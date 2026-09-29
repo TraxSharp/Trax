@@ -16,16 +16,42 @@ public class LifecycleHookRunner : ILifecycleHookRunner
     private readonly List<ITrainLifecycleHook> _hooks;
     private readonly ILogger<LifecycleHookRunner>? _logger;
 
+    /// <summary>
+    /// Builds the enabled hooks for one run from <paramref name="serviceProvider"/>, the provider
+    /// the runner was resolved from. The runner is transient and a train resolves it from its
+    /// run's scope, so a hook's scoped dependencies are that run's.
+    /// </summary>
+    public LifecycleHookRunner(
+        IEnumerable<ITrainLifecycleHookFactory> hookFactories,
+        IEffectRegistry effectRegistry,
+        IServiceProvider serviceProvider,
+        ILogger<LifecycleHookRunner>? logger = null
+    )
+        : this(hookFactories, effectRegistry, factory => factory.Create(serviceProvider), logger)
+    { }
+
+    /// <summary>
+    /// Builds the enabled hooks through each factory's parameterless <c>Create()</c>, with no
+    /// scope to take services from.
+    /// </summary>
     public LifecycleHookRunner(
         IEnumerable<ITrainLifecycleHookFactory> hookFactories,
         IEffectRegistry effectRegistry,
         ILogger<LifecycleHookRunner>? logger = null
     )
+        : this(hookFactories, effectRegistry, factory => factory.Create(), logger) { }
+
+    private LifecycleHookRunner(
+        IEnumerable<ITrainLifecycleHookFactory> hookFactories,
+        IEffectRegistry effectRegistry,
+        Func<ITrainLifecycleHookFactory, ITrainLifecycleHook> create,
+        ILogger<LifecycleHookRunner>? logger
+    )
     {
         _logger = logger;
         _hooks = hookFactories
             .Where(factory => effectRegistry.IsEnabled(factory.GetType()))
-            .Select(factory => factory.Create())
+            .Select(create)
             .ToList();
     }
 

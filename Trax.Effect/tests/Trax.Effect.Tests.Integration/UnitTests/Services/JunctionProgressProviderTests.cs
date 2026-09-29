@@ -188,6 +188,35 @@ public class JunctionProgressProviderTests
     }
 
     [Test]
+    public async Task AfterJunctionExecution_DoesNotPassTheCallersToken()
+    {
+        // The junction's work has returned; a cancelled caller must not cancel the write that
+        // records it, or the run is recorded Cancelled although the work finished.
+        var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await _provider.AfterJunctionExecution(junction, train, cts.Token);
+
+        _fakeEffectRunner.LastSaveChangesCancellationToken.Should().Be(CancellationToken.None);
+    }
+
+    [Test]
+    public async Task AfterJunctionExecution_AFailingWrite_DoesNotReplaceTheJunctionsResult()
+    {
+        var train = CreateTestTrain(effectRunner: new ThrowingEffectRunner());
+        var junction = CreateTestJunction("ProcessDataJunction");
+
+        var act = () => _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+
+        await act.Should()
+            .NotThrowAsync(
+                "a failed progress write after finished work is logged, not the outcome"
+            );
+        train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
+    }
+
+    [Test]
     public async Task AfterJunctionExecution_NullMetadata_ReturnsWithoutError()
     {
         // Arrange — train with null metadata (no reflection call)
@@ -386,6 +415,18 @@ public class JunctionProgressProviderTests
     /// <summary>
     /// Fake IEffectRunner that tracks method calls for assertions.
     /// </summary>
+    private class ThrowingEffectRunner : IEffectRunner
+    {
+        public Task SaveChanges(CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("database unavailable");
+
+        public Task Track(IModel model) => Task.CompletedTask;
+
+        public Task Update(IModel model) => Task.CompletedTask;
+
+        public void Dispose() { }
+    }
+
     private class FakeEffectRunner : IEffectRunner
     {
         public int UpdateCallCount { get; private set; }

@@ -57,6 +57,16 @@ The copies a train is *run* from are not masked, because the train needs the rea
 entry's input (`work_queue.input`) and a manifest's properties. Those are transport, not a record,
 and protecting them is a question of what is put in an input at all.
 
+They are kept out of logs instead. A run-from copy is a JSON string, so the mark cannot reach into
+it, and a scheduled run's metadata arrives with its manifest loaded, so logging the metadata logged
+the manifest's properties with the real values. Every log serialization of a model (its
+`ToString()`, the JSON effect's line and the junction logger's output) goes through
+`TraxLogSerialization.ForLogging`, which writes `Manifest.Properties`, `WorkQueue.Input` and
+`BackgroundJob.Input` as `{"_omitted": true}` and leaves a metadata row's navigations (`Manifest`,
+`Parent`, `Children`, `Logs`) out. It is a logging-only projection rather than `[JsonIgnore]` on
+the models, so a host that serializes a model itself (as an HTTP response, say) is unchanged; the
+dashboard and re-queue read the columns, not a serialization.
+
 ## Exemplars
 
 - `TraxRedactionTests` pins each shape: a nested object, collection elements, a whole marked
@@ -65,6 +75,8 @@ and protecting them is a question of what is put in an input at all.
   masked for its name.
 - `ParameterEffectTests.cs`, `JunctionLoggerProviderTests.cs` and `SensitiveOutputHookTests.cs`
   check the stored input and output, the junction logger's output and the hook output.
+- `TraxLogSerializationTests.cs` and `JsonEffectManifestPropertiesTests.cs` check that a model's
+  log serialization omits the run-from copies and the metadata navigations.
 
 Not covered: nothing finds a sensitive member left unmarked, which is the cost of opt-in. A value
 a train writes into its own log messages, or into an exception message, is not a serialized
@@ -72,4 +84,5 @@ member and is not masked.
 
 ## Changelog
 
+- **2026-09-28**: Run-from copies and metadata navigations are kept out of log serializations.
 - **2026-09-27**: Recorded.

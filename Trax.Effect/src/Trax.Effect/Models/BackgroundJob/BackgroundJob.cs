@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.BackgroundJob.DTOs;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Models.BackgroundJob;
 
@@ -85,7 +86,9 @@ public class BackgroundJob : IModel
         JsonSerializer.Serialize(
             this,
             GetType(),
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
         );
 
     #endregion

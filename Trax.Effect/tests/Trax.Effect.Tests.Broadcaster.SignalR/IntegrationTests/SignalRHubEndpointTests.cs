@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -151,5 +152,45 @@ public class SignalRHubEndpointTests
         Func<Task> act = async () => await hostBuilder.StartAsync();
 
         act.Should().ThrowAsync<InvalidOperationException>().Result.WithMessage("*AddSignalR()*");
+    }
+
+    private static async Task<HttpConnectionDispatcherOptions> MappedOptionsAsync(
+        Action<IEndpointRouteBuilder> map
+    )
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddSignalR();
+        await using var app = builder.Build();
+        map(app);
+
+        return ((IEndpointRouteBuilder)app)
+            .DataSources.SelectMany(ds => ds.Endpoints)
+            .Select(e => e.Metadata.GetMetadata<HttpConnectionDispatcherOptions>())
+            .First(o => o is not null)!;
+    }
+
+    [Test]
+    public async Task MapTraxTrainEventHub_SetsAShortTransportSendTimeout()
+    {
+        var options = await MappedOptionsAsync(endpoints => endpoints.MapTraxTrainEventHub());
+
+        options
+            .TransportSendTimeout.Should()
+            .Be(SignalRHubEndpointExtensions.DefaultTransportSendTimeout)
+            .And.BeLessThan(new HttpConnectionDispatcherOptions().TransportSendTimeout);
+    }
+
+    [Test]
+    public async Task MapTraxTrainEventHub_HostOverridesTheTransportSendTimeout()
+    {
+        var options = await MappedOptionsAsync(endpoints =>
+            endpoints.MapTraxTrainEventHub(
+                "/hubs/trax-events",
+                o => o.TransportSendTimeout = TimeSpan.FromSeconds(7)
+            )
+        );
+
+        options.TransportSendTimeout.Should().Be(TimeSpan.FromSeconds(7));
     }
 }

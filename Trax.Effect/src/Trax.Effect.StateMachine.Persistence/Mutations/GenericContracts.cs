@@ -37,10 +37,17 @@ public record AdvanceSnapshotInput
     /// <summary>The trigger to fire (a machine trigger name, e.g. "Next").</summary>
     public required string Trigger { get; init; }
 
-    /// <summary>Optional trigger input as JSON.</summary>
+    /// <summary>
+    /// Optional trigger input as JSON, at most <see cref="SnapshotLimits.MaxSnapshotBytes"/> bytes (UTF-8);
+    /// a larger one is refused as <c>too-large</c> before it is parsed.
+    /// </summary>
     public string? Input { get; init; }
 
-    /// <summary>Optional idempotency key so a retry replays instead of re-firing.</summary>
+    /// <summary>
+    /// Optional idempotency key so a retry replays instead of re-firing. A retry must repeat the trigger:
+    /// the same key sent with a different trigger is refused as <c>request-id-reused</c>. Advance and send
+    /// share one key space.
+    /// </summary>
     public string? RequestId { get; init; }
 
     /// <summary>
@@ -51,9 +58,9 @@ public record AdvanceSnapshotInput
 
     /// <summary>
     /// Optional: the snapshot the client's twin computed for this advance, as canonical JSON. When present the
-    /// server compares it against its own authoritative result; a divergence is refused with a
-    /// <c>client-divergence</c> problem (and reported), catching a client/server engine mismatch on real input.
-    /// Absent = no check. The server result is always authoritative regardless.
+    /// server compares it against its own authoritative result before persisting anything; a divergence is
+    /// refused with a <c>client-divergence</c> problem and the stored draft is left unchanged, catching a
+    /// client/server engine mismatch on real input. Absent = no check.
     /// </summary>
     public string? ClientResult { get; init; }
 }
@@ -90,7 +97,11 @@ public record SendSnapshotInput
     public required string Machine { get; init; }
     public required Guid Id { get; init; }
 
-    /// <summary>Idempotency key. A stable value per intended send; if absent the draft id is used.</summary>
+    /// <summary>
+    /// Idempotency key. A stable value per intended send; if absent, <c>send:{Id}</c> is used. It shares
+    /// one key space with <see cref="AdvanceSnapshotInput.RequestId"/>, so a key an advance already used is
+    /// refused as <c>request-id-reused</c>, before the effect runs.
+    /// </summary>
     public string? RequestId { get; init; }
 
     /// <summary>

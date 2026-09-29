@@ -39,7 +39,11 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
             record.ConcurrencyToken,
             record.LastRequestId,
             record.UpdatedAt
-        );
+        )
+        {
+            LastRequestTrigger = record.LastRequestTrigger,
+            LastRequestFromState = record.LastRequestFromState,
+        };
     }
 
     public Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default) =>
@@ -68,12 +72,31 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         return await TrySave(cancellationToken);
     }
 
-    public async Task<bool> Update(
+    // Records the id alone: the trigger and from-state are cleared, so a retry of this request is refused
+    // as a reused id rather than replayed. The draft service writes through UpdateWithRequest.
+    public Task<bool> Update(
         string userKey,
         Guid id,
         Snapshot snapshot,
         Guid expectedToken,
         string? requestId = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        UpdateWithRequest(
+            userKey,
+            id,
+            snapshot,
+            expectedToken,
+            requestId is null ? null : new AppliedRequest(requestId, null, null),
+            cancellationToken
+        );
+
+    public async Task<bool> UpdateWithRequest(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        Guid expectedToken,
+        AppliedRequest? request,
         CancellationToken cancellationToken = default
     )
     {
@@ -86,6 +109,9 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         var contextJson = snapshot.Context.ToJsonString();
         var newToken = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
+        var requestId = request?.RequestId;
+        var requestTrigger = request?.Trigger;
+        var requestFromState = request?.FromState;
 
         var rows = await db
             .SnapshotDrafts.Where(x =>
@@ -100,6 +126,8 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
                         .SetProperty(x => x.Context, contextJson)
                         .SetProperty(x => x.ConcurrencyToken, newToken)
                         .SetProperty(x => x.LastRequestId, requestId)
+                        .SetProperty(x => x.LastRequestTrigger, requestTrigger)
+                        .SetProperty(x => x.LastRequestFromState, requestFromState)
                         .SetProperty(x => x.UpdatedAt, now),
                 cancellationToken
             );

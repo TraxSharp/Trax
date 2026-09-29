@@ -11,8 +11,8 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// The other integration tests build the two tables with <c>EnsureCreated</c>. These build them with the
-/// SHIPPED migrations (Postgres <c>040_state_machine_snapshots.sql</c>, SQLite
-/// <c>006_state_machine_snapshots.sql</c>) and then round-trip through the real stores. A column added to
+/// SHIPPED migrations (Postgres <c>040_state_machine_snapshots.sql</c> and <c>048_snapshot_draft_request_scope.sql</c>,
+/// SQLite <c>006_state_machine_snapshots.sql</c> and <c>013_snapshot_draft_request_scope.sql</c>) and then round-trip through the real stores. A column added to
 /// <c>SnapshotRecord</c>/<c>EffectClaim</c> without updating the migration fails here, because the store's
 /// query hits a column the migration never created. This is the DDL-vs-EF-model drift guard, and it also
 /// proves the two providers auto-apply their tables (no EnsureCreated, no manual DDL).
@@ -130,6 +130,25 @@ public class MigrationSchemaTests
         after.Should().NotBeNull();
         after!.Json.Should().Contain("\"state\":\"Locked\"");
         after.LastRequestId.Should().Be("req-1");
+
+        // The request scope columns (048 / 013): the trigger and from-state recorded with the request id.
+        (
+            await With(
+                ctx,
+                c =>
+                    new EfSnapshotStore(c).UpdateWithRequest(
+                        userKey,
+                        id,
+                        Sample(),
+                        after.Token,
+                        new AppliedRequest("req-2", "Coin", "Locked")
+                    )
+            )
+        )
+            .Should()
+            .BeTrue();
+        var scoped = await With(ctx, c => new EfSnapshotStore(c).Get(userKey, id));
+        scoped!.LastRequest.Should().Be(new AppliedRequest("req-2", "Coin", "Locked"));
 
         // effect_claim: claim, confirm in-flight (no receipt), fenced complete, receipt readable back.
         var key = $"charge:{id}";

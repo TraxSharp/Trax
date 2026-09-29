@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Models.SchedulerConfig;
 
@@ -78,7 +79,12 @@ public class SchedulerConfig : IModel
     public DateTime UpdatedAt { get; set; }
 
     public override string ToString() =>
-        JsonSerializer.Serialize(this, TraxEffectConfiguration.StaticSystemJsonSerializerOptions);
+        JsonSerializer.Serialize(
+            this,
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
+        );
 
     [JsonConstructor]
     public SchedulerConfig() { }

@@ -428,11 +428,14 @@ public static class DataLayerGuards
     /// not string literals the scan can read.
     /// </para>
     /// <para>
-    /// The set a call applies to is read from the text of its statement: a <c>DbSet</c> or
-    /// <c>IQueryable</c> property declared under the scan roots, or <c>Set&lt;T&gt;()</c>. A call
-    /// on a per-user set is reported, a call on a set of shared rows is not, and a call whose set
-    /// the scan cannot name (a query passed in, a helper over <c>IQueryable&lt;T&gt;</c>) is
-    /// reported, because it may be a per-user one. A file that switches the filter off on purpose
+    /// The set a call applies to is read from the receiver of its call chain, the first set the
+    /// chain starts from: a <c>DbSet</c> or <c>IQueryable</c> property declared under the scan
+    /// roots, or <c>Set&lt;T&gt;()</c>. A call on a per-user set, or whose statement mentions one
+    /// anywhere (a subquery is filtered by the same call), is reported. A call on a set of shared
+    /// rows is not. A call whose set the scan cannot name (a query passed in, a helper over
+    /// <c>IQueryable&lt;T&gt;</c>, <c>Set&lt;T&gt;()</c> over a type parameter rather than a
+    /// mapped entity) is reported, because it may be a per-user one, even when a shared set
+    /// appears elsewhere in the statement. A file that switches the filter off on purpose
     /// goes in <see cref="OwnerScopeCensusOptions.FilterBypassAllowlist"/> with the reason.
     /// </para>
     /// <para>
@@ -490,6 +493,33 @@ public static class DataLayerGuards
             types.Add(declaration.Groups["type"].Value);
         }
 
+        // Every entity the models map, by simple name. Set<T>() or a set property whose element
+        // type is not one of these (a type parameter, say) names no set the scan can tell.
+        var entityTypeNames = models
+            .SelectMany(m => m.GetEntityTypes())
+            .Select(e => e.ClrType.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        IEnumerable<string> ElementTypes(Match reference) =>
+            reference.Groups["type"] is { Success: true } typed ? [typed.Value]
+            : sets.TryGetValue(reference.Value, out var types) ? types
+            : [];
+
+        // The receiver is the first set reference in the chain the call ends, read with every
+        // argument list emptied: db.Notes, db.Set<Note>(), or a query parameter the scan cannot
+        // name. It is named only when every element type it can hold is a mapped entity.
+        bool ReceiverIsNamedSet(string stripped, int callIndex)
+        {
+            var chain = TopLevel(ChainBefore(stripped, callIndex));
+            foreach (Match reference in SetReference.Matches(chain))
+            {
+                var types = ElementTypes(reference).ToList();
+                if (types.Count > 0)
+                    return types.All(entityTypeNames.Contains);
+            }
+            return false;
+        }
+
         var offenders = new List<string>();
         var bypassingFiles = new HashSet<string>(StringComparer.Ordinal);
         var inspected = 0;
@@ -514,24 +544,18 @@ public static class DataLayerGuards
                     continue;
             }
 
+            // Any per-user set mentioned in the statement is reported: the call switches filters
+            // off for the whole query, subqueries included.
             var statement = StatementBefore(file.Stripped, call.Index);
             var perUser = new SortedSet<string>(StringComparer.Ordinal);
-            var shared = false;
             foreach (Match reference in SetReference.Matches(statement))
-            {
-                var typed = reference.Groups["type"];
-                var element = typed.Success ? [typed.Value] : ElementTypes(reference.Value);
-                foreach (var type in element)
-                    if (perUserTypeNames.Contains(type))
-                        perUser.Add(type);
-                    else
-                        shared = true;
-            }
+            foreach (var type in ElementTypes(reference))
+                if (perUserTypeNames.Contains(type))
+                    perUser.Add(type);
 
-            IEnumerable<string> ElementTypes(string name) =>
-                sets.TryGetValue(name, out var types) ? types : [];
-
-            if (perUser.Count == 0 && shared)
+            // Only the set the chain starts from makes the call a shared one. A shared set named
+            // elsewhere in the statement (inside a lambda, say) says nothing about the receiver.
+            if (perUser.Count == 0 && ReceiverIsNamedSet(file.Stripped, call.Index))
                 continue;
 
             bypassingFiles.Add(file.Path);
@@ -618,6 +642,111 @@ public static class DataLayerGuards
     {
         var start = stripped.LastIndexOfAny([';', '{', '}'], Math.Max(0, index - 1));
         return stripped[(start + 1)..index];
+    }
+
+    /// <summary>
+    /// The member-access chain a call at <paramref name="index"/> (its <c>.</c>) is made on, read
+    /// backwards through invocations, indexers, generic arguments and dots until something that
+    /// cannot continue a chain: <c>db.Set&lt;Note&gt;().Where(...)</c> from
+    /// <c>return db.Set&lt;Note&gt;().Where(...).IgnoreQueryFilters()</c>.
+    /// </summary>
+    private static string ChainBefore(string stripped, int index)
+    {
+        var start = index;
+        var pos = SkipSpaceBack(stripped, index - 1);
+        while (pos >= 0)
+        {
+            while (pos >= 0 && stripped[pos] is ')' or ']')
+                pos = SkipSpaceBack(stripped, MatchingOpen(stripped, pos) - 1);
+            if (pos > 0 && stripped[pos] == '>' && stripped[pos - 1] != '=')
+            {
+                var open = MatchingAngle(stripped, pos);
+                if (open < 0)
+                    break;
+                pos = SkipSpaceBack(stripped, open - 1);
+            }
+
+            var end = pos;
+            while (pos >= 0 && (char.IsLetterOrDigit(stripped[pos]) || stripped[pos] == '_'))
+                pos--;
+            if (pos == end)
+            {
+                // A parenthesized head: the chain is what was consumed, and the scan cannot name it.
+                start = end + 1;
+                break;
+            }
+            start = pos + 1;
+
+            pos = SkipSpaceBack(stripped, pos);
+            if (pos >= 0 && stripped[pos] == '!')
+                pos = SkipSpaceBack(stripped, pos - 1);
+            if (pos < 0 || stripped[pos] != '.')
+                break;
+            pos--;
+            if (pos >= 0 && stripped[pos] == '?')
+                pos--;
+            pos = SkipSpaceBack(stripped, pos);
+        }
+        return stripped[start..index];
+    }
+
+    /// <summary>The text with the contents of every parenthesized or bracketed list removed.</summary>
+    private static string TopLevel(string text)
+    {
+        var result = new System.Text.StringBuilder(text.Length);
+        var depth = 0;
+        foreach (var c in text)
+        {
+            if (c is '(' or '[')
+                depth++;
+            else if (c is ')' or ']')
+                depth = Math.Max(0, depth - 1);
+            else if (depth == 0)
+                result.Append(c);
+        }
+        return result.ToString();
+    }
+
+    private static int SkipSpaceBack(string text, int pos)
+    {
+        while (pos >= 0 && char.IsWhiteSpace(text[pos]))
+            pos--;
+        return pos;
+    }
+
+    private static int MatchingOpen(string text, int close)
+    {
+        var depth = 0;
+        for (var i = close; i >= 0; i--)
+        {
+            if (text[i] is ')' or ']')
+                depth++;
+            else if (text[i] is '(' or '[' && --depth == 0)
+                return i;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// The <c>&lt;</c> opening a generic argument list closed at <paramref name="close"/>, or -1
+    /// when the text between is not a type list (a comparison, not generic arguments).
+    /// </summary>
+    private static int MatchingAngle(string text, int close)
+    {
+        var depth = 0;
+        for (var i = close; i >= 0; i--)
+        {
+            var c = text[i];
+            if (c == '>')
+                depth++;
+            else if (c == '<' && --depth == 0)
+                return i;
+            else if (
+                !(char.IsLetterOrDigit(c) || char.IsWhiteSpace(c) || c is '_' or '.' or ',' or '?')
+            )
+                return -1;
+        }
+        return -1;
     }
 
     private static int MatchingParen(string stripped, int open)

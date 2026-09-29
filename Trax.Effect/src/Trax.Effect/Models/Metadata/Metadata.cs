@@ -9,6 +9,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Models.Metadata;
 
@@ -473,7 +474,9 @@ public class Metadata : IModel, IDisposable
         JsonSerializer.Serialize(
             this,
             GetType(),
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
         );
 
     /// <summary>

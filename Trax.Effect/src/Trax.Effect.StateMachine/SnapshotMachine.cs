@@ -46,10 +46,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 RejectionReasons.NoTransition,
                 $"Unknown state '{snapshot.State}'."
             );
-        if (
-            !Enum.TryParse<TTrigger>(trigger, ignoreCase: false, out var triggerValue)
-            || !Enum.IsDefined(triggerValue)
-        )
+        if (!TriggerNames.TryGetValue(trigger, out var triggerValue))
             return new AdvanceResult.Rejected(
                 RejectionReasons.NoTransition,
                 $"Unknown trigger '{trigger}'."
@@ -200,6 +197,12 @@ public sealed class SnapshotMachine<TState, TTrigger>
                 $"Unknown state '{effectiveState}'."
             );
 
+        // A value with no canonical wire (a number outside double range) or that no store can hold (a NUL
+        // character) is refused here, before anything persists it: accepting it would store a row that every
+        // later read fails to serialize.
+        if (StorableJson.Problem(effectiveContext) is { } unstorable)
+            return new RehydrationResult.Error(RehydrationErrorCodes.Malformed, unstorable);
+
         var contextError = _def.ValidateContext(state, effectiveContext);
         if (contextError is not null)
             return new RehydrationResult.Error(RehydrationErrorCodes.InvalidContext, contextError);
@@ -209,7 +212,8 @@ public sealed class SnapshotMachine<TState, TTrigger>
             {
                 Machine = machine,
                 Version = _def.Version,
-                State = effectiveState,
+                // The declared name, never the token as sent, so what is stored and served is canonical.
+                State = state.ToString(),
                 Context = effectiveContext,
             }
         );
@@ -240,10 +244,7 @@ public sealed class SnapshotMachine<TState, TTrigger>
     {
         if (!TryParseState(snapshot.State, out var fromState))
             return false;
-        if (
-            !Enum.TryParse<TTrigger>(trigger, ignoreCase: false, out var triggerValue)
-            || !Enum.IsDefined(triggerValue)
-        )
+        if (!TriggerNames.TryGetValue(trigger, out var triggerValue))
             return false;
 
         return _def.Transitions.Any(t =>
@@ -335,8 +336,19 @@ public sealed class SnapshotMachine<TState, TTrigger>
         JsonNode? input
     ) => t.Guard is null || t.Guard(context, input);
 
+    // Exact-name lookups for the wire tokens. Enum.TryParse also accepts the numeric value ("1"), a padded
+    // name (" Unlocked") and a flags list ("Locked, Unlocked"), none of which the TypeScript twin accepts, and
+    // an accepted alias would then be stored and served as the state. Only a declared name, compared
+    // ordinally, is a state or a trigger.
+    private static readonly Dictionary<string, TState> StateNames = NamesOf<TState>();
+    private static readonly Dictionary<string, TTrigger> TriggerNames = NamesOf<TTrigger>();
+
+    private static Dictionary<string, T> NamesOf<T>()
+        where T : struct, Enum =>
+        Enum.GetNames<T>().ToDictionary(name => name, Enum.Parse<T>, StringComparer.Ordinal);
+
     private static bool TryParseState(string token, out TState state) =>
-        Enum.TryParse(token, ignoreCase: false, out state) && Enum.IsDefined(state);
+        StateNames.TryGetValue(token, out state);
 
     private static string? AsString(JsonNode? node) =>
         node?.GetValueKind() == JsonValueKind.String ? node.GetValue<string>() : null;

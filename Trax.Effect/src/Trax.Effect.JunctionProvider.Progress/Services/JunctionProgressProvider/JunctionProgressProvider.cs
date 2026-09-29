@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -33,8 +34,26 @@ public class JunctionProgressProvider : IJunctionProgressProvider
         serviceTrain.Metadata.CurrentlyRunningJunction = null;
         serviceTrain.Metadata.JunctionStartedAt = null;
 
-        await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
-        await serviceTrain.EffectRunner.SaveChanges(cancellationToken);
+        // The junction's work has already returned, so this write is bookkeeping about work that
+        // happened, not part of it. Neither the caller's token nor a failing write may replace the
+        // junction's result: a caller that cancelled while the work finished would otherwise see
+        // the run recorded Cancelled (effect/0005 records it Completed), and a database blip would
+        // turn finished work into a Failed run a manifest retries. FinishServiceTrain clears these
+        // columns again with the outcome, so a skipped write leaves nothing stale behind.
+        try
+        {
+            await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
+            await serviceTrain.EffectRunner.SaveChanges(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            serviceTrain.Logger?.LogWarning(
+                ex,
+                "Could not clear the junction progress of train ({TrainName}) after junction ({JunctionName}); the junction's result stands.",
+                serviceTrain.TrainName,
+                effectJunction.Metadata?.Name
+            );
+        }
     }
 
     public void Dispose() { }

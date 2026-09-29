@@ -96,6 +96,23 @@ public sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRunn
                         $"Only a {_fromState} draft can run this effect."
                     );
 
+                // The advance below would refuse a request id recorded for a different trigger. Refuse it here
+                // instead, before the effect, so the refusal never follows a real delivery.
+                if (
+                    await _drafts.IsReusedRequest(
+                        userKey,
+                        id,
+                        requestId,
+                        _trigger,
+                        loaded.Snapshot.State,
+                        cancellationToken
+                    )
+                )
+                    return new AdvanceOutcome.Rejected(
+                        "request-id-reused",
+                        "This request id was already used for a different action. Send a new id."
+                    );
+
                 // Exactly-once DELIVERY: claim the effect key BEFORE running. Two concurrent runs (or a
                 // crash-retry) run the effect once and replay the receipt.
                 string receipt;

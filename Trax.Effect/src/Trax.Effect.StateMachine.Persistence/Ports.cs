@@ -12,7 +12,30 @@ public sealed record StoredSnapshot(
     Guid Token,
     string? LastRequestId,
     DateTimeOffset UpdatedAt
-);
+)
+{
+    /// <summary>
+    /// The trigger the last applied advance fired, or <c>null</c> when none was recorded (no request id, or
+    /// a store that does not record it). A request id replays only for the trigger recorded with it.
+    /// </summary>
+    public string? LastRequestTrigger { get; init; }
+
+    /// <summary>The state the last applied advance fired from, or <c>null</c> when none was recorded.</summary>
+    public string? LastRequestFromState { get; init; }
+
+    /// <summary>The last applied request as one value, or <c>null</c> when there is no request id.</summary>
+    public AppliedRequest? LastRequest =>
+        LastRequestId is { } requestId
+            ? new AppliedRequest(requestId, LastRequestTrigger, LastRequestFromState)
+            : null;
+}
+
+/// <summary>
+/// The advance a draft records so a retry can be recognised: the client's idempotency key, the trigger it
+/// fired, and the state it fired from. <see cref="Trigger"/> and <see cref="FromState"/> are <c>null</c>
+/// only on a row written before they were recorded, and such a request is never replayed.
+/// </summary>
+public sealed record AppliedRequest(string RequestId, string? Trigger, string? FromState);
 
 /// <summary>
 /// Raw, user-scoped persistence of a snapshot. Engine-agnostic: it moves the four snapshot fields
@@ -60,6 +83,21 @@ public interface ISnapshotStore
         string? requestId = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// <see cref="Update"/> that records the whole <paramref name="request"/> (id, trigger and from-state),
+    /// or clears it when <paramref name="request"/> is <c>null</c>. The draft service writes through this,
+    /// so a retry replays only the request it repeats. A store that does not override it records the id
+    /// alone, and every retry against it is then refused as a reused id rather than replayed.
+    /// </summary>
+    Task<bool> UpdateWithRequest(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        Guid expectedToken,
+        AppliedRequest? request,
+        CancellationToken cancellationToken = default
+    ) => Update(userKey, id, snapshot, expectedToken, request?.RequestId, cancellationToken);
 }
 
 /// <summary>
@@ -76,7 +114,8 @@ public interface ISnapshotPrincipal
 /// <summary>
 /// The single irreversible side effect bound to a consequential transition (send a letter, charge a
 /// card, provision a resource). It returns a receipt (a downstream id) recorded in the snapshot. Run
-/// through <see cref="IdempotentEffect"/> so it fires exactly once per intent.
+/// through <see cref="IdempotentEffect"/> so it fires exactly once per intent. The receipt must be non-empty:
+/// a null or empty one is treated as a failed delivery, and the send reports <c>delivery-failed</c>.
 /// </summary>
 public interface ISnapshotEffect
 {

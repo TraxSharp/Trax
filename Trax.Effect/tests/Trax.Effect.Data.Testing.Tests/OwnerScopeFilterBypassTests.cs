@@ -245,4 +245,68 @@ public class OwnerScopeFilterBypassTests
             .Which.Should()
             .Contain("covers nothing");
     }
+
+    [Test]
+    public void Flags_IgnoreQueryFilters_on_a_generic_Set_whose_type_it_cannot_name()
+    {
+        // The generic repository: Set<T>() with a type parameter names no entity, so the scan
+        // cannot tell which set it is, and a set it cannot name may be a per-user one.
+        using var repo = RepoWith(
+            "public class Repository<T> where T : class { public IQueryable<T> All(DbContext db) => "
+                + "db.Set<T>().IgnoreQueryFilters(); }"
+        );
+
+        Scan(repo)
+            .Offenders.Should()
+            .ContainSingle(
+                "Set<T>() over a type parameter is a set the scan cannot name, and the docs say "
+                    + "such a call is reported because it may be a per-user one"
+            );
+    }
+
+    [Test]
+    public void Flags_IgnoreQueryFilters_on_an_unnamed_query_whose_statement_mentions_a_shared_set()
+    {
+        // The receiver is a query the scan cannot name; a shared set mentioned elsewhere in the
+        // same statement does not make the receiver shared.
+        using var repo = RepoWith(
+            "public class R { public IQueryable<Note> All(AppDbContext db, IQueryable<Note> notes) => "
+                + "notes.Where(n => db.Articles.Any()).IgnoreQueryFilters(); }"
+        );
+
+        Scan(repo)
+            .Offenders.Should()
+            .ContainSingle(
+                "the call applies to notes, whose set the scan cannot name, not to Articles"
+            );
+    }
+
+    [Test]
+    public void Passes_IgnoreQueryFilters_on_a_shared_set_reached_through_Set_after_a_lambda()
+    {
+        // The receiver is read past the lambda's argument list and the generic arguments, and a
+        // comparison inside the lambda is not taken for a generic argument list.
+        using var repo = RepoWith(
+            "public class R { public IQueryable<Article> Recent(DbContext db) =>\n"
+                + "    db.Set<Article>()\n        .Where(a => a.Id > 3 && a.Id < 9)\n"
+                + "        .IgnoreQueryFilters(); }"
+        );
+
+        var result = Scan(repo);
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+    }
+
+    [Test]
+    public void Flags_IgnoreQueryFilters_on_a_shared_set_whose_subquery_reads_a_per_user_set()
+    {
+        // The call switches filters off for the whole query, so the Notes subquery loses its
+        // owner scope even though the receiver is shared.
+        using var repo = RepoWith(
+            "public class R { public IQueryable<Article> Noted(AppDbContext db) => "
+                + "db.Articles.Where(a => db.Notes.Any(n => n.Id == a.Id)).IgnoreQueryFilters(); }"
+        );
+
+        Scan(repo).Offenders.Should().ContainSingle().Which.Should().Contain("Note");
+    }
 }

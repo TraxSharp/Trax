@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;
+using Trax.Effect.Provider.Parameter.Services.ParameterLifecycleHookOutputPolicy;
 using Trax.Effect.Services.EffectProviderFactory;
+using Trax.Effect.Services.LifecycleHookOutputPolicy;
 using Trax.Effect.Utils;
 using TraxEffectBuilder = Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder;
 
@@ -87,6 +89,10 @@ public static class ServiceExtensions
         configure?.Invoke(effectConfiguration);
 
         builder.ServiceCollection.AddSingleton(effectConfiguration);
+        builder.ServiceCollection.AddSingleton<
+            ILifecycleHookOutputPolicy,
+            ParameterLifecycleHookOutputPolicy
+        >();
         builder.TrainParameterJsonSerializerOptions = jsonSerializerOptions;
 
         builder.AddEffect<ParameterEffectProviderFactory>();

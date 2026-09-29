@@ -398,7 +398,9 @@ public class Manifest : IModel
         JsonSerializer.Serialize(
             this,
             GetType(),
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
         );
 
     #endregion

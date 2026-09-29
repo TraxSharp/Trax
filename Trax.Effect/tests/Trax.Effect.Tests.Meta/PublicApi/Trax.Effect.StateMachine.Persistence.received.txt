@@ -28,6 +28,13 @@ namespace Trax.Effect.StateMachine.Persistence
             public string Reason { get; init; }
         }
     }
+    public sealed class AppliedRequest : System.IEquatable<Trax.Effect.StateMachine.Persistence.AppliedRequest>
+    {
+        public AppliedRequest(string RequestId, string? Trigger, string? FromState) { }
+        public string? FromState { get; init; }
+        public string RequestId { get; init; }
+        public string? Trigger { get; init; }
+    }
     public abstract class AutosaveResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult>
     {
         public sealed class Conflict : Trax.Effect.StateMachine.Persistence.AutosaveResult, System.IEquatable<Trax.Effect.StateMachine.Persistence.AutosaveResult.Conflict>
@@ -74,6 +81,7 @@ namespace Trax.Effect.StateMachine.Persistence
         public System.Threading.Tasks.Task Delete(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> Update(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, string? requestId = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> UpdateWithRequest(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, Trax.Effect.StateMachine.Persistence.AppliedRequest? request, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> Upsert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default) { }
     }
     [System.ComponentModel.DataAnnotations.Schema.Table("effect_claim")]
@@ -137,6 +145,7 @@ namespace Trax.Effect.StateMachine.Persistence
     public interface ISnapshotDraftService
     {
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, string? requestId = null, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input, string? requestId, string? clientResult, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AutosaveResult> Autosave(string userKey, System.Guid id, string snapshotJson, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.LoadResult> Load(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
         string Serialize(Trax.Effect.StateMachine.Snapshot snapshot);
@@ -164,6 +173,7 @@ namespace Trax.Effect.StateMachine.Persistence
         System.Threading.Tasks.Task Delete(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<bool> Update(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, string? requestId = null, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<bool> UpdateWithRequest(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, Trax.Effect.StateMachine.Persistence.AppliedRequest? request, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<bool> Upsert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default);
     }
     public sealed class IdempotentEffect
@@ -217,6 +227,7 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public SnapshotDraftService(Trax.Effect.StateMachine.SnapshotMachine<TState, TTrigger> machine, Trax.Effect.StateMachine.Persistence.ISnapshotStore store, System.Collections.Generic.IReadOnlyCollection<TState>? committedStates = null, Trax.Effect.StateMachine.Persistence.IEffectClaimStore? effectClaims = null, System.Func<string, System.Guid, System.Collections.Generic.IEnumerable<string>>? effectKeysOnReset = null, System.TimeSpan? draftTtl = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, string? requestId = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input, string? requestId, string? clientResult, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AutosaveResult> Autosave(string userKey, System.Guid id, string snapshotJson, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.LoadResult> Load(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public string Serialize(Trax.Effect.StateMachine.Snapshot snapshot) { }
@@ -256,8 +267,12 @@ namespace Trax.Effect.StateMachine.Persistence
         public string Context { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("id")]
         public System.Guid Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_request_from_state")]
+        public string? LastRequestFromState { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_id")]
         public string? LastRequestId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_request_trigger")]
+        public string? LastRequestTrigger { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("machine")]
         public string Machine { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("state")]
@@ -297,7 +312,10 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public StoredSnapshot(string Json, System.Guid Token, string? LastRequestId, System.DateTimeOffset UpdatedAt) { }
         public string Json { get; init; }
+        public Trax.Effect.StateMachine.Persistence.AppliedRequest? LastRequest { get; }
+        public string? LastRequestFromState { get; init; }
         public string? LastRequestId { get; init; }
+        public string? LastRequestTrigger { get; init; }
         public System.Guid Token { get; init; }
         public System.DateTimeOffset UpdatedAt { get; init; }
     }

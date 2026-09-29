@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Broadcaster.SignalR.Configuration;
@@ -219,5 +220,25 @@ public class SignalRSinkRegistrationTests
             .OfType<SignalRTrainEventDispatcher>()
             .Should()
             .HaveCount(1);
+    }
+
+    [Test]
+    public async Task UseSignalRHub_RegistersTheDispatcherAsAHostedService_SoShutdownDrainsIt()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSignalR();
+        var registry = new EffectRegistry();
+        var builder = new TraxBuilder(services, registry);
+
+        builder.AddEffects(effects => effects.UseBroadcaster(b => b.UseSignalRHub()));
+
+        await using var sp = services.BuildServiceProvider();
+
+        sp.GetServices<IHostedService>()
+            .Should()
+            .ContainSingle(s => s is SignalRTrainEventDispatcher)
+            .Which.Should()
+            .BeSameAs(sp.GetRequiredService<SignalRTrainEventDispatcher>());
     }
 }

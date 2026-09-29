@@ -137,16 +137,17 @@ public class ServiceExtensionsRegistrationTests
     }
 
     [Test]
-    public void AddSingletonTraxRoute_ServiceTrain_SetsCanonicalNameToInterfaceFullName()
+    public void AddSingletonTraxRoute_ServiceTrain_IsRefused()
     {
         var services = new ServiceCollection();
-        services.AddSingletonTraxRoute<IFakeTrain, FakeTrain>();
-        using var provider = services.BuildServiceProvider();
 
-        var train = provider.GetService<IFakeTrain>() as FakeTrain;
+        var register = () => services.AddSingletonTraxRoute<IFakeTrain, FakeTrain>();
 
-        train.Should().NotBeNull();
-        train!.CanonicalName.Should().Be(typeof(IFakeTrain).FullName);
+        register
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*AddScopedTraxRoute or AddTransientTraxRoute*");
+        services.Should().BeEmpty("a refused registration adds nothing");
     }
 
     [Test]

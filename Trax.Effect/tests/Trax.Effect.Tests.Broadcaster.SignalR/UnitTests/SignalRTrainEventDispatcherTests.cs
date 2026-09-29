@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
@@ -34,8 +35,22 @@ public class SignalRTrainEventDispatcherTests
     private static SignalRSinkOptions NewOptions() =>
         (SignalRSinkOptions)Activator.CreateInstance(typeof(SignalRSinkOptions), nonPublic: true)!;
 
-    private SignalRTrainEventDispatcher Create(SignalRSinkConfiguration config) =>
-        new(_hub, config, _logger);
+    private readonly List<SignalRTrainEventDispatcher> _created = new();
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        foreach (var dispatcher in _created)
+            await dispatcher.DisposeAsync();
+        _created.Clear();
+    }
+
+    private SignalRTrainEventDispatcher Create(SignalRSinkConfiguration config)
+    {
+        var dispatcher = new SignalRTrainEventDispatcher(_hub, config, _logger);
+        _created.Add(dispatcher);
+        return dispatcher;
+    }
 
     private static TrainLifecycleEventMessage Message(
         string trainName = "Some.Other.IFoo",
@@ -62,6 +77,8 @@ public class SignalRTrainEventDispatcherTests
 
         await d.HandleAsync(Message(eventType: "Failed"), CancellationToken.None);
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client.Received(0).TrainEvent(Arg.Any<object>());
     }
 
@@ -72,6 +89,8 @@ public class SignalRTrainEventDispatcherTests
 
         await d.HandleAsync(Message(eventType: "Completed"), CancellationToken.None);
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client.Received(1).TrainEvent(Arg.Any<object>());
     }
 
@@ -81,6 +100,8 @@ public class SignalRTrainEventDispatcherTests
         var d = Create(NewOptions().OnlyForTrains<ICheckGeocodeDriftTrain>().Build());
 
         await d.HandleAsync(Message(trainName: "Some.Other.IFoo"), CancellationToken.None);
+
+        await d.StopAsync(CancellationToken.None);
 
         await _client.Received(0).TrainEvent(Arg.Any<object>());
     }
@@ -95,6 +116,8 @@ public class SignalRTrainEventDispatcherTests
             CancellationToken.None
         );
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client.Received(1).TrainEvent(Arg.Any<object>());
     }
 
@@ -108,6 +131,8 @@ public class SignalRTrainEventDispatcherTests
             CancellationToken.None
         );
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client.Received(0).TrainEvent(Arg.Any<object>());
     }
 
@@ -120,6 +145,8 @@ public class SignalRTrainEventDispatcherTests
         await d.HandleAsync(Message(eventType: "Completed"), CancellationToken.None);
         await d.HandleAsync(Message(eventType: "Failed"), CancellationToken.None);
         await d.HandleAsync(Message(eventType: "Cancelled"), CancellationToken.None);
+
+        await d.StopAsync(CancellationToken.None);
 
         await _client.Received(4).TrainEvent(Arg.Any<object>());
     }
@@ -148,6 +175,8 @@ public class SignalRTrainEventDispatcherTests
             CancellationToken.None
         );
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client.Received(1).TrainEvent(Arg.Any<object>());
     }
 
@@ -160,6 +189,8 @@ public class SignalRTrainEventDispatcherTests
             Message(trainName: "X.IY", externalId: "external-abc"),
             CancellationToken.None
         );
+
+        await d.StopAsync(CancellationToken.None);
 
         await _client
             .Received(1)
@@ -182,6 +213,8 @@ public class SignalRTrainEventDispatcherTests
             CancellationToken.None
         );
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client
             .Received(1)
             .TrainEvent(
@@ -200,6 +233,7 @@ public class SignalRTrainEventDispatcherTests
         Func<Task> act = () => d.HandleAsync(Message(), CancellationToken.None);
 
         await act.Should().NotThrowAsync();
+        await d.StopAsync(CancellationToken.None);
         _logger
             .Entries.Should()
             .Contain(e =>
@@ -252,6 +286,8 @@ public class SignalRTrainEventDispatcherTests
                 break;
         }
 
+        await d.StopAsync(CancellationToken.None);
+
         await _client
             .Received(1)
             .TrainEvent(
@@ -273,6 +309,8 @@ public class SignalRTrainEventDispatcherTests
         await d.OnFailed(metadata, new Exception("x"), CancellationToken.None);
         await d.OnCancelled(metadata, CancellationToken.None);
         await d.OnCompleted(metadata, CancellationToken.None);
+
+        await d.StopAsync(CancellationToken.None);
 
         // Only the Completed call should reach the hub.
         await _client.Received(1).TrainEvent(Arg.Any<object>());
@@ -300,6 +338,7 @@ public class SignalRTrainEventDispatcherTests
         );
 
         await d.OnCompleted(Metadata(endTime: endTime), CancellationToken.None);
+        await d.StopAsync(CancellationToken.None);
 
         captured.Should().NotBeNull();
         captured!.Timestamp.Should().Be(endTime);
@@ -320,6 +359,7 @@ public class SignalRTrainEventDispatcherTests
         );
 
         await d.OnCompleted(Metadata(endTime: null), CancellationToken.None);
+        await d.StopAsync(CancellationToken.None);
 
         captured.Should().NotBeNull();
         captured!.Timestamp.Should().BeOnOrAfter(before);
@@ -334,9 +374,10 @@ public class SignalRTrainEventDispatcherTests
 
         Func<Task> act = () => dispatcher.HandleAsync(Message(), CancellationToken.None);
 
-        // The dispatcher swallows the exception via the null-conditional logger call;
+        // The sender swallows the exception via the null-conditional logger call;
         // no log can be observed, but the contract is "never throw out of the pipeline".
         await act.Should().NotThrowAsync();
+        await dispatcher.StopAsync(CancellationToken.None);
         await _client.Received(1).TrainEvent(Arg.Any<object>());
     }
 
@@ -358,15 +399,167 @@ public class SignalRTrainEventDispatcherTests
         Func<Task> act = () => d.OnCompleted(metadata, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
+        await d.StopAsync(CancellationToken.None);
         _logger.Entries.Should().Contain(e => e.Level == LogLevel.Error);
+    }
+
+    /// <summary>
+    /// Makes every send to clients wait until <paramref name="release"/> completes, and signals
+    /// <paramref name="entered"/> when the first send starts.
+    /// </summary>
+    private void HoldSends(TaskCompletionSource entered, TaskCompletionSource release)
+    {
+        _client
+            .TrainEvent(Arg.Any<object>())
+            .Returns(_ =>
+            {
+                entered.TrySetResult();
+                return release.Task;
+            });
+    }
+
+    [Test]
+    public async Task Hook_ReturnsWithoutWaitingForASendThatNeverCompletes()
+    {
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        HoldSends(entered, release);
+        var d = Create(NewOptions().Build());
+
+        await d.OnStarted(Metadata(), CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The sender is stuck inside Clients.All. Every later hook still completes synchronously.
+        for (var i = 0; i < 10; i++)
+            d.OnCompleted(Metadata(), CancellationToken.None).IsCompleted.Should().BeTrue();
+
+        release.SetResult();
+    }
+
+    [Test]
+    public async Task QueueFull_DropsFurtherEvents_CountsThem_AndLogsOnce()
+    {
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        HoldSends(entered, release);
+        var d = Create(NewOptions().WithDeliveryQueueCapacity(4).Build());
+
+        // The first event is taken by the sender, which then waits on the held send.
+        await d.HandleAsync(Message(externalId: "held"), CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Four fill the queue; three more have nowhere to go.
+        for (var i = 0; i < 7; i++)
+            await d.HandleAsync(Message(externalId: $"e{i}"), CancellationToken.None);
+
+        d.DroppedEvents.Should().Be(3);
+        _logger
+            .Entries.Where(e => e.Level == LogLevel.Warning)
+            .Should()
+            .ContainSingle()
+            .Which.Message.Should()
+            .Contain("delivery queue is full");
+
+        release.SetResult();
+        await d.StopAsync(CancellationToken.None);
+
+        var sent = _client
+            .ReceivedCalls()
+            .Select(c => ((TraxClientEvent)c.GetArguments()[0]!).ExternalId)
+            .ToList();
+        sent.Should().Equal("held", "e0", "e1", "e2", "e3");
+        _logger
+            .Entries.Should()
+            .Contain(e =>
+                e.Level == LogLevel.Warning && e.Message.Contains("after dropping 3 events")
+            );
+    }
+
+    [Test]
+    public async Task NormalLoad_DeliversEveryEventInTheOrderItWasRaised()
+    {
+        var sent = new ConcurrentQueue<string>();
+        _client
+            .TrainEvent(Arg.Do<object>(o => sent.Enqueue(((TraxClientEvent)o).ExternalId)))
+            .Returns(Task.CompletedTask);
+        var d = Create(NewOptions().Build());
+        var ids = Enumerable.Range(0, 500).Select(i => $"id-{i}").ToArray();
+
+        foreach (var id in ids)
+            await d.HandleAsync(Message(externalId: id), CancellationToken.None);
+        await d.StopAsync(CancellationToken.None);
+
+        sent.Should().Equal(ids);
+        d.DroppedEvents.Should().Be(0);
+    }
+
+    [Test]
+    public async Task StopAsync_DrainsEventsQueuedBehindASlowSend()
+    {
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        HoldSends(entered, release);
+        var d = Create(NewOptions().Build());
+
+        for (var i = 0; i < 20; i++)
+            await d.HandleAsync(Message(externalId: $"q{i}"), CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var stop = d.StopAsync(CancellationToken.None);
+        stop.IsCompleted.Should().BeFalse("the queue is still waiting on the held send");
+        release.SetResult();
+        await stop.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await _client.Received(20).TrainEvent(Arg.Any<object>());
+    }
+
+    [Test]
+    public async Task StopAsync_TokenFires_AbandonsTheQueueAndReturns()
+    {
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        HoldSends(entered, release);
+        var d = Create(NewOptions().Build());
+
+        for (var i = 0; i < 5; i++)
+            await d.HandleAsync(Message(externalId: $"q{i}"), CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        using var cts = new CancellationTokenSource();
+        var stop = d.StopAsync(cts.Token);
+        await cts.CancelAsync();
+        await stop.WaitAsync(TimeSpan.FromSeconds(10));
+
+        _logger
+            .Entries.Should()
+            .Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("were not sent"));
+        release.SetResult();
+    }
+
+    [Test]
+    public async Task EventsAfterStop_AreIgnored_AndNotCountedAsDrops()
+    {
+        var d = Create(NewOptions().Build());
+        await d.StopAsync(CancellationToken.None);
+
+        await d.HandleAsync(Message(), CancellationToken.None);
+        await d.OnCompleted(Metadata(), CancellationToken.None);
+
+        d.DroppedEvents.Should().Be(0);
+        await _client.Received(0).TrainEvent(Arg.Any<object>());
     }
 
     private record MyShape(string Id, string TrainName);
 
     private sealed class TestLogger<T> : ILogger<T>
     {
-        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } =
-            new();
+        // The hook logs on the caller's thread and the sender on its own, so entries are
+        // written concurrently.
+        public ConcurrentQueue<(
+            LogLevel Level,
+            string Message,
+            Exception? Exception
+        )> Entries { get; } = new();
 
         public IDisposable BeginScope<TState>(TState state)
             where TState : notnull => NullScope.Instance;
@@ -381,7 +574,7 @@ public class SignalRTrainEventDispatcherTests
             Func<TState, Exception?, string> formatter
         )
         {
-            Entries.Add((logLevel, formatter(state, exception), exception));
+            Entries.Enqueue((logLevel, formatter(state, exception), exception));
         }
 
         private sealed class NullScope : IDisposable

@@ -24,8 +24,11 @@ namespace Trax.Effect.Attributes;
 /// <para>
 /// This does not touch the copy a train is <i>run</i> from: a queued entry's input
 /// (<c>work_queue.input</c>) and a manifest's properties keep the real value, because the train
-/// needs it. Keep a secret out of an input entirely where you can, and pass a reference to it
-/// instead.
+/// needs it. Those copies are JSON strings the mark cannot reach into, so Trax keeps them out of
+/// its logs instead: a model's <c>ToString()</c>, the JSON effect and the junction logger write
+/// each as <c>{"_omitted": true}</c> (<see cref="Utils.TraxLogSerialization"/>). They are still
+/// readable wherever the columns are. Keep a secret out of an input entirely where you can, and
+/// pass a reference to it instead.
 /// </para>
 /// </remarks>
 [AttributeUsage(

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Trax.Core.Junction;
@@ -93,6 +94,17 @@ public class AdvanceSnapshotJunction(
         )
             return Problem(mismatch.Code, mismatch.Message);
 
+        // The same bound autosave applies, checked before parsing: a reducer that copies its input into the
+        // context would otherwise store whatever the request body carried.
+        if (
+            input.Input is { } raw
+            && Encoding.UTF8.GetByteCount(raw) > SnapshotLimits.MaxSnapshotBytes
+        )
+            return Problem(
+                "too-large",
+                $"The trigger input exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+
         JsonNode? triggerInput;
         try
         {
@@ -103,35 +115,25 @@ public class AdvanceSnapshotJunction(
             return Problem("malformed", "The trigger input is not valid JSON.");
         }
 
+        // Runtime differential: when the client sent the snapshot its twin computed for this advance, the
+        // service compares it with its own result before writing and refuses a divergence (client-divergence)
+        // with nothing persisted, so the client reloads the draft as it was.
         var outcome = await service.Advance(
             userKey,
             input.Id,
             input.Trigger,
             triggerInput,
             input.RequestId,
+            input.ClientResult,
             CancellationToken
         );
 
-        if (outcome is AdvanceOutcome.Advanced advanced)
-        {
-            var serverWire = service.Serialize(advanced.Snapshot);
-            // Runtime differential: if the client sent the snapshot its twin computed for this advance, it must
-            // equal the server's authoritative result (both are canonical wire). A divergence means the two
-            // engines disagreed on a real transition — a skew the schema hash missed, or a genuine bug. Enforce:
-            // refuse and let the client reload. The server's result is authoritative regardless.
-            if (
-                input.ClientResult is { } clientWire
-                && !string.Equals(clientWire, serverWire, StringComparison.Ordinal)
-            )
-                return Problem(
-                    "client-divergence",
-                    "The client and server disagree on this transition; reload to continue."
-                );
-            return new AdvanceSnapshotOutput { Snapshot = serverWire };
-        }
-
         return outcome switch
         {
+            AdvanceOutcome.Advanced advanced => new AdvanceSnapshotOutput
+            {
+                Snapshot = service.Serialize(advanced.Snapshot),
+            },
             AdvanceOutcome.Rejected rejected => Problem(
                 rejected.Reason,
                 rejected.Detail ?? rejected.Reason
@@ -214,9 +216,11 @@ public class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPr
                 $"Machine '{input.Machine}' has no irreversible effect to send."
             );
 
-        // Absent a client key, the draft id IS the idempotency key, so a bare double-send replays.
+        // Absent a client key, one derived from the draft id is the idempotency key, so a bare double-send
+        // replays. It is prefixed because advance and send share one request-id namespace: a client that used
+        // the bare draft id as an advance's key must not have its Send refused as a reused id.
         var requestId = string.IsNullOrEmpty(input.RequestId)
-            ? input.Id.ToString()
+            ? $"send:{input.Id}"
             : input.RequestId;
 
         var registryService = registry.Service(input.Machine)!;

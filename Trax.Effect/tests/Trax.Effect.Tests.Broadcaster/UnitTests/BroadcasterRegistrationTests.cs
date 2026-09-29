@@ -82,6 +82,23 @@ public class BroadcasterRegistrationTests
     }
 
     [Test]
+    public void UseRabbitMq_PrefetchCountZero_Throws()
+    {
+        var services = new ServiceCollection();
+        var registry = new EffectRegistry();
+        var builder = new TraxBuilder(services, registry);
+
+        var act = () =>
+            builder.AddEffects(effects =>
+                effects.UseBroadcaster(b =>
+                    b.UseRabbitMq("amqp://localhost", opts => opts.PrefetchCount = 0)
+                )
+            );
+
+        act.Should().Throw<ArgumentException>().WithMessage("*PrefetchCount of at least 1*");
+    }
+
+    [Test]
     public void UseRabbitMq_WithConfigureCallback_CustomizesOptions()
     {
         var services = new ServiceCollection();

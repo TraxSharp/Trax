@@ -86,4 +86,56 @@ public class CanonicalizationConformanceTests
     {
         Wire(new JsonObject { ["s"] = "😀" }).Should().Be(Envelope("{\"s\":\"😀\"}"));
     }
+
+    // A lone surrogate has no UTF-8 encoding, so JSON.stringify (ES2019) writes it as a lowercase \uxxxx
+    // escape, while a well-formed pair stays literal. The inputs are code units, because a C# string literal
+    // holding a lone surrogate is easy to mangle in an editor.
+    [TestCase(new[] { 0xD800 }, "\\ud800")]
+    [TestCase(new[] { 0xDFFF }, "\\udfff")]
+    [TestCase(new[] { 0x61, 0xD83D }, "a\\ud83d")]
+    [TestCase(new[] { 0xDE00, 0xD83D }, "\\ude00\\ud83d")]
+    [TestCase(new[] { 0xD83D, 0xD83D, 0xDE00 }, "\\ud83d😀")]
+    public void Serialize_escapes_lone_surrogates_like_JSON_stringify(
+        int[] codeUnits,
+        string expectedInner
+    )
+    {
+        var input = new string(codeUnits.Select(u => (char)u).ToArray());
+        Wire(new JsonObject { ["s"] = input })
+            .Should()
+            .Be(Envelope("{\"s\":\"" + expectedInner + "\"}"));
+    }
+
+    [Test]
+    public void Serialize_escapes_a_lone_surrogate_in_a_key()
+    {
+        Wire(new JsonObject { [new string((char)0xDBFF, 1)] = 1 })
+            .Should()
+            .Be(Envelope("{\"\\udbff\":1}"));
+    }
+
+    [Test]
+    public void Serialize_orders_integer_like_keys_by_UTF16_code_unit()
+    {
+        // RFC 8785 sorts every key by code unit. A JavaScript object would enumerate "2" before "10", so the
+        // TypeScript twin must not rely on insertion into a plain object to produce this order.
+        Wire(
+                new JsonObject
+                {
+                    ["b"] = 1,
+                    ["10"] = "x",
+                    ["2"] = "y",
+                }
+            )
+            .Should()
+            .Be(Envelope("{\"10\":\"x\",\"2\":\"y\",\"b\":1}"));
+    }
+
+    [Test]
+    public void Serialize_keeps_a_key_named___proto__()
+    {
+        Wire(new JsonObject { ["__proto__"] = 1, ["a"] = 2 })
+            .Should()
+            .Be(Envelope("{\"__proto__\":1,\"a\":2}"));
+    }
 }

@@ -15,4 +15,12 @@ public class RabbitMqBroadcasterOptions
     /// Defaults to "trax.lifecycle".
     /// </summary>
     public string ExchangeName { get; set; } = "trax.lifecycle";
+
+    /// <summary>
+    /// How many received events the receiver may hold unacknowledged at once. The broker stops
+    /// delivering to this receiver until it acknowledges one, so a slow event handler leaves
+    /// events queued on the broker rather than in the receiving process. Defaults to 64. Must be
+    /// between 1 and 65535.
+    /// </summary>
+    public ushort PrefetchCount { get; set; } = 64;
 }

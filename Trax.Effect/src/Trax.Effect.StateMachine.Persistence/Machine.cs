@@ -79,8 +79,19 @@ public abstract class Machine<TState, TTrigger> : IMachine
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
-    private BuiltMachine<TState, TTrigger>? _built;
-    private BuiltMachine<TState, TTrigger> Built => _built ??= BuildOnce();
+    // A machine is a singleton that concurrent requests read, so both lazies publish exactly one value and
+    // every reader waits for it: a reader during the first Configure must not see a half-built machine or a
+    // null schema hash, because a null hash switches the schema-mismatch check off.
+    private readonly Lazy<BuiltMachine<TState, TTrigger>> _built;
+    private readonly Lazy<string?> _schemaHash;
+
+    protected Machine()
+    {
+        _built = new(BuildOnce, LazyThreadSafetyMode.ExecutionAndPublication);
+        _schemaHash = new(ComputeSchemaHash, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    private BuiltMachine<TState, TTrigger> Built => _built.Value;
 
     private BuiltMachine<TState, TTrigger> BuildOnce()
     {
@@ -98,34 +109,20 @@ public abstract class Machine<TState, TTrigger> : IMachine
 
     public string ExportIr() => IrExporter.Export(Built);
 
-    private string? _schemaHash;
-    private bool _schemaHashComputed;
+    public string? SchemaHash => _schemaHash.Value;
 
-    public string? SchemaHash
-    {
-        get
-        {
-            if (_schemaHashComputed)
-                return _schemaHash;
-            _schemaHashComputed = true;
-            try
-            {
-                _schemaHash = Convert.ToHexStringLower(
-                    System.Security.Cryptography.SHA256.HashData(
-                        System.Text.Encoding.UTF8.GetBytes(ExportIr())
-                    )
-                );
-            }
-            catch (InvalidOperationException)
-            {
-                // A raw-delegate machine has no exportable IR (its guards/reducers are opaque closures), so it
-                // has no frontend twin, no schema hash, and no handshake. Null, not throw: the guard treats it
-                // as "no check" for a client that somehow sends a hash for it.
-                _schemaHash = null;
-            }
-            return _schemaHash;
-        }
-    }
+    // A raw-delegate machine has no exportable IR (its guards/reducers are opaque closures), so it has no
+    // frontend twin, no schema hash, and no handshake: null, which the guard treats as "no check". Any other
+    // failure propagates, and the lazy rethrows it to every reader rather than answering null, which would
+    // switch the check off for a machine that should have one.
+    private string? ComputeSchemaHash() =>
+        Built.Declarative is null
+            ? null
+            : Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(ExportIr())
+                )
+            );
 
     /// <summary>Override to ship a committed differential corpus (e.g. an embedded resource); null = none.</summary>
     public virtual string? Corpus => null;

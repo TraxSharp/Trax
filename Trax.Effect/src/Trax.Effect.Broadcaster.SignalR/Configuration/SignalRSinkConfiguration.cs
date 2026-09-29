@@ -11,12 +11,14 @@ public sealed class SignalRSinkConfiguration
     internal SignalRSinkConfiguration(
         IReadOnlySet<string> eventTypeFilter,
         IReadOnlySet<string> trainNameFilter,
-        Func<TrainLifecycleEventMessage, object> projection
+        Func<TrainLifecycleEventMessage, object> projection,
+        int deliveryQueueCapacity
     )
     {
         EventTypeFilter = eventTypeFilter;
         TrainNameFilter = trainNameFilter;
         Projection = projection;
+        DeliveryQueueCapacity = deliveryQueueCapacity;
     }
 
     /// <summary>
@@ -33,6 +35,12 @@ public sealed class SignalRSinkConfiguration
     /// Projection applied to each message before it is sent to clients.
     /// </summary>
     public Func<TrainLifecycleEventMessage, object> Projection { get; }
+
+    /// <summary>
+    /// How many events may wait for delivery to clients. When the queue is full, further events
+    /// are dropped rather than holding up the train that raised them.
+    /// </summary>
+    public int DeliveryQueueCapacity { get; }
 
     /// <summary>
     /// Returns true if a message satisfies both the event-type and train-name filters.

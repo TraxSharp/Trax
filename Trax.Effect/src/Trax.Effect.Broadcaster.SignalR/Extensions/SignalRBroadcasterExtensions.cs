@@ -26,6 +26,9 @@ public static class SignalRBroadcasterExtensions
     /// as both an <see cref="Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook"/>
     /// (local-event path) and an <see cref="ITrainEventHandler"/> (remote-event path), so
     /// browsers receive events whether trains run in-process or arrive over a transport.
+    /// A lifecycle hook only queues the event: delivery to clients happens on a background
+    /// sender, so a slow or stalled client never holds up a train. See
+    /// <see cref="Configuration.SignalRSinkOptions.SignalRSinkOptions.WithDeliveryQueueCapacity"/>.
     /// </remarks>
     public static BroadcasterBuilder UseSignalRHub(
         this BroadcasterBuilder builder,
@@ -60,6 +63,11 @@ public static class SignalRBroadcasterExtensions
         );
 
         builder.ServiceCollection.AddSingleton<ITrainEventHandler>(sp =>
+            sp.GetRequiredService<SignalRTrainEventDispatcher>()
+        );
+
+        // The dispatcher delivers from a background queue; stopping the host drains it.
+        builder.ServiceCollection.AddHostedService(sp =>
             sp.GetRequiredService<SignalRTrainEventDispatcher>()
         );
 

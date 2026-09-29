@@ -16,4 +16,10 @@ public partial class SignalRSinkOptions
     private readonly HashSet<string> _trainNames = new(StringComparer.Ordinal);
     private Func<TrainLifecycleEventMessage, object> _projection =
         DefaultTraxClientEventProjection.Project;
+    private int _deliveryQueueCapacity = DefaultDeliveryQueueCapacity;
+
+    /// <summary>
+    /// The default for <see cref="WithDeliveryQueueCapacity"/>.
+    /// </summary>
+    public const int DefaultDeliveryQueueCapacity = 1024;
 }

@@ -1091,6 +1091,19 @@ namespace Trax.Effect.Services.JunctionEffectRunner
         public void Dispose() { }
     }
 }
+namespace Trax.Effect.Services.LifecycleHookOutputPolicy
+{
+    public sealed class DefaultLifecycleHookOutputPolicy : Trax.Effect.Services.LifecycleHookOutputPolicy.ILifecycleHookOutputPolicy
+    {
+        public const int DefaultMaxCopyBytes = 1048576;
+        public DefaultLifecycleHookOutputPolicy() { }
+        public int? MaxCopyBytes(string trainName) { }
+    }
+    public interface ILifecycleHookOutputPolicy
+    {
+        int? MaxCopyBytes(string trainName);
+    }
+}
 namespace Trax.Effect.Services.LifecycleHookRunner
 {
     public interface ILifecycleHookRunner : System.IDisposable
@@ -1104,6 +1117,7 @@ namespace Trax.Effect.Services.LifecycleHookRunner
     public class LifecycleHookRunner : System.IDisposable, Trax.Effect.Services.LifecycleHookRunner.ILifecycleHookRunner
     {
         public LifecycleHookRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory> hookFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.LifecycleHookRunner.LifecycleHookRunner>? logger = null) { }
+        public LifecycleHookRunner(System.Collections.Generic.IEnumerable<Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory> hookFactories, Trax.Effect.Services.EffectRegistry.IEffectRegistry effectRegistry, System.IServiceProvider serviceProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.LifecycleHookRunner.LifecycleHookRunner>? logger = null) { }
         public void Dispose() { }
         public System.Threading.Tasks.Task OnCancelled(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task OnCompleted(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken ct) { }
@@ -1243,12 +1257,14 @@ namespace Trax.Effect.Services.TrainLifecycleHookFactory
     public interface ITrainLifecycleHookFactory
     {
         Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook Create();
+        Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook Create(System.IServiceProvider serviceProvider);
     }
     public class LifecycleHookFactory<THook> : Trax.Effect.Services.TrainLifecycleHookFactory.ITrainLifecycleHookFactory
         where THook :  class, Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook
     {
         public LifecycleHookFactory(System.IServiceProvider serviceProvider) { }
         public Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook Create() { }
+        public Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook Create(System.IServiceProvider scopeProvider) { }
     }
 }
 namespace Trax.Effect.Utils
@@ -1266,11 +1282,21 @@ namespace Trax.Effect.Utils
         public override System.Type? Read(ref System.Text.Json.Utf8JsonReader reader, System.Type typeToConvert, System.Text.Json.JsonSerializerOptions options) { }
         public override void Write(System.Text.Json.Utf8JsonWriter writer, System.Type value, System.Text.Json.JsonSerializerOptions options) { }
     }
+    public static class TraxBoundedJson
+    {
+        public static string Serialize(object value, System.Text.Json.JsonSerializerOptions options, int? maxBytes) { }
+        public static string TruncatedPlaceholder(int maxBytes) { }
+    }
     public static class TraxJsonSerializationOptions
     {
         public static System.Text.Json.JsonSerializerOptions Default { get; set; }
         public static System.Text.Json.JsonSerializerOptions JunctionLogging { get; set; }
         public static System.Text.Json.JsonSerializerOptions ManifestProperties { get; set; }
+    }
+    public static class TraxLogSerialization
+    {
+        public const string OmittedProperty = "_omitted";
+        public static System.Text.Json.JsonSerializerOptions ForLogging(System.Text.Json.JsonSerializerOptions options) { }
     }
     public static class TraxRedaction
     {

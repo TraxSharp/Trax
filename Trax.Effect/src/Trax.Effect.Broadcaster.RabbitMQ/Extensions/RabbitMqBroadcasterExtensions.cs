@@ -21,6 +21,16 @@ public static class RabbitMqBroadcasterExtensions
         var options = new RabbitMqBroadcasterOptions { ConnectionString = connectionString };
         configure?.Invoke(options);
 
+        if (options.PrefetchCount == 0)
+        {
+            throw new ArgumentException(
+                "UseRabbitMq() requires RabbitMqBroadcasterOptions.PrefetchCount of at least 1. "
+                    + "A prefetch count of 0 means no limit, which lets unacknowledged events pile up "
+                    + "in the receiving process. Omit the setting to use the default of 64.",
+                nameof(configure)
+            );
+        }
+
         builder.ServiceCollection.AddSingleton(options);
         builder
             .ServiceCollection.AddSingleton<RabbitMqTrainEventBroadcaster>()

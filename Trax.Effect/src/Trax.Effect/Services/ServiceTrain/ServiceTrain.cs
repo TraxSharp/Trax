@@ -13,6 +13,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectRunner;
+using Trax.Effect.Services.LifecycleHookOutputPolicy;
 using Trax.Effect.Services.LifecycleHookRunner;
 
 namespace Trax.Effect.Services.ServiceTrain;
@@ -302,6 +303,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// Sealed, as are the other overloads: a service train does its work in <c>Junctions()</c>,
     /// and <c>Run</c> owns the metadata row, the lifecycle hooks and the outcome write around it.
     /// Trax.Effect's docs/adr/0009 records why.
+    ///
+    /// Each call records its own metadata row: running the same instance again starts a new
+    /// row, with a new <c>ExternalId</c> unless one was set for it, and leaves the previous run's
+    /// record as it was. An instance carries the state of the run in progress, so it runs one
+    /// execution at a time and is not shared between concurrent callers, which is why a service
+    /// train cannot be registered as a singleton.
     /// </remarks>
     /// <param name="input">The input data for the train</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
@@ -318,8 +325,18 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         LifecycleHookRunner.AssertLoaded();
         ServiceProvider.AssertLoaded();
 
-        if (Metadata == null)
+        // Each Run is its own execution with its own row. A scoped instance resolved once and run
+        // twice would otherwise write the second run over the first's terminal row, losing the
+        // first outcome. Metadata the caller passed through an overload below is this run's row.
+        if (_metadataSuppliedForRun)
+            _metadataSuppliedForRun = false;
+        else
+        {
+            if (Metadata is not null)
+                ForgetPreviousRun();
+
             await this.InitializeServiceTrain();
+        }
 
         Metadata.AssertLoaded();
 
@@ -456,26 +473,34 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         await this.FinishServiceTrain(result);
         await SaveOutcome();
 
-        // Ensure output is available as serialized JSON for lifecycle hooks,
-        // even when SaveTrainParameters() is not configured. Runs AFTER
-        // SaveChanges() so it is NOT persisted to the database.
+        // Hooks read the output as serialized JSON. When the parameter effect wrote the stored
+        // copy they get that; otherwise one is built here, AFTER the outcome is saved so it is not
+        // persisted, through the same decision and ceiling as the stored copy: an output the host
+        // excluded is not serialized for the hooks either, and any copy is bounded, because the
+        // broadcaster, GraphQL and SignalR hooks publish it to other processes and subscribers.
         if (Metadata.Output is null)
         {
             var outputObject = Metadata.GetOutputObject();
-            if (outputObject is not null)
+            var ceiling = (
+                ServiceProvider.GetService(typeof(ILifecycleHookOutputPolicy))
+                    as ILifecycleHookOutputPolicy
+                ?? new DefaultLifecycleHookOutputPolicy()
+            ).MaxCopyBytes(TrainName);
+
+            if (outputObject is not null && ceiling is not null)
             {
                 try
                 {
-                    // Masked as the stored output is: hooks broadcast this to other
-                    // processes and subscribers.
-                    Metadata.Output = System.Text.Json.JsonSerializer.Serialize(
-                        (object)outputObject,
+                    // Masked as the stored output is.
+                    Metadata.Output = Utils.TraxBoundedJson.Serialize(
+                        outputObject,
                         Utils.TraxRedaction.WithRedaction(
                             Configuration
                                 .TraxEffectConfiguration
                                 .TraxEffectConfiguration
                                 .StaticSystemJsonSerializerOptions
-                        )
+                        ),
+                        ceiling
                     );
                 }
                 catch (Exception ex)
@@ -528,9 +553,26 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         return EffectRunner.SaveChanges(CancellationToken.None);
     }
 
+    /// <summary>
+    /// Drops the previous run's row so the next run creates its own. The external id identifies a
+    /// run, so it is replaced too unless the caller already set a new one for this run.
+    /// </summary>
+    private void ForgetPreviousRun()
+    {
+        if (ExternalId == Metadata!.ExternalId)
+            ExternalId = Guid.NewGuid().ToString("N");
+
+        Metadata = null;
+    }
+
+    // Set by the overloads that take a pre-created row, and consumed by the Run they call, so that
+    // run uses the caller's row instead of starting a fresh one.
+    private bool _metadataSuppliedForRun;
+
     public async Task<TOut> Run(TIn input, Metadata metadata)
     {
         await this.InitializeServiceTrain(metadata);
+        _metadataSuppliedForRun = true;
         return await Run(input, CancellationToken);
     }
 
@@ -541,6 +583,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     {
         CancellationToken = cancellationToken;
         await this.InitializeServiceTrain(metadata);
+        _metadataSuppliedForRun = true;
         return await Run(input, CancellationToken);
     }
 

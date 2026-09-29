@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Models.WorkQueue;
 
@@ -265,7 +266,9 @@ public class WorkQueue : IModel
         JsonSerializer.Serialize(
             this,
             GetType(),
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
         );
 
     #endregion

@@ -41,9 +41,9 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `auth` | [0004](./0004-trax-owns-the-authorization-vocabulary.md), [0008](./0008-per-user-data-is-filtered-by-its-owner.md) |
-| `data-model` | [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), [0003](./0003-a-model-and-its-persistent-mapping-are-a-pair.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md), [0007](./0007-cancelled-staged-entries-are-deleted-after-a-retention.md), [0008](./0008-per-user-data-is-filtered-by-its-owner.md), [0010](./0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md) |
+| `data-model` | [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), [0003](./0003-a-model-and-its-persistent-mapping-are-a-pair.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md), [0007](./0007-cancelled-staged-entries-are-deleted-after-a-retention.md), [0008](./0008-per-user-data-is-filtered-by-its-owner.md), [0010](./0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md), [0013](./0013-a-request-id-replays-only-the-request-it-recorded.md) |
 | `migrations` | [0001](./0001-schema-changes-are-hand-written-sql.md), [0002](./0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md) |
-| `platform` | [0004](./0004-trax-owns-the-authorization-vocabulary.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), [0007](./0007-cancelled-staged-entries-are-deleted-after-a-retention.md), [0009](./0009-a-service-train-does-its-work-in-junctions.md), [0010](./0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md) |
+| `platform` | [0004](./0004-trax-owns-the-authorization-vocabulary.md), [0005](./0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), [0007](./0007-cancelled-staged-entries-are-deleted-after-a-retention.md), [0009](./0009-a-service-train-does-its-work-in-junctions.md), [0010](./0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md), [0011](./0011-a-service-train-instance-is-one-run.md), [0012](./0012-the-signalr-sink-queues-events-and-drops-when-clients-fall-behind.md), [0013](./0013-a-request-id-replays-only-the-request-it-recorded.md) |
 | `providers` | [0001](./0001-schema-changes-are-hand-written-sql.md), [0006](./0006-a-closed-vocabulary-is-a-postgres-enum.md) |
 
 ## All of them
@@ -60,3 +60,6 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0008](./0008-per-user-data-is-filtered-by-its-owner.md) | Per-user data is scoped by a row filter that reads the principal, and exposed as a bare [TraxAuthorize] | auth, data-model |
 | [0009](./0009-a-service-train-does-its-work-in-junctions.md) | A service train does its work in Junctions(), and neither its Run nor its NewMonad can be overridden | platform |
 | [0010](./0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md) | A sensitive field is marked, and masked where its copy is written | platform, data-model |
+| [0011](./0011-a-service-train-instance-is-one-run.md) | A service train instance is one run at a time, and is never a singleton | platform |
+| [0012](./0012-the-signalr-sink-queues-events-and-drops-when-clients-fall-behind.md) | The SignalR sink queues events, and drops them when clients fall behind | platform |
+| [0013](./0013-a-request-id-replays-only-the-request-it-recorded.md) | A request id replays only the request it recorded | platform, data-model |

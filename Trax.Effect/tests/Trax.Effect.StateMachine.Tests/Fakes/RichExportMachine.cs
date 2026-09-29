@@ -6,8 +6,8 @@ namespace Trax.Effect.StateMachine.Tests.Fakes;
 
 /// <summary>
 /// A machine authored only to exercise the IR exporter across every rule kind, reducer kind, comparison
-/// operator, an effect binding, and a committed state. It is never run (some rules/reducers are custom with
-/// no handler), only exported, so the exporter's full surface is covered.
+/// operator, an effect binding, and a committed state. It is never run, only exported, so the exporter's full
+/// surface is covered. Its custom handlers are bound only because Build refuses a custom name without one.
 /// </summary>
 public static class RichExportMachine
 {
@@ -96,6 +96,10 @@ public static class RichExportMachine
             .To(RState.B);
 
         m.In(RState.B).Committed().Context<Ctx>();
+
+        m.CustomGuard("c", (_, _) => true)
+            .CustomGuard("always", (_, _) => true)
+            .CustomReducer("fresh", (context, _) => context);
 
         return m.Build();
     }

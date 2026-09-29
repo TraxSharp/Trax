@@ -12,7 +12,9 @@ using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectProviderFactory;
 using Trax.Effect.Services.JunctionEffectRunner;
+using Trax.Effect.Services.LifecycleHookOutputPolicy;
 using Trax.Effect.Services.LifecycleHookRunner;
+using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Services.TrainLifecycleHook;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 
@@ -84,6 +86,9 @@ public static class ServiceExtensions
         services.AddSingleton<TraxChangeSignal>();
         services.AddSingleton<ITraxChangeSignal>(sp => sp.GetRequiredService<TraxChangeSignal>());
         services.AddHostedService<ChangeSignalCoalescer>();
+
+        // SaveTrainParameters, configured above, registers its own policy first.
+        services.TryAddSingleton<ILifecycleHookOutputPolicy, DefaultLifecycleHookOutputPolicy>();
 
         return services
             .AddSingleton<IEffectRegistry>(registry)
@@ -718,14 +723,25 @@ public static class ServiceExtensions
     /// Registers a Trax route with singleton lifetime. Sets <c>CanonicalName</c> to
     /// <typeparamref name="TService"/>'s FullName and injects <see cref="InjectAttribute"/> properties.
     /// </summary>
+    /// <remarks>
+    /// For junctions and other stateless routes. A <see cref="ServiceTrain{TIn,TOut}"/> is refused:
+    /// an instance carries the state of the run in progress (its metadata row, effect runner and
+    /// data context), so one shared by the whole process would mix concurrent runs together.
+    /// Register a train scoped or transient.
+    /// </remarks>
     /// <typeparam name="TService">The route interface type (used as the canonical name).</typeparam>
     /// <typeparam name="TImplementation">The concrete route implementation.</typeparam>
+    /// <exception cref="InvalidOperationException">
+    /// <typeparamref name="TImplementation"/> is a service train.
+    /// </exception>
     public static IServiceCollection AddSingletonTraxRoute<TService, TImplementation>(
         this IServiceCollection services
     )
         where TService : class
         where TImplementation : class, TService
     {
+        RefuseSingletonServiceTrain(typeof(TService), typeof(TImplementation));
+
         services.AddSingleton<TImplementation>();
         services.AddSingleton<TService>(sp =>
         {
@@ -744,15 +760,24 @@ public static class ServiceExtensions
     /// <summary>
     /// Registers a Trax route with singleton lifetime using runtime types.
     /// </summary>
+    /// <remarks>
+    /// A <see cref="ServiceTrain{TIn,TOut}"/> is refused; see
+    /// <see cref="AddSingletonTraxRoute{TService,TImplementation}"/>.
+    /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <param name="serviceInterface">The route interface type (used as the canonical name).</param>
     /// <param name="serviceImplementation">The concrete route implementation type.</param>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="serviceImplementation"/> is a service train.
+    /// </exception>
     public static IServiceCollection AddSingletonTraxRoute(
         this IServiceCollection services,
         Type serviceInterface,
         Type serviceImplementation
     )
     {
+        RefuseSingletonServiceTrain(serviceInterface, serviceImplementation);
+
         services.AddSingleton(serviceImplementation);
         services.AddSingleton(
             serviceInterface,
@@ -769,6 +794,19 @@ public static class ServiceExtensions
         );
 
         return services;
+    }
+
+    private static void RefuseSingletonServiceTrain(Type serviceInterface, Type implementation)
+    {
+        for (var type = implementation; type is not null; type = type.BaseType)
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ServiceTrain<,>))
+                throw new InvalidOperationException(
+                    $"{implementation.Name} is a service train and cannot be registered as a "
+                        + $"singleton ({serviceInterface.Name}). A train instance carries the state "
+                        + "of the run in progress, so one instance shared by the process would mix "
+                        + "concurrent runs together. Register it with AddScopedTraxRoute or "
+                        + "AddTransientTraxRoute."
+                );
     }
 
     #endregion

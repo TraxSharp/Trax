@@ -71,6 +71,29 @@ public interface ISnapshotDraftService
         CancellationToken cancellationToken = default
     );
 
+    /// <summary>
+    /// <see cref="Advance(string, Guid, string, JsonNode?, string?, CancellationToken)"/> that first
+    /// compares the result with <paramref name="clientResult"/>, the canonical snapshot the client's twin
+    /// computed, and persists nothing when they differ: the advance is refused as
+    /// <c>client-divergence</c> and the stored draft is unchanged. A null <paramref name="clientResult"/>
+    /// is a plain advance. A service that does not override this cannot check before it writes, so it
+    /// refuses any client result rather than persisting an advance it would then report as refused.
+    /// </summary>
+    Task<AdvanceOutcome> Advance(
+        string userKey,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        string? requestId,
+        string? clientResult,
+        CancellationToken cancellationToken = default
+    ) =>
+        clientResult is null
+            ? Advance(userKey, id, trigger, input, requestId, cancellationToken)
+            : throw new NotSupportedException(
+                $"{GetType().Name} cannot compare a client result before it persists an advance."
+            );
+
     string Serialize(Snapshot snapshot);
 }
 
@@ -217,12 +240,12 @@ public sealed class SnapshotDraftService<TState, TTrigger>(
 
                 // Atomic overwrite guarded by the token we just read: a commit that lands between this read
                 // and this write makes the soft save LOSE (Conflict) instead of resurrecting the draft.
-                var wrote = await store.Update(
+                var wrote = await store.UpdateWithRequest(
                     userKey,
                     id,
                     ok.Snapshot,
                     stored.Token,
-                    stored.LastRequestId,
+                    stored.LastRequest,
                     cancellationToken
                 );
                 return await Persisted(wrote, userKey, id, ok.Snapshot, cancellationToken);
@@ -240,15 +263,28 @@ public sealed class SnapshotDraftService<TState, TTrigger>(
     /// <summary>
     /// Authoritative path: read the STORED snapshot, re-drive it by one trigger, and persist the result
     /// with an optimistic-concurrency check — never trusting a client-computed state. Pass a stable
-    /// <paramref name="requestId"/> to make retries idempotent: a repeat of the same request returns the
-    /// current snapshot instead of firing the trigger again.
+    /// <paramref name="requestId"/> to make retries idempotent: a repeat of the same request (the same id
+    /// and trigger) returns the current snapshot instead of firing the trigger again, and an id reused for
+    /// a different trigger is refused as <c>request-id-reused</c>. A result that could not be stored, or is
+    /// larger than <see cref="SnapshotLimits.MaxSnapshotBytes"/>, is refused before anything is written.
     /// </summary>
-    public async Task<AdvanceOutcome> Advance(
+    public Task<AdvanceOutcome> Advance(
         string userKey,
         Guid id,
         string trigger,
         JsonNode? input = null,
         string? requestId = null,
+        CancellationToken cancellationToken = default
+    ) => Advance(userKey, id, trigger, input, requestId, clientResult: null, cancellationToken);
+
+    /// <inheritdoc cref="ISnapshotDraftService.Advance(string, Guid, string, JsonNode?, string?, string?, CancellationToken)"/>
+    public async Task<AdvanceOutcome> Advance(
+        string userKey,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        string? requestId,
+        string? clientResult,
         CancellationToken cancellationToken = default
     )
     {
@@ -256,57 +292,141 @@ public sealed class SnapshotDraftService<TState, TTrigger>(
         if (stored is null)
             return new AdvanceOutcome.NotFound();
 
-        // Idempotent replay: this exact request already applied — return the current snapshot, don't re-fire.
-        if (requestId is not null && requestId == stored.LastRequestId)
-            return RehydrateToOutcome(stored.Json);
-
+        Snapshot current;
         switch (machine.Rehydrate(stored.Json))
         {
+            case RehydrationResult.Ok ok:
+                current = ok.Snapshot;
+                break;
             case RehydrationResult.Error error:
                 return new AdvanceOutcome.LoadError(error.Code, error.Message);
-
-            case RehydrationResult.Ok ok:
-                switch (machine.Advance(ok.Snapshot, trigger, input))
-                {
-                    case AdvanceResult.Rejected rejected:
-                        return new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail);
-                    case AdvanceResult.Transitioned transitioned:
-                        var updated = await store.Update(
-                            userKey,
-                            id,
-                            transitioned.Snapshot,
-                            stored.Token,
-                            requestId,
-                            cancellationToken
-                        );
-                        if (!updated)
-                            return new AdvanceOutcome.Conflict();
-                        if (transitioned.Snapshot.State == _initialState)
-                            await ReleaseEffectClaims(userKey, id, cancellationToken);
-                        return new AdvanceOutcome.Advanced(transitioned.Snapshot);
-                    default:
-                        return new AdvanceOutcome.Rejected(RejectionReasons.InternalError, null);
-                }
-
             default:
                 return new AdvanceOutcome.LoadError(
                     RehydrationErrorCodes.Malformed,
                     "Unknown rehydration result."
                 );
         }
+
+        switch (Retry(stored.LastRequest, requestId, trigger, current.State))
+        {
+            case RetryKind.Replay:
+                return Checked(current, clientResult) ?? new AdvanceOutcome.Advanced(current);
+            case RetryKind.Reused:
+                return new AdvanceOutcome.Rejected(
+                    "request-id-reused",
+                    "This request id was already used for a different action. Send a new id."
+                );
+        }
+
+        // Compute the advance and check it in full before anything is written, so a refusal below leaves the
+        // stored draft exactly as it was.
+        Snapshot next;
+        switch (machine.Advance(current, trigger, input))
+        {
+            case AdvanceResult.Rejected rejected:
+                return new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail);
+            case AdvanceResult.Transitioned transitioned:
+                next = transitioned.Snapshot;
+                break;
+            default:
+                return new AdvanceOutcome.Rejected(RejectionReasons.InternalError, null);
+        }
+
+        if (StorableJson.Problem(next.Context) is { } unstorable)
+            return new AdvanceOutcome.Rejected(RehydrationErrorCodes.Malformed, unstorable);
+
+        var wire = machine.Serialize(next);
+        if (Encoding.UTF8.GetByteCount(wire) > SnapshotLimits.MaxSnapshotBytes)
+            return new AdvanceOutcome.Rejected(
+                "too-large",
+                $"The advanced snapshot exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit."
+            );
+
+        if (Checked(wire, clientResult) is { } divergence)
+            return divergence;
+
+        var updated = await store.UpdateWithRequest(
+            userKey,
+            id,
+            next,
+            stored.Token,
+            requestId is null ? null : new AppliedRequest(requestId, trigger, current.State),
+            cancellationToken
+        );
+        if (!updated)
+            return new AdvanceOutcome.Conflict();
+        if (next.State == _initialState)
+            await ReleaseEffectClaims(userKey, id, cancellationToken);
+        return new AdvanceOutcome.Advanced(next);
     }
 
-    private AdvanceOutcome RehydrateToOutcome(string json) =>
-        machine.Rehydrate(json) switch
-        {
-            RehydrationResult.Ok ok => new AdvanceOutcome.Advanced(ok.Snapshot),
-            RehydrationResult.Error error => new AdvanceOutcome.LoadError(
-                error.Code,
-                error.Message
-            ),
-            _ => new AdvanceOutcome.LoadError(
-                RehydrationErrorCodes.Malformed,
-                "Unknown rehydration result."
-            ),
-        };
+    /// <summary>
+    /// Whether <paramref name="requestId"/> is one the draft recorded for a different trigger, so an advance
+    /// on <paramref name="trigger"/> with it would be refused as <c>request-id-reused</c>. The effect runner
+    /// asks before it runs an irreversible effect, so a refused id never pays for a delivery it cannot record.
+    /// </summary>
+    internal async Task<bool> IsReusedRequest(
+        string userKey,
+        Guid id,
+        string requestId,
+        string trigger,
+        string currentState,
+        CancellationToken cancellationToken
+    ) =>
+        await store.Get(userKey, id, cancellationToken) is { } stored
+        && Retry(stored.LastRequest, requestId, trigger, currentState) == RetryKind.Reused;
+
+    private enum RetryKind
+    {
+        /// <summary>Not a retry: fire the trigger.</summary>
+        Fire,
+
+        /// <summary>A retry of the recorded request: answer with the current snapshot.</summary>
+        Replay,
+
+        /// <summary>The recorded id with a different trigger (or none recorded): refuse.</summary>
+        Reused,
+    }
+
+    // Whether this request repeats the one the draft last recorded. The id alone is not enough: a client
+    // (or Send's default key) can reuse an id for a different trigger, and replaying then answers one action
+    // with the outcome of another. A matching id and trigger replay, unless the draft is back in the state
+    // the request fired from on an edge that leaves it: then the request's outcome is gone (the draft was
+    // reset or moved back since) and the same request is a new one.
+    private RetryKind Retry(
+        AppliedRequest? last,
+        string? requestId,
+        string trigger,
+        string currentState
+    )
+    {
+        if (requestId is null || last is null || requestId != last.RequestId)
+            return RetryKind.Fire;
+        if (last.Trigger != trigger || last.FromState is null)
+            return RetryKind.Reused;
+        if (currentState == last.FromState && !IsSelfLoop(last.FromState, trigger))
+            return RetryKind.Fire;
+        return RetryKind.Replay;
+    }
+
+    private bool IsSelfLoop(string state, string trigger) =>
+        machine.Definition.Transitions.Any(t =>
+            t.From.ToString() == state && t.Trigger.ToString() == trigger && t.To.Equals(t.From)
+        );
+
+    private AdvanceOutcome? Checked(Snapshot snapshot, string? clientResult) =>
+        clientResult is null ? null : Checked(machine.Serialize(snapshot), clientResult);
+
+    // The runtime differential: the client's twin computed its own result for this advance, and it must
+    // equal the server's canonical wire byte for byte. A divergence means the two engines disagreed on a real
+    // transition, so the advance is refused and the client reloads. It is checked before the write, so the
+    // refusal is true: nothing was persisted.
+    private static AdvanceOutcome? Checked(string serverWire, string? clientResult) =>
+        clientResult is not null
+        && !string.Equals(clientResult, serverWire, StringComparison.Ordinal)
+            ? new AdvanceOutcome.Rejected(
+                "client-divergence",
+                "The client and server disagree on this transition; reload to continue."
+            )
+            : null;
 }

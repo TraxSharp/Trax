@@ -51,6 +51,20 @@ public class SnapshotRecord
     [Column("last_request_id")]
     public string? LastRequestId { get; set; }
 
+    /// <summary>
+    /// The trigger the last applied advance fired. A request id replays only for the same trigger, so an id
+    /// reused for a different trigger is refused rather than answered with an unrelated snapshot.
+    /// </summary>
+    [Column("last_request_trigger")]
+    public string? LastRequestTrigger { get; set; }
+
+    /// <summary>
+    /// The state the last applied advance fired from. A draft back in that state (reset, or moved back) no
+    /// longer shows the request's outcome, so the same request id and trigger fire again rather than replay.
+    /// </summary>
+    [Column("last_request_from_state")]
+    public string? LastRequestFromState { get; set; }
+
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -106,8 +120,9 @@ public class EffectClaim
 /// A ready-made DbContext for the snapshot-draft and effect-claim tables in the <c>trax</c> schema. A
 /// host may use this directly, or add the two entities to its own context via the entities'
 /// <c>OnModelCreating</c> helpers. The tables ship as migrations that apply automatically when the data
-/// provider is registered: Postgres via <c>040_state_machine_snapshots.sql</c>, SQLite via
-/// <c>006_state_machine_snapshots.sql</c>. Tests build them either from those migrations or via
+/// provider is registered: Postgres via <c>040_state_machine_snapshots.sql</c> and
+/// <c>048_snapshot_draft_request_scope.sql</c>, SQLite via <c>006_state_machine_snapshots.sql</c> and
+/// <c>013_snapshot_draft_request_scope.sql</c>. Tests build them either from those migrations or via
 /// <c>EnsureCreated</c> against a throwaway database.
 /// </summary>
 public sealed class SnapshotDbContext(DbContextOptions<SnapshotDbContext> options)

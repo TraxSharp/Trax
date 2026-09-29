@@ -69,6 +69,35 @@ public interface IMachineBuilder<TState, TTrigger>
 
     /// <summary>Begin configuring transitions and rules for a state.</summary>
     IStateBuilder<TState, TTrigger> In(TState state);
+
+    /// <summary>
+    /// Bind the C# handler for a <see cref="Rule.Custom"/> named <paramref name="name"/>, wherever the
+    /// machine uses it (a transition's <c>When</c> or a state's <c>Requires</c>). A custom rule is the
+    /// escape hatch for a predicate the declarative rules cannot express, hand-written once per runtime:
+    /// this is the C# one, and the TypeScript twin's <c>customGuards</c> is the other. Build refuses a
+    /// machine that names a custom rule with no handler bound.
+    /// </summary>
+    IMachineBuilder<TState, TTrigger> CustomGuard(
+        string name,
+        Func<JsonObject, JsonNode?, bool> guard
+    ) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support custom guard handlers."
+        );
+
+    /// <summary>
+    /// Bind the C# handler for a <see cref="Reduction.Custom"/> named <paramref name="name"/>: it receives
+    /// the current context and the trigger input and returns the destination context. The TypeScript
+    /// twin's <c>customReducers</c> is the other half. Build refuses a machine that names a custom
+    /// reduction with no handler bound.
+    /// </summary>
+    IMachineBuilder<TState, TTrigger> CustomReducer(
+        string name,
+        Func<JsonObject, JsonNode?, JsonObject> reducer
+    ) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support custom reducer handlers."
+        );
 }
 
 /// <summary>
@@ -196,6 +225,11 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
     private readonly Dictionary<TTrigger, List<JsonNode>> _diffSamples = [];
     private readonly Dictionary<TState, JsonNode> _diffSeeds = [];
     private readonly List<JsonNode> _diffContexts = [];
+    private readonly Dictionary<string, Func<JsonObject, JsonNode?, bool>> _customGuards = new(
+        StringComparer.Ordinal
+    );
+    private readonly Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>> _customReducers =
+        new(StringComparer.Ordinal);
     private bool _usedDeclarative;
 
     public IMachineBuilder<TState, TTrigger> Id(string id)
@@ -236,6 +270,24 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
 
     public IStateBuilder<TState, TTrigger> In(TState state) => new StateBuilder(this, state);
 
+    public IMachineBuilder<TState, TTrigger> CustomGuard(
+        string name,
+        Func<JsonObject, JsonNode?, bool> guard
+    )
+    {
+        _customGuards[name] = guard;
+        return this;
+    }
+
+    public IMachineBuilder<TState, TTrigger> CustomReducer(
+        string name,
+        Func<JsonObject, JsonNode?, JsonObject> reducer
+    )
+    {
+        _customReducers[name] = reducer;
+        return this;
+    }
+
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
     public BuiltMachine<TState, TTrigger> Build()
     {
@@ -247,6 +299,8 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             throw new InvalidOperationException(
                 "A machine needs a StartsAt(state, () => context). Add `.StartsAt(State.X, () => new JsonObject())` in Configure."
             );
+
+        RefuseUnboundCustomNames();
 
         var definition = new MachineDefinition<TState, TTrigger>
         {
@@ -294,6 +348,45 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
 
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative);
     }
+
+    // A custom rule or reduction with no C# handler would compile to a guard that is always false and a
+    // reducer that silently keeps the context, while a TypeScript twin given its handler behaves otherwise.
+    // Refuse the machine instead. Handlers may be bound before or after the rules that name them.
+    private void RefuseUnboundCustomNames()
+    {
+        var rules = _declarativeTransitions
+            .Select(t => t.Guard)
+            .Concat(_stateInvariants.Values.SelectMany(list => list))
+            .OfType<Rule>();
+        foreach (var name in rules.SelectMany(CustomNames).Distinct(StringComparer.Ordinal))
+            if (!_customGuards.ContainsKey(name))
+                throw new InvalidOperationException(
+                    $"The machine uses the custom rule '{name}', but no C# handler is bound to it. "
+                        + $"Add `.CustomGuard(\"{name}\", (context, input) => ...)` in Configure."
+                );
+
+        foreach (
+            var name in _declarativeTransitions
+                .Select(t => t.Reduce)
+                .OfType<Reduction.Custom>()
+                .Select(c => c.Name)
+                .Distinct(StringComparer.Ordinal)
+        )
+            if (!_customReducers.ContainsKey(name))
+                throw new InvalidOperationException(
+                    $"The machine uses the custom reduction '{name}', but no C# handler is bound to it. "
+                        + $"Add `.CustomReducer(\"{name}\", (context, input) => ...)` in Configure."
+                );
+    }
+
+    private static IEnumerable<string> CustomNames(Rule rule) =>
+        rule switch
+        {
+            Rule.Custom c => [c.Name],
+            Rule.All all => all.Rules.SelectMany(CustomNames),
+            Rule.Any any => any.Rules.SelectMany(CustomNames),
+            _ => [],
+        };
 
     private sealed class StateBuilder(MachineBuilder<TState, TTrigger> owner, TState state)
         : IStateBuilder<TState, TTrigger>
@@ -343,7 +436,7 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
                 }
                 if (invariants is not null)
                     foreach (var rule in invariants)
-                        if (!RuleEvaluator.Evaluate(rule, ctx, input: null))
+                        if (!RuleEvaluator.Evaluate(rule, ctx, input: null, owner._customGuards))
                             return "A state requirement was not satisfied.";
                 return null;
             };
@@ -385,7 +478,7 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             owner._usedDeclarative = true;
             _guardRule = guard;
             // Compile the rule down to the delegate the engine already runs; the engine is untouched.
-            _guard = (ctx, input) => RuleEvaluator.Evaluate(guard, ctx, input);
+            _guard = (ctx, input) => RuleEvaluator.Evaluate(guard, ctx, input, owner._customGuards);
             return this;
         }
 
@@ -419,7 +512,8 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
                     reduce,
                     ctx,
                     input,
-                    owner._initialContext?.Invoke() ?? new JsonObject()
+                    owner._initialContext?.Invoke() ?? new JsonObject(),
+                    owner._customReducers
                 );
             return this;
         }

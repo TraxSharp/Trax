@@ -183,6 +183,53 @@ public class OrderSendTests
         effect.Calls.Should().Be(2);
     }
 
+    [Test]
+    public async Task A_second_order_sent_with_the_same_request_id_after_a_soft_reset_is_placed()
+    {
+        var id = Guid.NewGuid();
+        await SeedReview("u", id);
+        var effect = new CountingEffect();
+        await NewRunner(effect).Run("u", id, "send"); // Placed, receipt-1
+
+        // Start over with a soft save (which releases the claim), fill a new order, and send it with the same
+        // key. The recorded request fired from Review, and the draft is back in Review, so its outcome is
+        // gone: the send is a new one and must be placed, not answered with a replay of the Review draft.
+        var ctx = TestDb.NewContext();
+        (
+            await TestOrder
+                .Service(new EfSnapshotStore(ctx), new EfEffectClaimStore(ctx))
+                .Autosave("u", id, TestOrder.DraftJson)
+        )
+            .Should()
+            .BeOfType<AutosaveResult.Saved>();
+        await SeedReview("u", id);
+
+        (await NewRunner(effect).Run("u", id, "send"))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Which.Snapshot.State.Should()
+            .Be("Placed");
+        effect.Calls.Should().Be(2);
+        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-2");
+    }
+
+    [Test]
+    public async Task A_send_with_a_request_id_an_advance_used_is_refused_before_the_effect_runs()
+    {
+        var id = Guid.NewGuid();
+        await SeedReview("u", id);
+        await TestOrder.Service(TestDb.NewStore()).Advance("u", id, "Back", requestId: "k");
+        await SeedReview("u", id);
+        var effect = new CountingEffect();
+
+        (await NewRunner(effect).Run("u", id, "k"))
+            .Should()
+            .BeOfType<AdvanceOutcome.Rejected>()
+            .Which.Reason.Should()
+            .Be("request-id-reused");
+        effect.Calls.Should().Be(0, "a refused send must not have charged");
+    }
+
     // Gap (test-catalog §8.2): the effect succeeds but the state write never lands (a crash between
     // recording the receipt and committing the terminal state). A retry must REPLAY the receipt and
     // commit, delivering exactly once — asserted here by fault injection, not just by construction.

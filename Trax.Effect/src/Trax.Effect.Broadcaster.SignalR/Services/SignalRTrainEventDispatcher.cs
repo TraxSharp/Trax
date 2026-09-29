@@ -1,5 +1,7 @@
 using System.Reflection;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Broadcaster.SignalR.Configuration;
 using Trax.Effect.Extensions;
@@ -16,15 +18,39 @@ namespace Trax.Effect.Broadcaster.SignalR.Services;
 /// <see cref="ITrainEventHandler"/> (so remote events received via the broadcaster
 /// transport, e.g. RabbitMQ, also reach connected clients).
 /// </summary>
-internal sealed class SignalRTrainEventDispatcher : ITrainLifecycleHook, ITrainEventHandler
+/// <remarks>
+/// A train awaits its lifecycle hooks inline, so the hook never waits on delivery to clients.
+/// It filters the event and writes it to a bounded queue. One background sender drains the
+/// queue in order and calls <c>Clients.All</c>. When the queue is full the event is dropped,
+/// counted and logged, and the train carries on. The host's shutdown drains what is queued.
+/// </remarks>
+internal sealed class SignalRTrainEventDispatcher
+    : ITrainLifecycleHook,
+        ITrainEventHandler,
+        IHostedService,
+        IAsyncDisposable,
+        IDisposable
 {
     private static readonly string? LocalExecutor = Assembly
         .GetEntryAssembly()
         ?.GetAssemblyProject();
 
+    /// <summary>
+    /// How long <see cref="DisposeAsync"/> waits for the queue to drain when the host did not
+    /// stop the dispatcher first.
+    /// </summary>
+    private static readonly TimeSpan DisposeDrainTimeout = TimeSpan.FromSeconds(5);
+
     private readonly IHubContext<TraxTrainEventHub, ITraxTrainEventClient> _hub;
     private readonly SignalRSinkConfiguration _config;
     private readonly ILogger<SignalRTrainEventDispatcher>? _logger;
+    private readonly Channel<TrainLifecycleEventMessage> _queue;
+    private readonly CancellationTokenSource _abandon = new();
+    private readonly Task _sender;
+
+    private long _dropped;
+    private long _droppedSinceReport;
+    private int _stopped;
 
     public SignalRTrainEventDispatcher(
         IHubContext<TraxTrainEventHub, ITraxTrainEventClient> hub,
@@ -35,7 +61,21 @@ internal sealed class SignalRTrainEventDispatcher : ITrainLifecycleHook, ITrainE
         _hub = hub;
         _config = config;
         _logger = logger;
+        _queue = Channel.CreateBounded<TrainLifecycleEventMessage>(
+            new BoundedChannelOptions(config.DeliveryQueueCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false,
+            }
+        );
+        _sender = Task.Run(SendLoopAsync);
     }
+
+    /// <summary>
+    /// Events dropped because the delivery queue was full, since the dispatcher was created.
+    /// </summary>
+    internal long DroppedEvents => Interlocked.Read(ref _dropped);
 
     public Task OnStarted(Metadata metadata, CancellationToken ct) =>
         DispatchAsync(BuildMessage(metadata, "Started"), ct);
@@ -55,11 +95,67 @@ internal sealed class SignalRTrainEventDispatcher : ITrainLifecycleHook, ITrainE
     public Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct) =>
         DispatchAsync(message, ct);
 
-    internal async Task DispatchAsync(TrainLifecycleEventMessage message, CancellationToken ct)
+    /// <summary>
+    /// Queues the event for the background sender and returns without waiting for delivery.
+    /// </summary>
+    internal Task DispatchAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
         if (!_config.Matches(message))
-            return;
+            return Task.CompletedTask;
 
+        if (_queue.Writer.TryWrite(message))
+            return Task.CompletedTask;
+
+        // TryWrite also fails once the writer is completed. An event raised during shutdown is
+        // not a drop caused by slow clients, so it is not counted.
+        if (Volatile.Read(ref _stopped) != 0)
+            return Task.CompletedTask;
+
+        Interlocked.Increment(ref _dropped);
+        if (Interlocked.Increment(ref _droppedSinceReport) == 1)
+        {
+            _logger?.LogWarning(
+                "SignalR sink delivery queue is full ({Capacity} events): dropping {EventType} for "
+                    + "train {TrainName} ({ExternalId}) and further events until clients catch up.",
+                _config.DeliveryQueueCapacity,
+                message.EventType,
+                message.TrainName,
+                message.ExternalId
+            );
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task SendLoopAsync()
+    {
+        try
+        {
+            await foreach (var message in _queue.Reader.ReadAllAsync(_abandon.Token))
+            {
+                await SendAsync(message);
+
+                if (_queue.Reader.Count == 0)
+                {
+                    var dropped = Interlocked.Exchange(ref _droppedSinceReport, 0);
+                    if (dropped > 0)
+                    {
+                        _logger?.LogWarning(
+                            "SignalR sink delivery queue drained after dropping {Dropped} events.",
+                            dropped
+                        );
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_abandon.IsCancellationRequested)
+        {
+            // Shutdown gave up waiting for the queue to drain.
+        }
+    }
+
+    private async Task SendAsync(TrainLifecycleEventMessage message)
+    {
         try
         {
             var payload = _config.Projection(message);
@@ -76,6 +172,53 @@ internal sealed class SignalRTrainEventDispatcher : ITrainLifecycleHook, ITrainE
                 message.ExternalId
             );
         }
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Stops accepting events and waits for the queued ones to be sent. When
+    /// <paramref name="cancellationToken"/> fires first, the rest of the queue is abandoned.
+    /// </summary>
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        Volatile.Write(ref _stopped, 1);
+        _queue.Writer.TryComplete();
+
+        try
+        {
+            await _sender.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await _abandon.CancelAsync();
+            _logger?.LogWarning(
+                "SignalR sink stopped before its delivery queue drained; {Remaining} events were not sent.",
+                _queue.Reader.Count
+            );
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        using (var timeout = new CancellationTokenSource(DisposeDrainTimeout))
+        {
+            await StopAsync(timeout.Token);
+        }
+
+        _abandon.Dispose();
+    }
+
+    /// <summary>
+    /// Stops accepting events and abandons whatever is still queued, without blocking. A host
+    /// drains the queue through <see cref="StopAsync"/> before its container is disposed.
+    /// </summary>
+    public void Dispose()
+    {
+        Volatile.Write(ref _stopped, 1);
+        _queue.Writer.TryComplete();
+        if (!_sender.IsCompleted)
+            _abandon.Cancel();
     }
 
     private static TrainLifecycleEventMessage BuildMessage(Metadata metadata, string eventType) =>

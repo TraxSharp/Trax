@@ -35,9 +35,26 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         CancellationToken ct
     )
     {
+        if (_options.PrefetchCount == 0)
+        {
+            throw new InvalidOperationException(
+                "RabbitMqBroadcasterOptions.PrefetchCount must be at least 1. "
+                    + "A prefetch count of 0 means no limit, which lets unacknowledged events pile up "
+                    + "in the receiving process."
+            );
+        }
+
         var factory = new ConnectionFactory { Uri = new Uri(_options.ConnectionString) };
         _connection = await factory.CreateConnectionAsync(ct);
         _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
+
+        // Bound how many deliveries the broker pushes before this receiver acknowledges them.
+        await _channel.BasicQosAsync(
+            prefetchSize: 0,
+            prefetchCount: _options.PrefetchCount,
+            global: false,
+            cancellationToken: ct
+        );
 
         await _channel.ExchangeDeclareAsync(
             exchange: _options.ExchangeName,

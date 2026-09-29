@@ -62,6 +62,14 @@ cancelled run's outcome throws, the recording error is logged and the train's or
 still propagates, with its failure hooks, so the caller learns why the train failed rather than
 why the bookkeeping did.
 
+**Bookkeeping after the work follows the same rule.** A junction effect that records progress
+after a junction's work has returned (`JunctionProgressProvider` clearing the progress columns)
+writes on `CancellationToken.None` and logs its own failure rather than throwing. Otherwise the
+consequence above silently depended on that effect being absent: its write, handed the cancelled
+token, threw `OperationCanceledException` out of the finished junction and the run was recorded
+`Cancelled`. A database error on the same write would likewise have turned finished work into a
+`Failed` run that a manifest retries.
+
 **The rule is one method, not a convention.** `SaveOutcome` exists so the terminal write is a named
 thing with the reason attached, rather than three call sites that each have to remember.
 
@@ -72,6 +80,8 @@ thing with the reason attached, rather than three call sites that each have to r
 - `OutcomeSaveFailureTests` pins what happens when the terminal save throws: a completed run
   propagates the save error without being recorded as `Failed`, and a failed run propagates its
   own exception and fires `OnFailed` once.
+- `JunctionProgressCancellationTests` pins the same outcome with junction progress on: work that
+  finished after the caller cancelled is recorded `Completed`.
 - [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) is the rule this produces.
 
 Not covered: nothing stops a new terminal-path write from taking `CancellationToken` directly
@@ -80,6 +90,8 @@ observe, not the shape of the code that produces them.
 
 ## Changelog
 
+- **2026-09-28**: Extended to bookkeeping written after a junction's work returns: the junction
+  progress write no longer takes the caller's token or lets its own failure replace the result.
 - **2026-09-23**: Recorded what happens when the terminal save itself fails: a completed run
   propagates the save error instead of being rewritten as `Failed` (the row stays `InProgress`
   for the reaper), and a failed run's recording error is logged while the original failure

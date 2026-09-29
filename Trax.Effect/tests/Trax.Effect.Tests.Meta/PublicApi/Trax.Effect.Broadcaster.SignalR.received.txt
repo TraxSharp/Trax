@@ -2,6 +2,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration
 {
     public sealed class SignalRSinkConfiguration
     {
+        public int DeliveryQueueCapacity { get; }
         public System.Collections.Generic.IReadOnlySet<string> EventTypeFilter { get; }
         public System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, object> Projection { get; }
         public System.Collections.Generic.IReadOnlySet<string> TrainNameFilter { get; }
@@ -12,6 +13,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
 {
     public class SignalRSinkOptions
     {
+        public const int DefaultDeliveryQueueCapacity = 1024;
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForEvents(params string[] eventTypes) { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForTrains(params System.Type[] trainInterfaceTypes) { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions OnlyForTrains<T1>()
@@ -23,6 +25,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
             where T1 :  class
             where T2 :  class
             where T3 :  class { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithDeliveryQueueCapacity(int capacity) { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithProjection<TClient>(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, TClient> projection)
             where TClient :  notnull { }
     }
@@ -35,7 +38,9 @@ namespace Trax.Effect.Broadcaster.SignalR.Extensions
     }
     public static class SignalRHubEndpointExtensions
     {
+        public static readonly System.TimeSpan DefaultTransportSendTimeout;
         public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string path = "/hubs/trax-events") { }
+        public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string path, System.Action<Microsoft.AspNetCore.Http.Connections.HttpConnectionDispatcherOptions> configureOptions) { }
     }
 }
 namespace Trax.Effect.Broadcaster.SignalR.Models

@@ -10,7 +10,8 @@ public partial class SignalRSinkOptions
         return new SignalRSinkConfiguration(
             eventTypeFilter: _eventTypes,
             trainNameFilter: _trainNames,
-            projection: _projection
+            projection: _projection,
+            deliveryQueueCapacity: _deliveryQueueCapacity
         );
     }
 }

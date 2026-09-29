@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
@@ -105,9 +106,11 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
                 }
                 catch
                 {
-                    // Drop the batch on failure to prevent infinite retry loops.
-                    // Logging failures should not crash the application.
+                    // One entry the database refuses fails the whole batch, so store the entries
+                    // one at a time and lose only the ones that still fail.
                     dataContext.Reset();
+                    if (!await SaveOneByOne(dataContext, batch, ct))
+                        break;
                 }
             }
         }
@@ -115,6 +118,40 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         {
             // Normal shutdown
         }
+    }
+
+    /// <summary>
+    /// Stores each entry of a failed batch on its own. An entry that still fails is dropped
+    /// rather than retried, so a bad entry cannot hold up the loop. Returns <c>false</c> when
+    /// shutdown cancelled it.
+    /// </summary>
+    private static async Task<bool> SaveOneByOne(
+        IDataContext dataContext,
+        List<Effect.Models.Log.Log> batch,
+        CancellationToken ct
+    )
+    {
+        foreach (var log in batch)
+        {
+            try
+            {
+                await dataContext.Logs.AddAsync(log, ct);
+                await dataContext.SaveChanges(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return false;
+            }
+            catch
+            {
+                // Logging failures should not crash the application.
+            }
+            finally
+            {
+                dataContext.Reset();
+            }
+        }
+        return true;
     }
 
     public void Dispose()

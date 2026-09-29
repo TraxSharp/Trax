@@ -106,8 +106,9 @@ public class SnapshotDraftServiceTests
         await Service()
             .Advance("u", id, "Coin", new JsonObject { ["coin"] = "quarter" }, requestId: "r1");
 
-        // Same requestId as the last applied advance -> replay the current state, don't fire Push.
-        var replay = await Service().Advance("u", id, "Push", requestId: "r1");
+        // The same request again (same id, same trigger) -> replay the current state, don't fire Coin.
+        var replay = await Service()
+            .Advance("u", id, "Coin", new JsonObject { ["coin"] = "quarter" }, requestId: "r1");
         replay
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>()

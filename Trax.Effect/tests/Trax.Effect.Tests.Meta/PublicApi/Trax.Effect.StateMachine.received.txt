@@ -130,6 +130,8 @@ namespace Trax.Effect.StateMachine
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
     {
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomGuard(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard);
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomReducer(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reducer);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.Effect.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> In(TState state);
@@ -181,6 +183,8 @@ namespace Trax.Effect.StateMachine
     {
         public MachineBuilder() { }
         public Trax.Effect.StateMachine.BuiltMachine<TState, TTrigger> Build() { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomGuard(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, bool> guard) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> CustomReducer(string name, System.Func<System.Text.Json.Nodes.JsonObject, System.Text.Json.Nodes.JsonNode?, System.Text.Json.Nodes.JsonObject> reducer) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.Effect.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id) { }
         public Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> In(TState state) { }
@@ -422,6 +426,10 @@ namespace Trax.Effect.StateMachine
         public System.Text.Json.Nodes.JsonObject Describe() { }
         public Trax.Effect.StateMachine.RehydrationResult Rehydrate(string json) { }
         public string Serialize(Trax.Effect.StateMachine.Snapshot snapshot) { }
+    }
+    public static class StorableJson
+    {
+        public static string? Problem(System.Text.Json.Nodes.JsonNode? node) { }
     }
     public sealed class TransitionDefinition<TState, TTrigger>
         where TState :  struct, System.Enum

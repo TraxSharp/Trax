@@ -213,15 +213,34 @@ internal static class CanonicalJson
     }
 
     /// <summary>
-    /// Escapes a string exactly as <c>JSON.stringify</c>: only <c>"</c>, <c>\</c>, and the C0 controls are
-    /// escaped (with the short forms where they exist, else lowercase <c>\u00xx</c>); every other character,
-    /// including non-ASCII, is emitted literally.
+    /// Escapes a string exactly as <c>JSON.stringify</c> (ES2019 well-formed stringify): only <c>"</c>,
+    /// <c>\</c>, the C0 controls and lone surrogates are escaped (with the short forms where they exist, else
+    /// lowercase <c>\uxxxx</c>); every other character, including non-ASCII and a valid surrogate pair, is
+    /// emitted literally. A lone surrogate has no UTF-8 encoding, so emitting it raw would turn it into
+    /// U+FFFD on the way out, and the bytes would no longer match the TypeScript twin's.
     /// </summary>
     private static void AppendString(StringBuilder sb, string value)
     {
         sb.Append('"');
-        foreach (var c in value)
+        for (var i = 0; i < value.Length; i++)
         {
+            var c = value[i];
+            if (char.IsSurrogate(c))
+            {
+                if (
+                    char.IsHighSurrogate(c)
+                    && i + 1 < value.Length
+                    && char.IsLowSurrogate(value[i + 1])
+                )
+                {
+                    sb.Append(c).Append(value[i + 1]);
+                    i++;
+                }
+                else
+                    sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                continue;
+            }
+
             switch (c)
             {
                 case '"':

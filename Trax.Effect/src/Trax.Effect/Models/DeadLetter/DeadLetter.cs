@@ -3,6 +3,7 @@ using System.Text.Json;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Models.DeadLetter;
 
@@ -160,7 +161,9 @@ public class DeadLetter : IModel
         JsonSerializer.Serialize(
             this,
             GetType(),
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
         );
 
     #endregion

@@ -29,6 +29,10 @@ public abstract record EffectOutcome
 /// lease expires and the next caller reclaims the key and re-runs — so a hard crash never wedges the key
 /// forever. If the crashed runner then revives, its <c>Complete</c>/<c>ReleaseOwned</c> is fenced out by
 /// the owner token (the reclaimer holds a new one), so it cannot corrupt the new claimant's result.</para>
+///
+/// <para><b>A receipt is required.</b> An effect that returns a null or empty receipt has failed as far as
+/// the ledger is concerned: its claim is released and <see cref="RunOnce"/> throws
+/// <see cref="InvalidOperationException"/>, exactly as if the effect had thrown.</para>
 /// </summary>
 public sealed class IdempotentEffect(IEffectClaimStore claims)
 {
@@ -59,6 +63,18 @@ public sealed class IdempotentEffect(IEffectClaimStore claims)
                     // re-run rather than being stuck behind an in-flight claim. Assumes throw = did not run.
                     await claims.ReleaseOwned(effectKey, won.OwnerToken, CancellationToken.None);
                     throw;
+                }
+
+                // The ledger reads a claim with no receipt as still in flight, and reclaims it once the lease
+                // passes, so recording a null or empty receipt would let the effect run again. Treat it as a
+                // failed effect instead: release the claim and say so.
+                if (string.IsNullOrEmpty(receipt))
+                {
+                    await claims.ReleaseOwned(effectKey, won.OwnerToken, CancellationToken.None);
+                    throw new InvalidOperationException(
+                        $"The effect for '{effectKey}' returned no receipt, so it was treated as failed and its "
+                            + "claim was released. An effect must return a non-empty receipt once it has run."
+                    );
                 }
 
                 // Record the receipt against OUR claim. If this returns false our lease expired and the

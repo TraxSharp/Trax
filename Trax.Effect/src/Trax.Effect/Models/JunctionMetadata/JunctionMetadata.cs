@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using LanguageExt;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Models.JunctionMetadata;
 
@@ -108,7 +109,12 @@ public class JunctionMetadata : IModel
     }
 
     public override string ToString() =>
-        JsonSerializer.Serialize(this, TraxEffectConfiguration.StaticSystemJsonSerializerOptions);
+        JsonSerializer.Serialize(
+            this,
+            TraxLogSerialization.ForLogging(
+                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+            )
+        );
 
     #endregion
 

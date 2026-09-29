@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.LifecycleHookRunner;
@@ -29,6 +30,44 @@ public class LifecycleHookRunnerTests
         using var runner = new LifecycleHookRunner([factory], _registry);
 
         factory.CreateCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public void Constructor_WithServiceProvider_BuildsHooksFromThatProvider()
+    {
+        var factory = new ScopeRecordingHookFactory();
+        using var scope = new ServiceCollection().BuildServiceProvider().CreateScope();
+
+        using var runner = new LifecycleHookRunner([factory], _registry, scope.ServiceProvider);
+
+        factory.CreatedFrom.Should().BeSameAs(scope.ServiceProvider);
+    }
+
+    [Test]
+    public void Constructor_WithServiceProvider_FactoryWithoutTheOverload_UsesCreate()
+    {
+        // A factory written against the interface before Create(IServiceProvider) existed.
+        var factory = new TrackingHookFactory();
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        using var runner = new LifecycleHookRunner([factory], _registry, provider);
+
+        factory.CreateCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public void GenericFactory_CreateWithProvider_ResolvesTheHooksDependenciesFromIt()
+    {
+        using var root = new ServiceCollection()
+            .AddScoped<ScopedDependency>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        var factory = new LifecycleHookFactory<HookWithScopedDependency>(root);
+        using var scope = root.CreateScope();
+
+        var hook = (HookWithScopedDependency)factory.Create(scope.ServiceProvider);
+
+        hook.Dependency.Should()
+            .BeSameAs(scope.ServiceProvider.GetRequiredService<ScopedDependency>());
     }
 
     [Test]
@@ -620,6 +659,29 @@ public class LifecycleHookRunnerTests
             CompletedCalled = true;
             return Task.CompletedTask;
         }
+    }
+
+    private class ScopeRecordingHookFactory : ITrainLifecycleHookFactory
+    {
+        public IServiceProvider? CreatedFrom { get; private set; }
+
+        public ITrainLifecycleHook Create() =>
+            throw new InvalidOperationException("the runner has a scope and must pass it");
+
+        public ITrainLifecycleHook Create(IServiceProvider serviceProvider)
+        {
+            CreatedFrom = serviceProvider;
+            return new NoOpHook();
+        }
+    }
+
+    private sealed class NoOpHook : ITrainLifecycleHook { }
+
+    private sealed class ScopedDependency { }
+
+    private sealed class HookWithScopedDependency(ScopedDependency dependency) : ITrainLifecycleHook
+    {
+        public ScopedDependency Dependency => dependency;
     }
 
     private class TrackingHookFactory : ITrainLifecycleHookFactory

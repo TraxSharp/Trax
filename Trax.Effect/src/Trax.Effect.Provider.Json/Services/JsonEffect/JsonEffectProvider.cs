@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Models;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.Provider.Json.Services.JsonEffect;
 
@@ -66,7 +67,9 @@ public class JsonEffectProvider(
     /// </remarks>
     public async Task SaveChanges(CancellationToken cancellationToken)
     {
-        var options = configuration.SystemJsonSerializerOptions;
+        // The logging options: a change is detected on what the log line shows, and the snapshot
+        // kept between saves holds no run-from copy of an input.
+        var options = TraxLogSerialization.ForLogging(configuration.SystemJsonSerializerOptions);
         var changedModels = new List<IModel>();
 
         lock (_lock)
@@ -123,7 +126,7 @@ public class JsonEffectProvider(
                 _previousStates[model] = JsonSerializer.Serialize(
                     model,
                     model.GetType(),
-                    configuration.SystemJsonSerializerOptions
+                    TraxLogSerialization.ForLogging(configuration.SystemJsonSerializerOptions)
                 );
             }
         }

@@ -41,6 +41,22 @@ public class SignalRSinkOptionsTests
 
         var projected = config.Projection(Sample(trainName: "X.IY"));
         projected.Should().BeOfType<TraxClientEvent>();
+        config.DeliveryQueueCapacity.Should().Be(SignalRSinkOptions.DefaultDeliveryQueueCapacity);
+    }
+
+    [Test]
+    public void WithDeliveryQueueCapacity_SetsCapacity()
+    {
+        NewOptions().WithDeliveryQueueCapacity(8).Build().DeliveryQueueCapacity.Should().Be(8);
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void WithDeliveryQueueCapacity_BelowOne_Throws(int capacity)
+    {
+        var act = () => NewOptions().WithDeliveryQueueCapacity(capacity);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("capacity");
     }
 
     [Test]

@@ -1,6 +1,8 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
+using RabbitMQ.Client;
 using Trax.Effect.Broadcaster.RabbitMQ;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
@@ -18,7 +20,13 @@ namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 [TestFixture]
 public class RabbitMqBroadcasterIntegrationTests
 {
-    private const string AmqpUri = "amqp://trax:trax123@localhost:5672/";
+    // TRAX_TEST_RABBITMQ_PORT moves the broker off 5672 when another project holds it, the same
+    // way TRAX_TEST_PG_PORT does for Postgres. CI leaves it unset.
+    private static readonly string AmqpUri =
+        $"amqp://trax:trax123@localhost:{PortOrDefault(Environment.GetEnvironmentVariable("TRAX_TEST_RABBITMQ_PORT"))}/";
+
+    private static string PortOrDefault(string? port) =>
+        string.IsNullOrWhiteSpace(port) ? "5672" : port;
 
     private static RabbitMqBroadcasterOptions Options(string suffix) =>
         new()
@@ -244,5 +252,84 @@ public class RabbitMqBroadcasterIntegrationTests
         await broadcaster.DisposeAsync();
         Func<Task> secondDispose = async () => await broadcaster.DisposeAsync();
         await secondDispose.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task Receiver_SlowHandler_LeavesEventsBeyondThePrefetchOnTheBroker()
+    {
+        var opts = Options("prefetch");
+        opts.PrefetchCount = 2;
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var handled = 0;
+        var allHandled = new TaskCompletionSource();
+        await receiver.StartAsync(
+            async (_, _) =>
+            {
+                entered.TrySetResult();
+                await release.Task;
+                if (Interlocked.Increment(ref handled) == 10)
+                    allHandled.TrySetResult();
+            },
+            CancellationToken.None
+        );
+
+        // A failed assertion must still release the handler, or disposing the receiver waits on it.
+        try
+        {
+            for (var i = 0; i < 10; i++)
+                await broadcaster.PublishAsync(SampleMessage($"m{i}"), CancellationToken.None);
+
+            // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
+            (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+                .Should()
+                .Be(entered.Task);
+
+            // The queue is exclusive to the receiver's connection, so its depth is read on the
+            // receiver's own channel. With the handler held, the broker may hand out only the
+            // prefetch (2); the other 8 stay ready on the broker. Without a prefetch limit it would
+            // push all 10 into the process and report 0.
+            var channel = (IChannel)
+                typeof(RabbitMqTrainEventReceiver)
+                    .GetField("_channel", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .GetValue(receiver)!;
+            var queue = (string)
+                typeof(RabbitMqTrainEventReceiver)
+                    .GetField("_queueName", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .GetValue(receiver)!;
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            uint ready;
+            do
+            {
+                ready = await channel.MessageCountAsync(queue);
+                if (ready == 8)
+                    break;
+                // determinism: polls the broker's counter until it reaches the expected depth.
+                await Task.Delay(50);
+            } while (DateTime.UtcNow < deadline);
+
+            ready.Should().Be(8u, "only PrefetchCount deliveries may be unacknowledged at once");
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
+        (await Task.WhenAny(allHandled.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+            .Should()
+            .Be(allHandled.Task, "releasing the handler lets the rest of the queue through");
+
+        await receiver.StopAsync(CancellationToken.None);
     }
 }
