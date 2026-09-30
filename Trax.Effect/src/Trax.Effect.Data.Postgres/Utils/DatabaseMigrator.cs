@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DbUp;
 using DbUp.Engine;
 using LanguageExt;
@@ -16,12 +17,12 @@ namespace Trax.Effect.Data.Postgres.Utils;
 /// written to be run again safely, which <c>MigrationsIntegrityTests</c> checks.
 /// </para>
 /// <para>
-/// <see cref="Migrate"/> holds a session advisory lock for the whole run, so hosts that start
+/// <see cref="Migrate(string)"/> holds a session advisory lock for the whole run, so hosts that start
 /// together against one database migrate one after another rather than racing each other's DDL.
 /// See <c>docs/adr/0014-postgres-migrations-are-serialized-and-rerunnable.md</c>.
 /// </para>
 /// </remarks>
-public static class DatabaseMigrator
+public static partial class DatabaseMigrator
 {
     /// <summary>
     /// The two-key advisory lock the migration holds: a fixed class key and 0. Postgres keeps the
@@ -37,7 +38,7 @@ public static class DatabaseMigrator
     /// <param name="connectionString">The connection string to the PostgreSQL database</param>
     /// <returns>A configured DbUp upgrade engine</returns>
     /// <remarks>
-    /// The engine takes no lock and does not pin the session time zone: <see cref="Migrate"/> does
+    /// The engine takes no lock and does not pin the session time zone: <see cref="Migrate(string)"/> does
     /// both. Run the engine directly only where nothing else can be migrating the same database.
     /// </remarks>
     public static UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString) =>
@@ -59,9 +60,17 @@ public static class DatabaseMigrator
     /// Takes a session advisory lock first and holds it until every script has run, so a second
     /// host calling this waits for the first rather than running the same DDL beside it. The wait
     /// has no timeout: a host whose migration hangs holds the others at startup. Inside
-    /// the lock it creates the <c>trax</c> schema, drops any index in it left <c>INVALID</c> by an
-    /// interrupted <c>CREATE INDEX CONCURRENTLY</c> (so the script that builds it can build it
-    /// again), and applies the pending scripts.
+    /// the lock it creates the <c>trax</c> schema, drops any index a script builds that an
+    /// interrupted <c>CREATE INDEX CONCURRENTLY</c> left <c>INVALID</c> (so the script can build it
+    /// again), and applies the pending scripts. An invalid index the scripts do not build, such as
+    /// one of the consumer's own or a <c>REINDEX CONCURRENTLY</c> in progress, is left alone.
+    /// </para>
+    /// <para>
+    /// The scripts run with a <c>lock_timeout</c> of five seconds. A script that needs a table lock
+    /// another transaction holds would otherwise wait for as long as that transaction stays open,
+    /// and every write to the table on every other instance would queue behind it. When a script
+    /// gives up on its lock (<c>55P03</c>) the migrator runs the pending scripts again, up to ten
+    /// times, and then fails the start with that error.
     /// </para>
     /// <para>
     /// Every connection it opens has its time zone pinned to UTC, whatever the connection string
@@ -73,16 +82,28 @@ public static class DatabaseMigrator
     /// <c>UsePostgres</c> calls this during service registration unless migrations are skipped.
     /// </para>
     /// </remarks>
-    public static async Task Migrate(string connectionString)
+    public static Task Migrate(string connectionString) =>
+        Migrate(connectionString, MigrationLockPolicy.Default);
+
+    internal static async Task Migrate(string connectionString, MigrationLockPolicy policy)
     {
         // The lock is held on one connection while DbUp runs the scripts on another, so the
         // migration's connections must not come from the host's pool: a host that caps its pool
         // at one connection would otherwise wait on itself until the pool timeout.
-        var migrationConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+        var migrationConnection = new NpgsqlConnectionStringBuilder(connectionString)
         {
             Timezone = "UTC",
             Pooling = false,
-        }.ConnectionString;
+        };
+        var migrationConnectionString = migrationConnection.ConnectionString;
+
+        // Only the script session carries the lock timeout. The advisory-lock session polls and
+        // never waits on a table lock.
+        var lockTimeoutMs = (long)policy.LockTimeout.TotalMilliseconds;
+        migrationConnection.Options = string.IsNullOrWhiteSpace(migrationConnection.Options)
+            ? $"-c lock_timeout={lockTimeoutMs}"
+            : $"{migrationConnection.Options} -c lock_timeout={lockTimeoutMs}";
+        var scriptConnectionString = migrationConnection.ConnectionString;
 
         try
         {
@@ -94,13 +115,28 @@ public static class DatabaseMigrator
             {
                 await lockConnection.ReloadTypesAsync();
                 await Execute(lockConnection, "create schema if not exists trax;");
-                await DropInvalidIndexes(lockConnection);
 
-                var result = CreateEngineWithEmbeddedScripts(migrationConnectionString)
-                    .PerformUpgrade();
+                for (var attempt = 1; ; attempt++)
+                {
+                    // Again before every attempt: a concurrent index build that gave up on its
+                    // lock leaves its index invalid.
+                    await DropInvalidIndexes(lockConnection);
 
-                if (result.Successful == false)
-                    result.Error.Rethrow();
+                    var result = CreateEngineWithEmbeddedScripts(scriptConnectionString)
+                        .PerformUpgrade();
+
+                    if (result.Successful)
+                        break;
+
+                    if (!IsLockTimeout(result.Error) || attempt >= policy.Attempts)
+                        result.Error.Rethrow();
+
+                    Console.WriteLine(
+                        $"A Trax migration script gave up waiting for a table lock (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
+                    );
+                    if (policy.Backoff > TimeSpan.Zero)
+                        await Task.Delay(policy.Backoff * attempt);
+                }
             }
             finally
             {
@@ -116,11 +152,22 @@ public static class DatabaseMigrator
         }
     }
 
+    private static bool IsLockTimeout(Exception? error)
+    {
+        for (var current = error; current is not null; current = current.InnerException)
+            if (current is PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable })
+                return true;
+        return false;
+    }
+
     /// <summary>
-    /// Drops every <c>INVALID</c> index in the <c>trax</c> schema. A <c>CREATE INDEX CONCURRENTLY</c>
-    /// that fails or is interrupted leaves its index behind, invalid, and <c>IF NOT EXISTS</c> then
-    /// skips it forever. Under the migration lock nothing else is building an index, so an invalid
-    /// one is a leftover. Dropped concurrently, so writers are not blocked.
+    /// Drops every <c>INVALID</c> index in the <c>trax</c> schema whose name a migration script
+    /// builds. A <c>CREATE INDEX CONCURRENTLY</c> that fails or is interrupted leaves its index
+    /// behind, invalid, and <c>IF NOT EXISTS</c> then skips it forever. Under the migration lock
+    /// nothing else is building one of those, so an invalid one is a leftover. Any other invalid
+    /// index belongs to someone else (a consumer's own build, or the <c>_ccnew</c> copy of a
+    /// <c>REINDEX CONCURRENTLY</c> in progress) and nothing here would build it again, so it is
+    /// left alone. Dropped concurrently, so writers are not blocked.
     /// </summary>
     private static async Task DropInvalidIndexes(NpgsqlConnection connection)
     {
@@ -132,8 +179,9 @@ public static class DatabaseMigrator
                 FROM pg_index i
                 JOIN pg_class c ON c.oid = i.indexrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
-                WHERE n.nspname = 'trax' AND NOT i.indisvalid;
+                WHERE n.nspname = 'trax' AND NOT i.indisvalid AND c.relname = ANY(@names);
                 """;
+            command.Parameters.AddWithValue("names", ScriptIndexNames.ToArray());
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
                 invalid.Add(reader.GetString(0));
@@ -145,6 +193,34 @@ public static class DatabaseMigrator
             await Execute(connection, $"DROP INDEX CONCURRENTLY IF EXISTS trax.{quoted};");
         }
     }
+
+    /// <summary>
+    /// The name of every index a shipped migration script creates, read from the scripts
+    /// themselves, lower-cased as Postgres folds an unquoted name.
+    /// </summary>
+    internal static IReadOnlySet<string> ScriptIndexNames { get; } = ReadScriptIndexNames();
+
+    private static System.Collections.Generic.HashSet<string> ReadScriptIndexNames()
+    {
+        var assembly = typeof(AssemblyMarker).Assembly;
+        var names = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        foreach (var resource in assembly.GetManifestResourceNames())
+        {
+            if (!resource.EndsWith(".sql", StringComparison.Ordinal))
+                continue;
+            using var stream = assembly.GetManifestResourceStream(resource)!;
+            using var reader = new StreamReader(stream);
+            foreach (Match match in CreateIndexName().Matches(reader.ReadToEnd()))
+                names.Add(match.Groups["name"].Value.Trim('"').ToLowerInvariant());
+        }
+        return names;
+    }
+
+    [GeneratedRegex(
+        @"\bcreate\s+(?:unique\s+)?index\s+(?:concurrently\s+)?(?:if\s+not\s+exists\s+)?(?:\w+\.)?(?<name>""[^""]+""|\w+)\s+on\b",
+        RegexOptions.IgnoreCase
+    )]
+    private static partial Regex CreateIndexName();
 
     /// <summary>
     /// Takes the migration lock, polling with <c>pg_try_advisory_lock</c> rather than waiting in

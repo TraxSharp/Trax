@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 
@@ -16,12 +17,24 @@ namespace Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 /// Each NUL becomes U+FFFD, the Unicode replacement character, so the stored text still shows
 /// that something was there. Only added and modified strings are touched, and only when they hold
 /// a NUL. SQLite and the in-memory provider store NUL as it is and do not use this.
+/// <para>
+/// A value that identifies a row is never touched: a key, a foreign key, an indexed column, or a
+/// column the model marks with <see cref="ComparedExactlyAnnotation"/> (a work-queue entry's
+/// external id and subject key, whose indexes are declared only in SQL). Rewriting one would make
+/// <c>"a\0"</c> the same key as <c>"a\uFFFD"</c>; left as it is, Postgres refuses the write.
+/// </para>
 /// </remarks>
 internal sealed class NulCharacterInterceptor : SaveChangesInterceptor
 {
     private const char Replacement = '�';
     private const string JsonNulEscape = "u0000";
     private const string JsonReplacementEscape = "ufffd";
+
+    /// <summary>
+    /// The model annotation that marks a string column as compared exactly, so it is never
+    /// rewritten. The same literal is set in the work-queue mapping in <c>Trax.Effect.Data</c>.
+    /// </summary>
+    internal const string ComparedExactlyAnnotation = "Trax:ComparedExactly";
 
     public static NulCharacterInterceptor Instance { get; } = new();
 
@@ -66,6 +79,9 @@ internal sealed class NulCharacterInterceptor : SaveChangesInterceptor
         if (property.CurrentValue is not string value)
             return;
 
+        if (IdentifiesTheRow(property.Metadata))
+            return;
+
         var isJson = string.Equals(
             property.Metadata.GetColumnType(),
             "jsonb",
@@ -77,6 +93,12 @@ internal sealed class NulCharacterInterceptor : SaveChangesInterceptor
         if (!ReferenceEquals(scrubbed, value))
             property.CurrentValue = scrubbed;
     }
+
+    internal static bool IdentifiesTheRow(IReadOnlyProperty property) =>
+        property.IsKey()
+        || property.IsForeignKey()
+        || property.IsIndex()
+        || property.FindAnnotation(ComparedExactlyAnnotation)?.Value is true;
 
     /// <summary>Replaces each raw NUL. Returns the same instance when there is none.</summary>
     internal static string ScrubText(string value) =>

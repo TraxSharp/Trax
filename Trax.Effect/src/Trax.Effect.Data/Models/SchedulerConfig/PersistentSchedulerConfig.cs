@@ -14,6 +14,8 @@ internal class PersistentSchedulerConfig : Effect.Models.SchedulerConfig.Schedul
             entity.ToTable("scheduler_config", "trax");
             entity.HasKey(e => e.Id);
             // No ValueGeneratedOnAdd: callers (and the migration) supply the singleton id.
+
+            entity.Property(e => e.Overrides).HasColumnType("jsonb");
         });
     }
 }

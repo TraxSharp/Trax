@@ -28,9 +28,12 @@ that changes every `DateTime` a consumer's own context sends, to fix five Trax c
 
 ## Consequences
 
-049 rewrites `work_queue`, `manifest_group` and `manifest` under an `ACCESS EXCLUSIVE` lock. On a large
-queue that blocks enqueue and dispatch for the length of the rewrite, so the migration guide asks for a
-maintenance window. A row written before 049 from a session outside UTC was already shifted when it was
+049 changes the types without rewriting `work_queue`, `manifest_group` or `manifest`. Each block sets
+its transaction's time zone to UTC and changes the type with no `USING`: in a UTC session Postgres
+reads each stored value as UTC and keeps the table's storage, so the `ACCESS EXCLUSIVE` lock is held
+for a catalog change, not a copy of the table. A `USING` clause, or a session in another zone, rewrites
+the table under that lock, which on a large queue blocked enqueue and dispatch for the length of the
+copy. A row written before 049 from a session outside UTC was already shifted when it was
 stored, and nothing can tell which rows those were, so it keeps its shift.
 
 ## Exemplars
@@ -38,6 +41,8 @@ stored, and nothing can tell which rows those were, so it keeps its shift.
 - `SessionTimeZoneTests` writes the five columns from New York and Berlin sessions and reads the same
   instants back, checks a defaulted `created_at` is the current instant, and refuses any
   `timestamp without time zone` column in the `trax` schema.
+- `PostgresMigrationTests.cs` runs 049 from a New York session and checks each table keeps its filenode
+  and a stored wall-clock time reads as the same UTC instant.
 - [Database Migrations](/docs/migration-guides/database-migrations) says what 049 costs to apply.
 
 Not covered: nothing checks the migrator's UTC pin on its own. A script that depends on it and the pin
@@ -45,4 +50,6 @@ going away would be caught only if a test runs that script from a non-UTC server
 
 ## Changelog
 
+- **2026-09-30**: 049 edited before any real database ran it: UTC per block and no `USING`, so it no
+  longer rewrites the tables.
 - **2026-09-29**: Recorded.

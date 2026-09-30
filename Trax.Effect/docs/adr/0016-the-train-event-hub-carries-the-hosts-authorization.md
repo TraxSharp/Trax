@@ -45,11 +45,34 @@ an argument fails where the hub is mapped.
 answer, and needs a per-connection notion of ownership the sink does not have yet. The posture and
 the masked reason stand on their own and stay useful once filtering exists.
 
+**Refuse a bare `RequireAuthorization()` and require a named policy.** A bare `[Authorize]` on an
+endpoint switches the host's fallback policy off and evaluates only its default policy, so a host
+whose fallback is stricter than its default would admit more callers to the hub than to an endpoint
+with no annotation at all. Refusing the bare call removes that case, but it also removes the plainest
+fail-closed posture a host can write ("any signed-in user") and makes every host invent a policy
+name for it. Instead, a bare `RequireAuthorization()` applies the default policy **and** the fallback
+policy when the host sets one. That is never more open than either of them alone, so the hub is
+never more open than an unannotated endpoint, and a host without a fallback sees no change.
+
 ## Consequences
 
 **`AllowAnonymous()` is allowed, and loud.** A dashboard on a trusted network can still open the
 hub; the choice is written at the mapping and logged as a warning at startup. It cannot be combined
 with a requirement.
+
+**A posture is checked where the hub is mapped, not only when a client connects.** Each policy it
+names is resolved through the host's `IAuthorizationPolicyProvider` at `MapTraxTrainEventHub`, and an
+unknown one stops the host there. A role name containing a comma is refused, because
+`AuthorizeAttribute.Roles` splits on commas and would read it as several roles.
+
+**Admission does not outlive the credential.** Authorization runs when a connection opens, so the hub
+sets `CloseOnAuthenticationExpiration`: a connection is closed once the authentication it was
+admitted on expires. It is set after the host's `ConfigureConnection`, which cannot turn it off. A
+user revoked before their credential expires is still connected until it does; that bound is the
+credential's lifetime, which the host controls.
+
+**Access is still all-or-nothing per connection.** A connection the posture admits receives every
+train's events. Per-connection filtering is the open alternative above.
 
 **A host that wants the failure reason in the browser says so.** `WithProjection` on
 `UseSignalRHub` produces any payload, including the reason.
@@ -62,7 +85,10 @@ the choice it has to make, and the removal is recorded in the package's
 
 - `SignalRHubAuthorizationTests` pins that mapping without a posture fails at startup, that each
   posture admits and refuses the right clients, that `AllowAnonymous()` logs a warning, and that an
-  authorized client receives a failed event without its failure reason.
+  authorized client receives a failed event without its failure reason. It also pins that a bare
+  `RequireAuthorization()` keeps the host's fallback policy (over long polling, and over WebSockets
+  with negotiation skipped), that an unknown policy or a role name with a comma fails at mapping, and
+  that a connection whose authentication expires is closed even when the host tries to turn that off.
 - [MapTraxTrainEventHub](/docs/sdk-reference/configuration/map-trax-train-event-hub) is the rule
   this produces.
 
@@ -71,4 +97,7 @@ the hub, and a custom projection can put the failure reason back.
 
 ## Changelog
 
+- **2026-09-30**: A bare `RequireAuthorization()` applies the fallback policy with the default one,
+  named policies are resolved at mapping, a role name with a comma is refused, and a connection is
+  closed when its authentication expires.
 - **2026-09-29**: Recorded.

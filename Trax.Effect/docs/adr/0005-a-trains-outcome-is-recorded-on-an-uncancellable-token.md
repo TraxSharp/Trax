@@ -57,9 +57,14 @@ anything that treated a cancelled request as proof the work did not happen. It n
 
 **A failed save is never rewritten as a different outcome.** A provider whose save throws does not
 stop the providers after it, so the data provider records the outcome even when an effect
-registered before it fails. When the write still fails, it is tried once more without the output
-and the failure's message and stack trace, because a store can refuse a row for what it carries;
-the state and end time are what the reaper, the scheduler and a manifest's retries act on. If
+registered before it fails. When the store says it refused the row for what it carries, by
+throwing `StoreRefusedContentException`, the write is tried once more without the output and the
+failure's message and stack trace; the state and end time are what the reaper, the scheduler and a
+manifest's retries act on. Only that refusal earns the second write. Any other failure, from the
+store or from any other provider, propagates as it is, because the store may already have saved
+the full row and a second write would put placeholders over it. The placeholders are what is
+stored, not what happened: the lifecycle hooks still see the real output and failure text. The
+row's first write gets the same treatment for an input the store refuses. If
 saving a completed run's outcome fails both times, the first save error propagates as it is; the
 run is not recorded as `Failed`, because the work happened, and a row no provider could write stays
 `InProgress` for the stale-run reaper. If recording a failed or cancelled run's outcome throws, the
@@ -84,7 +89,10 @@ thing with the reason attached, rather than three call sites that each have to r
 - `OutcomeSaveFailureTests` pins what happens when the terminal save throws: a completed run
   propagates the save error without being recorded as `Failed`, while the data provider after the
   failing one still records `Completed`, and a failed run propagates its own exception and fires
-  `OnFailed` once. `StateOnlyOutcomeFallbackTests` pins the second, state-only write.
+  `OnFailed` once. `StateOnlyOutcomeFallbackTests` pins the second, state-only write: it happens
+  for the store's own content refusal, never over a row the store already saved when another
+  effect throws, and the hooks see the real output. `NulCharacterOutcomeTests` pins a refusal
+  raised by Postgres itself.
 - `JunctionProgressCancellationTests` pins the same outcome with junction progress on: work that
   finished after the caller cancelled is recorded `Completed`.
 - [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) is the rule this produces.
@@ -95,6 +103,12 @@ observe, not the shape of the code that produces them.
 
 ## Changelog
 
+- **2026-09-30**: The state-only retry is limited to the store's own content refusal
+  (`StoreRefusedContentException`), which the data providers raise for the Postgres errors that
+  name a value. Before, any provider's failure triggered it, and the second write replaced a row
+  the store had already saved in full. Hooks now see the real output and failure text after the
+  retry, and an input refused on the first write is recorded as a placeholder instead of leaving
+  the run without a row.
 - **2026-09-29**: A provider whose save throws no longer stops the ones after it, and a terminal
   write the store refuses is retried once without the output and failure text, so the state is
   recorded; only when that fails too does the row stay `InProgress` for the reaper.

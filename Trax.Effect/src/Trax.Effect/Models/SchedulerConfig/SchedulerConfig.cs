@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Utils;
@@ -16,14 +17,14 @@ namespace Trax.Effect.Models.SchedulerConfig;
 /// <para>
 /// This is a singleton table: at most one row exists, with <see cref="Id"/> always 1. A CHECK
 /// constraint (set in the migration) prevents inserts of any other id. There is no row until an
-/// operator first changes a setting through the dashboard or the GraphQL operations, which then
-/// write a snapshot of every current value.
+/// operator first changes a setting through the dashboard or the GraphQL operations.
 /// </para>
 /// <para>
-/// At startup the scheduler copies the row, when there is one, over the settings configured in
-/// code, so a persisted value wins over a changed default in <c>AddScheduler</c> until the row is
-/// edited or deleted. Each property below is the persisted form of the scheduler setting of the
-/// same name; the defaults here match the scheduler's builder defaults.
+/// <see cref="Overrides"/> says which settings a save named. Those win over the settings
+/// configured in code; the rest keep each host's code value. A row written before that column
+/// existed has it null, and all of its columns were written as chosen values. Each property below
+/// is the persisted form of the scheduler setting of the same name; the defaults here match the
+/// scheduler's builder defaults.
 /// </para>
 /// </remarks>
 public class SchedulerConfig : IModel
@@ -157,6 +158,101 @@ public class SchedulerConfig : IModel
     /// </summary>
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// The settings a save named, as a JSON object of setting name to stored value, or null for a
+    /// row written before the column existed.
+    /// </summary>
+    /// <remarks>
+    /// A row holds one column per setting, so on its own it cannot tell a value an operator chose
+    /// from one that was only the saving host's current value, and a save from one host would pin
+    /// every setting to that host's values. This records which settings a save actually named: a
+    /// setting named here is the operator's, and every other setting keeps the value each host
+    /// configures in code. A setting with no column of its own is stored only here.
+    ///
+    /// Null means the row predates the column and every column holds a chosen value, as every save
+    /// used to write them all. An empty object means no setting is overridden. Read and write it
+    /// through <see cref="TryGetOverride{T}"/>, <see cref="SetOverride{T}"/> and
+    /// <see cref="RemoveOverride"/>, which keep it a JSON object; removing a key is how a setting
+    /// returns to its code value.
+    /// </remarks>
+    [Column("overrides")]
+    public string? Overrides { get; set; }
+
+    /// <summary>
+    /// Reads the override stored for <paramref name="name"/>.
+    /// </summary>
+    /// <param name="name">The setting's name, compared exactly.</param>
+    /// <param name="value">The stored value, or <c>default</c> when there is none.</param>
+    /// <returns>
+    /// True when <see cref="Overrides"/> names the setting. False when it does not, including when
+    /// <see cref="Overrides"/> is null: a legacy row's columns are read directly, not through this.
+    /// </returns>
+    /// <exception cref="JsonException">The stored value cannot be read as <typeparamref name="T"/>.</exception>
+    public bool TryGetOverride<T>(string name, out T? value)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        if (ReadOverrides() is { } overrides && overrides.TryGetPropertyValue(name, out var node))
+        {
+            value = node is null ? default : node.Deserialize<T>(OverrideSerialization);
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Records that a save named <paramref name="name"/>, with <paramref name="value"/> as its
+    /// value. A null <see cref="Overrides"/> becomes an object holding just this setting.
+    /// </summary>
+    /// <param name="name">The setting's name.</param>
+    /// <param name="value">The value to store; null is stored as JSON null, and still counts as set.</param>
+    public void SetOverride<T>(string name, T value)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        var overrides = ReadOverrides() ?? [];
+        overrides[name] = JsonSerializer.SerializeToNode(value, OverrideSerialization);
+        Overrides = overrides.ToJsonString(OverrideSerialization);
+    }
+
+    /// <summary>
+    /// Removes the override for <paramref name="name"/>, so the setting returns to the value each
+    /// host configures in code.
+    /// </summary>
+    /// <returns>True when there was an override to remove.</returns>
+    public bool RemoveOverride(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        if (ReadOverrides() is not { } overrides || !overrides.Remove(name))
+            return false;
+
+        Overrides = overrides.ToJsonString(OverrideSerialization);
+        return true;
+    }
+
+    /// <summary>
+    /// The names <see cref="Overrides"/> holds, or an empty list when it is null or empty.
+    /// </summary>
+    [NotMapped]
+    [JsonIgnore]
+    public IReadOnlyList<string> OverriddenSettings =>
+        ReadOverrides()?.Select(p => p.Key).ToList() ?? [];
+
+    private static readonly JsonSerializerOptions OverrideSerialization = new(
+        JsonSerializerDefaults.General
+    );
+
+    private JsonObject? ReadOverrides() =>
+        string.IsNullOrEmpty(Overrides)
+            ? null
+            : JsonNode.Parse(Overrides) as JsonObject
+                ?? throw new JsonException(
+                    "scheduler_config.overrides must hold a JSON object of setting name to value"
+                );
 
     /// <summary>
     /// Serializes this settings row to JSON for a log line. Not a stable format: read the

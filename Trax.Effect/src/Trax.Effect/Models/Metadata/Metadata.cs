@@ -506,6 +506,27 @@ public class Metadata : IModel, IDisposable
     }
 
     /// <summary>
+    /// Puts back the outcome content <see cref="DropOutcomeContent"/> replaced, for the lifecycle
+    /// hooks: they report what the run did, not what the store could hold.
+    /// </summary>
+    internal void RestoreOutcomeContent(string? output, string? failureReason, string? stackTrace)
+    {
+        Output = output;
+        FailureReason = failureReason;
+        StackTrace = stackTrace;
+    }
+
+    /// <summary>
+    /// Replaces a stored input the store refused with the same placeholder an unrecorded output
+    /// gets, so the run's row can still be written. The input object the train runs with is kept.
+    /// </summary>
+    internal void DropInputContent()
+    {
+        if (Input is not null)
+            Input = UnrecordedOutput;
+    }
+
+    /// <summary>
     /// Maps a failure class outside the enum to <see cref="Trax.Core.Exceptions.FailureClass.Unclassified"/>,
     /// matching <c>RemoteRunJson.TolerantFailureClassConverter</c>. An undefined value cannot be
     /// stored by the Postgres enum column, and on SQLite it breaks every later read of the row.

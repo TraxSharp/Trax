@@ -65,15 +65,24 @@ namespace Trax.Effect.StateMachine.Persistence
             public System.Guid OwnerToken { get; init; }
         }
     }
+    public sealed class CompletedEffect : System.IEquatable<Trax.Effect.StateMachine.Persistence.CompletedEffect>
+    {
+        public CompletedEffect(string Receipt, string? ContentFingerprint) { }
+        public string? ContentFingerprint { get; init; }
+        public string Receipt { get; init; }
+    }
     public sealed class EfEffectClaimStore : Trax.Effect.StateMachine.Persistence.IEffectClaimStore
     {
         public EfEffectClaimStore(Trax.Effect.Data.Services.DataContext.IDataContext db, Trax.Effect.Data.Services.SqlDialect.ISqlDialect? dialect = null) { }
         public System.Threading.Tasks.Task<bool> Complete(string effectKey, System.Guid ownerToken, string receipt, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.CompletedEffect?> GetCompleted(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<string?> GetReceipt(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<int> ReclaimStale(System.DateTimeOffset cutoff, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task Release(string effectKey, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task ReleaseForReset(string effectKey, System.Func<string, bool> receiptRecorded, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> ReleaseOwned(string effectKey, System.Guid ownerToken, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, string? contentFingerprint, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public sealed class EfSnapshotStore : Trax.Effect.StateMachine.Persistence.ISnapshotStore
     {
@@ -82,6 +91,7 @@ namespace Trax.Effect.StateMachine.Persistence
         public System.Threading.Tasks.Task Delete(string userKey, string machine, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, string machine, System.Guid id, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<bool> Insert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> Update(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, string? requestId = null, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> UpdateWithRequest(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, Trax.Effect.StateMachine.Persistence.AppliedRequest? request, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<bool> Upsert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default) { }
@@ -96,6 +106,7 @@ namespace Trax.Effect.StateMachine.Persistence
         public sealed class AlreadyRan : Trax.Effect.StateMachine.Persistence.EffectOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.EffectOutcome.AlreadyRan>
         {
             public AlreadyRan(string Receipt) { }
+            public string? ContentFingerprint { get; init; }
             public string Receipt { get; init; }
         }
         public sealed class InProgress : Trax.Effect.StateMachine.Persistence.EffectOutcome, System.IEquatable<Trax.Effect.StateMachine.Persistence.EffectOutcome.InProgress>
@@ -111,11 +122,14 @@ namespace Trax.Effect.StateMachine.Persistence
     public interface IEffectClaimStore
     {
         System.Threading.Tasks.Task<bool> Complete(string effectKey, System.Guid ownerToken, string receipt, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.CompletedEffect?> GetCompleted(string effectKey, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<string?> GetReceipt(string effectKey, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<int> ReclaimStale(System.DateTimeOffset cutoff, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task Release(string effectKey, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task ReleaseForReset(string effectKey, System.Func<string, bool> receiptRecorded, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<bool> ReleaseOwned(string effectKey, System.Guid ownerToken, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, string? contentFingerprint, System.Threading.CancellationToken cancellationToken = default);
     }
     public interface IMachine
     {
@@ -160,6 +174,7 @@ namespace Trax.Effect.StateMachine.Persistence
         System.Threading.Tasks.Task Delete(string userKey, string machine, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.StoredSnapshot?> Get(string userKey, string machine, System.Guid id, System.Threading.CancellationToken cancellationToken = default);
+        System.Threading.Tasks.Task<bool> Insert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<bool> Update(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, string? requestId = null, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<bool> UpdateWithRequest(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Guid expectedToken, Trax.Effect.StateMachine.Persistence.AppliedRequest? request, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<bool> Upsert(string userKey, System.Guid id, Trax.Effect.StateMachine.Snapshot snapshot, System.Threading.CancellationToken cancellationToken = default);
@@ -168,6 +183,7 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public IdempotentEffect(Trax.Effect.StateMachine.Persistence.IEffectClaimStore claims) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
+        public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, string? contentFingerprint, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
     }
     public abstract class LoadResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult>
     {
@@ -201,6 +217,10 @@ namespace Trax.Effect.StateMachine.Persistence
         public Trax.Effect.StateMachine.Persistence.ISnapshotDraftService CreateService(Trax.Effect.StateMachine.Persistence.ISnapshotStore store, Trax.Effect.StateMachine.Persistence.IEffectClaimStore? claims, System.TimeSpan? draftTtl = default) { }
         public string ExportIr() { }
         public System.Collections.Generic.IReadOnlyList<string> SelfCheck() { }
+    }
+    public static class SnapshotFingerprint
+    {
+        public static string Of(string canonicalWire) { }
     }
     public static class SnapshotLimits
     {

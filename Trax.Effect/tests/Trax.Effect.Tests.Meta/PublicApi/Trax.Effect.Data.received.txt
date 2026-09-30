@@ -1,5 +1,11 @@
 namespace Trax.Effect.Data.Extensions
 {
+    public static class BuilderOrderExtensions
+    {
+        [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLo" +
+            "gging(...).", true)]
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
+    }
     public static class ServiceExtensions
     {
         public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
@@ -187,6 +193,7 @@ namespace Trax.Effect.Data.Services.SqlDialect
         string ClaimWorkQueueEntry();
         string DequeueBackgroundJobs();
         string? EstimateRowCount();
+        bool IsTransient(System.Exception exception);
         bool IsUniqueViolation(Microsoft.EntityFrameworkCore.DbUpdateException exception);
         string LoadGroupFairQueuedJobs();
         string LockSubject();

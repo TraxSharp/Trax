@@ -1,4 +1,5 @@
 using FluentAssertions;
+using NSubstitute;
 using Trax.Effect.Models;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -26,6 +27,30 @@ public class EffectRunnerPendingClaimTests
                 Input = null,
             }
         );
+
+        (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Pins what the <see cref="IEffectRunner.TryClaimPendingRun"/> documentation warns about: a
+    /// generated double does not inherit the default, so it refuses the claim until configured.
+    /// </summary>
+    [Test]
+    public async Task A_substituted_runner_refuses_the_claim_until_it_is_configured()
+    {
+        var runner = Substitute.For<IEffectRunner>();
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Train",
+                ExternalId = "ext",
+                Input = null,
+            }
+        );
+
+        (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeFalse();
+
+        runner.TryClaimPendingRun(default!, default).ReturnsForAnyArgs(true);
 
         (await runner.TryClaimPendingRun(metadata, CancellationToken.None)).Should().BeTrue();
     }

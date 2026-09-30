@@ -31,6 +31,7 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     private readonly Counter<long> _droppedCounter;
     private long _totalDropped;
     private long _lastWarnedAt;
+    private long _lastRefusedWarnedAt;
 
     /// <summary>
     /// Creates the signal and registers the <see cref="MeterName"/> meter. The buffer holds at most one entry per
@@ -58,18 +59,28 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A value outside <see cref="ChangeDomain"/> is refused and logged (throttled): no sink can act
+    /// on it, and queued it could not be deduplicated, so a stream of them would fill the buffer and
+    /// drop the real domains behind it.
+    /// </remarks>
     public void Notify(ChangeDomain domain)
     {
+        if (!Enum.IsDefined(domain))
+        {
+            RefuseUndefined(domain);
+            return;
+        }
+
         var bit = Bit(domain);
-        if (bit != 0 && (Interlocked.Or(ref _pending, bit) & bit) != 0)
+        if ((Interlocked.Or(ref _pending, bit) & bit) != 0)
             return; // Already waiting to be read: that signal covers this change.
 
         if (_channel.Writer.TryWrite(domain))
             return;
 
         // Only a completed channel refuses a write: it has room for every domain.
-        if (bit != 0)
-            Interlocked.And(ref _pending, ~bit);
+        Interlocked.And(ref _pending, ~bit);
 
         _droppedCounter.Add(1);
         var total = Interlocked.Increment(ref _totalDropped);
@@ -85,6 +96,20 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
                 );
             }
         }
+    }
+
+    private void RefuseUndefined(ChangeDomain domain)
+    {
+        var now = Environment.TickCount64;
+        var lastWarn = Interlocked.Read(ref _lastRefusedWarnedAt);
+        if (
+            now - lastWarn >= 5_000
+            && Interlocked.CompareExchange(ref _lastRefusedWarnedAt, now, lastWarn) == lastWarn
+        )
+            _logger?.LogWarning(
+                "Trax change-signal refused undefined domain value {Domain}; nothing was signalled.",
+                (int)domain
+            );
     }
 
     /// <summary>
@@ -104,7 +129,7 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
 
     private static readonly int DomainCount = Enum.GetValues<ChangeDomain>().Length;
 
-    // A value outside the enum's first 32 members has no bit and is queued without dedupe.
+    // Notify refuses a value outside the enum, so every value that reaches here has a bit.
     private static int Bit(ChangeDomain domain) =>
         (int)domain is >= 0 and < 32 ? 1 << (int)domain : 0;
 

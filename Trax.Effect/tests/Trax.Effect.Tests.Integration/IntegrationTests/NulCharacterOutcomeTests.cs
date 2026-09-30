@@ -8,6 +8,7 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Exceptions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Metadata;
@@ -23,8 +24,11 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// column refuses the <c>\u0000</c> escape. A run whose output or failure message carries one must
 /// still record its outcome, rather than being left <c>InProgress</c> for the reaper to fail and a
 /// manifest to re-run.
+///
+/// <para>Enforces <c>docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md</c>.</para>
 /// </summary>
 [TestFixture]
+[Property("adr", "docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md")]
 [NonParallelizable]
 public class NulCharacterOutcomeTests
 {
@@ -48,7 +52,8 @@ public class NulCharacterOutcomeTests
         );
         services
             .AddScopedTraxRoute<INulOutputTrain, NulOutputTrain>()
-            .AddScopedTraxRoute<INulFailureTrain, NulFailureTrain>();
+            .AddScopedTraxRoute<INulFailureTrain, NulFailureTrain>()
+            .AddScopedTraxRoute<IUnpairedSurrogateFailureTrain, UnpairedSurrogateFailureTrain>();
         _provider = services.BuildServiceProvider();
     }
 
@@ -68,6 +73,11 @@ public class NulCharacterOutcomeTests
         row.TrainState.Should().Be(TrainState.Completed);
         row.EndTime.Should().NotBeNull();
         row.Output.Should().NotBeNull().And.NotContain("\\u0000");
+        row.Output.Should()
+            .Contain(
+                "bytes:\uFFFDend",
+                "the NUL is replaced where it stood, not dropped with the rest of the output"
+            );
     }
 
     [Test]
@@ -83,6 +93,54 @@ public class NulCharacterOutcomeTests
         row.TrainState.Should().Be(TrainState.Failed);
         row.EndTime.Should().NotBeNull();
         row.FailureReason.Should().NotBeNull().And.NotContain("\0");
+        row.FailureReason.Should()
+            .Contain(
+                "12\uFFFD3",
+                "the NUL is replaced where it stood, not dropped with the rest of the message"
+            );
+        row.StackTrace.Should().NotBeNull("only the NUL was unstorable, not the stack trace");
+    }
+
+    [Test]
+    public async Task A_failure_message_Postgres_cannot_encode_is_recorded_Failed_without_it()
+    {
+        using var scope = _provider.CreateScope();
+        var train = (UnpairedSurrogateFailureTrain)
+            scope.ServiceProvider.GetRequiredService<IUnpairedSurrogateFailureTrain>();
+
+        var act = async () => await train.Run(Unit.Default);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        var row = await PersistedRow(scope, train.Metadata!.Id);
+        row.TrainState.Should()
+            .Be(
+                TrainState.Failed,
+                "0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md records the state "
+                    + "without the content the database refused"
+            );
+        row.EndTime.Should().NotBeNull();
+        row.FailureException.Should().Be(nameof(InvalidOperationException));
+        row.FailureReason.Should().NotBeNull().And.NotContain("half of a pair");
+    }
+
+    [Test]
+    public async Task A_value_Postgres_refuses_is_reported_as_a_content_refusal()
+    {
+        using var scope = _provider.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        using var context = (IDataContext)factory.Create();
+        context.Logs.Add(
+            new Log
+            {
+                Level = LogLevel.Warning,
+                Message = "half of a pair: \uD800",
+                Category = $"surrogate-{Guid.NewGuid():N}",
+            }
+        );
+
+        var act = async () => await context.SaveChanges(CancellationToken.None);
+
+        await act.Should().ThrowAsync<StoreRefusedContentException>();
     }
 
     [Test]
@@ -128,6 +186,23 @@ public class NulCharacterOutcomeTests
         public class ReturnsNulJunction : EffectJunction<Unit, string>
         {
             public override Task<string> Run(Unit input) => Task.FromResult("bytes:\0end");
+        }
+    }
+
+    public interface IUnpairedSurrogateFailureTrain : IServiceTrain<Unit, Unit>;
+
+    public class UnpairedSurrogateFailureTrain
+        : ServiceTrain<Unit, Unit>,
+            IUnpairedSurrogateFailureTrain
+    {
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Chain<ThrowsSurrogateJunction>().Resolve();
+
+        public class ThrowsSurrogateJunction : EffectJunction<Unit, Unit>
+        {
+            // A string cut in the middle of a surrogate pair, as a truncated message can be.
+            public override Task<Unit> Run(Unit input) =>
+                throw new InvalidOperationException("half of a pair: \uD800");
         }
     }
 

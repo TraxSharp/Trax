@@ -233,6 +233,99 @@ public class ManifestTests
 
     #endregion
 
+    #region Registered input types
+
+    [Test]
+    public void A_stored_input_is_read_as_the_registered_type_it_names()
+    {
+        var m = NewManifest();
+        m.SetProperties(new TestProperties { Greeting = "hi", Count = 3 });
+
+        var restored = m.GetPropertiesUntyped([typeof(OtherProperties), typeof(TestProperties)]);
+
+        restored.Should().Be(new TestProperties { Greeting = "hi", Count = 3 });
+    }
+
+    /// <summary>
+    /// The stored name only chooses among the types the host registered. A type that is loaded
+    /// and implements the interface, but that no registered train takes, is not deserialized into.
+    /// </summary>
+    [Test]
+    public void A_loaded_input_type_that_is_not_registered_is_refused()
+    {
+        var m = NewManifest();
+        m.SetProperties(new TestProperties { Greeting = "hi" });
+
+        Action act = () => m.GetPropertiesUntyped([typeof(OtherProperties)]);
+
+        act.Should().Throw<TypeLoadException>().WithMessage("*not a registered*");
+    }
+
+    [Test]
+    public void A_registered_type_that_is_not_manifest_properties_is_not_a_match()
+    {
+        var m = NewManifest();
+        m.PropertyTypeName = typeof(SomeFakeTrain).FullName;
+        m.Properties = "{}";
+
+        Func<Type> act = () => m.ResolvePropertyType([typeof(SomeFakeTrain)]);
+
+        act.Should().Throw<TypeLoadException>();
+    }
+
+    [Test]
+    public void A_manifest_with_no_stored_input_resolves_to_unit()
+    {
+        NewManifest()
+            .ResolvePropertyType([typeof(TestProperties)])
+            .Should()
+            .Be(typeof(LanguageExt.Unit));
+    }
+
+    #endregion
+
+    #region Failure window and owner
+
+    [Test]
+    public void Create_copies_the_failure_window_and_owner()
+    {
+        var m = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(SomeFakeTrain),
+                FailureWindowSeconds = 600,
+                Owner = "orders",
+            }
+        );
+
+        m.FailureWindowSeconds.Should().Be(600);
+        m.Owner.Should().Be("orders");
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void Create_refuses_a_failure_window_that_counts_nothing(int seconds)
+    {
+        Action act = () =>
+            Manifest.Create(
+                new CreateManifest { Name = typeof(SomeFakeTrain), FailureWindowSeconds = seconds }
+            );
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [TestCase("")]
+    [TestCase("  ")]
+    public void Create_refuses_a_blank_owner(string owner)
+    {
+        Action act = () =>
+            Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain), Owner = owner });
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    #endregion
+
     private class SomeFakeTrain { }
 
     private record TestProperties : IManifestProperties

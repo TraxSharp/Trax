@@ -49,7 +49,7 @@ public static class ServiceExtensions
     /// migrations are managed externally (e.g., CI/CD pipelines, a dedicated migration Lambda,
     /// or the API/scheduler process on startup).
     ///
-    /// Migrations can be run separately by calling <see cref="DatabaseMigrator.Migrate"/> directly:
+    /// Migrations can be run separately by calling <see cref="DatabaseMigrator.Migrate(string)"/> directly:
     /// <code>
     /// await DatabaseMigrator.Migrate(connectionString);
     /// </code>

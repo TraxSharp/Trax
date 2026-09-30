@@ -300,7 +300,8 @@ internal class SendSnapshotJunction(
     /// as a <see cref="SnapshotProblem"/>, including <c>no-effect</c> when the machine declares none. Any other
     /// exception is caught and returned as <c>delivery-failed</c> with a fixed message and a reference, and the
     /// exception is logged under that reference; the draft is not advanced. A cancelled request is not a failed
-    /// delivery, so an <see cref="OperationCanceledException"/> propagates.
+    /// delivery, so an <see cref="OperationCanceledException"/> propagates when this request was cancelled; one
+    /// raised by the effect itself, such as an outbound call's timeout, is a <c>delivery-failed</c>.
     /// </summary>
     public override async Task<SendSnapshotOutput> Run(SendSnapshotInput input)
     {
@@ -365,7 +366,9 @@ internal class SendSnapshotJunction(
                 _ => Problem("internal-error", "Unknown send outcome."),
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
+            when (ex is not OperationCanceledException || !CancellationToken.IsCancellationRequested
+            )
         {
             // The effect (or the store around it) threw: the draft was NOT advanced, so the user can retry.
             // Surfaced as data with a fixed message: the exception's own text can carry anything, a connection

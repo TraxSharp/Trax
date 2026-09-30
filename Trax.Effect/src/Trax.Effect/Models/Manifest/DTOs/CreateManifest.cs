@@ -87,5 +87,18 @@ public class CreateManifest
     /// </summary>
     public int? VarianceSeconds { get; set; }
 
+    /// <summary>
+    /// How far back, in seconds, a failed run counts toward <see cref="MaxRetries"/>. Null uses the
+    /// scheduler's window. Must be at least 1 when set.
+    /// </summary>
+    public int? FailureWindowSeconds { get; set; }
+
     #endregion
+
+    /// <summary>
+    /// The application that declares the manifest, so a prune of undeclared manifests keeps to the
+    /// ones that application owns. Null when no application owns it. Cannot be empty or
+    /// whitespace when set.
+    /// </summary>
+    public string? Owner { get; set; }
 }

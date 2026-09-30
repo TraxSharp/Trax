@@ -215,6 +215,10 @@ namespace Trax.Effect.Enums
 }
 namespace Trax.Effect.Exceptions
 {
+    public class StoreRefusedContentException : System.Exception
+    {
+        public StoreRefusedContentException(System.Exception innerException) { }
+    }
     public class TrainAlreadyStartedException : Trax.Core.Exceptions.TrainException
     {
         public TrainAlreadyStartedException(long metadataId, string trainName) { }
@@ -377,6 +381,8 @@ namespace Trax.Effect.Models.EffectClaim
     public class EffectClaim
     {
         public EffectClaim() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("content_fingerprint")]
+        public string? ContentFingerprint { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
         public System.DateTimeOffset CreatedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("effect_key")]
@@ -517,12 +523,14 @@ namespace Trax.Effect.Models.Manifest.DTOs
         public string? CronExpression { get; set; }
         public long? DependsOnManifestId { get; set; }
         public string? Exclusions { get; set; }
+        public int? FailureWindowSeconds { get; set; }
         public int? IntervalSeconds { get; set; }
         public bool IsEnabled { get; set; }
         public int MaxRetries { get; set; }
         public Trax.Effect.Enums.MisfirePolicy MisfirePolicy { get; set; }
         public int? MisfireThresholdSeconds { get; set; }
         public required System.Type Name { get; set; }
+        public string? Owner { get; set; }
         public int Priority { get; set; }
         public Trax.Effect.Models.Manifest.IManifestProperties? Properties { get; set; }
         public Trax.Effect.Enums.ScheduleType ScheduleType { get; set; }
@@ -575,6 +583,8 @@ namespace Trax.Effect.Models.Manifest
         public string? Exclusions { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("external_id")]
         public string ExternalId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_window_seconds")]
+        public int? FailureWindowSeconds { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("id")]
         public long Id { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("interval_seconds")]
@@ -600,6 +610,8 @@ namespace Trax.Effect.Models.Manifest
         public System.Type NameType { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("next_scheduled_run")]
         public System.DateTime? NextScheduledRun { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("owner")]
+        public string? Owner { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("priority")]
         public int Priority { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("properties")]
@@ -623,6 +635,8 @@ namespace Trax.Effect.Models.Manifest
         public TProperty GetProperties<TProperty>()
             where TProperty : Trax.Effect.Models.Manifest.IManifestProperties { }
         public object GetPropertiesUntyped() { }
+        public object GetPropertiesUntyped(System.Collections.Generic.IEnumerable<System.Type> registeredInputTypes) { }
+        public System.Type ResolvePropertyType(System.Collections.Generic.IEnumerable<System.Type> registeredInputTypes) { }
         public void SetExclusions(System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> exclusions) { }
         public LanguageExt.Unit SetProperties(Trax.Effect.Models.Manifest.IManifestProperties properties) { }
         public override string ToString() { }
@@ -843,6 +857,11 @@ namespace Trax.Effect.Models.SchedulerConfig
         public System.TimeSpan? MetadataCleanupInterval { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("metadata_cleanup_retention")]
         public System.TimeSpan? MetadataCleanupRetention { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Collections.Generic.IReadOnlyList<string> OverriddenSettings { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("overrides")]
+        public string? Overrides { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("recover_stuck_jobs_on_startup")]
         public bool RecoverStuckJobsOnStartup { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("retry_backoff_multiplier")]
@@ -851,7 +870,10 @@ namespace Trax.Effect.Models.SchedulerConfig
         public System.TimeSpan StalePendingTimeout { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
         public System.DateTime UpdatedAt { get; set; }
+        public bool RemoveOverride(string name) { }
+        public void SetOverride<T>(string name, T value) { }
         public override string ToString() { }
+        public bool TryGetOverride<T>(string name, out T? value) { }
     }
 }
 namespace Trax.Effect.Models.SnapshotDraft
@@ -890,6 +912,7 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public CreateWorkQueue() { }
         public long? DeadLetterId { get; set; }
         public bool DeferPromotion { get; set; }
+        public bool ExplicitTrigger { get; set; }
         public string? Input { get; set; }
         public string? InputTypeName { get; set; }
         public long? ManifestId { get; set; }
@@ -927,6 +950,8 @@ namespace Trax.Effect.Models.WorkQueue
         public string? Input { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("input_type_name")]
         public string? InputTypeName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("is_explicit_trigger")]
+        public bool IsExplicitTrigger { get; set; }
         public Trax.Effect.Models.Manifest.Manifest? Manifest { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("manifest_id")]
         public long? ManifestId { get; set; }

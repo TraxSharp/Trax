@@ -257,8 +257,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     }
 
     // The same pattern the `trax machine` CLI enforces on the ids it generates from, so every id a machine can
-    // be built with is one the toolchain can emit.
-    [GeneratedRegex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
+    // be built with is one the toolchain can emit. `\z`, not `$`: `$` also matches before a final newline.
+    [GeneratedRegex(@"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z", RegexOptions.CultureInvariant)]
     private static partial Regex KebabCaseId();
 
     /// <inheritdoc/>
@@ -320,8 +320,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
 
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
     /// <exception cref="InvalidOperationException">
-    /// The machine has no id or no start state, names a custom rule or reduction with no handler bound, or binds
-    /// more than one effect with <c>RunsOnce</c>.
+    /// The machine has no id or no start state, names a custom rule or reduction with no handler bound, binds
+    /// more than one effect with <c>RunsOnce</c>, or enters an effect's target state by any other transition.
     /// </exception>
     public BuiltMachine<TState, TTrigger> Build()
     {
@@ -342,6 +342,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 $"The machine '{_id}' binds {_effects.Count} effects with RunsOnce, but a machine runs exactly one "
                     + "irreversible effect. Keep RunsOnce on the one transition that performs it."
             );
+
+        RefuseOtherEdgesIntoEffectTargets();
 
         var definition = new MachineDefinition<TState, TTrigger>
         {
@@ -388,6 +390,31 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             : null;
 
         return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative);
+    }
+
+    // An effect's target state means "the effect ran": the draft reaches it with the receipt the effect produced.
+    // A second edge into it would let the plain advance put a draft there with no effect run, so the machine is
+    // refused. A self-loop on the target does not enter it and is allowed.
+    private void RefuseOtherEdgesIntoEffectTargets()
+    {
+        foreach (var effect in _effects)
+        foreach (var t in _transitions)
+        {
+            if (!EqualityComparer<TState>.Default.Equals(t.To, effect.To))
+                continue;
+            if (EqualityComparer<TState>.Default.Equals(t.From, effect.To))
+                continue;
+            if (
+                EqualityComparer<TState>.Default.Equals(t.From, effect.From)
+                && EqualityComparer<TTrigger>.Default.Equals(t.Trigger, effect.Trigger)
+            )
+                continue;
+            throw new InvalidOperationException(
+                $"The machine '{_id}' enters {effect.To} from {t.From} on {t.Trigger}, but {effect.To} is the target "
+                    + $"of the effect bound with RunsOnce on {effect.From} -> {effect.Trigger}. Only the effect's own "
+                    + "transition may enter the state that records its receipt; route the other edge to another state."
+            );
+        }
     }
 
     // A custom rule or reduction with no C# handler would compile to a guard that is always false and a

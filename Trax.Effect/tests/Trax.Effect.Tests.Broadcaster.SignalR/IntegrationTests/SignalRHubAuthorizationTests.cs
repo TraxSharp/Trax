@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
@@ -221,9 +222,129 @@ public class SignalRHubAuthorizationTests
             .Contain("whitespace role names");
     }
 
+    [Test]
+    public async Task RequireAuthorization_OnAHostWithAFallbackPolicy_RefusesAUserTheFallbackRefuses()
+    {
+        using var host = await StartHostAsync(
+            hub => hub.RequireAuthorization(),
+            authorization: OperatorFallback
+        );
+
+        await using (var outsider = Client(host, user: "bob"))
+        {
+            var connect = async () => await outsider.StartAsync().WaitAsync(Timeout);
+            (
+                await connect
+                    .Should()
+                    .ThrowAsync<HttpRequestException>(
+                        "a bare RequireAuthorization() keeps the host's fallback policy " + Adr
+                    )
+            )
+                .Which.StatusCode.Should()
+                .Be(HttpStatusCode.Forbidden);
+        }
+
+        await using var operatorClient = Client(host, user: "alice", role: "Operator");
+        await operatorClient.StartAsync().WaitAsync(Timeout);
+        operatorClient.State.Should().Be(HubConnectionState.Connected);
+    }
+
+    [Test]
+    public async Task RequireAuthorization_OverWebSocketsWithoutNegotiation_RefusesAUserTheFallbackRefuses()
+    {
+        using var host = await StartHostAsync(
+            hub => hub.RequireAuthorization(),
+            authorization: OperatorFallback
+        );
+
+        await using (var outsider = WebSocketClient(host, user: "bob"))
+        {
+            var connect = async () => await outsider.StartAsync().WaitAsync(Timeout);
+            await connect
+                .Should()
+                .ThrowAsync<Exception>(
+                    "the posture is checked on the WebSocket upgrade as on negotiate " + Adr
+                );
+            outsider.State.Should().Be(HubConnectionState.Disconnected);
+        }
+
+        await using var operatorClient = WebSocketClient(host, user: "alice", role: "Operator");
+        await operatorClient.StartAsync().WaitAsync(Timeout);
+        operatorClient.State.Should().Be(HubConnectionState.Connected);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task AConnectionWhoseAuthenticationExpires_IsClosed(bool hostTriesToTurnItOff)
+    {
+        using var host = await StartHostAsync(hub =>
+            hub.RequireAuthorization()
+                .ConfigureConnection(c =>
+                {
+                    if (hostTriesToTurnItOff)
+                        c.CloseOnAuthenticationExpiration = false;
+                })
+        );
+        await using var connection = Client(host, user: "alice", expiresInMs: 500);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        await connection.StartAsync().WaitAsync(Timeout);
+
+        var wait = async () => await closed.Task.WaitAsync(Timeout);
+        await wait.Should()
+            .NotThrowAsync(
+                "a connection stops receiving once the authentication it was admitted on expires "
+                    + Adr
+            );
+    }
+
+    [Test]
+    public async Task RequireAuthorization_WithAnUnknownPolicy_FailsAtMapping()
+    {
+        var start = async () => await StartHostAsync(hub => hub.RequireAuthorization("TraxEvnets"));
+
+        (
+            await start
+                .Should()
+                .ThrowAsync<InvalidOperationException>(
+                    "a policy the host never registered is refused where the hub is mapped " + Adr
+                )
+        )
+            .Which.Message.Should()
+            .Contain("TraxEvnets");
+    }
+
+    [Test]
+    public async Task RequireRoles_WithACommaInARoleName_FailsAtStartup()
+    {
+        var start = async () => await StartHostAsync(hub => hub.RequireRoles("Operator,User"));
+
+        (
+            await start
+                .Should()
+                .ThrowAsync<ArgumentException>(
+                    "a role name is one role, never a list of them " + Adr
+                )
+        )
+            .Which.ParamName.Should()
+            .Be("roles");
+    }
+
+    private static void OperatorFallback(AuthorizationOptions options) =>
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .RequireRole("Operator")
+            .Build();
+
     private static async Task<IHost> StartHostAsync(
         Action<TraxTrainEventHubOptions> hub,
-        ILoggerProvider? logs = null
+        ILoggerProvider? logs = null,
+        Action<AuthorizationOptions>? authorization = null
     )
     {
         var builder = new HostBuilder().ConfigureWebHost(webHost =>
@@ -245,8 +366,10 @@ public class SignalRHubAuthorizationTests
                             _ => { }
                         );
                     services.AddAuthorization(o =>
-                        o.AddPolicy("TraxEvents", p => p.RequireClaim("scope", "trax.events"))
-                    );
+                    {
+                        o.AddPolicy("TraxEvents", p => p.RequireClaim("scope", "trax.events"));
+                        authorization?.Invoke(o);
+                    });
 
                     var registry = new EffectRegistry();
                     services.AddSingleton<IEffectRegistry>(registry);
@@ -266,11 +389,44 @@ public class SignalRHubAuthorizationTests
         return await builder.StartAsync();
     }
 
+    /// <summary>
+    /// A client that skips negotiation and opens a WebSocket straight away, so the posture is
+    /// checked on the WebSocket upgrade request rather than on a negotiate call.
+    /// </summary>
+    private static HubConnection WebSocketClient(IHost host, string user, string? role = null)
+    {
+        var server = host.GetTestServer();
+        var connection = new HubConnectionBuilder()
+            .WithUrl(
+                new Uri(server.BaseAddress, "hubs/trax-events"),
+                options =>
+                {
+                    options.Transports = HttpTransportType.WebSockets;
+                    options.SkipNegotiation = true;
+                    options.WebSocketFactory = async (context, cancellationToken) =>
+                    {
+                        var client = server.CreateWebSocketClient();
+                        client.ConfigureRequest = request =>
+                        {
+                            request.Headers["X-Test-User"] = user;
+                            if (role is not null)
+                                request.Headers["X-Test-Role"] = role;
+                        };
+                        return await client.ConnectAsync(context.Uri, cancellationToken);
+                    };
+                }
+            )
+            .Build();
+        connection.HandshakeTimeout = TimeSpan.FromSeconds(5);
+        return connection;
+    }
+
     private static HubConnection Client(
         IHost host,
         string? user,
         string? role = null,
-        string? scope = null
+        string? scope = null,
+        int? expiresInMs = null
     )
     {
         var server = host.GetTestServer();
@@ -287,6 +443,10 @@ public class SignalRHubAuthorizationTests
                         options.Headers["X-Test-Role"] = role;
                     if (scope is not null)
                         options.Headers["X-Test-Scope"] = scope;
+                    if (expiresInMs is not null)
+                        options.Headers["X-Test-Expires-In-Ms"] = expiresInMs.Value.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture
+                        );
                 }
             )
             .Build();
@@ -315,9 +475,20 @@ public class SignalRHubAuthorizationTests
             if (Request.Headers.TryGetValue("X-Test-Scope", out var scope))
                 claims.Add(new Claim("scope", scope.ToString()));
 
+            var properties = new AuthenticationProperties();
+            if (Request.Headers.TryGetValue("X-Test-Expires-In-Ms", out var expiresIn))
+                properties.ExpiresUtc = DateTimeOffset.UtcNow.AddMilliseconds(
+                    int.Parse(
+                        expiresIn.ToString(),
+                        System.Globalization.CultureInfo.InvariantCulture
+                    )
+                );
+
             var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
             return Task.FromResult(
-                AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName))
+                AuthenticateResult.Success(
+                    new AuthenticationTicket(principal, properties, SchemeName)
+                )
             );
         }
     }

@@ -9,6 +9,7 @@ using Trax.Core.Extensions;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 using Trax.Effect.Attributes;
+using Trax.Effect.Exceptions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -369,7 +370,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // manifest counts toward retries and dead letters. Persisting it regardless costs one
         // write and lets the cancellation surface inside the try, where it is recorded as what it
         // is.
-        await EffectRunner.SaveChanges(CancellationToken.None);
+        await SaveStart();
 
         // Everything up to the result is captured rather than allowed to propagate, so a failure
         // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
@@ -413,10 +414,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // The train's own failure is what the caller needs. If recording it fails too, that
             // is logged and the failure still propagates, with its hooks; the stale-run reaper
             // fails a row left in progress.
+            UnrecordedContent? unrecorded = null;
             try
             {
                 await this.FinishServiceTrain(result);
-                await SaveOutcome();
+                unrecorded = await SaveOutcome();
             }
             catch (Exception recordEx)
             {
@@ -426,6 +428,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                     TrainName
                 );
             }
+
+            // The hooks report what happened, not what the store could hold.
+            unrecorded?.Restore(Metadata);
 
             // The same test FinishServiceTrain used to choose Cancelled over Failed, so the hooks
             // that fire always match the state that was recorded.
@@ -476,6 +481,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 }
             }
 
+            unrecorded?.Drop(Metadata);
             exception.Rethrow();
         }
 
@@ -487,7 +493,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // Failed outcome: the work happened, and recording that it failed would be false.
         await EffectRunner.Update(Metadata);
         await this.FinishServiceTrain(result);
-        await SaveOutcome();
+        var unrecordedOutcome = await SaveOutcome();
+
+        // The hooks report what happened, not what the store could hold: the output the store
+        // refused is what they publish, in place of the placeholder that was stored.
+        unrecordedOutcome?.Restore(Metadata);
 
         // Hooks read the output as serialized JSON. When the parameter effect wrote the stored
         // copy they get that; otherwise one is built here, AFTER the outcome is saved so it is not
@@ -548,12 +558,64 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             );
         }
 
+        // Back to what was stored, so a later save of this tracked row does not send the refused
+        // content again.
+        unrecordedOutcome?.Drop(Metadata);
+
         return output;
+    }
+
+    /// <summary>
+    /// Persists the run's first row, carrying its input.
+    /// </summary>
+    /// <remarks>
+    /// When the store refuses the row for its input, the row is written again with the input
+    /// replaced by a placeholder, so the run still has a row that the reaper and a pre-created
+    /// row's owner can see move; the input the train runs with is untouched. Any other failure
+    /// propagates, and so does the refusal when the second write fails too.
+    /// </remarks>
+    private async Task SaveStart()
+    {
+        EffectRunner.AssertLoaded();
+        Metadata.AssertLoaded();
+
+        try
+        {
+            await EffectRunner.SaveChanges(CancellationToken.None);
+        }
+        catch (Exception contentEx) when (IsStoreContentRefusal(contentEx))
+        {
+            Logger?.LogError(
+                contentEx,
+                "The store refused the input of train ({TrainName}); recording the run without it.",
+                TrainName
+            );
+
+            Metadata.DropInputContent();
+
+            try
+            {
+                await EffectRunner.SaveChanges(CancellationToken.None);
+            }
+            catch (Exception stateEx)
+            {
+                Logger?.LogError(
+                    stateEx,
+                    "Could not record the start of train ({TrainName}) without its input either.",
+                    TrainName
+                );
+                ExceptionDispatchInfo.Capture(contentEx).Throw();
+            }
+        }
     }
 
     /// <summary>
     /// Persists the train's terminal state.
     /// </summary>
+    /// <returns>
+    /// The content that was replaced by placeholders when the store refused it, so the hooks can
+    /// be shown what happened; <c>null</c> when the row was written in full.
+    /// </returns>
     /// <remarks>
     /// Deliberately not given the caller's token. That token is cancelled in exactly the case
     /// this write exists to record, so handing it over would abandon the row at
@@ -564,10 +626,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     ///
     /// A store can refuse the row for what it carries: Postgres refuses characters it cannot
     /// store, for one. The state and end time are what the scheduler, the reaper and a manifest's
-    /// retries act on, so when the write fails the outcome is written again without the output
-    /// and the failure's text, and only if that fails too does the first error propagate.
+    /// retries act on, so when the store says it refused the content, with
+    /// <see cref="StoreRefusedContentException"/>, the outcome is written again without the
+    /// output and the failure's text, and only if that fails too does the first error propagate.
+    /// Any other failure, from the store or from another provider, propagates as it is: the
+    /// store may already have saved the full row, and a second write would replace it with
+    /// placeholders.
     /// </remarks>
-    private async Task SaveOutcome()
+    private async Task<UnrecordedContent?> SaveOutcome()
     {
         EffectRunner.AssertLoaded();
         Metadata.AssertLoaded();
@@ -575,8 +641,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         try
         {
             await EffectRunner.SaveChanges(CancellationToken.None);
+            return null;
         }
-        catch (Exception contentEx) when (contentEx is not OperationCanceledException)
+        catch (Exception contentEx) when (IsStoreContentRefusal(contentEx))
         {
             Logger?.LogError(
                 contentEx,
@@ -584,11 +651,13 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 TrainName
             );
 
+            var unrecorded = UnrecordedContent.Capture(Metadata);
+
             // Without the object, the parameter effect cannot serialize the output again over
             // the placeholder. It is put back for the hooks and TrainOutput.
             var outputObject = Metadata.GetOutputObject();
             Metadata.SetOutputObject(null);
-            Metadata.DropOutcomeContent();
+            unrecorded.Drop(Metadata);
 
             try
             {
@@ -607,7 +676,42 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             {
                 Metadata.SetOutputObject(outputObject);
             }
+
+            return unrecorded;
         }
+    }
+
+    /// <summary>
+    /// Whether a save failed because the store refused the row's content. The effect runner
+    /// calls every provider and aggregates their failures, so the refusal may be one of several.
+    /// </summary>
+    private static bool IsStoreContentRefusal(Exception exception) =>
+        exception switch
+        {
+            StoreRefusedContentException => true,
+            AggregateException aggregate => aggregate
+                .Flatten()
+                .InnerExceptions.Any(e => e is StoreRefusedContentException),
+            _ => false,
+        };
+
+    /// <summary>
+    /// The outcome content a store refused, kept so the hooks see it and the tracked row can be
+    /// put back to what was stored once they have run.
+    /// </summary>
+    private sealed record UnrecordedContent(
+        string? Output,
+        string? FailureReason,
+        string? StackTrace
+    )
+    {
+        public static UnrecordedContent Capture(Metadata metadata) =>
+            new(metadata.Output, metadata.FailureReason, metadata.StackTrace);
+
+        public void Restore(Metadata metadata) =>
+            metadata.RestoreOutcomeContent(Output, FailureReason, StackTrace);
+
+        public void Drop(Metadata metadata) => metadata.DropOutcomeContent();
     }
 
     /// <summary>

@@ -21,6 +21,12 @@ internal class PersistentWorkQueue : Effect.Models.WorkQueue.WorkQueue
 
             entity.HasIndex(e => e.ManifestId);
 
+            // Compared exactly and indexed in SQL only (ix_work_queue_external_id, the subject
+            // indexes), so the Postgres NUL scrubber must leave them as written. The literal is
+            // NulCharacterInterceptor.ComparedExactlyAnnotation.
+            entity.Property(e => e.ExternalId).HasAnnotation("Trax:ComparedExactly", true);
+            entity.Property(e => e.SubjectKey).HasAnnotation("Trax:ComparedExactly", true);
+
             entity.Property(e => e.Input).HasColumnType("jsonb");
 
             entity

@@ -144,17 +144,21 @@ internal class ValueTupleConverter : JsonConverterFactory
         /// <param name="value">The ValueTuple to write</param>
         /// <param name="options">The serializer options</param>
         /// <remarks>
-        /// This method:
-        /// 1. Extracts the values from the ValueTuple fields
-        /// 2. Serializes them as a JSON array
-        ///
-        /// The resulting JSON is a simple array of values, which is a natural
-        /// representation of a tuple in JSON format.
+        /// Writes a JSON array with one element per field. Each element is serialized on its own,
+        /// as <see cref="Read"/> reads each one on its own: under
+        /// <see cref="ReferenceHandler.Preserve"/>, one call over all the elements wrote an object
+        /// the tuple holds twice as a <c>$ref</c> the second time, and reading that element alone
+        /// could not resolve it. Each element is now written in full, so a shared object appears
+        /// once per element that holds it.
         /// </remarks>
         public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
         {
-            var values = Fields.Select(f => f.GetValue(value)!).ToArray();
-            JsonSerializer.Serialize(writer, values, options);
+            writer.WriteStartArray();
+
+            foreach (var field in Fields)
+                JsonSerializer.Serialize(writer, field.GetValue(value), field.FieldType, options);
+
+            writer.WriteEndArray();
         }
     }
 }

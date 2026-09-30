@@ -119,10 +119,15 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     }
 
     /// <summary>
-    /// Inserts a new draft row. Returns <c>false</c> when a row with the same key already exists, which is how
-    /// a writer that lost the race to create a draft finds out; any other database error propagates.
+    /// Inserts a new draft row in one statement. Returns <c>false</c> when a row with the same
+    /// <c>(user_key, machine, id)</c> already exists, which is how a writer that lost the race to create a draft
+    /// finds out; any other database error propagates.
     /// </summary>
-    internal Task<bool> Insert(
+    /// <param name="userKey">The owning user's key.</param>
+    /// <param name="id">The client-minted draft id.</param>
+    /// <param name="snapshot">The snapshot to store.</param>
+    /// <param name="cancellationToken">Cancels the insert.</param>
+    public Task<bool> Insert(
         string userKey,
         Guid id,
         Snapshot snapshot,

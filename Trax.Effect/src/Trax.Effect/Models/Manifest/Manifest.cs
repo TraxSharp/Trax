@@ -75,8 +75,9 @@ public class Manifest : IModel
     /// </summary>
     /// <remarks>
     /// The stored name is data, so no assembly is loaded to find it and only a type implementing
-    /// <see cref="IManifestProperties"/> is returned. A caller that knows the train's input type
-    /// from its own registry should pass that to <see cref="GetProperties(Type)"/> instead.
+    /// <see cref="IManifestProperties"/> is returned. Any loaded type qualifies, including one no
+    /// train takes as its input, so a host with a registry of input types should call
+    /// <see cref="ResolvePropertyType"/> instead, which picks only among those.
     /// </remarks>
     /// <exception cref="TypeLoadException">
     /// No loaded assembly defines the named type, or it does not implement
@@ -85,7 +86,7 @@ public class Manifest : IModel
     [NotMapped]
     [JsonIgnore]
     public Type PropertyType =>
-        PropertyTypeName == null ? typeof(Unit) : ResolvePropertyType(PropertyTypeName);
+        PropertyTypeName == null ? typeof(Unit) : ResolveLoadedPropertyType(PropertyTypeName);
 
     /// <summary>
     /// The train type named by <see cref="Name"/>, found among the assemblies already loaded; no
@@ -266,7 +267,36 @@ public class Manifest : IModel
     [Column("next_scheduled_run")]
     public DateTime? NextScheduledRun { get; set; }
 
+    /// <summary>
+    /// How far back, in seconds, a failed run of this manifest still counts toward its
+    /// <see cref="MaxRetries"/>. Null means the scheduler's own failure window applies.
+    /// </summary>
+    /// <remarks>
+    /// A failure older than the window no longer holds the manifest back or brings it closer to a
+    /// dead letter, so a manifest that failed a few times over months is not retired for it. The
+    /// database refuses zero and negative values, and <see cref="Create"/> refuses them before
+    /// they reach it: a window of nothing would count no failure at all, and the manifest would
+    /// never be dead-lettered however often it failed.
+    /// </remarks>
+    [Column("failure_window_seconds")]
+    public int? FailureWindowSeconds { get; set; }
+
     #endregion
+
+    /// <summary>
+    /// The application that declared this manifest, as the scheduler names it (its application
+    /// name). Null for a manifest written before the column existed, or by a host that names no
+    /// owner.
+    /// </summary>
+    /// <remarks>
+    /// Several applications can schedule against one database. Anything that removes manifests an
+    /// application no longer declares, such as the scheduler's startup prune, reads this to keep to
+    /// the ones that application owns, rather than treating every row it did not declare as its
+    /// own orphan. Trax compares it exactly. <see cref="Create"/> refuses an empty or whitespace
+    /// owner, which would otherwise be a name every unnamed host shares.
+    /// </remarks>
+    [Column("owner")]
+    public string? Owner { get; set; }
 
     #endregion
 
@@ -353,6 +383,21 @@ public class Manifest : IModel
         if (manifest.Name.FullName is null)
             throw new Exception($"Could not get a full name from ({manifest.Name})");
 
+        if (manifest.FailureWindowSeconds is <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(manifest),
+                manifest.FailureWindowSeconds,
+                "A failure window must be at least one second. Leave it null to use the "
+                    + "scheduler's window."
+            );
+
+        if (manifest.Owner is { } owner && string.IsNullOrWhiteSpace(owner))
+            throw new ArgumentException(
+                "A manifest owner cannot be empty or whitespace. Leave it null when no "
+                    + "application owns the manifest.",
+                nameof(manifest)
+            );
+
         var newManifest = new Manifest()
         {
             Name = manifest.Name.FullName,
@@ -371,6 +416,8 @@ public class Manifest : IModel
             ScheduledAt = manifest.ScheduledAt,
             Exclusions = manifest.Exclusions,
             VarianceSeconds = manifest.VarianceSeconds,
+            FailureWindowSeconds = manifest.FailureWindowSeconds,
+            Owner = manifest.Owner,
         };
 
         if (manifest.Properties != null)
@@ -462,8 +509,9 @@ public class Manifest : IModel
     /// Deserializes <see cref="Properties"/> as the type <see cref="PropertyType"/> resolves.
     /// </summary>
     /// <remarks>
-    /// Prefer <see cref="GetProperties(Type)"/> with the input type from the caller's own train
-    /// registry: that never resolves a type from the stored name at all.
+    /// Prefer <see cref="GetPropertiesUntyped(IEnumerable{Type})"/> with the input types the host
+    /// registered, or <see cref="GetProperties(Type)"/> with the one input type the caller already
+    /// knows: neither looks a type up by the stored name.
     /// </remarks>
     /// <exception cref="TypeLoadException">
     /// The stored name resolves to no loaded type, or to one that does not implement
@@ -484,6 +532,73 @@ public class Manifest : IModel
             ?? throw new Exception(
                 $"Could not deserialize property object ({Properties}) with type ({PropertyType})"
             );
+    }
+
+    /// <summary>
+    /// The type named by <see cref="PropertyTypeName"/>, chosen from
+    /// <paramref name="registeredInputTypes"/> rather than looked up by the stored name;
+    /// <see cref="Unit"/> when the manifest has no stored input.
+    /// </summary>
+    /// <param name="registeredInputTypes">
+    /// The input types the host registered, such as every registered train's input type. Only a
+    /// type in this set whose FullName equals the stored name, and which implements
+    /// <see cref="IManifestProperties"/>, is ever returned.
+    /// </param>
+    /// <remarks>
+    /// The stored name is data, so it only selects among types the host already chose to accept.
+    /// A type that happens to be loaded, but that no train takes as its input, is never
+    /// deserialized into.
+    /// </remarks>
+    /// <exception cref="TypeLoadException">
+    /// No registered type has the stored name, or more than one does (two assemblies defining one
+    /// FullName), so the row cannot say which it meant.
+    /// </exception>
+    public Type ResolvePropertyType(IEnumerable<Type> registeredInputTypes)
+    {
+        ArgumentNullException.ThrowIfNull(registeredInputTypes);
+
+        if (PropertyTypeName == null)
+            return typeof(Unit);
+
+        var matches = registeredInputTypes
+            .Where(t =>
+                t.FullName == PropertyTypeName && typeof(IManifestProperties).IsAssignableFrom(t)
+            )
+            .Distinct()
+            .Take(2)
+            .ToList();
+
+        return matches.Count switch
+        {
+            1 => matches[0],
+            0 => throw new TypeLoadException(
+                $"Stored type ({PropertyTypeName}) is not a registered {nameof(IManifestProperties)} input type"
+            ),
+            _ => throw new TypeLoadException(
+                $"More than one registered input type is named ({PropertyTypeName})"
+            ),
+        };
+    }
+
+    /// <summary>
+    /// Deserializes <see cref="Properties"/> as the type <see cref="ResolvePropertyType"/> picks
+    /// from <paramref name="registeredInputTypes"/>.
+    /// </summary>
+    /// <param name="registeredInputTypes">The input types the host registered.</param>
+    /// <exception cref="TypeLoadException">
+    /// The stored name matches no registered input type, or more than one.
+    /// </exception>
+    /// <exception cref="Exception"><see cref="Properties"/> is empty or deserializes to null.</exception>
+    public object GetPropertiesUntyped(IEnumerable<Type> registeredInputTypes)
+    {
+        var type = ResolvePropertyType(registeredInputTypes);
+
+        if (string.IsNullOrEmpty(Properties))
+            throw new Exception(
+                $"Cannot deserialize null property object with type ({PropertyTypeName})"
+            );
+
+        return GetProperties(type);
     }
 
     /// <summary>
@@ -512,7 +627,7 @@ public class Manifest : IModel
     /// Resolves a stored properties type name, refusing anything that is not
     /// <see cref="IManifestProperties"/>.
     /// </summary>
-    private static Type ResolvePropertyType(string typeName)
+    private static Type ResolveLoadedPropertyType(string typeName)
     {
         var type = ResolveType(typeName);
         if (!typeof(IManifestProperties).IsAssignableFrom(type))

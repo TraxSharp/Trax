@@ -39,7 +39,7 @@ public class ParameterEffect(
     /// </summary>
     private readonly JsonSerializerOptions _options = TraxRedaction.WithRedaction(options);
 
-    private readonly HashSet<Metadata> _trackedMetadatas = [];
+    private readonly Dictionary<Metadata, Serialized> _trackedMetadatas = [];
     private readonly object _lock = new();
 
     /// <summary>
@@ -60,8 +60,8 @@ public class ParameterEffect(
     {
         lock (_lock)
         {
-            foreach (var metadata in _trackedMetadatas)
-                SerializeParameters(metadata);
+            foreach (var (metadata, serialized) in _trackedMetadatas)
+                SerializeParameters(metadata, serialized);
         }
     }
 
@@ -88,8 +88,10 @@ public class ParameterEffect(
         {
             lock (_lock)
             {
-                _trackedMetadatas.Add(metadata);
-                SerializeParameters(metadata);
+                if (!_trackedMetadatas.TryGetValue(metadata, out var serialized))
+                    _trackedMetadatas[metadata] = serialized = new Serialized();
+
+                SerializeParameters(metadata, serialized);
             }
         }
     }
@@ -101,8 +103,8 @@ public class ParameterEffect(
         {
             lock (_lock)
             {
-                if (_trackedMetadatas.Contains(metadata))
-                    SerializeParameters(metadata);
+                if (_trackedMetadatas.TryGetValue(metadata, out var serialized))
+                    SerializeParameters(metadata, serialized);
             }
         }
 
@@ -110,78 +112,68 @@ public class ParameterEffect(
     }
 
     /// <summary>
-    /// Serializes the input and output parameters of a metadata object to JSON format.
+    /// The objects last serialized onto one tracked metadata. A run is saved several times (when it
+    /// starts, on every progress update and when it ends), and an input at the 1 MiB ceiling is
+    /// real work to serialize each time, so an object is serialized once and left alone until the
+    /// metadata is given a different one.
     /// </summary>
-    /// <param name="metadata">The metadata object whose parameters to serialize</param>
+    private sealed class Serialized
+    {
+        public object? Input;
+        public object? Output;
+    }
+
+    /// <summary>
+    /// Serializes the input and output objects of a metadata to JSON in its <c>Input</c> and
+    /// <c>Output</c>, each one once: an object already serialized onto this metadata is not
+    /// serialized again, and the column it wrote is left as it is.
+    /// </summary>
     /// <remarks>
-    /// This method serializes the input and output parameters of the specified metadata
-    /// object to JSON format. The serialized parameters are stored in the metadata object's
-    /// Input and Output properties, which can then be persisted to a database or other
-    /// storage medium.
-    ///
-    /// If the input or output parameter is null, it is not serialized. This prevents
-    /// overwriting existing serialized parameters with null values.
-    ///
-    /// The serialization is performed using the JSON serializer options provided to the
-    /// constructor, which allows for customizing the serialization process.
-    ///
-    /// IMPORTANT: This method queues existing JsonDocument instances for disposal after
-    /// database operations complete, preventing memory leaks while avoiding disposed object issues.
+    /// A null object is not serialized, so an existing copy is not overwritten with null. Because
+    /// an object is serialized once, the stored copy is the object as it was when it was first
+    /// saved: for the input that is the run's start, and a train that mutates its input afterwards
+    /// does not change the record of what it was given. Leaving the column alone is also what
+    /// keeps a placeholder the train wrote after the store refused the value.
     /// </remarks>
-    private void SerializeParameters(Metadata metadata)
+    private void SerializeParameters(Metadata metadata, Serialized serialized)
     {
         if (configuration.SaveInputs && configuration.ShouldSaveInputFor(metadata.Name))
         {
-            var inputObject = metadata.GetInputObject();
-            if (inputObject is not null)
+            var inputObject = (object?)metadata.GetInputObject();
+            if (inputObject is not null && !ReferenceEquals(inputObject, serialized.Input))
             {
-                try
-                {
-                    metadata.Input = TraxBoundedJson.Serialize(
-                        inputObject,
-                        _options,
-                        configuration.MaxParameterBytes
-                    );
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Input object contains disposed JsonDocument, skip serialization
-                    // This can happen when metadata contains disposed JsonDocument objects
-                    metadata.Input ??=
-                        """{"_disposed": true, "_message": "Input object contained disposed JsonDocument objects"}""";
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    metadata.Input = UnserializablePlaceholder(ex);
-                }
+                metadata.Input = Serialize(inputObject, "Input", metadata.Input);
+                serialized.Input = inputObject;
             }
         }
 
         if (configuration.SaveOutputs && configuration.ShouldSaveOutputFor(metadata.Name))
         {
-            var outputObject = metadata.GetOutputObject();
-            if (outputObject is not null)
+            var outputObject = (object?)metadata.GetOutputObject();
+            if (outputObject is not null && !ReferenceEquals(outputObject, serialized.Output))
             {
-                try
-                {
-                    metadata.Output = TraxBoundedJson.Serialize(
-                        outputObject,
-                        _options,
-                        configuration.MaxParameterBytes
-                    );
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Output object contains disposed JsonDocument, skip serialization
-                    // This can happen when metadata contains disposed JsonDocument objects
-                    metadata.Output ??=
-                        """{"_disposed": true, "_message": "Output object contained disposed JsonDocument objects"}""";
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    metadata.Output = UnserializablePlaceholder(ex);
-                }
+                metadata.Output = Serialize(outputObject, "Output", metadata.Output);
+                serialized.Output = outputObject;
             }
+        }
+    }
+
+    private string Serialize(object value, string parameter, string? current)
+    {
+        try
+        {
+            return TraxBoundedJson.Serialize(value, _options, configuration.MaxParameterBytes);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The object holds a JsonDocument that was already disposed. A copy already stored is
+            // kept.
+            return current
+                ?? $$"""{"_disposed": true, "_message": "{{parameter}} object contained disposed JsonDocument objects"}""";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return UnserializablePlaceholder(ex);
         }
     }
 
@@ -217,7 +209,7 @@ public class ParameterEffect(
     {
         lock (_lock)
         {
-            foreach (var metadata in _trackedMetadatas)
+            foreach (var metadata in _trackedMetadatas.Keys)
             {
                 metadata.SetInputObject(null);
                 metadata.SetOutputObject(null);

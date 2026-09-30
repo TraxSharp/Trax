@@ -163,5 +163,50 @@ public class ValueTupleConverterTests
         act.Should().Throw<JsonException>().WithMessage("*Expected a JSON array*Object*");
     }
 
+    [Test]
+    public void A_tuple_holding_the_same_object_twice_round_trips_under_Preserve()
+    {
+        var options = new JsonSerializerOptions
+        {
+            ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve,
+        };
+        options.Converters.Add(new ValueTupleConverter());
+        var box = new Box { Name = "shared" };
+
+        var json = JsonSerializer.Serialize((box, box), options);
+        var tuple = JsonSerializer.Deserialize<(Box, Box)>(json, options);
+
+        tuple.Item1.Name.Should().Be("shared");
+        tuple.Item2.Name.Should().Be("shared");
+    }
+
+    [Test]
+    public void A_tuple_holding_an_object_its_parent_also_holds_round_trips_under_Preserve()
+    {
+        var options = new JsonSerializerOptions
+        {
+            ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve,
+        };
+        options.Converters.Add(new ValueTupleConverter());
+        var box = new Box { Name = "shared" };
+
+        var json = JsonSerializer.Serialize(new Holder { Box = box, Pair = (box, 1) }, options);
+        var holder = JsonSerializer.Deserialize<Holder>(json, options)!;
+
+        holder.Box!.Name.Should().Be("shared");
+        holder.Pair.Item1.Name.Should().Be("shared");
+    }
+
     public sealed record Point(int X, int Y);
+
+    public sealed class Box
+    {
+        public string? Name { get; set; }
+    }
+
+    public sealed class Holder
+    {
+        public Box? Box { get; set; }
+        public (Box, int) Pair { get; set; }
+    }
 }

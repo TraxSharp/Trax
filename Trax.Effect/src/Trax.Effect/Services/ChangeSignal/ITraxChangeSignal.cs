@@ -12,6 +12,6 @@ namespace Trax.Effect.Services.ChangeSignal;
 /// </summary>
 public interface ITraxChangeSignal
 {
-    /// <summary>Signals that <paramref name="domain"/>'s data changed.</summary>
+    /// <summary>Signals that <paramref name="domain"/>'s data changed. A value outside <see cref="ChangeDomain"/> signals nothing.</summary>
     void Notify(ChangeDomain domain);
 }

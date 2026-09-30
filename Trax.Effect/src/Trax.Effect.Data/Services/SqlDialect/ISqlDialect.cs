@@ -25,6 +25,13 @@ public interface ISqlDialect
     /// using provider-appropriate locking to prevent concurrent claims.
     /// Parameter <c>{0}</c> is the work queue entry ID.
     /// </summary>
+    /// <remarks>
+    /// The claim refuses an entry whose manifest is disabled unless the entry is an explicit
+    /// trigger (<c>WorkQueue.IsExplicitTrigger</c>), the same rule
+    /// <see cref="LoadGroupFairQueuedJobs"/> applies. The load only chooses candidates; the claim
+    /// is the last read before dispatch, so a manifest disabled after its entry was loaded is
+    /// still held.
+    /// </remarks>
     string ClaimWorkQueueEntry();
 
     /// <summary>
@@ -86,8 +93,32 @@ public interface ISqlDialect
     bool IsUniqueViolation(DbUpdateException exception) => false;
 
     /// <summary>
+    /// Whether <paramref name="exception"/> is a failure that may succeed if the same work is
+    /// tried again: a lost or refused connection, a timeout, a deadlock or serialization failure,
+    /// a server not yet accepting connections, or (Sqlite) a busy or locked database.
+    /// The exception and every exception it wraps are examined, so a
+    /// <see cref="DbUpdateException"/>, or EF's <see cref="InvalidOperationException"/> around a
+    /// retried failure, is classified by the database error inside it.
+    /// </summary>
+    /// <remarks>
+    /// A caller retrying work against the database asks this rather than matching the provider's
+    /// exception types by name, which would treat every database error as transient, a constraint
+    /// violation or a syntax error included.
+    ///
+    /// Defaults to <c>false</c>, which keeps this from breaking implementations outside this repo
+    /// and fails the safe way: a provider that does not recognise a failure reports it rather than
+    /// retrying it.
+    /// </remarks>
+    bool IsTransient(Exception exception) => false;
+
+    /// <summary>
     /// Returns SQL that loads queued work queue entries with group-fair batching
     /// using a CTE with window functions. Parameter <c>{0}</c> is the per-group limit.
     /// </summary>
+    /// <remarks>
+    /// An entry whose manifest group is disabled is never loaded. An entry whose manifest is
+    /// disabled is loaded only when it is an explicit trigger (<c>WorkQueue.IsExplicitTrigger</c>),
+    /// so a paused manifest's scheduled entries take no slot in the per-group limit.
+    /// </remarks>
     string LoadGroupFairQueuedJobs();
 }

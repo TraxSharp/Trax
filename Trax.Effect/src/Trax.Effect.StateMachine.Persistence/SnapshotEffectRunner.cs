@@ -11,15 +11,18 @@ public interface ISnapshotEffectRunner
     /// effect's trigger. A draft already in the target state replays as <see cref="AdvanceOutcome.Advanced"/>
     /// without running anything. A draft in any state other than the effect's from-state, or a
     /// <paramref name="requestId"/> recorded for a different trigger, is <see cref="AdvanceOutcome.Rejected"/>
-    /// before the effect runs; a claim still held by another caller is rejected as <c>effect-in-progress</c>.
+    /// before the effect runs; a claim still held by another caller is rejected as <c>effect-in-progress</c>. A claim
+    /// whose effect already ran on content other than the draft's current content is rejected as
+    /// <c>draft-changed</c>: its receipt is not recorded and the effect does not run again.
     /// </summary>
     /// <param name="userKey">The authenticated owner of the draft.</param>
     /// <param name="id">The draft id.</param>
     /// <param name="requestId">The client's idempotency key for this send; a retry with the same id replays.</param>
     /// <param name="cancellationToken">
-    /// Cancels the request up to the effect, and is passed to the effect. Once the effect has returned, its receipt
-    /// and the advance that records it are written whatever the token says, so a cancelled request never leaves an
-    /// effect that ran looking as if it had not.
+    /// Cancels the request up to the effect. It is not passed to the effect, which gets
+    /// <see cref="CancellationToken.None"/>, and once the effect has returned, its receipt and the advance that
+    /// records it are written whatever the token says, so a cancelled request never leaves an effect that ran
+    /// looking as if it had not.
     /// </param>
     Task<AdvanceOutcome> Run(
         string userKey,
@@ -143,12 +146,17 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
                     );
 
                 // Exactly-once DELIVERY: claim the effect key BEFORE running. Two concurrent runs (or a
-                // crash-retry) run the effect once and replay the receipt.
+                // crash-retry) run the effect once and replay the receipt. The claim records the fingerprint of the
+                // content the effect runs on, so its receipt is only ever replayed onto that content.
+                var fingerprint = SnapshotFingerprint.Of(_drafts.Serialize(loaded.Snapshot));
                 string receipt;
                 switch (
                     await _idempotent.RunOnce(
                         _effectKey(userKey, id),
-                        () => _effect.Run(loaded.Snapshot, cancellationToken),
+                        fingerprint,
+                        // The request's token stops here: a request that goes away while the effect runs must
+                        // not turn an effect that happened into a cancellation.
+                        () => _effect.Run(loaded.Snapshot, CancellationToken.None),
                         _lease,
                         cancellationToken
                     )
@@ -158,6 +166,19 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
                         receipt = ran.Receipt;
                         break;
                     case EffectOutcome.AlreadyRan already:
+                        // The effect ran on content this draft no longer holds. Committing its receipt here would
+                        // record it against content it was not produced for, and running the effect again would
+                        // repeat it, so neither happens. A claim with no fingerprint predates the check and
+                        // replays as it always did.
+                        if (
+                            already.ContentFingerprint is { } ranOn
+                            && !string.Equals(ranOn, fingerprint, StringComparison.Ordinal)
+                        )
+                            return new AdvanceOutcome.Rejected(
+                                "draft-changed",
+                                "This draft's action already ran, on content that has changed since. Restore the "
+                                    + "content it ran on to record its result."
+                            );
                         receipt = already.Receipt;
                         break;
                     case EffectOutcome.InProgress:
@@ -172,8 +193,10 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
                         );
                 }
 
-                // Fold the receipt into the terminal snapshot. If a concurrent run already committed this
-                // CAS loses (Conflict) — harmless: the effect ran once and the winner recorded it. The effect has
+                // Fold the receipt into the terminal snapshot, on the draft exactly as the effect loaded it: if it
+                // was written since (an edit, a reset, a concurrent run's commit) the CAS loses (Conflict) and the
+                // receipt is not recorded on content the effect did not act on. The claim keeps it, so the next
+                // send replays it onto that same content rather than running the effect again. The effect has
                 // happened, so this write runs on a token the caller cannot cancel: a request that goes away now
                 // must still leave the draft showing what was done. The same rule as a train's outcome, in
                 // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
@@ -183,6 +206,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
                     _trigger,
                     new JsonObject { [_receiptKey] = receipt },
                     requestId,
+                    loaded.Token,
                     CancellationToken.None
                 );
 

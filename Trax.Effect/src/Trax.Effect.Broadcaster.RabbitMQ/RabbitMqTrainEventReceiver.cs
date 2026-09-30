@@ -51,7 +51,11 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     /// <exception cref="InvalidOperationException">
     /// <see cref="RabbitMqBroadcasterOptions.PrefetchCount"/> is 0.
     /// </exception>
-    /// <remarks>Call once per instance; calling again opens a second connection and leaks the first.</remarks>
+    /// <remarks>
+    /// Calling it again, as <c>TrainEventReceiverService</c> does when it retries a failed start,
+    /// first closes and disposes the connection and channel the previous call opened. A call that
+    /// fails partway closes and disposes what it opened before the exception reaches the caller.
+    /// </remarks>
     public async Task StartAsync(
         Func<TrainLifecycleEventMessage, CancellationToken, Task> handler,
         CancellationToken ct
@@ -66,9 +70,34 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             );
         }
 
+        await ReleaseAsync();
+
+        try
+        {
+            await OpenAsync(handler, ct);
+        }
+        catch
+        {
+            await ReleaseAsync();
+            throw;
+        }
+
+        _logger?.LogInformation(
+            "RabbitMQ receiver started on exchange {Exchange}, queue {Queue}.",
+            _options.ExchangeName,
+            _queueName
+        );
+    }
+
+    private async Task OpenAsync(
+        Func<TrainLifecycleEventMessage, CancellationToken, Task> handler,
+        CancellationToken ct
+    )
+    {
         var factory = new ConnectionFactory { Uri = new Uri(_options.ConnectionString) };
         _connection = await factory.CreateConnectionAsync(ct);
         _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
+        var channel = _channel;
 
         // Bound how many deliveries the broker pushes before this receiver acknowledges them.
         await _channel.BasicQosAsync(
@@ -102,7 +131,7 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             cancellationToken: ct
         );
 
-        var consumer = new AsyncEventingBasicConsumer(_channel);
+        var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, ea) =>
         {
             try
@@ -114,12 +143,12 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
                     await handler(message, ct);
                 }
 
-                await _channel.BasicAckAsync(ea.DeliveryTag, multiple: false, ct);
+                await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, ct);
             }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Error processing lifecycle event from RabbitMQ.");
-                await _channel.BasicNackAsync(
+                await channel.BasicNackAsync(
                     ea.DeliveryTag,
                     multiple: false,
                     requeue: false,
@@ -133,12 +162,6 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
             autoAck: false,
             consumer: consumer,
             cancellationToken: ct
-        );
-
-        _logger?.LogInformation(
-            "RabbitMQ receiver started on exchange {Exchange}, queue {Queue}.",
-            _options.ExchangeName,
-            _queueName
         );
     }
 
@@ -173,21 +196,32 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (_channel is not null)
-        {
-            if (_channel.IsOpen)
-                await IgnoringClosed(() => _channel.CloseAsync());
-            _channel.Dispose();
-        }
-
-        if (_connection is not null)
-        {
-            if (_connection.IsOpen)
-                await IgnoringClosed(() => _connection.CloseAsync());
-            _connection.Dispose();
-        }
-
+        await ReleaseAsync();
         GC.SuppressFinalize(this);
+    }
+
+    // Closes the channel and connection if still open, disposes both, and forgets them.
+    private async Task ReleaseAsync()
+    {
+        var channel = _channel;
+        var connection = _connection;
+        _channel = null;
+        _connection = null;
+        _queueName = null;
+
+        if (channel is not null)
+        {
+            if (channel.IsOpen)
+                await IgnoringClosed(() => channel.CloseAsync());
+            channel.Dispose();
+        }
+
+        if (connection is not null)
+        {
+            if (connection.IsOpen)
+                await IgnoringClosed(() => connection.CloseAsync());
+            connection.Dispose();
+        }
     }
 
     // IsOpen is only a snapshot: the broker can close the connection between the check and the

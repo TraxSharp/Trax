@@ -66,6 +66,28 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    public async Task A_reclaimed_claim_records_the_fingerprint_of_the_content_its_new_owner_runs_on()
+    {
+        var key = Key();
+        Won(await TestDb.NewClaims().TryClaim(key, TimeSpan.FromSeconds(-10), "before"));
+        var owner = Won(await TestDb.NewClaims().TryClaim(key, TimeSpan.FromMinutes(5), "after"));
+        (await TestDb.NewClaims().Complete(key, owner, "receipt-1")).Should().BeTrue();
+
+        (await TestDb.NewClaims().GetCompleted(key))
+            .Should()
+            .Be(new CompletedEffect("receipt-1", "after"));
+    }
+
+    [Test]
+    public async Task A_claim_in_flight_is_not_reported_as_completed()
+    {
+        var key = Key();
+        Won(await TestDb.NewClaims().TryClaim(key, TimeSpan.FromMinutes(5), "content"));
+
+        (await TestDb.NewClaims().GetCompleted(key)).Should().BeNull();
+    }
+
+    [Test]
     public async Task A_stuck_runner_that_revives_after_reclaim_is_fenced_out_of_completing()
     {
         var key = Key();

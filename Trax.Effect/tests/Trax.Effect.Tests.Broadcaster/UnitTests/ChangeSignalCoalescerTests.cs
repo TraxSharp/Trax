@@ -402,23 +402,26 @@ public class ChangeSignalCoalescerTests
     }
 
     [Test]
-    public void Notify_AnUndefinedDomainValue_IsQueuedEachTime_AndDroppedAfterComplete()
+    public void Notify_AnUndefinedDomainValue_IsRefused_AndCannotCrowdOutARealDomain()
     {
-        // A value past the enum's first 32 members has no pending bit, so it is never deduplicated.
-        var undefined = (ChangeDomain)40;
-        var signal = new TraxChangeSignal(new ChangeSignalOptions());
+        // No sink can act on a value outside the enum, and it has no pending bit to deduplicate
+        // it: queued, a stream of them would fill the buffer and drop real domains behind it.
+        var signal = new TraxChangeSignal(new ChangeSignalOptions { ChannelCapacity = 2 });
 
-        signal.Notify(undefined);
-        signal.Notify(undefined);
+        var act = () =>
+        {
+            for (var i = 0; i < 100; i++)
+                signal.Notify((ChangeDomain)40);
+        };
+        act.Should().NotThrow("Notify must never throw on a hot write path");
+        signal.Notify(ChangeDomain.WorkQueue);
 
-        signal.Reader.TryRead(out var first).Should().BeTrue();
-        signal.Reader.TryRead(out var second).Should().BeTrue();
-        first.Should().Be(undefined);
-        second.Should().Be(undefined);
+        var drained = new List<ChangeDomain>();
+        while (signal.Reader.TryRead(out var domain))
+            drained.Add(domain);
 
-        signal.Complete();
-        signal.Notify(undefined);
-        signal.TotalDropped.Should().Be(1);
+        drained.Should().Equal(ChangeDomain.WorkQueue);
+        signal.TotalDropped.Should().Be(0, "only a real domain refused by a full buffer is a drop");
         signal.Dispose();
     }
 

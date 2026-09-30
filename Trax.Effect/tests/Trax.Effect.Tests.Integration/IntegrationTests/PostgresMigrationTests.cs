@@ -386,6 +386,231 @@ public class PostgresMigrationTests
         );
     }
 
+    /// <summary>
+    /// A <c>timestamp</c> to <c>timestamptz</c> change keeps the table's storage when the session
+    /// is in UTC, and rewrites the whole table under <c>ACCESS EXCLUSIVE</c> otherwise (or when the
+    /// change carries a <c>USING</c>). 049 must keep the storage and read every stored wall-clock
+    /// time as UTC even when it runs from a session whose zone is not UTC, as it does through
+    /// <see cref="DatabaseMigrator.CreateEngineWithEmbeddedScripts"/> against a server whose
+    /// default zone is not UTC.
+    /// </summary>
+    [Test]
+    public async Task Migration049_keeps_each_tables_storage_and_reads_stored_times_as_utc_from_a_non_utc_session()
+    {
+        await WithDatabaseMigratedTo(
+            48,
+            async connectionString =>
+            {
+                var newYork = new NpgsqlConnectionStringBuilder(connectionString)
+                {
+                    Timezone = "America/New_York",
+                }.ConnectionString;
+
+                await using var connection = new NpgsqlConnection(newYork);
+                await connection.OpenAsync();
+                await Exec(
+                    connection,
+                    "INSERT INTO trax.work_queue (external_id, train_name, created_at) "
+                        + "VALUES ('before-049', 'A.Train', '2026-01-15 12:00:00');"
+                );
+
+                string[] tables = ["work_queue", "manifest_group", "manifest"];
+                var before = new Dictionary<string, string>();
+                foreach (var table in tables)
+                    before[table] = await Filenode(connection, table);
+
+                var result = DeployChanges
+                    .To.PostgresqlDatabase(newYork)
+                    .JournalToPostgresqlTable("trax", "migrations")
+                    .WithScriptsEmbeddedInAssembly(
+                        typeof(DatabaseMigrator).Assembly,
+                        name => MigrationNumber(name) == 49
+                    )
+                    .LogToNowhere()
+                    .Build()
+                    .PerformUpgrade();
+                result.Successful.Should().BeTrue(result.Error?.ToString());
+
+                foreach (var table in tables)
+                    (await Filenode(connection, table))
+                        .Should()
+                        .Be(
+                            before[table],
+                            $"049 must not rewrite trax.{table}: a rewrite holds ACCESS EXCLUSIVE "
+                                + "on it for as long as the copy takes"
+                        );
+
+                var stored = await ExternalIds(
+                    connection,
+                    "SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') "
+                        + "FROM trax.work_queue WHERE external_id = 'before-049';"
+                );
+                stored
+                    .Should()
+                    .Equal(
+                        ["2026-01-15 12:00:00"],
+                        "a stored wall-clock time was written as UTC and must keep meaning UTC"
+                    );
+            }
+        );
+    }
+
+    /// <summary>
+    /// The migrator runs at startup. A script whose DDL queues behind a transaction another
+    /// instance holds open would otherwise queue every later enqueue and dispatch behind itself
+    /// for as long as that transaction lasts. It gives up on the lock after a bounded wait and
+    /// runs the script again, and after a bounded number of tries fails the start.
+    /// </summary>
+    [Test]
+    public async Task A_script_behind_a_held_lock_times_out_and_the_migrator_gives_up_after_its_tries()
+    {
+        await WithDatabaseMigratedTo(
+            48,
+            async connectionString =>
+            {
+                await using var holder = new NpgsqlConnection(connectionString);
+                await holder.OpenAsync();
+                await using var held = await holder.BeginTransactionAsync();
+                await Exec(holder, "SELECT 1 FROM trax.work_queue LIMIT 1;");
+
+                var policy = new MigrationLockPolicy(
+                    TimeSpan.FromMilliseconds(200),
+                    Attempts: 3,
+                    Backoff: TimeSpan.Zero
+                );
+                var migrate = () =>
+                    DatabaseMigrator.Migrate(connectionString, policy).WaitAsync(Bounded);
+
+                (await migrate.Should().ThrowAsync<PostgresException>())
+                    .Which.SqlState.Should()
+                    .Be(PostgresErrorCodes.LockNotAvailable);
+
+                await held.RollbackAsync();
+            }
+        );
+    }
+
+    [Test]
+    public async Task A_script_behind_a_lock_that_is_released_between_tries_is_run_again_and_succeeds()
+    {
+        await WithDatabaseMigratedTo(
+            48,
+            async connectionString =>
+            {
+                const string application = "trax-migration-retry-test";
+                var named = new NpgsqlConnectionStringBuilder(connectionString)
+                {
+                    ApplicationName = application,
+                }.ConnectionString;
+
+                await using var holder = new NpgsqlConnection(connectionString);
+                await holder.OpenAsync();
+                var held = await holder.BeginTransactionAsync();
+                await Exec(holder, "SELECT 1 FROM trax.work_queue LIMIT 1;");
+
+                var policy = new MigrationLockPolicy(
+                    TimeSpan.FromMilliseconds(300),
+                    Attempts: 50,
+                    Backoff: TimeSpan.Zero
+                );
+                var migration = DatabaseMigrator.Migrate(named, policy);
+
+                // Two distinct waits by the script session prove the first one timed out and the
+                // script was run again. Only then is the lock released.
+                await using (var observer = new NpgsqlConnection(connectionString))
+                {
+                    await observer.OpenAsync();
+                    var waits = new HashSet<string>();
+                    var deadline = DateTime.UtcNow + Bounded;
+                    while (waits.Count < 2)
+                    {
+                        DateTime
+                            .UtcNow.Should()
+                            .BeBefore(deadline, "the script should have waited on the lock twice");
+                        migration.IsCompleted.Should().BeFalse("the lock is still held");
+                        foreach (
+                            var start in await ExternalIds(
+                                observer,
+                                "SELECT query_start::text FROM pg_stat_activity "
+                                    + $"WHERE application_name = '{application}' "
+                                    + "AND wait_event_type = 'Lock';"
+                            )
+                        )
+                            waits.Add(start);
+                        await Task.Yield();
+                    }
+                }
+
+                await held.RollbackAsync();
+                await held.DisposeAsync();
+
+                await migration.WaitAsync(Bounded);
+
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT scriptname FROM trax.migrations ORDER BY scriptname;"
+                    )
+                )
+                    .Should()
+                    .HaveCount(EmbeddedScripts().Count, "every script ran once the lock was free");
+            }
+        );
+    }
+
+    /// <summary>
+    /// An invalid index in <c>trax</c> that no script builds is someone else's: a consumer's own
+    /// failed build, or the <c>_ccnew</c> copy of a <c>REINDEX CONCURRENTLY</c> still running.
+    /// Nothing would build it again, so the migrator must not drop it.
+    /// </summary>
+    [Test]
+    public async Task An_invalid_index_no_script_builds_is_left_alone()
+    {
+        await WithEmptyDatabase(async connectionString =>
+        {
+            await DatabaseMigrator.Migrate(connectionString);
+
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await Exec(
+                connection,
+                "INSERT INTO trax.work_queue (external_id, train_name) VALUES "
+                    + "('consumer-a', 'A.Train'), ('consumer-b', 'A.Train');"
+            );
+            var failed = () =>
+                Exec(
+                    connection,
+                    "CREATE UNIQUE INDEX CONCURRENTLY ix_consumer_work_queue_train "
+                        + "ON trax.work_queue (train_name);"
+                );
+            await failed.Should().ThrowAsync<PostgresException>();
+
+            await DatabaseMigrator.Migrate(connectionString);
+
+            (await IndexState(connection, "ix_consumer_work_queue_train"))
+                .Should()
+                .Be("invalid", "the migrator drops only what a script builds again");
+        });
+    }
+
+    [Test]
+    public void The_scripts_index_names_include_every_concurrently_built_index()
+    {
+        DatabaseMigrator
+            .ScriptIndexNames.Should()
+            .Contain(["ix_work_queue_subject_queued", "ix_metadata_external_id"])
+            .And.NotContain(name => name.EndsWith("_ccnew"));
+    }
+
+    private static readonly TimeSpan Bounded = TimeSpan.FromSeconds(60);
+
+    private static async Task<string> Filenode(NpgsqlConnection connection, string table) =>
+        (
+            await ExternalIds(connection, $"SELECT pg_relation_filenode('trax.{table}')::text;")
+        ).Single();
+
     private static async Task<string> IndexState(NpgsqlConnection connection, string index)
     {
         var state = await ExternalIds(

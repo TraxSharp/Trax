@@ -137,6 +137,27 @@ public interface ISnapshotStore
     );
 
     /// <summary>
+    /// Creates the caller's draft, and only creates it: returns <c>false</c> when a draft already exists under
+    /// <paramref name="id"/>, which is how a writer that read no draft finds out one was created since. The draft
+    /// service creates every draft through this, so a save never overwrites a draft it did not read. A store that
+    /// does not override it checks <see cref="Get(string, Guid, CancellationToken)"/> and then writes through
+    /// <see cref="Upsert"/>: it refuses while that user has any draft under the id, whichever machine it belongs
+    /// to, but the check and the write are two steps, so a store that can make them one should.
+    /// </summary>
+    /// <param name="userKey">The owning user's key.</param>
+    /// <param name="id">The client-minted draft id.</param>
+    /// <param name="snapshot">The snapshot to store.</param>
+    /// <param name="cancellationToken">Cancels the store calls.</param>
+    async Task<bool> Insert(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        CancellationToken cancellationToken = default
+    ) =>
+        await Get(userKey, id, cancellationToken) is null
+        && await Upsert(userKey, id, snapshot, cancellationToken);
+
+    /// <summary>
     /// Conditional update used by the authoritative path: writes only if the row still carries
     /// <paramref name="expectedToken"/>, and records <paramref name="requestId"/> as the last applied
     /// idempotency key. Returns <c>false</c> if the row changed since it was read.
@@ -188,12 +209,15 @@ public interface ISnapshotEffect
     /// <summary>
     /// Performs the side effect for <paramref name="snapshot"/> (the draft as loaded, in the effect's from-state)
     /// and returns its receipt, which is written into the terminal snapshot's context. Throw if the effect did not
-    /// happen: the claim is released and a retry runs it again.
+    /// happen: the claim is released and a retry runs it again. An <see cref="OperationCanceledException"/> (an
+    /// outbound call's timeout included) means the outcome is unknown instead: the claim stays in flight until its
+    /// lease passes, so the effect is not run again before then.
     /// </summary>
     /// <param name="snapshot">The draft the effect acts on.</param>
     /// <param name="cancellationToken">
-    /// The request's cancellation token. Honour it only before the effect has happened: throwing after it happened
-    /// (an <see cref="OperationCanceledException"/> included) releases the claim, and a retry runs the effect again.
+    /// The effect runner passes <see cref="CancellationToken.None"/>: a request that goes away once the effect has
+    /// started does not stop it. Bound a slow downstream call with its own timeout, never after the irreversible
+    /// step.
     /// </param>
     /// <returns>A non-empty receipt, typically the downstream system's id for what was done.</returns>
     Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default);

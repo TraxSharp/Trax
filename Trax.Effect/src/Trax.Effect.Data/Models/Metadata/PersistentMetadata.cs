@@ -21,6 +21,8 @@ internal class PersistentMetadata : Effect.Models.Metadata.Metadata
 
             entity.HasIndex(e => e.ManifestId);
             entity.HasIndex(e => new { e.Name, e.TrainState });
+            // Built by Postgres migration 050; declared here so a schema created from the model has it.
+            entity.HasIndex(e => e.ExternalId).HasDatabaseName("ix_metadata_external_id");
 
             entity
                 .HasOne(x => x.Parent)

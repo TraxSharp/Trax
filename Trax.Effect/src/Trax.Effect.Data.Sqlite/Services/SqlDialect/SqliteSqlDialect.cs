@@ -42,12 +42,39 @@ internal class SqliteSqlDialect : ISqlDialect
                     or SQLitePCL.raw.SQLITE_CONSTRAINT_UNIQUE,
             };
 
+    /// <summary>
+    /// <c>SQLITE_BUSY</c> or <c>SQLITE_LOCKED</c>, which another connection's write causes and
+    /// which clears when it commits, or a <see cref="TimeoutException"/>, anywhere in the exception
+    /// or what it wraps. The primary code is compared, so the extended busy and locked codes count
+    /// too.
+    /// </summary>
+    public bool IsTransient(Exception exception) =>
+        AnyInChain(
+            exception,
+            e =>
+                e
+                    is TimeoutException
+                        or SqliteException
+                        {
+                            SqliteErrorCode: SQLitePCL.raw.SQLITE_BUSY
+                                or SQLitePCL.raw.SQLITE_LOCKED,
+                        }
+        );
+
     public string ClaimWorkQueueEntry() =>
         $$"""
             SELECT * FROM work_queue w
             WHERE w.id = {0}
               AND w.status = {{Queued}}
               AND w.confirmed_at IS NOT NULL
+              AND (
+                w.manifest_id IS NULL
+                OR w.is_explicit_trigger = 1
+                OR EXISTS (
+                    SELECT 1 FROM manifest wm
+                    WHERE wm.id = w.manifest_id AND wm.is_enabled = 1
+                )
+              )
               AND (
                 w.subject_key IS NULL
                 OR w.subject_key NOT IN (
@@ -98,6 +125,7 @@ internal class SqliteSqlDialect : ISqlDialect
                 WHERE wq.status = {{Queued}}
                   AND wq.confirmed_at IS NOT NULL
                   AND mg.is_enabled = 1
+                  AND (m.is_enabled = 1 OR wq.is_explicit_trigger = 1)
                   AND (wq.scheduled_at IS NULL OR wq.scheduled_at <= datetime('now'))
             )
             SELECT wq.* FROM work_queue wq
@@ -117,4 +145,27 @@ internal class SqliteSqlDialect : ISqlDialect
                      )
                    ))
             """;
+
+    /// <summary>
+    /// Whether <paramref name="exception"/> or anything it wraps matches. Every inner exception of
+    /// an <see cref="AggregateException"/> is followed, and the walk is bounded so a cycle ends it.
+    /// </summary>
+    private static bool AnyInChain(Exception exception, Func<Exception, bool> match)
+    {
+        var pending = new Stack<Exception>([exception]);
+        for (var seen = 0; pending.Count > 0 && seen < 64; seen++)
+        {
+            var current = pending.Pop();
+            if (match(current))
+                return true;
+
+            if (current is AggregateException aggregate)
+                foreach (var inner in aggregate.InnerExceptions)
+                    pending.Push(inner);
+            else if (current.InnerException is { } inner)
+                pending.Push(inner);
+        }
+
+        return false;
+    }
 }

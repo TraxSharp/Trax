@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -22,7 +23,10 @@ public class RabbitMqBroadcasterSenderTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
-    private static TrainLifecycleEventMessage Message(string externalId) =>
+    private static TrainLifecycleEventMessage Message(
+        string externalId,
+        string eventType = "Started"
+    ) =>
         new(
             MetadataId: 1,
             ExternalId: externalId,
@@ -31,7 +35,7 @@ public class RabbitMqBroadcasterSenderTests
             Timestamp: DateTime.UtcNow,
             FailureJunction: null,
             FailureReason: null,
-            EventType: "Started",
+            EventType: eventType,
             Executor: null,
             Output: null
         );
@@ -39,16 +43,62 @@ public class RabbitMqBroadcasterSenderTests
     private static RabbitMqTrainEventBroadcaster Broadcaster(
         IConnection connection,
         ILogger<RabbitMqTrainEventBroadcaster>? logger,
-        int queueCapacity = RabbitMqTrainEventBroadcaster.DefaultQueueCapacity
+        int queueCapacity = RabbitMqTrainEventBroadcaster.DefaultQueueCapacity,
+        Func<CancellationToken, Task<IConnection>>? connect = null,
+        TimeSpan? publishTimeout = null,
+        TimeSpan? firstRetryDelay = null
     )
     {
         var broadcaster = new RabbitMqTrainEventBroadcaster(
             new RabbitMqBroadcasterOptions { ConnectionString = "amqp://unused/" },
             logger,
-            queueCapacity
+            queueCapacity,
+            connect,
+            publishTimeout,
+            firstRetryDelay
         );
         Set(broadcaster, "_connection", connection);
         return broadcaster;
+    }
+
+    /// <summary>
+    /// Records every event published on <paramref name="channel"/>, in order. <paramref name="refuse"/>
+    /// decides, per event, whether the publish throws instead; a throwing publish closes the channel,
+    /// as the broker's channel-close would.
+    /// </summary>
+    private static Published Records(
+        IChannel channel,
+        Published? into = null,
+        Func<TrainLifecycleEventMessage, Exception?>? refuse = null
+    )
+    {
+        var published = into ?? new Published();
+        channel
+            .BasicPublishAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<bool>(),
+                Arg.Any<BasicProperties>(),
+                Arg.Any<ReadOnlyMemory<byte>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+            {
+                var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
+                    call.ArgAt<ReadOnlyMemory<byte>>(4).Span
+                )!;
+                var refusal = refuse?.Invoke(message);
+                published.Attempt(message);
+                if (refusal is not null)
+                {
+                    channel.IsOpen.Returns(false);
+                    return ValueTask.FromException(refusal);
+                }
+
+                published.Add(message);
+                return ValueTask.CompletedTask;
+            });
+        return published;
     }
 
     private static IConnection OpenConnection()
@@ -88,10 +138,12 @@ public class RabbitMqBroadcasterSenderTests
             () => throw new BrokerUnreachableException(new IOException("second")),
             () => Task.FromResult(channel)
         );
+        var published = Records(channel);
         var broadcaster = Broadcaster(connection, logger);
 
         await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
-        // Two failed attempts wait 1s and then 2s, inside the 5s the dispose drain allows.
+        // Two failed attempts wait 1s and then 2s before the third reaches the broker.
+        await published.Reaches(1).WaitAsync(Timeout);
         await broadcaster.DisposeAsync();
 
         await channel
@@ -244,10 +296,284 @@ public class RabbitMqBroadcasterSenderTests
         connection.Received(1).Dispose();
     }
 
+    [Test]
+    public async Task Sender_OpensItsChannelWithPublisherConfirmsTracked()
+    {
+        var connection = OpenConnection();
+        var channel = OpenChannel();
+        ChannelsFrom(connection, () => Task.FromResult(channel));
+        var published = Records(channel);
+        var broadcaster = Broadcaster(connection, new CapturingLogger());
+
+        await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
+        await published.Reaches(1).WaitAsync(Timeout);
+        await broadcaster.DisposeAsync();
+
+        await connection
+            .Received(1)
+            .CreateChannelAsync(
+                Arg.Is<CreateChannelOptions?>(o =>
+                    o != null
+                    && o.PublisherConfirmationsEnabled
+                    && o.PublisherConfirmationTrackingEnabled
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Test]
+    public async Task Sender_WhenAPublishIsNotConfirmedInTime_RetriesTheEventOnANewConnection()
+    {
+        // The first connection's socket is dead but still reports open: the publish waits for a
+        // confirm that never comes.
+        var stale = OpenConnection();
+        var staleChannel = OpenChannel();
+        ChannelsFrom(stale, () => Task.FromResult(staleChannel));
+        staleChannel
+            .BasicPublishAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<bool>(),
+                Arg.Any<BasicProperties>(),
+                Arg.Any<ReadOnlyMemory<byte>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call => new ValueTask(
+                // negative-wait: never completes on its own; only the publish bound ends it.
+                Task.Delay(System.Threading.Timeout.Infinite, call.ArgAt<CancellationToken>(5))
+            ));
+
+        var fresh = OpenConnection();
+        var freshChannel = OpenChannel();
+        ChannelsFrom(fresh, () => Task.FromResult(freshChannel));
+        var published = Records(freshChannel);
+
+        var broadcaster = Broadcaster(
+            stale,
+            new CapturingLogger(),
+            connect: _ => Task.FromResult(fresh),
+            publishTimeout: TimeSpan.FromMilliseconds(200),
+            firstRetryDelay: TimeSpan.FromMilliseconds(10)
+        );
+
+        await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
+
+        await published.Reaches(1).WaitAsync(Timeout);
+        published.ExternalIds.Should().Equal("m0");
+        stale.Received(1).Dispose();
+        await broadcaster.DisposeAsync();
+    }
+
+    [Test]
+    public async Task Sender_DeclaresTheExchangeOnEveryChannelItOpens()
+    {
+        var connection = OpenConnection();
+        var first = OpenChannel();
+        var second = OpenChannel();
+        ChannelsFrom(connection, () => Task.FromResult(first), () => Task.FromResult(second));
+        var published = Records(first, refuse: _ => ClosedByPeer());
+        Records(second, into: published);
+        var broadcaster = Broadcaster(
+            connection,
+            new CapturingLogger(),
+            firstRetryDelay: TimeSpan.FromMilliseconds(10)
+        );
+
+        await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
+        await published.Reaches(1).WaitAsync(Timeout);
+        await broadcaster.DisposeAsync();
+
+        await second
+            .Received(1)
+            .ExchangeDeclareAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<IDictionary<string, object?>?>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Test]
+    public async Task Sender_WhenTheBrokerRefusesAnEvent_GivesUpOnItAfterItsAttempts_AndSendsTheEventsBehindIt()
+    {
+        var logger = new CapturingLogger();
+        var connection = OpenConnection();
+        var published = new Published();
+        connection
+            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                var channel = OpenChannel();
+                Records(
+                    channel,
+                    into: published,
+                    refuse: m =>
+                        m.ExternalId == "refused"
+                            ? new OperationInterruptedException(
+                                new ShutdownEventArgs(
+                                    ShutdownInitiator.Peer,
+                                    406,
+                                    "PRECONDITION_FAILED - inequivalent arg 'type' for exchange"
+                                )
+                            )
+                            : null
+                );
+                return Task.FromResult(channel);
+            });
+        var broadcaster = Broadcaster(
+            connection,
+            logger,
+            firstRetryDelay: TimeSpan.FromMilliseconds(10)
+        );
+
+        await broadcaster.PublishAsync(Message("refused"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("behind"), CancellationToken.None);
+
+        await published.Reaches(1).WaitAsync(Timeout);
+        published.ExternalIds.Should().Equal("behind");
+        published
+            .AttemptsFor("refused")
+            .Should()
+            .Be(3, "an event the broker refuses is tried a bounded number of times");
+        logger.Entries(LogLevel.Error).Should().ContainSingle(e => e.Contains("refused"));
+        await broadcaster.DisposeAsync();
+    }
+
+    [Test]
+    public async Task AFullQueue_KeepsATerminalEvent_ByDroppingAStartedEventInstead()
+    {
+        var connection = OpenConnection();
+        var channel = OpenChannel();
+        var held = new Gate();
+        ChannelsFrom(connection, () => held.Pass(channel));
+        var published = Records(channel);
+        var broadcaster = Broadcaster(connection, new CapturingLogger(), queueCapacity: 2);
+
+        await broadcaster.PublishAsync(Message("held"), CancellationToken.None);
+        await held.Entered.WaitAsync(Timeout); // the sender holds this one; the queue is empty
+        await broadcaster.PublishAsync(Message("a"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("b"), CancellationToken.None); // the queue is full
+        await broadcaster.PublishAsync(Message("a", "Completed"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("c"), CancellationToken.None);
+
+        held.Release();
+        await published.Reaches(3).WaitAsync(Timeout);
+        await broadcaster.DisposeAsync();
+
+        published
+            .Events.Should()
+            .Equal(
+                [("held", "Started"), ("b", "Started"), ("a", "Completed")],
+                "a full queue gives up a Started event before a run's terminal one"
+            );
+        broadcaster.DroppedEvents.Should().Be(2);
+    }
+
+    [Test]
+    public async Task DisposeAsync_WhileTheBrokerIsUnreachable_DoesNotWaitOutTheDrain()
+    {
+        var connection = OpenConnection();
+        var attempted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        connection
+            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IChannel>>(_ =>
+            {
+                attempted.TrySetResult();
+                throw new BrokerUnreachableException(new IOException("refused"));
+            });
+        var broadcaster = Broadcaster(connection, new CapturingLogger());
+
+        await broadcaster.PublishAsync(Message("m0"), CancellationToken.None);
+        await attempted.Task.WaitAsync(Timeout);
+
+        // measuring-interval: the stopwatch measures how long shutdown is held up.
+        var clock = Stopwatch.StartNew();
+        await broadcaster.DisposeAsync();
+        clock.Stop();
+
+        clock
+            .Elapsed.Should()
+            .BeLessThan(
+                TimeSpan.FromSeconds(2),
+                "shutdown does not wait on a broker the sender already cannot reach"
+            );
+    }
+
     private static void Set(object target, string field, object value) =>
         typeof(RabbitMqTrainEventBroadcaster)
             .GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(target, value);
+
+    /// <summary>What the broker was handed, and how often each event was tried.</summary>
+    private sealed class Published
+    {
+        private readonly List<TrainLifecycleEventMessage> _messages = [];
+        private readonly Dictionary<string, int> _attempts = [];
+        private readonly List<(int Count, TaskCompletionSource Signal)> _waiters = [];
+
+        public IReadOnlyList<string> ExternalIds
+        {
+            get
+            {
+                lock (_messages)
+                    return _messages.Select(m => m.ExternalId).ToList();
+            }
+        }
+
+        public IReadOnlyList<(string, string)> Events
+        {
+            get
+            {
+                lock (_messages)
+                    return _messages.Select(m => (m.ExternalId, m.EventType)).ToList();
+            }
+        }
+
+        public int AttemptsFor(string externalId)
+        {
+            lock (_messages)
+                return _attempts.GetValueOrDefault(externalId);
+        }
+
+        public void Attempt(TrainLifecycleEventMessage message)
+        {
+            lock (_messages)
+                _attempts[message.ExternalId] = _attempts.GetValueOrDefault(message.ExternalId) + 1;
+        }
+
+        public void Add(TrainLifecycleEventMessage message)
+        {
+            lock (_messages)
+            {
+                _messages.Add(message);
+                foreach (var (count, signal) in _waiters)
+                    if (_messages.Count >= count)
+                        signal.TrySetResult();
+            }
+        }
+
+        /// <summary>Completes once at least <paramref name="count"/> events were published.</summary>
+        public Task Reaches(int count)
+        {
+            var signal = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            lock (_messages)
+            {
+                if (_messages.Count >= count)
+                    signal.TrySetResult();
+                else
+                    _waiters.Add((count, signal));
+            }
+            return signal.Task;
+        }
+    }
 
     /// <summary>Holds the sender inside its channel open until the test lets it through.</summary>
     private sealed class Gate

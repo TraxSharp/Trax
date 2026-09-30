@@ -19,6 +19,7 @@ public class MachineBuilderTests
     private enum T
     {
         Go,
+        Other,
     }
 
     private interface IFakeEffect { }
@@ -127,6 +128,7 @@ public class MachineBuilderTests
     [TestCase("-checkout")]
     [TestCase("checkout-")]
     [TestCase("1checkout")]
+    [TestCase("checkout\n")]
     public void Id_refuses_an_id_that_is_not_kebab_case(string id)
     {
         var b = new MachineBuilder<S, T>();
@@ -169,5 +171,28 @@ public class MachineBuilderTests
         var act = () => b.Build();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*RunsOnce*one*");
+    }
+
+    [Test]
+    public void Build_refuses_a_second_edge_into_an_effects_target_state()
+    {
+        var b = new MachineBuilder<S, T>();
+        b.Id("m").StartsAt(S.A, () => new JsonObject());
+        b.In(S.A).On(T.Go).RunsOnce<IFakeEffect>().To(S.B).On(T.Other).To(S.B);
+
+        var act = () => b.Build();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*B*effect*");
+    }
+
+    [Test]
+    public void Build_accepts_a_self_loop_on_an_effects_target_state()
+    {
+        var b = new MachineBuilder<S, T>();
+        b.Id("m").StartsAt(S.A, () => new JsonObject());
+        b.In(S.A).On(T.Go).RunsOnce<IFakeEffect>().To(S.B);
+        b.In(S.B).On(T.Other).To(S.B);
+
+        b.Build().Effects.Should().ContainSingle();
     }
 }

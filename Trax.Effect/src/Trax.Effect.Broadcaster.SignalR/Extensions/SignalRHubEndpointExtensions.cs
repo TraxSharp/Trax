@@ -32,8 +32,8 @@ public static class SignalRHubEndpointExtensions
     /// <param name="endpoints">The endpoint builder (typically <c>WebApplication</c>).</param>
     /// <param name="configure">Chooses the hub's authorization posture, and optionally its connection options.</param>
     /// <exception cref="InvalidOperationException">
-    /// <paramref name="configure"/> chose no authorization posture, or <c>services.AddSignalR()</c> has not
-    /// been called on the host.
+    /// <paramref name="configure"/> chose no authorization posture or named a policy the host has
+    /// not registered, or <c>services.AddSignalR()</c> has not been called on the host.
     /// </exception>
     public static HubEndpointConventionBuilder MapTraxTrainEventHub(
         this IEndpointRouteBuilder endpoints,
@@ -54,14 +54,20 @@ public static class SignalRHubEndpointExtensions
     /// <remarks>
     /// The posture is applied to the hub's endpoints, so the host's authentication and
     /// authorization middleware (<c>UseAuthentication()</c>, <c>UseAuthorization()</c>) decide who
-    /// may connect. <c>AllowAnonymous()</c> is logged as a warning at startup. The hub's
+    /// may connect. Every policy the posture names is resolved through the host's
+    /// <see cref="IAuthorizationPolicyProvider"/> here, so an unknown one fails at startup. A bare
+    /// <c>RequireAuthorization()</c> applies the host's default policy and, when it has one, its
+    /// fallback policy as well. A connection is closed once the authentication it was admitted on
+    /// expires (<see cref="HttpConnectionDispatcherOptions.CloseOnAuthenticationExpiration"/>,
+    /// which <c>ConfigureConnection</c> cannot turn off). <c>AllowAnonymous()</c> is logged as a
+    /// warning at startup. The hub's
     /// <see cref="HttpConnectionDispatcherOptions.TransportSendTimeout"/> is set to
     /// <see cref="DefaultTransportSendTimeout"/>; change it with <c>ConfigureConnection</c>.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// <paramref name="configure"/> chose no authorization posture, or combined
-    /// <c>AllowAnonymous()</c> with a requirement; or <c>services.AddSignalR()</c> has not been
-    /// called on the host.
+    /// <c>AllowAnonymous()</c> with a requirement, or named a policy the host has not registered;
+    /// or <c>services.AddSignalR()</c> has not been called on the host.
     /// </exception>
     public static HubEndpointConventionBuilder MapTraxTrainEventHub(
         this IEndpointRouteBuilder endpoints,
@@ -92,12 +98,22 @@ public static class SignalRHubEndpointExtensions
         configure(options);
         var posture = options.Build();
 
+        // Resolve every policy the posture names now, so a misspelled name or a host without
+        // authorization fails where the hub is mapped rather than at the first connection.
+        AuthorizationPolicy? fallback = null;
+        if (!posture.AllowAnonymous)
+            fallback = ResolvePolicies(endpoints.ServiceProvider, posture, path);
+
         var hub = endpoints.MapHub<TraxTrainEventHub>(
             path,
             connection =>
             {
                 connection.TransportSendTimeout = DefaultTransportSendTimeout;
                 posture.ConfigureConnection(connection);
+                // Authorization runs when a connection opens; this closes it once the
+                // authentication it was admitted on expires. Set after the host's own options
+                // so it cannot be turned off.
+                connection.CloseOnAuthenticationExpiration = true;
             }
         );
 
@@ -118,7 +134,14 @@ public static class SignalRHubEndpointExtensions
         if (posture.RequireAuthorization)
         {
             if (posture.Policies.Count == 0)
+            {
+                // Any authorization metadata on an endpoint switches the host's fallback policy
+                // off, so a bare requirement would evaluate only the default policy. Keep the
+                // fallback as well: the hub is never more open than an unannotated endpoint.
                 hub.RequireAuthorization();
+                if (fallback is not null)
+                    hub.RequireAuthorization(fallback);
+            }
             else
                 hub.RequireAuthorization(posture.Policies.ToArray());
         }
@@ -129,6 +152,39 @@ public static class SignalRHubEndpointExtensions
             );
 
         return hub;
+    }
+
+    /// <summary>
+    /// Resolves each policy <paramref name="posture"/> names through the host's
+    /// <see cref="IAuthorizationPolicyProvider"/> and refuses an unknown one. Returns the host's
+    /// fallback policy, or <c>null</c> when it has none.
+    /// </summary>
+    private static AuthorizationPolicy? ResolvePolicies(
+        IServiceProvider services,
+        TrainEventHubPosture posture,
+        string path
+    )
+    {
+        var provider =
+            services.GetService<IAuthorizationPolicyProvider>()
+            ?? throw new InvalidOperationException(
+                $"MapTraxTrainEventHub() at {path} requires authorization, but the host has no "
+                    + "IAuthorizationPolicyProvider. Call builder.Services.AddAuthorization() before building the application."
+            );
+
+        foreach (var name in posture.Policies)
+        {
+            if (provider.GetPolicyAsync(name).GetAwaiter().GetResult() is null)
+            {
+                throw new InvalidOperationException(
+                    $"MapTraxTrainEventHub() at {path} requires the authorization policy '{name}', "
+                        + "which the host has not registered. Register it, e.g.:\n"
+                        + $"    builder.Services.AddAuthorization(o => o.AddPolicy(\"{name}\", p => ...));"
+                );
+            }
+        }
+
+        return provider.GetFallbackPolicyAsync().GetAwaiter().GetResult();
     }
 
     private const string DefaultPath = "/hubs/trax-events";

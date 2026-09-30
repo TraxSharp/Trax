@@ -5,10 +5,12 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions
 public partial class TraxTrainEventHubOptions
 {
     /// <summary>
-    /// Admits only callers the host's authorization accepts. With no arguments any authenticated
-    /// caller is admitted (the host's default policy); with policy names, a caller must satisfy
-    /// every one. Calling it again adds policies. Combines with <see cref="RequireRoles"/>, which
-    /// then also applies.
+    /// Admits only callers the host's authorization accepts. With no arguments a caller must
+    /// satisfy the host's default policy and, when the host sets one, its fallback policy too, so
+    /// the hub is never more open than an endpoint with no authorization of its own. With policy
+    /// names a caller must satisfy every one, and each must be registered on the host or mapping
+    /// the hub fails. Calling it again adds policies. Combines with <see cref="RequireRoles"/>,
+    /// which then also applies.
     /// </summary>
     /// <param name="policies">Authorization policy names registered on the host.</param>
     /// <returns>The same options, for chaining.</returns>
@@ -38,7 +40,9 @@ public partial class TraxTrainEventHubOptions
     /// </summary>
     /// <param name="roles">Role names; at least one is required.</param>
     /// <returns>The same options, for chaining.</returns>
-    /// <exception cref="ArgumentException">No role is given, or one is null or whitespace.</exception>
+    /// <exception cref="ArgumentException">
+    /// No role is given, or one is null, whitespace, or contains a comma.
+    /// </exception>
     public TraxTrainEventHubOptions RequireRoles(params string[] roles)
     {
         if (roles is null || roles.Length == 0)
@@ -55,6 +59,15 @@ public partial class TraxTrainEventHubOptions
             {
                 throw new ArgumentException(
                     "RequireRoles() does not accept null or whitespace role names.",
+                    nameof(roles)
+                );
+            }
+
+            if (role.Contains(','))
+            {
+                throw new ArgumentException(
+                    $"RequireRoles() takes each role as its own argument; '{role}' contains a comma. "
+                        + "Pass the roles separately, e.g. RequireRoles(\"Operator\", \"Admin\").",
                     nameof(roles)
                 );
             }
@@ -81,7 +94,9 @@ public partial class TraxTrainEventHubOptions
 
     /// <summary>
     /// Adjusts the hub's connection options after Trax has applied its defaults, so a value set
-    /// here wins. Trax sets <see cref="HttpConnectionDispatcherOptions.TransportSendTimeout"/> to
+    /// here wins, except <see cref="HttpConnectionDispatcherOptions.CloseOnAuthenticationExpiration"/>,
+    /// which Trax always sets. Trax sets
+    /// <see cref="HttpConnectionDispatcherOptions.TransportSendTimeout"/> to
     /// <c>SignalRHubEndpointExtensions.DefaultTransportSendTimeout</c>.
     /// </summary>
     /// <param name="configure">Runs against the hub's connection options.</param>

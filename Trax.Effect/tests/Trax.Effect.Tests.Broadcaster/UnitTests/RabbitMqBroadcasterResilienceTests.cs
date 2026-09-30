@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using RabbitMQ.Client;
@@ -177,6 +178,70 @@ public class RabbitMqBroadcasterResilienceTests
         received.Should().Equal(Enumerable.Range(0, 20).Select(i => $"m{i}"));
 
         await receiver.StopAsync(CancellationToken.None);
+    }
+
+    [Test]
+    public async Task AnExchangeDeclaredWithAnotherType_IsRefused_AndTheEventDroppedAfterItsAttempts()
+    {
+        var exchange = $"trax.test.mismatch.{Guid.NewGuid():N}";
+        var factory = new ConnectionFactory { Uri = new Uri(AmqpUri) };
+        await using var setup = await factory.CreateConnectionAsync();
+        await using (var channel = await setup.CreateChannelAsync())
+        {
+            await channel.ExchangeDeclareAsync(
+                exchange,
+                ExchangeType.Direct,
+                durable: false,
+                autoDelete: false
+            );
+        }
+
+        var logger = new ErrorSignal();
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
+            new RabbitMqBroadcasterOptions { ConnectionString = AmqpUri, ExchangeName = exchange },
+            logger
+        );
+        try
+        {
+            await broadcaster.PublishAsync(Message("mismatch"), CancellationToken.None);
+
+            // determinism: the wait is on the logged refusal; the timeout is only the ceiling.
+            await logger.Logged.WaitAsync(TimeSpan.FromSeconds(15));
+            broadcaster.RefusedEvents.Should().Be(1);
+        }
+        finally
+        {
+            await broadcaster.DisposeAsync();
+            await using var cleanup = await setup.CreateChannelAsync();
+            await cleanup.ExchangeDeleteAsync(exchange);
+        }
+    }
+
+    /// <summary>Completes <see cref="Logged"/> at the first error logged.</summary>
+    private sealed class ErrorSignal : ILogger<RabbitMqTrainEventBroadcaster>
+    {
+        private readonly TaskCompletionSource _logged = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        public Task Logged => _logged.Task;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == LogLevel.Error)
+                _logged.TrySetResult();
+        }
     }
 
     private static void Set(object target, string field, object value) =>

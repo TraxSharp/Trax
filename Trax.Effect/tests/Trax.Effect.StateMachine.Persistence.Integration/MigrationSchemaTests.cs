@@ -187,6 +187,35 @@ public class MigrationSchemaTests
         (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key)))
             .Should()
             .Be("rcpt-1");
+
+        // The content fingerprint (053 / 018): recorded with the claim, read back with its receipt.
+        var bound = $"charge-bound:{id}";
+        var fingerprint = SnapshotFingerprint.Of("{\"machine\":\"turnstile\"}");
+        var boundClaim = await With(
+            ctx,
+            c =>
+                new EfEffectClaimStore(c, dialect).TryClaim(
+                    bound,
+                    TimeSpan.FromMinutes(5),
+                    fingerprint
+                )
+        );
+        var boundOwner = boundClaim.Should().BeOfType<ClaimResult.Won>().Which.OwnerToken;
+        (
+            await With(
+                ctx,
+                c => new EfEffectClaimStore(c, dialect).Complete(bound, boundOwner, "rcpt-2")
+            )
+        )
+            .Should()
+            .BeTrue();
+        (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetCompleted(bound)))
+            .Should()
+            .Be(
+                new CompletedEffect("rcpt-2", fingerprint),
+                "the claim keeps the fingerprint of the content its effect ran on. See "
+                    + "docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md."
+            );
     }
 
     private static async Task<T> With<T>(Func<IDataContext> ctx, Func<IDataContext, Task<T>> op)

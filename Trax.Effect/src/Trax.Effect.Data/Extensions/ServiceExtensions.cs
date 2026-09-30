@@ -61,8 +61,9 @@ public static class ServiceExtensions
     /// );
     /// ```
     ///
-    /// Calling this method without a data provider will result in a compile-time error,
-    /// since <c>AddDataContextLogging()</c> is only defined on <see cref="TraxEffectBuilderWithData"/>.
+    /// Calling this method before a data provider is a compile-time error that says so: it is
+    /// defined on <see cref="TraxEffectBuilderWithData"/>, and the earlier stage binds to an
+    /// overload in <see cref="BuilderOrderExtensions"/> that only carries the instruction.
     /// </remarks>
     public static TraxEffectBuilderWithData AddDataContextLogging(
         this TraxEffectBuilderWithData configurationBuilder,

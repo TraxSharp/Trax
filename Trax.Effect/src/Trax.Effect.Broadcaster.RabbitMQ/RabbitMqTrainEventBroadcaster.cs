@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
@@ -15,16 +14,30 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 /// <para>
 /// A train awaits its lifecycle hooks inline, so publishing never waits on the broker.
 /// <see cref="PublishAsync"/> writes the event to a bounded queue and returns; one background
-/// sender publishes the queue in order. When the queue is full the event is dropped, counted and
-/// logged, and the train carries on. While the broker cannot be reached the sender retries the
-/// event it holds with a growing delay, each connection attempt bounded by
-/// <see cref="ConnectTimeout"/>, and events queue behind it up to the queue's capacity.
+/// sender publishes the queue in order. When the queue is full it gives up a non-terminal event
+/// (<c>Started</c>, <c>StateChanged</c>, <c>DataChanged</c>) before a terminal one (<c>Completed</c>,
+/// <c>Failed</c>, <c>Cancelled</c>): an incoming non-terminal event is dropped, and an incoming
+/// terminal event replaces the oldest queued non-terminal one. Every drop is counted and logged,
+/// and the train carries on.
+/// </para>
+/// <para>
+/// Each publish waits for the broker's confirm, bounded by <see cref="PublishTimeout"/>. An event
+/// the broker has not confirmed is sent again, so a receiver can see an event twice but does not
+/// silently miss one the sender believed it sent. While the broker cannot be reached the sender
+/// retries the event it holds with a growing delay, each connection attempt bounded by
+/// <see cref="ConnectTimeout"/>, and events queue behind it. An event the broker refuses (it
+/// closes the channel on it, or rejects the publish) is tried <see cref="MaxRefusedAttempts"/>
+/// times and then dropped and logged as an error, so a refusal that will not clear, such as an
+/// exchange declared elsewhere with another type, does not hold up the events behind it.
 /// </para>
 /// <para>
 /// The connection and channel are opened lazily, and reopened when found closed; a closed one is
-/// disposed before it is replaced. The connection does not recover itself, because the sender
-/// reconnects on demand. The exchange is declared durable, but messages are published transient
-/// and unmandatory: an event published while no receiver queue is bound is dropped by the broker.
+/// disposed before it is replaced. A publish that fails discards its channel, and one that times
+/// out discards the connection too, since its socket may be dead while it still reports open. The
+/// exchange is declared on every channel the sender opens, so one deleted or lost with a broker
+/// restart is recreated. The connection does not recover itself, because the sender reconnects on
+/// demand. The exchange is declared durable, but messages are published transient and
+/// unmandatory: an event published while no receiver queue is bound is dropped by the broker.
 /// </para>
 /// </remarks>
 internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDisposable
@@ -32,27 +45,46 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
     /// <summary>How many events may wait for the sender before further ones are dropped.</summary>
     internal const int DefaultQueueCapacity = 1024;
 
+    /// <summary>How many times an event the broker refuses is tried before it is dropped.</summary>
+    internal const int MaxRefusedAttempts = 3;
+
     /// <summary>The longest a single connection attempt may take.</summary>
     internal static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>How long disposal waits for queued events to be sent before abandoning them.</summary>
+    /// <summary>The longest one publish may wait for the broker's confirm before it is retried.</summary>
+    internal static readonly TimeSpan PublishTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How long disposal waits for queued events to be sent before abandoning them. Disposal does
+    /// not wait at all while the sender is failing to reach the broker.
+    /// </summary>
     internal static readonly TimeSpan DisposeDrainTimeout = TimeSpan.FromSeconds(5);
 
     private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(2);
+
+    private static readonly CreateChannelOptions ConfirmedChannel = new(
+        publisherConfirmationsEnabled: true,
+        publisherConfirmationTrackingEnabled: true
+    );
 
     private readonly RabbitMqBroadcasterOptions _options;
     private readonly ILogger<RabbitMqTrainEventBroadcaster>? _logger;
     private readonly int _queueCapacity;
-    private readonly Channel<TrainLifecycleEventMessage> _queue;
+    private readonly Func<CancellationToken, Task<IConnection>> _connect;
+    private readonly TimeSpan _publishTimeout;
+    private readonly TimeSpan _firstRetryDelay;
+    private readonly LifecycleEventQueue _queue;
     private readonly CancellationTokenSource _abandon = new();
     private readonly Task _sender;
 
     private IConnection? _connection;
     private IChannel? _channel;
-    private bool _exchangeDeclared;
     private long _dropped;
     private long _droppedSinceReport;
+    private long _refused;
+    private int _failing;
     private int _disposed;
 
     /// <summary>
@@ -70,40 +102,42 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
     internal RabbitMqTrainEventBroadcaster(
         RabbitMqBroadcasterOptions options,
         ILogger<RabbitMqTrainEventBroadcaster>? logger,
-        int queueCapacity
+        int queueCapacity,
+        Func<CancellationToken, Task<IConnection>>? connect = null,
+        TimeSpan? publishTimeout = null,
+        TimeSpan? firstRetryDelay = null
     )
     {
         _options = options;
         _logger = logger;
         _queueCapacity = queueCapacity;
-        _queue = Channel.CreateBounded<TrainLifecycleEventMessage>(
-            new BoundedChannelOptions(queueCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = false,
-            }
-        );
+        _connect = connect ?? ConnectAsync;
+        _publishTimeout = publishTimeout ?? PublishTimeout;
+        _firstRetryDelay = firstRetryDelay ?? FirstRetryDelay;
+        _queue = new LifecycleEventQueue(queueCapacity);
         _sender = Task.Run(SendLoopAsync);
     }
 
-    /// <summary>Events dropped because the queue was full, since the broadcaster was created.</summary>
+    /// <summary>
+    /// Events dropped because the queue was full, since the broadcaster was created. Counts both an
+    /// incoming event that was dropped and a queued one an incoming terminal event replaced.
+    /// </summary>
     internal long DroppedEvents => Interlocked.Read(ref _dropped);
+
+    /// <summary>Events dropped because the broker refused them <see cref="MaxRefusedAttempts"/> times.</summary>
+    internal long RefusedEvents => Interlocked.Read(ref _refused);
 
     /// <summary>
     /// Queues <paramref name="message"/> for the background sender and returns without waiting
-    /// for the broker. When the queue is full the event is dropped and counted, and the first drop
-    /// of a run is logged as a warning.
+    /// for the broker. When the queue is full an event is dropped and counted, by the policy in the
+    /// class remarks, and the first drop of a run is logged as a warning.
     /// </summary>
     /// <param name="message">The lifecycle event to publish.</param>
     /// <param name="ct">Not used: queueing never waits.</param>
     public Task PublishAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
-        if (_queue.Writer.TryWrite(message))
-            return Task.CompletedTask;
-
-        // TryWrite also fails once disposal completed the queue; that is not a drop.
-        if (Volatile.Read(ref _disposed) != 0)
+        // A completed queue refuses the write once disposal started; that is not a drop.
+        if (!_queue.TryWrite(message, out var dropped) || dropped is null)
             return Task.CompletedTask;
 
         Interlocked.Increment(ref _dropped);
@@ -111,11 +145,12 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         {
             _logger?.LogWarning(
                 "RabbitMQ broadcaster queue is full ({Capacity} events): dropping {EventType} for "
-                    + "train {TrainName} ({ExternalId}) and further events until the broker catches up.",
+                    + "train {TrainName} ({ExternalId}) and further events until the broker catches up. "
+                    + "Terminal events are kept in preference to Started and other non-terminal ones.",
                 _queueCapacity,
-                message.EventType,
-                message.TrainName,
-                message.ExternalId
+                dropped.EventType,
+                dropped.TrainName,
+                dropped.ExternalId
             );
         }
 
@@ -127,11 +162,11 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         var ct = _abandon.Token;
         try
         {
-            await foreach (var message in _queue.Reader.ReadAllAsync(ct))
+            while (await _queue.ReadAsync(ct) is { } message)
             {
                 await SendWithRetryAsync(message, ct);
 
-                if (_queue.Reader.Count == 0)
+                if (_queue.Count == 0)
                 {
                     var dropped = Interlocked.Exchange(ref _droppedSinceReport, 0);
                     if (dropped > 0)
@@ -146,19 +181,21 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Disposal gave up waiting for the queue to drain.
+            // Disposal gave up on the queue.
         }
     }
 
     private async Task SendWithRetryAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
-        var delay = FirstRetryDelay;
+        var delay = _firstRetryDelay;
         var failures = 0;
+        var refusals = 0;
         while (true)
         {
             try
             {
                 await SendAsync(message, ct);
+                Interlocked.Exchange(ref _failing, 0);
                 if (failures > 0)
                     _logger?.LogInformation(
                         "RabbitMQ broadcaster reached the broker again after {Failures} failed attempts.",
@@ -172,6 +209,35 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             }
             catch (Exception ex)
             {
+                var refused = IsRefusal(ex);
+                // An attempt that timed out may be on a dead socket that still reports open.
+                await DiscardAsync(connectionToo: ex is OperationCanceledException);
+
+                if (refused && ++refusals >= MaxRefusedAttempts)
+                {
+                    Interlocked.Increment(ref _refused);
+                    _logger?.LogError(
+                        ex,
+                        "RabbitMQ broker refused {EventType} for train {TrainName} ({ExternalId}) "
+                            + "{Attempts} times on exchange {Exchange}; dropping it and sending the events behind it.",
+                        message.EventType,
+                        message.TrainName,
+                        message.ExternalId,
+                        refusals,
+                        _options.ExchangeName
+                    );
+                    return;
+                }
+
+                // Disposal does not wait on a broker the sender cannot reach. Set before reading
+                // _disposed, which DisposeAsync sets before reading this: one of the two sees the other.
+                Interlocked.Exchange(ref _failing, 1);
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    await _abandon.CancelAsync();
+                    ct.ThrowIfCancellationRequested();
+                }
+
                 // One warning per outage; the attempts inside it are Debug.
                 if (failures++ == 0)
                     _logger?.LogWarning(
@@ -189,6 +255,20 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         }
     }
 
+    // The broker answered and turned this event down: it closed the channel with a channel-level
+    // error (access refused, not found, not allowed, precondition failed), or nacked the publish.
+    private static bool IsRefusal(Exception ex) =>
+        ex switch
+        {
+            PublishException => true,
+            OperationInterruptedException
+            {
+                ShutdownReason:
+                { Initiator: ShutdownInitiator.Peer, ReplyCode: 403 or 404 or 405 or 406 },
+            } => true,
+            _ => false,
+        };
+
     private async Task SendAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
         var channel = await EnsureChannelAsync(ct);
@@ -200,13 +280,16 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             DeliveryMode = DeliveryModes.Transient,
         };
 
+        // The channel tracks confirms, so this completes once the broker has confirmed the event.
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bound.CancelAfter(_publishTimeout);
         await channel.BasicPublishAsync(
             exchange: _options.ExchangeName,
             routingKey: string.Empty,
             mandatory: false,
             basicProperties: properties,
             body: body,
-            cancellationToken: ct
+            cancellationToken: bound.Token
         );
 
         _logger?.LogDebug(
@@ -230,34 +313,60 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         {
             await DisposeQuietlyAsync(_connection);
             _connection = null;
-
-            var factory = new ConnectionFactory
-            {
-                Uri = new Uri(_options.ConnectionString),
-                RequestedConnectionTimeout = ConnectTimeout,
-                AutomaticRecoveryEnabled = false,
-            };
-            _connection = await factory.CreateConnectionAsync(ct);
+            _connection = await _connect(ct);
         }
 
-        var channel = await _connection.CreateChannelAsync(cancellationToken: ct);
-
-        if (!_exchangeDeclared)
+        // Opening a channel waits on the broker too, so it has the same bound as a publish.
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bound.CancelAfter(_publishTimeout);
+        var channel = await _connection.CreateChannelAsync(ConfirmedChannel, bound.Token);
+        try
         {
+            // Declared on every channel: the exchange may have been deleted, or lost with a broker
+            // restart, since the last one.
             await channel.ExchangeDeclareAsync(
                 exchange: _options.ExchangeName,
                 type: ExchangeType.Fanout,
                 durable: true,
                 autoDelete: false,
-                cancellationToken: ct
+                cancellationToken: bound.Token
             );
-            _exchangeDeclared = true;
+        }
+        catch
+        {
+            await DisposeQuietlyAsync(channel);
+            throw;
         }
 
         _channel = channel;
         return channel;
     }
 
+    private async Task<IConnection> ConnectAsync(CancellationToken ct)
+    {
+        var factory = new ConnectionFactory
+        {
+            Uri = new Uri(_options.ConnectionString),
+            RequestedConnectionTimeout = ConnectTimeout,
+            AutomaticRecoveryEnabled = false,
+        };
+        return await factory.CreateConnectionAsync(ct);
+    }
+
+    private async Task DiscardAsync(bool connectionToo)
+    {
+        await DisposeQuietlyAsync(_channel);
+        _channel = null;
+
+        if (connectionToo)
+        {
+            await DisposeQuietlyAsync(_connection);
+            _connection = null;
+        }
+    }
+
+    // Closes an open channel or connection within CloseTimeout and disposes it. A dead socket
+    // cannot hold this up, and one the broker closed first is not an error.
     private static async Task DisposeQuietlyAsync(IDisposable? closed)
     {
         if (closed is null)
@@ -265,19 +374,36 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
 
         try
         {
+            using var bound = new CancellationTokenSource(CloseTimeout);
             switch (closed)
             {
                 case IChannel { IsOpen: true } channel:
-                    await channel.CloseAsync();
+                    await channel.CloseAsync(
+                        Constants.ReplySuccess,
+                        "Goodbye",
+                        abort: false,
+                        bound.Token
+                    );
                     break;
                 case IConnection { IsOpen: true } connection:
-                    await connection.CloseAsync();
+                    await connection.CloseAsync(
+                        Constants.ReplySuccess,
+                        "Goodbye",
+                        CloseTimeout,
+                        abort: false,
+                        bound.Token
+                    );
                     break;
             }
         }
-        catch (Exception ex) when (ex is AlreadyClosedException or ObjectDisposedException)
+        catch (Exception ex)
+            when (ex
+                    is AlreadyClosedException
+                        or ObjectDisposedException
+                        or OperationCanceledException
+            )
         {
-            // Closed by the broker between the check and the call.
+            // Closed by the broker between the check and the call, or its socket is gone.
         }
 
         closed.Dispose();
@@ -285,15 +411,19 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
 
     /// <summary>
     /// Stops accepting events, waits up to <see cref="DisposeDrainTimeout"/> for the queued ones to
-    /// be sent, abandons the rest, then closes and disposes the channel and connection. Safe to
-    /// call more than once, and after the broker or the client library already closed them.
+    /// be sent, abandons the rest, then closes and disposes the channel and connection. While the
+    /// sender is failing to reach the broker it does not wait: the queue is abandoned at once.
+    /// Safe to call more than once, and after the broker or the client library already closed them.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        _queue.Writer.TryComplete();
+        _queue.Complete();
+        if (Volatile.Read(ref _failing) != 0)
+            await _abandon.CancelAsync();
+
         try
         {
             await _sender.WaitAsync(DisposeDrainTimeout);
@@ -301,12 +431,15 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         catch (TimeoutException)
         {
             await _abandon.CancelAsync();
-            _logger?.LogWarning(
-                "RabbitMQ broadcaster stopped before its queue drained; {Remaining} events were not sent.",
-                _queue.Reader.Count
-            );
             await _sender;
         }
+
+        var remaining = _queue.Count;
+        if (remaining > 0)
+            _logger?.LogWarning(
+                "RabbitMQ broadcaster stopped before its queue drained; {Remaining} events were not sent.",
+                remaining
+            );
 
         await DisposeQuietlyAsync(_channel);
         await DisposeQuietlyAsync(_connection);

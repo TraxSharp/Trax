@@ -180,13 +180,92 @@ public class DraftWriteRulesTests
     }
 
     [Test]
-    public async Task Autosave_keeps_a_same_state_save_of_a_draft_already_committed()
+    public async Task Autosave_must_not_rewrite_a_committed_draft()
+    {
+        var id = await SeedReview();
+        var runner = new OrderMachine().CreateEffectRunner(
+            new OrderMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims()),
+            new IdempotentEffect(TestDb.NewClaims()),
+            new ServiceCollection()
+                .AddSingleton<IOrderCharge>(new CountingEffect())
+                .BuildServiceProvider()
+        )!;
+        (await runner.Run("u", id, "req-1")).Should().BeOfType<AdvanceOutcome.Advanced>();
+
+        var forged = new JsonObject
+        {
+            ["machine"] = "order",
+            ["version"] = 1,
+            ["state"] = "Placed",
+            ["context"] = new JsonObject
+            {
+                ["items"] = new JsonArray(1, 2, 3, 4, 5, 6, 7, 8, 9),
+                ["receipt"] = "forged",
+            },
+        }.ToJsonString();
+
+        (await Orders().Autosave("u", id, forged))
+            .Should()
+            .BeOfType<AutosaveResult.Rejected>()
+            .Which.Code.Should()
+            .Be("draft-committed", Adr);
+        var stored = ((LoadResult.Loaded)await Orders().Load("u", id)).Snapshot;
+        stored.Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+        stored.Context["items"]!.AsArray().Count.Should().Be(1);
+    }
+
+    [Test]
+    public async Task Autosave_accepts_a_save_of_a_committed_draft_that_changes_nothing()
     {
         var id = Guid.NewGuid();
         (await TestDb.NewStore().Upsert("u", id, Snapshot(Placed("r-1")))).Should().BeTrue();
 
         (await Orders().Autosave("u", id, Placed("r-1"))).Should().BeOfType<AutosaveResult.Saved>();
     }
+
+    [Test]
+    public async Task Autosave_must_not_rewrite_a_draft_in_an_effects_target()
+    {
+        var service = new ShipMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims());
+        var id = Guid.NewGuid();
+        (await TestDb.NewStore().Upsert("u", id, Snapshot(Shipped("r-1")))).Should().BeTrue();
+
+        (await service.Autosave("u", id, Shipped("forged")))
+            .Should()
+            .BeOfType<AutosaveResult.Rejected>()
+            .Which.Code.Should()
+            .Be("draft-committed", Adr);
+    }
+
+    [Test]
+    public async Task Autosave_refuses_a_reset_the_machine_does_not_declare_from_an_effects_target()
+    {
+        var service = new ShipMachine().CreateService(TestDb.NewStore(), TestDb.NewClaims());
+        var id = Guid.NewGuid();
+        (await TestDb.NewStore().Upsert("u", id, Snapshot(Shipped("r-1")))).Should().BeTrue();
+        var packing = new JsonObject
+        {
+            ["machine"] = "ship",
+            ["version"] = 1,
+            ["state"] = "Packing",
+            ["context"] = new JsonObject(),
+        }.ToJsonString();
+
+        (await service.Autosave("u", id, packing))
+            .Should()
+            .BeOfType<AutosaveResult.Rejected>()
+            .Which.Code.Should()
+            .Be("draft-committed", Adr);
+    }
+
+    private static string Shipped(string receipt) =>
+        new JsonObject
+        {
+            ["machine"] = "ship",
+            ["version"] = 1,
+            ["state"] = "Shipped",
+            ["context"] = new JsonObject { ["receipt"] = receipt },
+        }.ToJsonString();
 
     [Test]
     public async Task Autosave_refuses_to_overwrite_a_stored_draft_that_does_not_rehydrate()

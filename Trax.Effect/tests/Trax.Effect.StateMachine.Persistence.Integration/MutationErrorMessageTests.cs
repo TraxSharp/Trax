@@ -89,15 +89,36 @@ public class MutationErrorMessageTests
     [Test]
     public async Task A_cancelled_send_is_not_reported_as_a_failed_delivery()
     {
-        var registry = Registry(new ThrowingCharge(new OperationCanceledException()));
+        using var request = new CancellationTokenSource();
+        var registry = Registry(new CancellingCharge(request));
         var id = await SeedReview(registry);
 
         var act = () =>
-            new SendSnapshotJunction(registry, User).Run(
+            new CancellableSend(registry, request.Token).Run(
                 new SendSnapshotInput { Machine = "order", Id = id }
             );
 
         await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    /// <summary>The send mutation as a request whose token the test controls.</summary>
+    private sealed class CancellableSend : SendSnapshotJunction
+    {
+        public CancellableSend(ISnapshotMachineRegistry registry, CancellationToken token)
+            : base(registry, User) => CancellationToken = token;
+    }
+
+    /// <summary>A charge during which the request goes away, and which then reports the cancellation.</summary>
+    private sealed class CancellingCharge(CancellationTokenSource request) : IOrderCharge
+    {
+        public async Task<string> Run(
+            Snapshot snapshot,
+            CancellationToken cancellationToken = default
+        )
+        {
+            await request.CancelAsync();
+            throw new OperationCanceledException(request.Token);
+        }
     }
 
     [Test]

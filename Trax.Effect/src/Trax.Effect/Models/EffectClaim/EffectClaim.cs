@@ -23,6 +23,14 @@ public class EffectClaim
     public string? Receipt { get; set; }
 
     /// <summary>
+    /// A fingerprint of the content the effect runs on, recorded when the claim is taken (and again when an expired
+    /// claim is taken over), so a receipt is only ever replayed onto that same content. Null on a claim recorded
+    /// before the column existed, or by a caller that passed none; such a claim replays its receipt unchecked.
+    /// </summary>
+    [Column("content_fingerprint")]
+    public string? ContentFingerprint { get; set; }
+
+    /// <summary>
     /// The fence token of the current claimant. Completing or releasing the claim compares it, so a runner whose
     /// lease expired and was reclaimed cannot complete or delete the new claimant's row.
     /// </summary>

@@ -1,9 +1,12 @@
 using System.Data;
+using System.Data.Common;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Models.Metadata;
 using Trax.Effect.Data.Services.DataContextTransaction;
 using Trax.Effect.Enums;
+using Trax.Effect.Exceptions;
 using Trax.Effect.Models;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.DeadLetter;
@@ -265,10 +268,58 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     ///
     /// This implementation delegates to the base SaveChangesAsync method, which handles
     /// the actual persistence of changes to the database.
+    ///
+    /// A write the database refuses because of a value it carries is rethrown as
+    /// <see cref="StoreRefusedContentException"/>, around the original error, so a train can
+    /// record its state without that value. Every other failure propagates unchanged.
     /// </remarks>
     public async Task SaveChanges(CancellationToken stoppingToken)
     {
-        await base.SaveChangesAsync(stoppingToken);
+        try
+        {
+            await base.SaveChangesAsync(stoppingToken);
+        }
+        catch (Exception ex) when (IsContentRefusal(ex))
+        {
+            throw new StoreRefusedContentException(ex);
+        }
+    }
+
+    /// <summary>
+    /// SQLSTATEs a database raises for a value it cannot store: a string past a column's length
+    /// (<c>22001</c>), a character the encoding lacks (<c>22021</c>), a Unicode escape it cannot
+    /// convert, such as <c>\u0000</c> in <c>jsonb</c> (<c>22P05</c>), and a value past a size
+    /// limit (<c>54000</c>). The codes are standard, so they are read off
+    /// <see cref="DbException.SqlState"/> without naming a provider.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> ContentSqlStates =
+    [
+        "22001",
+        "22021",
+        "22P05",
+        "54000",
+    ];
+
+    /// <summary>
+    /// Whether the save failed because of a value the row carries: a database error with one of
+    /// <see cref="ContentSqlStates"/>, or text the client could not encode before sending it (an
+    /// unpaired surrogate, which the Postgres client refuses to write).
+    /// </summary>
+    private static bool IsContentRefusal(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (
+                current is DbException { SqlState: { } sqlState }
+                && ContentSqlStates.Contains(sqlState)
+            )
+                return true;
+
+            if (current is EncoderFallbackException)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

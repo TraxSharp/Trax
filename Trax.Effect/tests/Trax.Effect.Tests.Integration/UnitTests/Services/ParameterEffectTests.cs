@@ -161,6 +161,70 @@ public class ParameterEffectTests
     }
 
     [Test]
+    public async Task An_input_is_serialized_once_however_often_the_run_is_saved()
+    {
+        // A run is saved when it starts, around every junction and when it ends; at the byte
+        // ceiling each serialization is real work.
+        var effect = NewEffect();
+        var input = new CountingInput();
+        var meta = NewMetadata(input: input);
+        await effect.Track(meta);
+
+        for (var i = 0; i < 4; i++)
+        {
+            await effect.Update(meta);
+            await effect.SaveChanges(default);
+        }
+
+        input.Reads.Should().Be(1);
+        meta.Input.Should().Contain("counted");
+    }
+
+    [Test]
+    public async Task An_output_is_serialized_once_however_often_the_run_is_saved()
+    {
+        var effect = NewEffect();
+        var output = new CountingInput();
+        var meta = NewMetadata(input: new { V = 1 }, output: output);
+        await effect.Track(meta);
+
+        await effect.Update(meta);
+        await effect.SaveChanges(default);
+        await effect.SaveChanges(default);
+
+        output.Reads.Should().Be(1);
+    }
+
+    [Test]
+    public async Task A_placeholder_written_over_a_serialized_input_is_kept()
+    {
+        // What the train writes after the store refused the input, so the next save can succeed.
+        var effect = NewEffect();
+        var meta = NewMetadata(input: new { V = 1 });
+        await effect.Track(meta);
+
+        meta.Input = """{"_unrecorded": true}""";
+        await effect.Update(meta);
+        await effect.SaveChanges(default);
+
+        meta.Input.Should().Be("""{"_unrecorded": true}""");
+    }
+
+    private sealed class CountingInput
+    {
+        public int Reads;
+
+        public string Value
+        {
+            get
+            {
+                Reads++;
+                return "counted";
+            }
+        }
+    }
+
+    [Test]
     public async Task Update_UntrackedMetadata_DoesNotSerialize()
     {
         var effect = NewEffect();

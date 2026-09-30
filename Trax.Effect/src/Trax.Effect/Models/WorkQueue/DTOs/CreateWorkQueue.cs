@@ -42,10 +42,18 @@ public class CreateWorkQueue
     public long? DeadLetterId { get; set; }
 
     /// <summary>
+    /// Marks the entry as a run someone asked for by name (a trigger, a group trigger or a
+    /// run-now), so it is dispatched even while its manifest is disabled. Defaults to false: a
+    /// scheduled entry waits for the manifest to be enabled again. A dead-letter requeue is always
+    /// explicit, whatever this says. See <see cref="WorkQueue.IsExplicitTrigger"/>.
+    /// </summary>
+    public bool ExplicitTrigger { get; set; }
+
+    /// <summary>
     /// Identifies what this work touches. Entries sharing a non-null key are not dispatched
     /// concurrently. Null means no serialization. <see cref="WorkQueue.Create"/> refuses an empty
-    /// or whitespace-only key, and one longer than <see cref="WorkQueue.MaxSubjectKeyLength"/>
-    /// characters.
+    /// or whitespace-only key, one holding a NUL character, and one longer than
+    /// <see cref="WorkQueue.MaxSubjectKeyLength"/> characters.
     /// </summary>
     public string? SubjectKey { get; set; }
 

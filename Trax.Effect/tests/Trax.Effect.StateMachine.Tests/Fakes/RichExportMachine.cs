@@ -15,6 +15,7 @@ public static class RichExportMachine
     {
         A,
         B,
+        C,
     }
 
     public enum RTrigger
@@ -93,9 +94,11 @@ public static class RichExportMachine
             .When(new Rule.Custom("always"))
             .RunsOnce<ThingEffect>()
             .Reduce(new Reduction.Custom("fresh"))
-            .To(RState.B);
+            .To(RState.C);
 
         m.In(RState.B).Committed().Context<Ctx>();
+        // The effect's target is entered by the effect's edge alone, which Build requires.
+        m.In(RState.C).Context<Ctx>();
 
         m.CustomGuard("c", (_, _) => true)
             .CustomGuard("always", (_, _) => true)
