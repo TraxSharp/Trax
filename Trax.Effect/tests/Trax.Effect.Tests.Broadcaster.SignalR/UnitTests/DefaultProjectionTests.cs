@@ -28,7 +28,7 @@ public class DefaultProjectionTests
         );
 
     [Test]
-    public void Project_CopiesAllSixFieldsFromMessage()
+    public void Project_CopiesFiveFieldsFromMessage_AndLeavesTheFailureReasonOut()
     {
         var message = SampleMessage(failureReason: "boom");
 
@@ -41,7 +41,7 @@ public class DefaultProjectionTests
         evt.TrainName.Should().Be(message.TrainName);
         evt.EventType.Should().Be(message.EventType);
         evt.Timestamp.Should().Be(message.Timestamp);
-        evt.FailureReason.Should().Be(message.FailureReason);
+        evt.FailureReason.Should().BeNull();
     }
 
     [Test]

@@ -100,10 +100,9 @@ public class SqliteBuilderFlagTests
     #region Data Context Logging
 
     [Test]
-    public void UseSqlite_EnablesDataContextLogging()
+    public void UseSqlite_ExposesTheLogsTable()
     {
-        // DataContextLogging is enabled when UseSqlite sets DataContextLoggingEffectEnabled = true.
-        // The Log DbSet should be available on the context, confirming data context logging support.
+        // AddDataContextLogging, available once UseSqlite returns the data builder, writes here.
         using var scope = _provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
 

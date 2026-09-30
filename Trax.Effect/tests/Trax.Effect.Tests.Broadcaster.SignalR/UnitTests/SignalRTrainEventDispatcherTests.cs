@@ -71,6 +71,35 @@ public class SignalRTrainEventDispatcherTests
         );
 
     [Test]
+    public async Task Handle_DataChangedSignalFromAnotherProcess_IsNotSentAsATrainEvent()
+    {
+        var d = Create(NewOptions().Build());
+
+        // A data-change signal rides the same transport but names no train: it has an empty
+        // train name, external id and metadata id 0, and is not a train lifecycle event.
+        await d.HandleAsync(
+            Message(
+                trainName: string.Empty,
+                eventType: TrainLifecycleEventMessage.DataChangedEventType,
+                externalId: string.Empty
+            ) with
+            {
+                MetadataId = 0,
+                ChangeDomain = "WorkQueue",
+            },
+            CancellationToken.None
+        );
+        await d.HandleAsync(Message(externalId: "a-real-event"), CancellationToken.None);
+
+        await d.StopAsync(CancellationToken.None);
+
+        await _client.Received(1).TrainEvent(Arg.Any<object>());
+        await _client
+            .Received(1)
+            .TrainEvent(Arg.Is<object>(p => ((TraxClientEvent)p).ExternalId == "a-real-event"));
+    }
+
+    [Test]
     public async Task Handle_EventTypeNotInFilter_DoesNotCallHubClient()
     {
         var d = Create(NewOptions().OnlyForEvents("Completed").Build());

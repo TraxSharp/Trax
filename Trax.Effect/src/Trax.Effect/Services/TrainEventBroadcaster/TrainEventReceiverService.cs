@@ -1,27 +1,27 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Extensions;
 
 namespace Trax.Effect.Services.TrainEventBroadcaster;
 
 /// <summary>
 /// Hosted service that consumes train lifecycle events from an <see cref="ITrainEventReceiver"/>
 /// and dispatches them to all registered <see cref="ITrainEventHandler"/> instances.
-/// Events originating from the local process are skipped to prevent double-notification
-/// when a train runs locally (already handled by in-process lifecycle hooks).
+/// Events this host published are skipped to prevent double-notification when a train runs
+/// locally (already handled by in-process lifecycle hooks). A host is recognised by its instance
+/// id, not its executor name, so replicas of one app still receive each other's events.
 /// </summary>
 public class TrainEventReceiverService : BackgroundService
 {
     private readonly ITrainEventReceiver _receiver;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TrainEventReceiverService>? _logger;
-    private readonly string? _localExecutor;
+    private readonly string _localInstanceId;
 
     /// <summary>
-    /// Creates the service. Registered as a hosted service by <c>UseBroadcaster()</c>. The local executor used to
-    /// skip this process's own events is the entry assembly's name.
+    /// Creates the service. Registered as a hosted service by <c>UseBroadcaster()</c>. The events it skips as
+    /// its own are those stamped with the instance id <c>UseBroadcaster()</c> registered in
+    /// <paramref name="serviceProvider"/>.
     /// </summary>
     /// <param name="receiver">The transport-specific receiver.</param>
     /// <param name="serviceProvider">Root provider; a scope is created per message to resolve handlers.</param>
@@ -35,13 +35,15 @@ public class TrainEventReceiverService : BackgroundService
         _receiver = receiver;
         _serviceProvider = serviceProvider;
         _logger = logger;
-        _localExecutor = Assembly.GetEntryAssembly()?.GetAssemblyProject();
+        _localInstanceId = (
+            serviceProvider.GetService<BroadcastInstance>() ?? BroadcastInstance.Unregistered
+        ).Id;
     }
 
     /// <summary>
     /// Starts the receiver and keeps it running until the host stops. When <see cref="ITrainEventReceiver.StartAsync"/>
-    /// throws, stops the receiver and retries after 5 seconds, doubling to at most 2 minutes. Each message whose
-    /// executor matches this process is skipped; every other one goes to all registered
+    /// throws, stops the receiver and retries after 5 seconds, doubling to at most 2 minutes. Each message stamped
+    /// with this host's instance id is skipped; every other one goes to all registered
     /// <see cref="ITrainEventHandler"/>s in a fresh scope, with each handler's exception logged and swallowed.
     /// </summary>
     /// <param name="stoppingToken">Signalled when the host stops.</param>
@@ -147,6 +149,5 @@ public class TrainEventReceiverService : BackgroundService
     }
 
     private bool IsLocalEvent(TrainLifecycleEventMessage message) =>
-        _localExecutor != null
-        && string.Equals(message.Executor, _localExecutor, StringComparison.Ordinal);
+        string.Equals(message.InstanceId, _localInstanceId, StringComparison.Ordinal);
 }

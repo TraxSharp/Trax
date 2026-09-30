@@ -478,6 +478,34 @@ public class Metadata : IModel, IDisposable
     }
 
     /// <summary>
+    /// The stored output of a run whose output could not be written.
+    /// </summary>
+    internal const string UnrecordedOutput = """{"_unrecorded": true}""";
+
+    /// <summary>
+    /// The stored failure message of a run whose failure detail could not be written.
+    /// </summary>
+    internal const string UnrecordedFailureReason =
+        "The failure's message could not be recorded; see the host's log for it.";
+
+    /// <summary>
+    /// Replaces what a terminal write carries beyond the run's state (its output, and the failure's
+    /// message and stack trace) with fixed text any store accepts, so the state and end time can
+    /// still be written when the store refused the row for its content. The failure's type,
+    /// junction and class are kept: Trax produces those, not the train.
+    /// </summary>
+    internal void DropOutcomeContent()
+    {
+        if (Output is not null)
+            Output = UnrecordedOutput;
+
+        if (FailureReason is not null)
+            FailureReason = UnrecordedFailureReason;
+
+        StackTrace = null;
+    }
+
+    /// <summary>
     /// Maps a failure class outside the enum to <see cref="Trax.Core.Exceptions.FailureClass.Unclassified"/>,
     /// matching <c>RemoteRunJson.TolerantFailureClassConverter</c>. An undefined value cannot be
     /// stored by the Postgres enum column, and on SQLite it breaks every later read of the row.

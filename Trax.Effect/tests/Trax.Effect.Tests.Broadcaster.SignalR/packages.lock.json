@@ -178,7 +178,7 @@
       "trax.effect": {
         "type": "Project",
         "dependencies": {
-          "Trax.Core": "[1.7.5, )"
+          "Trax.Core": "[1.7.6, )"
         }
       },
       "trax.effect.broadcaster.rabbitmq": {
@@ -202,9 +202,9 @@
       },
       "Trax.Core": {
         "type": "CentralTransitive",
-        "requested": "[1.7.5, )",
-        "resolved": "1.7.5",
-        "contentHash": "eFPEp8Q++iFfKDrgS5JYIwzTv2Wt/zfi1yWj6F6cP61bRJ5FHEKltRKvLFxWNaKknvXHskLdUls/tL4oCgqgSw==",
+        "requested": "[1.7.6, )",
+        "resolved": "1.7.6",
+        "contentHash": "8/4wKW0OrkagAIQm0kSnyigtZZbbXm/zicOdvSpWwmrjGGoZp4XVZH62RVV7662OriVIpUvz6+cdncOvVl4IsQ==",
         "dependencies": {
           "LanguageExt.Core": "4.4.9"
         }

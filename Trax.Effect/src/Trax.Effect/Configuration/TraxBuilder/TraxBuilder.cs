@@ -45,19 +45,20 @@ public partial class TraxBuilder(IServiceCollection services, IEffectRegistry re
     internal TraxEffectConfiguration.TraxEffectConfiguration? EffectConfiguration { get; set; }
 
     /// <summary>
-    /// Whether a database-backed data provider (e.g., Postgres) was configured.
+    /// Whether a database-backed data provider (<c>UsePostgres()</c> or <c>UseSqlite()</c>) was configured.
     /// When false, downstream builders (e.g., the scheduler) default to in-memory implementations.
+    /// Read-only outside Trax: only the data provider's <c>Use*</c> method sets it, so build-time validation
+    /// that reads it cannot be passed without a provider.
     /// </summary>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool HasDatabaseProvider { get; set; }
+    public bool HasDatabaseProvider { get; internal set; }
 
     /// <summary>
     /// Whether any data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>) was configured.
-    /// Unlike <see cref="HasDatabaseProvider"/> (Postgres only), this is true for all data providers.
-    /// Used for build-time validation of features that require any data context.
+    /// Unlike <see cref="HasDatabaseProvider"/>, this is also true for <c>UseInMemory()</c>.
+    /// Used for build-time validation of features that require any data context. Read-only outside Trax:
+    /// only the data provider's <c>Use*</c> method sets it.
     /// </summary>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool HasDataProvider { get; set; }
+    public bool HasDataProvider { get; internal set; }
 
     /// <summary>
     /// Assemblies a subsystem contributes for the mediator to scan so its routes become dispatchable, without
@@ -71,8 +72,7 @@ public partial class TraxBuilder(IServiceCollection services, IEffectRegistry re
     /// <summary>
     /// Set once <c>AddMediator</c> has built the train registry. A subsystem that contributes mediator
     /// assemblies checks this to fail fast if it is called after <c>AddMediator</c>, since its routes would
-    /// arrive too late to be dispatchable.
+    /// arrive too late to be dispatchable. Read-only outside Trax: only <c>AddMediator</c> sets it.
     /// </summary>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool MediatorConfigured { get; set; }
+    public bool MediatorConfigured { get; internal set; }
 }

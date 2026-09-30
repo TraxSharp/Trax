@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Extensions;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Mutations;
@@ -11,16 +12,15 @@ using Trax.Effect.StateMachine.Persistence.Mutations;
 namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
-/// The <c>trax.AddStateMachines(...)</c> builder step (Change 3): one call discovers the machines, wires the
-/// subsystem, auto-registers the <see cref="SnapshotDbContext"/> against the configured provider, and
-/// contributes the generic mutations to the mediator scan, none of which the host does by hand. Plus its
-/// ordering guard.
+/// The <c>trax.AddStateMachines(...)</c> builder step: one call discovers the machines, wires the subsystem
+/// over the data context the configured provider registers, and contributes the generic mutations to the
+/// mediator scan, none of which the host does by hand. Plus its ordering guard.
 /// </summary>
 [TestFixture]
 public class AddStateMachinesBuilderTests
 {
     [Test]
-    public void AddStateMachines_wires_the_subsystem_auto_registers_the_context_and_contributes_the_mutations()
+    public async Task AddStateMachines_wires_the_subsystem_over_the_data_context_and_contributes_the_mutations()
     {
         var services = new ServiceCollection();
         services.AddScoped<ISnapshotPrincipal>(_ => new FakePrincipal("u1"));
@@ -45,27 +45,19 @@ public class AddStateMachinesBuilderTests
         sp.GetRequiredService<ISnapshotMachineRegistry>().Service("order").Should().NotBeNull();
         sp.GetRequiredService<ISnapshotStore>().Should().NotBeNull();
 
-        // The SnapshotDbContext is auto-registered against the Postgres provider (no host AddDbContext), so
-        // resolving it runs the provider's configurator and it round-trips a record.
-        var db = sp.GetRequiredService<SnapshotDbContext>();
-        db.Database.ProviderName.Should().Contain("Npgsql");
-
+        // The store reaches snapshot_draft through the provider's data context: a draft it writes is read
+        // back through IDataContext.SnapshotDrafts, with no DbContext of the subsystem's own.
         var id = Guid.NewGuid();
-        db.SnapshotDrafts.Add(
-            new SnapshotRecord
-            {
-                Id = id,
-                UserKey = "u1",
-                Machine = "order",
-                Version = 1,
-                State = "Cart",
-                Context = "{}",
-                ConcurrencyToken = Guid.NewGuid(),
-                UpdatedAt = DateTimeOffset.UtcNow,
-            }
-        );
-        db.SaveChanges();
+        (
+            await sp.GetRequiredService<ISnapshotMachineRegistry>()
+                .Service("order")!
+                .Autosave("u1", id, OrderMachine.ReviewSnapshot(1))
+        )
+            .Should()
+            .BeOfType<AutosaveResult.Saved>();
 
+        var db = sp.GetRequiredService<IDataContext>();
+        ((DbContext)db).Database.ProviderName.Should().Contain("Npgsql");
         db.SnapshotDrafts.AsNoTracking()
             .Single(x => x.Id == id && x.UserKey == "u1")
             .Machine.Should()

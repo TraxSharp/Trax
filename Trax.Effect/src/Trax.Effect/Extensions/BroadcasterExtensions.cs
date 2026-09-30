@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Effect.Configuration.BroadcasterBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Services.ChangeSignal;
@@ -34,6 +35,9 @@ public static class BroadcasterExtensions
     )
         where TBuilder : TraxEffectBuilder
     {
+        // One identity per service provider: replicas, and hosts sharing a process, each get their own.
+        builder.ServiceCollection.TryAddSingleton<BroadcastInstance>();
+
         var broadcasterBuilder = new BroadcasterBuilder(builder);
         configure(broadcasterBuilder);
 

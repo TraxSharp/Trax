@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.ExceptionServices;
 using System.Text.Json.Serialization;
 using LanguageExt;
 using LanguageExt.UnsafeValueAccess;
@@ -351,6 +352,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         Metadata.AssertLoaded();
 
+        // The input goes on the row before its first write, so the InProgress row already carries
+        // it. A process that dies mid-run (a Lambda timeout, an OOM kill, a deploy) writes nothing
+        // after this, and those are the runs whose input is most needed. Update, not just the
+        // in-memory object: the providers save in registration order, so a data provider
+        // registered before the parameter effect would flush before the input was serialized.
+        // Setting it here also makes the typed input available to OnStarted, as it is to
+        // OnCompleted and OnFailed.
+        Metadata.SetInputObject(input);
+        await EffectRunner.Update(Metadata);
+
         // Not the caller's token, for the same reason SaveOutcome does not take it. An
         // already-cancelled caller, which is what a host shutting down or a timed-out request
         // looks like, made this throw before the try below, so nothing terminal was written: the
@@ -359,12 +370,6 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // write and lets the cancellation surface inside the try, where it is recorded as what it
         // is.
         await EffectRunner.SaveChanges(CancellationToken.None);
-
-        // Make the typed input available to lifecycle hooks before any of them fire, so
-        // OnStarted observes the same input as OnCompleted/OnFailed. This sets the in-memory
-        // object only; the input column is persisted later, so the initial Pending row above
-        // is unchanged.
-        Metadata.SetInputObject(input);
 
         // Everything up to the result is captured rather than allowed to propagate, so a failure
         // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
@@ -556,12 +561,53 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// and one a scheduler's stale-in-progress reaper later rewrites to <c>Failed</c> whatever
     /// actually happened. The outcome is the audit record of the work, not part of the work the
     /// caller is entitled to cancel.
+    ///
+    /// A store can refuse the row for what it carries: Postgres refuses characters it cannot
+    /// store, for one. The state and end time are what the scheduler, the reaper and a manifest's
+    /// retries act on, so when the write fails the outcome is written again without the output
+    /// and the failure's text, and only if that fails too does the first error propagate.
     /// </remarks>
-    private Task SaveOutcome()
+    private async Task SaveOutcome()
     {
         EffectRunner.AssertLoaded();
+        Metadata.AssertLoaded();
 
-        return EffectRunner.SaveChanges(CancellationToken.None);
+        try
+        {
+            await EffectRunner.SaveChanges(CancellationToken.None);
+        }
+        catch (Exception contentEx) when (contentEx is not OperationCanceledException)
+        {
+            Logger?.LogError(
+                contentEx,
+                "Could not record the outcome of train ({TrainName}) with its output and failure detail; recording its state without them.",
+                TrainName
+            );
+
+            // Without the object, the parameter effect cannot serialize the output again over
+            // the placeholder. It is put back for the hooks and TrainOutput.
+            var outputObject = Metadata.GetOutputObject();
+            Metadata.SetOutputObject(null);
+            Metadata.DropOutcomeContent();
+
+            try
+            {
+                await EffectRunner.SaveChanges(CancellationToken.None);
+            }
+            catch (Exception stateEx)
+            {
+                Logger?.LogError(
+                    stateEx,
+                    "Could not record the state of train ({TrainName}) either.",
+                    TrainName
+                );
+                ExceptionDispatchInfo.Capture(contentEx).Throw();
+            }
+            finally
+            {
+                Metadata.SetOutputObject(outputObject);
+            }
+        }
     }
 
     /// <summary>

@@ -19,6 +19,16 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
             where TClient :  notnull { }
     }
 }
+namespace Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions
+{
+    public class TraxTrainEventHubOptions
+    {
+        public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions AllowAnonymous() { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions ConfigureConnection(System.Action<Microsoft.AspNetCore.Http.Connections.HttpConnectionDispatcherOptions> configure) { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions RequireAuthorization(params string[] policies) { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions RequireRoles(params string[] roles) { }
+    }
+}
 namespace Trax.Effect.Broadcaster.SignalR.Extensions
 {
     public static class SignalRBroadcasterExtensions
@@ -28,8 +38,8 @@ namespace Trax.Effect.Broadcaster.SignalR.Extensions
     public static class SignalRHubEndpointExtensions
     {
         public static readonly System.TimeSpan DefaultTransportSendTimeout;
-        public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string path = "/hubs/trax-events") { }
-        public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string path, System.Action<Microsoft.AspNetCore.Http.Connections.HttpConnectionDispatcherOptions> configureOptions) { }
+        public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, System.Action<Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions> configure) { }
+        public static Microsoft.AspNetCore.Builder.HubEndpointConventionBuilder MapTraxTrainEventHub(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string path, System.Action<Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions> configure) { }
     }
 }
 namespace Trax.Effect.Broadcaster.SignalR.Models
@@ -41,6 +51,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Models
         public string EventType { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("externalId")]
         public string ExternalId { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         [System.Text.Json.Serialization.JsonPropertyName("failureReason")]
         public string? FailureReason { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("metadataId")]

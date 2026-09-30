@@ -23,7 +23,10 @@ public static class ServiceExtensions
     /// <param name="serializeJunctionData">
     /// When <c>true</c>, a successful junction's output is serialized to JSON (with <c>[TraxSensitive]</c>
     /// members masked) into its metadata's <c>OutputJson</c> and so appears in the after-junction entry.
-    /// Junction input is not serialized.
+    /// The copy follows the train's lifecycle-hook output policy: none for a train whose output
+    /// <c>SaveTrainParameters</c> excludes, and at most <c>MaxParameterBytes</c> (1 MiB by default) before it
+    /// is replaced by a <c>_truncated</c> placeholder. An output that cannot be serialized is logged as an
+    /// <c>_unserializable</c> placeholder, and never fails the train. Junction input is not serialized.
     /// Defaults to <c>false</c> to avoid performance overhead.
     /// </param>
     /// <returns>The builder for chaining.</returns>
@@ -34,10 +37,6 @@ public static class ServiceExtensions
         where TBuilder : TraxEffectBuilder
     {
         configurationBuilder.SerializeJunctionData = serializeJunctionData;
-        configurationBuilder.ServiceCollection.AddTransient<
-            IJunctionLoggerProvider,
-            JunctionLoggerProvider
-        >();
 
         configurationBuilder.AddJunctionEffect<JunctionLoggerFactory>();
         return configurationBuilder;

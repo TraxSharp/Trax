@@ -27,13 +27,14 @@ namespace Trax.Effect.Data.Models
 }
 namespace Trax.Effect.Data.Services.DataContext
 {
-    public class DataContext<TDbContext> : Microsoft.EntityFrameworkCore.DbContext, System.IAsyncDisposable, System.IDisposable, Trax.Effect.Data.Services.DataContext.IDataContext, Trax.Effect.Services.EffectProvider.IEffectProvider
+    public class DataContext<TDbContext> : Microsoft.EntityFrameworkCore.DbContext, System.IAsyncDisposable, System.IDisposable, Trax.Effect.Data.Services.DataContext.IDataContext, Trax.Effect.Services.EffectProvider.IEffectProvider, Trax.Effect.Services.EffectProvider.IPendingRunClaim
         where TDbContext : Microsoft.EntityFrameworkCore.DbContext
     {
         public DataContext(Microsoft.EntityFrameworkCore.DbContextOptions<TDbContext> options) { }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; set; }
         public int Changes { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Manifest.Manifest> Manifests { get; set; }
@@ -42,6 +43,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; set; }
         public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction() { }
         public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel) { }
@@ -53,6 +55,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public System.Threading.Tasks.Task RollbackTransaction() { }
         public System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken stoppingToken) { }
         public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
+        public System.Threading.Tasks.Task<bool> TryClaimPendingRun(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken) { }
         public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
     }
     public interface IDataContext : System.IAsyncDisposable, System.IDisposable, Trax.Effect.Services.EffectProvider.IEffectProvider
@@ -60,6 +63,7 @@ namespace Trax.Effect.Data.Services.DataContext
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; }
         int Changes { get; set; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Manifest.Manifest> Manifests { get; }
@@ -68,6 +72,7 @@ namespace Trax.Effect.Data.Services.DataContext
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; }
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction();
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel);

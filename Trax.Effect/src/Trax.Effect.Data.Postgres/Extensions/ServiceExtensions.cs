@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
 using Trax.Effect.Data.Postgres.Services.SqlDialect;
@@ -143,7 +144,8 @@ public static class ServiceExtensions
                         }
                     )
                     .UseLoggerFactory(new NullLoggerFactory())
-                    .ConfigureWarnings(x => x.Log(CoreEventId.ManyServiceProvidersCreatedWarning));
+                    .ConfigureWarnings(x => x.Log(CoreEventId.ManyServiceProvidersCreatedWarning))
+                    .AddInterceptors(NulCharacterInterceptor.Instance);
             }
         );
 
@@ -151,9 +153,6 @@ public static class ServiceExtensions
         configurationBuilder.ServiceCollection.AddScoped<IDataContext, PostgresContext>(sp =>
             sp.GetRequiredService<IDbContextFactory<PostgresContext>>().CreateDbContext()
         );
-
-        // Enable data context logging
-        configurationBuilder.DataContextLoggingEffectEnabled = true;
 
         // Register the PostgresContextProviderFactory
         configurationBuilder.AddEffect<IDataContextProviderFactory, PostgresContextProviderFactory>(
@@ -163,8 +162,8 @@ public static class ServiceExtensions
         // Register the SQL dialect for provider-specific raw SQL
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
 
-        // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
-        // Postgres data source, so a subsystem like AddStateMachines(...) needs no host AddDbContext call.
+        // Configure a feature's own DbContext, if it brings one, against this same Postgres data source, so it needs no
+        // host AddDbContext call. A feature table normally ships on IDataContext instead.
         configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(sp =>
         {
             var dataSource = sp.GetRequiredService<NpgsqlDataSource>();
@@ -177,7 +176,6 @@ public static class ServiceExtensions
         var promoted =
             configurationBuilder as TraxEffectBuilderWithData
             ?? new TraxEffectBuilderWithData(configurationBuilder);
-        promoted.DataContextLoggingEffectEnabled = true;
         return promoted;
     }
 }

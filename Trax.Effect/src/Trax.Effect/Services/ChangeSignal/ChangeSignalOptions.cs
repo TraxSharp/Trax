@@ -7,9 +7,10 @@ namespace Trax.Effect.Services.ChangeSignal;
 public sealed class ChangeSignalOptions
 {
     /// <summary>
-    /// Maximum number of buffered signals before new ones are dropped. Signals are a single
-    /// enum, so a small buffer absorbs any realistic burst; the point of the bound is to keep
-    /// a runaway producer from growing memory without limit.
+    /// The size of the signal buffer. The buffer holds each pending domain once, so it never
+    /// needs more room than there are <see cref="ChangeDomain"/> values, and a smaller value is
+    /// raised to that. Repeats of a domain still waiting to be read are absorbed rather than
+    /// buffered, so no burst can fill it.
     /// </summary>
     public int ChannelCapacity { get; set; } = 1024;
 

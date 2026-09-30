@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models;
+using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
@@ -76,10 +77,11 @@ public class EffectRunner : IEffectRunner
     /// <param name="cancellationToken">Token to monitor for cancellation requests</param>
     /// <returns>A task representing the asynchronous operation</returns>
     /// <remarks>
-    /// This method calls SaveChanges on each active provider in parallel,
-    /// allowing for efficient persistence across multiple storage mechanisms.
-    /// The RunAllAsync extension method ensures all providers are called
-    /// regardless of exceptions in individual providers.
+    /// Calls <c>SaveChanges</c> on each active provider in turn, in registration order. A
+    /// provider that throws does not stop the ones after it, so the data provider still records
+    /// the run when an effect registered before it fails. Once every provider has been called,
+    /// the failure is rethrown: a single exception as it was, several cancellations as the first
+    /// of them, and anything else as an <see cref="AggregateException"/>.
     /// </remarks>
     public async Task SaveChanges(CancellationToken cancellationToken)
     {
@@ -94,10 +96,8 @@ public class EffectRunner : IEffectRunner
     /// <param name="model">The model to track</param>
     /// <returns>A task representing the asynchronous operation</returns>
     /// <remarks>
-    /// This method calls Track on each active provider,
-    /// allowing the model to be processed by all registered providers.
-    /// The RunAll extension method ensures all providers are called
-    /// regardless of exceptions in individual providers.
+    /// Calls <c>Track</c> on each active provider in turn. As with <see cref="SaveChanges"/>, a
+    /// provider that throws does not stop the rest, and the failure is rethrown afterwards.
     /// </remarks>
     public async Task Track(IModel model)
     {
@@ -108,6 +108,24 @@ public class EffectRunner : IEffectRunner
     public async Task Update(IModel model)
     {
         await ActiveEffectProviders.RunAllAsync(provider => provider.Update(model));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Asks each provider that implements <see cref="IPendingRunClaim"/>, in registration order,
+    /// and stops at the first that refuses. Unlike the writes above, an exception propagates at
+    /// once: a run whose claim could not be decided must not start.
+    /// </remarks>
+    public async Task<bool> TryClaimPendingRun(
+        Metadata metadata,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var claim in ActiveEffectProviders.OfType<IPendingRunClaim>())
+            if (!await claim.TryClaimPendingRun(metadata, cancellationToken))
+                return false;
+
+        return true;
     }
 
     /// <summary>
@@ -134,6 +152,7 @@ public class EffectRunner : IEffectRunner
     private void DeactivateProviders()
     {
         var disposalExceptions = new List<Exception>();
+        var providerCount = ActiveEffectProviders.Count;
 
         foreach (var provider in ActiveEffectProviders)
         {
@@ -167,7 +186,7 @@ public class EffectRunner : IEffectRunner
         {
             _logger?.LogTrace(
                 "Successfully disposed all ({ProviderCount}) effect provider(s).",
-                ActiveEffectProviders.Count
+                providerCount
             );
         }
     }

@@ -1,17 +1,11 @@
-using LanguageExt;
+using System.Runtime.ExceptionServices;
 
 namespace Trax.Effect.Extensions;
 
 /// <summary>
-/// Provides extension methods for working with IEnumerable collections in a functional style.
-/// These methods enable robust execution of actions and functions across collections,
-/// with special handling for error cases and asynchronous operations.
+/// Runs an action or function over each element of a collection, one element at a time in order.
+/// Each method states what it does when an element throws, because they differ.
 /// </summary>
-/// <remarks>
-/// The extensions in this class follow functional programming principles,
-/// particularly using the Aggregate pattern to process collections sequentially
-/// while maintaining proper error handling and state management.
-/// </remarks>
 internal static class EnumerableExtensions
 {
     /// <summary>
@@ -47,8 +41,7 @@ internal static class EnumerableExtensions
     }
 
     /// <summary>
-    /// Applies a function to each element in the collection and returns a list of results,
-    /// ensuring all elements are processed even if exceptions occur for individual elements.
+    /// Applies a function to each element in the collection, in order, and returns the results.
     /// </summary>
     /// <typeparam name="T">The type of elements in the collection</typeparam>
     /// <typeparam name="TResult">The type of results produced by the function</typeparam>
@@ -56,29 +49,26 @@ internal static class EnumerableExtensions
     /// <param name="func">The function to apply to each element</param>
     /// <returns>A list containing the results of applying the function to each element</returns>
     /// <remarks>
-    /// This method aggregates results into a list, applying the function to each element
-    /// in sequence. Any exceptions thrown by the function for a particular element will
-    /// prevent that element's result from being added to the list, but will not stop
-    /// processing of subsequent elements.
+    /// An exception from <paramref name="func"/> propagates and stops the remaining elements. The
+    /// effect runners build their providers with it, so a factory that cannot create its provider
+    /// fails the runner rather than letting a run proceed without that provider.
     /// </remarks>
     public static List<TResult> RunAll<T, TResult>(
         this IEnumerable<T> source,
         Func<T, TResult> func
     )
     {
-        return source.Aggregate(
-            new List<TResult>(), // Initial accumulator
-            (acc, item) =>
-            {
-                acc.Add(func(item)); // Apply function and store result
-                return acc; // Return updated list
-            }
-        );
+        var results = new List<TResult>();
+
+        foreach (var item in source)
+            results.Add(func(item));
+
+        return results;
     }
 
     /// <summary>
-    /// Applies an asynchronous function to each element in the collection and returns a list of results,
-    /// ensuring all elements are processed even if exceptions occur for individual elements.
+    /// Applies an asynchronous function to each element in the collection, one at a time in order,
+    /// and returns the results.
     /// </summary>
     /// <typeparam name="T">The type of elements in the collection</typeparam>
     /// <typeparam name="TResult">The type of results produced by the function</typeparam>
@@ -86,56 +76,61 @@ internal static class EnumerableExtensions
     /// <param name="func">The asynchronous function to apply to each element</param>
     /// <returns>A task that resolves to a list containing the results of applying the function to each element</returns>
     /// <remarks>
-    /// This method handles asynchronous functions by awaiting each result before proceeding
-    /// to the next element. This ensures that elements are processed in sequence, which can
-    /// be important for operations that have side effects or dependencies on previous operations.
-    ///
-    /// The implementation uses a nested async lambda to properly await both the accumulated
-    /// results and the function application for each element.
+    /// An exception from <paramref name="func"/> propagates and stops the remaining elements.
     /// </remarks>
     public static async Task<List<TResult>> RunAllAsync<T, TResult>(
         this IEnumerable<T> source,
         Func<T, Task<TResult>> func
     )
     {
-        return await source.Aggregate(
-            Task.FromResult(new List<TResult>()),
-            async (accTask, item) =>
-            {
-                var acc = await accTask; // Await the accumulated list
-                var result = await func(item); // Execute the async function
-                acc.Add(result); // Store the result
-                return acc; // Return updated list
-            }
-        );
+        var results = new List<TResult>();
+
+        foreach (var item in source)
+            results.Add(await func(item));
+
+        return results;
     }
 
     /// <summary>
-    /// Executes an asynchronous action on each element in the collection,
-    /// ensuring all elements are processed even if exceptions occur for individual elements.
+    /// Runs an asynchronous action on every element in the collection, one at a time in order,
+    /// even when an earlier one throws, and then rethrows what was thrown.
     /// </summary>
     /// <typeparam name="T">The type of elements in the collection</typeparam>
     /// <param name="source">The source collection</param>
     /// <param name="func">The asynchronous action to execute on each element</param>
-    /// <returns>A task that completes when all elements have been processed</returns>
+    /// <returns>A task that completes when every element has been processed</returns>
     /// <remarks>
-    /// This method ensures that asynchronous actions are executed in sequence,
-    /// with each action waiting for the previous one to complete before starting.
-    /// This is important for maintaining order of execution when actions have
-    /// side effects or dependencies on previous actions.
+    /// The effect runner fans each write out through this, so one provider's failure does not
+    /// stop the next provider from recording the run: the data provider still writes the
+    /// terminal state when an effect registered before it throws.
     ///
-    /// The implementation uses Task.CompletedTask as the initial accumulator,
-    /// and then chains each action to execute after the previous one completes.
+    /// When exactly one element threw, that exception is rethrown as it was, with its stack
+    /// trace. When several threw and all of them were cancellations, the first cancellation is
+    /// rethrown, so a cancelled save still surfaces as <see cref="OperationCanceledException"/>.
+    /// Otherwise an <see cref="AggregateException"/> carries every exception, in element order.
     /// </remarks>
     public static async Task RunAllAsync<T>(this IEnumerable<T> source, Func<T, Task> func)
     {
-        await source.Aggregate(
-            Task.CompletedTask, // Initial accumulator (empty task)
-            async (acc, item) =>
+        List<Exception>? failures = null;
+
+        foreach (var item in source)
+        {
+            try
             {
-                await acc; // Ensure previous task is completed before starting the next
-                await func(item); // Execute the function
+                await func(item);
             }
-        );
+            catch (Exception ex)
+            {
+                (failures ??= []).Add(ex);
+            }
+        }
+
+        if (failures is null)
+            return;
+
+        if (failures.Count == 1 || failures.All(f => f is OperationCanceledException))
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+
+        throw new AggregateException(failures);
     }
 }

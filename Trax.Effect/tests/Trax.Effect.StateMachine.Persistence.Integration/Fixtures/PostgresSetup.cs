@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 
 // This SetUpFixture lives in the ROOT test namespace on purpose: a SetUpFixture only wraps its own
@@ -10,9 +10,9 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// Creates a throwaway database on the local Trax Postgres (the docker-compose <c>trax_database</c>) once
-/// for the whole assembly, builds the snapshot tables via <c>EnsureCreated</c>, and drops it at the end.
-/// A fresh database keeps <c>EnsureCreated</c> honest and isolates these tests from the shared trax tables.
-/// Each test uses its own <c>DbContext</c> so it hits the DB composite key, not the EF identity map.
+/// for the whole assembly, builds the tables with the shipped migrations, and drops it at the end. A fresh
+/// database isolates these tests from the shared trax tables. Each test uses its own data context so it hits
+/// the DB composite key, not the EF identity map.
 /// </summary>
 [SetUpFixture]
 public class PostgresSetup
@@ -37,10 +37,8 @@ public class PostgresSetup
             await Exec(admin, $"CREATE DATABASE {Database}");
         }
 
-        await using var db = new SnapshotDbContext(
-            new DbContextOptionsBuilder<SnapshotDbContext>().UseNpgsql(ConnectionString).Options
-        );
-        await db.Database.EnsureCreatedAsync();
+        // The shipped migrations build the tables, as they do for a host.
+        await DatabaseMigrator.Migrate(ConnectionString);
     }
 
     [OneTimeTearDown]

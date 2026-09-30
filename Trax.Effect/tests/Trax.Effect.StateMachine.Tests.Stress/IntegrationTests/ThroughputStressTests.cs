@@ -17,19 +17,19 @@ public class ThroughputStressTests : StressFixture
     private static async Task<AutosaveResult> Autosave(Guid id, string snapshot)
     {
         await using var ctx = StressDb.NewContext();
-        return await StressOrder.Service(new EfSnapshotStore(ctx)).Autosave("u", id, snapshot);
+        return await StressOrder.Service(StressDb.NewStore(ctx)).Autosave("u", id, snapshot);
     }
 
     private static async Task<AdvanceOutcome> Advance(Guid id, string trigger)
     {
         await using var ctx = StressDb.NewContext();
-        return await StressOrder.Service(new EfSnapshotStore(ctx)).Advance("u", id, trigger);
+        return await StressOrder.Service(StressDb.NewStore(ctx)).Advance("u", id, trigger);
     }
 
     private static async Task<string> LoadState(Guid id)
     {
         await using var ctx = StressDb.NewContext();
-        var loaded = await StressOrder.Service(new EfSnapshotStore(ctx)).Load("u", id);
+        var loaded = await StressOrder.Service(StressDb.NewStore(ctx)).Load("u", id);
         return loaded is LoadResult.Loaded l ? l.Snapshot.State : "not-loaded";
     }
 

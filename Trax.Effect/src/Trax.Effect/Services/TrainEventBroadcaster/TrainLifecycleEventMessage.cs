@@ -30,4 +30,24 @@ public record TrainLifecycleEventMessage(
     /// lifecycle transition. Handlers that only care about train events ignore it.
     /// </summary>
     public const string DataChangedEventType = "DataChanged";
+
+    /// <summary>
+    /// Identifies the host that published the message, one value per running host. A receiver
+    /// drops a message carrying its own host's id, because that host's in-process hooks already
+    /// delivered it, and delivers every other one. Replicas of one app share an
+    /// <see cref="Executor"/> but not an instance id, so each sees the others' events. A message
+    /// from a publisher that predates the field has none, and is treated as coming from another
+    /// host. <see cref="Executor"/> stays the name shown for display.
+    /// </summary>
+    [JsonPropertyName("instanceId")]
+    public string? InstanceId { get; init; }
+
+    /// <summary>
+    /// The type name of the exception a failed run recorded (<c>Metadata.FailureException</c>),
+    /// such as <c>TrainException</c>, or <c>null</c> for any other event. A receiver uses it to
+    /// decide, as the publishing host would, whether <see cref="FailureReason"/> is a message meant
+    /// for the caller. A message from a publisher that predates the field has none.
+    /// </summary>
+    [JsonPropertyName("failureException")]
+    public string? FailureException { get; init; }
 }

@@ -124,9 +124,9 @@ public class JunctionMetadata : IModel
     public EitherStatus State { get; set; }
 
     /// <summary>
-    /// True once the junction's railway step has returned. It is also true when the junction was
-    /// skipped because an earlier junction had already failed, so check <see cref="State"/> to learn
-    /// whether <c>Run</c> actually succeeded. Stays false if the step threw.
+    /// True once the junction's <c>Run</c> has been called and its railway step has returned,
+    /// whether <c>Run</c> succeeded or failed; check <see cref="State"/> for which. False when the
+    /// junction was skipped because an earlier junction had already failed, and when the step threw.
     /// </summary>
     [Column("has_ran")]
     public bool HasRan { get; set; }

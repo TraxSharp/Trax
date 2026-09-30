@@ -10,11 +10,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Data.Testing.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Trax.Core.Testing" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="NUnit" />
   </ItemGroup>

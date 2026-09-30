@@ -105,9 +105,14 @@ public class WorkQueue : IModel
     /// <c>StalePendingTimeout</c>, or in progress longer than <c>StaleInProgressTimeout</c>. A run
     /// that is still working past its timeout no longer holds its subject. Only queued work is
     /// serialized; a synchronous run through the mediator does not consult the key.
+    ///
+    /// Only <see cref="Create"/> sets it, from <see cref="CreateWorkQueue.SubjectKey"/>, so every
+    /// key goes through the checks <see cref="Create"/> makes. A Trax.Mediator older than 1.23.0
+    /// set it after <see cref="Create"/> and cannot run against this version.
     /// </remarks>
     [Column("subject_key")]
-    public string? SubjectKey { get; set; }
+    [JsonInclude]
+    public string? SubjectKey { get; private set; }
 
     /// <summary>
     /// When this entry became eligible for dispatch, or null while it is still being staged.

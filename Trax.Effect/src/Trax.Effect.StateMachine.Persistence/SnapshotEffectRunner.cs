@@ -16,7 +16,11 @@ public interface ISnapshotEffectRunner
     /// <param name="userKey">The authenticated owner of the draft.</param>
     /// <param name="id">The draft id.</param>
     /// <param name="requestId">The client's idempotency key for this send; a retry with the same id replays.</param>
-    /// <param name="cancellationToken">Cancels the request; also passed to the effect.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the request up to the effect, and is passed to the effect. Once the effect has returned, its receipt
+    /// and the advance that records it are written whatever the token says, so a cancelled request never leaves an
+    /// effect that ran looking as if it had not.
+    /// </param>
     Task<AdvanceOutcome> Run(
         string userKey,
         Guid id,
@@ -103,7 +107,10 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
                 return new AdvanceOutcome.NotFound();
 
             case LoadResult.Invalid invalid:
-                return new AdvanceOutcome.LoadError(invalid.Code, invalid.Message);
+                return new AdvanceOutcome.LoadError(invalid.Code, invalid.Message)
+                {
+                    Exception = invalid.Exception,
+                };
 
             case LoadResult.Loaded loaded:
                 // Already effected -> replay the stored result; never run the effect twice.
@@ -166,14 +173,17 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
                 }
 
                 // Fold the receipt into the terminal snapshot. If a concurrent run already committed this
-                // CAS loses (Conflict) — harmless: the effect ran once and the winner recorded it.
-                return await _drafts.Advance(
+                // CAS loses (Conflict) — harmless: the effect ran once and the winner recorded it. The effect has
+                // happened, so this write runs on a token the caller cannot cancel: a request that goes away now
+                // must still leave the draft showing what was done. The same rule as a train's outcome, in
+                // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
+                return await _drafts.AdvanceAfterEffect(
                     userKey,
                     id,
                     _trigger,
                     new JsonObject { [_receiptKey] = receipt },
                     requestId,
-                    cancellationToken
+                    CancellationToken.None
                 );
 
             default:

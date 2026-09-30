@@ -27,9 +27,9 @@ public class RegistryJunctionTests
                 new OrderMachine(),
                 new DeclarativeTurnstileMachine(),
             },
-            new EfSnapshotStore(context),
-            new EfEffectClaimStore(context),
-            new IdempotentEffect(new EfEffectClaimStore(context)),
+            TestDb.NewStore(context),
+            TestDb.NewClaims(context),
+            new IdempotentEffect(TestDb.NewClaims(context)),
             provider
         );
     }

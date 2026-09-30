@@ -18,7 +18,7 @@ public class ExactlyOnceStressTests : StressFixture
         await using var ctx = StressDb.NewContext();
         (
             await StressOrder
-                .Service(new EfSnapshotStore(ctx))
+                .Service(StressDb.NewStore(ctx))
                 .Autosave("u", id, StressOrder.ReviewJson(1, 2))
         )
             .Should()
@@ -28,7 +28,7 @@ public class ExactlyOnceStressTests : StressFixture
     private static async Task<string> LoadState(Guid id)
     {
         await using var ctx = StressDb.NewContext();
-        var loaded = await StressOrder.Service(new EfSnapshotStore(ctx)).Load("u", id);
+        var loaded = await StressOrder.Service(StressDb.NewStore(ctx)).Load("u", id);
         return loaded is LoadResult.Loaded l ? l.Snapshot.State : "not-loaded";
     }
 
@@ -39,9 +39,9 @@ public class ExactlyOnceStressTests : StressFixture
     )
     {
         await using var ctx = StressDb.NewContext();
-        var claims = new EfEffectClaimStore(ctx);
+        var claims = StressDb.NewClaims(ctx);
         var runner = new SnapshotEffectRunner<OrderState, OrderTrigger>(
-            StressOrder.Service(new EfSnapshotStore(ctx), claims),
+            StressOrder.Service(StressDb.NewStore(ctx), claims),
             effect,
             new IdempotentEffect(claims),
             OrderState.Review,

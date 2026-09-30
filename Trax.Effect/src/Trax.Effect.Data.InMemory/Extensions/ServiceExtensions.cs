@@ -75,8 +75,8 @@ public static class ServiceExtensions
             InMemoryContextProviderFactory.BuildOptions(root)
         ));
 
-        // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
-        // in-memory store (shared root), so a subsystem like AddStateMachines(...) needs no host AddDbContext.
+        // Configure a feature's own DbContext, if it brings one, against this same in-memory store (shared root), so it needs no
+        // host AddDbContext call. A feature table normally ships on IDataContext instead.
         configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(
             new DelegateFeatureDbConfigurator(options =>
                 options.UseInMemoryDatabase("trax-feature", root)

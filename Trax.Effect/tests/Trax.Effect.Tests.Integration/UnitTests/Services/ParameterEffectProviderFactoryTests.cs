@@ -12,7 +12,7 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 public class ParameterEffectProviderFactoryTests
 {
     [Test]
-    public void Create_ReturnsParameterEffectAndTracksProvider()
+    public void Create_ReturnsParameterEffect()
     {
         var config = new StubConfig();
         var effectConfig = new ParameterEffectConfiguration
@@ -25,7 +25,6 @@ public class ParameterEffectProviderFactoryTests
         var provider = factory.Create();
 
         provider.Should().BeOfType<ParameterEffect>();
-        factory.Providers.Should().ContainSingle().Which.Should().BeSameAs(provider);
     }
 
     [Test]
@@ -39,7 +38,7 @@ public class ParameterEffectProviderFactoryTests
     }
 
     [Test]
-    public void Create_MultipleCalls_AccumulatesProviders()
+    public void Create_MultipleCalls_ReturnsDistinctProviders()
     {
         var config = new StubConfig();
         var factory = new ParameterEffectProviderFactory(
@@ -47,11 +46,9 @@ public class ParameterEffectProviderFactoryTests
             new ParameterEffectConfiguration()
         );
 
-        factory.Create();
-        factory.Create();
-        factory.Create();
+        var providers = new[] { factory.Create(), factory.Create(), factory.Create() };
 
-        factory.Providers.Should().HaveCount(3);
+        providers.Should().OnlyHaveUniqueItems();
     }
 
     private class StubConfig : ITraxEffectConfiguration

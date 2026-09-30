@@ -52,7 +52,11 @@ public abstract record AdvanceResult
     public sealed record Transitioned(Snapshot Snapshot) : AdvanceResult;
 
     /// <summary>The trigger was declined; <see cref="Reason"/> is one of <see cref="RejectionReasons"/>.</summary>
-    public sealed record Rejected(string Reason, string? Detail = null) : AdvanceResult;
+    public sealed record Rejected(string Reason, string? Detail = null) : AdvanceResult
+    {
+        /// <summary>The exception behind an <c>internal-error</c>, kept for the server's log and never in <see cref="Detail"/>.</summary>
+        internal Exception? Exception { get; init; }
+    }
 
     // Private ctor seals the hierarchy to the two nested cases above.
     private AdvanceResult() { }
@@ -69,7 +73,11 @@ public abstract record RehydrationResult
     public sealed record Ok(Snapshot Snapshot) : RehydrationResult;
 
     /// <summary>The JSON could not be accepted; <see cref="Code"/> is one of <see cref="RehydrationErrorCodes"/>.</summary>
-    public sealed record Error(string Code, string Message) : RehydrationResult;
+    public sealed record Error(string Code, string Message) : RehydrationResult
+    {
+        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
+        internal Exception? Exception { get; init; }
+    }
 
     private RehydrationResult() { }
 }

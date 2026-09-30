@@ -14,7 +14,8 @@ namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 /// <remarks>
 /// Loggers queue entries into a bounded in-memory queue of 4096; when it is full the oldest entry is
 /// dropped. A single background loop, started by the constructor, writes them in batches of up to 256
-/// at least once a second using one long-lived data context. If a batch fails, its entries are retried
+/// as they arrive, using one long-lived data context. <see cref="Dispose"/> lets it write what is
+/// already queued before it stops. If a batch fails, its entries are retried
 /// one at a time and any that still fail are dropped, so logging never throws into the caller.
 /// </remarks>
 public class DataContextLoggingProvider : IDataContextLoggingProvider
@@ -86,35 +87,20 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
     {
         const int maxBatchSize = 256;
         var batch = new List<Effect.Models.Log.Log>(maxBatchSize);
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        using var dataContext = await _dbContextFactory.CreateDbContextAsync(ct);
+        var reader = _logChannel.Reader;
 
         try
         {
-            while (!ct.IsCancellationRequested)
+            using var dataContext = await _dbContextFactory.CreateDbContextAsync(ct);
+
+            // WaitToReadAsync returns false only once the queue is completed and empty, so after
+            // Dispose completes it the loop still writes everything queued before that, then ends.
+            while (await reader.WaitToReadAsync(ct))
             {
-                // Wait for either new data or the 1-second timer tick
-                var dataAvailable = _logChannel.Reader.TryRead(out var firstLog);
-
-                if (!dataAvailable)
-                {
-                    // Wait for whichever comes first: data or timer
-                    using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    var timerTask = timer.WaitForNextTickAsync(delayCts.Token).AsTask();
-                    var readTask = _logChannel.Reader.WaitToReadAsync(delayCts.Token).AsTask();
-
-                    await Task.WhenAny(timerTask, readTask);
-                    await delayCts.CancelAsync();
-
-                    dataAvailable = _logChannel.Reader.TryRead(out firstLog);
-                    if (!dataAvailable)
-                        continue;
-                }
-
                 batch.Clear();
-                batch.Add(firstLog!);
-
-                while (batch.Count < maxBatchSize && _logChannel.Reader.TryRead(out var log))
+                // The loop is the queue's only reader, so after WaitToReadAsync returns true the
+                // batch holds at least one entry.
+                while (batch.Count < maxBatchSize && reader.TryRead(out var log))
                     batch.Add(log);
 
                 try
@@ -139,7 +125,7 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Normal shutdown
+            // Dispose gave up waiting for the queue to drain.
         }
     }
 
@@ -178,17 +164,43 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
     }
 
     /// <summary>
-    /// Stops accepting entries, cancels the background writer and waits up to five seconds for it to
-    /// stop. Entries still queued when the writer is cancelled are not written.
+    /// Stops accepting entries and waits up to five seconds for the background writer to store the
+    /// ones already queued. Only if that runs out is the writer cancelled, and whatever it has not
+    /// written by then is lost. A second call does nothing.
     /// </summary>
     public void Dispose()
     {
-        _logChannel.Writer.TryComplete();
-        _cts.Cancel();
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
 
-        // Best-effort wait for the flush loop to drain
-        _flushTask.Wait(TimeSpan.FromSeconds(5));
+        _logChannel.Writer.TryComplete();
+
+        if (!WaitForWriter(DrainTimeout))
+        {
+            _cts.Cancel();
+            WaitForWriter(TimeSpan.FromSeconds(1));
+        }
 
         _cts.Dispose();
+    }
+
+    private static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(5);
+
+    private int _disposed;
+
+    /// <summary>
+    /// True when the writer has stopped within <paramref name="timeout"/>. A writer that failed
+    /// (its database unreachable, say) has stopped too, and logging never throws into the caller.
+    /// </summary>
+    private bool WaitForWriter(TimeSpan timeout)
+    {
+        try
+        {
+            return _flushTask.Wait(timeout);
+        }
+        catch (AggregateException)
+        {
+            return true;
+        }
     }
 }

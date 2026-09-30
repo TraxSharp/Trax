@@ -145,7 +145,9 @@ public class SignalRHubEndpointTests
                 .Configure(app =>
                 {
                     app.UseRouting();
-                    app.UseEndpoints(endpoints => endpoints.MapTraxTrainEventHub());
+                    app.UseEndpoints(endpoints =>
+                        endpoints.MapTraxTrainEventHub(hub => hub.AllowAnonymous())
+                    );
                 })
         );
 
@@ -173,7 +175,9 @@ public class SignalRHubEndpointTests
     [Test]
     public async Task MapTraxTrainEventHub_SetsAShortTransportSendTimeout()
     {
-        var options = await MappedOptionsAsync(endpoints => endpoints.MapTraxTrainEventHub());
+        var options = await MappedOptionsAsync(endpoints =>
+            endpoints.MapTraxTrainEventHub(hub => hub.AllowAnonymous())
+        );
 
         options
             .TransportSendTimeout.Should()
@@ -187,7 +191,9 @@ public class SignalRHubEndpointTests
         var options = await MappedOptionsAsync(endpoints =>
             endpoints.MapTraxTrainEventHub(
                 "/hubs/trax-events",
-                o => o.TransportSendTimeout = TimeSpan.FromSeconds(7)
+                hub =>
+                    hub.AllowAnonymous()
+                        .ConfigureConnection(o => o.TransportSendTimeout = TimeSpan.FromSeconds(7))
             )
         );
 

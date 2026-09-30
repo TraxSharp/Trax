@@ -1,6 +1,9 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Trax.Core.Testing;
@@ -18,15 +21,17 @@ public static class DataLayerGuards
 {
     private const string DefaultBaseTypeName = "DomainDataContext";
 
-    private static readonly Regex ContextClass = new(
-        @"\bclass\s+(\w+DbContext)\b",
-        RegexOptions.Compiled
-    );
-
     /// <summary>
     /// Every domain <c>*DbContext</c> under the source scan roots must derive the shared base
     /// (<c>DomainDataContext&lt;TSelf&gt;</c>), which enforces one-project-one-schema-one-context.
     /// </summary>
+    /// <remarks>
+    /// Each class declaration is judged on its own base list, parsed with Roslyn, so a file that
+    /// names the base anywhere else (another class, a field, a comment) does not excuse a context
+    /// that does not derive it. A context is a class whose name ends in <c>DbContext</c>, or one
+    /// that derives <c>DbContext</c> directly. A scan root that does not exist is an offender, so a
+    /// mistyped root fails instead of scanning nothing.
+    /// </remarks>
     public static GuardResult DomainContextsDeriveBase(
         ArchitectureGuardOptions options,
         string baseTypeName = DefaultBaseTypeName,
@@ -37,23 +42,23 @@ public static class DataLayerGuards
         knownExceptions ??= new HashSet<string>(StringComparer.Ordinal);
 
         var root = options.RepoRootOverride ?? RepoRoot.Path;
-        var inheritsBase = new Regex($@":\s*{Regex.Escape(baseTypeName)}<", RegexOptions.Compiled);
-        var offenders = new List<string>();
+        var offenders = MissingScanRoots(root, options.SourceScanRoots);
         var inspected = 0;
 
-        foreach (var file in SourceFiles.CSharpUnder(root, [.. options.SourceScanRoots]))
+        foreach (var context in ClassesUnder(root, options.SourceScanRoots))
         {
-            var stripped = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
-            if (!ContextClass.IsMatch(stripped))
+            if (
+                !context.Name.EndsWith("DbContext", StringComparison.Ordinal)
+                && !context.BaseNames.Contains("DbContext")
+            )
                 continue;
 
             inspected++;
-            var rel = Rel(root, file);
-            if (knownExceptions.Contains(rel))
+            if (knownExceptions.Contains(context.File))
                 continue;
 
-            if (!inheritsBase.IsMatch(stripped))
-                offenders.Add(rel);
+            if (!context.GenericBaseNames.Contains(baseTypeName))
+                offenders.Add($"{context.File} ({context.Name})");
         }
 
         var message =
@@ -69,6 +74,10 @@ public static class DataLayerGuards
     /// Every context deriving the shared base must ship a companion <c>I{Name}</c> interface in the
     /// same directory (application code depends on the interface, not the concrete context).
     /// </summary>
+    /// <remarks>
+    /// Every class declaration deriving the base counts, whatever its constructor looks like. A
+    /// scan root that does not exist is an offender.
+    /// </remarks>
     public static GuardResult CompanionInterfaces(
         ArchitectureGuardOptions options,
         string baseTypeName = DefaultBaseTypeName
@@ -76,25 +85,18 @@ public static class DataLayerGuards
     {
         ArgumentNullException.ThrowIfNull(options);
         var root = options.RepoRootOverride ?? RepoRoot.Path;
-        var baseContextClass = new Regex(
-            $@"\bclass\s+(\w+DbContext)\s*\([^)]*\)\s*:\s*{Regex.Escape(baseTypeName)}<",
-            RegexOptions.Compiled | RegexOptions.Singleline
-        );
-        var offenders = new List<string>();
+        var offenders = MissingScanRoots(root, options.SourceScanRoots);
         var inspected = 0;
 
-        foreach (var file in SourceFiles.CSharpUnder(root, [.. options.SourceScanRoots]))
+        foreach (var context in ClassesUnder(root, options.SourceScanRoots))
         {
-            var stripped = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
-            var match = baseContextClass.Match(stripped);
-            if (!match.Success)
+            if (!context.GenericBaseNames.Contains(baseTypeName))
                 continue;
 
             inspected++;
-            var contextName = match.Groups[1].Value;
-            var companion = Path.Combine(Path.GetDirectoryName(file)!, $"I{contextName}.cs");
-            if (!File.Exists(companion))
-                offenders.Add($"{Rel(root, file)} (expected I{contextName}.cs alongside it)");
+            var directory = Path.GetDirectoryName(Path.Combine(root, context.File))!;
+            if (!File.Exists(Path.Combine(directory, $"I{context.Name}.cs")))
+                offenders.Add($"{context.File} (expected I{context.Name}.cs alongside it)");
         }
 
         var message =
@@ -520,7 +522,7 @@ public static class DataLayerGuards
             return false;
         }
 
-        var offenders = new List<string>();
+        var offenders = MissingScanRoots(root, scan.SourceScanRoots);
         var bypassingFiles = new HashSet<string>(StringComparer.Ordinal);
         var inspected = 0;
 
@@ -851,6 +853,94 @@ public static class DataLayerGuards
             .GetValue(builder);
         return (DbContext)Activator.CreateInstance(contextType, options)!;
     }
+
+    /// <summary>
+    /// A class declaration found under the scan roots: its file, its name, and the simple names of
+    /// the types in its base list, split into all of them and the generic ones. The parts of a
+    /// partial class are merged, since any part may carry the base list.
+    /// </summary>
+    private sealed record ClassDeclaration(
+        string File,
+        string Name,
+        HashSet<string> BaseNames,
+        HashSet<string> GenericBaseNames
+    );
+
+    private static List<ClassDeclaration> ClassesUnder(string root, IReadOnlyList<string> scanRoots)
+    {
+        var classes = new Dictionary<string, ClassDeclaration>(StringComparer.Ordinal);
+
+        foreach (var file in SourceFiles.CSharpUnder(root, [.. scanRoots]))
+        {
+            var tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file));
+            foreach (
+                var declaration in tree.GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
+            )
+            {
+                var key = FullName(declaration);
+                if (!classes.TryGetValue(key, out var found))
+                    classes[key] = found = new ClassDeclaration(
+                        Rel(root, file),
+                        declaration.Identifier.ValueText,
+                        new HashSet<string>(StringComparer.Ordinal),
+                        new HashSet<string>(StringComparer.Ordinal)
+                    );
+
+                foreach (var baseType in declaration.BaseList?.Types ?? default)
+                {
+                    var name = Unqualified(baseType.Type);
+                    found.BaseNames.Add(name.Identifier.ValueText);
+                    if (name is GenericNameSyntax)
+                        found.GenericBaseNames.Add(name.Identifier.ValueText);
+                }
+            }
+        }
+
+        return [.. classes.Values];
+    }
+
+    private static SimpleNameSyntax Unqualified(TypeSyntax type) =>
+        type switch
+        {
+            QualifiedNameSyntax qualified => qualified.Right,
+            AliasQualifiedNameSyntax alias => alias.Name,
+            SimpleNameSyntax simple => simple,
+            _ => SyntaxFactory.IdentifierName(type.ToString()),
+        };
+
+    /// <summary>The namespace-and-nesting name of a declaration, to merge the parts of a partial class.</summary>
+    private static string FullName(ClassDeclarationSyntax declaration)
+    {
+        var parts = new List<string>();
+        for (SyntaxNode? node = declaration; node is not null; node = node.Parent)
+        {
+            switch (node)
+            {
+                case BaseTypeDeclarationSyntax type:
+                    parts.Add(type.Identifier.ValueText);
+                    break;
+                case BaseNamespaceDeclarationSyntax ns:
+                    parts.Add(ns.Name.ToString());
+                    break;
+            }
+        }
+
+        parts.Reverse();
+        return string.Join(".", parts);
+    }
+
+    /// <summary>
+    /// A scan root that does not exist, reported as an offender: the scan would otherwise skip it
+    /// and pass having checked nothing there.
+    /// </summary>
+    private static List<string> MissingScanRoots(string root, IReadOnlyList<string> scanRoots) =>
+        [
+            .. scanRoots
+                .Where(scanRoot => !Directory.Exists(Path.Combine(root, scanRoot)))
+                .Select(scanRoot =>
+                    $"scan root '{scanRoot}' does not exist under {root}; fix or remove it"
+                ),
+        ];
 
     private static string Rel(string root, string file) =>
         Path.GetRelativePath(root, file).Replace('\\', '/');

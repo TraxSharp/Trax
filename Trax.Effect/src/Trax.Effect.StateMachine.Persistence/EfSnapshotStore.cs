@@ -1,29 +1,53 @@
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.StateMachine;
+using SnapshotDraft = Trax.Effect.Models.SnapshotDraft.SnapshotDraft;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
-/// The Postgres-backed <see cref="ISnapshotStore"/>: user-scoped reads/writes of a
-/// <see cref="SnapshotRecord"/> with the context in a real <c>jsonb</c> column and optimistic
-/// concurrency via <see cref="SnapshotRecord.ConcurrencyToken"/>. Only EXPECTED races (an optimistic
-/// conflict or a concurrent-create unique violation) are caught and returned as <c>false</c>; a genuine
-/// constraint violation from a real bug still propagates, so it can't masquerade as a benign conflict.
+/// The <see cref="ISnapshotStore"/> over <see cref="IDataContext.SnapshotDrafts"/>: user-scoped reads and
+/// writes of a <see cref="SnapshotDraft"/> with the context in a real <c>jsonb</c> column (<c>TEXT</c> on
+/// SQLite) and optimistic concurrency via its concurrency token. Only EXPECTED races (an optimistic conflict,
+/// or a concurrent create the <paramref name="dialect"/> recognises as a unique violation) are returned as
+/// <c>false</c>; any other database error propagates, so it cannot masquerade as a benign conflict.
 /// </summary>
-public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
+/// <param name="db">The data context the table is reached through.</param>
+/// <param name="dialect">
+/// Recognises a unique violation on the configured provider. Without one, a concurrent create of the same draft
+/// throws instead of losing the race.
+/// </param>
+public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null) : ISnapshotStore
 {
     /// <inheritdoc/>
-    public async Task<StoredSnapshot?> Get(
+    public Task<StoredSnapshot?> Get(
         string userKey,
         Guid id,
         CancellationToken cancellationToken = default
+    ) => Read(db.SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey), cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<StoredSnapshot?> Get(
+        string userKey,
+        string machine,
+        Guid id,
+        CancellationToken cancellationToken = default
+    ) =>
+        Read(
+            db.SnapshotDrafts.Where(x =>
+                x.Id == id && x.UserKey == userKey && x.Machine == machine
+            ),
+            cancellationToken
+        );
+
+    private static async Task<StoredSnapshot?> Read(
+        IQueryable<SnapshotDraft> query,
+        CancellationToken cancellationToken
     )
     {
-        var record = await db
-            .SnapshotDrafts.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id && x.UserKey == userKey, cancellationToken);
+        var record = await query.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
 
         if (record is null)
             return null;
@@ -53,11 +77,23 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
             .SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey)
             .ExecuteDeleteAsync(cancellationToken);
 
+    /// <inheritdoc/>
+    public Task Delete(
+        string userKey,
+        string machine,
+        Guid id,
+        CancellationToken cancellationToken = default
+    ) =>
+        db
+            .SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey && x.Machine == machine)
+            .ExecuteDeleteAsync(cancellationToken);
+
     /// <summary>
-    /// Inserts the draft or overwrites its machine, version, state and context, with a fresh concurrency token
-    /// and <c>updated_at</c>. It does not compare tokens and leaves the last-request columns untouched. Returns
-    /// <c>false</c> when a tracked write turned stale or a concurrent insert of the same <c>(user_key, id)</c>
-    /// won (recognised only as a Postgres unique violation); any other database error propagates.
+    /// Inserts the draft of <paramref name="snapshot"/>'s machine, or overwrites its version, state and context,
+    /// with a fresh concurrency token and <c>updated_at</c>. It leaves the last-request columns untouched, and
+    /// never touches another machine's draft under the same id. Returns <c>false</c> when the row changed between
+    /// this call's read and its write, or a concurrent insert of the same <c>(user_key, machine, id)</c> won; any
+    /// other database error propagates.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
     /// <param name="id">The client-minted draft id.</param>
@@ -70,18 +106,72 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         CancellationToken cancellationToken = default
     )
     {
+        var machine = snapshot.Machine;
         var record = await db.SnapshotDrafts.FirstOrDefaultAsync(
-            x => x.Id == id && x.UserKey == userKey,
+            x => x.Id == id && x.UserKey == userKey && x.Machine == machine,
             cancellationToken
         );
         if (record is null)
-        {
-            record = new SnapshotRecord { Id = id, UserKey = userKey };
-            db.SnapshotDrafts.Add(record);
-        }
+            return await Insert(userKey, id, snapshot, cancellationToken);
 
         Apply(record, snapshot);
-        return await TrySave(cancellationToken);
+        return await Save(record, cancellationToken);
+    }
+
+    /// <summary>
+    /// Inserts a new draft row. Returns <c>false</c> when a row with the same key already exists, which is how
+    /// a writer that lost the race to create a draft finds out; any other database error propagates.
+    /// </summary>
+    internal Task<bool> Insert(
+        string userKey,
+        Guid id,
+        Snapshot snapshot,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var record = new SnapshotDraft { Id = id, UserKey = userKey };
+        Apply(record, snapshot);
+        db.SnapshotDrafts.Add(record);
+        return Save(record, cancellationToken);
+    }
+
+    private static void Apply(SnapshotDraft record, Snapshot snapshot)
+    {
+        record.Machine = snapshot.Machine;
+        record.Version = snapshot.Version;
+        record.State = snapshot.State;
+        record.Context = snapshot.Context.ToJsonString();
+        record.ConcurrencyToken = Guid.NewGuid();
+        record.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private async Task<bool> Save(SnapshotDraft record, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ((DbContext)db).SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A stale optimistic write: someone else changed the row since it was read.
+            return false;
+        }
+        catch (DbUpdateException ex) when (dialect?.IsUniqueViolation(ex) == true)
+        {
+            // A concurrent create of the same (user_key, id): the other writer got there first. Any other
+            // DbUpdateException (a NOT NULL or check-constraint violation from a real bug) is not swallowed.
+            return false;
+        }
+        finally
+        {
+            // Stop tracking the row whether or not it was written: the context may be shared with the rest of
+            // the request, a failed write left tracked would be retried by its next save, and a written one
+            // would be served stale from the identity map to this store's next read.
+            ((DbContext)db)
+                .Entry(record)
+                .State = EntityState.Detached;
+        }
     }
 
     /// <summary>
@@ -114,8 +204,9 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         );
 
     /// <summary>
-    /// One atomic <c>UPDATE ... WHERE concurrency_token = expectedToken</c> that bypasses the change tracker. It
-    /// writes the snapshot, the request's id, trigger and from-state (all null when <paramref name="request"/> is
+    /// One atomic <c>UPDATE ... WHERE concurrency_token = expectedToken</c> on the draft of
+    /// <paramref name="snapshot"/>'s machine that bypasses the change tracker. It writes the snapshot, the
+    /// request's id, trigger and from-state (all null when <paramref name="request"/> is
     /// null), a fresh token and <c>updated_at</c>. A write that lost the race, or targets a missing row, updates
     /// nothing and returns <c>false</c> rather than throwing.
     /// </summary>
@@ -134,9 +225,8 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
         CancellationToken cancellationToken = default
     )
     {
-        // Optimistic update as a single atomic statement that bypasses the change tracker (so it can't
-        // collide with an entity a prior Upsert tracked on this same context). The token guard is in the
-        // WHERE, so a write that lost the race updates 0 rows — no lost update, no exception.
+        // Optimistic update as a single atomic statement that bypasses the change tracker. The token guard is
+        // in the WHERE, so a write that lost the race updates 0 rows — no lost update, no exception.
         var machineId = snapshot.Machine;
         var version = snapshot.Version;
         var state = snapshot.State;
@@ -149,12 +239,14 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
 
         var rows = await db
             .SnapshotDrafts.Where(x =>
-                x.Id == id && x.UserKey == userKey && x.ConcurrencyToken == expectedToken
+                x.Id == id
+                && x.UserKey == userKey
+                && x.Machine == machineId
+                && x.ConcurrencyToken == expectedToken
             )
             .ExecuteUpdateAsync(
                 setters =>
                     setters
-                        .SetProperty(x => x.Machine, machineId)
                         .SetProperty(x => x.Version, version)
                         .SetProperty(x => x.State, state)
                         .SetProperty(x => x.Context, contextJson)
@@ -168,38 +260,4 @@ public sealed class EfSnapshotStore(SnapshotDbContext db) : ISnapshotStore
 
         return rows == 1;
     }
-
-    private static void Apply(SnapshotRecord record, Snapshot snapshot)
-    {
-        record.Machine = snapshot.Machine;
-        record.Version = snapshot.Version;
-        record.State = snapshot.State;
-        record.Context = snapshot.Context.ToJsonString();
-        record.ConcurrencyToken = Guid.NewGuid();
-        record.UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
-    private async Task<bool> TrySave(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await db.SaveChangesAsync(cancellationToken);
-            return true;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            // A stale optimistic write — someone else changed the row since we read it.
-            return false;
-        }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
-        {
-            // A concurrent create of the same (user_key, id) — the other writer got there first.
-            return false;
-        }
-        // Any other DbUpdateException (a NOT NULL / check-constraint violation from a real bug) is NOT
-        // swallowed — it must surface, not masquerade as a benign "reload and retry" conflict.
-    }
-
-    internal static bool IsUniqueViolation(DbUpdateException ex) =>
-        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 }

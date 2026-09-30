@@ -106,8 +106,16 @@ public sealed class SnapshotMachine<TState, TTrigger>
         }
         catch (Exception ex)
         {
-            // Totality backstop: the engine must never surface an exception to a resolver.
-            return new AdvanceResult.Rejected(RejectionReasons.InternalError, ex.Message);
+            // Totality backstop: the engine must never surface an exception to a resolver. A guard, reducer or
+            // validator is the author's code and its exception text can carry anything, so the detail is fixed
+            // and the exception rides along for the server's log only.
+            return new AdvanceResult.Rejected(
+                RejectionReasons.InternalError,
+                "The transition failed with an unexpected error."
+            )
+            {
+                Exception = ex,
+            };
         }
     }
 
@@ -127,7 +135,14 @@ public sealed class SnapshotMachine<TState, TTrigger>
         }
         catch (Exception ex)
         {
-            return new RehydrationResult.Error(RehydrationErrorCodes.Malformed, ex.Message);
+            // A migration is the author's code too: the message is fixed and the exception kept for the log.
+            return new RehydrationResult.Error(
+                RehydrationErrorCodes.Malformed,
+                "The snapshot could not be read."
+            )
+            {
+                Exception = ex,
+            };
         }
     }
 

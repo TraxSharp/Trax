@@ -12,6 +12,9 @@ internal static class DefaultTraxClientEventProjection
             TrainName: message.TrainName,
             EventType: message.EventType,
             Timestamp: message.Timestamp,
-            FailureReason: message.FailureReason
+            // A failure reason can hold whatever the failing code put in its exception message, and
+            // every connected client receives every train's events. A host that wants it on the wire
+            // chooses that with WithProjection.
+            FailureReason: null
         );
 }

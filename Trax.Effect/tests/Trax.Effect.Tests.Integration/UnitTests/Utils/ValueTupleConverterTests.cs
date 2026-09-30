@@ -90,14 +90,78 @@ public class ValueTupleConverterTests
     }
 
     [Test]
-    public void Deserialize_PrimitiveValues_HitsReadConversionPath()
+    public void Deserialize_PrimitiveValues_ReadsWhatSerializeWrote()
     {
-        // System.Text.Json deserializes the inner object[] elements as JsonElement,
-        // which the converter's Convert.ChangeType call cannot handle. We assert the
-        // exception path so this test stays accurate to the current behavior while
-        // still exercising the Read body.
-        var act = () => JsonSerializer.Deserialize<(int, int)>("[1, 2]", _options);
+        var json = JsonSerializer.Serialize((1, "hello"), _options);
 
-        act.Should().Throw<InvalidCastException>();
+        var tuple = JsonSerializer.Deserialize<(int, string)>(json, _options);
+
+        tuple.Should().Be((1, "hello"));
     }
+
+    [Test]
+    public void Deserialize_MixedNumericTypes_ConvertsEachElementToItsFieldType()
+    {
+        var tuple = JsonSerializer.Deserialize<(int, long, double, decimal)>(
+            "[1, 2, 3.5, 4.25]",
+            _options
+        );
+
+        tuple.Should().Be((1, 2L, 3.5, 4.25m));
+    }
+
+    [Test]
+    public void Deserialize_ComplexElements_RoundTrip()
+    {
+        var original = (new List<int> { 1, 2, 3 }, new Point(4, 5), (string?)null);
+        var json = JsonSerializer.Serialize(original, _options);
+
+        var tuple = JsonSerializer.Deserialize<(List<int>, Point, string?)>(json, _options);
+
+        tuple.Item1.Should().Equal(1, 2, 3);
+        tuple.Item2.Should().Be(new Point(4, 5));
+        tuple.Item3.Should().BeNull();
+    }
+
+    [Test]
+    public void Deserialize_WithTheDefaultTraxOptions_ReadsWhatSerializeWrote()
+    {
+        // The default options preserve references, so the array is written inside a
+        // {"$id": …, "$values": […]} wrapper. A stored train input is written this way.
+        var options = TraxJsonSerializationOptions.Default;
+        var json = JsonSerializer.Serialize((7, "seven"), options);
+
+        var tuple = JsonSerializer.Deserialize<(int, string)>(json, options);
+
+        tuple.Should().Be((7, "seven"));
+    }
+
+    [Test]
+    public void Deserialize_NotAnArray_Throws()
+    {
+        var act = () => JsonSerializer.Deserialize<(int, int)>("42", _options);
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Test]
+    public void Deserialize_AnArrayInsideAPreservedReferenceWrapper_ReadsTheArray()
+    {
+        var tuple = JsonSerializer.Deserialize<(int, string)>(
+            """{"$id":"1","$values":[7,"seven"]}""",
+            _options
+        );
+
+        tuple.Should().Be((7, "seven"));
+    }
+
+    [Test]
+    public void Deserialize_AnObjectWithoutValues_Throws()
+    {
+        var act = () => JsonSerializer.Deserialize<(int, int)>("""{"a":1,"b":2}""", _options);
+
+        act.Should().Throw<JsonException>().WithMessage("*Expected a JSON array*Object*");
+    }
+
+    public sealed record Point(int X, int Y);
 }

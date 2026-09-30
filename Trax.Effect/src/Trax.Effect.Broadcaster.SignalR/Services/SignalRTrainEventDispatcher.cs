@@ -92,8 +92,14 @@ internal sealed class SignalRTrainEventDispatcher
     public Task OnStateChanged(Metadata metadata, CancellationToken ct) =>
         DispatchAsync(BuildMessage(metadata, "StateChanged"), ct);
 
+    /// <summary>
+    /// Queues an event received from another process. A data-change signal rides the same
+    /// transport but is not a train event: it names no train, so it is not sent to clients.
+    /// </summary>
     public Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct) =>
-        DispatchAsync(message, ct);
+        message.EventType == TrainLifecycleEventMessage.DataChangedEventType
+            ? Task.CompletedTask
+            : DispatchAsync(message, ct);
 
     /// <summary>
     /// Queues the event for the background sender and returns without waiting for delivery.
@@ -235,5 +241,8 @@ internal sealed class SignalRTrainEventDispatcher
             Output: metadata.Output,
             HostName: metadata.HostName,
             HostEnvironment: metadata.HostEnvironment
-        );
+        )
+        {
+            FailureException = metadata.FailureException,
+        };
 }

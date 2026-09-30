@@ -24,10 +24,19 @@ public class OrderAutosaveTests
 
     private async Task<Guid> SeedPlaced(string user)
     {
+        // The soft path cannot create a committed draft, so it is seeded straight into the store.
         var id = Guid.NewGuid();
-        (await Service().Autosave(user, id, PlacedJson()))
+        (
+            await TestDb
+                .NewStore()
+                .Upsert(
+                    user,
+                    id,
+                    ((RehydrationResult.Ok)TestOrder.Machine.Rehydrate(PlacedJson())).Snapshot
+                )
+        )
             .Should()
-            .BeOfType<AutosaveResult.Saved>();
+            .BeTrue();
         return id;
     }
 

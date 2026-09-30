@@ -26,7 +26,8 @@ public static class SignalRBroadcasterExtensions
     /// or replace the default <c>TraxClientEvent</c> projection (<c>WithProjection</c>).
     /// </param>
     /// <remarks>
-    /// Map the hub endpoint with <c>app.MapTraxTrainEventHub("/hubs/trax-events")</c>
+    /// Map the hub endpoint with an authorization posture, e.g.
+    /// <c>app.MapTraxTrainEventHub(hub =&gt; hub.RequireAuthorization())</c>,
     /// and call <c>services.AddSignalR()</c> on the host. The dispatcher is registered
     /// as both an <see cref="Trax.Effect.Services.TrainLifecycleHook.ITrainLifecycleHook"/>
     /// (local-event path) and an <see cref="ITrainEventHandler"/> (remote-event path), so

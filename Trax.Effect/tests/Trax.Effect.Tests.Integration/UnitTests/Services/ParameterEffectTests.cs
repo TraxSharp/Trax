@@ -38,12 +38,14 @@ public class ParameterEffectTests
         int? maxParameterBytes = null
     )
     {
+        // Without a ceiling argument the effect keeps the configuration's default.
         var config = new ParameterEffectConfiguration
         {
             SaveInputs = saveInputs,
             SaveOutputs = saveOutputs,
-            MaxParameterBytes = maxParameterBytes,
         };
+        if (maxParameterBytes is not null)
+            config.MaxParameterBytes = maxParameterBytes;
         return new ParameterEffect(new JsonSerializerOptions(), config);
     }
 
@@ -298,6 +300,102 @@ public class ParameterEffectTests
     private sealed class CyclicNode
     {
         public CyclicNode? Self { get; set; }
+    }
+
+    [Test]
+    public async Task Track_OutputWithAThrowingGetter_FallsBackToPlaceholderJson()
+    {
+        var effect = NewEffect();
+        var meta = NewMetadata();
+        meta.Output = null;
+        meta.SetOutputObject(new ThrowingGetter());
+
+        var track = async () => await effect.Track(meta);
+
+        await track
+            .Should()
+            .NotThrowAsync("a getter's exception is a recording problem, not a failed run");
+        ShouldBeUnserializablePlaceholder(meta.Output, nameof(InvalidOperationException));
+    }
+
+    [Test]
+    public async Task Track_InputWithAThrowingGetter_FallsBackToPlaceholderJson()
+    {
+        var effect = NewEffect();
+        var meta = NewMetadata(input: new ThrowingGetter());
+
+        var track = async () => await effect.Track(meta);
+
+        await track.Should().NotThrowAsync();
+        ShouldBeUnserializablePlaceholder(meta.Input, nameof(InvalidOperationException));
+    }
+
+    [Test]
+    public async Task Update_InputWithAThrowingGetter_FallsBackToPlaceholderJson()
+    {
+        // Junction progress calls Update before and after every junction, so an input that
+        // cannot be serialized must not fail each of those calls.
+        var effect = NewEffect();
+        var meta = NewMetadata(input: new ThrowingGetter());
+        await effect.Track(meta);
+
+        var update = async () => await effect.Update(meta);
+
+        await update.Should().NotThrowAsync();
+        ShouldBeUnserializablePlaceholder(meta.Input, nameof(InvalidOperationException));
+    }
+
+    [Test]
+    public async Task Track_OutputWithCollidingPropertyNames_FallsBackToPlaceholderJson()
+    {
+        // System.Text.Json rejects the contract itself with an InvalidOperationException.
+        var effect = NewEffect();
+        var meta = NewMetadata();
+        meta.Output = null;
+        meta.SetOutputObject(new CollidingNames());
+
+        var track = async () => await effect.Track(meta);
+
+        await track.Should().NotThrowAsync();
+        ShouldBeUnserializablePlaceholder(meta.Output, nameof(InvalidOperationException));
+    }
+
+    [Test]
+    public async Task SaveChanges_OutputWithCollidingPropertyNames_FallsBackToPlaceholderJson()
+    {
+        var effect = NewEffect();
+        var meta = NewMetadata();
+        await effect.Track(meta);
+        meta.SetOutputObject(new CollidingNames());
+
+        var save = async () => await effect.SaveChanges(CancellationToken.None);
+
+        await save.Should().NotThrowAsync();
+        ShouldBeUnserializablePlaceholder(meta.Output, nameof(InvalidOperationException));
+    }
+
+    private static void ShouldBeUnserializablePlaceholder(string? json, string errorType)
+    {
+        json.Should().NotBeNull();
+        using var document = JsonDocument.Parse(json!);
+        document.RootElement.GetProperty("_unserializable").GetBoolean().Should().BeTrue();
+        document.RootElement.GetProperty("_error").GetString().Should().Be(errorType);
+    }
+
+    private sealed class ThrowingGetter
+    {
+        public string Name { get; set; } = "x";
+
+        public string Broken => throw new InvalidOperationException("getter failed");
+    }
+
+    private sealed class CollidingNames
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("value")]
+        public int First { get; set; } = 1;
+
+        [System.Text.Json.Serialization.JsonPropertyName("value")]
+        public int Second { get; set; } = 2;
     }
 
     [Test]
@@ -684,6 +782,37 @@ public class ParameterEffectTests
     #endregion
 
     #region Size ceiling (Feature B)
+
+    [Test]
+    public void MaxParameterBytes_DefaultsToOneMebibyte()
+    {
+        new ParameterEffectConfiguration()
+            .MaxParameterBytes.Should()
+            .Be(1024 * 1024, "an unconfigured host must not store parameters of any size");
+    }
+
+    [Test]
+    public async Task Track_DefaultConfiguration_OversizedOutput_ReturnsTruncatedPlaceholder()
+    {
+        var effect = NewEffect();
+        var meta = NewMetadata(output: new { Blob = new string('x', 2 * 1024 * 1024) });
+
+        await effect.Track(meta);
+
+        meta.Output.Should().Be(TraxBoundedJson.TruncatedPlaceholder(1024 * 1024));
+    }
+
+    [Test]
+    public async Task Track_MaxParameterBytesSetToNull_StoresTheWholeOutput()
+    {
+        var effect = NewEffect(new ParameterEffectConfiguration { MaxParameterBytes = null });
+        var blob = new string('x', 2 * 1024 * 1024);
+        var meta = NewMetadata(output: new { Blob = blob });
+
+        await effect.Track(meta);
+
+        meta.Output.Should().Contain(blob, "null is the explicit opt-out from the ceiling");
+    }
 
     [Test]
     public async Task Track_OutputUnderCap_SerializesFully()

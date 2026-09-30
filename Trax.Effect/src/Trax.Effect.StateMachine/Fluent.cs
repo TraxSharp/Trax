@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Trax.Effect.StateMachine;
 
@@ -45,7 +46,12 @@ public interface IMachineBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
-    /// <summary>The machine's stable id, written into every snapshot. Required.</summary>
+    /// <summary>
+    /// The machine's stable id, written into every snapshot. Required. It must be kebab-case: lowercase letters
+    /// and digits in hyphen-separated words, starting with a letter (<c>checkout</c>, <c>turnstile-two</c>),
+    /// because it becomes a file name, a module name and a key segment in every generated artifact.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="id"/> is null or not kebab-case.</exception>
     IMachineBuilder<TState, TTrigger> Id(string id);
 
     /// <summary>The definition version (drives migration). Defaults to 1.</summary>
@@ -196,6 +202,7 @@ public interface ITransitionBuilder<TState, TTrigger>
     /// Bind the one irreversible effect to this transition. It runs exactly-once (claim before the effect,
     /// lease + fence, crash-retry replays) and its receipt is available to the reducer as
     /// <c>input["receipt"]</c>. The effect implementation is resolved from DI by <typeparamref name="TEffect"/>.
+    /// A machine binds at most one effect: <see cref="MachineBuilder{TState,TTrigger}.Build"/> refuses a second.
     /// </summary>
     ITransitionBuilder<TState, TTrigger> RunsOnce<TEffect>(string? keyPrefix = null);
 
@@ -209,7 +216,7 @@ public interface ITransitionBuilder<TState, TTrigger>
 /// declared here, on the transition it belongs to, and nothing leaks into the composition root. The result
 /// is the same <see cref="MachineDefinition{TState,TTrigger}"/> the engine already interprets.
 /// </summary>
-public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, TTrigger>
+public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
@@ -239,9 +246,20 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Id(string id)
     {
+        if (id is null || !KebabCaseId().IsMatch(id))
+            throw new ArgumentException(
+                $"The machine id '{id}' is not kebab-case. Use lowercase letters and digits in hyphen-separated "
+                    + "words, starting with a letter, e.g. `.Id(\"checkout\")` or `.Id(\"turnstile-two\")`.",
+                nameof(id)
+            );
         _id = id;
         return this;
     }
+
+    // The same pattern the `trax machine` CLI enforces on the ids it generates from, so every id a machine can
+    // be built with is one the toolchain can emit.
+    [GeneratedRegex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
+    private static partial Regex KebabCaseId();
 
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Version(int version)
@@ -301,6 +319,10 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
     }
 
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The machine has no id or no start state, names a custom rule or reduction with no handler bound, or binds
+    /// more than one effect with <c>RunsOnce</c>.
+    /// </exception>
     public BuiltMachine<TState, TTrigger> Build()
     {
         if (_id is null)
@@ -313,6 +335,13 @@ public sealed class MachineBuilder<TState, TTrigger> : IMachineBuilder<TState, T
             );
 
         RefuseUnboundCustomNames();
+
+        // The persistence layer runs one bound effect per machine; a second would be declared and never run.
+        if (_effects.Count > 1)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' binds {_effects.Count} effects with RunsOnce, but a machine runs exactly one "
+                    + "irreversible effect. Keep RunsOnce on the one transition that performs it."
+            );
 
         var definition = new MachineDefinition<TState, TTrigger>
         {

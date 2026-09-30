@@ -20,7 +20,11 @@ public abstract record LoadResult
     /// <summary>A stored row exists but failed rehydration; the row is left untouched.</summary>
     /// <param name="Code">A rehydration error code, one of <see cref="RehydrationErrorCodes"/>.</param>
     /// <param name="Message">A human-readable explanation of what failed validation.</param>
-    public sealed record Invalid(string Code, string Message) : LoadResult;
+    public sealed record Invalid(string Code, string Message) : LoadResult
+    {
+        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
+        internal Exception? Exception { get; init; }
+    }
 
     private LoadResult() { }
 }
@@ -36,10 +40,17 @@ public abstract record AutosaveResult
     /// <param name="Code">
     /// <c>too-large</c> (over <see cref="SnapshotLimits.MaxSnapshotBytes"/>), <c>draft-committed</c> (the stored
     /// draft is in a committed state and the save would move it anywhere but the same state or the initial
-    /// state), or a <see cref="RehydrationErrorCodes"/> value when the payload failed validation.
+    /// state), <c>state-reserved</c> (the save would create a draft in, or move one into, a committed state or
+    /// the target of an effect-bound transition, which only the effect runner reaches), <c>draft-unreadable</c>
+    /// (the stored draft fails rehydration, so only a reset to the initial state may overwrite it), or a
+    /// <see cref="RehydrationErrorCodes"/> value when the payload failed validation.
     /// </param>
     /// <param name="Message">A human-readable explanation of the refusal.</param>
-    public sealed record Rejected(string Code, string Message) : AutosaveResult;
+    public sealed record Rejected(string Code, string Message) : AutosaveResult
+    {
+        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
+        internal Exception? Exception { get; init; }
+    }
 
     /// <summary>The draft changed elsewhere between read and write — reload and retry.</summary>
     public sealed record Conflict : AutosaveResult;
@@ -60,11 +71,17 @@ public abstract record AdvanceOutcome
     /// <summary>The advance was refused and the stored draft is unchanged.</summary>
     /// <param name="Reason">
     /// A machine rejection reason (see <see cref="RejectionReasons"/>), or one of the service's own:
-    /// <c>request-id-reused</c>, <c>too-large</c>, <c>client-divergence</c>, or
-    /// <see cref="RehydrationErrorCodes.Malformed"/> when the resulting context could not be stored.
+    /// <c>effect-bound</c> (the trigger runs the machine's irreversible effect from this state, so only
+    /// <see cref="ISnapshotEffectRunner.Run"/> may fire it), <c>request-id-reused</c>, <c>too-large</c>,
+    /// <c>client-divergence</c>, or <see cref="RehydrationErrorCodes.Malformed"/> when the resulting context
+    /// could not be stored.
     /// </param>
     /// <param name="Detail">Extra context for the reason, such as the failing guard; null when there is none.</param>
-    public sealed record Rejected(string Reason, string? Detail) : AdvanceOutcome;
+    public sealed record Rejected(string Reason, string? Detail) : AdvanceOutcome
+    {
+        /// <summary>The exception behind an <c>internal-error</c>, kept for the server's log and never in <see cref="Detail"/>.</summary>
+        internal Exception? Exception { get; init; }
+    }
 
     /// <summary>No draft exists for this user and id, so there is nothing to advance.</summary>
     public sealed record NotFound : AdvanceOutcome;
@@ -72,7 +89,11 @@ public abstract record AdvanceOutcome
     /// <summary>The stored draft failed rehydration, so it could not be advanced; it is left untouched.</summary>
     /// <param name="Code">A rehydration error code, one of <see cref="RehydrationErrorCodes"/>.</param>
     /// <param name="Message">A human-readable explanation of what failed validation.</param>
-    public sealed record LoadError(string Code, string Message) : AdvanceOutcome;
+    public sealed record LoadError(string Code, string Message) : AdvanceOutcome
+    {
+        /// <summary>The exception behind an unexpected failure, kept for the server's log and never in <see cref="Message"/>.</summary>
+        internal Exception? Exception { get; init; }
+    }
 
     /// <summary>Another writer advanced this draft first — the client's view is stale.</summary>
     public sealed record Conflict : AdvanceOutcome;
@@ -89,7 +110,7 @@ public interface ISnapshotDraftService
 {
     /// <summary>
     /// Reads the caller's draft and rehydrates it, validating the stored JSON on the way out. A draft idle
-    /// past the configured TTL is deleted and reported as <see cref="LoadResult.NotFound"/>.
+    /// past the configured TTL is deleted, with its effect claims, and reported as <see cref="LoadResult.NotFound"/>.
     /// </summary>
     /// <param name="userKey">The owner of the draft; drafts are always scoped to one user.</param>
     /// <param name="id">The draft's id.</param>
@@ -98,10 +119,14 @@ public interface ISnapshotDraftService
 
     /// <summary>
     /// The soft path: validates a client-provided snapshot and persists it as-is. Invalid or oversized
-    /// data is never stored. When the machine declares committed states, a save that would move a
+    /// data is never stored. The soft path never creates a committed state: a save that would create a draft
+    /// in, or move one into, a committed state or an effect-bound transition's target is rejected as
+    /// <c>state-reserved</c> unless the stored draft is already in that state. A save that would move a
     /// committed draft anywhere but its own state or the initial state is rejected as
-    /// <c>draft-committed</c>, and a concurrent write yields <c>Conflict</c>; otherwise it is last writer
-    /// wins. Saving a snapshot in the initial state releases the draft's effect claims.
+    /// <c>draft-committed</c>, a stored draft that fails rehydration may only be reset to the initial state
+    /// (anything else is <c>draft-unreadable</c>), and a concurrent write yields <c>Conflict</c>. A machine
+    /// with no committed states and no effect is last writer wins. Saving a snapshot in the initial state
+    /// releases the draft's effect claims.
     /// </summary>
     /// <param name="userKey">The owner of the draft.</param>
     /// <param name="id">The draft's id; the draft is created if it does not exist.</param>
@@ -117,7 +142,9 @@ public interface ISnapshotDraftService
     /// <summary>
     /// The authoritative path: reads the stored snapshot, fires <paramref name="trigger"/> on it, and
     /// persists the result under an optimistic-concurrency check, never trusting a client-computed state.
-    /// A lost race comes back as <c>Conflict</c>, not an exception.
+    /// A lost race comes back as <c>Conflict</c>, not an exception. A trigger bound to the machine's
+    /// irreversible effect from the stored state is refused as <c>effect-bound</c>: only the effect runner
+    /// (the send path) fires it, after the effect has run.
     /// </summary>
     /// <param name="userKey">The owner of the draft.</param>
     /// <param name="id">The draft's id; it must already exist.</param>
@@ -183,7 +210,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     IReadOnlyCollection<TState>? committedStates = null,
     IEffectClaimStore? effectClaims = null,
     Func<string, Guid, IEnumerable<string>>? effectKeysOnReset = null,
-    TimeSpan? draftTtl = null
+    TimeSpan? draftTtl = null,
+    IReadOnlyList<EffectBinding<TState, TTrigger>>? effects = null
 ) : ISnapshotDraftService
     where TState : struct, Enum
     where TTrigger : struct, Enum
@@ -194,6 +222,21 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     private readonly HashSet<string> _committedStates = BuildStateSet(committedStates);
     private readonly string _initialState = machine.Definition.InitialState.ToString()!;
 
+    // A draft belongs to one machine: every read and delete names it, so two machines' drafts under one id
+    // stay apart.
+    private readonly string _machineId = machine.Definition.Id;
+
+    // The (from, trigger) edges that run the machine's irreversible effect. Only the effect runner fires them,
+    // after the effect ran, so the receipt the reducer records is one the effect produced.
+    private readonly HashSet<(string From, string Trigger)> _effectEdges =
+        effects?.Select(e => (e.From.ToString()!, e.Trigger.ToString()!)).ToHashSet() ?? [];
+
+    // The states the soft path may not create or move a draft into: every committed state and every state an
+    // effect-bound transition lands in. A draft reaches them through the effect runner only.
+    private readonly HashSet<string> _reservedStates = BuildStateSet(committedStates)
+        .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
+        .ToHashSet();
+
     private static HashSet<string> BuildStateSet(IReadOnlyCollection<TState>? states)
     {
         var set = new HashSet<string>();
@@ -203,7 +246,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         return set;
     }
 
-    // On returning to the initial state (a reset / "start over"), release any effect claims for this
+    // On returning to the initial state (a reset / "start over") or deleting the draft, release any effect claims for this
     // instance so the NEXT logical effect can claim a clean key — otherwise the next effect would replay
     // the previous one's receipt and never run. Idempotent; a no-op when no effects are wired.
     private async Task ReleaseEffectClaims(
@@ -216,6 +259,13 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             return;
         foreach (var key in effectKeysOnReset(userKey, id))
             await effectClaims.Release(key, cancellationToken);
+    }
+
+    // Every draft deletion goes through here, so no deleted draft leaves its effect claims behind.
+    private async Task Delete(string userKey, Guid id, CancellationToken cancellationToken)
+    {
+        await store.Delete(userKey, _machineId, id, cancellationToken);
+        await ReleaseEffectClaims(userKey, id, cancellationToken);
     }
 
     private async Task<AutosaveResult> Persisted(
@@ -233,6 +283,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         return new AutosaveResult.Saved(snapshot);
     }
 
+    private static AutosaveResult.Rejected Reserved() =>
+        new(
+            "state-reserved",
+            "This step is completed by its action, not by saving the draft. Send it instead."
+        );
+
     /// <inheritdoc/>
     public string Serialize(Snapshot snapshot) => machine.Serialize(snapshot);
 
@@ -243,24 +299,29 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         CancellationToken cancellationToken = default
     )
     {
-        var stored = await store.Get(userKey, id, cancellationToken);
+        var stored = await store.Get(userKey, _machineId, id, cancellationToken);
         if (stored is null)
             return new LoadResult.NotFound();
 
         // Lazy on-read expiry: a draft idle past the TTL is treated as abandoned. Delete the row (so an
         // expired COMMITTED draft is cleared uniformly, not just ignored) and report NotFound, which every
         // caller already handles as "no draft, start fresh". A null TTL never expires. This is a resume-time
-        // decision only; Advance/Autosave never yank an active session's draft.
+        // decision only; Advance/Autosave never yank an active session's draft. Deleting a draft also releases
+        // its effect claims, exactly as a reset does: the next draft under the same id (a well-known id is
+        // allowed) is a new intent, and a kept claim would answer its effect with the old receipt.
         if (draftTtl is { } ttl && stored.UpdatedAt < DateTimeOffset.UtcNow - ttl)
         {
-            await store.Delete(userKey, id, cancellationToken);
+            await Delete(userKey, id, cancellationToken);
             return new LoadResult.NotFound();
         }
 
         return machine.Rehydrate(stored.Json) switch
         {
             RehydrationResult.Ok ok => new LoadResult.Loaded(ok.Snapshot),
-            RehydrationResult.Error error => new LoadResult.Invalid(error.Code, error.Message),
+            RehydrationResult.Error error => new LoadResult.Invalid(error.Code, error.Message)
+            {
+                Exception = error.Exception,
+            },
             _ => new LoadResult.Invalid(
                 RehydrationErrorCodes.Malformed,
                 "Unknown rehydration result."
@@ -287,24 +348,40 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         {
             case RehydrationResult.Ok ok:
                 // Fast path: nothing to protect => blind last-writer-wins autosave.
-                if (_committedStates.Count == 0)
+                if (_reservedStates.Count == 0)
                 {
                     var upserted = await store.Upsert(userKey, id, ok.Snapshot, cancellationToken);
                     return await Persisted(upserted, userKey, id, ok.Snapshot, cancellationToken);
                 }
 
-                // Guarded path: a soft save must not resurrect a COMMITTED draft (e.g. Paid -> Review) and
-                // let an irreversible action happen again. The only committed -> X a soft save may make is a
-                // reset to the initial state or a same-state update.
-                var stored = await store.Get(userKey, id, cancellationToken);
+                // Guarded path. A soft save never creates a committed state: it may not create a draft in, or
+                // move one into, a committed state or an effect's target, because only the effect runner puts a
+                // draft there. It may not resurrect a COMMITTED draft (e.g. Paid -> Review) and let an
+                // irreversible action happen again either: the only committed -> X a soft save may make is a reset
+                // to the initial state or a same-state update.
+                var stored = await store.Get(userKey, _machineId, id, cancellationToken);
+                var entering = _reservedStates.Contains(ok.Snapshot.State);
                 if (stored is null)
                 {
+                    if (entering)
+                        return Reserved();
                     var inserted = await store.Upsert(userKey, id, ok.Snapshot, cancellationToken);
                     return await Persisted(inserted, userKey, id, ok.Snapshot, cancellationToken);
                 }
-                if (
-                    machine.Rehydrate(stored.Json) is RehydrationResult.Ok current
-                    && _committedStates.Contains(current.Snapshot.State)
+
+                // A stored draft that cannot be read may be committed, so nothing but a reset overwrites it.
+                if (machine.Rehydrate(stored.Json) is not RehydrationResult.Ok current)
+                {
+                    if (ok.Snapshot.State != _initialState)
+                        return new AutosaveResult.Rejected(
+                            "draft-unreadable",
+                            "The saved draft can't be read, so it can only be started over."
+                        );
+                }
+                else if (entering && ok.Snapshot.State != current.Snapshot.State)
+                    return Reserved();
+                else if (
+                    _committedStates.Contains(current.Snapshot.State)
                     && ok.Snapshot.State != current.Snapshot.State
                     && ok.Snapshot.State != _initialState
                 )
@@ -326,7 +403,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 return await Persisted(wrote, userKey, id, ok.Snapshot, cancellationToken);
 
             case RehydrationResult.Error error:
-                return new AutosaveResult.Rejected(error.Code, error.Message);
+                return new AutosaveResult.Rejected(error.Code, error.Message)
+                {
+                    Exception = error.Exception,
+                };
             default:
                 return new AutosaveResult.Rejected(
                     RehydrationErrorCodes.Malformed,
@@ -353,7 +433,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     ) => Advance(userKey, id, trigger, input, requestId, clientResult: null, cancellationToken);
 
     /// <inheritdoc cref="ISnapshotDraftService.Advance(string, Guid, string, JsonNode?, string?, string?, CancellationToken)"/>
-    public async Task<AdvanceOutcome> Advance(
+    public Task<AdvanceOutcome> Advance(
         string userKey,
         Guid id,
         string trigger,
@@ -361,9 +441,54 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         string? requestId,
         string? clientResult,
         CancellationToken cancellationToken = default
+    ) =>
+        AdvanceCore(
+            userKey,
+            id,
+            trigger,
+            input,
+            requestId,
+            clientResult,
+            effectRan: false,
+            cancellationToken
+        );
+
+    /// <summary>
+    /// The effect runner's advance: fires <paramref name="trigger"/> even when it is bound to the machine's
+    /// effect, because the runner calls it only after the effect has run and carries the effect's receipt in
+    /// <paramref name="input"/>. Every other check of the public advance still applies.
+    /// </summary>
+    internal Task<AdvanceOutcome> AdvanceAfterEffect(
+        string userKey,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        string? requestId,
+        CancellationToken cancellationToken
+    ) =>
+        AdvanceCore(
+            userKey,
+            id,
+            trigger,
+            input,
+            requestId,
+            clientResult: null,
+            effectRan: true,
+            cancellationToken
+        );
+
+    private async Task<AdvanceOutcome> AdvanceCore(
+        string userKey,
+        Guid id,
+        string trigger,
+        JsonNode? input,
+        string? requestId,
+        string? clientResult,
+        bool effectRan,
+        CancellationToken cancellationToken
     )
     {
-        var stored = await store.Get(userKey, id, cancellationToken);
+        var stored = await store.Get(userKey, _machineId, id, cancellationToken);
         if (stored is null)
             return new AdvanceOutcome.NotFound();
 
@@ -374,13 +499,24 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 current = ok.Snapshot;
                 break;
             case RehydrationResult.Error error:
-                return new AdvanceOutcome.LoadError(error.Code, error.Message);
+                return new AdvanceOutcome.LoadError(error.Code, error.Message)
+                {
+                    Exception = error.Exception,
+                };
             default:
                 return new AdvanceOutcome.LoadError(
                     RehydrationErrorCodes.Malformed,
                     "Unknown rehydration result."
                 );
         }
+
+        // An effect-bound edge records the effect's receipt. Fired from here, the receipt would be whatever the
+        // caller put in the input and the effect would never have run, so only the effect runner fires it.
+        if (!effectRan && _effectEdges.Contains((current.State, trigger)))
+            return new AdvanceOutcome.Rejected(
+                "effect-bound",
+                "This action runs an irreversible effect. Send it instead of advancing."
+            );
 
         switch (Retry(stored.LastRequest, requestId, trigger, current.State))
         {
@@ -399,7 +535,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         switch (machine.Advance(current, trigger, input))
         {
             case AdvanceResult.Rejected rejected:
-                return new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail);
+                return new AdvanceOutcome.Rejected(rejected.Reason, rejected.Detail)
+                {
+                    Exception = rejected.Exception,
+                };
             case AdvanceResult.Transitioned transitioned:
                 next = transitioned.Snapshot;
                 break;
@@ -448,7 +587,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         string currentState,
         CancellationToken cancellationToken
     ) =>
-        await store.Get(userKey, id, cancellationToken) is { } stored
+        await store.Get(userKey, _machineId, id, cancellationToken) is { } stored
         && Retry(stored.LastRequest, requestId, trigger, currentState) == RetryKind.Reused;
 
     private enum RetryKind

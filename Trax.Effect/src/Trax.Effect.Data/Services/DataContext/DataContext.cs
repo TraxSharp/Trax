@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Models.Metadata;
 using Trax.Effect.Data.Services.DataContextTransaction;
+using Trax.Effect.Enums;
 using Trax.Effect.Models;
 using Trax.Effect.Models.BackgroundJob;
 using Trax.Effect.Models.DeadLetter;
@@ -12,6 +13,7 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Services.EffectProvider;
 
 namespace Trax.Effect.Data.Services.DataContext;
 
@@ -38,7 +40,8 @@ namespace Trax.Effect.Data.Services.DataContext;
 /// </remarks>
 public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     : DbContext(options),
-        IDataContext
+        IDataContext,
+        IPendingRunClaim
     where TDbContext : DbContext
 {
     #region Tables
@@ -118,6 +121,16 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </summary>
     public DbSet<Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DbSet for the state-machine drafts Trax.Effect.StateMachine.Persistence stores.
+    /// </summary>
+    public DbSet<Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
+
+    /// <summary>
+    /// Gets or sets the DbSet for the exactly-once effect claims Trax.Effect.StateMachine.Persistence records.
+    /// </summary>
+    public DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
+
     #endregion
 
     /// <summary>
@@ -140,14 +153,16 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
 
         modelBuilder.ApplyEntityOnModelCreating();
 
-        // Persisted-operation and runner-nonce entities use string primary keys,
-        // so they do not implement IModel and are not discovered by
-        // ApplyEntityOnModelCreating. Map them explicitly.
+        // Persisted-operation, runner-nonce and state-machine entities use string or
+        // composite primary keys, so they do not implement IModel and are not discovered
+        // by ApplyEntityOnModelCreating. Map them explicitly.
         Models.PersistedOperation.PersistentPersistedOperation.OnModelCreating(modelBuilder);
         Models.PersistedOperationHistory.PersistentPersistedOperationHistory.OnModelCreating(
             modelBuilder
         );
         Models.RunnerNonce.PersistentRunnerNonce.OnModelCreating(modelBuilder);
+        Models.SnapshotDraft.PersistentSnapshotDraft.OnModelCreating(modelBuilder);
+        Models.EffectClaim.PersistentEffectClaim.OnModelCreating(modelBuilder);
     }
 
     /// <summary>
@@ -193,12 +208,12 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     ///
     /// The transaction must be explicitly committed or rolled back using the
     /// CommitTransaction or RollbackTransaction methods.
+    ///
+    /// On a provider with no transactions of its own (InMemory) the level has nothing to apply to
+    /// and is ignored.
     /// </remarks>
-    public async Task<IDataContextTransaction> BeginTransaction(IsolationLevel isolationLevel) =>
-        new DataContextTransaction.DataContextTransaction(
-            this,
-            await Database.BeginTransactionAsync()
-        );
+    public Task<IDataContextTransaction> BeginTransaction(IsolationLevel isolationLevel) =>
+        BeginTransaction(isolationLevel, CancellationToken.None);
 
     /// <inheritdoc />
     public async Task<IDataContextTransaction> BeginTransaction(
@@ -207,7 +222,9 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     ) =>
         new DataContextTransaction.DataContextTransaction(
             this,
-            await Database.BeginTransactionAsync(cancellationToken)
+            Database.IsRelational()
+                ? await Database.BeginTransactionAsync(isolationLevel, cancellationToken)
+                : await Database.BeginTransactionAsync(cancellationToken)
         );
 
     /// <summary>
@@ -297,6 +314,47 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         // automatically via snapshot comparison.
         if (entry.State == EntityState.Detached)
             entry.State = model.Id > 0 ? EntityState.Modified : EntityState.Added;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One conditional <c>UPDATE ... WHERE id = @id AND train_state = 'pending'</c>, committed on
+    /// its own, so two contexts racing for one row cannot both win. When it updates nothing, the
+    /// row is looked up: a row that exists was started by someone else, and a row that does not
+    /// exist has not been saved yet, so it is this run's own. The in-memory provider cannot run a
+    /// set-based update; it reads the stored state instead, which is enough for the tests it exists
+    /// for but is not atomic.
+    /// </remarks>
+    public async Task<bool> TryClaimPendingRun(
+        Metadata metadata,
+        CancellationToken cancellationToken
+    )
+    {
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory")
+            return !await Metadatas
+                .AsNoTracking()
+                .AnyAsync(
+                    m => m.Id == metadata.Id && m.TrainState != TrainState.Pending,
+                    cancellationToken
+                );
+
+        // A row that was never saved has no id yet, and nothing to claim.
+        if (metadata.Id <= 0)
+            return true;
+
+        var claimed = await Metadatas
+            .Where(m => m.Id == metadata.Id && m.TrainState == TrainState.Pending)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(m => m.TrainState, TrainState.InProgress),
+                cancellationToken
+            );
+
+        if (claimed == 1)
+            return true;
+
+        return !await Metadatas
+            .AsNoTracking()
+            .AnyAsync(m => m.Id == metadata.Id, cancellationToken);
     }
 
     /// <summary>

@@ -70,18 +70,26 @@ public class Manifest : IModel
     public string? Properties { get; set; }
 
     /// <summary>
-    /// The type named by <see cref="PropertyTypeName"/>, found by searching the loaded assemblies;
+    /// The type named by <see cref="PropertyTypeName"/>, found among the assemblies already loaded;
     /// <see cref="Unit"/> when there is none. Not mapped.
     /// </summary>
-    /// <exception cref="TypeLoadException">No loaded assembly defines the named type.</exception>
+    /// <remarks>
+    /// The stored name is data, so no assembly is loaded to find it and only a type implementing
+    /// <see cref="IManifestProperties"/> is returned. A caller that knows the train's input type
+    /// from its own registry should pass that to <see cref="GetProperties(Type)"/> instead.
+    /// </remarks>
+    /// <exception cref="TypeLoadException">
+    /// No loaded assembly defines the named type, or it does not implement
+    /// <see cref="IManifestProperties"/>.
+    /// </exception>
     [NotMapped]
     [JsonIgnore]
     public Type PropertyType =>
-        PropertyTypeName == null ? typeof(Unit) : ResolveType(PropertyTypeName);
+        PropertyTypeName == null ? typeof(Unit) : ResolvePropertyType(PropertyTypeName);
 
     /// <summary>
-    /// The train type named by <see cref="Name"/>, found by searching the loaded assemblies. Not
-    /// mapped.
+    /// The train type named by <see cref="Name"/>, found among the assemblies already loaded; no
+    /// assembly is loaded to find it. Not mapped.
     /// </summary>
     /// <exception cref="TypeLoadException">No loaded assembly defines the named type.</exception>
     [NotMapped]
@@ -419,19 +427,25 @@ public class Manifest : IModel
     /// <summary>
     /// Deserializes <see cref="Properties"/> as <paramref name="propertyType"/>.
     /// </summary>
-    /// <param name="propertyType">Must equal the stored <see cref="PropertyType"/>.</param>
+    /// <param name="propertyType">
+    /// The type to read the properties as, which the caller resolved itself (from its train
+    /// registry, say). Its FullName must equal the stored <see cref="PropertyTypeName"/>; the stored
+    /// name is compared, never loaded.
+    /// </param>
     /// <exception cref="Exception">
     /// <paramref name="propertyType"/> is not the stored type, or <see cref="Properties"/> is
     /// empty or deserializes to null.
     /// </exception>
     public object GetProperties(Type propertyType)
     {
-        if (propertyType != PropertyType)
-            throw new Exception($"Passed type ({propertyType}) is not saved type ({PropertyType})");
+        if (propertyType.FullName != PropertyTypeName)
+            throw new Exception(
+                $"Passed type ({propertyType}) is not saved type ({PropertyTypeName})"
+            );
 
         if (string.IsNullOrEmpty(Properties))
             throw new Exception(
-                $"Cannot deserialize null property object with type ({PropertyType})"
+                $"Cannot deserialize null property object with type ({PropertyTypeName})"
             );
 
         return JsonSerializer.Deserialize(
@@ -440,13 +454,21 @@ public class Manifest : IModel
                 TraxJsonSerializationOptions.ManifestProperties
             )
             ?? throw new Exception(
-                $"Could not deserialize property object ({Properties}) with type ({PropertyType})"
+                $"Could not deserialize property object ({Properties}) with type ({PropertyTypeName})"
             );
     }
 
     /// <summary>
-    /// Deserializes the Properties JSON using the type resolved from <see cref="PropertyTypeName"/>.
+    /// Deserializes <see cref="Properties"/> as the type <see cref="PropertyType"/> resolves.
     /// </summary>
+    /// <remarks>
+    /// Prefer <see cref="GetProperties(Type)"/> with the input type from the caller's own train
+    /// registry: that never resolves a type from the stored name at all.
+    /// </remarks>
+    /// <exception cref="TypeLoadException">
+    /// The stored name resolves to no loaded type, or to one that does not implement
+    /// <see cref="IManifestProperties"/>.
+    /// </exception>
     public object GetPropertiesUntyped()
     {
         if (string.IsNullOrEmpty(Properties))
@@ -487,19 +509,39 @@ public class Manifest : IModel
     public Manifest() { }
 
     /// <summary>
-    /// Resolves a type by its full name, searching all loaded assemblies.
+    /// Resolves a stored properties type name, refusing anything that is not
+    /// <see cref="IManifestProperties"/>.
+    /// </summary>
+    private static Type ResolvePropertyType(string typeName)
+    {
+        var type = ResolveType(typeName);
+        if (!typeof(IManifestProperties).IsAssignableFrom(type))
+            throw new TypeLoadException(
+                $"Stored type ({typeName}) does not implement {nameof(IManifestProperties)}"
+            );
+        return type;
+    }
+
+    /// <summary>
+    /// Finds a type by its FullName among the assemblies already loaded. The name comes from a
+    /// database row, so it is never handed to <see cref="Type.GetType(string)"/>, which loads the
+    /// assembly an assembly-qualified name points at.
     /// </summary>
     private static Type ResolveType(string typeName)
     {
-        // First try the standard Type.GetType which works for types in the current assembly and mscorlib
-        var type = Type.GetType(typeName);
-        if (type != null)
-            return type;
-
-        // Search through all loaded assemblies
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
-            type = assembly.GetType(typeName);
+            Type? type;
+            try
+            {
+                type = assembly.GetType(typeName, throwOnError: false);
+            }
+            catch (ArgumentException)
+            {
+                // GetType refuses an empty name with ArgumentException rather than returning null.
+                type = null;
+            }
+
             if (type != null)
                 return type;
         }

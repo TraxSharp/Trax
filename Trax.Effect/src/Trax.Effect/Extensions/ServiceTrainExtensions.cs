@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
 using Trax.Effect.Enums;
+using Trax.Effect.Exceptions;
 using Trax.Effect.Models.Host;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -36,15 +37,22 @@ internal static class ServiceTrainExtensions
             }
         );
 
-        return await serviceTrain.InitializeServiceTrain(metadata);
+        return await serviceTrain.InitializeServiceTrain(metadata, preCreated: false);
     }
 
     /// <summary>
     /// Initializes the train metadata in the database and sets the initial state.
     /// </summary>
+    /// <param name="serviceTrain">The train about to run.</param>
+    /// <param name="metadata">The run's row.</param>
+    /// <param name="preCreated">
+    /// Whether the row already exists in the store, created by whoever dispatched the run, in which
+    /// case the start is claimed there. False for a row this run has just created.
+    /// </param>
     internal static async Task<Unit> InitializeServiceTrain<TIn, TOut>(
         this ServiceTrain<TIn, TOut> serviceTrain,
-        Metadata metadata
+        Metadata metadata,
+        bool preCreated = true
     )
     {
         serviceTrain.EffectRunner.AssertLoaded();
@@ -58,12 +66,13 @@ internal static class ServiceTrainExtensions
         serviceTrain.Logger?.LogTrace("Initializing ({TrainName})", serviceTrain.TrainName);
         serviceTrain.Metadata = metadata;
 
-        return await serviceTrain.StartServiceTrain(metadata);
+        return await serviceTrain.StartServiceTrain(metadata, preCreated);
     }
 
     internal static async Task<Unit> StartServiceTrain<TIn, TOut>(
         this ServiceTrain<TIn, TOut> serviceTrain,
-        Metadata metadata
+        Metadata metadata,
+        bool preCreated
     )
     {
         serviceTrain.EffectRunner.AssertLoaded();
@@ -73,6 +82,18 @@ internal static class ServiceTrainExtensions
             throw new TrainException(
                 $"Cannot start a train with state ({metadata.TrainState}), must be Pending."
             );
+
+        // A row that already exists was created by whoever dispatched this run, and the same row
+        // can be handed to two executions (an at-least-once queue, a retried dispatch, a job
+        // claimed twice). Each holds a copy that says Pending, so the check above passes for both;
+        // the store decides which one starts. A row this run created is its own; it is not
+        // claimed, and its Id cannot tell the two apart, since the in-memory provider assigns one
+        // on tracking.
+        if (
+            preCreated
+            && !await serviceTrain.EffectRunner.TryClaimPendingRun(metadata, CancellationToken.None)
+        )
+            throw new TrainAlreadyStartedException(metadata.Id, serviceTrain.TrainName);
 
         serviceTrain.Logger?.LogTrace(
             "Setting ({TrainName}) to In Progress.",
@@ -126,6 +147,8 @@ internal static class ServiceTrainExtensions
 
         if (failureReason != null)
         {
+            NameTheTrainCanonically(serviceTrain, failureReason);
+
             // Classify before recording, so the class lands on the metadata with the rest of the
             // failure and travels with the exception data if this run is reported somewhere else.
             // Only real failures are classified. A cancellation something asked for is not one; a
@@ -270,6 +293,29 @@ internal static class ServiceTrainExtensions
         }
 
         return failureClass;
+    }
+
+    /// <summary>
+    /// Makes the failure data a junction attached name this train the way its metadata row, the
+    /// registry and the dashboard do, by its canonical name.
+    /// </summary>
+    /// <remarks>
+    /// Trax.Core's junction records the train's class name, having no other; a failure raised
+    /// outside any junction is recorded here with the canonical name. Without this, one train
+    /// appeared under two names depending on where it failed. Only data recorded for this run is
+    /// renamed: a junction overwrites the data of a nested train's failure that passes through it,
+    /// so data carrying another run's external id did not come from this one.
+    /// </remarks>
+    private static void NameTheTrainCanonically<TIn, TOut>(
+        ServiceTrain<TIn, TOut> serviceTrain,
+        Exception failureReason
+    )
+    {
+        if (
+            failureReason.Data["TrainExceptionData"] is TrainExceptionData data
+            && data.TrainExternalId == serviceTrain.ExternalId
+        )
+            data.TrainName = serviceTrain.TrainName;
     }
 
     private static bool IsRebuiltFailure(Exception failure)

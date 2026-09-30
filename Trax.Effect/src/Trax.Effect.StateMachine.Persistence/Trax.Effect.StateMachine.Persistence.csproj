@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>Postgres-backed persistence for the Trax snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
+    <Description>Persistence for the Trax snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
     <AssemblyName>Trax.Effect.StateMachine.Persistence</AssemblyName>
   </PropertyGroup>
 
@@ -11,7 +11,7 @@
     <ProjectReference Include="../Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
     <!-- The generic mutation surface (ServiceTrain / Junction / [TraxMutation]) and AddStateMachines. -->
     <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
-    <!-- The provider-agnostic ITraxFeatureDbConfigurator seam that auto-registers the SnapshotDbContext. -->
+    <!-- IDataContext, whose SnapshotDrafts and EffectClaims the stores reach their tables through, and ISqlDialect. -->
     <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
 
@@ -20,7 +20,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 
   <ItemGroup>

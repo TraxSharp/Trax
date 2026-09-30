@@ -129,6 +129,48 @@ public class ManifestTests
         act.Should().Throw<Exception>().WithMessage("*Cannot deserialize null*");
     }
 
+    /// <summary>
+    /// The stored type name is data: a row can name any type. Only a manifest-properties type is
+    /// ever deserialized into, so a row naming something else is refused before any of it runs.
+    /// </summary>
+    [Test]
+    public void GetPropertiesUntyped_AStoredNameThatIsNotManifestProperties_IsRefused()
+    {
+        var m = NewManifest();
+        m.PropertyTypeName = typeof(System.Diagnostics.Process).FullName;
+        m.Properties = "{}";
+
+        Action act = () => m.GetPropertiesUntyped();
+
+        act.Should().Throw<TypeLoadException>().WithMessage("*IManifestProperties*");
+    }
+
+    /// <summary>
+    /// An assembly-qualified name makes <see cref="Type.GetType(string)"/> load that assembly from
+    /// disk. Trax writes a FullName, so only the assemblies already loaded are searched.
+    /// </summary>
+    [Test]
+    public void PropertyType_AnAssemblyQualifiedName_IsNotLoaded()
+    {
+        var m = NewManifest();
+        m.PropertyTypeName = typeof(TestProperties).AssemblyQualifiedName;
+
+        Func<Type> act = () => m.PropertyType;
+
+        act.Should().Throw<TypeLoadException>();
+    }
+
+    [Test]
+    public void GetProperties_MatchesTheStoredNameAgainstTheGivenType()
+    {
+        var m = NewManifest();
+        m.SetProperties(new TestProperties { Greeting = "hi", Count = 3 });
+
+        var restored = m.GetProperties(typeof(TestProperties));
+
+        ((TestProperties)restored).Count.Should().Be(3);
+    }
+
     #endregion
 
     #region Create / Type resolution
@@ -158,6 +200,24 @@ public class ManifestTests
         var m = new Manifest { Name = null! };
 
         m.NameType.Should().Be(typeof(LanguageExt.Unit));
+    }
+
+    [Test]
+    public void PropertyType_NoStoredName_ReturnsUnit()
+    {
+        var m = new Manifest { Name = typeof(SomeFakeTrain).FullName!, PropertyTypeName = null };
+
+        m.PropertyType.Should().Be(typeof(LanguageExt.Unit));
+    }
+
+    [Test]
+    public void NameType_AnEmptyName_IsNotFound()
+    {
+        var m = new Manifest { Name = "" };
+
+        Action act = () => _ = m.NameType;
+
+        act.Should().Throw<TypeLoadException>().WithMessage("Unable to find type*");
     }
 
     [Test]

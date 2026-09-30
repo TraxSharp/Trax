@@ -76,7 +76,9 @@ public class SignalRBroadcasterCompositionTests
                 .Configure(app =>
                 {
                     app.UseRouting();
-                    app.UseEndpoints(endpoints => endpoints.MapTraxTrainEventHub());
+                    app.UseEndpoints(endpoints =>
+                        endpoints.MapTraxTrainEventHub(hub => hub.AllowAnonymous())
+                    );
                 })
         );
 

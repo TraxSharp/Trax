@@ -26,6 +26,8 @@ public class PostgresMigrationTests
         "ix_metadata_manifest_failed",
         // 047: the runner prunes expired nonces by this, on every sweep.
         "ix_runner_nonce_expires_at",
+        // 050: a consumer's lookup of its runs by external id.
+        "ix_metadata_external_id",
     ];
 
     private static string GetConnectionString()
@@ -193,14 +195,217 @@ public class PostgresMigrationTests
     }
 
     /// <summary>
+    /// Hosts that start together against a fresh database each run the migration at registration.
+    /// Without a lock they ran the same DDL side by side and one of them crashed on an object the
+    /// other had just created.
+    /// </summary>
+    [Test]
+    public async Task Concurrent_migrations_of_an_empty_database_all_succeed()
+    {
+        await WithEmptyDatabase(async connectionString =>
+        {
+            var hosts = Enumerable
+                .Range(0, 4)
+                .Select(_ => Task.Run(() => DatabaseMigrator.Migrate(connectionString)));
+
+            var act = () => Task.WhenAll(hosts);
+
+            await act.Should()
+                .NotThrowAsync("the advisory lock makes the second host wait for the first");
+
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            var journaled = await ExternalIds(
+                connection,
+                "SELECT scriptname FROM trax.migrations ORDER BY scriptname;"
+            );
+            journaled.Should().OnlyHaveUniqueItems("each script is applied once");
+            journaled.Should().HaveCount(EmbeddedScripts().Count);
+        });
+    }
+
+    /// <summary>
+    /// The migrator holds its lock on one connection while the scripts run on another. A host whose
+    /// connection string caps the pool at one connection must still migrate: the migration's
+    /// connections cannot come from the host's pool.
+    /// </summary>
+    [Test]
+    public async Task A_connection_string_with_a_pool_of_one_still_migrates()
+    {
+        await WithEmptyDatabase(async connectionString =>
+        {
+            var pooledToOne = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                Pooling = true,
+                MaxPoolSize = 1,
+                Timeout = 5,
+            }.ConnectionString;
+
+            var act = () => DatabaseMigrator.Migrate(pooledToOne);
+
+            await act.Should().NotThrowAsync("the migration does not borrow from the host's pool");
+        });
+    }
+
+    /// <summary>
+    /// A script that stops partway is not journaled, and runs again from its first statement at the
+    /// next start. From 046 on every script has to survive that: this runs each one again over a
+    /// database that already has it, which is the harshest partial state there is.
+    /// </summary>
+    [Test]
+    public async Task Every_script_from_046_on_runs_again_over_its_own_result()
+    {
+        await WithEmptyDatabase(async connectionString =>
+        {
+            await DatabaseMigrator.Migrate(connectionString);
+
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            foreach (var (name, script) in EmbeddedScripts().Where(s => Number(s.Name) >= 46))
+            {
+                var statements = new PostgresqlConnectionManager(connectionString)
+                    .SplitScriptIntoCommands(script)
+                    .ToList();
+
+                foreach (var statement in statements)
+                {
+                    var act = () => Exec(connection, statement);
+                    await act.Should()
+                        .NotThrowAsync(
+                            $"{name} must be safe to run again, and this failed:\n{statement}"
+                        );
+                }
+            }
+        });
+    }
+
+    /// <summary>
     /// Creates a throwaway database migrated to 040, runs <paramref name="test"/> against it, and
     /// drops it.
     /// </summary>
-    private static async Task WithDatabaseMigratedTo040(Func<string, Task> test)
+    private static Task WithDatabaseMigratedTo040(Func<string, Task> test) =>
+        WithDatabaseMigratedTo(40, test);
+
+    /// <summary>
+    /// Creates a throwaway database migrated through script <paramref name="last"/>, runs
+    /// <paramref name="test"/> against it, and drops it.
+    /// </summary>
+    private static Task WithDatabaseMigratedTo(int last, Func<string, Task> test) =>
+        WithEmptyDatabase(async connectionString =>
+        {
+            await using (var setup = new NpgsqlConnection(connectionString))
+            {
+                await setup.OpenAsync();
+                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;");
+            }
+
+            var upTo = DeployChanges
+                .To.PostgresqlDatabase(connectionString)
+                .JournalToPostgresqlTable("trax", "migrations")
+                .WithScriptsEmbeddedInAssembly(
+                    typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly,
+                    name => MigrationNumber(name) <= last
+                )
+                .LogToNowhere()
+                .Build()
+                .PerformUpgrade();
+            upTo.Successful.Should().BeTrue(upTo.Error?.ToString());
+
+            await test(connectionString);
+        });
+
+    /// <summary>
+    /// A consumer correlating its records with runs looks them up by external id. Without an index
+    /// every lookup read the whole metadata table.
+    /// </summary>
+    [Test]
+    public async Task A_lookup_by_external_id_reads_an_index()
+    {
+        var connectionString = GetConnectionString();
+        await DatabaseMigrator.Migrate(connectionString);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await Exec(connection, "SET LOCAL enable_seqscan = off;");
+
+        var plan = await ExternalIds(
+            connection,
+            "EXPLAIN SELECT 1 FROM trax.metadata WHERE external_id = 'abcdefabcdefabcdefabcdefabcdefab';"
+        );
+
+        string.Join('\n', plan)
+            .Should()
+            .Contain("ix_metadata_external_id", "the lookup must not be a pass over every run");
+    }
+
+    /// <summary>
+    /// A <c>CREATE INDEX CONCURRENTLY</c> that fails leaves its index behind, marked invalid, and
+    /// <c>IF NOT EXISTS</c> would then skip it at every later start. The migrator drops the
+    /// leftover, so the script builds it properly.
+    /// </summary>
+    [Test]
+    public async Task An_index_left_invalid_by_an_interrupted_build_is_built_again()
+    {
+        await WithDatabaseMigratedTo(
+            45,
+            async connectionString =>
+            {
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // Two queued entries under one subject make a unique build of 046's index fail
+                // partway, which is the one way to leave an invalid index behind without killing
+                // a backend.
+                await Exec(
+                    connection,
+                    "INSERT INTO trax.work_queue (external_id, train_name, subject_key) VALUES "
+                        + "('invalid-a', 'A.Train', 'subject'), ('invalid-b', 'A.Train', 'subject');"
+                );
+                var interrupted = () =>
+                    Exec(
+                        connection,
+                        "CREATE UNIQUE INDEX CONCURRENTLY ix_work_queue_subject_queued "
+                            + "ON trax.work_queue (subject_key);"
+                    );
+                await interrupted.Should().ThrowAsync<PostgresException>();
+                (await IndexState(connection, "ix_work_queue_subject_queued"))
+                    .Should()
+                    .Be("invalid", "the failed build leaves its index behind");
+
+                await DatabaseMigrator.Migrate(connectionString);
+
+                (await IndexState(connection, "ix_work_queue_subject_queued"))
+                    .Should()
+                    .Be(
+                        "valid, not unique",
+                        "the migrator drops the leftover and 046 builds the index it means"
+                    );
+            }
+        );
+    }
+
+    private static async Task<string> IndexState(NpgsqlConnection connection, string index)
+    {
+        var state = await ExternalIds(
+            connection,
+            "SELECT CASE WHEN NOT i.indisvalid THEN 'invalid' "
+                + "WHEN i.indisunique THEN 'valid, unique' ELSE 'valid, not unique' END "
+                + "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                + $"WHERE c.relname = '{index}';"
+        );
+        return state.SingleOrDefault() ?? "missing";
+    }
+
+    /// <summary>
+    /// Creates a throwaway, empty database, runs <paramref name="test"/> against it, and drops it.
+    /// </summary>
+    private static async Task WithEmptyDatabase(Func<string, Task> test)
     {
         var builder = new NpgsqlConnectionStringBuilder(GetConnectionString())
         {
-            Database = $"trax_migration_041_{Guid.NewGuid():N}",
+            Database = $"trax_migration_{Guid.NewGuid():N}",
             Pooling = false,
         };
         var database = builder.Database!;
@@ -217,26 +422,7 @@ public class PostgresMigrationTests
 
         try
         {
-            var connectionString = builder.ConnectionString;
-            await using (var setup = new NpgsqlConnection(connectionString))
-            {
-                await setup.OpenAsync();
-                await Exec(setup, "CREATE SCHEMA IF NOT EXISTS trax;");
-            }
-
-            var upTo040 = DeployChanges
-                .To.PostgresqlDatabase(connectionString)
-                .JournalToPostgresqlTable("trax", "migrations")
-                .WithScriptsEmbeddedInAssembly(
-                    typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly,
-                    name => MigrationNumber(name) <= 40
-                )
-                .LogToNowhere()
-                .Build()
-                .PerformUpgrade();
-            upTo040.Successful.Should().BeTrue(upTo040.Error?.ToString());
-
-            await test(connectionString);
+            await test(builder.ConnectionString);
         }
         finally
         {
@@ -256,6 +442,28 @@ public class PostgresMigrationTests
         using var reader = new StreamReader(stream);
         return await reader.ReadToEndAsync();
     }
+
+    /// <summary>The embedded Postgres scripts, by file name, in the order DbUp runs them.</summary>
+    private static List<(string Name, string Script)> EmbeddedScripts()
+    {
+        var assembly = typeof(Trax.Effect.Data.Postgres.Utils.DatabaseMigrator).Assembly;
+        return assembly
+            .GetManifestResourceNames()
+            .Where(name => name.EndsWith(".sql"))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .Select(name =>
+            {
+                using var stream = assembly.GetManifestResourceStream(name)!;
+                using var reader = new StreamReader(stream);
+                return (
+                    name[(name.IndexOf(".Migrations.") + ".Migrations.".Length)..],
+                    reader.ReadToEnd()
+                );
+            })
+            .ToList();
+    }
+
+    private static int Number(string fileName) => int.Parse(fileName[..fileName.IndexOf('_')]);
 
     private static async Task<List<string>> ExternalIds(NpgsqlConnection connection, string sql)
     {

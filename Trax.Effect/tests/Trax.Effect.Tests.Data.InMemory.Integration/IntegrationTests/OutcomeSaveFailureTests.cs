@@ -19,8 +19,8 @@ namespace Trax.Effect.Tests.Data.InMemory.Integration.IntegrationTests;
 /// What a train reports when the write that records its outcome fails.
 ///
 /// <para>A completed run's save error propagates as it is, and the run is not rewritten as
-/// <c>Failed</c>, because the work happened; the row stays <c>InProgress</c> for the stale-run
-/// reaper. A failed run's recording error is logged, and the train's own failure propagates
+/// <c>Failed</c>, because the work happened. A provider that throws does not stop the others, so
+/// the data provider still records the outcome. A failed run's recording error is logged, and the train's own failure propagates
 /// with its failure hooks, so the caller learns why the train failed rather than why the
 /// bookkeeping did.</para>
 ///
@@ -31,8 +31,8 @@ public class OutcomeSaveFailureTests : TestSetup
 {
     public override ServiceProvider ConfigureServices(IServiceCollection services)
     {
-        // First in line, so the in-memory provider never gets to write the terminal state and the
-        // persisted row shows what a lone failing provider would leave behind.
+        // First in line, so the failing save happens before the in-memory provider's: the row shows
+        // that one provider's failure does not stop the data provider from recording the outcome.
         services.Insert(
             0,
             ServiceDescriptor.Singleton<IEffectProviderFactory, FailingOutcomeSaveFactory>()
@@ -68,7 +68,11 @@ public class OutcomeSaveFailureTests : TestSetup
 
         var row = await PersistedRow(typeof(ICompletingTrain).FullName!);
         row.TrainState.Should()
-            .Be(TrainState.InProgress, "the row is left for the stale-run reaper to resolve");
+            .Be(
+                TrainState.Completed,
+                "a provider that throws does not stop the data provider after it from recording "
+                    + "the outcome"
+            );
     }
 
     [Test]

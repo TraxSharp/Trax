@@ -8,7 +8,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster;
 public interface ITrainEventHandler
 {
     /// <summary>
-    /// Handles one event that arrived from another process; events this process published are filtered out before
+    /// Handles one event that arrived from another host; events this host published are filtered out before
     /// handlers run. Handlers are resolved from a new scope per message. An exception is logged and does not stop
     /// the other handlers or the receiver.
     /// </summary>

@@ -28,9 +28,9 @@ public class RequestIdScopeTests
         var context = TestDb.NewContext();
         return new SnapshotMachineRegistry(
             new IMachine[] { new LogMachine() },
-            new EfSnapshotStore(context),
-            new EfEffectClaimStore(context),
-            new IdempotentEffect(new EfEffectClaimStore(context)),
+            TestDb.NewStore(context),
+            TestDb.NewClaims(context),
+            new IdempotentEffect(TestDb.NewClaims(context)),
             new ServiceCollection().BuildServiceProvider()
         );
     }

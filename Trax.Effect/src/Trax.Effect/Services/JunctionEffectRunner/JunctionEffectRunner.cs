@@ -55,9 +55,8 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
         CancellationToken cancellationToken
     )
     {
-        await ActiveJunctionEffectProviders.RunAllAsync(provider =>
-            provider.BeforeJunctionExecution(effectJunction, serviceTrain, cancellationToken)
-        );
+        foreach (var provider in ActiveJunctionEffectProviders)
+            await provider.BeforeJunctionExecution(effectJunction, serviceTrain, cancellationToken);
     }
 
     /// <summary>
@@ -73,9 +72,8 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
         CancellationToken cancellationToken
     )
     {
-        await ActiveJunctionEffectProviders.RunAllAsync(provider =>
-            provider.AfterJunctionExecution(effectJunction, serviceTrain, cancellationToken)
-        );
+        foreach (var provider in ActiveJunctionEffectProviders)
+            await provider.AfterJunctionExecution(effectJunction, serviceTrain, cancellationToken);
     }
 
     /// <summary>
@@ -85,6 +83,7 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
     public void Dispose()
     {
         var disposalExceptions = new List<Exception>();
+        var providerCount = ActiveJunctionEffectProviders.Count;
 
         foreach (var provider in ActiveJunctionEffectProviders)
         {
@@ -118,7 +117,7 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
         {
             _logger?.LogTrace(
                 "Successfully disposed all ({ProviderCount}) effect provider(s).",
-                ActiveJunctionEffectProviders.Count
+                providerCount
             );
         }
     }

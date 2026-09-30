@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Services.EffectProvider;
@@ -13,9 +12,9 @@ namespace Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory
 /// interface that creates instances of ParameterEffect.
 ///
 /// This factory uses the Trax.Core effect configuration to obtain the JSON serialization options
-/// to use for parameter serialization. It also maintains a list of all parameter effect providers
-/// created by the factory, which allows for tracking and managing the providers throughout
-/// their lifecycle.
+/// to use for parameter serialization. It keeps no reference to the providers it creates: each
+/// belongs to the run that asked for it, which disposes it, so a provider and the parameters it
+/// tracked are collectable once the run ends.
 ///
 /// The factory is registered with the dependency injection container as an IEffectProviderFactory,
 /// which allows the Trax.Effect system to create and use parameter effect providers without
@@ -32,19 +31,6 @@ public class ParameterEffectProviderFactory(
     public ParameterEffectConfiguration Configuration => effectConfiguration;
 
     /// <summary>
-    /// Gets a list of all parameter effect providers created by this factory.
-    /// </summary>
-    /// <remarks>
-    /// This property provides access to all parameter effect providers created by the factory.
-    /// This allows for tracking and managing the providers throughout their lifecycle.
-    ///
-    /// The list is maintained by the factory and updated whenever a new provider is created.
-    /// This enables the factory to keep track of all active providers and perform operations
-    /// on them as needed, such as disposing them when they are no longer needed.
-    /// </remarks>
-    public List<ParameterEffect> Providers { get; } = [];
-
-    /// <summary>
     /// Creates a new instance of a parameter effect provider.
     /// </summary>
     /// <returns>A new instance of IEffectProvider</returns>
@@ -54,21 +40,11 @@ public class ParameterEffectProviderFactory(
     ///
     /// The method performs the following operations:
     /// 1. Creates a new instance of ParameterEffect with the JSON serialization options from the configuration
-    /// 2. Adds the new provider to the list of providers maintained by the factory
-    /// 3. Returns the new provider as an IEffectProvider
+    /// 2. Returns the new provider as an IEffectProvider, owned by the caller
     ///
     /// The created provider is returned as an IEffectProvider, which allows the Trax.Effect
     /// system to use it without directly depending on the concrete implementation.
     /// </remarks>
-    public IEffectProvider Create()
-    {
-        var parameterEffect = new ParameterEffect(
-            configuration.SystemJsonSerializerOptions,
-            effectConfiguration
-        );
-
-        Providers.Add(parameterEffect);
-
-        return parameterEffect;
-    }
+    public IEffectProvider Create() =>
+        new ParameterEffect(configuration.SystemJsonSerializerOptions, effectConfiguration);
 }

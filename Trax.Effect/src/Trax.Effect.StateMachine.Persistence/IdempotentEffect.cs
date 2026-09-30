@@ -51,7 +51,11 @@ public sealed class IdempotentEffect(IEffectClaimStore claims)
     /// How long the claim is held before another caller may reclaim it; null uses
     /// <see cref="SnapshotLimits.DefaultEffectLease"/> (5 minutes). Set it longer than the effect can take.
     /// </param>
-    /// <param name="cancellationToken">Cancels the claim and completion calls. It is not passed to <paramref name="effect"/>.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the claim, before the effect runs. It is not passed to <paramref name="effect"/>, and once the effect
+    /// has returned its receipt is recorded whatever the token says: a cancellation then would leave the claim in
+    /// flight until its lease passed, and the next caller would run the effect again.
+    /// </param>
     /// <exception cref="InvalidOperationException">The effect returned a null or empty receipt; its claim was released.</exception>
     public async Task<EffectOutcome> RunOnce(
         string effectKey,
@@ -96,8 +100,11 @@ public sealed class IdempotentEffect(IEffectClaimStore claims)
 
                 // Record the receipt against OUR claim. If this returns false our lease expired and the
                 // claim was reclaimed mid-effect; the fence stops us corrupting the new owner's row. The
-                // effect still ran exactly once here, so we hand back its receipt.
-                await claims.Complete(effectKey, won.OwnerToken, receipt, cancellationToken);
+                // effect still ran exactly once here, so we hand back its receipt. The effect has happened, so
+                // the caller's token no longer applies: a cancelled write here would leave the claim in flight
+                // and let the next caller run the effect again. The same rule as a train's outcome, in
+                // docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md.
+                await claims.Complete(effectKey, won.OwnerToken, receipt, CancellationToken.None);
                 return new EffectOutcome.Ran(receipt);
 
             case ClaimResult.Lost:

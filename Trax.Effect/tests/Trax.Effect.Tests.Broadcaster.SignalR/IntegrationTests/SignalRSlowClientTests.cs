@@ -54,7 +54,7 @@ public class SignalRSlowClientTests
             effects.UseBroadcaster(b => b.UseSignalRHub())
         );
         await using var app = builder.Build();
-        app.MapTraxTrainEventHub();
+        app.MapTraxTrainEventHub(hub => hub.AllowAnonymous());
         await app.StartAsync();
 
         var address = app

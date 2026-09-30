@@ -16,17 +16,17 @@ public class RegistryCorruptDataTests
 {
     private static readonly ISnapshotPrincipal User = new FakePrincipal("u");
 
-    private static ISnapshotMachineRegistry Registry()
+    private static ISnapshotMachineRegistry Registry(CountingEffect? effect = null)
     {
         var context = TestDb.NewContext();
         var provider = new ServiceCollection()
-            .AddSingleton<IOrderCharge>(new CountingEffect())
+            .AddSingleton<IOrderCharge>(effect ?? new CountingEffect())
             .BuildServiceProvider();
         return new SnapshotMachineRegistry(
             new IMachine[] { new TurnstileMachine(), new OrderMachine() },
-            new EfSnapshotStore(context),
-            new EfEffectClaimStore(context),
-            new IdempotentEffect(new EfEffectClaimStore(context)),
+            TestDb.NewStore(context),
+            TestDb.NewClaims(context),
+            new IdempotentEffect(TestDb.NewClaims(context)),
             provider
         );
     }
@@ -77,5 +77,38 @@ public class RegistryCorruptDataTests
         );
 
         output.Problem!.Code.Should().Be("invalid-context");
+    }
+
+    [Test]
+    public async Task Send_over_corrupt_stored_data_is_a_typed_problem_and_runs_no_effect()
+    {
+        // A Review order carrying a receipt is shape-invalid (Review forbids one).
+        var id = Guid.NewGuid();
+        await TestDb
+            .NewStore()
+            .Upsert(
+                "u",
+                id,
+                new Snapshot
+                {
+                    Machine = "order",
+                    Version = 1,
+                    State = "Review",
+                    Context = new JsonObject
+                    {
+                        ["items"] = new JsonArray(1),
+                        ["receipt"] = "already-sent",
+                    },
+                }
+            );
+        var effect = new CountingEffect();
+
+        var output = await new SendSnapshotJunction(Registry(effect), User).Run(
+            new SendSnapshotInput { Machine = "order", Id = id }
+        );
+
+        output.Problem!.Code.Should().Be("invalid-context");
+        output.Snapshot.Should().BeNull();
+        effect.Calls.Should().Be(0, "a draft that cannot be loaded is never sent");
     }
 }

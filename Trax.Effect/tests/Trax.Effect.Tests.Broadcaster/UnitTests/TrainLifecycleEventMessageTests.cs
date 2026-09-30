@@ -206,4 +206,82 @@ public class TrainLifecycleEventMessageTests
         msg1.Should().Be(msg2);
         msg1.Should().NotBe(msg3);
     }
+
+    [Test]
+    public void InstanceId_RoundTripsOverTheWire()
+    {
+        var message = new TrainLifecycleEventMessage(
+            1,
+            "ext",
+            "Train",
+            "Completed",
+            DateTime.UtcNow,
+            null,
+            null,
+            "Completed",
+            "Worker",
+            null
+        )
+        {
+            InstanceId = "host-a",
+        };
+
+        var json = JsonSerializer.Serialize(message);
+        json.Should().Contain("\"instanceId\":\"host-a\"");
+        JsonSerializer
+            .Deserialize<TrainLifecycleEventMessage>(json)!
+            .InstanceId.Should()
+            .Be("host-a");
+    }
+
+    [Test]
+    public void MessageFromAnOlderPublisher_WithoutInstanceId_Deserializes()
+    {
+        const string json =
+            """{"metadataId":1,"externalId":"e","trainName":"T","trainState":"Completed","timestamp":"2026-09-29T00:00:00Z","failureJunction":null,"failureReason":null,"eventType":"Completed","executor":"Worker","output":null}""";
+
+        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!;
+
+        message.InstanceId.Should().BeNull();
+        message.ExternalId.Should().Be("e");
+    }
+
+    [Test]
+    public void FailureException_RoundTripsOverTheWire()
+    {
+        var message = new TrainLifecycleEventMessage(
+            1,
+            "ext",
+            "Train",
+            "Failed",
+            DateTime.UtcNow,
+            "Junction",
+            "The card was declined.",
+            "Failed",
+            "Worker",
+            null
+        )
+        {
+            FailureException = "TrainException",
+        };
+
+        var json = JsonSerializer.Serialize(message);
+        json.Should().Contain("\"failureException\":\"TrainException\"");
+        JsonSerializer
+            .Deserialize<TrainLifecycleEventMessage>(json)!
+            .FailureException.Should()
+            .Be("TrainException");
+    }
+
+    [Test]
+    public void MessageFromAnOlderPublisher_WithoutFailureException_Deserializes()
+    {
+        const string json =
+            """{"metadataId":1,"externalId":"e","trainName":"T","trainState":"Failed","timestamp":"2026-09-29T00:00:00Z","failureJunction":"J","failureReason":"r","eventType":"Failed","executor":"Worker","output":null}""";
+
+        var message = JsonSerializer.Deserialize<TrainLifecycleEventMessage>(json)!;
+
+        message.FailureException.Should().BeNull();
+        message.FailureReason.Should().Be("r");
+    }
 }

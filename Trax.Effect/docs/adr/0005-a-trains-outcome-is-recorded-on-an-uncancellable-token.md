@@ -55,12 +55,16 @@ token finishes its work after the caller gives up, and that run is now recorded 
 `Completed` rather than surfacing `OperationCanceledException`. This is a behaviour change for
 anything that treated a cancelled request as proof the work did not happen. It never was.
 
-**A failed save is never rewritten as a different outcome.** If saving a completed run's outcome
-throws, the save error propagates as it is; the run is not recorded as `Failed`, because the work
-happened, and the row stays `InProgress` for the stale-run reaper. If recording a failed or
-cancelled run's outcome throws, the recording error is logged and the train's original failure
-still propagates, with its failure hooks, so the caller learns why the train failed rather than
-why the bookkeeping did.
+**A failed save is never rewritten as a different outcome.** A provider whose save throws does not
+stop the providers after it, so the data provider records the outcome even when an effect
+registered before it fails. When the write still fails, it is tried once more without the output
+and the failure's message and stack trace, because a store can refuse a row for what it carries;
+the state and end time are what the reaper, the scheduler and a manifest's retries act on. If
+saving a completed run's outcome fails both times, the first save error propagates as it is; the
+run is not recorded as `Failed`, because the work happened, and a row no provider could write stays
+`InProgress` for the stale-run reaper. If recording a failed or cancelled run's outcome throws, the
+recording error is logged and the train's original failure still propagates, with its failure
+hooks, so the caller learns why the train failed rather than why the bookkeeping did.
 
 **Bookkeeping after the work follows the same rule.** A junction effect that records progress
 after a junction's work has returned (`JunctionProgressProvider` clearing the progress columns)
@@ -78,8 +82,9 @@ thing with the reason attached, rather than three call sites that each have to r
 - `CancelledOutcomePersistenceTests` pins both halves: a train stopped by the caller's token persists
   `Cancelled` with an `EndTime`, and a train whose work completed anyway persists `Completed`.
 - `OutcomeSaveFailureTests` pins what happens when the terminal save throws: a completed run
-  propagates the save error without being recorded as `Failed`, and a failed run propagates its
-  own exception and fires `OnFailed` once.
+  propagates the save error without being recorded as `Failed`, while the data provider after the
+  failing one still records `Completed`, and a failed run propagates its own exception and fires
+  `OnFailed` once. `StateOnlyOutcomeFallbackTests` pins the second, state-only write.
 - `JunctionProgressCancellationTests` pins the same outcome with junction progress on: work that
   finished after the caller cancelled is recorded `Completed`.
 - [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) is the rule this produces.
@@ -90,6 +95,9 @@ observe, not the shape of the code that produces them.
 
 ## Changelog
 
+- **2026-09-29**: A provider whose save throws no longer stops the ones after it, and a terminal
+  write the store refuses is retried once without the output and failure text, so the state is
+  recorded; only when that fails too does the row stay `InProgress` for the reaper.
 - **2026-09-28**: Extended to bookkeeping written after a junction's work returns: the junction
   progress write no longer takes the caller's token or lets its own failure replace the result.
 - **2026-09-23**: Recorded what happens when the terminal save itself fails: a completed run

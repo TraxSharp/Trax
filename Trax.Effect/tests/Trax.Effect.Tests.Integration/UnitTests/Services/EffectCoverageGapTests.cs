@@ -81,6 +81,23 @@ public class EffectCoverageGapTests
     }
 
     [Test]
+    public async Task EffectJunction_RailwayJunction_SkippedOnTheFailureTrack_HasNotRan()
+    {
+        var junction = new TestEffectJunction();
+        var train = CreateTrain();
+
+        var result = await junction.RailwayJunction(
+            Either<Exception, string>.Left(new InvalidOperationException("earlier junction")),
+            train
+        );
+
+        result.IsLeft.Should().BeTrue();
+        junction
+            .Metadata!.HasRan.Should()
+            .BeFalse("an earlier junction failed, so this junction's Run was never called");
+    }
+
+    [Test]
     public async Task EffectJunction_RailwayJunction_WithEffectRunner_CallsBeforeAndAfter()
     {
         var runner = Substitute.For<IJunctionEffectRunner>();

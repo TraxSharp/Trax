@@ -1,8 +1,8 @@
 using System.Reflection;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Configuration.TraxBuilder;
-using Trax.Effect.Data.Services.FeatureDbConfigurator;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.StateMachine.Persistence.Mutations;
 
@@ -11,10 +11,9 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <summary>
 /// Registers state-machine persistence as a first-class Trax subsystem inside <c>AddTrax</c>. One call
 /// discovers the machines, wires the store, the effect-claim ledger, the exactly-once runner, the registry,
-/// and the four generic <c>stateMachine</c> mutations, AUTO-registers the <see cref="SnapshotDbContext"/>
-/// against the provider the host already chose, and contributes the mutations to the mediator scan. The host
-/// writes one call and nothing else: no <c>AddDbContext&lt;SnapshotDbContext&gt;</c>, no naming of the
-/// mutations' assembly.
+/// and the four generic <c>stateMachine</c> mutations, and contributes the mutations to the mediator scan. The
+/// stores reach their tables through the <see cref="IDataContext"/> the host's data provider registers, so the
+/// host writes one call and nothing else: no <c>DbContext</c> of its own, no naming of the mutations' assembly.
 /// </summary>
 public static class StateMachinesBuilderExtensions
 {
@@ -60,12 +59,6 @@ public static class StateMachinesBuilderExtensions
 
         RegisterMachinesAndStores(builder.ServiceCollection, configure, assemblies);
 
-        // Auto-register the SnapshotDbContext against the provider the host configured in AddEffects, via the
-        // ITraxFeatureDbConfigurator each UseXxx registers. The host never writes AddDbContext.
-        builder.ServiceCollection.AddDbContext<SnapshotDbContext>(
-            (sp, options) => sp.GetRequiredService<ITraxFeatureDbConfigurator>().Configure(options)
-        );
-
         // Contribute the generic mutations' assembly so AddMediator scans it and the four mutations become
         // dispatchable, without the host naming the assembly.
         builder.Root.ContributedMediatorAssemblies.Add(StateMachineMutations.Assembly);
@@ -103,8 +96,16 @@ public static class StateMachinesBuilderExtensions
         foreach (var type in machineTypes)
             services.AddSingleton(typeof(IMachine), type);
 
-        services.AddScoped<ISnapshotStore, EfSnapshotStore>();
-        services.AddScoped<IEffectClaimStore, EfEffectClaimStore>();
+        // The stores use the request's data context, and the provider's dialect to read a unique violation as a
+        // lost race. InMemory registers no dialect, so there a race throws rather than being misread.
+        services.AddScoped<ISnapshotStore>(sp => new EfSnapshotStore(
+            sp.GetRequiredService<IDataContext>(),
+            sp.GetService<ISqlDialect>()
+        ));
+        services.AddScoped<IEffectClaimStore>(sp => new EfEffectClaimStore(
+            sp.GetRequiredService<IDataContext>(),
+            sp.GetService<ISqlDialect>()
+        ));
         services.AddScoped<IdempotentEffect>();
         services.AddScoped<ISnapshotMachineRegistry, SnapshotMachineRegistry>();
 

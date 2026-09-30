@@ -143,16 +143,16 @@ public class ParameterEffect(
                         configuration.MaxParameterBytes
                     );
                 }
-                catch (Exception ex) when (ex is JsonException or NotSupportedException)
-                {
-                    metadata.Input = UnserializablePlaceholder(ex);
-                }
                 catch (ObjectDisposedException)
                 {
                     // Input object contains disposed JsonDocument, skip serialization
                     // This can happen when metadata contains disposed JsonDocument objects
                     metadata.Input ??=
                         """{"_disposed": true, "_message": "Input object contained disposed JsonDocument objects"}""";
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    metadata.Input = UnserializablePlaceholder(ex);
                 }
             }
         }
@@ -170,16 +170,16 @@ public class ParameterEffect(
                         configuration.MaxParameterBytes
                     );
                 }
-                catch (Exception ex) when (ex is JsonException or NotSupportedException)
-                {
-                    metadata.Output = UnserializablePlaceholder(ex);
-                }
                 catch (ObjectDisposedException)
                 {
                     // Output object contains disposed JsonDocument, skip serialization
                     // This can happen when metadata contains disposed JsonDocument objects
                     metadata.Output ??=
                         """{"_disposed": true, "_message": "Output object contained disposed JsonDocument objects"}""";
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    metadata.Output = UnserializablePlaceholder(ex);
                 }
             }
         }
@@ -190,9 +190,12 @@ public class ParameterEffect(
     /// it did.
     /// </summary>
     /// <remarks>
-    /// A reference cycle raises <see cref="JsonException"/> and an unsupported type raises
-    /// <see cref="NotSupportedException"/>. Neither is a reason to fail a run that already
-    /// succeeded: thrown out of the success path, the outcome write never happened, the row stayed
+    /// Anything serialization throws lands here except <see cref="OutOfMemoryException"/>: a
+    /// reference cycle raises <see cref="JsonException"/>, an unsupported type
+    /// <see cref="NotSupportedException"/>, a contract System.Text.Json rejects (two members with
+    /// the same <c>[JsonPropertyName]</c>, <c>[JsonInclude]</c> on a non-public member)
+    /// <see cref="InvalidOperationException"/>, and a property getter whatever it throws. None of
+    /// them is a reason to fail a run that already succeeded: thrown out of the success path, the outcome write never happened, the row stayed
     /// <c>InProgress</c> until the reaper marked it <c>Failed</c>, and the manifest's retry policy
     /// then re-ran work that had completed, failing the same way every time. Degrading is the same
     /// answer the byte ceiling already gives.

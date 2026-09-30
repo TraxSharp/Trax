@@ -9,5 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests" />
+    <!-- Reads the exception behind an internal-error rejection, to log it without returning its text. -->
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
   </ItemGroup>
 </Project>

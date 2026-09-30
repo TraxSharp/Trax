@@ -10,8 +10,12 @@ namespace Trax.Effect.Data.Postgres.Services.SqlDialect;
 /// </summary>
 internal class PostgresSqlDialect : ISqlDialect
 {
+    /// <remarks>
+    /// The name is a parameter, so it must not sit inside SQL quotes: quoted, the placeholder EF
+    /// substitutes is hashed as literal text, and every name takes the same lock.
+    /// </remarks>
     public FormattableString TryAcquireLeaderLock(string lockName) =>
-        $"""SELECT pg_try_advisory_xact_lock(hashtext('{lockName}')) AS "Value" """;
+        $"""SELECT pg_try_advisory_xact_lock(hashtext({lockName})) AS "Value" """;
 
     /// <summary>SQLSTATE <c>23505</c>, <c>unique_violation</c>, which a primary key raises too.</summary>
     public bool IsUniqueViolation(DbUpdateException exception) =>

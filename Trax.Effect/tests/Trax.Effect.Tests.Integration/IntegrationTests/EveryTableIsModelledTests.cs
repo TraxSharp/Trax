@@ -28,10 +28,6 @@ public class EveryTableIsModelledTests : TestSetup
     private static readonly Dictionary<string, string> Unmodelled = new(StringComparer.Ordinal)
     {
         ["migrations"] = "DbUp's journal of applied scripts, not Trax data",
-        ["snapshot_draft"] =
-            "Trax.Effect.StateMachine.Persistence maps it on its own SnapshotDbContext, a known deviation the ADR records",
-        ["effect_claim"] =
-            "Trax.Effect.StateMachine.Persistence maps it on its own SnapshotDbContext, a known deviation the ADR records",
     };
 
     [Test]
@@ -100,6 +96,28 @@ public class EveryTableIsModelledTests : TestSetup
             .BeEquivalentTo(
                 migrated["runner_nonce"],
                 $"the RunnerNonce model maps exactly the columns its migration creates. See {Adr}."
+            );
+    }
+
+    [TestCase("snapshot_draft")]
+    [TestCase("effect_claim")]
+    public async Task State_machine_tables_are_mapped_column_for_column(string table)
+    {
+        using var context = (IDataContext)DataContextFactory.Create();
+        var migrated = await MigratedColumns((DbContext)context);
+        var mapped = MappedColumns((DbContext)context);
+
+        mapped
+            .Should()
+            .ContainKey(
+                table,
+                $"Trax.Effect.StateMachine.Persistence reaches {table} through IDataContext. See {Adr}."
+            );
+        mapped[table]
+            .Should()
+            .BeEquivalentTo(
+                migrated[table],
+                $"the {table} model maps exactly the columns its migrations create. See {Adr}."
             );
     }
 

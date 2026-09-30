@@ -5,11 +5,13 @@ using Microsoft.Extensions.Logging;
 namespace Trax.Effect.Services.ChangeSignal;
 
 /// <summary>
-/// Default <see cref="ITraxChangeSignal"/>: a bounded, non-blocking channel of domain
-/// signals drained by <see cref="ChangeSignalCoalescer"/>. When the buffer is full new
-/// signals are dropped (a coalesced refetch is coming regardless, so losing one is
-/// harmless), the <c>trax.change_signal.dropped</c> counter is incremented, and a
-/// throttled warning is logged. Mirrors the shape of <c>TraxAuditChannel</c>.
+/// Default <see cref="ITraxChangeSignal"/>: the set of domains with a change not yet read,
+/// drained by <see cref="ChangeSignalCoalescer"/>. A domain is queued once; notifying it again
+/// while it is still waiting adds nothing, because the pending signal already covers the new
+/// change. A burst for one domain therefore never crowds out another domain's signal. Reading a
+/// domain clears it, so a change after the read queues it again. A signal raised after
+/// <see cref="Complete"/> is dropped, the <c>trax.change_signal.dropped</c> counter is
+/// incremented, and a throttled warning is logged.
 /// </summary>
 public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
 {
@@ -20,6 +22,10 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     public const string DroppedCounterName = "trax.change_signal.dropped";
 
     private readonly Channel<ChangeDomain> _channel;
+    private readonly PendingReader _reader;
+
+    // One bit per ChangeDomain value: set while that domain sits in the channel unread.
+    private int _pending;
     private readonly ILogger<TraxChangeSignal>? _logger;
     private readonly Meter _meter;
     private readonly Counter<long> _droppedCounter;
@@ -27,8 +33,8 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     private long _lastWarnedAt;
 
     /// <summary>
-    /// Creates the signal with a bounded buffer of <see cref="ChangeSignalOptions.ChannelCapacity"/> entries and
-    /// registers the <see cref="MeterName"/> meter. Registered as a singleton by <c>AddTrax</c>; not intended to be
+    /// Creates the signal and registers the <see cref="MeterName"/> meter. The buffer holds at most one entry per
+    /// domain, whatever <see cref="ChangeSignalOptions.ChannelCapacity"/> says. Registered as a singleton by <c>AddTrax</c>; not intended to be
     /// constructed directly.
     /// </summary>
     /// <param name="options">Buffer sizing. Throws <see cref="ArgumentNullException"/> when <c>null</c>.</param>
@@ -38,7 +44,7 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
         ArgumentNullException.ThrowIfNull(options);
         _logger = logger;
         _channel = Channel.CreateBounded<ChangeDomain>(
-            new BoundedChannelOptions(options.ChannelCapacity)
+            new BoundedChannelOptions(Math.Max(options.ChannelCapacity, DomainCount))
             {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = true,
@@ -46,6 +52,7 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
             }
         );
 
+        _reader = new PendingReader(this);
         _meter = new Meter(MeterName);
         _droppedCounter = _meter.CreateCounter<long>(DroppedCounterName);
     }
@@ -53,8 +60,16 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
     /// <inheritdoc />
     public void Notify(ChangeDomain domain)
     {
+        var bit = Bit(domain);
+        if (bit != 0 && (Interlocked.Or(ref _pending, bit) & bit) != 0)
+            return; // Already waiting to be read: that signal covers this change.
+
         if (_channel.Writer.TryWrite(domain))
             return;
+
+        // Only a completed channel refuses a write: it has room for every domain.
+        if (bit != 0)
+            Interlocked.And(ref _pending, ~bit);
 
         _droppedCounter.Add(1);
         var total = Interlocked.Increment(ref _totalDropped);
@@ -65,17 +80,20 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
             if (Interlocked.CompareExchange(ref _lastWarnedAt, now, lastWarn) == lastWarn)
             {
                 _logger?.LogWarning(
-                    "Trax change-signal channel full. {DroppedTotal} signals dropped since process start.",
+                    "Trax change-signal raised after shutdown. {DroppedTotal} signals dropped since process start.",
                     total
                 );
             }
         }
     }
 
-    /// <summary>Consumer read stream. Only the coalescer reads from this.</summary>
-    public ChannelReader<ChangeDomain> Reader => _channel.Reader;
+    /// <summary>
+    /// Consumer read stream, holding each pending domain once. Only the coalescer reads from this. Reading a
+    /// domain clears it from the pending set, so the next change to it is queued again.
+    /// </summary>
+    public ChannelReader<ChangeDomain> Reader => _reader;
 
-    /// <summary>Observed total dropped count since process start. For tests and diagnostics.</summary>
+    /// <summary>Signals raised after <see cref="Complete"/>, which are dropped, since process start. For tests and diagnostics.</summary>
     public long TotalDropped => Interlocked.Read(ref _totalDropped);
 
     /// <summary>Signals no more entries will be enqueued (used on shutdown).</summary>
@@ -83,4 +101,40 @@ public sealed class TraxChangeSignal : ITraxChangeSignal, IDisposable
 
     /// <inheritdoc />
     public void Dispose() => _meter.Dispose();
+
+    private static readonly int DomainCount = Enum.GetValues<ChangeDomain>().Length;
+
+    // A value outside the enum's first 32 members has no bit and is queued without dedupe.
+    private static int Bit(ChangeDomain domain) =>
+        (int)domain is >= 0 and < 32 ? 1 << (int)domain : 0;
+
+    private void Cleared(ChangeDomain domain) => Interlocked.And(ref _pending, ~Bit(domain));
+
+    /// <summary>The channel's reader, clearing each domain from the pending set as it is read.</summary>
+    private sealed class PendingReader(TraxChangeSignal owner) : ChannelReader<ChangeDomain>
+    {
+        private ChannelReader<ChangeDomain> Inner => owner._channel.Reader;
+
+        public override bool TryRead(out ChangeDomain item)
+        {
+            if (!Inner.TryRead(out item))
+                return false;
+            owner.Cleared(item);
+            return true;
+        }
+
+        public override ValueTask<bool> WaitToReadAsync(
+            CancellationToken cancellationToken = default
+        ) => Inner.WaitToReadAsync(cancellationToken);
+
+        public override Task Completion => Inner.Completion;
+
+        public override bool CanCount => Inner.CanCount;
+
+        public override int Count => Inner.Count;
+
+        public override bool CanPeek => Inner.CanPeek;
+
+        public override bool TryPeek(out ChangeDomain item) => Inner.TryPeek(out item);
+    }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.LifecycleHookOutputPolicy;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Utils;
 
@@ -15,9 +16,12 @@ namespace Trax.Effect.JunctionProvider.Logging.Services.JunctionLoggerProvider;
 /// </summary>
 /// <param name="configuration">Supplies the log level and whether junction output is serialized.</param>
 /// <param name="logger">The logger entries are written to.</param>
+/// <param name="outputPolicy">Decides whether a junction output is serialized and under what ceiling; the
+/// default policy when none is registered.</param>
 internal class JunctionLoggerProvider(
     ITraxEffectConfiguration configuration,
-    ILogger<JunctionLoggerProvider> logger
+    ILogger<JunctionLoggerProvider> logger,
+    ILifecycleHookOutputPolicy? outputPolicy = null
 ) : IJunctionLoggerProvider
 {
     /// <summary>
@@ -39,7 +43,7 @@ internal class JunctionLoggerProvider(
     {
         if (effectJunction.Metadata is null)
             throw new TrainException(
-                "Effect Junction's Metadata should be null. Something has gone horribly wrong."
+                "Effect Junction's Metadata should not be null. Something has gone horribly wrong."
             );
 
         logger.Log(configuration.LogLevel, "{@JunctionMetadata}", effectJunction.Metadata);
@@ -48,7 +52,9 @@ internal class JunctionLoggerProvider(
     /// <summary>
     /// Logs the junction's metadata after it ran. When the junction succeeded with a non-null result and
     /// junction data serialization is on, first stores that result as JSON in the metadata's
-    /// <c>OutputJson</c>, with sensitive members masked; otherwise <c>OutputJson</c> is left as it was.
+    /// <c>OutputJson</c>, with sensitive members masked, bounded and left out as the train's own output
+    /// is for lifecycle hooks, and replaced by a placeholder when it cannot be serialized; otherwise
+    /// <c>OutputJson</c> is left as it was. Never fails the train over the output.
     /// </summary>
     /// <typeparam name="TIn">The junction's input type.</typeparam>
     /// <typeparam name="TOut">The junction's output type.</typeparam>
@@ -66,7 +72,7 @@ internal class JunctionLoggerProvider(
     {
         if (effectJunction.Metadata is null)
             throw new TrainException(
-                "Effect Junction's Metadata should be null. Something has gone horribly wrong."
+                "Effect Junction's Metadata should not be null. Something has gone horribly wrong."
             );
 
         effectJunction.Result.Match(
@@ -76,12 +82,7 @@ internal class JunctionLoggerProvider(
                     return;
 
                 effectJunction.Metadata.OutputJson = configuration.SerializeJunctionData
-                    ? JsonSerializer.Serialize<object>(
-                        resultOut,
-                        TraxLogSerialization.ForLogging(
-                            TraxJsonSerializationOptions.JunctionLogging
-                        )
-                    )
+                    ? SerializeForLog(resultOut, serviceTrain.TrainName)
                     : null;
             },
             Left: _ => { },
@@ -90,6 +91,44 @@ internal class JunctionLoggerProvider(
 
         logger.Log(configuration.LogLevel, "{@Metadata}", effectJunction.Metadata);
     }
+
+    /// <summary>
+    /// Serializes a junction's output for the log under the same decision and ceiling as the copy
+    /// lifecycle hooks get: nothing for a train whose output the host excluded, and a
+    /// <c>{"_truncated": true, ...}</c> placeholder past the ceiling. The junction already
+    /// succeeded, so an output the serializer cannot represent (a <see cref="Type"/> member, a graph
+    /// deeper than the options allow, a throwing getter) is logged as
+    /// <c>{"_unserializable": true, "_error": "&lt;exception type&gt;"}</c> rather than failing the train.
+    /// </summary>
+    private string? SerializeForLog(object output, string trainName)
+    {
+        var ceiling = (outputPolicy ?? DefaultPolicy).MaxCopyBytes(trainName);
+        if (ceiling is null)
+            return null;
+
+        try
+        {
+            return TraxBoundedJson.Serialize(
+                output,
+                TraxLogSerialization.ForLogging(TraxJsonSerializationOptions.JunctionLogging),
+                ceiling
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(
+                ex,
+                "Could not serialize the output of a junction of train ({TrainName}) for the log.",
+                trainName
+            );
+            return JsonSerializer.Serialize(
+                new { _unserializable = true, _error = ex.GetType().Name }
+            );
+        }
+    }
+
+    private static readonly ILifecycleHookOutputPolicy DefaultPolicy =
+        new DefaultLifecycleHookOutputPolicy();
 
     /// <summary>Holds no resources; does nothing.</summary>
     public void Dispose() { }

@@ -57,7 +57,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     /// <summary>
     /// Runs the junction inside a service train: creates a fresh <see cref="Metadata"/>, runs the train's
     /// junction effects' <c>BeforeJunctionExecution</c>, runs the junction on the railway (a
-    /// <c>Left</c> input skips <see cref="Run"/>), stamps the end time and state, then runs the effects'
+    /// <c>Left</c> input skips <see cref="Run"/> and leaves <c>HasRan</c> false), stamps the end time and state, then runs the effects'
     /// <c>AfterJunctionExecution</c>. Called by the train; not intended to be called directly.
     /// </summary>
     /// <param name="previousOutput">The previous junction's result, or the train input.</param>
@@ -99,7 +99,8 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
 
         Metadata.EndTimeUtc = DateTime.UtcNow;
         Metadata.State = result.State;
-        Metadata.HasRan = true;
+        // A Left input skips Run: an earlier junction failed and this one never executed.
+        Metadata.HasRan = previousOutput.IsRight;
 
         if (serviceTrain.JunctionEffectRunner is not null)
             await serviceTrain.JunctionEffectRunner.AfterJunctionExecution(

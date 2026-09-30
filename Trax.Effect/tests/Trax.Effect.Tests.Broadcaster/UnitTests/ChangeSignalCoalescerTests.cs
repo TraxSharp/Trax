@@ -338,11 +338,11 @@ public class ChangeSignalCoalescerTests
     }
 
     [Test]
-    public void Notify_WhenChannelFull_DropsWithoutThrowingAndCounts()
+    public void Notify_RepeatedForAPendingDomain_IsAbsorbedWithoutThrowingOrDropping()
     {
         var signal = new TraxChangeSignal(new ChangeSignalOptions { ChannelCapacity = 2 });
 
-        // Nothing is draining, so writes past the capacity are dropped rather than queued.
+        // Nothing is draining. A domain already waiting to be read covers every repeat of it.
         var act = () =>
         {
             for (var i = 0; i < 5; i++)
@@ -350,7 +350,94 @@ public class ChangeSignalCoalescerTests
         };
 
         act.Should().NotThrow("Notify must never throw on a hot write path");
-        signal.TotalDropped.Should().Be(3, "two fit in the buffer and three are dropped");
+        signal.TotalDropped.Should().Be(0, "a repeat of a pending domain is not lost");
+        signal.Reader.TryRead(out var only).Should().BeTrue();
+        only.Should().Be(ChangeDomain.WorkQueue);
+        signal.Reader.TryRead(out _).Should().BeFalse("the five notifies are one pending signal");
+        signal.Dispose();
+    }
+
+    [Test]
+    public void Notify_ABurstForOneDomain_DoesNotCrowdOutAnotherDomainsOnlySignal()
+    {
+        var signal = new TraxChangeSignal(new ChangeSignalOptions { ChannelCapacity = 2 });
+
+        for (var i = 0; i < 1000; i++)
+            signal.Notify(ChangeDomain.WorkQueue);
+        signal.Notify(ChangeDomain.DeadLetter);
+
+        var drained = new List<ChangeDomain>();
+        while (signal.Reader.TryRead(out var domain))
+            drained.Add(domain);
+
+        drained.Should().BeEquivalentTo([ChangeDomain.WorkQueue, ChangeDomain.DeadLetter]);
+        signal.TotalDropped.Should().Be(0);
+        signal.Dispose();
+    }
+
+    [Test]
+    public void Notify_AfterADomainIsRead_QueuesItAgain()
+    {
+        var signal = new TraxChangeSignal(new ChangeSignalOptions());
+
+        signal.Notify(ChangeDomain.Manifest);
+        signal.Reader.TryRead(out _).Should().BeTrue();
+        signal.Notify(ChangeDomain.Manifest);
+
+        signal.Reader.TryRead(out var again).Should().BeTrue("a change after the read is new");
+        again.Should().Be(ChangeDomain.Manifest);
+        signal.Dispose();
+    }
+
+    [Test]
+    public void Notify_AfterComplete_IsDroppedAndCounted()
+    {
+        var signal = new TraxChangeSignal(new ChangeSignalOptions());
+        signal.Complete();
+
+        signal.Notify(ChangeDomain.WorkQueue);
+
+        signal.TotalDropped.Should().Be(1);
+        signal.Dispose();
+    }
+
+    [Test]
+    public void Notify_AnUndefinedDomainValue_IsQueuedEachTime_AndDroppedAfterComplete()
+    {
+        // A value past the enum's first 32 members has no pending bit, so it is never deduplicated.
+        var undefined = (ChangeDomain)40;
+        var signal = new TraxChangeSignal(new ChangeSignalOptions());
+
+        signal.Notify(undefined);
+        signal.Notify(undefined);
+
+        signal.Reader.TryRead(out var first).Should().BeTrue();
+        signal.Reader.TryRead(out var second).Should().BeTrue();
+        first.Should().Be(undefined);
+        second.Should().Be(undefined);
+
+        signal.Complete();
+        signal.Notify(undefined);
+        signal.TotalDropped.Should().Be(1);
+        signal.Dispose();
+    }
+
+    [Test]
+    public void Reader_CountsAndPeeksPendingDomains_WithoutClearingThem()
+    {
+        var signal = new TraxChangeSignal(new ChangeSignalOptions());
+        signal.Notify(ChangeDomain.Manifest);
+        signal.Notify(ChangeDomain.DeadLetter);
+
+        signal.Reader.CanCount.Should().BeTrue();
+        signal.Reader.Count.Should().Be(2);
+        signal.Reader.CanPeek.Should().BeTrue();
+        signal.Reader.TryPeek(out var peeked).Should().BeTrue();
+        peeked.Should().Be(ChangeDomain.Manifest);
+
+        // A peek does not read: the domain is still pending, so a repeat of it is absorbed.
+        signal.Notify(ChangeDomain.Manifest);
+        signal.Reader.Count.Should().Be(2);
         signal.Dispose();
     }
 

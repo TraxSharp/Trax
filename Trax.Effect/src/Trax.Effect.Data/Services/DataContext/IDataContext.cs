@@ -137,6 +137,29 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     DbSet<Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces =>
         ((DbContext)this).Set<Effect.Models.RunnerNonce.RunnerNonce>();
 
+    /// <summary>
+    /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft, written by
+    /// Trax.Effect.StateMachine.Persistence. Filter by <c>UserKey</c> when querying directly, because the draft
+    /// id alone is not unique across users.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default here keeps an implementation written
+    /// before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts =>
+        ((DbContext)this).Set<Effect.Models.SnapshotDraft.SnapshotDraft>();
+
+    /// <summary>
+    /// The <c>trax.effect_claim</c> table: one row per exactly-once effect intent, written by
+    /// Trax.Effect.StateMachine.Persistence. A row with a null receipt is in flight; one with a receipt has run.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default here keeps an implementation written
+    /// before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims =>
+        ((DbContext)this).Set<Effect.Models.EffectClaim.EffectClaim>();
+
     #endregion
 
     /// <summary>

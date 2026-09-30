@@ -74,14 +74,30 @@ public abstract class DomainDataLayerGuardFixture
     public void Domain_contexts_derive_the_shared_base()
     {
         var result = DataLayerGuards.DomainContextsDeriveBase(Options, BaseTypeName);
-        Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        AssertCheckedAndClean(result);
     }
 
     [Test]
     public void Domain_contexts_have_companion_interfaces()
     {
         var result = DataLayerGuards.CompanionInterfaces(Options, BaseTypeName);
+        AssertCheckedAndClean(result);
+    }
+
+    /// <summary>
+    /// A source guard that inspected no context proves nothing: a fixture whose scan roots miss
+    /// the repo's contexts would otherwise pass. Fails on any offender (a missing scan root among
+    /// them), then on having inspected nothing.
+    /// </summary>
+    internal static void AssertCheckedAndClean(GuardResult result)
+    {
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
+        Assert.That(
+            result.Inspected,
+            Is.GreaterThan(0),
+            "The guard found no domain context under the scan roots, so it checked nothing. Point "
+                + "Options.SourceScanRoots at the directories that hold this repo's contexts."
+        );
     }
 
     [Test]

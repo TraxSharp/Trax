@@ -177,7 +177,7 @@ public class DataContextLoggingProviderTests
         passLogger.Log(LogLevel.Warning, default, "x", null, (_, _) => "x");
 
         // The provider's flush loop will eventually persist the un-filtered log.
-        // We dispose to force the drain rather than wait for the 1-second timer tick.
+        // Dispose writes what is queued before it returns.
         provider.Dispose();
     }
 
@@ -192,10 +192,9 @@ public class DataContextLoggingProviderTests
         for (var i = 0; i < 5; i++)
             logger.Log(LogLevel.Information, default, i, null, (s, _) => $"msg {s}");
 
-        // Poll for the flush loop to land at least one batch instead of waiting
-        // a fixed window past the 1-second timer tick. CI scheduling can stretch
-        // the timer's wakeup well past 1.5s; once any log is persisted we know
-        // the flush path is working and can stop waiting.
+        // Poll for the flush loop to land at least one batch instead of waiting a fixed
+        // window: CI scheduling can delay the background writer, and once any log is
+        // persisted the flush path is known to work.
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         var landed = 0;
         while (DateTime.UtcNow < deadline)
@@ -219,18 +218,120 @@ public class DataContextLoggingProviderTests
         logs.Should().HaveCountGreaterThanOrEqualTo(1);
     }
 
+    /// <summary>
+    /// The entries logged just before shutdown are the ones that say why it happened, so stopping
+    /// the sink writes what is already queued before it lets go.
+    /// </summary>
+    [Test]
+    public async Task Dispose_WritesEveryEntryAlreadyQueued()
+    {
+        var (provider, context) = BuildProvider(
+            new FakeConfig { MinimumLogLevel = LogLevel.Trace }
+        );
+        var category = $"Shutdown.{Guid.NewGuid():N}";
+        var logger = provider.CreateLogger(category);
+
+        const int count = 1000;
+        for (var i = 0; i < count; i++)
+            logger.Log(LogLevel.Information, default, i, null, (s, _) => $"msg {s}");
+
+        provider.Dispose();
+
+        context.Reset();
+        var stored = await context.Logs.AsNoTracking().CountAsync(l => l.Category == category);
+        stored.Should().Be(count, "entries queued before Dispose are written, not dropped");
+    }
+
     [Test]
     public void Dispose_CalledTwice_DoesNotThrow()
     {
         var (provider, _) = BuildProvider(new FakeConfig());
 
-        Action act = () =>
-        {
-            provider.Dispose();
-            // Second Dispose should be a no-op (cts already cancelled, channel already completed).
-        };
+        provider.Dispose();
 
-        act.Should().NotThrow();
+        // The second call does nothing: the queue is already completed and the writer stopped.
+        Action again = () => provider.Dispose();
+
+        again.Should().NotThrow();
+    }
+
+    [Test]
+    public void Dispose_WhenTheWriterFailed_ReturnsWithoutThrowing()
+    {
+        var factory = Substitute.For<IDataContextProviderFactory>();
+        factory
+            .CreateDbContextAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<IDataContext>>(_ => throw new InvalidOperationException("unreachable"));
+        var provider = new DataContextLoggingProvider(factory, new FakeConfig());
+        var logger = provider.CreateLogger("Writer.Failed");
+
+        var log = () => logger.Log(LogLevel.Information, default, "m", null, (_, _) => "m");
+        Action dispose = () => provider.Dispose();
+
+        log.Should().NotThrow("logging never throws into the caller");
+        dispose.Should().NotThrow("a writer that failed has stopped too");
+    }
+
+    [TestCase(
+        true,
+        TestName = "Dispose_WhenTheWriterCannotOpenItsContext_CancelsItWithinTheDrainBound"
+    )]
+    [TestCase(false, TestName = "Dispose_WhenTheWriterCannotSave_CancelsItWithinTheDrainBound")]
+    public async Task Dispose_WhenTheWriterCannotFinish_CancelsItWithinTheDrainBound(
+        bool stuckOpening
+    )
+    {
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task Hang(CancellationToken token)
+        {
+            entered.TrySetResult();
+            try
+            {
+                // negative-wait: a database that never answers; only the writer's cancellation ends it.
+                await Task.Delay(Timeout.Infinite, token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled.TrySetResult();
+                throw;
+            }
+        }
+
+        var context = Substitute.For<IDataContext>();
+        context.Logs.Returns(Substitute.For<DbSet<global::Trax.Effect.Models.Log.Log>>());
+        context
+            .SaveChanges(Arg.Any<CancellationToken>())
+            .Returns(call => Hang(call.Arg<CancellationToken>()));
+        var factory = Substitute.For<IDataContextProviderFactory>();
+        if (stuckOpening)
+            factory
+                .CreateDbContextAsync(Arg.Any<CancellationToken>())
+                .Returns(async call =>
+                {
+                    await Hang(call.Arg<CancellationToken>());
+                    return context;
+                });
+        else
+            factory.CreateDbContextAsync(Arg.Any<CancellationToken>()).Returns(context);
+        var provider = new DataContextLoggingProvider(factory, new FakeConfig());
+
+        provider
+            .CreateLogger("Writer.Stuck")
+            .Log(LogLevel.Information, default, "m", null, (_, _) => "m");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // measuring-interval: the stopwatch measures how long shutdown is held up.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        provider.Dispose();
+        clock.Stop();
+
+        cancelled
+            .Task.IsCompleted.Should()
+            .BeTrue("the writer is cancelled once the drain runs out");
+        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(8));
     }
 
     #endregion

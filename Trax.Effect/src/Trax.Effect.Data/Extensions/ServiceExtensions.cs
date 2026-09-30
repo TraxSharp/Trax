@@ -23,7 +23,8 @@ namespace Trax.Effect.Data.Extensions;
 public static class ServiceExtensions
 {
     /// <summary>
-    /// Adds data context logging to the Trax.Effect system.
+    /// Registers an <see cref="ILoggerProvider"/> that stores the host's <see cref="ILogger"/> messages
+    /// in the <c>trax.log</c> table, readable through <c>IDataContext.Logs</c>.
     /// Requires a data provider (<c>UsePostgres()</c>, <c>UseSqlite()</c>, or <c>UseInMemory()</c>) to have been configured first.
     /// </summary>
     /// <param name="configurationBuilder">
@@ -32,22 +33,20 @@ public static class ServiceExtensions
     /// to <see cref="TraxEffectBuilderWithData"/>.
     /// </param>
     /// <param name="minimumLogLevel">The minimum log level to capture (defaults to Information if not specified)</param>
-    /// <param name="blacklist">A list of namespace patterns to exclude from logging</param>
+    /// <param name="blacklist">
+    /// Logger categories not to store: an exact category name, or a pattern in which <c>*</c> matches
+    /// any run of characters.
+    /// </param>
     /// <returns>The configuration builder for method chaining</returns>
     /// <remarks>
-    /// This method configures logging for database operations in the Trax.Effect.Data system.
-    /// It registers the necessary services for capturing and processing database logs.
+    /// It is a sink for application logging, not a trace of the data context: every
+    /// <see cref="ILogger"/> category at or above <paramref name="minimumLogLevel"/> and not
+    /// blacklisted is stored, whatever wrote it. It does not record SQL or transaction boundaries.
+    /// EF Core's own command log (<c>Microsoft.EntityFrameworkCore.Database.Command</c>) is always
+    /// skipped, because writing a row would log another one.
     ///
-    /// The method:
-    /// 1. Creates a logging configuration with the specified settings
-    /// 2. Registers the logging provider and configuration with the dependency injection container
-    ///
-    /// Data context logging provides visibility into:
-    /// - SQL queries executed
-    /// - Transaction boundaries
-    /// - Errors and warnings
-    ///
-    /// This is particularly useful for debugging and performance optimization.
+    /// Entries are queued in memory (4096, oldest dropped when full) and written in batches by
+    /// <see cref="DataContextLoggingProvider"/>, which stores what is queued when the host stops.
     ///
     /// Example usage:
     /// ```csharp

@@ -19,5 +19,18 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
     <InternalsVisibleTo Include="Trax.Effect.Tests.Broadcaster" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+  </ItemGroup>
+
+  <!--
+    The builder flags that build-time validation reads (TraxBuilder.HasDatabaseProvider, HasDataProvider,
+    MediatorConfigured) have internal setters, so a consumer cannot pass that validation without the provider or
+    the mediator it checks for. These are the assemblies that earn a flag and set it.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Data.Postgres" />
+    <InternalsVisibleTo Include="Trax.Effect.Data.Sqlite" />
+    <InternalsVisibleTo Include="Trax.Effect.Data.InMemory" />
+    <InternalsVisibleTo Include="Trax.Mediator" />
   </ItemGroup>
 </Project>

@@ -166,7 +166,8 @@ public abstract class Machine<TState, TTrigger> : IMachine
             Built.CommittedStates,
             claims,
             EffectKeysOnReset,
-            draftTtl
+            draftTtl,
+            Built.Effects
         );
 
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
@@ -179,11 +180,11 @@ public abstract class Machine<TState, TTrigger> : IMachine
     /// </summary>
     /// <param name="service">
     /// The draft service from this machine's <see cref="CreateService"/>. Any other implementation throws
-    /// <see cref="InvalidCastException"/>.
+    /// <see cref="ArgumentException"/>.
     /// </param>
     /// <param name="idempotent">The exactly-once primitive the runner claims the effect key through.</param>
     /// <param name="services">The container the effect is resolved from; the effect must be registered.</param>
-    /// <exception cref="InvalidCastException"><paramref name="service"/> was not created by this machine.</exception>
+    /// <exception cref="ArgumentException"><paramref name="service"/> was not created by this machine's <see cref="CreateService"/>.</exception>
     /// <exception cref="InvalidOperationException">The effect type is not registered in <paramref name="services"/>.</exception>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public ISnapshotEffectRunner? CreateEffectRunner(
@@ -195,10 +196,20 @@ public abstract class Machine<TState, TTrigger> : IMachine
         if (Built.Effects.Count == 0)
             return null;
 
+        // The runner commits the effect's result through the draft service's effect-only advance, which only
+        // the service this machine built has. Say so rather than failing on a cast.
+        if (service is not SnapshotDraftService<TState, TTrigger> drafts)
+            throw new ArgumentException(
+                $"CreateEffectRunner needs the draft service built by this machine's CreateService, but was given "
+                    + $"{service?.GetType().Name ?? "null"}. Get the runner from ISnapshotMachineRegistry.EffectRunner, "
+                    + "or pass the service CreateService returned.",
+                nameof(service)
+            );
+
         var binding = Built.Effects[0];
         var effect = (ISnapshotEffect)services.GetRequiredService(binding.EffectType);
         return new SnapshotEffectRunner<TState, TTrigger>(
-            (SnapshotDraftService<TState, TTrigger>)service,
+            drafts,
             effect,
             idempotent,
             binding.From,

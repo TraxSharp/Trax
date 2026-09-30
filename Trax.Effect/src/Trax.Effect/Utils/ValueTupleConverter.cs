@@ -14,7 +14,7 @@ namespace Trax.Effect.Utils;
 ///
 /// This converter handles ValueTuple types with up to 7 elements (the maximum supported
 /// by the ValueTuple struct). It serializes ValueTuples as JSON arrays and deserializes
-/// JSON arrays back into ValueTuples.
+/// JSON arrays back into ValueTuples, reading each element as its field's type.
 ///
 /// This converter is particularly useful in the Trax.Effect system because:
 /// 1. ValueTuples are used extensively for returning multiple values from methods
@@ -77,7 +77,7 @@ internal class ValueTupleConverter : JsonConverterFactory
     /// instances during deserialization.
     ///
     /// The converter serializes ValueTuples as JSON arrays and deserializes JSON arrays
-    /// back into ValueTuples, ensuring that the field types are properly converted.
+    /// back into ValueTuples, deserializing each element as its field's type.
     /// </remarks>
     private class ValueTupleConverterInner<T> : JsonConverter<T>
         where T : struct
@@ -99,17 +99,12 @@ internal class ValueTupleConverter : JsonConverterFactory
         /// <param name="typeToConvert">The type to convert to</param>
         /// <param name="options">The serializer options</param>
         /// <returns>The deserialized ValueTuple</returns>
-        /// <exception cref="JsonException">Thrown if deserialization fails or if the array length doesn't match the tuple size</exception>
+        /// <exception cref="JsonException">Thrown if the value is not an array or if the array length doesn't match the tuple size</exception>
         /// <remarks>
-        /// This method:
-        /// 1. Deserializes the JSON array into an object array
-        /// 2. Verifies that the array length matches the number of fields in the ValueTuple
-        /// 3. Converts each array element to the appropriate field type
-        /// 4. Creates a new ValueTuple instance with the converted values
-        ///
-        /// The conversion ensures that the JSON values are properly typed for the
-        /// ValueTuple fields, handling cases like numbers being deserialized as
-        /// different numeric types than expected.
+        /// Each element is deserialized as its own field's type, so a number becomes the
+        /// field's numeric type and an object becomes the field's class. The array may be
+        /// bare, or inside the <c>{"$id": …, "$values": […]}</c> wrapper that
+        /// <see cref="Write"/> produces when the options preserve references.
         /// </remarks>
         public override T Read(
             ref Utf8JsonReader reader,
@@ -117,17 +112,27 @@ internal class ValueTupleConverter : JsonConverterFactory
             JsonSerializerOptions options
         )
         {
-            var values =
-                JsonSerializer.Deserialize<object[]>(ref reader, options)
-                ?? throw new JsonException("Failed to deserialize ValueTuple");
+            using var document = JsonDocument.ParseValue(ref reader);
+            var array = document.RootElement;
 
-            if (values.Length != Fields.Length)
+            if (
+                array.ValueKind == JsonValueKind.Object
+                && array.TryGetProperty("$values", out var values)
+            )
+                array = values;
+
+            if (array.ValueKind != JsonValueKind.Array)
                 throw new JsonException(
-                    $"Expected {Fields.Length} values, but got {values.Length}"
+                    $"Expected a JSON array for {typeof(T)}, but got {array.ValueKind}"
                 );
 
-            object?[] args = values
-                .Zip(Fields, (val, field) => Convert.ChangeType(val, field.FieldType))
+            var length = array.GetArrayLength();
+            if (length != Fields.Length)
+                throw new JsonException($"Expected {Fields.Length} values, but got {length}");
+
+            var args = array
+                .EnumerateArray()
+                .Zip(Fields, (element, field) => element.Deserialize(field.FieldType, options))
                 .ToArray();
             return (T)Activator.CreateInstance(typeof(T), args)!;
         }

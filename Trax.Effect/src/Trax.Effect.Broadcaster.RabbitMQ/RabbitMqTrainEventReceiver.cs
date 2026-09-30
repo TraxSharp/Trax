@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RabbitMQ.Client.Exceptions;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
 namespace Trax.Effect.Broadcaster.RabbitMQ;
@@ -143,7 +144,9 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
 
     /// <summary>
     /// Deletes this receiver's queue and closes the channel and connection if they are open.
-    /// Does not dispose them; <see cref="DisposeAsync"/> does.
+    /// Does not dispose them; <see cref="DisposeAsync"/> does. A channel or connection the broker
+    /// has already closed, including one it closes while this runs, is left as it is: the queue
+    /// is exclusive and auto-delete, so the broker removes it with the connection.
     /// </summary>
     /// <param name="ct">Cancels the close calls.</param>
     public async Task StopAsync(CancellationToken ct)
@@ -151,40 +154,53 @@ public class RabbitMqTrainEventReceiver : ITrainEventReceiver
         if (_channel is { IsOpen: true })
         {
             if (_queueName is not null)
-            {
-                await _channel.QueueDeleteAsync(_queueName, cancellationToken: ct);
-            }
+                await IgnoringClosed(() =>
+                    _channel.QueueDeleteAsync(_queueName, cancellationToken: ct)
+                );
 
-            await _channel.CloseAsync(cancellationToken: ct);
+            await IgnoringClosed(() => _channel.CloseAsync(cancellationToken: ct));
         }
 
         if (_connection is { IsOpen: true })
-        {
-            await _connection.CloseAsync(cancellationToken: ct);
-        }
+            await IgnoringClosed(() => _connection.CloseAsync(cancellationToken: ct));
 
         _logger?.LogInformation("RabbitMQ receiver stopped.");
     }
 
     /// <summary>
-    /// Closes the channel and connection if still open, then disposes both.
+    /// Closes the channel and connection if still open, then disposes both. Tolerates either
+    /// having been closed by the broker already.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_channel is not null)
         {
             if (_channel.IsOpen)
-                await _channel.CloseAsync();
+                await IgnoringClosed(() => _channel.CloseAsync());
             _channel.Dispose();
         }
 
         if (_connection is not null)
         {
             if (_connection.IsOpen)
-                await _connection.CloseAsync();
+                await IgnoringClosed(() => _connection.CloseAsync());
             _connection.Dispose();
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    // IsOpen is only a snapshot: the broker can close the connection between the check and the
+    // call. Shutting down something already shut down is not an error.
+    private async Task IgnoringClosed(Func<Task> close)
+    {
+        try
+        {
+            await close();
+        }
+        catch (Exception ex) when (ex is AlreadyClosedException or ObjectDisposedException)
+        {
+            _logger?.LogDebug(ex, "RabbitMQ receiver connection was already closed.");
+        }
     }
 }

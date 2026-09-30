@@ -15,7 +15,7 @@ public class ClaimContentionStressTests : StressFixture
     private static async Task<ClaimResult> Claim(string key, TimeSpan lease)
     {
         await using var ctx = StressDb.NewContext();
-        return await new EfEffectClaimStore(ctx).TryClaim(key, lease);
+        return await StressDb.NewClaims(ctx).TryClaim(key, lease);
     }
 
     [Test]

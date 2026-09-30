@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
+using Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Extensions;
@@ -29,7 +30,8 @@ internal sealed class SignalRTestServer : IAsyncDisposable
 
     public static async Task<SignalRTestServer> StartAsync(
         Action<SignalRSinkOptions>? configure = null,
-        string hubPath = "/hubs/trax-events"
+        string hubPath = "/hubs/trax-events",
+        Action<TraxTrainEventHubOptions>? hub = null
     )
     {
         var hostBuilder = new HostBuilder().ConfigureWebHost(webHost =>
@@ -52,7 +54,9 @@ internal sealed class SignalRTestServer : IAsyncDisposable
                 .Configure(app =>
                 {
                     app.UseRouting();
-                    app.UseEndpoints(endpoints => endpoints.MapTraxTrainEventHub(hubPath));
+                    app.UseEndpoints(endpoints =>
+                        endpoints.MapTraxTrainEventHub(hubPath, hub ?? (h => h.AllowAnonymous()))
+                    );
                 });
         });
 

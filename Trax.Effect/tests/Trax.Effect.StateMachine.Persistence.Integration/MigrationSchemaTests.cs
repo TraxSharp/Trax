@@ -1,8 +1,15 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Data.Sqlite.Extensions;
+using Trax.Effect.Extensions;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using PostgresMigrator = Trax.Effect.Data.Postgres.Utils.DatabaseMigrator;
 using SqliteMigrator = Trax.Effect.Data.Sqlite.Utils.DatabaseMigrator;
@@ -13,7 +20,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 /// The other integration tests build the two tables with <c>EnsureCreated</c>. These build them with the
 /// SHIPPED migrations (Postgres <c>040_state_machine_snapshots.sql</c> and <c>048_snapshot_draft_request_scope.sql</c>,
 /// SQLite <c>006_state_machine_snapshots.sql</c> and <c>013_snapshot_draft_request_scope.sql</c>) and then round-trip through the real stores. A column added to
-/// <c>SnapshotRecord</c>/<c>EffectClaim</c> without updating the migration fails here, because the store's
+/// <c>SnapshotDraft</c>/<c>EffectClaim</c> without updating the migration fails here, because the store's
 /// query hits a column the migration never created. This is the DDL-vs-EF-model drift guard, and it also
 /// proves the two providers auto-apply their tables (no EnsureCreated, no manual DDL).
 ///
@@ -51,11 +58,7 @@ public class MigrationSchemaTests
             // Applies 001..040 to a fresh database: 040 creates trax.snapshot_draft + trax.effect_claim.
             await PostgresMigrator.Migrate(conn);
 
-            await AssertStoresRoundTrip(() =>
-                new SnapshotDbContext(
-                    new DbContextOptionsBuilder<SnapshotDbContext>().UseNpgsql(conn).Options
-                )
-            );
+            await AssertStoresRoundTrip(Host(effects => effects.UsePostgres(conn)));
         }
         finally
         {
@@ -73,15 +76,11 @@ public class MigrationSchemaTests
         try
         {
             // DbUp creates the file and applies 001..006: 006 creates snapshot_draft + effect_claim
-            // (unqualified, TEXT columns). SnapshotDbContext strips the "trax" schema on SQLite so the
+            // (unqualified, TEXT columns). The SQLite data context strips the "trax" schema so the
             // stores query exactly these tables.
             await SqliteMigrator.Migrate(conn);
 
-            await AssertStoresRoundTrip(() =>
-                new SnapshotDbContext(
-                    new DbContextOptionsBuilder<SnapshotDbContext>().UseSqlite(conn).Options
-                )
-            );
+            await AssertStoresRoundTrip(Host(effects => effects.UseSqlite(conn)));
         }
         finally
         {
@@ -96,17 +95,30 @@ public class MigrationSchemaTests
     /// (claim -> in-flight -> fenced complete -> receipt). A fresh context per call hits the database, not
     /// the EF identity map.
     /// </summary>
-    private static async Task AssertStoresRoundTrip(Func<SnapshotDbContext> ctx)
+    /// <summary>The data context and dialect a host on this provider gets, with the migrations already applied.</summary>
+    private static ServiceProvider Host(Func<TraxEffectBuilder, TraxEffectBuilderWithData> provider)
     {
+        var services = new ServiceCollection();
+        services.AddTrax(trax => trax.AddEffects(effects => provider(effects)));
+        return services.BuildServiceProvider();
+    }
+
+    private static async Task AssertStoresRoundTrip(ServiceProvider host)
+    {
+        using var _ = host;
+        var dialect = host.GetRequiredService<ISqlDialect>();
+        IDataContext ctx() =>
+            (IDataContext)host.GetRequiredService<IDataContextProviderFactory>().Create();
+
         const string userKey = "mig-user";
         var id = Guid.NewGuid();
 
         // snapshot_draft: insert, read back (context survives), then a token-guarded update + replay marker.
-        (await With(ctx, c => new EfSnapshotStore(c).Upsert(userKey, id, Sample())))
+        (await With(ctx, c => new EfSnapshotStore(c, dialect).Upsert(userKey, id, Sample())))
             .Should()
             .BeTrue();
 
-        var stored = await With(ctx, c => new EfSnapshotStore(c).Get(userKey, id));
+        var stored = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id));
         stored
             .Should()
             .NotBeNull(
@@ -120,13 +132,20 @@ public class MigrationSchemaTests
         (
             await With(
                 ctx,
-                c => new EfSnapshotStore(c).Update(userKey, id, advanced, stored.Token, "req-1")
+                c =>
+                    new EfSnapshotStore(c, dialect).Update(
+                        userKey,
+                        id,
+                        advanced,
+                        stored.Token,
+                        "req-1"
+                    )
             )
         )
             .Should()
             .BeTrue();
 
-        var after = await With(ctx, c => new EfSnapshotStore(c).Get(userKey, id));
+        var after = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id));
         after.Should().NotBeNull();
         after!.Json.Should().Contain("\"state\":\"Locked\"");
         after.LastRequestId.Should().Be("req-1");
@@ -136,7 +155,7 @@ public class MigrationSchemaTests
             await With(
                 ctx,
                 c =>
-                    new EfSnapshotStore(c).UpdateWithRequest(
+                    new EfSnapshotStore(c, dialect).UpdateWithRequest(
                         userKey,
                         id,
                         Sample(),
@@ -147,29 +166,30 @@ public class MigrationSchemaTests
         )
             .Should()
             .BeTrue();
-        var scoped = await With(ctx, c => new EfSnapshotStore(c).Get(userKey, id));
+        var scoped = await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id));
         scoped!.LastRequest.Should().Be(new AppliedRequest("req-2", "Coin", "Locked"));
 
         // effect_claim: claim, confirm in-flight (no receipt), fenced complete, receipt readable back.
         var key = $"charge:{id}";
         var claim = await With(
             ctx,
-            c => new EfEffectClaimStore(c).TryClaim(key, TimeSpan.FromMinutes(5))
+            c => new EfEffectClaimStore(c, dialect).TryClaim(key, TimeSpan.FromMinutes(5))
         );
         claim.Should().BeOfType<ClaimResult.Won>();
         var owner = ((ClaimResult.Won)claim).OwnerToken;
 
-        (await With(ctx, c => new EfEffectClaimStore(c).GetReceipt(key))).Should().BeNull();
-        (await With(ctx, c => new EfEffectClaimStore(c).Complete(key, owner, "rcpt-1")))
+        (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key)))
+            .Should()
+            .BeNull();
+        (await With(ctx, c => new EfEffectClaimStore(c, dialect).Complete(key, owner, "rcpt-1")))
             .Should()
             .BeTrue();
-        (await With(ctx, c => new EfEffectClaimStore(c).GetReceipt(key))).Should().Be("rcpt-1");
+        (await With(ctx, c => new EfEffectClaimStore(c, dialect).GetReceipt(key)))
+            .Should()
+            .Be("rcpt-1");
     }
 
-    private static async Task<T> With<T>(
-        Func<SnapshotDbContext> ctx,
-        Func<SnapshotDbContext, Task<T>> op
-    )
+    private static async Task<T> With<T>(Func<IDataContext> ctx, Func<IDataContext, Task<T>> op)
     {
         await using var context = ctx();
         return await op(context);

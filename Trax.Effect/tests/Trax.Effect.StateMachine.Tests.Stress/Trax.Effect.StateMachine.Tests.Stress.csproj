@@ -25,5 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <!-- UsePostgres: the data context, dialect and migrations the stores run over, as a host gets them. -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
   </ItemGroup>
 </Project>

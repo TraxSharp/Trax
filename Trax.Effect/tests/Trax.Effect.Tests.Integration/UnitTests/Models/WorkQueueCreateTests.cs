@@ -172,6 +172,19 @@ public class WorkQueueCreateTests
     }
 
     [Test]
+    public void TheSubjectKey_HasNoPublicSetter()
+    {
+        typeof(WorkQueue)
+            .GetProperty(nameof(WorkQueue.SubjectKey))!
+            .GetSetMethod(nonPublic: false)
+            .Should()
+            .BeNull(
+                "a key set after Create would skip the checks Create makes, so an empty or "
+                    + "over-long key could reach the dispatcher"
+            );
+    }
+
+    [Test]
     public void TheParameterlessConstructor_IsNotPublic()
     {
         typeof(WorkQueue)

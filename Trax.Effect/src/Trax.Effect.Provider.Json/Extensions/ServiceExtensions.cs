@@ -49,11 +49,6 @@ public static class ServiceExtensions
     public static TBuilder AddJson<TBuilder>(this TBuilder configurationBuilder)
         where TBuilder : TraxEffectBuilder
     {
-        configurationBuilder.ServiceCollection.AddTransient<
-            IJsonEffectProvider,
-            JsonEffectProvider
-        >();
-
         configurationBuilder.AddEffect<JsonEffectProviderFactory>();
         return configurationBuilder;
     }

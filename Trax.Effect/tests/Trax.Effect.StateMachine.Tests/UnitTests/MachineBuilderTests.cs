@@ -118,4 +118,56 @@ public class MachineBuilderTests
         ok.Snapshot.Version.Should().Be(2);
         ok.Snapshot.Context["migrated"]!.GetValue<bool>().Should().BeTrue();
     }
+
+    [TestCase("")]
+    [TestCase("../x")]
+    [TestCase("Checkout")]
+    [TestCase("check_out")]
+    [TestCase("check--out")]
+    [TestCase("-checkout")]
+    [TestCase("checkout-")]
+    [TestCase("1checkout")]
+    public void Id_refuses_an_id_that_is_not_kebab_case(string id)
+    {
+        var b = new MachineBuilder<S, T>();
+
+        var act = () => b.Id(id);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*kebab-case*");
+    }
+
+    [Test]
+    public void Id_refuses_a_null_id()
+    {
+        var b = new MachineBuilder<S, T>();
+
+        var act = () => b.Id(null!);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [TestCase("m")]
+    [TestCase("checkout")]
+    [TestCase("turnstile-two")]
+    [TestCase("a1-b2-c3")]
+    public void Id_accepts_a_kebab_case_id(string id)
+    {
+        var b = new MachineBuilder<S, T>();
+        b.Id(id).StartsAt(S.A, () => new JsonObject());
+
+        b.Build().Definition.Id.Should().Be(id);
+    }
+
+    [Test]
+    public void Build_refuses_a_machine_that_binds_more_than_one_effect()
+    {
+        var b = new MachineBuilder<S, T>();
+        b.Id("m").StartsAt(S.A, () => new JsonObject());
+        b.In(S.A).On(T.Go).RunsOnce<IFakeEffect>().To(S.B);
+        b.In(S.B).On(T.Go).RunsOnce<IFakeEffect>("other").To(S.A);
+
+        var act = () => b.Build();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*RunsOnce*one*");
+    }
 }

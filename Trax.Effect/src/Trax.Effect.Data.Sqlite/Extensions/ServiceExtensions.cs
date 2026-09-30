@@ -62,9 +62,6 @@ public static class ServiceExtensions
                 .CreateDbContext()
         );
 
-        // Enable data context logging
-        configurationBuilder.DataContextLoggingEffectEnabled = true;
-
         // Register the context provider factory
         configurationBuilder.AddEffect<IDataContextProviderFactory, SqliteContextProviderFactory>(
             toggleable: false
@@ -73,8 +70,8 @@ public static class ServiceExtensions
         // Register the SQL dialect
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, SqliteSqlDialect>();
 
-        // Configure any feature's own DbContext (e.g. the state-machine SnapshotDbContext) against this same
-        // SQLite database, so a subsystem like AddStateMachines(...) needs no host AddDbContext call.
+        // Configure a feature's own DbContext, if it brings one, against this same SQLite database, so it needs no
+        // host AddDbContext call. A feature table normally ships on IDataContext instead.
         configurationBuilder.ServiceCollection.AddSingleton<ITraxFeatureDbConfigurator>(
             new DelegateFeatureDbConfigurator(options => options.UseSqlite(connectionString))
         );
@@ -85,7 +82,6 @@ public static class ServiceExtensions
         var promoted =
             configurationBuilder as TraxEffectBuilderWithData
             ?? new TraxEffectBuilderWithData(configurationBuilder);
-        promoted.DataContextLoggingEffectEnabled = true;
         return promoted;
     }
 

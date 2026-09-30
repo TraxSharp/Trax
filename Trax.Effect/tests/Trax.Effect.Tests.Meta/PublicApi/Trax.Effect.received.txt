@@ -118,9 +118,9 @@ namespace Trax.Effect.Configuration.TraxBuilder
     {
         public TraxBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Trax.Effect.Services.EffectRegistry.IEffectRegistry registry) { }
         public System.Collections.Generic.List<System.Reflection.Assembly> ContributedMediatorAssemblies { get; }
-        public bool HasDataProvider { get; set; }
-        public bool HasDatabaseProvider { get; set; }
-        public bool MediatorConfigured { get; set; }
+        public bool HasDataProvider { get; }
+        public bool HasDatabaseProvider { get; }
+        public bool MediatorConfigured { get; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabel(string key, string value) { }
         public Trax.Effect.Configuration.TraxBuilder.TraxBuilder AddHostLabels(System.Collections.Generic.Dictionary<string, string> labels) { }
@@ -143,10 +143,9 @@ namespace Trax.Effect.Configuration.TraxEffectBuilder
 {
     public class TraxEffectBuilder
     {
-        public bool DataContextLoggingEffectEnabled { get; set; }
         public Trax.Effect.Services.EffectRegistry.IEffectRegistry? EffectRegistry { get; }
-        public bool HasDataProvider { get; set; }
-        public bool HasDatabaseProvider { get; set; }
+        public bool HasDataProvider { get; }
+        public bool HasDatabaseProvider { get; }
         public bool JunctionProgressEnabled { get; set; }
         public Microsoft.Extensions.Logging.LogLevel LogLevel { get; set; }
         public bool MigrationsDisabled { get; set; }
@@ -212,6 +211,15 @@ namespace Trax.Effect.Enums
         Queued = 0,
         Dispatched = 1,
         Cancelled = 2,
+    }
+}
+namespace Trax.Effect.Exceptions
+{
+    public class TrainAlreadyStartedException : Trax.Core.Exceptions.TrainException
+    {
+        public TrainAlreadyStartedException(long metadataId, string trainName) { }
+        public long MetadataId { get; }
+        public string TrainName { get; }
     }
 }
 namespace Trax.Effect.Extensions
@@ -362,6 +370,23 @@ namespace Trax.Effect.Models.DeadLetter
         public void Requeue(string note) { }
         public override string ToString() { }
         public static Trax.Effect.Models.DeadLetter.DeadLetter Create(Trax.Effect.Models.DeadLetter.DTOs.CreateDeadLetter createDeadLetter) { }
+    }
+}
+namespace Trax.Effect.Models.EffectClaim
+{
+    public class EffectClaim
+    {
+        public EffectClaim() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTimeOffset CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("effect_key")]
+        public string EffectKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("lease_expires_at")]
+        public System.DateTimeOffset LeaseExpiresAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("owner_token")]
+        public System.Guid OwnerToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("receipt")]
+        public string? Receipt { get; set; }
     }
 }
 namespace Trax.Effect.Models.Host
@@ -829,6 +854,35 @@ namespace Trax.Effect.Models.SchedulerConfig
         public override string ToString() { }
     }
 }
+namespace Trax.Effect.Models.SnapshotDraft
+{
+    public class SnapshotDraft
+    {
+        public SnapshotDraft() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("concurrency_token")]
+        public System.Guid ConcurrencyToken { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("context", TypeName="jsonb")]
+        public string Context { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public System.Guid Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_request_from_state")]
+        public string? LastRequestFromState { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_request_id")]
+        public string? LastRequestId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("last_request_trigger")]
+        public string? LastRequestTrigger { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("machine")]
+        public string Machine { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state")]
+        public string State { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
+        public System.DateTimeOffset UpdatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("user_key")]
+        public string UserKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("version")]
+        public int Version { get; set; }
+    }
+}
 namespace Trax.Effect.Models.WorkQueue.DTOs
 {
     public class CreateWorkQueue
@@ -886,7 +940,8 @@ namespace Trax.Effect.Models.WorkQueue
         [System.ComponentModel.DataAnnotations.Schema.Column("status")]
         public Trax.Effect.Enums.WorkQueueStatus Status { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("subject_key")]
-        public string? SubjectKey { get; set; }
+        [System.Text.Json.Serialization.JsonInclude]
+        public string? SubjectKey { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_name")]
         public string TrainName { get; set; }
         public override string ToString() { }
@@ -954,6 +1009,10 @@ namespace Trax.Effect.Services.EffectProvider
         System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model);
         System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model);
     }
+    public interface IPendingRunClaim
+    {
+        System.Threading.Tasks.Task<bool> TryClaimPendingRun(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken);
+    }
 }
 namespace Trax.Effect.Services.EffectProviderFactory
 {
@@ -1012,12 +1071,14 @@ namespace Trax.Effect.Services.EffectRunner
         public void Dispose() { }
         public System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken) { }
         public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
+        public System.Threading.Tasks.Task<bool> TryClaimPendingRun(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken) { }
         public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
     }
     public interface IEffectRunner : System.IDisposable
     {
         System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken cancellationToken);
         System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model);
+        System.Threading.Tasks.Task<bool> TryClaimPendingRun(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken);
         System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model);
     }
 }
@@ -1161,6 +1222,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public string? Executor { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("externalId")]
         public string ExternalId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("failureException")]
+        public string? FailureException { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("failureJunction")]
         public string? FailureJunction { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("failureReason")]
@@ -1169,6 +1232,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public string? HostEnvironment { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("hostName")]
         public string? HostName { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("instanceId")]
+        public string? InstanceId { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("metadataId")]
         public long MetadataId { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("output")]

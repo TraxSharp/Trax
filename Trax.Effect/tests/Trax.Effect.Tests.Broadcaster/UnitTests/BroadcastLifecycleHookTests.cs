@@ -205,6 +205,39 @@ public class BroadcastLifecycleHookTests
     }
 
     [Test]
+    public async Task OnFailed_BroadcastsTheFailureExceptionType()
+    {
+        var metadata = CreateMetadata(TrainState.Failed);
+        var exception = new TrainException("The card was declined.");
+        metadata.AddException(exception);
+
+        TrainLifecycleEventMessage? captured = null;
+        await _broadcaster.PublishAsync(
+            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+            Arg.Any<CancellationToken>()
+        );
+
+        await _hook.OnFailed(metadata, exception, CancellationToken.None);
+
+        captured!.FailureException.Should().Be(nameof(TrainException));
+        captured.FailureException.Should().Be(metadata.FailureException);
+    }
+
+    [Test]
+    public async Task OnCompleted_BroadcastsNoFailureException()
+    {
+        TrainLifecycleEventMessage? captured = null;
+        await _broadcaster.PublishAsync(
+            Arg.Do<TrainLifecycleEventMessage>(m => captured = m),
+            Arg.Any<CancellationToken>()
+        );
+
+        await _hook.OnCompleted(CreateMetadata(TrainState.Completed), CancellationToken.None);
+
+        captured!.FailureException.Should().BeNull();
+    }
+
+    [Test]
     public async Task OnFailed_WithTrainExceptionData_BroadcastsJunctionAndReason()
     {
         var metadata = CreateMetadata(TrainState.Failed);

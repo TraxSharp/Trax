@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Models;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.EffectProvider;
@@ -199,6 +200,82 @@ public class EffectRunnerRegistryTests
 
     #endregion
 
+    #region EffectRunner with a throwing provider
+
+    [Test]
+    public async Task SaveChanges_first_provider_throws_the_second_still_saves_and_the_exception_surfaces()
+    {
+        var registry = new EffectRegistry();
+        var throwing = new ThrowingEffectFactory(new InvalidOperationException("first"));
+        var tracking = new TrackingEffectFactory();
+
+        using var runner = new EffectRunner([throwing, tracking], registry);
+        var act = () => runner.SaveChanges(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage("first");
+        tracking.Provider.SaveChangesCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Update_first_provider_throws_the_second_still_updates()
+    {
+        var registry = new EffectRegistry();
+        var throwing = new ThrowingEffectFactory(new InvalidOperationException("first"));
+        var tracking = new TrackingEffectFactory();
+
+        using var runner = new EffectRunner([throwing, tracking], registry);
+        var act = () => runner.Update(new FakeModel());
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        tracking.Provider.UpdateCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Track_first_provider_throws_the_second_still_tracks()
+    {
+        var registry = new EffectRegistry();
+        var throwing = new ThrowingEffectFactory(new InvalidOperationException("first"));
+        var tracking = new TrackingEffectFactory();
+
+        using var runner = new EffectRunner([throwing, tracking], registry);
+        var act = () => runner.Track(new FakeModel());
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        tracking.Provider.TrackCalled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task SaveChanges_two_providers_throw_surfaces_both_in_an_AggregateException()
+    {
+        var registry = new EffectRegistry();
+        var first = new ThrowingEffectFactory(new InvalidOperationException("first"));
+        var second = new ThrowingEffectFactory2(new ArgumentException("second"));
+
+        using var runner = new EffectRunner([first, second], registry);
+        var act = () => runner.SaveChanges(CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<AggregateException>();
+        thrown
+            .Which.InnerExceptions.Select(e => e.Message)
+            .Should()
+            .BeEquivalentTo(["first", "second"]);
+    }
+
+    [Test]
+    public async Task SaveChanges_every_provider_cancelled_surfaces_a_cancellation_not_an_aggregate()
+    {
+        var registry = new EffectRegistry();
+        var first = new ThrowingEffectFactory(new OperationCanceledException());
+        var second = new ThrowingEffectFactory2(new OperationCanceledException());
+
+        using var runner = new EffectRunner([first, second], registry);
+        var act = () => runner.SaveChanges(CancellationToken.None);
+
+        await act.Should().ThrowExactlyAsync<OperationCanceledException>();
+    }
+
+    #endregion
+
     #region JunctionEffectRunner
 
     [Test]
@@ -304,9 +381,59 @@ public class EffectRunnerRegistryTests
         throwingFactory.Provider.DisposeCalled.Should().BeTrue();
     }
 
+    [Test]
+    public void JunctionEffectRunner_Dispose_LogsHowManyProvidersItDisposed()
+    {
+        var registry = new EffectRegistry();
+        var logger = new RecordingLogger<JunctionEffectRunner>();
+        var runner = new JunctionEffectRunner(
+            [new EnabledJunctionEffectFactory(), new DisabledJunctionEffectFactory()],
+            registry,
+            logger
+        );
+
+        runner.Dispose();
+
+        logger.Messages.Should().ContainSingle(m => m.Contains("(2)"));
+    }
+
+    [Test]
+    public void EffectRunner_Dispose_LogsHowManyProvidersItDisposed()
+    {
+        var registry = new EffectRegistry();
+        var logger = new RecordingLogger<EffectRunner>();
+        var runner = new EffectRunner(
+            [new EnabledEffectFactory(), new DisabledEffectFactory()],
+            registry,
+            logger
+        );
+
+        runner.Dispose();
+
+        logger.Messages.Should().ContainSingle(m => m.Contains("(2)"));
+    }
+
     #endregion
 
     #region Test Stubs
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        ) => Messages.Add(formatter(state, exception));
+    }
 
     private class StubEffectProvider : IEffectProvider
     {
@@ -430,6 +557,28 @@ public class EffectRunnerRegistryTests
         public TrackingEffectProvider Provider { get; } = new();
 
         public IEffectProvider Create() => Provider;
+    }
+
+    private class ThrowingEffectProvider(Exception exception) : IEffectProvider
+    {
+        public Task SaveChanges(CancellationToken cancellationToken) =>
+            Task.FromException(exception);
+
+        public Task Track(IModel model) => Task.FromException(exception);
+
+        public Task Update(IModel model) => Task.FromException(exception);
+
+        public void Dispose() { }
+    }
+
+    private class ThrowingEffectFactory(Exception exception) : IEffectProviderFactory
+    {
+        public IEffectProvider Create() => new ThrowingEffectProvider(exception);
+    }
+
+    private class ThrowingEffectFactory2(Exception exception) : IEffectProviderFactory
+    {
+        public IEffectProvider Create() => new ThrowingEffectProvider(exception);
     }
 
     private class ThrowingDisposeEffectProvider : IEffectProvider

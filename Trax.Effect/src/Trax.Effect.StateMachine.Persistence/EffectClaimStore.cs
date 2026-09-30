@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
+using EffectClaim = Trax.Effect.Models.EffectClaim.EffectClaim;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -68,14 +71,24 @@ public interface IEffectClaimStore
     Task<int> ReclaimStale(DateTimeOffset cutoff, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The Postgres-backed <see cref="IEffectClaimStore"/>. The unique PK on <c>effect_key</c> is the lock.</summary>
-public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
+/// <summary>
+/// The <see cref="IEffectClaimStore"/> over <see cref="IDataContext.EffectClaims"/>. The primary key on
+/// <c>effect_key</c> is the lock.
+/// </summary>
+/// <param name="db">The data context the table is reached through.</param>
+/// <param name="dialect">
+/// Recognises a unique violation on the configured provider, which is how a claim on a key someone else holds is
+/// told apart from a real failure. Without one, such a claim throws instead of reporting
+/// <see cref="ClaimResult.Lost"/>.
+/// </param>
+public sealed class EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = null)
+    : IEffectClaimStore
 {
     /// <summary>
     /// Inserts a new <c>effect_claim</c> row with a fresh owner token and <c>lease_expires_at = now + lease</c>.
     /// If the key already exists, it takes the row over only when the receipt is null and the lease has passed,
     /// rotating the owner token; otherwise the result is <see cref="ClaimResult.Lost"/>. A completed claim is
-    /// never reclaimed. The duplicate key is recognised only as a Postgres unique violation.
+    /// never reclaimed. The duplicate key is recognised through the <see cref="ISqlDialect"/> the store was given.
     /// </summary>
     /// <param name="effectKey">The intent key, the primary key of the row.</param>
     /// <param name="lease">How long the claim is held before another caller may reclaim it.</param>
@@ -90,27 +103,25 @@ public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
         var now = DateTimeOffset.UtcNow;
         var expires = now + lease;
 
-        db.EffectClaims.Add(
-            new EffectClaim
-            {
-                EffectKey = effectKey,
-                OwnerToken = owner,
-                LeaseExpiresAt = expires,
-                Receipt = null,
-                CreatedAt = now,
-            }
-        );
+        var claim = new EffectClaim
+        {
+            EffectKey = effectKey,
+            OwnerToken = owner,
+            LeaseExpiresAt = expires,
+            Receipt = null,
+            CreatedAt = now,
+        };
+        db.EffectClaims.Add(claim);
 
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await ((DbContext)db).SaveChangesAsync(cancellationToken);
             return new ClaimResult.Won(owner);
         }
-        catch (DbUpdateException ex) when (EfSnapshotStore.IsUniqueViolation(ex))
+        catch (DbUpdateException ex) when (dialect?.IsUniqueViolation(ex) == true)
         {
-            // The key exists. Clear the failed Add so the context stays usable, then try to reclaim it —
-            // but ONLY if it is an in-flight claim (no receipt) whose lease has expired.
-            db.ChangeTracker.Clear();
+            // The key exists. Try to reclaim it — but ONLY if it is an in-flight claim (no receipt) whose lease
+            // has expired.
             var rows = await db
                 .EffectClaims.Where(x =>
                     x.EffectKey == effectKey && x.Receipt == null && x.LeaseExpiresAt < now
@@ -122,6 +133,14 @@ public sealed class EfEffectClaimStore(SnapshotDbContext db) : IEffectClaimStore
                     cancellationToken
                 );
             return rows == 1 ? new ClaimResult.Won(owner) : new ClaimResult.Lost();
+        }
+        finally
+        {
+            // Stop tracking the claim whether or not it was written: the context may be shared with the rest of
+            // the request, and a failed insert left tracked would be retried by the next save on it.
+            ((DbContext)db)
+                .Entry(claim)
+                .State = EntityState.Detached;
         }
     }
 

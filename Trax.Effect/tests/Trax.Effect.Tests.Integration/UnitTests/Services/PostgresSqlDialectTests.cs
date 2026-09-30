@@ -23,10 +23,15 @@ public class PostgresSqlDialectTests
     {
         var dialect = Create();
         var method = dialect.GetType().GetMethod("TryAcquireLeaderLock")!;
-        var sql = method.Invoke(dialect, ["my-lock"])!;
+        var sql = (FormattableString)method.Invoke(dialect, ["my-lock"])!;
 
-        sql.ToString().Should().Contain("pg_try_advisory_xact_lock");
-        sql.ToString().Should().Contain("my-lock");
+        sql.Format.Should().Contain("pg_try_advisory_xact_lock");
+        sql.GetArguments().Should().Equal("my-lock");
+        sql.Format.Should()
+            .Contain(
+                "hashtext({0})",
+                "a quoted placeholder hashes the parameter's name, so every lock would be one lock"
+            );
     }
 
     [Test]

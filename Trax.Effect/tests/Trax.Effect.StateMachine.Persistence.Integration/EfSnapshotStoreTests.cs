@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 
@@ -118,6 +119,27 @@ public class EfSnapshotStoreTests
         (await TestDb.NewStore().Update("u", id, Unlocked("dollar"), stored!.Token))
             .Should()
             .BeTrue();
+        (await TestDb.NewStore().Get("u", id))!.Json.Should().Contain("dollar");
+    }
+
+    [Test]
+    public async Task Upsert_over_a_row_changed_since_it_was_read_loses_instead_of_overwriting()
+    {
+        var id = Guid.NewGuid();
+        await TestDb.NewStore().Upsert("u", id, Unlocked("quarter"));
+
+        // This request's context already holds the row as it was first read.
+        var context = TestDb.NewContext();
+        await context.SnapshotDrafts.SingleAsync(x => x.Id == id && x.UserKey == "u");
+
+        // Another request writes it in the meantime.
+        (await TestDb.NewStore().Upsert("u", id, Unlocked("dollar")))
+            .Should()
+            .BeTrue();
+
+        (await TestDb.NewStore(context).Upsert("u", id, Unlocked("euro")))
+            .Should()
+            .BeFalse("the row changed after this writer read it");
         (await TestDb.NewStore().Get("u", id))!.Json.Should().Contain("dollar");
     }
 }

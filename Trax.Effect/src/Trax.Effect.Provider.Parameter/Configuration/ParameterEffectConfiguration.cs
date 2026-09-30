@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Trax.Effect.Services.LifecycleHookOutputPolicy;
 
 namespace Trax.Effect.Provider.Parameter.Configuration;
 
@@ -25,15 +26,18 @@ public class ParameterEffectConfiguration
 
     /// <summary>
     /// Hard byte ceiling per serialized parameter (applies to input <b>and</b> output).
-    /// <c>null</c> means unbounded (the historical behavior).
+    /// Defaults to 1 MiB (1,048,576 bytes). <c>null</c> removes the ceiling.
     /// </summary>
     /// <remarks>
     /// A payload that serializes past this many UTF-8 bytes is aborted mid-serialization
     /// (before the whole thing is materialized) and stored as a small valid-JSON placeholder
     /// <c>{"_truncated": true, "_maxBytes": N}</c>. This is the automatic safety net that keeps
-    /// a single unexpectedly-large train from exhausting host memory. Must be a positive value.
+    /// a single unexpectedly-large train from exhausting host memory, so it is on unless a host
+    /// turns it off. Set a larger value for trains that legitimately carry more, or <c>null</c>
+    /// to store parameters of any size. Must be a positive value when set.
     /// </remarks>
-    public int? MaxParameterBytes { get; set; }
+    public int? MaxParameterBytes { get; set; } =
+        DefaultLifecycleHookOutputPolicy.DefaultMaxCopyBytes;
 
     /// <summary>
     /// Optional predicate deciding whether a given train's INPUT should be serialized.

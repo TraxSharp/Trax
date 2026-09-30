@@ -1,4 +1,6 @@
 using Trax.Effect.Models;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.EffectProvider;
 
 namespace Trax.Effect.Services.EffectRunner;
 
@@ -56,4 +58,18 @@ public interface IEffectRunner : IDisposable
     /// has directly modified the model's properties.
     /// </remarks>
     Task Update(IModel model);
+
+    /// <summary>
+    /// Claims the stored <c>Pending</c> row of a run started from a pre-created row, through every
+    /// active provider that implements <see cref="IPendingRunClaim"/>.
+    /// </summary>
+    /// <param name="metadata">A run whose row already exists in the store.</param>
+    /// <param name="cancellationToken">Cancels the claim.</param>
+    /// <returns>
+    /// <c>false</c> when a provider found the row no longer <c>Pending</c>; <c>true</c> otherwise,
+    /// including when no provider can claim. The default implementation claims nothing and
+    /// returns <c>true</c>.
+    /// </returns>
+    Task<bool> TryClaimPendingRun(Metadata metadata, CancellationToken cancellationToken) =>
+        Task.FromResult(true);
 }

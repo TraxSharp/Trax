@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 
@@ -69,15 +70,74 @@ public class SnapshotDraftExpiryTests
     {
         var id = Guid.NewGuid();
         // A committed (Placed) draft — the kind a soft autosave can't overwrite. Expiry must still clear it,
-        // so a returning user isn't wedged behind their own completed order.
-        (await Order(TimeSpan.FromMinutes(1)).Autosave("u", id, TestOrder.PlacedJson("r1", 1, 2)))
+        // so a returning user isn't wedged behind their own completed order. The soft path cannot create a
+        // committed draft, so it is seeded straight into the store.
+        (
+            await TestDb
+                .NewStore()
+                .Upsert(
+                    "u",
+                    id,
+                    (
+                        (RehydrationResult.Ok)
+                            TestOrder.Machine.Rehydrate(TestOrder.PlacedJson("r1", 1, 2))
+                    ).Snapshot
+                )
+        )
             .Should()
-            .BeOfType<AutosaveResult.Saved>();
+            .BeTrue();
         await TestDb.BackdateDraft("u", id, DateTimeOffset.UtcNow.AddHours(-1));
 
         (await Order(TimeSpan.FromMinutes(1)).Load("u", id))
             .Should()
             .BeOfType<LoadResult.NotFound>();
         (await TestDb.NewStore().Get("u", id)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task A_fresh_order_after_ttl_expiry_runs_its_effect()
+    {
+        var ttl = TimeSpan.FromMinutes(1);
+        var effect = new CountingEffect();
+        var id = Guid.NewGuid();
+
+        await PlaceOrder(ttl, effect, id);
+        effect.Calls.Should().Be(1);
+
+        // The placed draft is abandoned past the TTL, and the next load clears it.
+        await TestDb.BackdateDraft("u", id, DateTimeOffset.UtcNow.AddHours(-1));
+        (
+            await new OrderMachine()
+                .CreateService(TestDb.NewStore(), TestDb.NewClaims(), ttl)
+                .Load("u", id)
+        )
+            .Should()
+            .BeOfType<LoadResult.NotFound>();
+
+        // A new order under the same (well-known) draft id is a new intent: it must be charged, not answered
+        // with the expired order's receipt.
+        var placed = await PlaceOrder(ttl, effect, id);
+
+        effect.Calls.Should().Be(2);
+        placed.Context["receipt"]!.GetValue<string>().Should().Be("receipt-2");
+    }
+
+    private static async Task<Snapshot> PlaceOrder(TimeSpan ttl, CountingEffect effect, Guid id)
+    {
+        var machine = new OrderMachine();
+        var service = machine.CreateService(TestDb.NewStore(), TestDb.NewClaims(), ttl);
+        (await service.Autosave("u", id, OrderMachine.ReviewSnapshot(1)))
+            .Should()
+            .BeOfType<AutosaveResult.Saved>();
+
+        var runner = machine.CreateEffectRunner(
+            service,
+            new IdempotentEffect(TestDb.NewClaims()),
+            new ServiceCollection().AddSingleton<IOrderCharge>(effect).BuildServiceProvider()
+        )!;
+        return (await runner.Run("u", id, $"send-{Guid.NewGuid()}"))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>()
+            .Which.Snapshot;
     }
 }

@@ -22,6 +22,7 @@ public class TrainEventReceiverServiceTests
         var services = new ServiceCollection();
         services.AddTransient<ITrainEventHandler>(_ => _handler);
         services.AddLogging();
+        services.AddSingleton<BroadcastInstance>();
         _serviceProvider = services.BuildServiceProvider();
     }
 
@@ -141,10 +142,11 @@ public class TrainEventReceiverServiceTests
         await service.StartAsync(cts.Token);
         await Task.Delay(50);
 
-        // Use the local executor name (entry assembly project name)
-        var localExecutor = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
-
-        var message = CreateMessage(executor: localExecutor);
+        // Stamped with this host's instance id, as its own hook and sink stamp what they publish.
+        var message = CreateMessage() with
+        {
+            InstanceId = _serviceProvider.GetRequiredService<BroadcastInstance>().Id,
+        };
         await capturedHandler!(message, CancellationToken.None);
 
         await _handler

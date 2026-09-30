@@ -141,5 +141,77 @@ public class SqliteMigrationTests
         }
     }
 
+    /// <summary>
+    /// Before 014 the unique queued-per-manifest index compared the status to a label SQLite never
+    /// stores, so a database could hold two queued entries for one manifest, and the rebuilt index
+    /// cannot be created over them. 014 keeps each manifest's oldest queued entry and cancels the
+    /// rest.
+    /// </summary>
+    [Test]
+    public void Migration014_KeepsTheOldestQueuedEntryPerManifest()
+    {
+        var dbPath = CreateTempDbPath();
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var upTo013 = DbUp
+                .DeployChanges.To.SqliteDatabase(connectionString)
+                .WithScriptsEmbeddedInAssembly(
+                    typeof(DatabaseMigrator).Assembly,
+                    name =>
+                        int.Parse(
+                            System
+                                .Text.RegularExpressions.Regex.Match(name, @"\.(\d{3})_")
+                                .Groups[1]
+                                .Value
+                        ) <= 13
+                )
+                .LogToNowhere()
+                .Build()
+                .PerformUpgrade();
+            upTo013.Successful.Should().BeTrue(upTo013.Error?.ToString());
+
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                connection.Open();
+                using var seed = connection.CreateCommand();
+                seed.CommandText = """
+                    INSERT INTO manifest_group (id, name) VALUES (1, 'g');
+                    INSERT INTO manifest (id, external_id, name, manifest_group_id) VALUES (1, 'm', 'M', 1);
+                    INSERT INTO work_queue (id, external_id, train_name, status, manifest_id, created_at, dispatch_attempts)
+                    VALUES (1, 'first', 'M', 0, 1, datetime('now'), 0),
+                           (2, 'second', 'M', 0, 1, datetime('now'), 0),
+                           (3, 'done', 'M', 1, 1, datetime('now'), 0);
+                    """;
+                seed.ExecuteNonQuery();
+            }
+
+            DatabaseMigrator.Migrate(connectionString).Wait();
+
+            using var check = new SqliteConnection(connectionString);
+            check.Open();
+            using var command = check.CreateCommand();
+            command.CommandText =
+                "SELECT external_id || ':' || status FROM work_queue ORDER BY id;";
+            var rows = new List<string>();
+            using (var reader = command.ExecuteReader())
+                while (reader.Read())
+                    rows.Add(reader.GetString(0));
+
+            rows.Should()
+                .Equal(
+                    ["first:0", "second:2", "done:1"],
+                    "the oldest queued entry stays queued, the later one is cancelled, and a "
+                        + "dispatched one is left alone"
+                );
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath))
+                File.Delete(dbPath);
+        }
+    }
+
     #endregion
 }

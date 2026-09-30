@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Junction;
 
 namespace Trax.Effect.StateMachine.Persistence.Mutations;
@@ -30,11 +31,44 @@ internal static class SnapshotGuards
                     "This client is running an outdated version of the machine. Reload the page to continue.",
             }
             : null;
+
+    /// <summary>
+    /// A refusal to return to the client. When it came from an exception (a guard, reducer or migration that
+    /// threw, or an effect that failed), the exception's text stays on the server: it is logged under a fresh
+    /// reference, and the client gets the fixed <paramref name="message"/> with that reference, so an operator
+    /// can find the log entry without the response carrying whatever the exception said.
+    /// </summary>
+    public static SnapshotProblem Failure(
+        ILogger? logger,
+        string code,
+        string message,
+        Exception? exception,
+        string machine,
+        Guid id
+    )
+    {
+        if (exception is null)
+            return new SnapshotProblem { Code = code, Message = message };
+
+        var reference = Guid.NewGuid().ToString("N");
+        logger?.LogError(
+            exception,
+            "The {Machine} draft {DraftId} failed with {Code}. Reference {Reference}.",
+            machine,
+            id,
+            code,
+            reference
+        );
+        return new SnapshotProblem { Code = code, Message = $"{message} Reference: {reference}." };
+    }
 }
 
 /// <summary>Autosave (soft path): validate + store a client snapshot for any registered machine. Infrastructure chained by <see cref="SaveSnapshot"/>; not intended to be called directly.</summary>
-internal class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
-    : Junction<SaveSnapshotInput, SaveSnapshotOutput>
+internal class SaveSnapshotJunction(
+    ISnapshotMachineRegistry registry,
+    ISnapshotPrincipal principal,
+    ILogger<SaveSnapshotJunction>? logger = null
+) : Junction<SaveSnapshotInput, SaveSnapshotOutput>
 {
     /// <summary>
     /// Autosaves <see cref="SaveSnapshotInput.Snapshot"/> for the current user. Every refusal is returned as a
@@ -62,7 +96,16 @@ internal class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
             {
                 Snapshot = service.Serialize(saved.Snapshot),
             },
-            AutosaveResult.Rejected rejected => Problem(rejected.Code, rejected.Message),
+            AutosaveResult.Rejected rejected => Failed(
+                SnapshotGuards.Failure(
+                    logger,
+                    rejected.Code,
+                    rejected.Message,
+                    rejected.Exception,
+                    input.Machine,
+                    input.Id
+                )
+            ),
             AutosaveResult.Conflict => Problem(
                 "conflict",
                 "The draft changed elsewhere; reload and retry."
@@ -76,12 +119,16 @@ internal class SaveSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
         };
+
+    private static SaveSnapshotOutput Failed(SnapshotProblem problem) =>
+        new() { Problem = problem };
 }
 
 /// <summary>Authoritative advance: re-drive the stored draft by one trigger, server-side. Infrastructure chained by <see cref="AdvanceSnapshot"/>; not intended to be called directly.</summary>
 internal class AdvanceSnapshotJunction(
     ISnapshotMachineRegistry registry,
-    ISnapshotPrincipal principal
+    ISnapshotPrincipal principal,
+    ILogger<AdvanceSnapshotJunction>? logger = null
 ) : Junction<AdvanceSnapshotInput, AdvanceSnapshotOutput>
 {
     /// <summary>
@@ -145,12 +192,27 @@ internal class AdvanceSnapshotJunction(
             {
                 Snapshot = service.Serialize(advanced.Snapshot),
             },
-            AdvanceOutcome.Rejected rejected => Problem(
-                rejected.Reason,
-                rejected.Detail ?? rejected.Reason
+            AdvanceOutcome.Rejected rejected => Failed(
+                SnapshotGuards.Failure(
+                    logger,
+                    rejected.Reason,
+                    rejected.Detail ?? rejected.Reason,
+                    rejected.Exception,
+                    input.Machine,
+                    input.Id
+                )
             ),
             AdvanceOutcome.NotFound => Problem("not-found", "No draft with that id."),
-            AdvanceOutcome.LoadError loadError => Problem(loadError.Code, loadError.Message),
+            AdvanceOutcome.LoadError loadError => Failed(
+                SnapshotGuards.Failure(
+                    logger,
+                    loadError.Code,
+                    loadError.Message,
+                    loadError.Exception,
+                    input.Machine,
+                    input.Id
+                )
+            ),
             AdvanceOutcome.Conflict => Problem(
                 "conflict",
                 "The draft changed elsewhere; reload and retry."
@@ -164,11 +226,17 @@ internal class AdvanceSnapshotJunction(
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
         };
+
+    private static AdvanceSnapshotOutput Failed(SnapshotProblem problem) =>
+        new() { Problem = problem };
 }
 
 /// <summary>Resume read: load the caller's stored draft. A missing draft is normal (start fresh), not an error. Infrastructure chained by <see cref="LoadSnapshot"/>; not intended to be called directly.</summary>
-internal class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
-    : Junction<LoadSnapshotInput, LoadSnapshotOutput>
+internal class LoadSnapshotJunction(
+    ISnapshotMachineRegistry registry,
+    ISnapshotPrincipal principal,
+    ILogger<LoadSnapshotJunction>? logger = null
+) : Junction<LoadSnapshotInput, LoadSnapshotOutput>
 {
     /// <summary>
     /// Loads the current user's draft. A missing (or expired) draft comes back as the <c>not-found</c>
@@ -197,7 +265,17 @@ internal class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
                 Snapshot = service.Serialize(loaded.Snapshot),
             },
             LoadResult.NotFound => Problem("not-found", "No draft to resume."),
-            LoadResult.Invalid invalid => Problem(invalid.Code, invalid.Message),
+            LoadResult.Invalid invalid => new LoadSnapshotOutput
+            {
+                Problem = SnapshotGuards.Failure(
+                    logger,
+                    invalid.Code,
+                    invalid.Message,
+                    invalid.Exception,
+                    input.Machine,
+                    input.Id
+                ),
+            },
             _ => Problem("internal-error", "Unknown load result."),
         };
     }
@@ -210,15 +288,19 @@ internal class LoadSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
 }
 
 /// <summary>Run a machine's one irreversible effect exactly once (state-gated, idempotent). Infrastructure chained by <see cref="SendSnapshot"/>; not intended to be called directly.</summary>
-internal class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshotPrincipal principal)
-    : Junction<SendSnapshotInput, SendSnapshotOutput>
+internal class SendSnapshotJunction(
+    ISnapshotMachineRegistry registry,
+    ISnapshotPrincipal principal,
+    ILogger<SendSnapshotJunction>? logger = null
+) : Junction<SendSnapshotInput, SendSnapshotOutput>
 {
     /// <summary>
     /// Runs the machine's irreversible effect for the current user's draft, keyed by
     /// <see cref="SendSnapshotInput.RequestId"/> or <c>send:{Id}</c> when none is given. Refusals are returned
-    /// as a <see cref="SnapshotProblem"/>, including <c>no-effect</c> when the machine declares none; an
-    /// exception from the effect is caught and returned as <c>delivery-failed</c> carrying the exception
-    /// message, with the draft not advanced.
+    /// as a <see cref="SnapshotProblem"/>, including <c>no-effect</c> when the machine declares none. Any other
+    /// exception is caught and returned as <c>delivery-failed</c> with a fixed message and a reference, and the
+    /// exception is logged under that reference; the draft is not advanced. A cancelled request is not a failed
+    /// delivery, so an <see cref="OperationCanceledException"/> propagates.
     /// </summary>
     public override async Task<SendSnapshotOutput> Run(SendSnapshotInput input)
     {
@@ -255,12 +337,27 @@ internal class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
                 {
                     Snapshot = registryService.Serialize(advanced.Snapshot),
                 },
-                AdvanceOutcome.Rejected rejected => Problem(
-                    rejected.Reason,
-                    rejected.Detail ?? rejected.Reason
+                AdvanceOutcome.Rejected rejected => Failed(
+                    SnapshotGuards.Failure(
+                        logger,
+                        rejected.Reason,
+                        rejected.Detail ?? rejected.Reason,
+                        rejected.Exception,
+                        input.Machine,
+                        input.Id
+                    )
                 ),
                 AdvanceOutcome.NotFound => Problem("not-found", "No draft with that id."),
-                AdvanceOutcome.LoadError loadError => Problem(loadError.Code, loadError.Message),
+                AdvanceOutcome.LoadError loadError => Failed(
+                    SnapshotGuards.Failure(
+                        logger,
+                        loadError.Code,
+                        loadError.Message,
+                        loadError.Exception,
+                        input.Machine,
+                        input.Id
+                    )
+                ),
                 AdvanceOutcome.Conflict => Problem(
                     "conflict",
                     "The draft changed elsewhere; reload and retry."
@@ -268,10 +365,21 @@ internal class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
                 _ => Problem("internal-error", "Unknown send outcome."),
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The effect threw: the draft was NOT advanced, so the user can retry. Surfaced as data.
-            return Problem("delivery-failed", ex.Message);
+            // The effect (or the store around it) threw: the draft was NOT advanced, so the user can retry.
+            // Surfaced as data with a fixed message: the exception's own text can carry anything, a connection
+            // string included, so it goes to the log under the reference the client is given.
+            return Failed(
+                SnapshotGuards.Failure(
+                    logger,
+                    "delivery-failed",
+                    "The action could not be completed. Try again.",
+                    ex,
+                    input.Machine,
+                    input.Id
+                )
+            );
         }
     }
 
@@ -280,4 +388,7 @@ internal class SendSnapshotJunction(ISnapshotMachineRegistry registry, ISnapshot
         {
             Problem = new SnapshotProblem { Code = code, Message = message },
         };
+
+    private static SendSnapshotOutput Failed(SnapshotProblem problem) =>
+        new() { Problem = problem };
 }

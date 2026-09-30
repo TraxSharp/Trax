@@ -29,10 +29,6 @@ public class SqliteEveryTableIsModelledTests : TestSetup
     private static readonly Dictionary<string, string> Unmodelled = new(StringComparer.Ordinal)
     {
         ["SchemaVersions"] = "DbUp's journal of applied scripts, not Trax data",
-        ["snapshot_draft"] =
-            "Trax.Effect.StateMachine.Persistence maps it on its own SnapshotDbContext, a known deviation the ADR records",
-        ["effect_claim"] =
-            "Trax.Effect.StateMachine.Persistence maps it on its own SnapshotDbContext, a known deviation the ADR records",
     };
 
     public override ServiceProvider ConfigureServices(IServiceCollection services) =>
@@ -101,6 +97,28 @@ public class SqliteEveryTableIsModelledTests : TestSetup
             .BeEquivalentTo(
                 migrated["runner_nonce"],
                 $"the RunnerNonce model maps exactly the columns its migration creates. See {Adr}."
+            );
+    }
+
+    [TestCase("snapshot_draft")]
+    [TestCase("effect_claim")]
+    public async Task State_machine_tables_are_mapped_column_for_column(string table)
+    {
+        using var context = NewContext();
+        var migrated = await MigratedColumns(context);
+        var mapped = MappedColumns(context);
+
+        mapped
+            .Should()
+            .ContainKey(
+                table,
+                $"Trax.Effect.StateMachine.Persistence reaches {table} through IDataContext. See {Adr}."
+            );
+        mapped[table]
+            .Should()
+            .BeEquivalentTo(
+                migrated[table],
+                $"the {table} model maps exactly the columns its migrations create. See {Adr}."
             );
     }
 

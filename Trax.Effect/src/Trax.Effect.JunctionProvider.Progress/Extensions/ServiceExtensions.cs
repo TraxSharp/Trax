@@ -30,15 +30,6 @@ public static class ServiceExtensions
     {
         configurationBuilder.JunctionProgressEnabled = true;
 
-        configurationBuilder.ServiceCollection.AddTransient<
-            ICancellationCheckProvider,
-            CancellationCheckProvider
-        >();
-        configurationBuilder.ServiceCollection.AddTransient<
-            IJunctionProgressProvider,
-            JunctionProgressProvider
-        >();
-
         // Register CancellationCheck FIRST so it runs before JunctionProgress sets columns
         configurationBuilder.AddJunctionEffect<CancellationCheckFactory>();
         configurationBuilder.AddJunctionEffect<JunctionProgressFactory>();

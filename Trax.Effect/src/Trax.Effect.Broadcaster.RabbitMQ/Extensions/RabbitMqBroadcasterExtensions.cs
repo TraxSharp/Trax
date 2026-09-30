@@ -21,7 +21,9 @@ public static class RabbitMqBroadcasterExtensions
     /// Registers the options, a <see cref="RabbitMqTrainEventBroadcaster"/> as the singleton
     /// <see cref="ITrainEventBroadcaster"/>, and a <see cref="RabbitMqTrainEventReceiver"/> as the
     /// singleton <see cref="ITrainEventReceiver"/>. No connection is opened here: the broadcaster
-    /// connects on its first publish and the receiver when it is started.
+    /// connects when it first has an event to send and the receiver when it is started. Publishing
+    /// only queues the event, so an unreachable broker never holds up a train: the broadcaster's
+    /// background sender retries, and drops events once 1024 are waiting.
     /// </remarks>
     /// <exception cref="ArgumentException">
     /// <paramref name="configure"/> set <see cref="RabbitMqBroadcasterOptions.PrefetchCount"/> to 0,

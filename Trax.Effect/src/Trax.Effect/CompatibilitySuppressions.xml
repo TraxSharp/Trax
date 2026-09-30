@@ -1,0 +1,63 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder.get_DataContextLoggingEffectEnabled</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder.set_DataContextLoggingEffectEnabled(System.Boolean)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxBuilder.TraxBuilder.set_HasDatabaseProvider(System.Boolean)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxBuilder.TraxBuilder.set_HasDataProvider(System.Boolean)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxBuilder.TraxBuilder.set_MediatorConfigured(System.Boolean)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder.set_HasDatabaseProvider(System.Boolean)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder.set_HasDataProvider(System.Boolean)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Models.WorkQueue.WorkQueue.set_SubjectKey(System.String)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

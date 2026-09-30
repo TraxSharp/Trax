@@ -11,8 +11,8 @@ public class OrderSendTests
     private static SnapshotEffectRunner<OrderState, OrderTrigger> NewRunner(ISnapshotEffect effect)
     {
         var ctx = TestDb.NewContext();
-        var claims = new EfEffectClaimStore(ctx);
-        var service = TestOrder.Service(new EfSnapshotStore(ctx), claims);
+        var claims = TestDb.NewClaims(ctx);
+        var service = TestOrder.Service(TestDb.NewStore(ctx), claims);
         return new SnapshotEffectRunner<OrderState, OrderTrigger>(
             service,
             effect,
@@ -170,7 +170,7 @@ public class OrderSendTests
         // Reset back to the initial state releases the effect claim.
         var ctx = TestDb.NewContext();
         var reset = await TestOrder
-            .Service(new EfSnapshotStore(ctx), new EfEffectClaimStore(ctx))
+            .Service(TestDb.NewStore(ctx), TestDb.NewClaims(ctx))
             .Advance("u", id, "Reset", requestId: "reset");
         reset
             .Should()
@@ -197,7 +197,7 @@ public class OrderSendTests
         var ctx = TestDb.NewContext();
         (
             await TestOrder
-                .Service(new EfSnapshotStore(ctx), new EfEffectClaimStore(ctx))
+                .Service(TestDb.NewStore(ctx), TestDb.NewClaims(ctx))
                 .Autosave("u", id, TestOrder.DraftJson)
         )
             .Should()
@@ -242,7 +242,7 @@ public class OrderSendTests
 
         // The effect runs and records its receipt, but we "crash" before advancing to Placed.
         var ctx = TestDb.NewContext();
-        var ran = await new IdempotentEffect(new EfEffectClaimStore(ctx)).RunOnce(
+        var ran = await new IdempotentEffect(TestDb.NewClaims(ctx)).RunOnce(
             TestOrder.EffectKey("u", id),
             () => effect.Run(TestOrder.Machine.Definition.CreateInitialSnapshot())
         );
@@ -258,5 +258,64 @@ public class OrderSendTests
             .Be("Placed");
         effect.Calls.Should().Be(1);
         (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+    }
+
+    [Test]
+    public async Task Cancellation_after_the_effect_ran_must_not_let_it_run_again()
+    {
+        var id = Guid.NewGuid();
+        await SeedReview("u", id);
+        using var request = new CancellationTokenSource();
+        // The client goes away the moment the effect has succeeded: the request token is cancelled before
+        // the receipt is recorded and the draft advanced.
+        var effect = new CancelsAfterRunningEffect(request);
+
+        var ctx = TestDb.NewContext();
+        var claims = TestDb.NewClaims(ctx);
+        var runner = new SnapshotEffectRunner<OrderState, OrderTrigger>(
+            TestOrder.Service(TestDb.NewStore(ctx), claims),
+            effect,
+            new IdempotentEffect(claims),
+            OrderState.Review,
+            OrderTrigger.Place,
+            OrderState.Placed,
+            TestOrder.EffectKey,
+            receiptKey: "orderId",
+            lease: TimeSpan.Zero
+        );
+
+        try
+        {
+            await runner.Run("u", id, "req-1", request.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // The request was cancelled; what matters is what the retry does next.
+        }
+
+        // With a lease already expired, a claim left without its receipt would be taken over and run again.
+        var retry = await NewRunner(effect).Run("u", id, "req-2");
+
+        retry.Should().BeOfType<AdvanceOutcome.Advanced>();
+        effect.Calls.Should().Be(1);
+        (await Load("u", id)).Context["receipt"]!.GetValue<string>().Should().Be("receipt-1");
+    }
+
+    private sealed class CancelsAfterRunningEffect(CancellationTokenSource request)
+        : ISnapshotEffect
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public async Task<string> Run(
+            Snapshot snapshot,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var n = Interlocked.Increment(ref _calls);
+            await request.CancelAsync();
+            return $"receipt-{n}";
+        }
     }
 }
