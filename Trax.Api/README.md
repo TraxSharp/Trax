@@ -1,135 +1,92 @@
 # Trax.Api
 
-[![Build](https://github.com/TraxSharp/Trax.Api/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Api/actions/workflows/nuget_release.yml)
-[![NuGet Version](https://img.shields.io/nuget/v/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
-[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL/)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Api/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Api)](https://github.com/TraxSharp/Trax.Api/commits/main)
+[![Build](https://github.com/TraxSharp/Trax.Api/actions/workflows/nuget_release.yml/badge.svg?branch=main)](https://github.com/TraxSharp/Trax.Api/actions/workflows/nuget_release.yml?query=branch%3Amain)
+[![NuGet](https://img.shields.io/nuget/v/Trax.Api.GraphQL)](https://www.nuget.org/packages/Trax.Api.GraphQL)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Api/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Api)
-[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Api/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/api)
 
-GraphQL API for [Trax](https://traxsharp.net/docs), a .NET framework for building trains (typed pipelines of junctions) with execution logging, scheduling and dispatch. Trax.Api exposes train discovery, execution, and scheduler operations over HTTP via HotChocolate, generates queries over your own `[TraxQueryModel]` entities, and ships optional authentication and audit packages.
+> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
-## The Trax Stack
+Trax.Api generates a typed GraphQL API from your trains and `[TraxQueryModel]` entities, with fail-closed
+authorization, request audit and typed clients. It builds on [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler)
+and runs on HotChocolate; [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) builds on it.
 
-Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Api.**
-
-| Repo | Adds |
-|------|------|
-| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
-| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
-| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
-| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
-| **[Trax.Api](https://github.com/TraxSharp/Trax.Api)** | GraphQL API for remote access |
-| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
-| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
-| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## What This Does
-
-Adds a programmatic interface to your train network. External consumers can discover registered trains, run them on demand, queue work for the scheduler, and manage manifests, all through a typed GraphQL schema.
-
-The API is designed to run on a **separate machine** from the scheduler. Both share a PostgreSQL database: the API writes work queue entries, the scheduler polls and dispatches. This means the API server is a thin HTTP layer with no polling services or background workers.
-
-## Installation
+## Install
 
 ```bash
 dotnet add package Trax.Api.GraphQL
-dotnet add package Trax.Effect.Data.Postgres   # the data provider behind UsePostgres below
+dotnet add package Trax.Effect.Data.Postgres   # storage for the run records and the work queue
+dotnet add package Trax.Api.Auth.ApiKey        # or Trax.Api.Auth.Jwt, Trax.Api.Auth.Oidc
 ```
 
-`Trax.Api.GraphQL` depends on `Trax.Api` and `Trax.Mediator`, so you don't need to reference them directly.
+## Example
 
-## Setup
+Adapted from the game server sample. Two attributes put the leaderboard train on the schema as a queued mutation:
 
 ```csharp
-using Trax.Api.GraphQL.Extensions;
-using Trax.Effect.Data.Postgres.Extensions;
-using Trax.Effect.Extensions;
-using Trax.Mediator.Extensions;
+[TraxMutation(GraphQLOperation.Queue)]
+[TraxAuthorize(Roles = "Admin")]
+public class RecalculateLeaderboardTrain
+    : ServiceTrain<RecalculateLeaderboardInput, RecalculateLeaderboardOutput>,
+        IRecalculateLeaderboardTrain
 
-var builder = WebApplication.CreateBuilder(args);
-
+// Program.cs: Trax, an auth scheme, and the GraphQL endpoint gated behind it
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString))
-        .AddMediator(typeof(Program).Assembly)
-);
+        .AddMediator(typeof(Program).Assembly));
 
-// AddTraxGraphQL requires AddTrax to have been called first, and throws otherwise.
-builder.Services.AddTraxGraphQL();
+// Keys come from your secret manager, never from source control.
+builder.Services.AddTraxApiKeyAuth(keys => keys
+    .Add(builder.Configuration["ApiKeys:Admin"]!, id: "admin", "Admin"));
+builder.Services.AddAuthorization();
+builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 
 var app = builder.Build();
-
-app.UseTraxGraphQL();  // maps at /trax/graphql
-
-app.Run();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseTraxGraphQL();   // maps at /trax/graphql
 ```
 
-## Two Execution Modes
-
-| Mode | How It Works | When to Use |
-|------|-------------|-------------|
-| **Queue** | Creates a `WorkQueue` entry. The scheduler picks it up and dispatches on the scheduler machine. | Heavy trains, recurring work, dedicated scheduler infrastructure. |
-| **Run** | Calls `ITrainBus.RunAsync` in-process on the API machine. | Lightweight on-demand trains where you need the result immediately. |
-
-Trains opt into the GraphQL schema with `[TraxQuery]` or `[TraxMutation]` attributes. Only annotated trains get typed fields generated.
-
-## Authentication
-
-`UseTraxGraphQL` accepts a `configure` callback for endpoint-level auth:
-
-```csharp
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization("AdminPolicy"));
+```graphql
+mutation {
+  dispatch {
+    recalculateLeaderboard(input: { region: "na" }) {
+      workQueueId
+    }
+  }
+}
 ```
 
-For per-train authorization, decorate train classes with `[TraxAuthorize]`:
+A caller without the `Admin` role gets a `TRAX_AUTHORIZATION` error. An exposed train that declares neither
+`[TraxAuthorize]` nor `[TraxAllowAnonymous]` stops the host from starting.
 
-```csharp
-[TraxAuthorize("Admin")]
-[TraxMutation(GraphQLOperation.Run)]
-public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrain { ... }
-```
+## Where this fits
 
-## Security Disclaimer
+Trax is split into layers, one repo each. Take the ones you need; the trains you wrote do not change. **You are here: Trax.Api.**
 
-> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [SECURITY-DISCLAIMER.md](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md).
+| Repo | What it adds |
+|---|---|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Trains, junctions and the chain, with no database and no DI container |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
+| **[Trax.Api](https://github.com/TraxSharp/Trax.Api)** | **GraphQL generated from your trains, with authentication, audit and typed clients** |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
 
-Trax.Api ships authentication (`Trax.Api.Auth`, `Trax.Api.Auth.ApiKey`) and audit (`Trax.Api.GraphQL.Audit`) packages. They provide the glue between ASP.NET Core's auth primitives and Trax's train dispatch. They do not guarantee that a system using them is secure. Read [SECURITY-DISCLAIMER.md](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md) before deploying.
+Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
 
-## Packages
+## Contributing
 
-| Package | Description |
-|---------|-------------|
-| `Trax.Api` | Core library: DTOs, health check, shared service registration |
-| `Trax.Api.GraphQL` | HotChocolate schema (queries, mutations, subscriptions) |
-| `Trax.Api.GraphQL.Client` | Runtime-validated GraphQL client: hand-written queries checked against the server schema at startup |
-| `Trax.Api.GraphQL.Client.Trax` | Trax integration for the client: query junctions, log correlation, schema discovery |
-| `Trax.Api.GraphQL.Client.Typed` | Queries derived from POCOs, built against the live schema at startup |
-| `Trax.Api.GraphQL.PersistedOperations` | Server-managed persisted operations, so shipped clients can be hot-fixed |
-| `Trax.Api.GraphQL.Testing` | Architecture-guard checkers for cross-schema edges and loaders |
-| `Trax.Api.Auth` | Principal abstraction and claim-type constants (no scheme). NO WARRANTY. |
-| `Trax.Api.Auth.ApiKey` | API-key authentication handler. NO WARRANTY. |
-| `Trax.Api.Auth.Jwt` | JWT bearer authentication, plus Google, Auth0, Entra and Cognito presets. NO WARRANTY. |
-| `Trax.Api.Auth.Jwt.Cognito` | Amazon Cognito token validation and claim normalization. NO WARRANTY. |
-| `Trax.Api.Auth.Jwt.Cognito.Issuer` | Cognito-shaped token minting and a refresh-token store. NO WARRANTY. |
-| `Trax.Api.Auth.Jwt.Testing` | JWKS server and token minters for integration tests. NO WARRANTY. |
-| `Trax.Api.Auth.Oidc` | OpenID Connect code flow with a session cookie. NO WARRANTY. |
-| `Trax.Api.GraphQL.Audit` | GraphQL request audit pipeline (listener, channel, writer, sink). NO WARRANTY. |
-
-Reference: [GraphQL API](https://traxsharp.net/docs/sdk-reference/graphql-api), [API Auth](https://traxsharp.net/docs/sdk-reference/api-auth), [API Security](https://traxsharp.net/docs/api-security).
-
-## Next Layer
-
-When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, move up to [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard).
+Read [AGENTS.md](https://github.com/TraxSharp/Trax.Api/blob/main/AGENTS.md) before changing code. Report vulnerabilities
+privately as described in [SECURITY.md](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY.md).
 
 ## License
 
-MIT
+MIT. There is no commercial edition, and there will not be one.
 
-## Trademark & Brand Notice
-
-Trax is an open-source .NET framework provided by TraxSharp. This project is an independent community effort and is not affiliated with, sponsored by, or endorsed by the Utah Transit Authority, Trax Retail, or any other entity using the "Trax" name in other industries.
+Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+other organization using the Trax name.
