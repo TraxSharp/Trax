@@ -18,7 +18,7 @@ nav_order: 4
 > train's return type, which are the same two faults the analyzer reported. The rest of this page
 > describes the analyzer as it was designed, for projects that still reference the package.
 
-Trax.Core includes a Roslyn analyzer that validates your train's route at compile time, like a route planner that checks every junction has the cargo it needs before the train ever departs. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
+The `Trax.Core.Analyzers` Roslyn analyzer is deprecated: chains are now checked at host startup instead. As designed, it validated a train's route at compile time, checking that every junction's input would be in Memory before that junction ran. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
 
 ## The Problem
 

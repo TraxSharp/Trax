@@ -8,7 +8,7 @@ section: Packages
 
 # Trax.Effect
 
-`Trax.Effect` upgrades the core pipeline engine into a full commercial service, with journey logging, dependency injection, and pluggable effect providers.
+`Trax.Effect` gives every train run a record: a row with its state, start and end time, the junction that failed and the exception it threw, stored in PostgreSQL, SQLite or memory. It also resolves junctions from dependency injection and runs pluggable effect providers around each run.
 
 ```bash
 dotnet add package Trax.Effect
@@ -30,8 +30,8 @@ Everything in [Core](core.md), plus:
 
 **`Train<TIn, TOut>`** (Core) - The core pipeline engine. Chains junctions, propagates errors, manages Memory. No logging, no DI, no side effects.
 
-**`ServiceTrain<TIn, TOut>`** (Effect) - The full commercial service. Wraps every journey with:
-- Journey logging (departure time, arrival time, right track / left track, cargo in/out)
+**`ServiceTrain<TIn, TOut>`** (Effect) - A `Train` with the services around it. Wraps every run with:
+- A run record (start time, end time, success or failure, and the input and output when parameter saving is on)
 - Effect providers (database persistence, JSON logging, parameter serialization)
 - Integration with `ITrainBus` for dispatch discovery
 - `IServiceProvider` access for junction instantiation

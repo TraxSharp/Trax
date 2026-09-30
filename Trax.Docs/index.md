@@ -6,13 +6,15 @@ nav_order: 1
 
 # Trax
 
-Trax is a .NET framework for structuring business logic as typed pipelines. Each pipeline is a sequence of junctions where every junction has one job, typed input and output, and errors short-circuit automatically. Your configuration lives in `Program.cs`, your logic lives in pipelines.
+Trax is a .NET framework for business logic you can call, schedule, serve as an API, or move to workers, with every run recorded in your Postgres.
+
+You write a train: a typed pipeline of small steps called junctions, where a failing junction skips the rest and the train returns the exception. Call it from a controller, put it on a cron schedule, publish it as a GraphQL mutation, or send it to a worker on another machine or in AWS Lambda. It is the same class each time, and every run leaves a record: when it started, how it ended, which junction failed and the exception it threw. Trax is MIT licensed and targets .NET 10.
 
 New here? Start with the [Getting Started](/docs/getting-started) guide.
 
 ## The vocabulary
 
-The website calls them "pipelines." The code calls them "trains." Same thing, different name. The entire framework uses a train metaphor:
+The type names in the API follow a train metaphor:
 
 | Term | What it means |
 |------|---------------|
