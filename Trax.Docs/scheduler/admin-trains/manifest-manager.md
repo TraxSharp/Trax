@@ -13,22 +13,16 @@ The ManifestManager is the first half of each polling cycle. It figures out whic
 ## Chain
 
 ```
-LoadManifestsJunction → CancelTimedOutJobsJunction → ReapStalePendingMetadataJunction → ReapStaleInProgressMetadataJunction → ResolveStaleStagedEntriesJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
+CancelTimedOutJobsJunction → ReapStalePendingMetadataJunction → ReapStaleInProgressMetadataJunction → LoadManifestsJunction → ResolveStaleStagedEntriesJunction → ReapFailedJobsJunction → DetermineJobsToQueueJunction → CreateWorkQueueEntriesJunction
 ```
 
 ## Junctions
 
-### LoadManifestsJunction
-
-Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`, `HasSuccessfulMetadata`). These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
-
-The projection uses `AsNoTracking()`, the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
-
-> **Scaling note:** LoadManifestsJunction loads all enabled manifests in a single query. For typical production deployments (up to 10K manifests), this is efficient with proper indexes. The junction cannot be paginated without breaking the reap junctions' ability to identify stale jobs across all manifests.
+The timeout and stale-run junctions come first and work on runs directly, not on the loaded manifests, so the manifests are loaded after them and a run they fail is already counted in the same cycle.
 
 ### CancelTimedOutJobsJunction
 
-Finds InProgress metadata that has exceeded `DefaultJobTimeout` and requests cooperative cancellation. Sets `CancellationRequested = true` in the database (picked up by `CancellationCheckProvider` at the next junction boundary) and attempts same-server instant cancellation via the `CancellationRegistry`.
+Finds every InProgress run past its timeout and requests cooperative cancellation. A run's timeout is its manifest's `TimeoutSeconds`, or `DefaultJobTimeout` when the manifest sets none or the run has no manifest. Runs of disabled manifests are included, and the scheduler's own trains are not. Sets `CancellationRequested = true` in the database (picked up by `CancellationCheckProvider` at the next junction boundary) and attempts same-server instant cancellation via the `CancellationRegistry`.
 
 ### ReapStalePendingMetadataJunction
 
@@ -38,9 +32,19 @@ Fails Pending metadata that has not been picked up within `StalePendingTimeout` 
 
 Fails InProgress metadata that has not completed within `StaleInProgressTimeout` (default: 60 minutes). Acts as a safety net for hard crashes. Lambda hard-kills, OOM events, or process crashes where the worker dies without reaching `FinishServiceTrain`. This timeout should be longer than `DefaultJobTimeout` to allow cooperative cancellation (via `CancelTimedOutJobsJunction`) to propagate before force-failing.
 
-Newly-failed metadata from both stale reapers is visible to `ReapFailedJobsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
+A run whose manifest sets a `Timeout` longer than `DefaultJobTimeout` gets as much longer: it is failed at the later of `StaleInProgressTimeout` and its manifest's timeout plus the same grace (`StaleInProgressTimeout - DefaultJobTimeout`, 40 minutes with the defaults). A manifest with a three hour timeout therefore has its run failed as stale at 3 h 40 min, not at 60 minutes while it is still working.
 
-Failing a run, from either reaper, also releases its [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), so a run still pending past `StalePendingTimeout` or still working past `StaleInProgressTimeout` stops holding its subject.
+Newly-failed metadata from both stale reapers is counted by `LoadManifestsJunction` in the same ManifestManager cycle, enabling dead-lettering if retries are exhausted.
+
+Failing a run, from either reaper, also releases its [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), so a run still pending past `StalePendingTimeout` or still working past its stale threshold stops holding its subject.
+
+### LoadManifestsJunction
+
+Projects all enabled manifests into lightweight `ManifestDispatchView` records using a single database query with pre-computed aggregate flags (`FailedCount`, `HasAwaitingDeadLetter`, `HasQueuedWork`, `HasActiveExecution`, `HasSuccessfulMetadata`) and the end time of the manifest's latest cancelled run. These flags are computed via COUNT/EXISTS subqueries pushed into the database, keeping query cost O(manifests) regardless of how large the child tables (`Metadatas`, `DeadLetters`, `WorkQueues`) grow.
+
+The projection uses `AsNoTracking()`, the results are read-only snapshots used for scheduling decisions only. No unbounded child collections are loaded into memory.
+
+> **Scaling note:** LoadManifestsJunction loads all enabled manifests in a single query. For typical production deployments (up to 10K manifests), this is efficient with proper indexes.
 
 ### ResolveStaleStagedEntriesJunction
 
@@ -55,11 +59,11 @@ Resolves work queue entries that a crash left unconfirmed. A train with [`DeferQ
 
 ### ReapFailedJobsJunction
 
-Scans loaded manifests for any whose failure count meets or exceeds `MaxRetries`. For each, it creates a `DeadLetter` record with status `AwaitingIntervention` and persists immediately.
+Scans loaded manifests for any whose failure count exceeds `MaxRetries`. `MaxRetries` is the number of retries after the first run, so `MaxRetries(0)` dead-letters on the first failure and the default of 3 on the fourth; a manifest with no counted failure is never dead-lettered. For each, it creates a `DeadLetter` record with status `AwaitingIntervention` and persists immediately.
 
 A manifest is only reaped if it doesn't already have an unresolved dead letter. This prevents duplicate dead letters from accumulating when the same manifest fails across multiple polling cycles.
 
-`FailedCount` only counts failures that occurred **after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets, only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed.
+`FailedCount` only counts failures that started within [`FailureCountWindow`](/docs/scheduler/scheduling-options#configuration-options) (default: 24 hours) **and after** the most recent dead letter resolution. When a dead letter is resolved (retried or acknowledged), the failure counter effectively resets, only new failures contribute toward the next `MaxRetries` threshold. This prevents retried manifests from being immediately re-dead-lettered due to historical failures that were already addressed. The window does the same for failures that were never dead-lettered: a failure a month ago neither delays the next run nor counts toward a dead letter, even though a success does not reset the count inside the window.
 
 The junction returns the list of newly created dead letters so `DetermineJobsToQueueJunction` can skip those manifests without re-querying the database.
 
@@ -67,9 +71,9 @@ The junction returns the list of newly created dead letters so `DetermineJobsToQ
 
 The decision junction. It runs two passes over the loaded manifests:
 
-**Pass 1: Time-based manifests** (Cron and Interval). For each, it checks whether the manifest is due using `SchedulingHelpers.ShouldRunNow()`, which dispatches to either cron parsing or interval arithmetic based on the schedule type.
+**Pass 1: Time-based manifests** (Cron and Interval). For each, it checks whether the manifest is due using `SchedulingHelpers.ShouldRunNow()`, which dispatches to either cron parsing or interval arithmetic based on the schedule type. Cron is evaluated in UTC. A cron that has never succeeded is due at its first occurrence after it was scheduled, which scheduling records on the manifest's `NextScheduledRun`. The schedule is evaluated from the later of the manifest's last successful run and its last cancelled run, because a cancelled run consumes the occurrence it ran for: after a cancelled run the next occurrence after it is due, whatever `NextScheduledRun` held.
 
-**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`. Before comparing timestamps, the junction verifies that the parent has at least one `Completed` metadata record (`HasSuccessfulMetadata`). If the parent has a `LastSuccessfulRun` timestamp but no successful metadata to back it up (e.g., metadata was truncated or pruned), the timestamp is considered stale and the dependent is not queued. See [Dependent Trains](/docs/scheduler/dependent-trains).
+**Pass 2: Dependent manifests**. For each manifest with `ScheduleType.Dependent`, it finds the parent in the loaded set and checks whether the parent's `LastSuccessfulRun` is later than the dependent's last run. That is the start of the dependent's latest successful run (`LoadManifestsJunction` loads that start time for dependents only; with none on record, the dependent's own `LastSuccessfulRun` stands in), so a parent success that landed while the dependent was running queues it again; or the end of its latest cancelled run when that is later, because a cancelled run consumed the parent success it was started for. Before comparing timestamps, the junction verifies that the parent has at least one `Completed` metadata record (`HasSuccessfulMetadata`). If the parent has a `LastSuccessfulRun` timestamp but no successful metadata to back it up (e.g., metadata was truncated or pruned), the timestamp is considered stale and the dependent is not queued. See [Dependent Trains](/docs/scheduler/dependent-trains).
 
 Manifests with `ScheduleType.DormantDependent` are excluded from **both** passes. They are never auto-queued by the ManifestManager, dormant dependents must be explicitly activated at runtime by the parent train via [`IDormantDependentContext`](/docs/scheduler/dependent-trains#dormant-dependents).
 
@@ -88,10 +92,10 @@ For each manifest identified as due, creates a `WorkQueue` entry with:
 - `TrainName` from the manifest's `Name` (the canonical interface name, e.g. `MyApp.Trains.IProcessOrderTrain`)
 - `Input` / `InputTypeName` from the manifest's `Properties` / `PropertyTypeName`
 - `ManifestId` linking back to the source manifest
-- `Priority` set from `ManifestGroup.Priority` (the group's priority, not an individual manifest priority)
+- `Priority` set from the manifest's own `Priority`, as a manual trigger or a dead-letter requeue is (the dispatcher orders by the group's priority first)
 - `Status = Queued`
 
-For dependent manifests, `DependentPriorityBoost` is still added on top of the group priority at dispatch time.
+For dependent manifests, `DependentPriorityBoost` is added on top of the manifest priority.
 
 Each entry is saved individually. If one fails (e.g., a serialization issue for a specific manifest), the others still get queued. Errors are logged per-manifest.
 

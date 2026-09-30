@@ -82,7 +82,7 @@ All three support running across multiple servers. Trax's two-stage architecture
 | Dead-letter queue | Yes, after max retries | No | No (jobs stay in `FailedState`) |
 | Stuck job recovery | Yes, `RecoverStuckJobsOnStartup` + configurable timeout | Yes, `RequestsRecovery` flag | Yes, server watchdog requeues |
 
-Trax and Hangfire both handle retries automatically; Quartz leaves it to the job. Trax adds dead-lettering on top: after `MaxRetries` failures, the job moves to a dead-letter table and stops retrying. This separates "transient failure, will recover" from "needs human attention" without manual intervention.
+Trax and Hangfire both handle retries automatically; Quartz leaves it to the job. Trax adds dead-lettering on top: once its recent failures exceed `MaxRetries`, the job moves to a dead-letter table and stops retrying. This separates "transient failure, will recover" from "needs human attention" without manual intervention.
 
 ### Cancellation
 
@@ -95,7 +95,7 @@ Trax and Hangfire both handle retries automatically; Quartz leaves it to the job
 | Cross-server cancellation | Between-junction via DB flag + `CancellationCheckProvider` | Not supported | Not supported natively |
 | Cancelled state | Dedicated `TrainState.Cancelled`, excluded from retries, dead letters, and success rate | No dedicated state | `DeletedState` |
 
-Trax treats cancellation as a first-class state. A cancelled train transitions to `TrainState.Cancelled`, is excluded from retry logic and success rate calculations, and won't produce dead letters. The same `CancellationToken` flows from ASP.NET Core through the train into every junction and EF Core query. Cross-server cancellation (where the dashboard runs on one machine and the train runs on another) polls a DB flag between junctions, so it's between-junction rather than instant, but no work is lost.
+Trax treats cancellation as a first-class state. A cancelled train transitions to `TrainState.Cancelled`, is excluded from retry logic and success rate calculations, and won't produce dead letters; a scheduled job's next run is its next scheduled occurrence. The same `CancellationToken` flows from ASP.NET Core through the train into every junction and EF Core query. Cross-server cancellation (where the dashboard runs on one machine and the train runs on another) polls a DB flag between junctions, so it's between-junction rather than instant, but no work is lost.
 
 ### Lifecycle Hooks and Junction Progress
 
@@ -171,5 +171,5 @@ services.AddTrax(trax => trax
     )
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
-        .Schedule<ISyncTrain, SyncInput>("sync", new SyncInput(), Every.Hours(1))));
+        .Schedule<ISyncTrain>("sync", new SyncInput(), Every.Hours(1))));
 ```

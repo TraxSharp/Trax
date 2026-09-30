@@ -96,6 +96,8 @@ You can run multiple standalone worker processes against the same database. Post
 
 **Not registered:** ManifestManager, JobDispatcher, polling services, startup service. This process only executes; it doesn't schedule or dispatch.
 
+A scheduler host whose `AddScheduler` already runs local workers (the default on Postgres) refuses `AddTraxWorker()`, in either order, with an `InvalidOperationException`: two sets of `LocalWorkerOptions` would silently replace one another. Configure the scheduler's pool with `AddScheduler(scheduler => scheduler.ConfigureLocalWorkers(o => ...))` instead.
+
 ## How It Differs from the Scheduler's Local Workers
 
 | Aspect | Scheduler (with Postgres) | `AddTraxWorker()` |

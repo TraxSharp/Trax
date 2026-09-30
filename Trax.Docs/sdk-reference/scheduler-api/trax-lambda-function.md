@@ -22,6 +22,7 @@ dotnet add package Trax.Runner.Lambda
 public abstract class TraxLambdaFunction
 {
     protected abstract void ConfigureServices(IServiceCollection services, IConfiguration configuration);
+    protected virtual void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration);
     protected virtual void ConfigureLogging(ILoggingBuilder logging);
     protected virtual IServiceProvider BuildServiceProvider();
     protected virtual TimeSpan TerminalWriteMargin { get; }
@@ -32,7 +33,6 @@ public abstract class TraxLambdaFunction
     );
 
     public Task RunLocalAsync(string[] args);
-    internal void ConfigureRoutes(IEndpointRouteBuilder routes);
 }
 ```
 

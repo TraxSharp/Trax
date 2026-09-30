@@ -142,7 +142,7 @@ The scheduler process needs:
 
 - **Payload size limit:** Lambda response payloads are limited to 6 MB (synchronous). Train outputs exceeding this will fail.
 - **Execution timeout:** Lambda functions have a maximum execution time of 15 minutes. Long-running trains may time out.
-- **Cancellation is process-local:** Same limitation as other remote execution models.
+- **Cancellation reaches the function through the database:** a cancel sets the run's cancel flag, which the train sees at its next junction boundary when the function registers `CancellationCheckProvider` (via `AddJunctionProgress()`). A junction already running is not interrupted. See [Remote Execution](/docs/scheduler/remote-execution#limitations).
 
 ## See Also
 

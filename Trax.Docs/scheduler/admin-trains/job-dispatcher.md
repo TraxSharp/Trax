@@ -23,12 +23,12 @@ LoadQueuedJobsJunction → LoadDispatchCapacityJunction → ApplyCapacityLimitsJ
 Loads `WorkQueue` entries with `Status = Queued`, filtering out:
 
 - entries whose `ManifestGroup` has `IsEnabled = false`
-- entries whose manifest has `IsEnabled = false`, unless the entry is an explicit trigger (`WorkQueue.IsExplicitTrigger`): a run someone asked for by name, such as a trigger or a dead-letter requeue. Disabling a manifest pauses the entries it already queued, a retry waiting out its backoff included, and they are dispatched once it is enabled again. A disabled group holds explicit triggers too
+- entries whose manifest has `IsEnabled = false`, unless the entry is a dead-letter requeue. The entry stays `Queued` and is dispatched once the manifest is re-enabled (see [Disabling a job](/docs/scheduler/scheduling-options#disabling-a-job))
 - entries whose `ScheduledAt` is in the future
 - unconfirmed entries (`ConfirmedAt` is null), staged by a train with [`DeferQueuePromotion`](/docs/core/trains-and-junctions#making-the-side-effect-durable) and not yet promoted
 - manual entries whose [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) already has a run in flight (a dispatched entry whose metadata is `Pending` or `InProgress`)
 
-Both load paths apply these filters, the group-fair SQL and the load-all path used when `MaxQueuedJobsPerCycle` is `null`. After loading, the batch keeps only the **first queued entry per subject key**, in dispatch order; the rest are loaded again on a later cycle. The claim would refuse all of these anyway, but a candidate the claim refuses still takes a capacity slot in the cycle that loaded it, so without the filtering a backlog for one subject, or a few stranded staged entries, could fill `MaxActiveJobs` while ready work waited.
+Both load paths apply these filters, the group-fair SQL and the load-all path used when `MaxQueuedJobsPerCycle` is `null`. The group-fair SQL filters on the group only, so the disabled-manifest filter is applied to what it returns. After loading, the batch keeps only the **first queued entry per subject key**, in dispatch order; the rest are loaded again on a later cycle. The claim would refuse all of these anyway, but a candidate the claim refuses still takes a capacity slot in the cycle that loaded it, so without the filtering a backlog for one subject, or a few stranded staged entries, could fill `MaxActiveJobs` while ready work waited.
 
 #### Group-Fair Batching
 
@@ -82,7 +82,7 @@ If the entry has already been claimed by another server (locked in another trans
 
 For each successfully claimed entry, the dispatcher:
 
-1. **Deserializes the input**: looks `InputTypeName` up among the input types of the registered trains, then deserializes `Input` from JSON into that type. The name is only compared, never loaded, so it must be the full name of a registered train's input (an assembly-qualified name also matches when its assembly is the one the input lives in). A name that matches no registered train's input fails the claim: the transaction rolls back, the entry stays `Queued`, and the error is logged. `LocalWorkerService` resolves a background job's input type the same way, and fails a job whose type matches none. The `TrainName` stored in the work queue entry is the canonical interface name (e.g. `MyApp.Trains.IProcessOrderTrain`), set during scheduling or queue submission.
+1. **Deserializes the input**: looks `InputTypeName` up among the input types of the registered trains, then deserializes `Input` from JSON into that type. The name is only compared, never loaded, so it must be the full name of a registered train's input (an assembly-qualified name also matches when its assembly is the one the input lives in). An input that cannot be read (its type name matches no registered train's input, for example after the type was renamed or removed, or its JSON no longer fits the type) will never become readable, so the entry is settled rather than retried: in the same transaction the dispatcher records a `Failed` run carrying the reason and marks the entry `Dispatched` to that run. The failure counts toward the manifest's retries and dead letter like any other, and the next entry for the same subject can be dispatched. Nothing is constructed from an unresolved name. `LocalWorkerService` resolves a background job's input type the same way, and fails a job whose type matches none. The `TrainName` stored in the work queue entry is the canonical interface name (e.g. `MyApp.Trains.IProcessOrderTrain`), set during scheduling or queue submission.
 
 2. **Creates a Metadata record**: a new `Metadata` row with `TrainState = Pending`, linked to the manifest (if present). Saved immediately so it gets a database-generated ID.
 
@@ -92,7 +92,17 @@ For each successfully claimed entry, the dispatcher:
 
 5. **Enqueues to the job submitter**: calls `IJobSubmitter.EnqueueAsync` with the metadata ID, deserialized input, and the work queue entry's **priority**. The priority flows from the WorkQueue entry to the `background_job` table, where `LocalWorkerService` dequeues by `priority DESC, created_at ASC`. This means high-priority jobs are executed before low-priority ones. This happens after commit because the `InMemoryJobSubmitter` executes the train synchronously and needs to read the committed Metadata.
 
-Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (type resolution, serialization, database error), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
+Each entry is processed in its own DI scope with a fresh `IDataContext`. If any individual entry fails (a database error, for example), its transaction is rolled back, the error is logged, and the loop continues to the next entry. One bad entry doesn't affect the rest of the queue.
+
+### Dispatch failures
+
+When `EnqueueAsync` throws, the claim is already committed: the run's row is `Pending` and the entry `Dispatched`. The dispatcher then:
+
+1. **Fails the run only if no runner started it.** A single conditional write moves the row to `Failed` only while it is still `Pending`. If it has left `Pending`, a runner has the job (a remote runner that ran it and answered with an error, or that is still running it when the HTTP timeout expires, or an in-memory submitter that ran it inline): the entry stays `Dispatched`, no dispatch attempt is counted, and the train is not run again. See [Delivery and execution](/docs/scheduler/remote-execution#delivery-and-execution).
+2. **Requeues the entry if attempts remain.** It increments `DispatchAttempts`; below [`MaxDispatchAttempts`](/docs/sdk-reference/scheduler-api/add-scheduler) (default 5) it resets the entry to `Queued` and sets `ScheduledAt` to hold it back: 5 seconds after the first failure, doubling per attempt, up to 5 minutes. The run of a requeued attempt records `FailureException = "DispatchRequeued"`, with the submitter's exception in `FailureReason`, and is **not** counted in the manifest's failed runs, so a short outage of a remote worker does not dead-letter the manifest.
+3. **Leaves an exhausted entry `Dispatched`.** The attempt that reaches `MaxDispatchAttempts` records the submitter's exception as the run's failure, which counts once toward the manifest's retries.
+
+This handling runs on its own token, bounded at 30 seconds, not on the dispatcher's. A host that stops while a job is being submitted cancels the dispatcher's token, and the failed submit must still be recorded; otherwise the run would stay `Pending` and hold its subject until the stale-pending reaper found it.
 
 ## Parallel Dispatch
 
@@ -119,7 +129,7 @@ When `MaxConcurrentDispatch > 1`, the junction uses a `SemaphoreSlim` to bound c
 **Considerations:**
 - Each concurrent dispatch opens its own database connection. Keep the value well below your connection pool size (default Npgsql pool: 100).
 - Priority ordering within a cycle is best-effort when dispatching in parallel, entries are *started* in priority order, but complete in arbitrary order. This matches the existing behavior in multi-server deployments.
-- Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. Failed dispatches mark their Metadata as `Failed` immediately, same as the sequential path.
+- Error handling is per-entry: if one dispatch fails (HTTP timeout, network error), the others continue. A failed dispatch is handled as in [Dispatch failures](#dispatch-failures), same as the sequential path.
 
 ## MaxActiveJobs Enforcement
 
@@ -148,7 +158,7 @@ Both limits are enforced simultaneously. In practice, a group can dispatch at mo
 
 ### How Global and Per-Group Limits Interact
 
-The global `MaxActiveJobs` is a hard ceiling on total concurrent jobs across all groups. Per-group limits are independent caps within that ceiling. When the sum of per-group limits exceeds the global limit, the global limit wins. Not every group can run at full capacity simultaneously.
+On one dispatching host, the global `MaxActiveJobs` caps total concurrent jobs across all groups, and per-group limits are independent caps within it. Neither is a hard ceiling across hosts: each dispatcher counts active jobs on its own, so with N hosts dispatching the total can reach N times either limit (see [Capacity Limit Approximation](/docs/scheduler/concurrency#capacity-limit-approximation)). When the sum of per-group limits exceeds the global limit, the global limit wins. Not every group can run at full capacity simultaneously.
 
 The dispatcher processes entries in priority order and applies two checks with different behaviors:
 

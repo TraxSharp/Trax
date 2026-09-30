@@ -62,7 +62,7 @@ builder.Services.AddTrax(trax => trax
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         // Local workers enabled automatically with Postgres. No extra call needed
-        .Schedule<IMyTrain, MyInput>(
+        .Schedule<IMyTrain>(
             "my-job", new MyInput(), Every.Minutes(5))
     )
 );
@@ -87,7 +87,7 @@ No connection string parameter needed, local workers use the same `IDataContext`
 |--------|---------|-------------|
 | `WorkerCount` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
 | `PollingInterval` | 1 second | How often idle workers poll for new jobs |
-| `VisibilityTimeout` | 30 minutes | How long a claimed job stays invisible before crash recovery reclaims it |
+| `VisibilityTimeout` | 30 minutes | How long a claimed job whose worker stopped refreshing its claim stays invisible before crash recovery reclaims it. A running job's claim is refreshed every third of this, so it does not bound how long a job may run |
 | `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay. giving them time to finish cleanly. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#background-services-and-shutdown). |
 | `BatchSize` | 1 | Number of jobs each worker claims per poll. Higher values reduce database round-trips when there is a backlog. Claimed jobs are processed sequentially within the worker task. If the host starts shutting down mid-batch, the jobs not yet started are released (their `fetched_at` is cleared) so any worker can claim them at once. If a worker crashes mid-batch, uncompleted jobs wait for `VisibilityTimeout` before being reclaimed. |
 
@@ -115,7 +115,9 @@ On claim, the worker sets `fetched_at = NOW()` and commits the transaction.
 
 **Phase 2. Execute** (in a fresh DI scope)
 
-The worker resolves `IJobRunnerTrain` from a new DI scope and calls `Run(new RunJobRequest(metadataId, input))`. This is the same train that Hangfire previously invoked, it loads the Metadata, validates the job state, executes the target train, and updates the Manifest's `LastSuccessfulRun` on success.
+The worker resolves `IJobRunnerTrain` from a new DI scope and calls `Run(new RunJobRequest(metadataId, input))`. This is the same train that Hangfire previously invoked, it loads the Metadata, claims the run, executes the target train, and updates the Manifest's `LastSuccessfulRun` on success.
+
+While the job runs, the worker refreshes its `fetched_at` every third of `VisibilityTimeout`, so a job that runs longer than `VisibilityTimeout` keeps its claim and is not picked up by another worker. The job's cancellation registration is the worker's own: a cancel from the dashboard or `ITraxScheduler` reaches the running job however long it runs.
 
 **Phase 3. Cleanup** (always runs, success or failure)
 
@@ -123,7 +125,7 @@ The worker deletes the `background_job` row. The delete does not take the host's
 
 ### Crash Recovery
 
-If a worker crashes after claiming a job (Phase 1) but before deleting it (Phase 3), the `fetched_at` timestamp becomes stale. The dequeue query's `WHERE fetched_at < NOW() - :visibility_timeout` condition makes the job eligible for re-claim by another worker after the visibility timeout expires.
+If a worker crashes after claiming a job (Phase 1) but before deleting it (Phase 3), it stops refreshing `fetched_at` and the timestamp becomes stale. The dequeue query's `WHERE fetched_at < NOW() - :visibility_timeout` condition makes the job eligible for re-claim by another worker after the visibility timeout expires.
 
 ```
 Worker A claims job #1 → fetched_at = 10:00:00
@@ -175,7 +177,7 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects.UseInMemory())
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -269,7 +271,7 @@ public class MyJobSubmitter : IJobSubmitter
       .AddScheduler(scheduler => scheduler
 -         .UseHangfire(connectionString)
 +         // Local workers are now the default. No call needed
-          .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+          .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
       )
   );
 

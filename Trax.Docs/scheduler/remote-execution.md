@@ -66,7 +66,7 @@ services.AddTrax(trax => trax
     .AddMediator(assemblies)
     .AddScheduler(scheduler => scheduler
         .ConfigureLocalWorkers(opts => opts.WorkerCount = 8)
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -124,7 +124,7 @@ services.AddTrax(trax => trax
             remote.BaseUrl = "https://my-workers.example.com/trax/run";
             remote.SigningKey = runnerKey;
         })
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -212,7 +212,7 @@ services.AddTrax(trax => trax
             remote.BaseUrl = "https://my-runner.example.com/trax/run";
             remote.SigningKey = runnerKey;
         })
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -227,14 +227,35 @@ public class Function
     private static readonly IServiceProvider Services = BuildServiceProvider();
     private readonly SqsJobRunnerHandler _handler = new(Services);
 
-    public async Task FunctionHandler(SQSEvent sqsEvent, ILambdaContext context)
-    {
-        await _handler.HandleAsync(sqsEvent, context.CancellationToken);
-    }
+    public Task<SQSBatchResponse> FunctionHandler(SQSEvent sqsEvent, ILambdaContext context) =>
+        _handler.HandleBatchAsync(sqsEvent, context.CancellationToken);
 }
 ```
 
-`BuildServiceProvider` registers `AddTrax(...)` and `AddTraxJobRunner(runner => runner.SigningKey = ...)` with the same key as `sqs.SigningKey`. The handler checks each message's signature attribute; it does not check the message's age or refuse a repeat, because SQS redelivers by design and the job's `Pending` metadata row is what stops a second run.
+Enable **`ReportBatchItemFailures`** in the event source mapping's `FunctionResponseTypes`. Without it, Lambda ignores the `SQSBatchResponse` and treats the whole batch as succeeded. In CloudFormation or SAM:
+
+```yaml
+Events:
+  TraxJobs:
+    Type: SQS
+    Properties:
+      Queue: !GetAtt TraxJobsQueue.Arn
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+```
+
+`HandleBatchAsync` runs every record in the batch and reports back only the records SQS should deliver again:
+
+| Record | Result |
+|--------|--------|
+| The train ran and succeeded | Acknowledged |
+| The train ran and failed | Acknowledged: the failure is recorded on the run's row, and the manifest's retries and dead letters act on it. A redelivery would not run it again |
+| Another delivery of the same job already started or finished it | Acknowledged without running it (SQS delivers at least once) |
+| Its signature or body is refused, or the runner failed before starting the run (for example, its input type is unknown or the database is unreachable) | Reported, so SQS redelivers it until the queue's `maxReceiveCount` moves it to the dead-letter queue |
+
+`HandleAsync` is still available for a function that returns nothing: it also runs every record, then throws if any record must be delivered again, so Lambda retries the whole batch (the records in it that already ran are acknowledged on the retry without running again).
+
+`BuildServiceProvider` registers `AddTrax(...)` with a data provider and `AddTraxJobRunner(runner => runner.SigningKey = ...)` with the same key as `sqs.SigningKey`. The handler checks each message's signature attribute; it does not check the message's age or refuse a repeat, because SQS redelivers by design and the job's `Pending` metadata row is what stops a second run.
 
 ```
 ┌──── Scheduler Process ────┐         ┌──── SQS ────┐       ┌── Lambda ──────────────┐
@@ -358,7 +379,7 @@ Two invocation modes:
 
 **IAM permissions:** The scheduler process needs `lambda:InvokeFunction` on the target function ARN. The Lambda execution role needs its normal permissions (database access, etc.).
 
-**Payload size limit:** Lambda invocation payloads are limited to 256 KB (synchronous) and 256 KB (async). If your serialized train input exceeds this, store the data externally and pass a reference.
+**Payload size limit:** `UseLambdaWorkers()` invokes asynchronously (`InvocationType.Event`), and an asynchronous invocation's payload is limited far below the 6 MB a synchronous `UseLambdaRun()` invocation (`InvocationType.RequestResponse`) may carry each way; see the [AWS Lambda quotas](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html) for the current values. If your serialized train input exceeds the limit, store the data externally and pass a reference.
 
 **Sample:** See `Trax.Samples.ContentShield.Api` and `Trax.Samples.ContentShield.Runner` in the `samples/EphemeralWorkers/` directory of the Trax.Samples repository. The sample uses `UseRemoteWorkers()` for local development with commented-out `UseLambdaWorkers()` configuration for production deployment.
 
@@ -378,7 +399,7 @@ services.AddTrax(trax => trax
         // Register PostgresJobSubmitter without starting local workers.
         // Jobs are written to background_job and picked up by the worker process.
         .OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -452,6 +473,29 @@ You can also mix models. For example, run local workers for fast trains and remo
 ```
 
 Trains not routed via `ForTrain<T>()` or `[TraxRemote]` execute locally.
+
+To send different trains to different runners, call `UseRemoteWorkers()` (or `UseLambdaWorkers()`, or `UseSqsWorkers()`) once per endpoint. Each call keeps its own options and its own client, so a train is sent only to the endpoint it is routed to, with that endpoint's signing key and headers:
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .UseRemoteWorkers(
+        remote =>
+        {
+            remote.BaseUrl = "https://gpu-workers/trax/execute";
+            remote.SigningKey = gpuRunnerKey;
+        },
+        routing => routing.ForTrain<IAiInferenceTrain>())
+    .UseRemoteWorkers(
+        remote =>
+        {
+            remote.BaseUrl = "https://cpu-workers/trax/execute";
+            remote.SigningKey = cpuRunnerKey;
+        },
+        routing => routing.ForTrain<IBatchProcessTrain>())
+)
+```
+
+A train routed by two calls is refused when the scheduler is built. A `[TraxRemote]` train that no call routes explicitly goes to the first routed registration of any kind (the first `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()` call).
 
 ## Authorization Posture
 
@@ -534,7 +578,15 @@ Regardless of deployment model, every process that executes trains must:
 
 When the JobDispatcher dispatches a job, the Metadata record is committed to the database **before** the job is submitted to the worker. This is necessary because the worker needs to read the Metadata. However, if the submission fails (network timeout, remote worker unreachable, throttling), the Metadata would be orphaned in `Pending` state.
 
-Trax handles this with multiple layers of protection:
+Trax handles this with multiple layers of protection.
+
+### Delivery and execution
+
+A failed submit is not always a failed delivery. The HTTP submitter also fails when the runner ran the job and answered with an error, and when the runner is still running the job as the HTTP `Timeout` expires. In both cases the runner already owns the run: its outcome is, or will be, recorded on the run's row.
+
+So when a submit fails, the dispatcher fails the run's row only if it is still `Pending`, with a single conditional write. If the row has left `Pending`, a runner started it: the work queue entry stays `Dispatched`, no dispatch attempt is counted, and the train is **not** run again. The run's own failure, if it failed, counts toward the manifest's retries like any other (see [Dead-Lettering](#5-dead-lettering)). If the row is still `Pending`, the job was not delivered, and the requeue below applies. A runner that receives that job later finds the row already `Failed` and completes without running it.
+
+The same rule covers a job delivered twice (an SQS redelivery, a retried Lambda invocation, a re-claimed local job): only the delivery that moves the run's row out of `Pending` runs the train, and every other delivery completes without running it or recording anything, so its transport acknowledges it.
 
 ### 1. Retry with Exponential Backoff
 
@@ -578,14 +630,15 @@ Set `MaxRetries = 0` to disable retries entirely.
 
 ### 2. Dispatch Requeue
 
-If the HTTP request still fails after exhausting retries, the work queue entry is automatically reset to `Queued` status so the next dispatcher cycle can try again. Each failed attempt:
+If the submit still fails after exhausting retries and no runner started the job, the work queue entry is reset to `Queued` so a later dispatcher cycle can try again. Each failed attempt:
 
-- Marks the orphaned Metadata as `Failed` (immutable audit record)
+- Marks the orphaned Metadata as `Failed` (immutable audit record). While the entry has attempts left, its `FailureException` is `DispatchRequeued` and the submitter's exception type and message are in `FailureReason`; such a run is **not** counted as a failure of the manifest, because the job has not failed, only one delivery of it
 - Increments `dispatch_attempts` on the work queue entry
 - Resets `status` to `Queued`, clears `metadata_id` and `dispatched_at`
-- On the next dispatch cycle, a **new** Metadata row is created
+- Sets `scheduled_at` to hold the entry back before its next attempt: 5 seconds after the first failure, doubling with each attempt, up to 5 minutes
+- On the next dispatch cycle after that, a **new** Metadata row is created
 
-After `MaxDispatchAttempts` failures, the entry stays in `Dispatched` status and feeds into the dead letter pipeline.
+After `MaxDispatchAttempts` failures, the entry stays in `Dispatched` status. That last attempt's run records the submitter's exception as usual and counts once toward the manifest's retries, so an outage that outlasts every attempt still leads to a retry and, eventually, a dead letter.
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -600,6 +653,8 @@ Set `MaxDispatchAttempts(0)` to disable requeuing (immediate failure, matching p
 
 The ManifestManager runs a `ReapStalePendingMetadataJunction` on every polling cycle. Any Metadata that has been in `Pending` state longer than `StalePendingTimeout` (default: 20 minutes) is automatically marked as `Failed`. This catches edge cases where the remote worker received the job but crashed before updating the Metadata.
 
+A run whose job still has a row in `trax.background_job` is not reaped: it was delivered to the local worker pool and is waiting for a free worker (the dispatcher can have more runs `Pending` than there are workers). The worker pool recovers a job whose worker died by itself, after `VisibilityTimeout`.
+
 ```csharp
 .AddScheduler(scheduler => scheduler
     .StalePendingTimeout(TimeSpan.FromMinutes(10))
@@ -611,7 +666,7 @@ Or at runtime via the Dashboard under **Server Settings > Job Settings > Stale P
 
 ### 4. Stale InProgress Reaper
 
-The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. This catches hard crashes where the worker dies without reaching `FinishServiceTrain`: Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
+The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. A run whose manifest sets a longer `Timeout` is given its timeout plus the grace between `DefaultJobTimeout` and `StaleInProgressTimeout` instead, so a long job is never failed as stale while it is still inside its own timeout. This catches hard crashes where the worker dies without reaching `FinishServiceTrain`: Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
 
 ```csharp
 .AddScheduler(scheduler => scheduler
@@ -620,11 +675,11 @@ The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every p
 )
 ```
 
-This timeout should be longer than `DefaultJobTimeout` (default: 20 minutes) to give cooperative cancellation time to propagate before force-failing. The ordering in the ManifestManager pipeline is: `CancelTimedOutJobsJunction` (cooperative cancel) → `ReapStalePendingMetadataJunction` → `ReapStaleInProgressMetadataJunction` (force-fail) → `ResolveStaleStagedEntriesJunction` → `ReapFailedJobsJunction` (dead-letter).
+This timeout should be longer than `DefaultJobTimeout` (default: 20 minutes) to give cooperative cancellation time to propagate before force-failing. The ordering in the ManifestManager pipeline is: `CancelTimedOutJobsJunction` (cooperative cancel) → `ReapStalePendingMetadataJunction` → `ReapStaleInProgressMetadataJunction` (force-fail) → `LoadManifestsJunction` (counts failures, including the ones just recorded) → `ResolveStaleStagedEntriesJunction` → `ReapFailedJobsJunction` (dead-letter).
 
 ### 5. Dead-Lettering
 
-After `MaxRetries` failed **executions** (distinct from dispatch attempts), the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
+When a manifest's failed **executions** (distinct from dispatch attempts: a requeued dispatch attempt is not counted, and only the attempt that exhausts `MaxDispatchAttempts` counts, once) within `FailureCountWindow` exceed `MaxRetries`, the retries allowed after the first run, the ManifestManager creates a `DeadLetter` record and marks the manifest as `AwaitingIntervention`. Dead letters can be resolved via the Dashboard or programmatically.
 
 Failed metadata feeds into the normal retry pipeline, if the manifest has retries remaining, the ManifestManager will create a new work queue entry on the next cycle.
 
@@ -648,12 +703,12 @@ When a train fails on a remote worker, Trax preserves the full exception context
 | `IsError` | Whether the execution failed |
 | `ErrorMessage` | The message of a `TrainException`. Any other exception is reported with a fixed message; the detail stays in the runner's log |
 | `ExceptionType` | The .NET exception type name (e.g., `"InvalidOperationException"`) |
-| `FailureJunction` | The train junction where the failure occurred (extracted from `TrainExceptionData`) |
+| `FailureJunction` | `/trax/run` only (`RemoteRunResponse`). The train junction where the failure occurred (extracted from `TrainExceptionData`) |
 | `StackTrace` | Always null. No stack trace leaves the runner; the runner's metadata row and log hold it |
 | `FailureClass` | `/trax/run` only (`RemoteRunResponse`). The [failure class](/docs/core/trains-and-junctions#classifying-failures) the worker's classifier assigned, or null when the worker sent none |
 | `PublicMessage` | `/trax/run` only (`RemoteRunResponse`). The message a client of the calling side may see: the message of a plain `TrainException`, which a train author wrote for the caller, and null for every other failure |
 
-On the API side, the HTTP job submitter and HTTP run executor read the response body and reconstruct a `TrainException` with the structured data intact. The HTTP submitter counts a job as submitted only when the body is a `RemoteJobResponse` for the job it sent; any other `200` fails the dispatch. On the run path it is a `RemoteRunException`, which carries the runner's `PublicMessage`; a transport failure (a non-success status, a Lambda function error, an empty reply) is a `RemoteRunException` with no public message. A surface that shows errors to clients reads `PublicMessage` and, when it is null, says only that the train failed. `Trax.Docs/adr/0028` records why. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason` and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both the HTTP and Lambda run executors therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead. On the worker, the error fields come from the attached data, or, for a `TrainException` rebuilt from an earlier boundary, from the JSON in its message. Any other exception is sent with a fixed message and no `FailureClass`; its detail stays in the runner's log. A class outside the `FailureClass` values is sent as `Unclassified`.
+On the API side, the HTTP run executor reads the response body and reconstructs a `TrainException` with the structured data intact. The HTTP job submitter does not: a `RemoteJobResponse` carries only `IsError`, `ErrorMessage`, `ExceptionType` and `StackTrace`, and an error response fails the dispatch with a plain `TrainException` whose message is `Remote worker reported error: {ErrorMessage} [{ExceptionType}]`. That is enough, because on the `/trax/execute` path the worker writes the failure to the metadata row itself. The HTTP submitter counts a job as submitted only when the body is a `RemoteJobResponse` for the job it sent; any other `200` fails the dispatch. On the run path it is a `RemoteRunException`, which carries the runner's `PublicMessage`; a transport failure (a non-success status, a Lambda function error, an empty reply) is a `RemoteRunException` with no public message. A surface that shows errors to clients reads `PublicMessage` and, when it is null, says only that the train failed. `Trax.Docs/adr/0028` records why. `Metadata.AddException()` populates `FailureException`, `FailureJunction`, `FailureReason` and (for `/trax/run`) `FailureClass` from the reconstructed exception. The class is carried rather than recomputed, because the original exception type is gone by the time the response arrives; a null `FailureClass` records as `Unclassified`, and the calling side's own classifier is never asked about a failure rebuilt from the response. The job-runner HTTP endpoint and the Lambda runner's local HTTP route write `RemoteRunResponse` with Trax's own JSON options (enums as integers) whatever the host's JSON configuration. A Lambda function's own invocation response is serialized by the function's Lambda serializer, which Trax does not control. Both the HTTP and Lambda run executors therefore read `FailureClass` as either an integer or a name, and a class they do not know (an unknown number or name from a newer worker) reads as `Unclassified` while the worker's error is kept. `/trax/execute` needs no such field: the worker writes to the same metadata row, so its classification is already recorded. Locally-executed trains attach this data via `Exception.Data["TrainExceptionData"]`; remote trains carry it as JSON in the exception message instead. On the worker, the error fields come from the attached data, or, for a `TrainException` rebuilt from an earlier boundary, from the JSON in its message. Any other exception is sent with a fixed message and no `FailureClass`; its detail stays in the runner's log. A class outside the `FailureClass` values is sent as `Unclassified`.
 
 ```
 Runner Process                         API Process
@@ -691,10 +746,11 @@ When a remote job fails, check these in order:
 1. **Metadata table**: `SELECT failure_exception, failure_junction, failure_reason, stack_trace FROM trax.metadata WHERE id = <id>`. These fields are populated from the structured error response.
 2. **Log table**: `SELECT * FROM trax.log WHERE metadata_id = <id> ORDER BY id`. If `AddDataContextLogging()` is enabled on the runner, junction-level logs are persisted.
 3. **Stale pending check**: If `failure_exception = 'StalePendingTimeout'`, the runner never started executing. Check runner health, network connectivity, and deployment status.
+4. **Dispatch attempts**: If `failure_exception = 'DispatchRequeued'`, that attempt never reached a runner and the entry was queued again; `failure_reason` holds the submitter's error. A run whose `failure_junction` is `DispatchJobsJunction` with any other exception is the attempt that exhausted `MaxDispatchAttempts`.
 
 ## Limitations
 
-- **Cancellation is process-local.** The `ICancellationRegistry` is in-memory. Dashboard "Cancel" only cancels trains running on the same process as the dashboard. Remote trains cannot be cancelled via the dashboard in v1.
+- **Cancelling a remote run goes through the database.** Dashboard "Cancel" (and `CancelAsync`) sets the run's persisted cancel flag and also cancels the token of a run on the same process through the in-memory `ICancellationRegistry`. A remote run sees only the flag, at its next junction boundary, and only if the worker registers `CancellationCheckProvider` (added by [`AddJunctionProgress()`](/docs/sdk-reference/configuration/add-junction-progress)). A junction already running on the worker is not interrupted. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens).
 - **Type resolution requires shared assemblies.** The remote process must reference the same NuGet packages and assemblies that define your train types, and register them with `AddMediator`. A queued job's input type is matched by fully-qualified name against the registered trains' input types, and a remote run's output is read into the output type the caller expects. When that type is an interface or abstract, the output is read into the implementation the runner names, but only if that implementation is already loaded in the scheduler's process and implements the expected type; the scheduler never loads a type by the name the runner sends, and refuses the run otherwise. So the scheduler must reference the assembly that defines the concrete output too.
 
 ## See Also

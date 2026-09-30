@@ -33,7 +33,7 @@ Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<LambdaWorkerOptions>` | Yes | Callback to set the Lambda function name and client options |
-| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this Lambda function. When omitted, only `[TraxRemote]`-attributed trains are routed. |
+| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this Lambda function. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. |
 
 ## Returns
 
@@ -82,7 +82,7 @@ services.AddTrax(trax => trax
             routing => routing
                 .ForTrain<IReviewContentTrain>()
                 .ForTrain<ISendViolationNoticeTrain>())
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -150,6 +150,8 @@ You can use Lambda workers alongside HTTP remote workers and SQS workers, each f
 
 Each train can only be routed to one submitter. Routing the same train to multiple submitters throws `InvalidOperationException` at build time.
 
+`UseLambdaWorkers()` can also be called more than once, one call per function. Each call keeps its own `LambdaWorkerOptions` and its own Lambda client, and invokes only the trains it routes.
+
 ## How It Works
 
 When the JobDispatcher processes a work queue entry, it checks whether the entry's train is routed to this function. If it is, the Lambda submitter:
@@ -180,16 +182,16 @@ The scheduler process needs:
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|
-| `LambdaWorkerOptions` | Singleton | Configuration options |
-| `IAmazonLambda` | Singleton | AWS Lambda client |
-| Lambda job submitter | Scoped | An internal `IJobSubmitter` that dispatches jobs via the Lambda SDK. The JobDispatcher resolves it for each train routed to this function; application code does not resolve it |
+| `IAmazonLambda` (keyed) | Singleton | The call's own Lambda client, configured by its `ConfigureLambdaClient` |
+| Lambda job submitter | Created per dispatch | An internal `IJobSubmitter` that invokes the call's function with its own options and client. The JobDispatcher creates it for each train routed to this call; application code does not resolve it |
+| `LambdaWorkerOptions`, `IAmazonLambda` | Singleton | The **first** call's options and client, also registered by type, as before (`UseLambdaRun()` registers its own `IAmazonLambda` too) |
 
 > **Note:** `UseLambdaWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this function.
 
 ## Limitations
 
 - **Payload size limit:** Lambda invocation payloads are limited to 256 KB. If your serialized train input exceeds this, store the data externally and pass a reference.
-- **Cancellation is process-local:** Same limitation as other remote execution models. Dashboard "Cancel" only affects trains on the same process.
+- **Cancellation reaches the function through the database:** Dashboard "Cancel" sets the run's cancel flag, which the train sees at its next junction boundary when the function registers `CancellationCheckProvider` (via `AddJunctionProgress()`). A junction already running is not interrupted. See [Remote Execution](/docs/scheduler/remote-execution#limitations).
 
 ## See Also
 

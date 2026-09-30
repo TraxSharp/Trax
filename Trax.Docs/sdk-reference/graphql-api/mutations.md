@@ -211,7 +211,7 @@ The whole namespace sits behind the operations gate (`GateOperations`, `RequireA
 
 ### triggerManifest
 
-Triggers an immediate execution of a manifest, bypassing its normal schedule.
+Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, that entry runs it and nothing more is queued; the mutation still succeeds.
 
 ```graphql
 mutation {
@@ -331,7 +331,7 @@ mutation {
 
 ### triggerGroup
 
-Triggers immediate execution of all enabled manifests in a group.
+Triggers immediate execution of all enabled manifests in a group. A manifest that already has a queued work queue entry is skipped, and does not stop the others being queued.
 
 ```graphql
 mutation {
@@ -349,7 +349,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `groupId` | `Long!` | Yes | The manifest group's database ID |
 
-**Returns**: `OperationResponse` (includes `count`, the number of manifests triggered)
+**Returns**: `OperationResponse` (includes `count`, the number of manifests queued, which leaves out those skipped as already queued; the server logs the skipped count)
 
 ---
 
@@ -467,7 +467,9 @@ mutation {
 
 ### config (nested namespace)
 
-The `operations.config` namespace patches scheduler runtime settings. Writes go to both the in-memory `SchedulerConfiguration` singleton (immediate effect on running services) and the persisted `trax.scheduler_config` row (survives restarts via the `SchedulerConfigBootstrapHostedService`).
+The `operations.config` namespace patches scheduler runtime settings. A save writes only the fields it sets to the persisted `trax.scheduler_config` row, so it never rewrites a setting it did not name, and applies them to the host that received it at once. Every running scheduler host reads the row every few seconds and applies a new or changed one without a restart, so a save made on an API-only host, or on one of several scheduler hosts, reaches all of them. A scheduler applies a change from its next polling cycle, including a new polling or cleanup interval; `localWorkerCount` is the exception and applies when the worker pool next starts. The row also survives restarts: each scheduler applies it at startup over the settings configured in code.
+
+The row stores every setting, so the first save, which creates it, records the saving host's values for the settings it does not name. A host that does not run the scheduler (an API-only host built with `AddTraxJobRunner()`) cannot know those values, so there the first save is refused with a message saying so; make it on a host that calls `AddScheduler`. Once the row exists, a stored value takes precedence over the value in code until the row is changed or deleted, and deleting the row returns every running scheduler to its configured settings.
 
 #### updateScheduler
 
@@ -511,12 +513,12 @@ Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (
 | `recoverStuckJobsOnStartup` | `Boolean` | |
 | `deadLetterRetentionPeriod` | `TimeSpan` | Zero to ten years |
 | `autoPurgeDeadLetters` | `Boolean` | |
-| `localWorkerCount` | `Int` | 1 to 256. Ignored when `UseLocalWorkers()` is not configured |
+| `localWorkerCount` | `Int` | 1 to 256. Ignored when `UseLocalWorkers()` is not configured. Applies when the worker pool next starts |
 | `clearLocalWorkerCount` | `Boolean` | Resets `localWorkerCount` to `Environment.ProcessorCount` |
 | `metadataCleanupInterval` | `TimeSpan` | 1 second to 30 days. Ignored when metadata cleanup is not configured |
 | `metadataCleanupRetention` | `TimeSpan` | 1 second to ten years. Ignored when metadata cleanup is not configured |
 
-**Returns**: `OperationResponse`. `count` is the number of fields actually changed (zero if every supplied value already matched). A value outside its range makes `success` `false`, with a `message` naming each offending field, and nothing in the patch is applied or persisted. The ranges are what the scheduler can run with: an interval becomes a timer that rejects values under a millisecond or over about 49 days, and polling the database more often than once a second is load rather than responsiveness. At startup, a persisted value outside its range (from a row written before these checks, or edited by hand) is skipped with a warning, and the configured value stays in effect.
+**Returns**: `OperationResponse`. `count` is the number of fields actually changed (zero if every supplied value already matched). A value outside its range makes `success` `false`, with a `message` naming each offending field, and nothing in the patch is applied or persisted; so does a first save on a host that does not run the scheduler. The ranges are what the scheduler can run with: an interval is the wait between two polling cycles, which a timer caps at about 49 days, and polling the database more often than once a second is load rather than responsiveness. When a scheduler applies the row, a persisted value outside its range (from a row written before these checks, or edited by hand) is skipped with a warning, and the configured value stays in effect.
 
 ---
 
@@ -571,9 +573,9 @@ Upgrading from a version where this mutation wrote the row itself: it now author
 
 The entry is created through [`ITrainExecutionService.QueueAsync`](/docs/sdk-reference/mediator-api/train-execution#queueasync), so the train's `[TraxAuthorize]` requirements apply on top of the operations gate. Authorization runs before `inputJson` is read: a caller who may not run the train gets a GraphQL error with code `TRAX_AUTHORIZATION` and message `"Not authorized."`, not `success: false`, even when the input is malformed, and nothing is inserted. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
-Three kinds of exception propagate out of the mutation rather than becoming `success: false`. Authorization (an `UnauthorizedAccessException`, which `TrainAuthorizationException` is) surfaces as the `TRAX_AUTHORIZATION` error above. Cancellation of the request ends it. An infrastructure failure, meaning a database, EF Core, network, I/O or timeout exception anywhere in the exception's chain (a `DbException` such as `NpgsqlException`, `DbUpdateException`, `TimeoutException`, `SocketException`, `HttpRequestException` or `IOException`), is logged on the server and arrives as a GraphQL error with HotChocolate's masked `"Unexpected Execution Error"` message, so nothing about the server reaches the caller. That includes a data-layer exception caused by the train's own `OnQueue` hook; a hook that means to refuse throws its own exception.
+Four kinds of exception propagate out of the mutation rather than becoming `success: false`. Authorization (an `UnauthorizedAccessException`, which `TrainAuthorizationException` is) surfaces as the `TRAX_AUTHORIZATION` error above. Cancellation of the request ends it. An infrastructure failure, meaning a database, EF Core, network, I/O or timeout exception anywhere in the exception's chain (a `DbException` such as `NpgsqlException`, `DbUpdateException`, `TimeoutException`, `SocketException`, `HttpRequestException` or `IOException`), is logged on the server and arrives as a GraphQL error with HotChocolate's masked `"Unexpected Execution Error"` message, so nothing about the server reaches the caller. That includes a data-layer exception caused by the train's own `OnQueue` hook; a hook that means to refuse throws its own exception. The mediator's `TrainAuthorizationNotConfiguredException`, for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` registered, is a host misconfiguration, so it is logged and masked the same way.
 
-Every other exception from the enqueue is a refusal and becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the generic `"The train input failed validation."` (neither the cap nor the input's size is echoed), and anything else as `"The enqueue was refused: "` followed by the exception's message. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key, one that is only whitespace, or one longer than 512 Unicode characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). The mediator's `InvalidOperationException` for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` registered also arrives this way, although it is a host misconfiguration rather than a refusal of the input. `Trax.Scheduler/docs/adr/0004` records the split.
+Every other exception from the enqueue is a refusal and becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the generic `"The train input failed validation."` (neither the cap nor the input's size is echoed), and anything else as `"The enqueue was refused: "` followed by the exception's message. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key, one that is only whitespace, or one longer than 512 Unicode characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). `Trax.Scheduler/docs/adr/0004` records the split.
 
 ```graphql
 mutation {

@@ -341,7 +341,9 @@ Task ActivateAsync<TTrain, TInput, TOutput>(
 **Exceptions:**
 - `InvalidOperationException` if the context is not initialized, the manifest is not found, the manifest is not `DormantDependent`, or the manifest does not depend on the current parent
 
-**Concurrency:** If the target manifest already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is silently skipped with a warning log.
+**Disabled:** If the target manifest is disabled, or its manifest group is, the activation is skipped with a warning log.
+
+**Concurrency:** If the target manifest already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is skipped with a warning log.
 
 ### ActivateManyAsync
 
@@ -359,7 +361,7 @@ Task ActivateManyAsync<TTrain, TInput, TOutput>(
 | `activations` | `IEnumerable<(string, TInput)>` | Yes | Collection of (ExternalId, Input) pairs to activate |
 | `ct` | `CancellationToken` | No | Cancellation token |
 
-All activations are performed in a single database transaction. If any validation fails (wrong parent, not dormant, etc.), the entire batch is rolled back. Concurrency-skipped entries (already queued/active) do not cause a rollback.
+All activations are performed in a single database transaction. If any validation fails (wrong parent, not dormant, etc.), the entire batch is rolled back. Skipped entries (disabled, already queued or active) do not cause a rollback.
 
 ### Example
 
@@ -390,7 +392,7 @@ public class SelectiveDispatchJunction(IDormantDependentContext dormants)
 - `Include()` and `IncludeMany()` (without `dependsOn`) must follow `Schedule()`. Calling them without a root throws `InvalidOperationException`.
 - `IncludeMany()` (with `dependsOn`) can follow `ScheduleMany()` for first-level batch dependents. `ThenIncludeMany()` is for deeper chaining after a previous `IncludeMany()`.
 - Dependent manifests have `ScheduleType.Dependent` and no interval/cron schedule of their own. They are triggered solely by their parent's successful completion. Dormant dependents have `ScheduleType.DormantDependent` and must be explicitly activated via `IDormantDependentContext`.
-- The dependency check compares `parent.LastSuccessfulRun > dependent.LastSuccessfulRun` during each polling cycle.
+- The dependency check queues a dependent when the parent's `LastSuccessfulRun` is later than the start of the dependent's latest successful run, during each polling cycle. A dependent therefore runs at least once after each parent success, including one that lands while the dependent is running.
 - **Cursor vs. Root**: The builder tracks two pointers: the *cursor* (last declared manifest, used by `ThenInclude`) and the *root* (the last `Schedule()`, used by `Include`). `Schedule` sets both. `ThenInclude` and `Include` move the cursor but leave the root unchanged. `ScheduleMany` resets both to null.
 - **Priority boost**: When a dependent manifest's work queue entry is created, `DependentPriorityBoost` (default 16) is added to its base priority. This means dependent trains are dispatched before non-dependent trains by default. The boost is configurable via [`DependentPriorityBoost`](/docs/sdk-reference/scheduler-api/add-scheduler) on the scheduler builder. The final priority is clamped to [0, 31].
 - **Cycle detection**: ManifestGroup dependencies must form a DAG. At startup, the builder derives group-level edges from all `Schedule`/`ThenInclude`/`Include`/`ScheduleMany`/`ThenIncludeMany`/`IncludeMany` calls and validates that no circular dependencies exist between groups. If a cycle is detected, `Build()` throws `InvalidOperationException` listing the groups involved. Within-group dependencies are allowed; only cross-group edges are validated. See [Dependent Trains: Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection) for details.

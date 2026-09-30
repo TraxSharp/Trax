@@ -19,7 +19,7 @@ If the junction **fails** (returns Left), the failure is **ignored**. No excepti
 Creates and executes a junction with short-circuit behavior.
 
 ```csharp
-public Monad<TInput, TReturn> ShortCircuit<TJunction>() where TJunction : class
+protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>() where TJunction : class
 ```
 
 | Type Parameter | Constraint | Description |
@@ -31,7 +31,7 @@ public Monad<TInput, TReturn> ShortCircuit<TJunction>() where TJunction : class
 Executes a pre-created junction with short-circuit behavior.
 
 ```csharp
-public Monad<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance) where TJunction : class
+protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance) where TJunction : class
 ```
 
 | Parameter | Type | Description |

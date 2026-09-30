@@ -31,6 +31,14 @@ services.AddTrax(trax => trax
 
 This is a host configuration error, reported to the host. A caller that asks `ITrainExecutionService` for a train name that does not exist gets `TrainNotFoundException` instead, whose message is always "The requested train was not found." and does not say what is registered.
 
+The scheduler checks the same thing when a train is scheduled (`Schedule`, `ScheduleMany`, `ScheduleOnceAsync` and the rest) and throws `InvalidOperationException` with the same fix:
+
+```text
+No train implements IServiceTrain<OrderInput, TOut>. Add the train's assembly to AddMediator(m => m.ScanAssemblies(typeof(MyTrain).Assembly)).
+```
+
+A scheduled run runs the train it names, so the scheduler also refuses a train that was not scanned when another train takes the same input type: `Train 'MyApp.Orders.IOrderTrain' is not registered, although another train takes OrderInput.`, followed by the same fix.
+
 ## "AddTrax() must be called before AddTraxDashboard()" / "...before AddTraxGraphQL()"
 
 `AddTraxDashboard()` and `AddTraxGraphQL()` require `AddTrax()` to be called first. They check for a `TraxMarker` singleton in the DI container at registration time.
@@ -52,16 +60,15 @@ builder.Services.AddTraxGraphQL();     // After AddTrax()
 
 The step builder pattern enforces configuration ordering at compile time. `AddMediator()` is only available on `TraxBuilderWithEffects` (returned by `AddEffects()`), and `AddScheduler()` is only available on `TraxBuilderWithMediator` (returned by `AddMediator()`).
 
-**Cause:** Calling methods out of order. Trax.Mediator reports its own order mistakes as CS0619 with the fix as the text:
+**Cause:** Calling methods out of order. Trax.Mediator and Trax.Scheduler report order mistakes as CS0619 with the fix as the text:
 
 | Error text | Cause |
 |---|---|
 | `Call AddEffects(...) before AddMediator(...).` | `AddMediator()` called before `AddEffects()` |
 | `AddMediator(...) is already called. Call it once and configure everything in that call.` | `AddMediator()` called twice |
 | `Call AddStateMachines(...) before AddMediator(...).` | `AddStateMachines()` called after `AddMediator()` |
+| `Call AddMediator(...) before AddScheduler(...).` | `AddScheduler()` called before `AddMediator()`, straight after `AddEffects()` or on the bare builder |
 | `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLogging(...).` | `AddDataContextLogging()` called before a data provider |
-
-`AddScheduler()` called before `AddMediator()` still reports CS1929, `'TraxBuilderWithEffects' does not contain a definition for 'AddScheduler'`. It is the same mistake.
 
 **Fix:** Follow the required order: `AddEffects()` -> `AddStateMachines()` if you use it -> `AddMediator()` -> `AddScheduler()`:
 ```csharp
@@ -141,10 +148,27 @@ If you're using `ShortCircuit`, remember that throwing an exception means "conti
 ## Scheduled jobs don't execute (no errors)
 
 Possible causes:
-- The manifest's `IsEnabled` is `false`. Check via `ITraxScheduler` or the database
+- The manifest's `IsEnabled` is `false`. Check via `ITraxScheduler` or the database. A disabled manifest's already-queued entries also wait, `Queued`, until it is re-enabled. A restart does not re-enable a manifest or group that was disabled at runtime unless the code states `.Enabled(true)` (see [What a Restart Rewrites](/docs/scheduler/scheduling-options#what-a-restart-rewrites))
+- A new cron schedule has not reached its first occurrence yet. It first runs at its first occurrence after it was scheduled, not on the next poll, and cron times are UTC: `Cron.Daily(hour: 3)` is 03:00 UTC. The manifest's `NextScheduledRun` shows when that is
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
 - The train's input type doesn't implement `IManifestProperties`
 - Your train assembly isn't registered with `AddMediator()`. Make sure to pass the assembly containing your trains
+
+## `FormatException` or `ArgumentOutOfRangeException` from `Cron` or `Every`
+
+`Schedule.FromCron`, which every `Cron` helper goes through, parses the expression and throws `FormatException` when it cannot fire: `Cron.Daily(hour: 25)`, `Cron.Hourly(minute: 60)`, a seven-field expression. `Schedule.FromInterval`, and so every `Every` helper, throws `ArgumentOutOfRangeException` for an interval shorter than one second, including `Every.Seconds(0)`. Fix the value at the call the stack trace names; earlier versions accepted these and stored a schedule that never ran, or ran once.
+
+## "Manifest group 'X' is given two different MaxActiveJobs values"
+
+Two schedules that share a group each state the same group setting (`MaxActiveJobs`, `Priority` or `Enabled`) with different values. Every start writes a stated group setting, so the value in force would depend on which manifest was seeded last, and `AddScheduler` refuses it. The message names both schedules.
+
+**Fix:** state the setting on one member of the group, or the same value on each. A member that says only `.Group("name")` leaves the group's settings alone.
+
+## "Batch 'X' prunes manifests whose external ID starts with ..."
+
+One batch's prune prefix starts another batch's, so the first would delete the second's manifests at every start. A name-based `ScheduleMany(name, ...)` prunes only within its own group, so this is raised only when the groups do not keep the two apart: an explicit `PrunePrefix`, or two name-based batches moved into one group.
+
+**Fix:** rename one batch so neither name plus `-` starts the other, or keep the batches in separate groups.
 
 ## "Ambiguous reference" between Cron types
 

@@ -34,12 +34,12 @@ For work that has no pre-existing manifest, a transient job that should run once
 
 ```csharp
 // Auto-generated externalId (format: "once-{guid}")
-await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
+await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput, Unit>(
     new SendReminderInput { UserId = userId, Message = "Your trial expires tomorrow" },
     TimeSpan.FromHours(24));
 
 // Explicit externalId for tracking or idempotency
-await scheduler.ScheduleOnceAsync<IProcessRefundTrain, ProcessRefundInput>(
+await scheduler.ScheduleOnceAsync<IProcessRefundTrain, ProcessRefundInput, Unit>(
     "refund-order-12345",
     new ProcessRefundInput { OrderId = 12345 },
     TimeSpan.FromHours(24));
@@ -92,7 +92,7 @@ If the job fails, normal retry logic applies. Retries continue until the job suc
 One-off jobs accept the same `ScheduleOptions` as recurring manifests:
 
 ```csharp
-await scheduler.ScheduleOnceAsync<ICleanupTrain, CleanupInput>(
+await scheduler.ScheduleOnceAsync<ICleanupTrain, CleanupInput, Unit>(
     "cleanup-temp-files",
     new CleanupInput { OlderThan = TimeSpan.FromDays(7) },
     TimeSpan.FromMinutes(10),
@@ -101,6 +101,8 @@ await scheduler.ScheduleOnceAsync<ICleanupTrain, CleanupInput>(
         .Timeout(TimeSpan.FromMinutes(5))
         .Group("maintenance"));
 ```
+
+`MaxRetries(1)` allows one retry after the first run, two attempts in all; `MaxRetries(0)` runs the job once and dead-letters it on its first failure. A one-off run that times out or is cancelled is not run again: the cancelled run consumed its one occurrence.
 
 ## SDK Reference
 

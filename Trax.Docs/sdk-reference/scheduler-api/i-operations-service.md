@@ -42,9 +42,11 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | Method | What it does | `Id` on success |
 |--------|--------------|-----------------|
 | `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. | the work queue entry |
-| `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. | the run's metadata row |
+| `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. When the submit throws, the exception is thrown to the caller and the run is recorded `Failed`, but only while it is still `Pending`: a runner that already started it (and then answered with an error, or outlasted the HTTP timeout) keeps its own record. | the run's metadata row |
 
-Both look the train up by its interface `FullName` and read `InputJson` the way the mediator reads a caller's input: the system serializer options with property names matched whatever their case (`customerId`, `CustomerId` and `CUSTOMERID` all fill the same property), a property given twice in any casing refused as invalid input rather than resolved to its last value, the mediator's input size cap, and a blank input read as `{}`, which the input type must be buildable from. `QueueTrainAsync` reads this way once it runs against a Trax.Mediator release that carries the change; until then a queued input's property names are case-sensitive.
+Both look the train up by its interface `FullName` and hand the input to the mediator: `QueueTrainAsync` through `ITrainExecutionService.QueueAsync`, `RunTrainAsync` through `ITrainExecutionService.PrepareAsync`, which authorizes the caller and reads the input without writing anything. Either way `InputJson` is read by `TrainInputReader`: property names matched whatever their case (`customerId`, `CustomerId` and `CUSTOMERID` all fill the same property), a property given twice in any casing refused as invalid input rather than resolved to its last value, JSON reference metadata (`$id`, `$ref`, `$values`) not honoured, so the input is exactly the tree the caller wrote, the mediator's input size cap, and a blank input read as `{}`, which the input type must be buildable from.
+
+The form a queued input is stored in, and the form a run's submitter writes for its worker, is indented and writes every member, so it is larger than the caller's JSON. Both are held to `TrainInputReader.StoredInputGrowthFactor` (4) times `MaxInputJsonBytes`, measured before anything is written or submitted.
 
 A run is a deliberate bypass of the work queue. It skips dispatch priority, group `MaxActiveJobs`, and the subject lock, so it can run while another run for the same subject is in progress (see [QueueSubjectKey](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing)). Use `QueueTrainAsync` when that matters.
 
@@ -55,10 +57,11 @@ Both methods return a failed `OperationResult` with a `Message` for an answer th
 | Outcome | `QueueTrainAsync` | `RunTrainAsync` |
 |---------|-------------------|-----------------|
 | Blank `TrainName`, unknown train | failed result | failed result |
-| Invalid, oversized or `null` `InputJson`, or a property given twice | failed result (`Invalid InputJson: ...`) | failed result, same message; no run is written |
+| Invalid or `null` `InputJson`, a property given twice, or JSON reference metadata | failed result (`Invalid InputJson: ...`) | failed result, same message; no run is written |
+| `InputJson` over `MaxInputJsonBytes`, or a stored form over its cap | failed result, a generic message | failed result, same message; no run is written |
 | The train's `OnQueue` or `QueueSubjectKey` refused | failed result (`The enqueue was refused: ...`) | not applicable: a run has neither |
 | The caller may not run the train | throws `UnauthorizedAccessException` | throws `UnauthorizedAccessException`, before the input is read |
-| `[TraxAuthorize]` train, no enforcer, not trusted | failed result (`The enqueue was refused: ...`) | throws `InvalidOperationException` |
+| `[TraxAuthorize]` train, no enforcer, not trusted | logged and thrown (`TrainAuthorizationNotConfiguredException`) | throws `TrainAuthorizationNotConfiguredException` |
 | Database or network failure | logged and thrown | logged and thrown |
 | The job submitter failed | not applicable | the run is marked `Failed` with the submitter's exception, then it is logged and thrown |
 | `ct` cancelled | throws `OperationCanceledException` | throws `OperationCanceledException`; a run cancelled before its submit completed is marked `Failed` |
@@ -96,11 +99,11 @@ An exact count of a large, unfiltered log table is a full scan, and the schedule
 
 ## Authorization
 
-Neither method decides authorization itself: `QueueTrainAsync` leaves it to the mediator, and `RunTrainAsync` applies the mediator's rule. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
+Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` through `QueueAsync` and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
 
 ## Implementing it yourself
 
-`RunTrainAsync` and every method added after it have a default implementation that throws `NotSupportedException`, so an implementation written before they were added still compiles. `OperationsService` needs the constructor that takes an `IServiceProvider`, which dependency injection picks, to resolve a job submitter; built with the older constructor, its `RunTrainAsync` throws `InvalidOperationException`.
+`RunTrainAsync` and every method added after it have a default implementation that throws `NotSupportedException`, so an implementation written before they were added still compiles. `OperationsService` needs the constructor that takes an `IServiceProvider`, which dependency injection picks, to resolve a job submitter; built with the older constructor, its `RunTrainAsync` throws `InvalidOperationException`. Its `RunTrainAsync` also needs an `ITrainExecutionService` that implements `PrepareAsync`, as the mediator's own does; one written before that method existed throws `NotSupportedException` rather than skip authorization.
 
 ## Package
 

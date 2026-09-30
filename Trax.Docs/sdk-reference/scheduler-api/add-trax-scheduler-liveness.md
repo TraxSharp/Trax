@@ -8,7 +8,7 @@ nav_order: 12
 
 # AddTraxSchedulerLiveness
 
-Registers an ASP.NET Core health check that reports unhealthy when the JobDispatcher has not completed a polling cycle within a threshold. Unlike a process or port probe, this catches a scheduler that is up but dispatching nothing.
+Registers an ASP.NET Core health check that reports unhealthy when the JobDispatcher has not completed a polling cycle within a threshold. Unlike a process or port probe, this catches a scheduler that is up but dispatching nothing. A cycle still running counts from when it began, and the check reports healthy while dispatch is paused or when the host runs no JobDispatcher (InMemory); see [Health & Liveness](/docs/scheduler/health-and-liveness#how-it-works).
 
 ## Signature
 

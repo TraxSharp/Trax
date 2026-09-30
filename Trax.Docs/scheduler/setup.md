@@ -51,16 +51,16 @@ builder.Services.AddTrax(trax => trax
         .DefaultMaxRetries(3)
 
         // Schedule jobs directly in configuration
-        .Schedule<IHelloWorldTrain, HelloWorldInput>(
+        .Schedule<IHelloWorldTrain>(
             "hello-world",
             new HelloWorldInput { Name = "Trax.Core Scheduler" },
             Every.Minutes(1))
 
-        .Schedule<IDailyReportTrain, DailyReportInput>(
+        .Schedule<IDailyReportTrain>(
             "daily-report",
             new DailyReportInput { ReportType = "sales" },
             Cron.Daily(hour: 3),
-            opts => opts.MaxRetries = 5)
+            opts => opts.MaxRetries(5))
     )
 );
 
@@ -77,11 +77,11 @@ app.Run();
 | `JobDispatcherPollingService` | Claims work queue entries via `FOR UPDATE SKIP LOCKED` | Not registered (InMemory dispatches directly) |
 | `MetadataCleanupPollingService` | Cleans up old metadata (if `AddMetadataCleanup()`) | Not registered (uses `ExecuteDeleteAsync`) |
 
-With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips PostgreSQL-specific junctions (`CancelTimedOutJobs`, `ReapStalePending`) and dispatches jobs directly through the in-memory job submitter. No work queue or JobDispatcher needed.
+With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips the timeout, stale-metadata and stale staged-entry junctions (`CancelTimedOutJobs`, `ReapStalePendingMetadata`, `ReapStaleInProgressMetadata`, `ResolveStaleStagedEntries`) and dispatches jobs directly through the in-memory job submitter. No work queue or JobDispatcher needed.
 
 When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed, it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission](/docs/scheduler/job-submission) for architecture details.
 
-All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, you only need to pass your own train assemblies to `AddMediator()`.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`, `DeadLetterCleanupTrain`) are registered automatically by `AddScheduler()`, you only need to pass your own train assemblies to `AddMediator()`.
 
 ### Local Worker Options
 
@@ -159,11 +159,11 @@ public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, 
 
 ```csharp
 .AddScheduler(scheduler => scheduler
-    .Schedule<ISyncCustomersTrain, SyncCustomersInput>(
+    .Schedule<ISyncCustomersTrain>(
         "sync-customers-us-east",
         new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
         Cron.Hourly(minute: 30),
-        opts => opts.MaxRetries = 3)
+        opts => opts.MaxRetries(3))
 )
 ```
 
@@ -178,7 +178,7 @@ public class JobSetupService(ITraxScheduler scheduler)
             "sync-customers-us-east",
             new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
             Every.Hours(6),
-            opts => opts.MaxRetries = 3);
+            opts => opts.MaxRetries(3));
     }
 }
 ```

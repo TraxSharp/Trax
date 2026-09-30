@@ -168,7 +168,7 @@ All other exceptions                      → TrainState.Failed
 No exception                              → TrainState.Completed
 ```
 
-Cancelled trains are **not retried** and **do not create dead letters**. Cancellation is a deliberate operator action, not a transient failure. An `OperationCanceledException` nothing asked for is the opposite case: most often an `HttpClient` timeout, it means a dependency was slow, so the run is recorded as a failure, classified `Transient` unless your `IFailureClassifier` answers otherwise, and a manifest retries it. `OnFailed` fires for it, not `OnCancelled`. The dashboard shows cancelled trains with a warning (orange) badge to distinguish them from failures.
+Cancelled trains are **not retried** and **do not create dead letters**. Cancellation is a deliberate operator action, not a transient failure. A cancelled run of a scheduled manifest consumes the occurrence it ran for: the manifest next runs at its next scheduled occurrence, not on the next polling cycle. An `OperationCanceledException` nothing asked for is the opposite case: most often an `HttpClient` timeout, it means a dependency was slow, so the run is recorded as a failure, classified `Transient` unless your `IFailureClassifier` answers otherwise, and a manifest retries it. `OnFailed` fires for it, not `OnCancelled`. The dashboard shows cancelled trains with a warning (orange) badge to distinguish them from failures.
 
 ## TrainBus Dispatch
 
@@ -280,7 +280,7 @@ Trax.Core supports two complementary cancellation paths: **same-server** (instan
 
 ### Same-Server: ICancellationRegistry
 
-When the scheduler is configured, `LocalWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-junction:
+When the scheduler is configured, `LocalWorkerService` registers each in-flight train's `CancellationTokenSource` with `ICancellationRegistry`. Calling `TryCancel(metadataId)` fires the CTS immediately, interrupting the train mid-junction. The first registration for a run holds it until that worker removes it with `Unregister(metadataId, cts)`, so a second delivery of the same job on the same host (which does not run the train) cannot take the registration from the job that is running:
 
 ```
 Dashboard "Cancel" button
@@ -330,13 +330,13 @@ Both methods use dual-layer cancellation:
 1. **Database flag** (`CancellationRequested = true`): works cross-server, picked up by `CancellationCheckProvider` at the next junction boundary
 2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`): immediately fires the `CancellationTokenSource` if the job is running on the same server
 
-Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**.
+Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**. A cancelled run of a scheduled manifest consumes the occurrence it ran for: the manifest next runs at its next scheduled occurrence, not on the next polling cycle.
 
 ## Automatic Timeout Cancellation
 
-The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks all InProgress metadata and cancels any where the elapsed time exceeds the manifest's `TimeoutSeconds` (or the global `DefaultJobTimeout`).
+The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks every InProgress run and cancels any where the elapsed time exceeds its manifest's `TimeoutSeconds`, or the global `DefaultJobTimeout` when the manifest sets none or the run has no manifest. Runs of a manifest disabled while they run are still timed out.
 
-This is distinct from dead-lettering. Timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried.
+This is distinct from dead-lettering. Timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried: an hourly job that times out runs again at its next hourly occurrence, so a job that always exceeds its timeout runs once an hour rather than continuously.
 
 Configure timeouts per-manifest or globally:
 

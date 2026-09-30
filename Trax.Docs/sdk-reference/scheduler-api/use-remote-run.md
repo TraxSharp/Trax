@@ -120,7 +120,7 @@ app.Run();
 | Service | Lifetime | Description |
 |---------|----------|-------------|
 | `RemoteRunOptions` | Singleton | Configuration options |
-| `IRunExecutor` | Scoped | Replaced with an internal implementation that dispatches run requests via HTTP POST and blocks until the response |
+| `IRunExecutor` | Transient | A typed `HttpClient` client (`AddHttpClient`). Replaced with an internal implementation that dispatches run requests via HTTP POST and blocks until the response |
 
 > **Note:** Without `UseRemoteRun()`, the default `LocalRunExecutor` executes trains in-process via `ITrainBus.RunByNameAsync()`. `UseRemoteRun()` overrides this via last-registration-wins.
 

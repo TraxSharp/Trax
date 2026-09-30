@@ -72,9 +72,10 @@ call it. As of this ADR's last changelog entry:
 
 Anything in the last two groups is a defect against this decision, not an exception to it.
 
-**`RunTrainAsync` copies two mediator rules.** The published mediator keeps its authorization
-check and its input reading private, so the run path repeats both, and they can drift until the
-mediator exposes them.
+**`RunTrainAsync` takes the mediator's rules rather than copying them.** It once repeated the
+mediator's authorization check and input reading, because the mediator kept both private. The
+mediator now exposes them as `ITrainExecutionService.PrepareAsync`, which the run path calls, so
+a run and a queue of the same train and JSON cannot drift apart.
 
 **`IOperationsService` grows.** A member added to it is a break for anyone implementing the
 interface themselves, so a new member has a default implementation that throws
@@ -92,6 +93,8 @@ field. Parity is held by review and by the audit list, not by a guard.
 
 ## Changelog
 
+- **2026-09-30**: `RunTrainAsync` calls the mediator's `PrepareAsync` instead of copying its
+  authorization check and input reading.
 - **2026-09-27**: Listed which actions comply, which have a shared method the surfaces do not
   call yet, and which have none.
 - **2026-09-27**: Recorded.

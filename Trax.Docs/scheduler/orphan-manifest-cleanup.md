@@ -27,13 +27,22 @@ At startup, after seeding all configured manifests via upsert, the scheduler com
 
 - **WorkQueue** entries (pending dispatches)
 - **DeadLetter** records (failed executions)
-- **Metadata** records (execution history)
+- **Metadata** records of finished runs (execution history)
 
-If deleting an orphaned manifest would break a `DependsOnManifestId` foreign key on another manifest, that reference is set to `null` before deletion.
+What the prune leaves alone:
 
-Orphan pruning deletes manifests in batches (500 per batch) to keep SQL `IN(...)` clauses small and avoid command timeouts on large prune operations. Each batch clears FK references, then deletes in FK-safe order: WorkQueues, DeadLetters, Metadata, and finally the manifests themselves. This makes the operation resilient to restarts, each batch commits independently, so partial progress is preserved.
+| Case | What happens |
+|---|---|
+| The host declares no manifests | Nothing is pruned, and the log says why. An API or worker host that calls `AddScheduler` only to reach `ITraxScheduler` or the operations service has no basis for calling another host's manifests orphaned. |
+| An orphan has a `Pending` or `InProgress` run | The manifest and the run are kept. The next start prunes the manifest once the run has finished. A prune never deletes an unfinished run. |
+| A run of the orphan started a nested train | The nested run is kept, with its `ParentId` cleared, as [metadata cleanup](/docs/scheduler/dead-letters-and-cleanup#metadata-cleanup) does. |
+| Another manifest depends on the orphan | Its `DependsOnManifestId` is set to `null`. |
+
+Orphan pruning deletes manifests in batches (500 per batch) to keep SQL `IN(...)` clauses small and avoid command timeouts on large prune operations. Each batch runs in one transaction: it clears the references above, then deletes WorkQueues, DeadLetters, Metadata, and finally the manifests. A batch that fails rolls back, is logged, and the prune moves on to the next one. A failure of the prune as a whole is logged too, and the host starts anyway: pruning is housekeeping.
 
 After manifest pruning, any `ManifestGroup` with no remaining manifests is also deleted.
+
+Nothing on a manifest records which application declared it. Where several hosts share one database and each declares its own schedules, each host's prune still compares the whole table with its own set, so give every such host the full set of schedules or turn pruning off on all but one.
 
 ## Configuration
 
@@ -97,14 +106,16 @@ services.AddTrax(trax => trax
 
 // On next startup:
 //   - No manifests are seeded
-//   - All existing manifests are deleted from the database
+//   - Nothing is pruned: a host that declares no manifests leaves the table alone
 ```
+
+To remove every manifest, delete them from the dashboard or the database. The scheduler will not treat "this host declares nothing" as "delete everything".
 
 ### Interaction with ScheduleMany PrunePrefix
 
 Orphan manifest cleanup and [ScheduleMany's PrunePrefix](/docs/sdk-reference/scheduler-api/schedule-many#with-pruning-automatic-stale-cleanup) are complementary:
 
-- **PrunePrefix** operates within a single `ScheduleMany` batch during seeding, removing items that were in a previous deployment but not in the current batch. It runs in a separate database context after the main seeding transaction commits, a prune failure does not roll back the upserted manifests.
+- **PrunePrefix** operates within a single `ScheduleMany` batch during seeding, removing items that were in a previous deployment but not in the current batch. It runs in a separate database context after the main seeding transaction commits, so a prune failure does not roll back the upserted manifests. A named batch prunes only within its own group. It follows the same rules as the orphan prune for unfinished runs, nested runs and transactions.
 - **Orphan manifest cleanup** operates globally after all seeding is complete, removing any manifest not in the configured set, including entire `Schedule` definitions that were removed.
 
 Both features compose correctly. PrunePrefix may delete some manifests during seeding, and orphan cleanup catches any remaining orphans afterward.
@@ -114,7 +125,7 @@ Both features compose correctly. PrunePrefix may delete some manifests during se
 - Orphan pruning runs once at startup as part of `SchedulerStartupService`, before the polling services begin. It does not run continuously.
 - Both single manifests (`.Schedule(...)`) and batch manifests (`.ScheduleMany(...)`) are tracked. The scheduler knows the full set of ExternalIds that each builder call will create, including all items in a batch.
 - Deletion follows FK-safe ordering: self-referencing `DependsOnManifestId` is cleared first, then WorkQueue, DeadLetter, and Metadata records, and finally the manifest itself.
-- When all schedules are removed from code (empty configuration), all manifests in the database are pruned. This is the expected behavior, the code is the source of truth.
+- When a host declares no schedules (empty configuration), nothing is pruned.
 
 ## SDK Reference
 

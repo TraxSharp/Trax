@@ -13,7 +13,7 @@ The JobRunner is what actually runs your train. It executes on job submitter wor
 ## Chain
 
 ```
-LoadMetadataJunction → ValidateMetadataStateJunction → RunScheduledTrainJunction
+LoadMetadataJunction → RunScheduledTrainJunction
 ```
 
 ## Input
@@ -28,33 +28,31 @@ The `MetadataId` points to the `Metadata` row created by the [JobDispatcher](/do
 
 ### LoadMetadataJunction
 
-Loads the `Metadata` record by ID, eagerly including its `Manifest` navigation (needed later by `RunScheduledTrainJunction` to record the success). If the input includes a non-null `Input` object, it wraps it in a `ResolvedTrainInput` for type-safe routing through Trax.Core's memory system.
+Loads the `Metadata` record by ID, eagerly including its `Manifest` navigation (needed later by `RunScheduledTrainJunction` to record the success), and requires a non-null `Input`.
 
-### ValidateMetadataStateJunction
+It then resolves the train the row names. The row's `Name` is the train's canonical name, its interface's `FullName`; a row written by an older version may carry the interface's short name or the class's name, which is accepted when exactly one registered train taking the input goes by it. The train must be registered and must take the input given, and it may not be one of the scheduler's own trains, which the scheduler runs in its own process. Otherwise the junction throws before anything touches the row, which stays `Pending`.
 
-Checks that the loaded metadata is in `TrainState.Pending`. If it's already `InProgress`, `Completed`, or `Failed`, the junction throws. This guards against duplicate execution, if the job submitter retries a job that already started, this junction catches it.
+Two trains may take the same input type, so the train is found by the name on the row, never by the input's type. The input and the train's canonical name travel on in a `ResolvedTrainInput`, a wrapper for routing through Trax.Core's memory system.
 
 ### RunScheduledTrainJunction
 
-Resolves the target train via `ITrainBus` using the deserialized input and invokes it. The train name stored in the metadata record is the canonical interface name (set via `CanonicalName` during DI registration), which `ITrainBus` uses for resolution. This is where your train's `Junctions()` declaration gets run. The train runs as the `Pending` metadata record the dispatcher created (the request's `MetadataId`), passed to `ITrainBus.RunAsync`, so its execution is recorded on that row. The JobRunner's own run is a separate record, and the two are not linked by `ParentId`.
+If the loaded row is no longer `Pending`, another delivery of the same job already started it, and this one completes without running anything (see [Duplicate deliveries](#duplicate-deliveries)). Otherwise it runs the train `LoadMetadataJunction` resolved, by name, through [`ITrainBus.RunByNameAsync`](/docs/sdk-reference/mediator-api/train-bus), with the deserialized input. The input-keyed `ITrainBus.RunAsync` reaches only one train per input type, so it is not used here: the train that runs is always the one the row names. This is where your train's `Junctions()` declaration gets run. The train runs as the `Pending` metadata record the dispatcher created (the request's `MetadataId`), passed to `RunByNameAsync`, so its execution is recorded on that row. The JobRunner's own run is a separate record, and the two are not linked by `ParentId`.
 
 Once the train has returned, the same junction records the success on the manifest: it sets `Manifest.LastSuccessfulRun` to `DateTime.UtcNow`, computes `NextScheduledRun`, and disables a `ScheduleType.Once` manifest. `LastSuccessfulRun` is what drives [dependent train](/docs/scheduler/dependent-trains) evaluation: downstream manifests won't fire until this value advances past their own `LastSuccessfulRun`. If there's no manifest (e.g., an ad-hoc execution), this step is a no-op.
 
 The update and its save run on an uncancellable token, inside this junction rather than as junctions of their own. A train checks its token before every junction, so a host shutdown that lands after your train completed would otherwise skip the update, leaving `LastSuccessfulRun` stale and a `Once` manifest enabled to run again. `Trax.Scheduler/docs/adr/0005` records why this is not split into separate junctions.
 
-## Concurrency Model: Upstream Guarantee + State Guard
-
-The JobRunner does not use any database-level locking of its own. Its safety relies on two mechanisms:
+## Concurrency Model: One Dispatch, and a Claimed Start
 
 ### Upstream Single-Dispatch Guarantee
 
-The [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) uses `FOR UPDATE SKIP LOCKED` to atomically claim each WorkQueue entry before creating its Metadata record. This guarantees that for any given WorkQueue entry, exactly one Metadata record is created and exactly one background task is enqueued. The JobRunner inherits this guarantee, it is only invoked once per Metadata ID.
+The [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) uses `FOR UPDATE SKIP LOCKED` to atomically claim each WorkQueue entry before creating its Metadata record. For any given WorkQueue entry, exactly one Metadata record is created and one job is submitted.
 
-### State Validation Guard
+### Duplicate deliveries
 
-`ValidateMetadataStateJunction` acts as a defense-in-depth check. It throws a `TrainException` if the metadata is in any state other than `Pending`. This catches edge cases where the job submitter might retry a job that has already started (e.g., after a visibility timeout). Once the `TrainBus` transitions the metadata to `InProgress`, any duplicate invocation will be rejected.
+A submitted job can still reach a runner more than once: SQS delivers at least once, an HTTP or Lambda dispatch can be retried after the first attempt was accepted, and a local job can be claimed again. The run's `Pending` row decides which delivery runs it. Starting a train from a pre-created row claims the row in the store with one conditional write, which moves it to `InProgress` only while it is still `Pending`, so exactly one delivery wins, even when both loaded the row as `Pending`.
 
-This is an **optimistic** guard, it reads the state without acquiring a lock. In the theoretical scenario where two workers execute the same Metadata ID simultaneously (which the JobDispatcher prevents), both could read `Pending` before either transitions to `InProgress`. This is acceptable because the upstream guarantee makes this scenario unreachable in practice.
+Every other delivery completes without running the train and records nothing: not on the run's row, not on the manifest, and not as a failure of its own JobRunner run. Whether it sees a row that is already `InProgress`, `Completed`, `Failed` or `Cancelled`, or loses the claim to a delivery that started a moment earlier, it logs that the run was already started and returns normally. Its transport therefore acknowledges it: the local worker deletes the job row, an SQS record is not returned to the queue, and a runner endpoint answers with success.
 
 ### No Wrapping Transaction
 
@@ -64,7 +62,7 @@ See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-s
 
 ## Registration
 
-All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. Local workers (the implicit default when `UsePostgres()` is configured) register `JobRunnerTrain` as a scoped train route so that local workers can resolve and execute it. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()`, only pass your own train assemblies.
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`, `DeadLetterCleanupTrain`) are registered automatically by `AddScheduler()`, `AddTraxWorker()`, or `AddTraxJobRunner()`. Local workers (the implicit default when `UsePostgres()` is configured) register `JobRunnerTrain` as a scoped train route so that local workers can resolve and execute it. You do **not** need to include the `Trax.Scheduler` assembly in `AddMediator()`, only pass your own train assemblies.
 
 ## SDK Reference
 

@@ -61,8 +61,8 @@ adopting repo's `Directory.Build.props`, with a "Pack (package validation)" step
 `.github/workflows/pull_request.yml`. Six repos adopt it, each against the release that was current
 when it did: Trax.Core (baseline 1.7.3), Trax.Effect (1.56.0, every project under `src/`, so a new
 package is covered without being listed), Trax.Mediator (1.22.1, Trax.Mediator and
-Trax.Mediator.Testing), Trax.Scheduler (1.33.0, its five packages by name, since
-`Trax.Scheduler.Tests.ArrayLogger` ships from `tests/`), Trax.Api (1.43.2, every project under
+Trax.Mediator.Testing), Trax.Scheduler (1.33.0, its four packages by name; nothing under
+`tests/` is packed), Trax.Api (1.43.2, every project under
 `src/`) and Trax.Dashboard (1.15.1). Each baseline moves with its repo's releases.
 
 Not covered: Nothing checks that a
@@ -72,5 +72,6 @@ before the baseline moved is accepted as the new normal.
 
 ## Changelog
 
+- **2026-09-30**: Trax.Scheduler stops packing `Trax.Scheduler.Tests.ArrayLogger`, so validation covers its four shipped packages.
 - **2026-09-27**: Trax.Effect, Trax.Mediator, Trax.Scheduler and Trax.Api adopt it.
 - **2026-09-27**: Recorded, from CORE-7 and its Dashboard counterpart.

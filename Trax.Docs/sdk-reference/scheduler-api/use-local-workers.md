@@ -34,7 +34,7 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 |----------|------|---------|-------------|
 | `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
 | `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs |
-| `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery) |
+| `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible after its worker last refreshed its claim before another worker can reclaim it (crash recovery). A running job's claim is refreshed every third of this, so a long job is not reclaimed while it runs |
 | `BatchSize` | `int` | `1` | Number of jobs each worker claims per poll cycle |
 | `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown |
 
@@ -51,7 +51,7 @@ services.AddTrax(trax => trax
     )
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -74,7 +74,7 @@ services.AddTrax(trax => trax
             options.VisibilityTimeout = TimeSpan.FromMinutes(15);
             options.ShutdownTimeout = TimeSpan.FromMinutes(1);
         })
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
     )
 );
 ```
@@ -96,8 +96,8 @@ services.AddTrax(trax => trax
             routing => routing
                 .ForTrain<IHeavyComputeTrain>()
                 .ForTrain<IAiInferenceTrain>())
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
-        .Schedule<IHeavyComputeTrain, HeavyInput>("heavy-compute", new HeavyInput(), Every.Hours(1))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IHeavyComputeTrain>("heavy-compute", new HeavyInput(), Every.Hours(1))
     )
 );
 ```
@@ -111,7 +111,8 @@ In this example, `IHeavyComputeTrain` is dispatched to the remote HTTP endpoint,
 - No additional NuGet packages required. This is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
 - Workers delete job rows after execution (both success and failure), including a job that finishes during shutdown: the delete does not take the host's stopping token. Trax.Core's Metadata and DeadLetter tables handle the audit trail.
-- If a worker crashes mid-execution, the job's `fetched_at` timestamp becomes stale and the job is reclaimed after `VisibilityTimeout`.
+- While a job runs, its worker refreshes the job's `fetched_at` every third of `VisibilityTimeout`. If a worker crashes mid-execution, the refreshes stop, the timestamp becomes stale, and the job is reclaimed after `VisibilityTimeout`.
+- A job waiting in `trax.background_job` for a free worker is not failed by the stale-pending reaper, however long it waits.
 - When `UseRemoteWorkers()` or `UseSqsWorkers()` is also configured, local workers still run. Only the trains explicitly routed via `ForTrain<T>()` or `[TraxRemote]` are dispatched remotely.
 
 ## Registered Services

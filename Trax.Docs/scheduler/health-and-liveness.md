@@ -18,7 +18,7 @@ builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
-        .Schedule<ISyncTrain, SyncInput>(ScheduledJob.Sync, input, Every.Seconds(30))
+        .Schedule<ISyncTrain>(ScheduledJob.Sync, input, Every.Seconds(30))
     )
 );
 
@@ -38,6 +38,13 @@ The scheduler registers an `ISchedulerLivenessMonitor` singleton on startup. The
 `ISchedulerLivenessMonitor` is read-only: `StartedAt` and `LastDispatchCompletedAt`. Only the dispatcher can record a cycle, so nothing else in the process can report the scheduler alive. Resolve the interface to read the timestamps. Registering your own implementation in its place does not work: the dispatcher keeps stamping the built-in monitor, and the health check reads yours.
 
 Before the first cycle completes, the check measures from startup time instead. A cold start stays healthy within the grace window, but a scheduler that never dispatches still trips once startup is older than the threshold.
+
+The dispatcher also stamps the start of each cycle. A cycle still running counts from when it began, so a slow synchronous dispatch is not mistaken for a wedged scheduler until the cycle itself has run past the threshold. That applies only when the previous cycle succeeded: a cycle that follows a failed one proves nothing until it completes, so a dispatcher that keeps failing stays unhealthy.
+
+The check reports healthy when nothing on the host is meant to dispatch, since restarting the process would not change that:
+
+- **Dispatch is paused.** An operator turned `jobDispatcherEnabled` off from the dashboard or the `updateScheduler` mutation. The check reports healthy with the description "JobDispatcher is paused.", and the paused loop keeps stamping, so turning dispatch back on does not start from a stale timestamp.
+- **The host runs no JobDispatcher.** A scheduler on the InMemory provider registers none (its ManifestManager dispatches inline).
 
 ## Options
 

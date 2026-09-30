@@ -269,7 +269,8 @@ public class TenantSyncService(ITraxScheduler scheduler)
 
 - All manifests are created/updated in a **single database transaction**. If any manifest fails to save, the entire batch is rolled back.
 - Pruning runs in a **separate database context** after the main transaction commits. A prune failure does not roll back the upserted manifests. The failure is logged as a warning and retried on the next cycle.
-- The `configureEach` callback receives `Action<TSource, ManifestOptions>` (not `Action<ManifestOptions>` like `Schedule`), which lets you customize options based on the source item. It applies per-item overrides on top of the base options from `ScheduleOptions`.
+- The name-based overload prunes only manifests in its own group, so a batch named `sync` leaves a batch named `sync-users` alone. With an explicit `PrunePrefix`, `AddScheduler` fails at startup when one batch's prefix starts another's, unless the shorter one is a name-based batch in a different group. A manifest with a pending or running run is never pruned.
+- The `configureEach` callback receives `Action<TSource, ManifestOptions>` (not `Action<ManifestOptions>` like `Schedule`), which lets you customize options based on the source item. Each item gets its own copy of every batch option, misfire policy, threshold and exclusion list included, so a change in `configureEach` affects that item only.
 - The source collection is materialized (`.ToList()`) internally to avoid multiple enumeration.
 - The group is configured via `.Group(...)` on `ScheduleOptions`. Per-group settings (MaxActiveJobs, Priority, IsEnabled) can be set from code or adjusted at runtime from the dashboard. See [Per-Group Dispatch Controls](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
 - `ScheduleMany` cannot be followed by `.ThenInclude()`. Use [IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) (with `dependsOn`) instead for batch dependent scheduling.

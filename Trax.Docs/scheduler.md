@@ -27,13 +27,12 @@ await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput, Unit>(
     "sync-customers-us-east",
     new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
     Every.Hours(6),
-    opts => opts.MaxRetries = 3);
+    opts => opts.MaxRetries(3));
 
-// For bulk scheduling from a collection, use ScheduleMany:
-scheduler.ScheduleMany<ISyncTableTrain, SyncTableInput, string>(
-    "sync",
+// For bulk scheduling from a collection, use ScheduleManyAsync:
+await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, Unit, string>(
     tables,
-    table => (table, new SyncTableInput { TableName = table }),
+    table => ($"sync-{table}", new SyncTableInput { TableName = table }),
     Every.Minutes(5));
 ```
 
@@ -76,7 +75,7 @@ Not all work is recurring. `TriggerAsync(externalId, delay)` queues a delayed ex
 await scheduler.TriggerAsync("sync-customers", TimeSpan.FromMinutes(30));
 
 // One-off job: runs once after 24 hours, then auto-disables
-await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput>(
+await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput, Unit>(
     new SendReminderInput { UserId = userId },
     TimeSpan.FromHours(24));
 ```
@@ -87,9 +86,9 @@ A manifest can depend on another manifest: one train's arrival triggers another'
 
 ```csharp
 scheduler
-    .Schedule<IExtractTrain, ExtractInput>(
+    .Schedule<IExtractTrain>(
         "extract", new ExtractInput(), Every.Hours(1))
-    .Include<ILoadTrain, LoadInput>(
+    .Include<ILoadTrain>(
         "load", new LoadInput());
 ```
 
@@ -99,15 +98,15 @@ Every manifest belongs to a `ManifestGroup`. Groups provide per-group dispatch c
 
 ```csharp
 scheduler
-    .Schedule<ISyncTrain, SyncInput>(
+    .Schedule<ISyncTrain>(
         "sync-data", new SyncInput(), Every.Hours(1),
-        groupId: "data-sync")
-    .Include<ILoadTrain, LoadInput>(
+        opts => opts.Group("data-sync"))
+    .Include<ILoadTrain>(
         "load-data", new LoadInput(),
-        groupId: "data-sync");
+        opts => opts.Group("data-sync"));
 ```
 
-When `groupId` is not specified, it defaults to the manifest's `externalId`. See [Scheduling Options](scheduler/scheduling-options.md#per-group-dispatch-controls).
+When no group is set, it defaults to the manifest's `externalId`. See [Scheduling Options](scheduler/scheduling-options.md#per-group-dispatch-controls).
 
 ## Architecture
 

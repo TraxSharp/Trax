@@ -24,7 +24,7 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<RemoteWorkerOptions>` | Yes | Callback to set the remote endpoint URL and HTTP client options |
-| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this remote endpoint. When omitted, only `[TraxRemote]`-attributed trains are routed. |
+| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this remote endpoint. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. |
 
 ## Returns
 
@@ -36,7 +36,7 @@ public SchedulerConfigurationBuilder UseRemoteWorkers(
 |----------|------|---------|-------------|
 | `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives job requests (e.g., `https://my-workers.example.com/trax/execute`) |
 | `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` (add auth headers, custom timeouts, or any other HTTP configuration) |
-| `Timeout` | `TimeSpan` | 30 seconds | HTTP request timeout for each job dispatch |
+| `Timeout` | `TimeSpan` | 30 seconds | HTTP request timeout for each job dispatch. A job the runner has already started when it expires keeps running there and is not dispatched again |
 | `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503) |
 | `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request (and each retry) carries a `Trax-Signature` the runner verifies. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
 
@@ -72,8 +72,8 @@ services.AddTrax(trax => trax
             routing => routing
                 .ForTrain<IHeavyComputeTrain>()
                 .ForTrain<IAiInferenceTrain>())
-        .Schedule<IMyTrain, MyInput>("my-job", new MyInput(), Every.Minutes(5))
-        .Schedule<IHeavyComputeTrain, HeavyInput>("heavy", new HeavyInput(), Every.Hours(1))
+        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
+        .Schedule<IHeavyComputeTrain>("heavy", new HeavyInput(), Every.Hours(1))
     )
 );
 ```
@@ -115,20 +115,30 @@ remote.ConfigureHttpClient = client =>
 
 ### Multiple Remote Endpoints
 
-You can call `UseRemoteWorkers()` multiple times to route different trains to different endpoints:
+Call `UseRemoteWorkers()` once per endpoint to route different trains to different runners:
 
 ```csharp
 .AddScheduler(scheduler => scheduler
     .UseRemoteWorkers(
-        remote => remote.BaseUrl = "https://gpu-workers/trax/execute",
+        remote =>
+        {
+            remote.BaseUrl = "https://gpu-workers/trax/execute";
+            remote.SigningKey = gpuRunnerKey;
+        },
         routing => routing.ForTrain<IAiInferenceTrain>())
     .UseRemoteWorkers(
-        remote => remote.BaseUrl = "https://cpu-workers/trax/execute",
+        remote =>
+        {
+            remote.BaseUrl = "https://cpu-workers/trax/execute";
+            remote.SigningKey = cpuRunnerKey;
+        },
         routing => routing.ForTrain<IBatchProcessTrain>())
 )
 ```
 
-Each train can only be routed to one submitter. Routing the same train to multiple endpoints throws `InvalidOperationException` at build time.
+Each call keeps its own `RemoteWorkerOptions` and its own `HttpClient`. `IAiInferenceTrain` jobs are sent only to `gpu-workers`, signed with `gpuRunnerKey`, and carry only the headers that call's `ConfigureHttpClient` added; `IBatchProcessTrain` jobs go only to `cpu-workers` with its key and headers. Neither runner ever sees the other's credentials.
+
+Each train can only be routed to one submitter. Routing the same train from two calls (or from `UseRemoteWorkers()` and `UseSqsWorkers()` or `UseLambdaWorkers()`) throws `InvalidOperationException` when the scheduler is built, naming both endpoints.
 
 ### Attribute-Based Routing
 
@@ -144,9 +154,9 @@ public class HeavyComputeTrain : ServiceTrain<HeavyInput, HeavyOutput>, IHeavyCo
 }
 ```
 
-When `UseRemoteWorkers()` is configured, trains marked with `[TraxRemote]` are automatically dispatched to the first registered remote submitter. Builder `ForTrain<T>()` routing takes precedence over the attribute.
+A train marked with `[TraxRemote]` that no call routes with `ForTrain<T>()` is dispatched to the **first** routed registration, of whatever kind: the first `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()` call in the builder. With `UseSqsWorkers()` alone, `[TraxRemote]` trains go to that queue; with two `UseRemoteWorkers()` calls, they go to the first endpoint. Builder `ForTrain<T>()` routing takes precedence over the attribute.
 
-If no `UseRemoteWorkers()` is configured, `[TraxRemote]` is silently ignored and the train runs locally.
+Only when none of the three is configured is `[TraxRemote]` ignored, and the train runs locally.
 
 ## Performance
 
@@ -177,12 +187,14 @@ See [Parallel Dispatch](/docs/scheduler/admin-trains/job-dispatcher#parallel-dis
 
 ## Registered Services
 
-`UseRemoteWorkers()` registers:
+Each `UseRemoteWorkers()` call registers:
 
 | Service | Lifetime | Description |
 |---------|----------|-------------|
-| `RemoteWorkerOptions` | Singleton | Configuration options |
-| HTTP job submitter | Scoped | An internal `IJobSubmitter` that dispatches jobs via HTTP POST. The JobDispatcher resolves it for each train routed to this endpoint; application code does not resolve it |
+| A named `HttpClient` | Per `IHttpClientFactory` | The call's own client, with its `BaseUrl`, `Timeout` and `ConfigureHttpClient` applied |
+| HTTP job submitter | Created per dispatch | An internal `IJobSubmitter` that dispatches jobs via HTTP POST with the call's own options and client. The JobDispatcher creates it for each train routed to this call; application code does not resolve it |
+
+`RemoteWorkerOptions` is not registered in the container: each call's options belong to its own submitter.
 
 > **Note:** `UseRemoteWorkers()` does **not** replace the default `IJobSubmitter`. Local workers continue to run for trains not routed to this endpoint.
 
@@ -192,10 +204,12 @@ When the JobDispatcher processes a work queue entry, it checks whether the entry
 
 1. Serializes a `RemoteJobRequest` containing the metadata ID and optional input
 2. POSTs the JSON payload to `BaseUrl`
-3. Reads the runner's `RemoteJobResponse` for that metadata ID. A non-success status, an `IsError` response, or a success status whose body is not a `RemoteJobResponse` naming the same metadata ID (a proxy's page, an empty body, a misrouted `BaseUrl`) fails the dispatch with a `TrainException`
+3. Reads the runner's `RemoteJobResponse` for that metadata ID. A non-success status, an `IsError` response, or a success status whose body is not a `RemoteJobResponse` naming the same metadata ID (a proxy's page, an empty body, a misrouted `BaseUrl`) fails the submit with a `TrainException`
 4. Returns a synthetic job ID (`"http-{guid}"`)
 
-The remote endpoint is responsible for running `JobRunnerTrain`, which loads the metadata from the shared Postgres database, validates the job state, executes the train, and updates the manifest.
+The remote endpoint is responsible for running `JobRunnerTrain`, which loads the metadata from the shared Postgres database, claims the run, executes the train, and updates the manifest.
+
+A failed submit is not always a failed delivery. When the submit fails, the dispatcher looks at the run's row: if the runner has already started it (the runner ran the train and reported its failure, or is still running it when `Timeout` expires), the run is the runner's and its outcome is recorded there, so the entry is **not** requeued and the train does not run again. Only a run still `Pending` (the request never reached a runner, or the runner refused it before starting it) is recorded as a failed dispatch attempt and requeued, up to [`MaxDispatchAttempts`](/docs/scheduler/admin-trains/job-dispatcher#dispatch-failures). See [Delivery and execution](/docs/scheduler/remote-execution#delivery-and-execution).
 
 ## Package
 

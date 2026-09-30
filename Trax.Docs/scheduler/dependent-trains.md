@@ -18,8 +18,10 @@ Dependent trains solve this. A manifest with `ScheduleType.Dependent` doesn't ru
 Each polling cycle, the `ManifestManagerTrain` evaluates dependent manifests separately from time-based ones. The logic is simple:
 
 1. Find the parent manifest (via `DependsOnManifestId`)
-2. If `parent.LastSuccessfulRun > dependent.LastSuccessfulRun`, queue the dependent
-3. If the parent has never succeeded, or the dependent already ran after the parent's last success, skip it
+2. If the parent's `LastSuccessfulRun` is later than the moment the dependent's latest successful run **started**, queue the dependent
+3. If the parent has never succeeded, or the dependent's latest successful run started after the parent's last success, skip it
+
+A dependent runs **at least once after each parent success**. Comparing against when the dependent's run started, rather than when it finished, is what makes that hold: a parent success that lands while the dependent is running was not seen by that run, so the dependent is queued once more when it finishes. When the dependent has no successful run on record (its history was pruned), its own `LastSuccessfulRun` stands in. A dependent run that was cancelled (timed out, or cancelled by an operator) consumed the parent success it was started for: when it ended later than that baseline, the dependent waits for the parent's next success.
 
 That's it. No event bus, no callbacks. The existing polling loop picks up the change on its next cycle.
 
@@ -196,7 +198,7 @@ public class QueueDeltaBronzeTasks(IDormantDependentContext dormants)
                 ExternalId: $"delta-bronze-{input.Table}-{b.Key}",
                 Input: ExtractRequest.Create(input.Table, b.Key, b.Value)));
 
-        await dormants.ActivateManyAsync<ICacheBronzeTrain, ExtractRequest>(activations);
+        await dormants.ActivateManyAsync<ICacheBronzeTrain, ExtractRequest, Unit>(activations);
         return Unit.Default;
     }
 }
@@ -212,7 +214,9 @@ Each call creates a `WorkQueue` entry with the runtime-supplied input. The `Depe
 
 ### Concurrency Guards
 
-If a dormant dependent already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is silently skipped with a warning log. This prevents duplicate work when the parent runs faster than its children can complete.
+If a dormant dependent is disabled, or its manifest group is, the activation is skipped with a warning log: a disabled manifest stays stopped until it is re-enabled.
+
+If a dormant dependent already has a queued `WorkQueue` entry or an active execution (`Pending`/`InProgress` metadata), the activation is skipped with a warning log. This prevents duplicate work when the parent runs faster than its children can complete. Unlike a standard dependent, a dormant dependent is not queued again afterwards: the skipped activation's input is dropped, so a parent that must not lose one should activate again on its next run.
 
 ## Under the Hood
 
@@ -250,7 +254,8 @@ Each link in the chain is independent. The scheduler doesn't have a concept of "
 | Scenario | Result |
 |----------|--------|
 | Parent succeeds, dependent never ran | Dependent queued |
-| Parent succeeds, dependent already ran after parent's last success | Dependent skipped |
+| Parent succeeds, dependent's latest successful run started after that | Dependent skipped |
+| Parent succeeds while the dependent is running | Dependent queued again once that run finishes |
 | Parent never succeeded | Dependent skipped |
 | Parent disabled | Dependent skipped (parent not in loaded set) |
 | Dependent has a dead letter | Dependent skipped until resolved |
@@ -258,7 +263,8 @@ Each link in the chain is independent. The scheduler doesn't have a concept of "
 | Parent deleted | `DependsOnManifestId` set to NULL, dependent skipped |
 | Parent succeeds, dormant dependent exists | Dormant dependent **not** queued (requires explicit activation) |
 | Parent activates dormant dependent via `IDormantDependentContext` | WorkQueue entry created with runtime input |
-| Parent activates dormant dependent that is already queued/active | Activation silently skipped |
+| Parent activates dormant dependent that is already queued/active | Activation skipped with a warning |
+| Parent activates dormant dependent that is disabled, or in a disabled group | Activation skipped with a warning |
 
 ## SDK Reference
 

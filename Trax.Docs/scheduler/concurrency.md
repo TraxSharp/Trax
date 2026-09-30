@@ -93,9 +93,9 @@ CREATE UNIQUE INDEX ix_work_queue_unique_queued_manifest
     WHERE status = 'queued' AND manifest_id IS NOT NULL;
 ```
 
-If the advisory lock is somehow bypassed (e.g., a bug, a code path that doesn't go through the polling service), this index causes a constraint violation on the second insert. The existing per-entry `try/catch` in `CreateWorkQueueEntriesJunction` catches the error and logs it. No crash, no corruption.
+The index also meets a manual trigger: `TriggerAsync`, `TriggerGroupAsync` and the dashboard's trigger buttons queue an entry for the manifest, with its `manifest_id` set, and can land between the cycle loading a manifest as due and writing its entry. `CreateWorkQueueEntriesJunction` saves each entry on its own; when one insert fails, it logs the error and detaches that entry, so the rest of the cycle, the reapers' and dead-letter writes included, still saves. EF Core takes a savepoint before each save inside the leader transaction and rolls back to it on failure, so the transaction itself stays usable. No crash, no corruption.
 
-Manual WorkQueue entries (from the dashboard or `TriggerAsync`) have `manifest_id IS NULL` and are excluded from this index. Multiple manual triggers for different purposes are always allowed.
+A trigger checks for a queued entry first and skips a manifest that already has one, since that entry already runs it; an insert that loses a race is recognised the same way. So a trigger never fails on this index. Entries with no manifest (`manifest_id IS NULL`, such as a `queueTrain` enqueue) are excluded from it, and any number may be queued.
 
 ## JobDispatcher: Row-Level Locking
 
@@ -187,15 +187,15 @@ Each entry is dispatched within its own DI scope, following the same pattern as 
 
 1. **Clean change tracker**: each entry gets a fresh `IDataContext` with no stale tracked entities from previous iterations.
 2. **Transaction isolation**: if one entry fails, its transaction is rolled back without affecting others.
-3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the job submitter. This makes the Metadata record visible to the job submitter when it begins execution, necessary because the `InMemoryJobSubmitter` executes trains synchronously within `EnqueueAsync`. If the enqueue fails after commit, the WorkQueue entry is already `Dispatched` with a valid Metadata record; the next dispatch cycle won't re-process it, but the Metadata's `Pending` state can be detected for recovery.
+3. **Commit-then-enqueue**: the claim transaction (Metadata creation + WorkQueue status update) is committed before calling `EnqueueAsync` on the job submitter. This makes the Metadata record visible to the job submitter when it begins execution, necessary because the `InMemoryJobSubmitter` executes trains synchronously within `EnqueueAsync`. If the enqueue fails after commit, the dispatcher fails that Metadata with a write that matches it only while it is still `Pending`. If a runner already started it (a remote runner that ran the job and answered with an error, or is still running it when the HTTP call times out), the write matches nothing, the entry stays `Dispatched` and the train is not run again. Otherwise, while the entry has dispatch attempts left (`MaxDispatchAttempts`, default 5), the failed run is recorded with `FailureException = "DispatchRequeued"` (not counted toward the manifest's retries) and the WorkQueue entry is reset to `Queued`, held back by a backoff (5 seconds, doubling, up to 5 minutes), so a later cycle dispatches it again with a new Metadata. Once the attempts are used up, the entry stays `Dispatched` and that last failure counts once. See [Dispatch failures](/docs/scheduler/admin-trains/job-dispatcher#dispatch-failures).
 
 ### Capacity Limit Approximation
 
-With multiple servers, `MaxActiveJobs` enforcement is approximate. Each server independently counts active Metadata records in `LoadDispatchCapacityJunction`. Between the count and the actual dispatch, another server may have dispatched entries, causing the total to slightly exceed the configured limit.
+With multiple servers, `MaxActiveJobs` enforcement is approximate. Each server independently counts active Metadata records in `LoadDispatchCapacityJunction`. Between the count and the actual dispatch, other servers may have dispatched entries of their own, so the total can exceed the configured limit.
 
 This is a deliberate tradeoff. `MaxActiveJobs` is a soft limit to prevent overwhelming the system. Not a strict concurrency semaphore. The alternative (a global advisory lock for the entire dispatch cycle) would serialize all dispatch activity, defeating the purpose of multi-server deployment.
 
-In practice, the overshoot is bounded by the number of servers multiplied by the number of entries dispatched per cycle. For most deployments, this is negligible.
+Each server can dispatch up to the whole limit from the same count, so with N dispatching servers the number of active jobs can reach N times `MaxActiveJobs` (and N times a group's `MaxActiveJobs`). Size the limit for that, or run the dispatcher on one host if the limit must hold exactly.
 
 ## LocalWorkerService: Already Safe
 
@@ -258,7 +258,8 @@ These are `Debug`-level messages. In production, set the log level to `Informati
 | Two servers run metadata cleanup concurrently | Both succeed, no side effects | Idempotent deletes |
 | A server crashes mid-ManifestManager cycle | Transaction rolls back, lock released, no partial state | Transaction-scoped advisory lock |
 | A server crashes mid-dispatch of a WorkQueue entry | Transaction rolls back, entry remains `Queued` for next cycle | Per-entry transaction |
-| A worker crashes mid-execution of a BackgroundJob | Visibility timeout expires, job reclaimed by another worker | `fetched_at` timestamp |
+| A worker crashes mid-execution of a BackgroundJob | Visibility timeout expires, job reclaimed by another worker | `fetched_at` timestamp, refreshed only while the job runs |
+| One job is delivered twice (SQS redelivery, retried dispatch, re-claimed job) | Only one delivery runs the train; the other completes without running it or recording anything | Conditional `Pending` → `InProgress` claim on the run's row |
 
 ## SDK Reference
 

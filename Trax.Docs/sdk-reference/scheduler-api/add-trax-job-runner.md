@@ -190,6 +190,8 @@ Registers the minimum set of services to run `JobRunnerTrain`:
 
 **Not registered:** ManifestManager, JobDispatcher, polling services, startup service, `LocalWorkerService`. This process only runs trains; it doesn't schedule or dispatch them.
 
+The `SchedulerConfiguration`, `ICancellationRegistry`, `ITraxScheduler` and `IDormantDependentContext` registrations use `TryAdd`, and `AddScheduler` replaces the configuration and cancellation registry. A scheduler host that also maps a runner endpoint for another scheduler therefore keeps the configuration it built, whichever of `AddTraxJobRunner` and `AddScheduler` it calls first.
+
 ### UseTraxJobRunner
 
 Throws while mapping when the runner options have no posture. Otherwise maps a `POST` endpoint at the specified route that:

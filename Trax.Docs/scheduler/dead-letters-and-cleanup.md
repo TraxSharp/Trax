@@ -9,7 +9,7 @@ nav_order: 3
 
 ## Handling Dead Letters
 
-When a job exceeds `MaxRetries`, it enters the dead letter queue with status `AwaitingIntervention`. The ManifestManager will skip these manifests until they're resolved.
+When a job's counted failures exceed `MaxRetries` (the retries allowed after the first run, so the default of 3 dead-letters on the fourth failure), it enters the dead letter queue with status `AwaitingIntervention`. Failures count only while they started within `FailureCountWindow` (default: 24 hours), so failures spread over weeks do not dead-letter a manifest. The ManifestManager will skip these manifests until they're resolved.
 
 To resolve a dead letter, use the **Dashboard UI**, the **GraphQL API**, or the **ITraxScheduler** service directly.
 
@@ -125,7 +125,7 @@ var result = await scheduler.AcknowledgeAllDeadLettersAsync("Mass acknowledge");
 
 ### Failure Counter Reset
 
-Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution when comparing against `MaxRetries`. This means a retried manifest starts fresh, it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
+Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution (and inside `FailureCountWindow`) when comparing against `MaxRetries`. This means a retried manifest starts fresh, it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
 
 ### One Queued Entry per Manifest
 
@@ -150,7 +150,7 @@ All dead letter operations filter by `status = 'awaiting_intervention'` at query
 
 ## Retry Delay & Backoff
 
-When a manifest has failures but hasn't reached `MaxRetries`, the scheduler applies an exponential backoff delay before retrying:
+When a manifest has counted failures but hasn't exceeded `MaxRetries`, the scheduler applies an exponential backoff delay before retrying. `failureCount` is the number of failures inside `FailureCountWindow` since the latest resolved dead letter, so a failure older than the window no longer delays the next run:
 
 ```
 delay = min(DefaultRetryDelay * RetryBackoffMultiplier ^ (failureCount - 1), MaxRetryDelay)
@@ -260,7 +260,7 @@ Configure via the scheduler builder:
 )
 ```
 
-Runtime settings can be adjusted via the Dashboard at `/trax/data/settings`.
+Both settings can also be changed at runtime, from the dashboard's Server Settings page or the [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation. The purge reads them on every run, so turning auto-purge off keeps resolved dead letters from the next run on, without a restart, and the cleanup service stays registered so it can be turned back on the same way.
 
 ## Testing
 
