@@ -65,12 +65,16 @@ Not covered:
 - **Dashboard requeue is the one layer nothing checks.** It compares against the stored name
   in `MetadataDetailPage`, and a drift there is invisible.
 - Registering a train without its own interface does not leave `CanonicalName` null: it falls
-  back to the first interface, which for an interfaceless train is `IServiceTrain<TIn, TOut>`.
+  back to the closed `IServiceTrain<TIn, TOut>`. Only an interface deriving from
+  `IServiceTrain<,>` counts as the train's own, so a marker interface on a shared base class is
+  never chosen.
   `TrainGuards.EveryTrainHasInterface` is the check for that, and Trax.Samples applies it to
   Bookworm.
 
 ## Changelog
 
+- **2026-09-30**: Scanning selects the interface deriving from `IServiceTrain<,>` as the
+  train's own, not the first non-generic interface the CLR lists; the fallback note says so.
 - **2026-09-11**: Added `samples` to `repos`. Two sample lifecycle hooks key a dictionary on
   `typeof(I...Train).FullName!` and look it up by `metadata.Name`, which is exactly the
   comparison the Consequences section warns about, so the decision binds that repo too. The

@@ -26,7 +26,7 @@ When `RunAsync<TOut>(input, metadata?)` is called, the `TrainBus`:
 
 ### Input Type Uniqueness
 
-Each input type maps to exactly one train. When duplicate input types are found, the first registration wins and subsequent duplicates are silently skipped via `TryAdd`. See [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) for the full uniqueness rules and code examples.
+The bus's input-keyed `RunAsync` reaches one train per input type: when two trains share one, the first scanned is the one it runs. Discovery still lists both, and a run by name runs the train named. See [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) for the full rules and code examples.
 
 ### Train Name Resolution
 
@@ -44,7 +44,7 @@ The canonical name is the preferred identifier. It is stable across implementati
 1. **Must be concrete classes** (not abstract)
 2. **Must implement IServiceTrain<,>**
 3. **Must have parameterless constructor or be registered in DI**
-4. **Should implement a non-generic interface** for better DI integration
+4. **Should implement its own interface**, a non-generic one deriving from `IServiceTrain<TIn, TOut>`. That interface is the train's service type and its canonical name. Other interfaces the class or its base classes implement are ignored.
 
 ## SDK Reference
 

@@ -46,7 +46,7 @@ Only `PostgresJobSubmitter` is a public type. The HTTP, SQS, Lambda and in-memor
 
 | Implementation | What it does |
 |----------------|-------------|
-| `LocalRunExecutor` | Executes in-process via `ITrainBus.RunAsync` (default) |
+| `LocalRunExecutor` | Executes in-process via `ITrainBus.RunByNameAsync` (default) |
 | HTTP, from [`UseRemoteRun`](/docs/sdk-reference/scheduler-api/use-remote-run) | POSTs to a remote HTTP endpoint, blocks until complete |
 | Lambda, from [`UseLambdaRun`](/docs/sdk-reference/scheduler-api/use-lambda-run) | Invokes an AWS Lambda function directly via SDK, blocks until complete (requires `Trax.Scheduler.Lambda`) |
 

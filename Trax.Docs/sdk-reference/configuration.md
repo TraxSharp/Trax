@@ -16,7 +16,7 @@ The builder uses a **step builder pattern** that enforces ordering at compile ti
 2. `TraxBuilderWithEffects` -- returned by `AddEffects()`, exposes `AddMediator()`
 3. `TraxBuilderWithMediator` -- returned by `AddMediator()`, exposes `AddScheduler()`
 
-This means you cannot call `AddMediator()` without first calling `AddEffects()`, and you cannot call `AddScheduler()` without first calling `AddMediator()`. The compiler catches incorrect ordering before you run your application.
+This means you cannot call `AddMediator()` without first calling `AddEffects()`, and you cannot call `AddScheduler()` without first calling `AddMediator()`. The compiler catches incorrect ordering before you run your application. A wrong order in Trax.Mediator's calls fails with an error that says which call comes first, for example `Call AddEffects(...) before AddMediator(...).` ([Builder Pattern](/docs/reference/builder-pattern) lists them).
 
 Effect-specific methods are nested inside `.AddEffects(effects => ...)`, which receives a `TraxEffectBuilder`. The `AddEffects` lambda must return the builder from the last chained call (`Func<TraxEffectBuilder, TraxEffectBuilder>`).
 
@@ -140,7 +140,7 @@ services.AddTrax(trax => trax
 
 // Does NOT compile -- AddMediator() is not available on TraxBuilder
 services.AddTrax(trax => trax
-    .AddMediator(typeof(Program).Assembly)  // Error: TraxBuilder has no AddMediator
+    .AddMediator(typeof(Program).Assembly)  // Error CS0619: Call AddEffects(...) before AddMediator(...).
 );
 
 // Does NOT compile -- AddScheduler() is not available on TraxBuilderWithEffects

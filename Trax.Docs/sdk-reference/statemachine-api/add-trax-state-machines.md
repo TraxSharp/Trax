@@ -17,7 +17,8 @@ is no context of the subsystem's own to register, and it **contributes the mutat
 scan** so Trax routes them by input type. You name neither a context nor the mutations' assembly.
 
 Call it after `AddEffects(...)` (it needs a data provider) and **before** `AddMediator(...)` (the mediator
-builds its route registry when it runs, so the mutations must be contributed first).
+builds its route registry when it runs, so the mutations must be contributed first). Called after `AddMediator(...)`, it
+does not compile: the error is `Call AddStateMachines(...) before AddMediator(...).`
 
 ## Signature
 

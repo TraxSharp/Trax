@@ -27,6 +27,8 @@ When multiple limits are configured, a request must acquire all applicable permi
 
 `PerPrincipalMaxConcurrentRun(int)` caps the number of concurrent `RunAsync` executions for any single authenticated principal (bucketed by the `trax:principal-id` claim). Use this to keep a single authenticated caller from saturating the global or per-train budget via request fan-out. Anonymous callers, scheduler runs, and remote-worker executions do not count against the cap.
 
+A principal's semaphore exists only while one of its runs holds or waits for a slot, and the last run to finish removes it, so the limiter's memory tracks the principals running now rather than every principal the process has served.
+
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connStr))

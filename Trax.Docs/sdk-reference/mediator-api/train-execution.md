@@ -79,7 +79,7 @@ Task<QueueTrainResult> QueueAsync(
 **Throws**:
 - `TrainNotFoundException` (an `InvalidOperationException`) if no train is registered with the given name. Use `ITrainDiscoveryService.DiscoverTrains()` to list available trains.
 - `AmbiguousTrainNameException` if the name matches more than one train's friendly name.
-- `TrainInputValidationException` if `inputJson` exceeds the configured size cap (`WithMaxInputJsonBytes`, 256 KiB by default).
+- `TrainInputValidationException` if `inputJson` exceeds the configured size cap (`WithMaxInputJsonBytes`, 256 KiB by default), or if the input as it would be stored (step 4) is larger than `TrainInputReader.StoredInputGrowthFactor` (4) times that cap. For the second, `MaxBytes` is the stored cap and `ObservedBytes` the stored size.
 - `JsonException` if `inputJson` does not deserialize to the train's input type, or names a property twice (`{"amount":1,"Amount":999}`). That includes a null or blank `inputJson` for an input type that needs values: a constructor parameter with no default (a positional record such as `record RenamePlayer(string Id, string NewName)`) or a `required` member. It fails here, at enqueue, rather than queueing a run whose input is full of nulls. `Unit`, an input with only settable properties, and parameters with defaults are built from `{}` as before, and an explicit `"{}"` is read like any other input.
 - `JsonException` if `inputJson` is the JSON literal `null`, which is well-formed but is not an input, or is blank and the input type needs values, as for `QueueAsync`.
 - `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements the caller does not meet. Authorization runs before the input is read, and applies to every caller-built enqueue, including the operations surface (`queueTrain`, `requeueExecution`). The dashboard's queue dialog and re-queue button also route through this method, but inside a trusted execution scope, so per-train requirements are skipped there; the dashboard is gated by its host. `Trax.Docs/adr/0017` records why.
@@ -94,8 +94,8 @@ Task<QueueTrainResult> QueueAsync(
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
 2. Authorizes the caller against the train's requirements, failing closed as described under **Throws**.
-3. Deserializes `inputJson` to the train's `InputType`, reading null or blank as `{}`, so `OnQueue` and `QueueSubjectKey` always receive a real input. Property names are matched whatever their case, so `{"Amount":5}` and `{"amount":5}` are the same input, and a property given twice, in the same or another casing, is refused with `JsonException` (`Trax.Docs/adr/0023`).
-4. Re-serializes the input using manifest serialization options (normalizes the JSON).
+3. Deserializes `inputJson` to the train's `InputType` through [`TrainInputReader.Read`](#traininputreader), reading null or blank as `{}`, so `OnQueue` and `QueueSubjectKey` always receive a real input. Property names are matched whatever their case, so `{"Amount":5}` and `{"amount":5}` are the same input, and a property given twice, in the same or another casing, is refused with `JsonException` (`Trax.Docs/adr/0023`). JSON reference metadata is not honoured: a list written as `{"$id":"1","$values":[...]}` is refused with `JsonException`, and `$ref` is read as an unknown property, not as a reference to another part of the input.
+4. Re-serializes the input using manifest serialization options (normalizes the JSON: indented, every member written), and refuses the enqueue with `TrainInputValidationException` when that stored form is larger than 4 times `MaxInputJsonBytes`. The check runs before the entry exists, so nothing is written.
 5. Creates a `WorkQueue` entry with the train name, serialized input, input type name, priority, and `scheduledAt` converted to UTC.
 6. Stamps the entry's subject key from the train's [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) override, if it has one. An exception from `QueueSubjectKey`, or an empty, whitespace-only or over-long key, aborts the enqueue, so no entry is written.
 7. Tracks the entry, then (if the train overrides [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook)) enters the enqueue context and invokes the hook with the entry's `ExternalId` and the input, then saves and commits, all in one transaction. A throw rolls the whole thing back, so nothing the hook tracked on `IEnqueueContextAccessor.Current` survives either. Trains that do not override the hook are never resolved here, enter no context, and open no transaction: their enqueue is a single write.
@@ -127,7 +127,7 @@ Task<RunTrainResult> RunAsync(
 |-----------|------|----------|---------|-------------|
 | `trainName` | `string` | Yes | N/A | Train name (matched by canonical name, then friendly name) |
 | `inputJson` | `string` | Yes | N/A | JSON-serialized input matching the train's `InputType`. Blank is read the way `QueueAsync` reads a missing input |
-| `ct` | `CancellationToken` | No | `default` | Cancellation token forwarded to `ITrainBus.RunAsync` |
+| `ct` | `CancellationToken` | No | `default` | Cancellation token forwarded to the train's `Run` |
 
 **Returns**: `RunTrainResult`
 
@@ -141,6 +141,7 @@ Task<RunTrainResult> RunAsync(
 - `TrainInputValidationException` if `inputJson` exceeds the configured size cap.
 - `JsonException` if `inputJson` is the JSON literal `null`, which is well-formed but is not an input.
 - `TrainException` if the train itself fails during execution (propagated from `ITrainBus`).
+- `InvalidOperationException` from the DI container if the train cannot be built, for example because a constructor dependency is not registered. The train is resolved before its metadata is written, so this leaves no `Pending` record behind.
 - `TrainAuthorizationException` if the train has `[TraxAuthorize]` requirements the caller does not meet.
 - `TrainAuthorizationNotConfiguredException` (an `InvalidOperationException`) if the train declares `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered, unless the call runs inside a trusted execution scope or the host called `AllowMissingAuthorizationService()`. The same fail-closed rule, and the same trusted-scope exemption, as `QueueAsync`.
 
@@ -148,11 +149,13 @@ Task<RunTrainResult> RunAsync(
 
 1. Looks up the train by `trainName` via `ITrainDiscoveryService`.
 2. Authorizes the caller against the train's requirements, failing closed as described under **Throws**.
-3. Deserializes `inputJson` to the train's `InputType`, reading blank, casing and repeated properties as `QueueAsync` does.
-4. Creates a `Metadata` record with a generated external ID.
-5. Persists the metadata via the data context.
-6. Calls the typed `ITrainBus.RunAsync<TOut>(input, ct, metadata)` via reflection, using the train's `OutputType` from its registration.
-7. Returns the metadata ID and the train's output (or `null` for `Unit` trains).
+3. Deserializes `inputJson` to the train's `InputType`, reading blank, casing, repeated properties and reference metadata as `QueueAsync` does.
+4. Resolves the train found in step 1 by its canonical name, in a child DI scope. The train that runs is the one that was authorized, even when another train takes the same input type. A train that cannot be built throws here, before anything is written.
+5. Creates a `Metadata` record with a generated external ID and persists it in the `Pending` state.
+6. Runs the train as that record, for the train's `OutputType`, invoked by reflection.
+7. Returns the metadata ID and the train's output (or `null` for `Unit` trains). The output is read through a generic method closed over `OutputType`, so an output type that is not public (an `internal` record in the consumer's assembly, say) is returned like any other.
+
+Steps 4 to 6 are the default `LocalRunExecutor` with the default `ITrainBus`. A host that registers its own `ITrainBus` gets the record written first, then `ITrainBus.RunByNameAsync<TOut>(trainName, input, ct, metadata)` called with it. A remote executor (`UseRemoteRun`, `UseLambdaRun`) takes over steps 4 to 7 and does them its own way.
 
 ## PrepareAsync
 
@@ -179,6 +182,38 @@ Authorization runs before the input is read, so a caller who may not use the tra
 ### Throws
 
 The same as `RunAsync`: `TrainNotFoundException`, `AmbiguousTrainNameException`, `UnauthorizedAccessException`, `TrainInputValidationException`, `JsonException`, and `InvalidOperationException` for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` outside a trusted scope.
+
+
+## TrainInputReader
+
+The reading rules above, as a public static class in `Trax.Mediator.Services.TrainExecution`. `QueueAsync`, `RunAsync` and `PrepareAsync` all read input through it; a host or package that takes train input JSON on a path of its own should call it rather than copy the rules, so it accepts and refuses the same JSON.
+
+```csharp
+public static class TrainInputReader
+{
+    public const int StoredInputGrowthFactor = 4;
+
+    public static object Read(
+        string? inputJson,
+        TrainRegistration registration,
+        int maxInputJsonBytes
+    );
+}
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `inputJson` | `string?` | Yes | N/A | The caller's JSON. Null or blank is read as `{}` |
+| `registration` | `TrainRegistration` | Yes | N/A | The train whose `InputType` is read |
+| `maxInputJsonBytes` | `int` | Yes | N/A | The size cap in UTF-8 bytes, normally `MediatorConfiguration.MaxInputJsonBytes` |
+
+**Returns**: an instance of `registration.InputType`, never null.
+
+**Throws**: `TrainInputValidationException` if the JSON is larger than `maxInputJsonBytes` (checked before parsing); `JsonException` if it cannot be read as the input type, names a property twice, uses `$id`/`$values` reference metadata where the type expects a list, is the literal `null`, or is blank for an input type that needs values.
+
+It does not authorize. Call it after the caller has been authorized for the train, as `PrepareAsync` does, so a caller who may not use the train learns nothing about its input from a parse error.
+
+`StoredInputGrowthFactor` is how many times `MaxInputJsonBytes` a queued input's stored form may be (see step 4 of `QueueAsync`).
 
 ## Examples
 

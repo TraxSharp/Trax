@@ -63,7 +63,7 @@ builder.Services.AddTrax(trax => trax
 );
 ```
 
-Each input type maps to exactly one train. If two trains accept the same `TIn`, the first registration wins and the duplicate is silently skipped. This means `TrainBus.RunAsync` always resolves to a single train for a given input type. If you need multiple trains that share an input type, inject them directly by interface instead of dispatching through the bus.
+`TrainBus.RunAsync` picks the train by input type, so for each input type it reaches one train: if two trains accept the same `TIn`, the first one scanned is the one it runs. Both trains are still registered and discovered, and everything that names a train runs the train it names: `ITrainExecutionService.RunAsync`, the GraphQL `run` operations, and `ITrainBus.RunByNameAsync`. To run a specific train from code when its input type is shared, call `RunByNameAsync` or inject the train by its interface.
 
 ## Nested Trains
 

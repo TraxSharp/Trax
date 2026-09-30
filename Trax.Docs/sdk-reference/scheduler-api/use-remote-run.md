@@ -122,7 +122,7 @@ app.Run();
 | `RemoteRunOptions` | Singleton | Configuration options |
 | `IRunExecutor` | Scoped | Replaced with an internal implementation that dispatches run requests via HTTP POST and blocks until the response |
 
-> **Note:** Without `UseRemoteRun()`, the default `LocalRunExecutor` executes trains in-process via `ITrainBus.RunAsync()`. `UseRemoteRun()` overrides this via last-registration-wins.
+> **Note:** Without `UseRemoteRun()`, the default `LocalRunExecutor` executes trains in-process via `ITrainBus.RunByNameAsync()`. `UseRemoteRun()` overrides this via last-registration-wins.
 
 ## How It Works
 

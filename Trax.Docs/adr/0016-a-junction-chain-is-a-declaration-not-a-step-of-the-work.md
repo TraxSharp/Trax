@@ -58,10 +58,12 @@ belong, and a junction receives the input as its argument. A train that wants to
 identifier onto its input declares a junction that does it.
 
 **Reading a chain resolves nothing.** Steps are recorded from type arguments, so a junction that
-cannot be constructed is still declared. Whether a junction can be constructed is not checked at
-all: a junction takes its constructor arguments from Memory, which the chain fills as it runs, so
-the answer is not decidable from the declaration. The container is consulted only to decide
-whether a junction's input can be supplied from outside Memory.
+cannot be constructed is still declared. What is decidable from the type alone is checked: a
+junction without exactly one public constructor, or one that is abstract or an interface, is
+recorded as a refusal. Whether its constructor arguments will be found is not: a junction takes
+them from Memory, which the chain fills as it runs, or from the container, and the replay has no
+option for that yet. The container is consulted only to decide whether a junction's input can be
+supplied from outside Memory.
 
 **A declaration that does work is refused.** `Junctions()` runs when a chain is read, so a body
 that awaits before returning, returns a result instead of ending in `Resolve()`, or ends in
@@ -93,12 +95,14 @@ type. It was rejected because the declaration would then depend on instance stat
 code sets, the kind of ambient dependence this ADR otherwise has to leave unchecked, and a train
 that forgot the assignment would pass the check and fail every run.
 
-**A train the check cannot build is skipped with a warning, not refused.** The check builds every
-train to read its chain. A train that cannot be constructed at startup, because its constructor
-needs something only a request provides, or a registered train that does not derive from
-`Train<,>`, is logged as unverified and skipped. A train that cannot be built is not evidence of a
-chain that cannot run, and refusing to start over one would take down a host whose trains all
-work.
+**A train the check cannot build is skipped with a warning, not refused, unless a type it needs is
+not registered at all.** The check builds every train to read its chain. A train that cannot be
+constructed at startup, because its constructor needs something only a request provides, or a
+registered train that does not derive from `Train<,>`, is logged as unverified and skipped. A train
+that cannot be built is not evidence of a chain that cannot run, and refusing to start over one
+would take down a host whose trains all work. A constructor argument the container does not
+register (asked of `IServiceProviderIsService`, which builds nothing) is different: that train
+fails every run, so the host refuses, naming the train and the type.
 
 **A train that can be built but whose `Junctions()` throws is refused.** Any exception, not only a
 `ChainDeclarationException`, fails the start and is reported as a chain that could not be read. The
@@ -107,7 +111,9 @@ with `NullReferenceException`. Skipping it would pass a train whose declaration 
 it is read, which is exactly what a run does first.
 
 **The refusal happens only where the check runs.** It is a hosted service `AddMediator` registers,
-so it runs when a generic host starts. A host with `SkipChainVerification()`, the Lambda runner and
+so it runs when a generic host starts. It checks in `StartingAsync`, which the host finishes for
+every hosted service before calling any `StartAsync`, so it refuses before a worker starts even
+under `HostOptions.ServicesStartConcurrently`. A host with `SkipChainVerification()`, the Lambda runner and
 a bare `ServiceProvider` never run it; there, a chain that cannot run fails when something first
 runs the train, as it did before the check existed.
 
@@ -153,7 +159,12 @@ declares a chain that reads the input (synchronously or in an async body), does 
 declaring, or has a `Junctions()` that throws something other than a declaration error; that it
 reports every failing train at once; that a container-supplied input is checked without building
 the service; that a train which can only be built inside a request is skipped with a warning
-rather than refused; and that the opt-out works. `SchedulerChainVerificationTests` in
+rather than refused, while one whose constructor needs an unregistered type is refused naming it;
+that each fault is on its own line, numbered from one with its junction's name, refusals first and
+without the Resolve fault a refusal causes; and that the opt-out works. `StartupGateHostTests` in
+Trax.Mediator starts a real host with a worker registered first and pins that the host refuses
+before the worker starts, with and without `ServicesStartConcurrently`, and that a junction with two
+constructors refuses the host. `SchedulerChainVerificationTests` in
 Trax.Scheduler reads and replays the scheduler's own trains (the ManifestManager, the
 JobDispatcher and the JobRunner), so a regression in one of them cannot stop every scheduler host
 from starting. `ChainVerificationTests` in Trax.Core pins the replay itself: a junction output's
@@ -180,6 +191,9 @@ Trax the Cli is pinned to; nothing checks a project an older Cli scaffolded agai
 release, or that Trax.Cli ships its template before Trax.Core ships a removal.
 
 ## Changelog
+- **2026-09-30**: Recorded that a junction Trax cannot build is refused at startup, that a train
+  whose constructor needs an unregistered type is refused rather than skipped, and that the check
+  runs in `StartingAsync`. Added `StartupGateHostTests`.
 - **2026-09-28**: Recorded that two chains started as separate statements are refused unless the
   first is awaited, and that `AddServices` fills exactly the slots the replay counts. Added
   `UnlinkedChainTests` and `AddServicesSlotTests`.

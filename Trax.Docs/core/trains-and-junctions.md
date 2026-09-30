@@ -280,8 +280,11 @@ already in Memory because it is the input type or `Unit`.
 Because a chain is a declaration of types, whether it can run is decidable without running it. At
 startup Trax reads every registered train's chain and refuses to start if one of them cannot run.
 The check is a hosted service that `AddMediator` registers, so it runs wherever the generic host
-starts hosted services; the Lambda runner and a bare `ServiceProvider` never run it. It refuses to
-start when:
+starts hosted services; the Lambda runner and a bare `ServiceProvider` never run it. It checks in
+`StartingAsync`, which the host finishes for every hosted service before it calls any
+`StartAsync`, so a refusal stops the host before any worker starts, including under
+`HostOptions.ServicesStartConcurrently`. The `[TraxAuthorize]` enforcer check runs the same way. It
+refuses to start when:
 
 - the chain could not be read, because it reads the input
 - `Junctions()` throws anything else, for example a `NullReferenceException` from reading
@@ -312,15 +315,24 @@ start when:
 - a `ShortCircuit` junction's output cannot be the train's return type (its value is returned as
   the result by a cast, which would fail on every run)
 - the chain ends without the train's return type in Memory
+- the train's own constructor needs a type the container does not register at all, which would
+  fail every run of the train: `ITdTrain cannot be built: its constructor needs 'IClock', which is
+  not registered. Register it before building the host.`
 
-Every train is checked before anything is reported, so one start tells you about all of them.
+Every train is checked before anything is reported, so one start tells you about all of them. Each
+fault is on its own line, prefixed with the train. A step's fault names the step counting from one
+and its junction, as in `IOrderTrain: step 2 (ChargeCard) needs 'Payment' in Memory and nothing
+before it puts one there.` A refusal (naming a type that is not a junction, say) is listed first,
+and while a chain has one, the "chain ends without" fault it causes is left out; fix the refusal
+and start again.
 
-A train the check cannot build is logged as a warning and skipped, not refused: one that cannot be
-constructed at startup (its constructor needs a service only a request provides, such as a current
-user read from `HttpContext`), or a registered train that does not derive from `Train<,>`. A train
-that cannot be built is not evidence of a chain that cannot run, but its chain goes unverified, so
-read the warning. A train that *can* be built but whose `Junctions()` throws is a different case,
-and is refused as above.
+A train the check cannot build is logged as a warning and skipped, not refused, when everything its
+constructor needs is registered: it cannot be constructed at startup because a registered service
+only works inside a request, such as a current user read from `HttpContext`. A registered train
+that does not derive from `Train<,>` is skipped the same way. A train that cannot be built for that
+reason is not evidence of a chain that cannot run, but its chain goes unverified, so read the
+warning. A train that *can* be built but whose `Junctions()` throws is a different case, and is
+refused as above.
 
 #### What the check counts as available
 
@@ -464,7 +476,7 @@ An enqueue started from inside an `OnQueue` hook **joins the enqueue it runs ins
 
 `Trax.Mediator/docs/adr/0003` records the reasoning.
 
-The enqueue holds its data context, and with it a pooled database connection with an open transaction, for the whole time the hook runs. A slow hook (one calling a remote API, say) therefore keeps a connection and a transaction open on Trax's database for that long. A deferring train (below) does not: its entry is committed on a context that is released before the hook runs, so for a slow hook that writes nothing through `IEnqueueContextAccessor.Current`, `DeferQueuePromotion` also keeps the connection free. From Trax.Mediator 1.23.0 that time is limited: a hook that runs longer than `MaxQueueHookDuration` (30 seconds by default, set with `AddMediator(m => m.WithMaxQueueHookDuration(TimeSpan))`) fails its enqueue with `QueueHookTimeoutException`, which rolls back everything written on the enqueue's context and frees the connection. The hook's token is cancelled at the limit; honour it, because a hook that ignores it keeps running with no enqueue behind it, and anything it enqueues after that is refused. A hook that has to wait longer belongs on a deferring train, whose hook holds no connection and is not limited.
+The enqueue holds its data context, and with it a pooled database connection with an open transaction, for the whole time the hook runs. A slow hook (one calling a remote API, say) therefore keeps a connection and a transaction open on Trax's database for that long. A deferring train (below) does not: its entry is committed on a context that is released before the hook runs, so for a slow hook that writes nothing through `IEnqueueContextAccessor.Current`, `DeferQueuePromotion` also keeps the connection free. From Trax.Mediator 1.23.0 that time is limited: a hook that runs longer than `MaxQueueHookDuration` (30 seconds by default, set with `AddMediator(m => m.WithMaxQueueHookDuration(TimeSpan))`) fails its enqueue with `QueueHookTimeoutException`, which rolls back everything written on the enqueue's context and frees the connection. The hook's token is cancelled at the limit; honour it, because a hook that ignores it keeps running with no enqueue behind it, and anything it enqueues after that is refused. The same holds when the caller cancels (a GraphQL client disconnecting, say): the enqueue stops waiting at once and rolls back, and a hook still running after that has its later enqueues refused too, since the caller was told this one failed. Whatever such a hook throws afterwards is logged. A hook that has to wait longer belongs on a deferring train, whose hook holds no connection and is not limited.
 
 **Writing through your own `DbContext`.** EF can only share a transaction between contexts that share a connection, so a separately-registered context (the common case, and the one in the example above) commits independently and cannot be rolled back with the entry. For that, defer promotion:
 

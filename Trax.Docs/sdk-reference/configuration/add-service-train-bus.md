@@ -42,7 +42,7 @@ Scans the given assemblies with the default `Transient` lifetime. Equivalent to:
 )
 ```
 
-Both overloads are called on `TraxBuilderWithEffects` (the return type of `AddEffects()`), which enforces at compile time that effects are configured before the mediator. Both return `TraxBuilderWithMediator`, which exposes `AddScheduler()` as the next valid step.
+Both overloads are called on `TraxBuilderWithEffects` (the return type of `AddEffects()`), which enforces at compile time that effects are configured before the mediator. Both return `TraxBuilderWithMediator`, which exposes `AddScheduler()` as the next valid step. Called before `AddEffects()`, `AddMediator` fails to compile with `Call AddEffects(...) before AddMediator(...).`, and called a second time with `AddMediator(...) is already called. Call it once and configure everything in that call.`
 
 ## TraxMediatorBuilder
 
@@ -107,30 +107,32 @@ services.AddTrax(trax => trax
 2. Registers each discovered train with the DI container at the specified lifetime
 3. Registers `ITrainBus` for dynamic train dispatch
 4. Registers `ITrainRegistry` for train type lookup
-5. Registers the startup chain validator, a hosted service that reads every registered train's `Junctions()` declaration when the host starts and refuses to start if any chain cannot run, reporting every failing train at once. A train it cannot build (its constructor needs something only a request provides) or that does not derive from `Train<,>` is logged as a warning and skipped rather than refused. A train it can build whose `Junctions()` throws is refused, whatever the exception: a `Junctions()` that dereferences `Metadata`, which is null at startup, fails the start, reported as a train whose chain could not be read. Being a hosted service, the check runs only where hosted services start: not with `SkipChainVerification()`, and not on the Lambda runner or any other bare `ServiceProvider`, where such a train fails when it first runs instead. See [Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
+5. Registers the startup chain validator, a hosted service that reads every registered train's `Junctions()` declaration when the host starts and refuses to start if any chain cannot run, reporting every failing train at once. A train whose constructor needs a type the container does not register is refused, naming the train and the type. A train it cannot build although everything its constructor needs is registered (a service that only works inside a request) or that does not derive from `Train<,>` is logged as a warning and skipped rather than refused. The check runs in `StartingAsync`, so it refuses the host before any hosted service's `StartAsync` runs, including under `HostOptions.ServicesStartConcurrently`. A train it can build whose `Junctions()` throws is refused, whatever the exception: a `Junctions()` that dereferences `Metadata`, which is null at startup, fails the start, reported as a train whose chain could not be read. Being a hosted service, the check runs only where hosted services start: not with `SkipChainVerification()`, and not on the Lambda runner or any other bare `ServiceProvider`, where such a train fails when it first runs instead. See [Trains & Junctions](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
 
 ## How Discovery Works
 
-1. Scans the specified assemblies for all types implementing `IServiceTrain<TIn, TOut>`.
-2. For each discovered type, extracts the `TIn` (input) type.
-3. Registers the train in the `ITrainRegistry` keyed by `TIn`.
-4. Registers the train in the DI container with the specified lifetime.
+1. Scans the specified assemblies for all concrete classes implementing `IServiceTrain<TIn, TOut>`.
+2. Selects each train's service type: its own interface, the non-generic one that derives from `IServiceTrain<TIn, TOut>`. When one train interface extends another, the most derived is selected. A train with no such interface is registered under the closed `IServiceTrain<TIn, TOut>`. No other interface counts, so a marker interface or `IDisposable` on a shared base class never becomes a train's service type. A train that implements two train interfaces, neither extending the other, has no single canonical name and is refused with a `TrainException`. `RegisterServiceTrains` selects the same way.
+3. Registers the train in the `ITrainRegistry` keyed by the `TIn` of its service type.
+4. Registers the train in the DI container under that service type, with the specified lifetime.
 
 ## Input Type Uniqueness
 
-Each input type maps to **exactly one** train via the `TrainBus`. If two trains accept the same `TIn`, the first registration wins and the duplicate is silently skipped via `TryAdd`. Only the first-registered train will be dispatched when calling `RunAsync` with that input type.
+`TrainBus.RunAsync` dispatches by input type, so it reaches **one** train per input type. If two trains accept the same `TIn`, the registry keeps the first one scanned (via `TryAdd`), and `RunAsync` with that input type runs it.
+
+Both trains are still registered and discovered, and a call that names a train runs that train, whichever one the registry keeps: `ITrainExecutionService.RunAsync`, the GraphQL `run` operations and `ITrainBus.RunByNameAsync` all do.
 
 ```csharp
 // This is fine -- different input types
 public class CreateOrderTrain : ServiceTrain<CreateOrderInput, OrderResult> { }
 public class CancelOrderTrain : ServiceTrain<CancelOrderInput, OrderResult> { }
 
-// Only CreateOrderTrain will be dispatched via TrainBus -- UpdateOrderTrain is silently skipped
+// trainBus.RunAsync(new OrderInput()) runs CreateOrderTrain; run UpdateOrderTrain by name
 public class CreateOrderTrain : ServiceTrain<OrderInput, OrderResult> { }
 public class UpdateOrderTrain : ServiceTrain<OrderInput, OrderResult> { }
 ```
 
-If you need multiple trains that share an input type, inject them directly by interface instead of dispatching through the bus.
+To run a specific one of several trains that share an input type, call `ITrainBus.RunByNameAsync` with its interface's full name, or inject it by its interface.
 
 ## Lifetime Considerations
 

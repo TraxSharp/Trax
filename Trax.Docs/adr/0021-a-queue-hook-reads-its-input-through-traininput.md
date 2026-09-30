@@ -40,9 +40,10 @@ hooks on one scoped instance at the same time, and a field would hand one enqueu
 other. The input is kept in an `AsyncLocal` for that reason, the same way the ambient enqueue
 context is.
 
-**A non-generic interface the mediator casts to.** Train discovery registers a train under its
-first non-generic interface, so one added to `ServiceTrain` would become every train's service
-type. The method is public on `ServiceTrain<TIn, TOut>` and hidden from IntelliSense instead, and
+**A non-generic interface the mediator casts to.** Train discovery registered a train under its
+first non-generic interface, so one added to `ServiceTrain` would have become every train's
+service type. (Since 2026-09-30 it selects the interface deriving from `IServiceTrain<,>`, so a
+marker would no longer be chosen; the method stays as it is.) The method is public on `ServiceTrain<TIn, TOut>` and hidden from IntelliSense instead, and
 the mediator calls it the way it already calls the hooks.
 
 ## Consequences
@@ -69,5 +70,7 @@ from another train's hook, whose outer hook still reads its own input afterwards
 
 ## Changelog
 
+- **2026-09-30**: Train registration no longer picks the first non-generic interface; the
+  rejected option says so.
 - **2026-09-27**: Recorded.
 - **2026-09-27**: The mediator half landed; its guard is named under Exemplars.

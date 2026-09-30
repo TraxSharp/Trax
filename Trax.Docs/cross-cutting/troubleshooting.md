@@ -7,22 +7,29 @@ nav_order: 4
 
 # Troubleshooting
 
-## "No train found for input type X"
+## "Could not find train with input type (X)"
 
-The `TrainBus` couldn't find a train that accepts your input type.
+The `TrainBus` has no train registered for the input's type. The message names the type, the assemblies the mediator scanned, and the two fixes:
+
+```text
+Could not find train with input type (MyApp.Orders.OrderInput): no IServiceTrain<OrderInput, TOut> is registered for it. Scanned assemblies: [MyApp.Api]. Add a train that takes this input type, or add the assembly that holds its train to ScanAssemblies(...).
+```
 
 **Causes:**
-- The assembly containing your train wasn't registered with `AddMediator`
+- The assembly containing your train is not in the scanned list, because it was never passed to `AddMediator` or `ScanAssemblies`
 - Your train doesn't implement `IServiceTrain<TIn, TOut>`
 - Your train class is `abstract`
 
-**Fix:**
+**Fix:** add the train's assembly to the scan.
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
-    .AddMediator(typeof(YourTrain).Assembly)  // Ensure correct assembly
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(typeof(Program).Assembly, typeof(YourTrain).Assembly))
 );
 ```
+
+This is a host configuration error, reported to the host. A caller that asks `ITrainExecutionService` for a train name that does not exist gets `TrainNotFoundException` instead, whose message is always "The requested train was not found." and does not say what is registered.
 
 ## "AddTrax() must be called before AddTraxDashboard()" / "...before AddTraxGraphQL()"
 
@@ -41,13 +48,21 @@ builder.Services.AddTraxDashboard();   // After AddTrax()
 builder.Services.AddTraxGraphQL();     // After AddTrax()
 ```
 
-## Compile error: "TraxBuilder does not contain a definition for AddMediator"
+## Compile error: "Call AddEffects(...) before AddMediator(...)"
 
 The step builder pattern enforces configuration ordering at compile time. `AddMediator()` is only available on `TraxBuilderWithEffects` (returned by `AddEffects()`), and `AddScheduler()` is only available on `TraxBuilderWithMediator` (returned by `AddMediator()`).
 
-**Cause:** Calling methods out of order, e.g. `AddMediator()` before `AddEffects()`.
+**Cause:** Calling methods out of order. Trax.Mediator reports its own order mistakes as CS0619 with the fix as the text:
 
-**Fix:** Follow the required order: `AddEffects()` -> `AddMediator()` -> `AddScheduler()`:
+| Error text | Cause |
+|---|---|
+| `Call AddEffects(...) before AddMediator(...).` | `AddMediator()` called before `AddEffects()` |
+| `AddMediator(...) is already called. Call it once and configure everything in that call.` | `AddMediator()` called twice |
+| `Call AddStateMachines(...) before AddMediator(...).` | `AddStateMachines()` called after `AddMediator()` |
+
+`AddScheduler()` called before `AddMediator()` still reports CS1929, `'TraxBuilderWithEffects' does not contain a definition for 'AddScheduler'`. It is the same mistake.
+
+**Fix:** Follow the required order: `AddEffects()` -> `AddStateMachines()` if you use it -> `AddMediator()` -> `AddScheduler()`:
 ```csharp
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))  // Step 1
@@ -67,6 +82,13 @@ A junction's dependency isn't registered in the DI container.
 services.AddScoped<IUserRepository, UserRepository>();
 services.AddScoped<IEmailService, EmailService>();
 ```
+
+## "ITrain cannot be built: its constructor needs 'X', which is not registered"
+
+The host refused to start because a train's own constructor asks for a type that nothing registers
+in the container, so the train would fail every run. Register the type before building the host.
+A type that *is* registered but can only be built inside a request (one reading `HttpContext`, say)
+is not refused: the train is skipped with a warning, "was not verified at startup".
 
 ## "Junction 'X' (train 'Y') needs 'Z' as a constructor argument"
 

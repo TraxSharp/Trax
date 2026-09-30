@@ -109,6 +109,37 @@ Extension methods target a specific marker, which is what enforces ordering at c
 rather than at run time. `AddDataContextLogging()` is the same idea one level down: it is
 declared on `TraxEffectBuilderWithData`, which only a data provider call returns.
 
+### Wrong-order overloads
+
+A call made on the wrong marker would otherwise fail with CS1929, which names the marker types
+and leaves the reader to work out the order from them. So a transition someone can get wrong also
+gets an overload on the marker the call is wrongly made on, marked
+`[Obsolete("Call X(...) before Y(...).", error: true)]` and `[EditorBrowsable(Never)]`. The
+compiler then reports CS0619 with the instruction as its text:
+
+```
+error CS0619: 'BuilderOrderExtensions.AddMediator(TraxBuilder, params Assembly[])' is obsolete:
+'Call AddEffects(...) before AddMediator(...).'
+```
+
+Trax.Mediator's are in `BuilderOrderExtensions`:
+
+| Wrong call | Error text |
+|---|---|
+| `AddMediator(...)` on `TraxBuilder`, before `AddEffects` | `Call AddEffects(...) before AddMediator(...).` |
+| `AddMediator(...)` on `TraxBuilderWithMediator`, a second time | `AddMediator(...) is already called. Call it once and configure everything in that call.` |
+| `AddStateMachines(...)` on `TraxBuilderWithMediator`, after `AddMediator` | `Call AddStateMachines(...) before AddMediator(...).` |
+
+When you add one, take the real method's parameter list and names exactly, so a call that uses
+named arguments or a lambda binds to the overload and reports the instruction rather than an
+argument error. The receiver has to be a marker the real method does not accept, or the correct
+order becomes ambiguous. The overload lives in the package that owns the later marker, because
+that is the one that can name both types: `AddStateMachines` is Trax.Effect's, but the
+`TraxBuilderWithMediator` overload is Trax.Mediator's, and its options parameter is
+`Action<dynamic>` because Trax.Mediator does not reference the options type. The body throws and
+never runs. `BuilderOrderDiagnosticsTests` in Trax.Mediator compiles each wrong order in memory
+and asserts the one error it produces, and compiles each right order and asserts none.
+
 ## SDK Reference
 
 > [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddServiceTrainBus](/docs/sdk-reference/mediator-api/add-service-train-bus)
