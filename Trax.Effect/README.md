@@ -1,186 +1,127 @@
 # Trax.Effect
 
-[![Build](https://github.com/TraxSharp/Trax.Effect/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Effect/actions/workflows/nuget_release.yml)
-[![NuGet Version](https://img.shields.io/nuget/v/Trax.Effect)](https://www.nuget.org/packages/Trax.Effect/)
-[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Effect)](https://www.nuget.org/packages/Trax.Effect/)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Effect/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Effect)](https://github.com/TraxSharp/Trax.Effect/commits/main)
+[![Build](https://github.com/TraxSharp/Trax.Effect/actions/workflows/nuget_release.yml/badge.svg?branch=main)](https://github.com/TraxSharp/Trax.Effect/actions/workflows/nuget_release.yml?query=branch%3Amain)
+[![NuGet](https://img.shields.io/nuget/v/Trax.Effect)](https://www.nuget.org/packages/Trax.Effect)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Effect/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Effect)
-[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Effect/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/effect)
 
-The effect layer for [Trax.Core](https://www.nuget.org/packages/Trax.Core/). A Trax.Core `Train` runs a chain of junctions; a Trax.Effect `ServiceTrain` does the same inside dependency injection and records every run: a `Metadata` row with its state, timing, input, output and failure, persisted by whichever data provider you install. Optional provider packages add parameter capture, per-junction logging and progress, cross-process event broadcasting, and a persisted state-machine engine.
+> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs). Start with [Getting Started](https://traxsharp.net/docs/getting-started) and [Effect Providers](https://traxsharp.net/docs/effect/effect-providers).
+Trax.Effect adds run records, dependency injection and storage providers to Trax trains, plus the portable state-machine engine. Its `ServiceTrain` runs the same chain as a [Trax.Core](https://github.com/TraxSharp/Trax.Core) `Train`, resolves junctions from DI, and writes a metadata row for every run. Trax.Mediator, Trax.Scheduler and the layers above it all run trains through it.
 
-## The Trax Stack
-
-Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Effect.**
-
-| Repo | Adds |
-|------|------|
-| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
-| **[Trax.Effect](https://github.com/TraxSharp/Trax.Effect)** | Execution logging, DI, pluggable storage |
-| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
-| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
-| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
-| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
-| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
-| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
-
-## What This Does
-
-`Trax.Core` gives you `Train<TIn, TOut>`: a locomotive that carries cargo through a sequence of stops. That's enough for pure logic, but production services need to know what ran, when it departed, whether it arrived, what it was carrying, and what went wrong if it derailed.
-
-`Trax.Effect` adds the `ServiceTrain<TIn, TOut>` base class, a full commercial train service that wraps every journey with:
-
-- **Journey logging**: a persistent metadata record for each run (state, timing, cargo in, cargo out, derailment details)
-- **Station services**: pluggable effect providers that fire during execution (data persistence, logging, parameter serialization, progress tracking)
-- **DI integration**: stops are resolved from `IServiceProvider`, so you get constructor injection out of the box
-
-## Installation
+## Install
 
 ```bash
 dotnet add package Trax.Effect
+dotnet add package Trax.Effect.Data.Postgres   # or Trax.Effect.Data.Sqlite, or Trax.Effect.Data.InMemory
 ```
 
-`Trax.Effect` is the one package every setup needs. The provider packages below pair with it, and each adds an extension method to the `AddEffects` builder (the broadcaster transports add theirs to the `UseBroadcaster` builder). Install a data provider to persist runs:
+Install one storage package, since runs are recorded only through one: Postgres for production, SQLite for a single process, InMemory for tests.
 
-```bash
-dotnet add package Trax.Effect.Data.Postgres   # UsePostgres(connectionString), production
-dotnet add package Trax.Effect.Data.Sqlite     # UseSqlite(connectionString), single server
-dotnet add package Trax.Effect.Data.InMemory   # UseInMemory(), tests and prototyping
-```
+## Example
 
-Then any of the optional providers:
-
-| Package | Adds | What it does |
-|---------|------|--------------|
-| `Trax.Effect.Provider.Parameter` | `SaveTrainParameters()` | Serializes each run's input and output into its `Metadata` row |
-| `Trax.Effect.Provider.Json` | `AddJson()` | Logs tracked model state as JSON, for debugging |
-| `Trax.Effect.JunctionProvider.Logging` | `AddJunctionLogger(serializeJunctionData)` | Logs each junction's name and duration, optionally its input and output |
-| `Trax.Effect.JunctionProvider.Progress` | `AddJunctionProgress()` | Persists the current junction on the run and checks for cancellation before each one (needs a data provider) |
-| `Trax.Effect.Broadcaster.RabbitMQ` | `UseRabbitMq(connectionString)` inside `UseBroadcaster(...)` | Carries train lifecycle events between processes |
-| `Trax.Effect.Broadcaster.SignalR` | `UseSignalRHub()` inside `UseBroadcaster(...)`, and `MapTraxTrainEventHub()` | Pushes train lifecycle events to browser and Blazor clients |
-| `Trax.Effect.StateMachine` | | The pure snapshot state-machine engine, no dependencies |
-| `Trax.Effect.StateMachine.Persistence` | `AddStateMachines(assemblies)` on the builder `AddEffects` returns | Persists state-machine drafts in Postgres, with exactly-once effects |
-| `Trax.Effect.Data.Testing` | | Data-layer architecture guards for your own test suite |
-| `Trax.Effect.StateMachine.Testing` | | Replays a differential corpus to prove the C# and TypeScript engines agree |
-
-You rarely install `Trax.Effect.Data` directly: every data provider depends on it.
-
-## Setup
-
-Register station services in your `IServiceCollection`:
+Adapted from the game server sample:
 
 ```csharp
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects =>
-        effects.UsePostgres(connectionString).SaveTrainParameters().AddJunctionLogger(serializeJunctionData: true).AddJunctionProgress()
-    )
-);
-```
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .SaveTrainParameters()
+        .AddJunctionLogger()));
 
-For development or tests, swap Postgres for in-memory:
+builder.Services.AddScopedTraxRoute<IRecalculateLeaderboardTrain, RecalculateLeaderboardTrain>();
 
-```csharp
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects =>
-        effects.UseInMemory().AddJson()
-    )
-);
-```
+public interface IRecalculateLeaderboardTrain
+    : IServiceTrain<RecalculateLeaderboardInput, RecalculateLeaderboardOutput>;
 
-## Usage
-
-Inherit from `ServiceTrain` instead of `Train`:
-
-```csharp
-public interface ICreateUserTrain : IServiceTrain<CreateUserRequest, User> { }
-
-public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
+public class RecalculateLeaderboardTrain
+    : ServiceTrain<RecalculateLeaderboardInput, RecalculateLeaderboardOutput>,
+        IRecalculateLeaderboardTrain
 {
-    protected override Task<Either<Exception, User>> Junctions()
-        => Chain<ValidateEmailJunction>()
-            .Chain<CreateUserInDatabaseJunction>()
-            .Chain<SendWelcomeEmailJunction>()
+    protected override Task<Either<Exception, RecalculateLeaderboardOutput>> Junctions() =>
+        Chain<AggregateScoresJunction>()
+            .Chain<RankPlayersJunction>()
             .Resolve();
 }
+
+public class RankPlayersJunction(ILogger<RankPlayersJunction> logger)
+    : Junction<RecalculateLeaderboardInput, RecalculateLeaderboardOutput> { /* ... */ }
 ```
 
-The chain syntax is identical to `Train`. The difference is what happens around it. `ServiceTrain` automatically opens a journey log when the train departs, updates it when it arrives, persists effect data at each station, and records the derailment details if any stop fails.
+Inject `IRecalculateLeaderboardTrain` and call `Run(input)`. The junctions' constructor arguments come from the container. Before the first junction runs, a row is written to `trax.metadata` in state `InProgress`. When the train ends it becomes `Completed` or `Failed`, with the end time, and on failure the junction that failed and the exception. `SaveTrainParameters()` stores the input and output as JSON on the same row. Trax.Mediator's `AddMediator` registers every train in an assembly, so most apps do not call `AddScopedTraxRoute` themselves (`AddTransientTraxRoute` and `AddSingletonTraxRoute` also exist).
 
-Junctions work the same way, with full DI:
+## Metadata
 
-```csharp
-public class CreateUserInDatabaseJunction(AppDbContext db) : Junction<CreateUserRequest, User>
-{
-    public override async Task<User> Run(CreateUserRequest input)
-    {
-        var user = new User { Email = input.Email, Name = input.Name };
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-        return user;
-    }
-}
-```
+Each run's row moves through `Pending`, `InProgress`, then `Completed`, `Failed` or `Cancelled`. It carries the train name, start and end times, the host name, and on failure `FailureJunction`, `FailureException` and `FailureReason`. The dashboard shows the same rows, and so does a SQL query.
 
-## Journey Lifecycle
+If a process dies halfway through a run, the run is marked failed and a scheduled train is retried from its first junction, so junctions that call other systems should be safe to repeat.
 
-Every `ServiceTrain` journey transitions through:
+## Packages
 
-```
-Pending → InProgress → Completed
-                     → Failed
-                     → Cancelled
-```
+Each provider adds one method to the `AddEffects` builder, except the broadcasters, which add theirs inside `UseBroadcaster(b => ...)`.
 
-Think of it as: the train is boarding (`Pending`), in transit (`InProgress`), and then either arrives (`Completed`), derails (`Failed`), or is pulled from service (`Cancelled`). These states are persisted in the journey log and queryable through the data layer.
+| Package | Method | What it adds |
+|---|---|---|
+| [Trax.Effect](https://www.nuget.org/packages/Trax.Effect) | `AddTrax`, `AddEffects` | `ServiceTrain`, run records, lifecycle hooks, DI registration |
+| [Trax.Effect.Data.Postgres](https://www.nuget.org/packages/Trax.Effect.Data.Postgres) | `UsePostgres(connectionString)` | PostgreSQL storage, applying the Trax migrations at startup. For production |
+| [Trax.Effect.Data.Sqlite](https://www.nuget.org/packages/Trax.Effect.Data.Sqlite) | `UseSqlite(connectionString)` | SQLite storage for a single process |
+| [Trax.Effect.Data.InMemory](https://www.nuget.org/packages/Trax.Effect.Data.InMemory) | `UseInMemory()` | In-memory storage for tests, lost on exit |
+| [Trax.Effect.Data](https://www.nuget.org/packages/Trax.Effect.Data) | | The data layer the storage packages share. Installed with them |
+| [Trax.Effect.Provider.Parameter](https://www.nuget.org/packages/Trax.Effect.Provider.Parameter) | `SaveTrainParameters()` | Effect provider: stores each run's input and output, masking `[TraxSensitive]` members |
+| [Trax.Effect.Provider.Json](https://www.nuget.org/packages/Trax.Effect.Provider.Json) | `AddJson()` | Effect provider: logs tracked model state as JSON, for debugging |
+| [Trax.Effect.JunctionProvider.Logging](https://www.nuget.org/packages/Trax.Effect.JunctionProvider.Logging) | `AddJunctionLogger()` | Junction provider: logs each junction's start, finish and duration, optionally its output |
+| [Trax.Effect.JunctionProvider.Progress](https://www.nuget.org/packages/Trax.Effect.JunctionProvider.Progress) | `AddJunctionProgress()` | Junction provider: records the running junction and checks for cancellation between junctions. Needs a storage package |
+| [Trax.Effect.Broadcaster.RabbitMQ](https://www.nuget.org/packages/Trax.Effect.Broadcaster.RabbitMQ) | `UseRabbitMq(connectionString)` | Train lifecycle events delivered to other processes over RabbitMQ |
+| [Trax.Effect.Broadcaster.SignalR](https://www.nuget.org/packages/Trax.Effect.Broadcaster.SignalR) | `UseSignalRHub()`, `MapTraxTrainEventHub()` | Train lifecycle events pushed to browser and Blazor clients |
+| [Trax.Effect.StateMachine](https://www.nuget.org/packages/Trax.Effect.StateMachine) | | The snapshot state-machine engine, with no dependencies |
+| [Trax.Effect.StateMachine.Persistence](https://www.nuget.org/packages/Trax.Effect.StateMachine.Persistence) | `AddStateMachines(assemblies)` | Stores state-machine snapshots and drafts through your storage package, with run-once effects |
+| [Trax.Effect.StateMachine.Testing](https://www.nuget.org/packages/Trax.Effect.StateMachine.Testing) | | Checks that the C# and TypeScript engines agree on a generated corpus |
+| [Trax.Effect.Data.Testing](https://www.nuget.org/packages/Trax.Effect.Data.Testing) | | Architecture guards for your data layer |
 
-## Station Services
+The state-machine packages hold a multi-step flow (a wizard, a checkout) as a JSON snapshot that a C# backend and a TypeScript client both read. See [State machines](https://traxsharp.net/docs/statemachine).
 
-| Service | Package | What it does |
-|---------|---------|-------------|
-| **Postgres** | `Trax.Effect.Data.Postgres` | Persists journey logs and execution data to PostgreSQL |
-| **InMemory** | `Trax.Effect.Data.InMemory` | In-memory store for tests and local dev |
-| **Json** | `Trax.Effect.Provider.Json` | Logs state transitions as JSON for debugging |
-| **Parameter** | `Trax.Effect.Provider.Parameter` | Serializes train cargo (inputs/outputs) into the journey log |
-| **Sqlite** | `Trax.Effect.Data.Sqlite` | Persists journey logs to SQLite, for a single server |
-| **JunctionLogger** | `Trax.Effect.JunctionProvider.Logging` | Logs each junction's execution with optional cargo serialization |
-| **JunctionProgress** | `Trax.Effect.JunctionProvider.Progress` | Tracks per-junction progress and checks for cancellation signals |
+## What it does not do
 
-Station services compose, so enable as many as you need:
+- Storage is PostgreSQL, SQLite or in memory. There is no SQL Server or MySQL provider.
+- A failed run is not resumed at the junction that failed.
+- The broadcasters send lifecycle events. They do not carry messages between services.
+- Runs are recorded in the database and logged through `ILogger`, not emitted as OpenTelemetry spans.
 
-```csharp
-effects
-    .UsePostgres(connectionString)
-    .AddJson()
-    .SaveTrainParameters()
-    .AddJunctionLogger(serializeJunctionData: true)
-    .AddJunctionProgress();
-```
+## Where this fits
 
-Every method is documented under [Configuration](https://traxsharp.net/docs/sdk-reference/configuration).
+Trax is split into layers, one repo each. Take the ones you need; the trains you wrote do not change. **You are here: Trax.Effect.**
 
-## DI Registration Helpers
+| Repo | What it adds |
+|---|---|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Trains, junctions and the chain, with no database and no DI container |
+| **[Trax.Effect](https://github.com/TraxSharp/Trax.Effect)** | **A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine** |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
 
-Register your trains as scoped services with proper interface mapping:
+Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
 
-```csharp
-builder.Services.AddScopedTraxRoute<ICreateUserTrain, CreateUserTrain>();
-builder.Services.AddTransientTraxRoute<IProcessOrderTrain, ProcessOrderTrain>();
-```
+## Documentation
 
-Or use `AddMediator` (from [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator/)) to auto-register all trains in an assembly.
+- [Effect overview](https://traxsharp.net/docs/effect)
+- [Metadata](https://traxsharp.net/docs/effect/metadata)
+- [Effect providers](https://traxsharp.net/docs/effect/effect-providers)
+- [Configuration reference](https://traxsharp.net/docs/sdk-reference/configuration)
+- [State machines](https://traxsharp.net/docs/statemachine)
 
-## Next Layer
+## Contributing
 
-When you need decoupled dispatch (callers don't know which train handles a request), move up to [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator).
+Read [AGENTS.md](https://github.com/TraxSharp/Trax.Effect/blob/main/AGENTS.md) before changing code. Report vulnerabilities
+privately as described in [SECURITY.md](https://github.com/TraxSharp/Trax.Effect/blob/main/SECURITY.md).
 
 ## License
 
-MIT
+MIT. There is no commercial edition, and there will not be one.
 
-## Trademark & Brand Notice
-
-Trax is an open-source .NET framework provided by TraxSharp. This project is an independent community effort and is not affiliated with, sponsored by, or endorsed by the Utah Transit Authority, Trax Retail, or any other entity using the "Trax" name in other industries.
+Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+other organization using the Trax name.
