@@ -1,103 +1,26 @@
 # Trax.Core
 
-[![Build](https://github.com/TraxSharp/Trax.Core/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Core/actions/workflows/nuget_release.yml)
-[![NuGet Version](https://img.shields.io/nuget/v/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
-[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Core)](https://www.nuget.org/packages/Trax.Core/)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Core/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Core)](https://github.com/TraxSharp/Trax.Core/commits/main)
+[![Build](https://github.com/TraxSharp/Trax.Core/actions/workflows/nuget_release.yml/badge.svg?branch=main)](https://github.com/TraxSharp/Trax.Core/actions/workflows/nuget_release.yml?query=branch%3Amain)
+[![NuGet](https://img.shields.io/nuget/v/Trax.Core)](https://www.nuget.org/packages/Trax.Core)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Core/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Core)
-[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Core/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/core)
 
-Railway Oriented Programming for .NET. Build trains that carry data through a sequence of stops, with automatic derailment handling when something goes wrong.
+> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
-A **train** (`Train<TIn, TOut>`) declares a chain of **junctions** (`Junction<TIn, TOut>`), small classes that each do one thing. The train keeps every value it has seen in a type-keyed memory, hands each junction the input and constructor arguments it asks for, and stops at the first junction that throws, returning `Either<Exception, TOut>` instead of throwing. Trax.Core is the in-process foundation of the Trax packages; the layers above it add dependency injection, execution logging, dispatch, scheduling and a dashboard.
+Trax.Core defines trains for .NET. A train is a typed pipeline of small steps (junctions): when a junction throws, the rest are skipped and the train returns the exception. It has no database and no DI container, and the other Trax layers build on it.
 
-```bash
-dotnet add package Trax.Core
-dotnet add package Trax.Core.Testing   # optional: architecture-guard test fixtures
-```
-
-Documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## The Trax Stack
-
-Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Core.**
-
-| Repo | Adds |
-|------|------|
-| **[Trax.Core](https://github.com/TraxSharp/Trax.Core)** | Pipelines, junctions, railway error propagation |
-| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
-| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | Decoupled dispatch via `TrainBus` |
-| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
-| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
-| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
-| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
-| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## Why?
-
-Error handling tends to bury the actual logic:
-
-```csharp
-public async Task<OrderReceipt> ProcessOrder(OrderRequest request)
-{
-    var inventory = await _inventory.CheckAsync(request.Items);
-    if (!inventory.Available)
-        return Error("Items out of stock");
-
-    var payment = await _payments.ChargeAsync(request.PaymentMethod, request.Total);
-    if (!payment.Success)
-        return Error("Payment failed");
-
-    var shipment = await _shipping.CreateAsync(request.Address, request.Items);
-    if (shipment == null)
-        return Error("Shipping setup failed");
-
-    return new OrderReceipt(payment, shipment);
-}
-```
-
-Every junction needs its own null check, error branch, and early return. The business logic (check inventory, charge payment, create shipment) gets lost in the noise.
-
-## With Trax.Core
-
-```csharp
-public class ProcessOrderTrain : Train<OrderRequest, OrderReceipt>
-{
-    protected override Task<Either<Exception, OrderReceipt>> Junctions() =>
-        Chain<CheckInventoryJunction>()
-            .Chain<ChargePaymentJunction>()
-            .Chain<CreateShipmentJunction>()
-            .Resolve();
-}
-```
-
-A train picks up its cargo, visits each stop along the route (`.Chain<T>`), and arrives at its destination (`Resolve`). If `CheckInventoryJunction` throws, the train derails and `ChargePaymentJunction` and `CreateShipmentJunction` are never reached. The exception propagates through the chain automatically.
-
-```
-Main Track:     Input → [Stop 1] → [Stop 2] → [Stop 3] → Output
-                            ↓
-Derailed:              Exception → [Skip]  → [Skip]  → Exception
-```
-
-Each junction is its own class with its own dependencies, testable in isolation.
-
-## Installation
-
-Requires `net10.0`.
+## Install
 
 ```bash
 dotnet add package Trax.Core
+dotnet add package Trax.Core.Testing   # optional: architecture-guard fixtures for your NUnit tests
 ```
 
-`Trax.Core.Analyzers` is deprecated and reports nothing; do not install it.
+Trax.Core targets .NET 10.
 
-## Quick Start
-
-**1. Define junctions.** Each junction takes one type of cargo in and produces one type of cargo out. Its constructor arguments are taken from the train's memory:
+## Example
 
 ```csharp
 using LanguageExt;
@@ -107,80 +30,98 @@ using Trax.Core.Train;
 public record CreateUserRequest(string Email);
 public record User(Guid Id, string Email);
 
-public interface IUserRepository
+public class ValidateEmailJunction : Junction<CreateUserRequest, Unit>
 {
-    Task<User?> GetByEmailAsync(string email);
-    Task<User> AddAsync(string email);
-}
-
-public class ValidateEmailJunction(IUserRepository repo) : Junction<CreateUserRequest, Unit>
-{
-    public override async Task<Unit> Run(CreateUserRequest input)
+    public override Task<Unit> Run(CreateUserRequest input)
     {
-        if (await repo.GetByEmailAsync(input.Email) is not null)
-            throw new InvalidOperationException($"Email {input.Email} is already taken");
-
-        return Unit.Default;
+        if (!input.Email.Contains('@'))
+            throw new ArgumentException($"'{input.Email}' is not an email address");
+        return Task.FromResult(Unit.Default);
     }
 }
 
-public class CreateUserInDatabaseJunction(IUserRepository repo) : Junction<CreateUserRequest, User>
+public class CreateUserJunction : Junction<CreateUserRequest, User>
 {
-    public override Task<User> Run(CreateUserRequest input) => repo.AddAsync(input.Email);
+    public override Task<User> Run(CreateUserRequest input) =>
+        Task.FromResult(new User(Guid.NewGuid(), input.Email));
 }
-```
 
-**2. Build a route by chaining junctions into a train:**
-
-```csharp
-public class CreateUserTrain(IUserRepository repo) : Train<CreateUserRequest, User>
+public class CreateUserTrain : Train<CreateUserRequest, User>
 {
     protected override Task<Either<Exception, User>> Junctions() =>
-        AddServices(repo)
-            .Chain<ValidateEmailJunction>()
-            .Chain<CreateUserInDatabaseJunction>()
+        Chain<ValidateEmailJunction>()
+            .Chain<CreateUserJunction>()
             .Resolve();
 }
 ```
 
-When the train is run with an input, the cargo is loaded automatically. `AddServices` puts the repository on board, so each junction's constructor can take it. At each stop, `.Chain<T>` picks up the cargo `T` needs from what the train is carrying, runs the junction, and loads the output back on. `Resolve` unloads the final delivery at the destination.
-
-The train carries all of this in **Memory**, a type-keyed store that accumulates as the train moves through its route. Each stop can use anything a previous stop produced.
-
-With Trax.Effect, a `ServiceTrain` resolves junction dependencies from the DI container instead, so `AddServices` is not needed.
-
-**3. Run it:**
+Run it with `RunEither`, which never throws, and read the `Either`:
 
 ```csharp
-// repo is any IUserRepository implementation
-var train = new CreateUserTrain(repo);
-Either<Exception, User> result = await train.RunEither(new CreateUserRequest("ada@example.com"));
+Either<Exception, User> result = await new CreateUserTrain().RunEither(new CreateUserRequest("ada@example.com"));
 
-// Or throw on failure:
-User user = await new CreateUserTrain(repo).Run(new CreateUserRequest("grace@example.com"));
+string message = result.Match(
+    Right: user => $"created {user.Id}",
+    Left: ex => $"failed: {ex.Message}");
 ```
 
-## Startup Chain Verification
+`Run` returns the `User` directly and rethrows the exception instead. Each junction's output is stored in Memory under its type, and the next junction asks for its input by type, so values are never passed between junctions by hand. If `ValidateEmailJunction` throws, `CreateUserJunction` does not run and `result` holds the `ArgumentException`.
 
-A train's chain is a declaration, so a host can check it before serving traffic. With the mediator registered, every train's `Junctions()` is read at startup and replayed over the types Memory would hold; if a junction expects cargo no earlier stop loads, or the chain ends without the train's result, the host refuses to start and names every train that cannot run.
+A junction that needs a service takes it in its constructor. In a plain `Train` you put the service in Memory with `AddServices(repository)` ahead of the first `Chain`. A `ServiceTrain` from Trax.Effect resolves it from dependency injection instead.
 
-The Roslyn analyzer this package used to describe here (CHAIN001, CHAIN002) is deprecated: it only reads chains rooted at `Activate()`, which can no longer be written.
+## Chain checking
 
-## IDE Extensions
+A chain is a declaration, so it can be checked without running it. With Trax.Mediator registered, the host reads every train's `Junctions()` at startup and refuses to start if a junction asks for a type nothing earlier provides, or the chain ends without the train's output. Trax.Core alone does not run that check.
 
-Inlay hint extensions show `TIn → TOut` types inline for each `.Chain<TJunction>()` call, so you can see what cargo flows through each stop at a glance.
+`Trax.Core.Analyzers` is deprecated and reports nothing. It only read chains rooted at `Activate()`, which can no longer be written, so there is no reason to install it.
 
-- **VSCode**: [Trax.Core Chain Hints](https://marketplace.visualstudio.com/items?itemName=Trax.Core.trax-hints) on the Marketplace
-- **Rider / ReSharper**: Search for **Trax.Core Chain Hints** in JetBrains Marketplace
+## Packages
 
-## Next Layer
+| Package | What it adds |
+|---|---|
+| [Trax.Core](https://www.nuget.org/packages/Trax.Core) | `Train`, `Junction`, the chain and Memory |
+| [Trax.Core.Testing](https://www.nuget.org/packages/Trax.Core.Testing) | Architecture-guard base fixtures and hygiene checks for NUnit; the checkers also return offender lists for other test frameworks |
+| [Trax.Core.Analyzers](https://www.nuget.org/packages/Trax.Core.Analyzers) | Deprecated, reports nothing. Do not install it |
 
-When you need execution logging, DI, or persistent metadata, move up to [Trax.Effect](https://github.com/TraxSharp/Trax.Effect).
+## What it does not do
+
+- It records nothing. A run that should leave a record is a `ServiceTrain` from Trax.Effect.
+- It has no DI container. Junction dependencies come from Memory or `AddServices`.
+- It does not check chains before they run. That check comes with Trax.Mediator.
+
+## Where this fits
+
+Trax is split into layers, one repo each. Take the ones you need; the trains you wrote do not change. **You are here: Trax.Core.**
+
+| Repo | What it adds |
+|---|---|
+| **[Trax.Core](https://github.com/TraxSharp/Trax.Core)** | **Trains, junctions and the chain, with no database and no DI container** |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine |
+| [Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator) | The train bus: run a train by handing over its input, with every chain checked at startup |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
+
+Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
+
+## Documentation
+
+- [Core overview](https://traxsharp.net/docs/core)
+- [Trains and junctions](https://traxsharp.net/docs/core/trains-and-junctions)
+- [Building chains](https://traxsharp.net/docs/core/building-chains)
+- [Memory](https://traxsharp.net/docs/core/memory)
+- [Architecture guards](https://traxsharp.net/docs/reference/architecture-guards)
+
+## Contributing
+
+Read [AGENTS.md](https://github.com/TraxSharp/Trax.Core/blob/main/AGENTS.md) before changing code. Report vulnerabilities
+privately as described in [SECURITY.md](https://github.com/TraxSharp/Trax.Core/blob/main/SECURITY.md).
 
 ## License
 
-MIT
+MIT. There is no commercial edition, and there will not be one.
 
-## Trademark & Brand Notice
-
-Trax is an open-source .NET framework provided by TraxSharp. This project is an independent community effort and is not affiliated with, sponsored by, or endorsed by the Utah Transit Authority, Trax Retail, or any other entity using the "Trax" name in other industries.
+Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+other organization using the Trax name.
