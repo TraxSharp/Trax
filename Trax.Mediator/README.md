@@ -41,50 +41,8 @@ public class LeaderboardController(ITrainBus trains) : ControllerBase
 }
 ```
 
-The controller never names `RecalculateLeaderboardTrain`. The bus looks up the train registered for
-`RecalculateLeaderboardInput`, resolves it through its `IRecalculateLeaderboardTrain` interface, runs it in the current
-request and returns its output. The run gets a row in `trax.metadata` like any other. `ITrainBus` is scoped, so inject it
-into a controller or resolve it from a scope.
-
-## Dispatch by input type
-
-`AddMediator` scans the assemblies you pass for every `IServiceTrain<TIn, TOut>` and maps each input type to its train.
-Each train needs its own interface (`IRecalculateLeaderboardTrain`), which is the name it is registered and recorded
-under. When two trains take the same input type, `RunAsync` reaches only the first one registered. Run the other with
-`RunByNameAsync`, which takes the interface's full name and runs exactly that train.
-
-A junction can call `ITrainBus` to run another train. The inner run gets its own record; the bus does not link it to the
-outer run.
-
-## Checked at startup
-
-Before any hosted service starts, the host reads every registered train's chain and refuses to start if one cannot run:
-a junction whose input no earlier junction (or the train's input) provides, or a junction Trax cannot construct. Every
-train is checked first, so one failed start lists all of them. `AddMediator(m => m.SkipChainVerification())` turns the
-check off.
-
-The host also refuses to start when a train carries `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered.
-
-## Authorization and concurrency limits
-
-The bus is an in-process call and checks no authorization. `ITrainExecutionService` is the path for outside callers,
-and the one Trax.Api uses: it runs or queues a train by name from JSON input, and checks the caller against the train's
-`[TraxAuthorize]` before reading the input. Its runs are also where concurrency limits apply:
-
-| Limit | Set with |
-|---|---|
-| All trains together | `GlobalConcurrentRunLimit(n)` |
-| One train | `ConcurrentRunLimit<TTrain>(n)`, or `[TraxConcurrencyLimit(n)]` on the train |
-| One authenticated caller | `PerPrincipalMaxConcurrentRun(n)` |
-
-A run that hits a limit waits for a slot. Queued work is not gated here.
-
-## Packages
-
-| Package | What it adds |
-|---|---|
-| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator) | The train bus, train discovery and registry, the startup chain check, `[TraxAuthorize]` enforcement and concurrency limits |
-| [Trax.Mediator.Testing](https://www.nuget.org/packages/Trax.Mediator.Testing) | `TrainGuards.EveryTrainHasInterface`, an architecture guard that lists every train missing its interface |
+The controller never names the train: the bus runs the one registered for `RecalculateLeaderboardInput` and records the
+run. A chain that can never be satisfied stops the host at startup.
 
 ## Where this fits
 
@@ -102,15 +60,6 @@ Trax is split into layers, one repo each. Take the ones you need; the trains you
 | [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
 
 Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## Documentation
-
-- [Mediator overview](https://traxsharp.net/docs/mediator)
-- [Train discovery](https://traxsharp.net/docs/mediator/train-discovery)
-- [ITrainBus reference](https://traxsharp.net/docs/sdk-reference/mediator-api/train-bus)
-- [Train execution service](https://traxsharp.net/docs/sdk-reference/mediator-api/train-execution)
-- [Concurrency limiting](https://traxsharp.net/docs/sdk-reference/mediator-api/concurrency-limiting)
-- [Registration order](https://traxsharp.net/docs/reference/registration-order)
 
 ## Contributing
 
