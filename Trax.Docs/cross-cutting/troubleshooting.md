@@ -68,9 +68,26 @@ services.AddScoped<IUserRepository, UserRepository>();
 services.AddScoped<IEmailService, EmailService>();
 ```
 
+## "Junction 'X' (train 'Y') needs 'Z' as a constructor argument"
+
+A junction's constructor asks for something the chain never produced and the container does not
+hold. Trax builds a junction through its single public constructor, taking each argument from
+Memory first and the container second, so the message names the junction, the train and the
+missing type.
+
+**Fix:** Register the missing service, or chain a junction that outputs it before this one. The
+startup chain check does not verify constructor arguments, so this surfaces on the first run.
+
+## "Junction 'X' has 2 public constructors"
+
+Trax builds a junction through its single public constructor. A junction with more than one, or
+none, cannot be built, so the startup chain check refuses the host naming the junction and the
+count. Give it exactly one public constructor.
+
 ## Junction runs but Memory doesn't have the expected type
 
-The chain couldn't find a type in Memory to pass to your junction.
+The chain couldn't find a type in Memory to pass to your junction. The run fails with
+`Junction 'X' (train 'Y') needs 'Z' as its input, but nothing earlier in the chain produced one`.
 
 **Causes:**
 - A previous junction didn't return or add the expected type to Memory

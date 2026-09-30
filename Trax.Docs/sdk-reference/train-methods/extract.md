@@ -67,4 +67,4 @@ protected override Task<Either<Exception, OrderResult>> Junctions() =>
 
 - Only the **first** matching property/field is extracted. If `TIn` has multiple properties of type `TOut`, only the first one found is used.
 - Properties and fields must be **public** and belong to the instance to be discoverable.
-- If `TIn` is not found in Memory (parameterless overload), sets the exception: `"Could not find type: ({TIn})."`. That holds for a value type too.
+- If `TIn` is not found in Memory (parameterless overload), sets the exception, naming the step, the train and the missing type: `"Extract<OrderInput, OrderDetails> (train 'ProcessOrderTrain') found no 'OrderInput' in Memory. Chain a junction that outputs 'OrderInput' before the Extract."`. That holds for a value type too.

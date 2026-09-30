@@ -52,7 +52,7 @@ When a junction throws, Trax captures structured context without modifying the o
 
 `FailureClass` is also read back from a failure that already carries one: from `TrainExceptionData`, or from the message of a `TrainException`, which is how a remote failure arrives. Another exception type's message is never read for a class, even when it is JSON. A carried value outside the `FailureClass` vocabulary is recorded as `Unclassified`, so the row stays writable on Postgres and readable on SQLite.
 
-The original exception is rethrown to callers with its type, message, and stack trace intact. `TrainExceptionData` rides along in `Exception.Data` for any code that wants structured context (e.g., logging, monitoring).
+The original exception is rethrown to callers with its type, message, and stack trace intact. `TrainExceptionData` rides along in `Exception.Data` for any code that wants structured context (e.g., logging, monitoring). Its `TrainName` is the train's canonical name, the interface `FullName` its metadata row's `Name` holds, whether the failure happened inside a junction or outside any; for a plain Core `Train` run without Trax.Effect it is the class name.
 
 ## Host Tracking
 

@@ -59,7 +59,7 @@ By default, both inputs and outputs are serialized. You can control this with th
 |----------|------|---------|-------------|
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
-| `MaxParameterBytes` | `int?` | `null` | Hard byte ceiling per serialized parameter. `null` is unbounded. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. |
+| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. `null` removes the ceiling. |
 | `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's input. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's output. |
 
@@ -100,10 +100,10 @@ Size is rarely the reason here. Inputs are usually small, but they are also wher
 
 That stores the mutation train's input and nothing else. How long it is then kept is a separate question, answered by [per-train metadata retention](/docs/scheduler/admin-trains/metadata-cleanup).
 
-**Cap every parameter.** `MaxParameterBytes` is the automatic safety net for the trains you did not predict:
+**Cap every parameter.** `MaxParameterBytes` is the automatic safety net for the trains you did not predict, and it is on by default at 1 MiB per parameter. Raise it for a host whose trains legitimately carry more, or set it to `null` to store parameters of any size:
 
 ```csharp
-.SaveTrainParameters(configure: cfg => cfg.MaxParameterBytes = 1_048_576)
+.SaveTrainParameters(configure: cfg => cfg.MaxParameterBytes = 4 * 1_048_576)
 ```
 
 A parameter that serializes past the ceiling is aborted before it is fully materialized (the serializer streams through a byte-counting writer and stops the moment the count is exceeded), and a small placeholder is stored instead. This bounds serialization work for collection and object graphs; it does not shrink the train's return value, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` and reduce what the train returns.
@@ -120,7 +120,9 @@ The parameter effect only cares about `Metadata` objects and ignores other track
 2. If `SaveInputs` is enabled and the train is not excluded (via `ExcludeInput`/`ShouldSaveInputs`), it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
 3. If `SaveOutputs` is enabled and the train is not excluded (via `ExcludeOutput`/`ShouldSaveOutputs`), it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
 
-When `MaxParameterBytes` is set, both serializations run through a streaming writer that aborts once the ceiling is crossed and substitutes the placeholder, so a runaway payload never gets fully built.
+Unless `MaxParameterBytes` is set to `null`, both serializations run through a streaming writer that aborts once the ceiling is crossed and substitutes the placeholder, so a runaway payload never gets fully built.
+
+A parameter that cannot be serialized at all is stored as `{"_unserializable": true, "_error": "<exception type>"}`, and the run's outcome is unaffected. That covers a reference cycle, an unsupported type, a contract `System.Text.Json` rejects (two members with the same `[JsonPropertyName]`, `[JsonInclude]` on a non-public member), and a property getter that throws.
 
 These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions (through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API), you can see exactly what went in and what came out.
 

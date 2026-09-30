@@ -300,6 +300,8 @@ start when:
   assigned after the train is built, in a lifecycle hook such as `OnStarted`, is null when the
   check reads the chain; assigning a service later is not supported
 - `Chain<T>` or `ShortCircuit<T>` names a type that is not a junction
+- `Chain<T>` or `ShortCircuit<T>` names a junction Trax cannot build, because it does not have
+  exactly one public constructor, or is abstract or an interface
 - a second chain call is made on the train as a separate statement after a junction step the body
   did not await, as in `Chain<A>(); return Chain<B>().Resolve();`. Both calls start from the
   train, so the two chains run at the same time over one Memory. Link them

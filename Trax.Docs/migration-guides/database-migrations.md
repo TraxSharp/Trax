@@ -77,7 +77,9 @@ manifest's entire terminal history.
 ## Queued Subject Index (046)
 
 `046_work_queue_subject_queued_index.sql` (Postgres) or `011_work_queue_subject_queued_index.sql`
-(SQLite) adds one partial index. It is `CREATE INDEX IF NOT EXISTS` and safe to re-run.
+(SQLite) adds one partial index. It is `CREATE INDEX IF NOT EXISTS` and safe to re-run. On Postgres
+it is built `CONCURRENTLY` where it has not been built yet, so enqueue and dispatch are not blocked
+while it builds; a database that already ran 046 is not touched again.
 
 | Index | Table | Covers |
 |-------|-------|--------|
@@ -102,3 +104,50 @@ A draft written before the migration has no recorded trigger, so a retry of its 
 refused once as `request-id-reused` rather than replayed. A custom `ISnapshotStore` should
 override `UpdateWithRequest` to store the whole request; without it, every retry against that
 store is refused the same way.
+
+## Timestamps as timestamptz (049)
+
+`049_timestamptz_columns.sql` (Postgres only) changes five columns from `timestamp without time zone`
+to `timestamptz`: `work_queue.created_at` and `dispatched_at`, `manifest_group.created_at` and
+`updated_at`, and `manifest.next_scheduled_run`. Their defaults, and `background_job.created_at`'s,
+become `now()`.
+
+A plain timestamp stores the writing session's wall-clock time, so a host whose Postgres session was
+not in UTC stored these hours off: `CreatedAt` read back four or five hours early from New York, and
+variance schedules fired early or late. Each stored value is read as UTC, which is what every host
+with a UTC session wrote. A row written from another zone before the upgrade was shifted when it was
+stored, and keeps that shift.
+
+**Plan a maintenance window on a large database.** Each `ALTER` rewrites its table under an
+`ACCESS EXCLUSIVE` lock. `work_queue` is the one that matters: it keeps dispatched rows until metadata
+cleanup removes them, so on a large queue the rewrite blocks enqueue and dispatch, on every host, for
+as long as it takes. Stop the scheduler (or every host) first, or run the migration yourself with
+[SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) at a quiet time. Each change checks
+the column's type first, so an interrupted run resumes where it stopped.
+
+## External Id Index (050)
+
+`050_metadata_external_id_index.sql` (Postgres only) adds `ix_metadata_external_id`, a plain btree index
+on `trax.metadata (external_id)`. It is not unique: a dispatch retry adds a run under the same id.
+
+External id is the one key that is the same from enqueue to run, so a consumer correlating its own
+records with runs looks them up by it. Without an index each lookup read the whole table: 48 to 77 ms
+at a million rows, against 0.05 ms with it. `external_id` is `char(32)`, so compare a `char(32)` to use
+it without a cast.
+
+It is built `CREATE INDEX CONCURRENTLY`, so runs keep being written while it builds, and the build
+takes as long as the table is large. It waits for transactions already open on `metadata` to finish
+before it starts, so a long transaction on a running instance delays startup of the upgraded one.
+
+## SQLite enum partial indexes (014)
+
+`014_enum_integer_partial_indexes.sql` (SQLite only) recreates eleven partial indexes on `work_queue`,
+`metadata` and `dead_letter`. Their predicates compared the enum columns with Postgres labels
+(`status = 'queued'`), but SQLite stores an enum as its integer, so the indexes covered no row: the
+unique one-queued-entry-per-manifest index enforced nothing, and the others served no query. They now
+compare integers.
+
+Because that unique index was inert, a SQLite database can hold two queued entries for one manifest,
+and the index cannot be built over them. Before rebuilding it, 014 keeps each manifest's oldest queued
+entry and cancels the rest (status `Cancelled`), which is what the queue would have held had the index
+worked.

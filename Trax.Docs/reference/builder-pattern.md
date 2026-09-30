@@ -98,6 +98,13 @@ set: `TraxBuilder` is the root and has none, `TraxBuilderWithMediator.Root` is `
 only `TraxBuilderWithEffects.Root` is public, because `AddMediator` needs it to read the
 assemblies earlier subsystems contributed.
 
+`HasDatabaseProvider`, `HasDataProvider` and `TraxBuilder.MediatorConfigured` are read-only
+outside Trax. Build-time validation reads them to fail closed (the scheduler refuses to build
+without a data provider, `AddStateMachines` refuses to run after `AddMediator`), so only the call
+that earns a flag sets it: a data provider's `Use*` method, or `AddMediator`. The setters are
+`internal`, visible to the Trax.Effect data provider assemblies and Trax.Mediator. A test that
+needs a builder with a data provider calls a real one, `UseInMemory()` being the cheapest.
+
 Extension methods target a specific marker, which is what enforces ordering at compile time
 rather than at run time. `AddDataContextLogging()` is the same idea one level down: it is
 declared on `TraxEffectBuilderWithData`, which only a data provider call returns.

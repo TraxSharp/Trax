@@ -129,9 +129,10 @@ it creates. It never reaches `trax.log`.
 
 ## What the log table does not survive
 
-`DataContextLoggingProvider` buffers into a bounded channel of 4096 and flushes batches of up
-to 256 once a second. Two consequences worth knowing before you treat an absent row as
-evidence:
+`DataContextLoggingProvider` buffers into a bounded channel of 4096 and writes batches of up
+to 256 as entries arrive. When the host stops it writes what is already queued, waiting up to five
+seconds; only entries still queued after that are lost. A few consequences worth knowing before you
+treat an absent row as evidence:
 
 - The channel is `DropOldest`, so a burst larger than the buffer silently discards the oldest
   entries.

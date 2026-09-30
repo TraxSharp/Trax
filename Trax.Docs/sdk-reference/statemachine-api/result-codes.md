@@ -25,7 +25,15 @@ branching.
 | `client-divergence` | advance | the client's computed result differs from the server's authoritative result ([divergence detection](/docs/sdk-reference/statemachine-api/runtime-integrity)); nothing was written, reload |
 | `too-large` | save, advance | the snapshot, the trigger input, or the advanced snapshot exceeds `SnapshotLimits.MaxSnapshotBytes` (64 KiB); nothing was written |
 | `request-id-reused` | advance, send | the request id was last used for a different trigger, so this is not a retry of it; send a new id. A send is refused before its effect runs |
-| `delivery-failed` | send | the effect threw, or returned no receipt; the draft was not advanced, so the send can be retried |
+| `effect-bound` | advance | the trigger runs the machine's irreversible effect from this state, so only a send fires it; nothing was written |
+| `state-reserved` | save | the snapshot is in a committed state or an effect's target and the stored draft is not already there; only a send puts a draft there, and nothing was written |
+| `draft-committed` | save | the stored draft is in a committed state and the save would move it anywhere but that state or the initial state |
+| `draft-unreadable` | save | the stored draft fails rehydration, so only a reset to the initial state may overwrite it |
+| `internal-error` | advance, send | a guard, reducer or validator threw. The message is fixed and carries a reference; the exception is logged on the server under that reference |
+| `delivery-failed` | send | the effect threw, or returned no receipt; the draft was not advanced, so the send can be retried. The message is fixed and carries a reference; the exception is logged on the server under that reference. A cancelled request is not a failed delivery: it propagates as a cancellation |
 
 Over GraphQL these surface on the mutation's `problem` field, so a client reads the code and reacts (re-enable
-a control on `guard-failed`, start fresh on `version-mismatch`) without ever seeing a stack trace.
+a control on `guard-failed`, start fresh on `version-mismatch`) without ever seeing a stack trace. When the
+refusal came from an exception, a guard, reducer or migration that threw or an effect that failed, the
+message is a fixed sentence ending in `Reference: {id}`, and the server logs the exception under that id at
+error level: the exception's own text never reaches the client.

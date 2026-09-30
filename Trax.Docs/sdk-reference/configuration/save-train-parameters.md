@@ -10,6 +10,8 @@ nav_order: 5
 
 Serializes train input and output parameters to JSON and stores them in the `Metadata.Input` and `Metadata.Output` fields. Enables parameter inspection in the dashboard and database.
 
+The input is written with the row a run writes when it starts, so a run that never finishes (a Lambda timeout, a killed container, a deploy mid-run) still has its input on its `InProgress` row. The output is written with the outcome.
+
 ## Signature
 
 ```csharp
@@ -36,7 +38,7 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 |----------|------|---------|-------------|
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
-| `MaxParameterBytes` | `int?` | `null` | Hard byte ceiling per serialized parameter (input and output). `null` is unbounded. A payload that serializes past this many UTF-8 bytes is aborted mid-serialization and stored as `{"_truncated": true, "_maxBytes": N}` instead. Must be positive. |
+| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter (input and output). A payload that serializes past this many UTF-8 bytes is aborted mid-serialization and stored as `{"_truncated": true, "_maxBytes": N}` instead. `null` removes the ceiling. Must be positive when set. |
 | `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate receiving the canonical train name (`Metadata.Name`); return `false` to skip serializing that train's input. Also the way to express an opt-in, which a list of exclusions cannot. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate receiving the canonical train name (`Metadata.Name`); return `false` to skip serializing that train's output. The escape hatch for cases the `ExcludeOutput` helpers can't express. |
 
@@ -149,7 +151,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-Keep inputs, drop the output of a few known-large trains, and cap everything else:
+Keep inputs, drop the output of a few known-large trains, and cap everything else at a ceiling of your own:
 
 ```csharp
 services.AddTrax(trax => trax
@@ -157,7 +159,7 @@ services.AddTrax(trax => trax
         .UsePostgres(connectionString)
         .SaveTrainParameters(configure: cfg =>
         {
-            cfg.MaxParameterBytes = 1_048_576;   // 1 MB ceiling for every parameter
+            cfg.MaxParameterBytes = 512 * 1024;   // 512 KiB ceiling for every parameter
             cfg.ExcludeOutput<GetEntitiesQuery>();
             cfg.ExcludeOutput<GetLeadsQuery>();
             cfg.ExcludeOutput("GetPpaDataFromCache");   // string fragments work too
@@ -166,9 +168,9 @@ services.AddTrax(trax => trax
 );
 ```
 
-A train whose output crosses `MaxParameterBytes` stores `{"_truncated": true, "_maxBytes": 1048576}` in `Metadata.Output` instead of the full payload. A train matched by `ExcludeOutput` stores nothing for its output, and its input is still serialized unless `ExcludeInput` or `ShouldSaveInputs` also refuses it.
+A train whose output crosses `MaxParameterBytes` stores `{"_truncated": true, "_maxBytes": 524288}` in `Metadata.Output` instead of the full payload. A train matched by `ExcludeOutput` stores nothing for its output, and its input is still serialized unless `ExcludeInput` or `ShouldSaveInputs` also refuses it.
 
-A parameter `System.Text.Json` cannot represent at all, a reference cycle or an unsupported type, stores `{"_unserializable": true, "_error": "JsonException"}` on the same principle. Only the exception's type is kept: the messages carry unbounded detail, which is the wrong thing to put in the column a ceiling exists to bound. The run itself is unaffected, because an output that cannot be stored is a recording problem rather than a reason to fail work that already succeeded.
+A parameter that cannot be serialized at all stores `{"_unserializable": true, "_error": "JsonException"}` on the same principle, with the exception's type in `_error`. That covers a reference cycle, an unsupported type, a contract `System.Text.Json` rejects (two members with the same `[JsonPropertyName]`, `[JsonInclude]` on a non-public member), and a property getter that throws. Only the exception's type is kept: the messages carry unbounded detail, which is the wrong thing to put in the column a ceiling exists to bound. The run itself is unaffected, because an output that cannot be stored is a recording problem rather than a reason to fail work that already succeeded.
 
 ## Remarks
 
@@ -176,7 +178,7 @@ A parameter `System.Text.Json` cannot represent at all, a reference cycle or an 
 - The serialized JSON is stored in `Metadata.Input` (set on train start) and `Metadata.Output` (set on completion).
 - Useful for debugging failed trains: inspect the exact input that caused the failure.
 - The `ParameterEffectConfiguration` singleton is accessible at runtime. The dashboard's Effects page provides a UI to toggle `SaveInputs` and `SaveOutputs` without restarting the application. The per-train exclusions and predicates are set in code and are not editable there; the global toggles are the outer gate, so turning `SaveInputs` off from the dashboard stops every train's input regardless of what the predicate says.
-- **Lifecycle hooks receive the output under the same rules as the stored copy.** When the output is stored, `OnCompleted` hooks read that copy, bounded by `MaxParameterBytes`. When it is not, the train serializes a copy for the hooks in memory, without persisting it, and follows the same decision: an output skipped by `ExcludeOutput`, `ShouldSaveOutputs` or `SaveOutputs = false` is not serialized for the hooks either, and they see `Metadata.Output` as `null`. Any copy that is built is bounded: by `MaxParameterBytes` when it is set, and otherwise by 1 MiB (`DefaultLifecycleHookOutputPolicy.DefaultMaxCopyBytes`), past which the hooks get the `_truncated` placeholder. The same 1 MiB ceiling applies on a host without `SaveTrainParameters()`, and when the effect is switched off from the dashboard. This matters because the broadcaster, GraphQL and SignalR hooks publish the copy to other processes and every subscriber.
+- **Lifecycle hooks receive the output under the same rules as the stored copy.** When the output is stored, `OnCompleted` hooks read that copy, bounded by `MaxParameterBytes`. When it is not, the train serializes a copy for the hooks in memory, without persisting it, and follows the same decision: an output skipped by `ExcludeOutput`, `ShouldSaveOutputs` or `SaveOutputs = false` is not serialized for the hooks either, and they see `Metadata.Output` as `null`. Any copy that is built is bounded: by `MaxParameterBytes`, and when that is `null` by 1 MiB (`DefaultLifecycleHookOutputPolicy.DefaultMaxCopyBytes`), past which the hooks get the `_truncated` placeholder. The same 1 MiB ceiling applies on a host without `SaveTrainParameters()`, and when the effect is switched off from the dashboard. This matters because the broadcaster, GraphQL and SignalR hooks publish the copy to other processes and every subscriber.
 - **`MaxParameterBytes` bounds serialization work, not the result object.** It serializes through a streaming writer and aborts the moment the byte count crosses the ceiling, so an oversized collection or object graph is never fully materialized as a string. It does not shrink the train's return value itself, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` (skip serialization entirely) and reduce what the train returns.
 
 ## Package

@@ -25,7 +25,7 @@ public abstract class Machine<TState, TTrigger>
 
 | Method | Description |
 |--------|-------------|
-| `Id(string id)` | The machine's stable name (what the `machine` mutation field selects). |
+| `Id(string id)` | The machine's stable name (what the `machine` mutation field selects). It must be kebab-case, matching `^[a-z][a-z0-9]*(-[a-z0-9]+)*$` (`checkout`, `turnstile-two`), because it becomes a file name, a module name and a key segment in everything generated from the machine. Anything else throws `ArgumentException`. |
 | `Version(int version)` | The definition version stamped onto every snapshot. |
 | `StartsAt(TState state, Func<JsonObject> context)` | The initial state and a factory for its context. A factory, not a value, so instances never alias. |
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
@@ -35,7 +35,9 @@ public abstract class Machine<TState, TTrigger>
 | `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
 
 `Build()` throws `InvalidOperationException` for a custom rule or reduction whose name has no handler bound,
-so an unbound name fails when the machine is built rather than refusing its edge forever. Handlers may be
+so an unbound name fails when the machine is built rather than refusing its edge forever. It also throws for a
+machine that binds more than one effect with `RunsOnce`: a machine runs exactly one irreversible effect, and a
+second binding would otherwise be declared and never run. Handlers may be
 bound before or after the rules that name them. `CustomGuard` and `CustomReducer` are default interface
 methods that throw `NotSupportedException` on a custom `IMachineBuilder` implementation that does not
 override them.
@@ -48,7 +50,7 @@ override them.
 | `Context<TContext>()` | The declarative, string-free replacement for `Holds`: the state's context shape comes from a record. Field names, JSON types, nullability, and attribute constraints (`[MinLength(1)]`) become both the validator and the exportable schema. |
 | `Context()` | Declares that the state carries no context (an empty schema). |
 | `Requires(Rule constraint)` | A per-state policy layered on the schema (composed, ANDed, chainable): what the state demands beyond its shape, e.g. a complete draft or an absent receipt. Exports as the state's `invariants` entry. Build the rule with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
-| `Committed()` | Marks the state as one a soft autosave must not overwrite (except a reset to the initial state). |
+| `Committed()` | Marks the state as completed. A soft autosave can neither put a draft into it nor move a draft out of it (except a reset to the initial state); only the effect runner puts a draft there. See [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write). |
 | `On(TTrigger trigger)` | Starts a transition out of this state. Returns an `ITransitionBuilder`. |
 
 ## ITransitionBuilder
@@ -61,7 +63,7 @@ override them.
 | `Because(string message)` | The detail surfaced when the guard rejects the trigger. |
 | `Reduce(Func<JsonObject, JsonNode?, JsonObject> reducer)` | Computes the next context. Return a fresh JSON object; never mutate the input. |
 | `Reduce(Reduction reduce)` | The declarative, exportable reducer: `Set(...).FromInput(...)`, `Clear()`, `Reset()`, `Keep()`. See the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
-| `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. |
+| `RunsOnce<TEffect>(string? keyPrefix = null)` | Binds an `ISnapshotEffect` that runs exactly once when this transition is sent, keyed on `{keyPrefix}:{user}:{id}`. Omit `keyPrefix` and it defaults to `{machineId}:{trigger}`. Only the send fires this transition: an advance of its trigger is refused as `effect-bound`. A machine binds at most one. |
 | `To(TState state)` | The destination state. Also closes the transition, so you can chain another `On(...)`. |
 
 ## IDifferentialBuilder

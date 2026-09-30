@@ -121,6 +121,12 @@ the mediator does. An empty key, or one longer than `WorkQueue.MaxSubjectKeyLeng
 characters), throws `ArgumentException`. Leave the key null when the entry should not be
 serialized.
 
+A later Trax.Effect makes `WorkQueue.SubjectKey` read-only, so `Create` is the only place a key is
+set and every key passes its checks. Assigning `entry.SubjectKey = ...` no longer compiles; pass
+the key in `CreateWorkQueue.SubjectKey` instead. That Trax.Effect needs Trax.Mediator 1.23.0 or
+later: Trax.Mediator 1.22.x sets the key after `Create`, so it fails every enqueue with
+`MissingMethodException` against it. Update the two packages together.
+
 ## Records that gained parameters
 
 These positional records gained optional trailing parameters:

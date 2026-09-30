@@ -29,7 +29,7 @@ Task<TOut> RunAsync<TOut>(object trainInput, CancellationToken cancellationToken
 
 **Returns**: `Task<TOut>`, the train's output.
 
-**Throws**: `TrainException` if no train is registered for the input's type, or if `metadata` is not `Pending`. `OperationCanceledException` if the token is cancelled.
+**Throws**: `TrainException` if no train is registered for the input's type, or if `metadata` is not `Pending`. `TrainAlreadyStartedException` (a `TrainException`, namespace `Trax.Effect.Exceptions`) if `metadata` says `Pending` but the stored row no longer is, because another execution started it first: the start is claimed with one conditional write in the store, so of two executions handed the same row only one runs the train. The refused one has run nothing and written nothing, and the row belongs to the other: do not record a failure on it. `OperationCanceledException` if the token is cancelled.
 
 ### RunAsync (void)
 

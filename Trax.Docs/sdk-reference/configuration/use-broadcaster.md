@@ -45,9 +45,11 @@ The `TrainEventReceiverService` automatically retries if the transport connectio
 
 ## De-duplication
 
-When a train runs locally on the hub (via a `run` mutation), the `GraphQLSubscriptionHook` fires directly and notifies subscribers. The same event is also published to the message bus by the broadcast lifecycle hook. The `TrainEventReceiverService` detects this by comparing the event's `Executor` field against the local process name and **skips events that originated locally**. This prevents double-notification.
+When a train runs locally on the hub (via a `run` mutation), the `GraphQLSubscriptionHook` fires directly and notifies subscribers. The same event is also published to the message bus by the broadcast lifecycle hook. `UseBroadcaster()` gives each host an instance id (a GUID, one per service provider), the broadcast hook and change sink stamp it on every message as `InstanceId`, and the `TrainEventReceiverService` **skips only messages carrying its own host's id**. This prevents double-notification without dropping anything another host published.
 
-The `Executor` field is always stamped by the **broadcasting process** (via `Assembly.GetEntryAssembly()`), not copied from `metadata.Executor`. This is important because metadata may be pre-created by a different process (e.g., the API pre-creates metadata for queued jobs that execute on a worker). If the hook used `metadata.Executor`, the hub would incorrectly discard worker events as "local."
+Because the id is per host rather than per application, replicas of one app behind a load balancer (which share an entry assembly, and so an `Executor`) each receive the others' events. A message from a publisher on a version without `InstanceId` has none, and is always delivered.
+
+The `Executor` field is kept for display. It is stamped by the **broadcasting process** (via `Assembly.GetEntryAssembly()`), not copied from `metadata.Executor`, because metadata may be pre-created by a different process (e.g., the API pre-creates metadata for queued jobs that execute on a worker).
 
 ## Abstractions
 
@@ -81,15 +83,34 @@ The `TrainLifecycleEventMessage` is a serializable record containing:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `MetadataId` | `long` | Database metadata row ID |
-| `ExternalId` | `string` | External identifier for the execution |
-| `TrainName` | `string` | Fully-qualified train class name |
+| `MetadataId` | `long` | Database metadata row ID (`0` on a `DataChanged` signal) |
+| `ExternalId` | `string` | External identifier for the execution (empty on a `DataChanged` signal) |
+| `TrainName` | `string` | Canonical train name, the train interface's full name (empty on a `DataChanged` signal) |
 | `TrainState` | `string` | Current state (serialized as string for transport) |
 | `Timestamp` | `DateTime` | When the event occurred |
 | `FailureJunction` | `string?` | Junction that failed (if applicable) |
 | `FailureReason` | `string?` | Failure message (if applicable) |
-| `EventType` | `string` | One of: `Started`, `Completed`, `Failed`, `Cancelled` |
-| `Executor` | `string?` | Assembly name of the process that broadcast the event |
+| `EventType` | `string` | See the event types below |
+| `Executor` | `string?` | Assembly name of the process that broadcast the event, for display |
+| `Output` | `string?` | The completed train's output as JSON, bounded and excluded by the same rules as the stored copy (see `SaveTrainParameters`); `null` when excluded or not a completion |
+| `HostName` | `string?` | Machine name of the host that ran the train |
+| `HostEnvironment` | `string?` | Environment name of the host that ran the train |
+| `ChangeDomain` | `string?` | The changed domain on a `DataChanged` signal (`WorkQueue`, `DeadLetter`, `Manifest`, `ManifestGroup`, `SchedulerConfig`, `Execution`); `null` otherwise |
+| `InstanceId` | `string?` | Id of the host that published the message, used for de-duplication (see above); `null` from a publisher that predates it |
+| `FailureException` | `string?` | Type name of the exception a failed run recorded (`Metadata.FailureException`), such as `TrainException`; `null` otherwise, and from a publisher that predates it |
+
+`Output`, `HostName`, `HostEnvironment`, `ChangeDomain`, `InstanceId` and `FailureException` are optional on the wire, so a message from an older publisher still deserializes.
+
+`EventType` is one of:
+
+| Event type | Published when |
+|------------|----------------|
+| `Started` | A run's row is saved as in progress |
+| `Completed` | A run completes |
+| `Failed` | A run fails |
+| `Cancelled` | A run is cancelled |
+| `StateChanged` | After each of the four above. Every transition is published twice, once under its own type and once as `StateChanged`, so a subscriber to the aggregate stream (the GraphQL `onTrainStateChanged` subscription) is fed on every host |
+| `DataChanged` | A coalesced data-change signal, not a train event. Only `ChangeDomain`, `Timestamp`, `Executor` and `InstanceId` are set. A handler that only cares about trains ignores it (`TrainLifecycleEventMessage.DataChangedEventType`) |
 
 ## Transports
 
@@ -113,6 +134,10 @@ Options:
 | `PrefetchCount` | `ushort` | `64` | How many received events the receiver may hold unacknowledged at once. The broker holds the rest until the handlers acknowledge one, so a slow handler leaves events queued on the broker rather than in the receiving process. `0` (no limit) is refused: `UseRabbitMq` throws `ArgumentException`, and a directly constructed receiver throws `InvalidOperationException` from `StartAsync`. |
 
 The RabbitMQ transport uses a **fanout exchange** so all connected hub instances receive every event. Each receiver creates its own exclusive, auto-delete queue.
+
+Publishing never waits on the broker. A lifecycle hook is awaited inside the train, so the broadcaster writes each event to a bounded queue (1024 events) and returns; one background sender publishes the queue in order. While the broker is unreachable the sender retries the event it holds with a growing delay (1 second, doubling to 30), each connection attempt bounded at 5 seconds, and further events wait in the queue. When the queue is full, new events are dropped and a `Warning` is logged, followed by a second one giving the count when the queue drains. A connection the broker closed is disposed before it is replaced. On shutdown the broadcaster waits up to 5 seconds for queued events to be sent. Delivery is best effort: a consumer that must not miss an event reads it from the store.
+
+Stopping the receiver tolerates a connection the broker has already closed, for example when the broker restarts or another host sharing it shuts down first.
 
 ```csharp
 effects.UseBroadcaster(b =>

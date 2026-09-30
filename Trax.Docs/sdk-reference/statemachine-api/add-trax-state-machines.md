@@ -11,10 +11,10 @@ nav_order: 1
 Registers state-machine persistence as a step in the `AddTrax` builder chain. One call discovers every
 `Machine<TState, TTrigger>` in the given assemblies and wires the whole subsystem: the snapshot store, the
 effect-claim ledger, the exactly-once runner, the machine registry, and the four generic `stateMachine`
-mutation trains. It also does the two things the host used to wire by hand: it **auto-registers the
-`SnapshotDbContext`** against the database provider you configured in `AddEffects`, and it **contributes the
-mutation trains to the mediator scan** so Trax routes them by input type. You name neither the
-`SnapshotDbContext` nor the mutations' assembly.
+mutation trains. The stores reach their tables through the `IDataContext` the database provider you
+configured in `AddEffects` registers (`IDataContext.SnapshotDrafts` and `IDataContext.EffectClaims`), so there
+is no context of the subsystem's own to register, and it **contributes the mutation trains to the mediator
+scan** so Trax routes them by input type. You name neither a context nor the mutations' assembly.
 
 Call it after `AddEffects(...)` (it needs a data provider) and **before** `AddMediator(...)` (the mediator
 builds its route registry when it runs, so the mutations must be contributed first).
@@ -71,9 +71,11 @@ Only the two things a machine genuinely can't know:
 | `ISnapshotPrincipal` | Maps the current caller to the user key that scopes drafts. Bind it over your auth (for example Trax's `TraxCaller`). |
 | Each effect implementation | Every effect a machine references with `RunsOnce<TEffect>` is resolved from the container when its transition is sent. |
 
-The `SnapshotDbContext` and the mutation-routing assembly are no longer host concerns: `AddStateMachines`
-registers the context against your `AddEffects` provider (via an `ITraxFeatureDbConfigurator` each
-`UsePostgres`/`UseSqlite`/`UseInMemory` registers), and contributes the mutations to the mediator scan.
+The database wiring and the mutation-routing assembly are not host concerns: the stores use the
+`IDataContext` and `ISqlDialect` your `UsePostgres`/`UseSqlite`/`UseInMemory` registers, and `AddStateMachines`
+contributes the mutations to the mediator scan. `UseInMemory` registers no dialect, so there a concurrent create
+of one draft throws instead of losing the race, and the in-memory provider cannot run the stores' atomic
+updates at all: use it for wiring tests, not for the draft operations.
 
 ## Example
 
@@ -91,16 +93,13 @@ builder.Services.AddScoped<ICharge, StripeCharge>();
 
 `snapshot_draft` and `effect_claim` (both in the `trax` schema) ship as migrations in the core data
 providers and apply automatically when you register one. `UsePostgres(...)` runs
-`040_state_machine_snapshots.sql`; `UseSqlite(...)` runs `006_state_machine_snapshots.sql`. A host that
-calls `AddStateMachines` gets the tables for free; one that does not just carries two empty tables. You
-do not create or migrate them yourself, and there is no `EnsureCreated` step. On SQLite, `SnapshotDbContext`
-strips the `trax` schema and maps the `jsonb` context column to `TEXT` so the stores match the unqualified
-SQLite tables.
+`040_state_machine_snapshots.sql`, `048_snapshot_draft_request_scope.sql` and
+`051_snapshot_draft_machine_key.sql`; `UseSqlite(...)` runs `006`, `013` and `015` of the same names. A host
+that calls `AddStateMachines` gets the tables for free; one that does not just carries two empty tables. You do
+not create or migrate them yourself, and there is no `EnsureCreated` step. Their models are
+`Trax.Effect.Models.SnapshotDraft.SnapshotDraft` and `Trax.Effect.Models.EffectClaim.EffectClaim`, mapped on the
+core data context like every other Trax table, so on SQLite the data context strips the `trax` schema, maps the
+`jsonb` context column to `TEXT`, and stores each timestamp as fixed-width UTC text that sorts in time order.
 
-## Obsolete: `AddTraxStateMachines(IServiceCollection)`
-
-The earlier `services.AddTraxStateMachines(...)` form is obsolete. It sits outside the builder, so it cannot
-auto-register the `SnapshotDbContext` or contribute the mutations to the mediator scan: a host using it must
-also call `AddDbContext<SnapshotDbContext>(...)` and add `StateMachineMutations.Assembly` to its
-`AddMediator(...)` scan by hand. It still works for back-compat, but prefer the `trax.AddStateMachines(...)`
-builder step.
+A draft is keyed by its user, its machine and its id, so two machines can each give one user a draft under
+the same well-known id without touching each other's.

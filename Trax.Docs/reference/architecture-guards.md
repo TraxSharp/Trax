@@ -20,7 +20,9 @@ Each package lives in the repo that owns the concern it checks, and depends only
 | `Trax.Api.GraphQL.Testing` | GraphQL | `EdgeManifestIsValid`, `EdgeResolversUseLoader` |
 | `Trax.Mediator.Testing` | Trains | `EveryTrainHasInterface` |
 
-A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a ready-to-use failure message. The `Trax.Core.Testing` fixtures also fail when a guard inspected nothing: scan roots that point at the wrong directory would otherwise pass every check. Assert `Inspected > 0` yourself if you call a checker directly.
+A checker returns a `GuardResult` with the offenders it found, how many items it inspected, and a ready-to-use failure message. The `Trax.Core.Testing` fixtures, and the two source guards in `DomainDataLayerGuardFixture`, also fail when a guard inspected nothing: scan roots that point at the wrong directory would otherwise pass every check. Assert `Inspected > 0` yourself if you call a checker directly. The data-layer source checkers (`DomainContextsDeriveBase`, `CompanionInterfaces`, `OwnerScopeFilterBypasses`) also report a scan root that does not exist as an offender.
+
+`DomainContextsDeriveBase` and `CompanionInterfaces` parse each file with Roslyn and judge every class declaration by its own base list. A context counts whether it has a primary or an ordinary constructor, a file holding several contexts has each one checked, and the base named anywhere else in the file does not excuse a context that does not derive it.
 
 Most guards scan source on disk. `NoPendingModelChanges` and `OwnerScopeCompleteness` are the exceptions. `NoPendingModelChanges` builds each migration-based context offline (no database) and asserts its EF model matches the latest migration snapshot, catching a model edit that shipped without `dotnet ef migrations add` before it trips `PendingModelChangesWarning` at host startup.
 

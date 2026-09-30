@@ -21,7 +21,9 @@ public interface ISnapshotEffect
 
 `Run` performs the side effect and returns a receipt, the downstream id (a message-log id, a charge id) that
 proves it happened. Throwing means the effect did not complete: the transition is not applied, and the client
-can retry from the same state.
+can retry from the same state. So honour the cancellation token only before the effect has happened: an
+`OperationCanceledException` after it releases the claim just as any other throw does, and a retry runs the
+effect again.
 
 ## Binding it
 
@@ -61,7 +63,16 @@ services.AddScoped<ICharge, StripeCharge>();
 
 The effect runs through the persistence layer's idempotent path: a claim is taken before the effect, held
 under a lease with a fence token, and a crash mid-flight replays without re-running a completed effect. The
-key is `{keyPrefix}:{userKey}:{id}`, so it is scoped per draft per user.
+key is `{keyPrefix}:{userKey}:{id}`, so it is scoped per draft per user. A reset to the initial state, and a
+draft deleted by the draft TTL, release the key, so the next draft under that id runs its effect afresh.
+
+Once the effect has returned, its receipt is recorded and the draft advanced on a token the request cannot
+cancel. A client that disconnects right after a charge still leaves the draft showing the charge, and the next
+send replays it instead of charging again.
+
+The transition itself is fired only by the send. An advance of its trigger is refused as `effect-bound`, and an
+autosave cannot put a draft into its destination state; see
+[what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write).
 
 The receipt `Run` returns is handed to the transition's reducer as `input["receipt"]`, which is how the send
 gets recorded in the destination context. It must be non-empty. The ledger reads a claim with no receipt as

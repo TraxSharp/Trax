@@ -38,9 +38,9 @@ table's mapping. The table's behaviour was tested only where its SQL lived, not 
 did.
 
 **The feature's own `DbContext` over the Effect-shipped table.** What state-machine persistence
-does (below). It keeps the mapping next to the feature, but the entity is then invisible to the data
-context, to its drift check and to anything that reads `IDataContext`, and every such context has to
-repeat the Sqlite schema stripping `SqliteContext` already does.
+did until 2026-09-29 (below). It keeps the mapping next to the feature, but the entity is then invisible
+to the data context, to its drift check and to anything that reads `IDataContext`, and every such context
+has to repeat the Sqlite schema stripping `SqliteContext` already does.
 
 **Everything, operation included, in Trax.Effect.** Rejected as a default. The model and the
 provider knowledge belong to Effect; what a feature does with its rows is the feature's, which is
@@ -56,18 +56,20 @@ and no dedicated `DbContext`. The runner nonce now matches: `RunnerNonce`, `Pers
 `IDataContext.RunnerNonces`, and a store that adds a row, reads a key conflict through
 `ISqlDialect.IsUniqueViolation`, and takes an expired row over with one guarded `ExecuteUpdate`.
 
-**State-machine persistence is a known deviation.** `snapshot_draft` and `effect_claim` ship in the
-core migrations as 0009 requires, but their entities (`SnapshotRecord`, `EffectClaim`) are declared
-with their mapping in `Trax.Effect.StateMachine.Persistence/Entities.cs`, have no base and persistent
-pair, and are mapped on that package's own `SnapshotDbContext`, not on `IDataContext`. Its conflict
-check also reads only the Postgres exception. Both drift guards list the two tables as unmodelled
-with that reason, so a third table cannot join them silently. Bringing them into line is open work,
-not a second pattern.
+**State-machine persistence now matches.** `snapshot_draft` and `effect_claim` were first mapped on
+the persistence package's own `SnapshotDbContext`, with entities that had no base and persistent pair
+and a conflict check that read only the Postgres exception, and both drift guards listed them as
+unmodelled. They are now `SnapshotDraft` and `EffectClaim` in Trax.Effect with their persistent
+mappings and `IDataContext.SnapshotDrafts` and `IDataContext.EffectClaims`; the stores take an
+`IDataContext` and read a lost race through `ISqlDialect.IsUniqueViolation`, and the package's own
+context is gone. The drift guards list no exception but DbUp's journal. The Sqlite half needed one
+more piece of provider knowledge: `SqliteContext` stores a `DateTimeOffset` as fixed-width UTC text, so
+a lease or expiry comparison translates to SQL and orders correctly.
 
 **Adding to `IDataContext` must not break an implementation.** A new `DbSet` on the interface is a
-binary break that package validation refuses. `RunnerNonces` therefore has a default that reads the
-set from the implementation as a `DbContext`, as `Raw` already assumes, and `ISqlDialect` members
-added since the interface shipped default to the safe answer.
+binary break that package validation refuses. `RunnerNonces`, `SnapshotDrafts` and `EffectClaims`
+therefore have a default that reads the set from the implementation as a `DbContext`, as `Raw` already
+assumes, and `ISqlDialect` members added since the interface shipped default to the safe answer.
 
 **Provider knowledge grows in `ISqlDialect`.** `IsUniqueViolation` is its first member that
 classifies an exception rather than returning SQL: Postgres `23505`, Sqlite `SQLITE_CONSTRAINT`
@@ -78,8 +80,9 @@ shares the primary code and must throw rather than read as a conflict.
 
 **Enforced elsewhere:** Trax.Effect's `EveryTableIsModelledTests` (Postgres) and
 `SqliteEveryTableIsModelledTests` fail when a migrated table is not mapped by the data context, other
-than DbUp's journal and the two state-machine tables named above, and when a mapped column does not
-exist in its migrated table, and they pin `runner_nonce` to its model column for column.
+than DbUp's journal, and when a mapped column does not exist in its migrated table, and they pin
+`runner_nonce`, `snapshot_draft` and `effect_claim` to their models column for column. Trax.Effect's
+`SqliteStoreTests` run the state-machine stores' lost races and lease comparisons on Sqlite.
 `RunnerNonceStorageTests` and `SqliteRunnerNonceStorageTests` cover the model's round trip, expiry
 through `ExecuteUpdate` and `ExecuteDelete`, concurrent inserts, and `IsUniqueViolation` on both
 providers. Trax.Scheduler's `SharedNonceStoreTests` and `SqliteSharedNonceStoreTests` run the store
@@ -94,4 +97,5 @@ The guards prove every table has a model, not that every caller uses it. Schedul
 
 ## Changelog
 
+- **2026-09-29**: State-machine persistence brought into line; the known deviation is gone.
 - **2026-09-28**: Recorded, with the runner nonce's move from raw SQL to its model.

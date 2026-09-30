@@ -18,7 +18,7 @@ Within a single host, the broadcaster wiring looks like:
 - Train completes locally → the lifecycle hook that `UseBroadcaster()` registers publishes via the transport's `ITrainEventBroadcaster`.
 - A remote process publishes → that host's `TrainEventReceiverService` receives via `ITrainEventReceiver` and dispatches to every registered `ITrainEventHandler`.
 
-The receiver service skips events whose `Executor` matches the local process, so a host that both produces and consumes does not see its own events twice.
+The receiver service skips events stamped with its own host's instance id, so a host that both produces and consumes does not see its own events twice, while replicas of one app still see each other's (see [UseBroadcaster: De-duplication](/docs/sdk-reference/configuration/use-broadcaster#de-duplication)).
 
 ## Sinks
 
@@ -35,7 +35,7 @@ A purely headless sink (writes to a database, files, an external API) only needs
 
 ### Data-change signals
 
-The broadcaster also carries coalesced data-change signals, not just train lifecycle events. A write path calls `ITraxChangeSignal.Notify(domain)`; in a single-process deployment the signal reaches local GraphQL subscribers directly, and when `UseBroadcaster()` is configured a `BroadcastChangeSink` forwards it to other processes over the same transport (the receiving side re-publishes it to its own subscribers). This is what drives the dashboard's `onDataChanged` push without polling. See [Subscriptions: Data Change Signals](/docs/sdk-reference/graphql-api/subscriptions#data-change-signals).
+The broadcaster also carries coalesced data-change signals, not just train lifecycle events. A write path calls `ITraxChangeSignal.Notify(domain)`; in a single-process deployment the signal reaches local GraphQL subscribers directly, and when `UseBroadcaster()` is configured a `BroadcastChangeSink` forwards it to other processes over the same transport (the receiving side re-publishes it to its own subscribers). This is what drives the dashboard's `onDataChanged` push without polling. A signal arrives at an `ITrainEventHandler` as a message with `EventType` `DataChanged` and no train fields; the SignalR sink skips it, and a handler that only cares about trains should too. See [Subscriptions: Data Change Signals](/docs/sdk-reference/graphql-api/subscriptions#data-change-signals).
 
 ## Pairing a transport with a sink
 
@@ -67,10 +67,12 @@ builder.Services.AddTrax(trax =>
                 .UseSignalRHub(opts => opts.OnlyForEvents("Completed", "Failed")))));
 
 var app = builder.Build();
-app.MapTraxTrainEventHub();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapTraxTrainEventHub(hub => hub.RequireAuthorization("TraxEvents"));
 ```
 
-The hub subscribes to the RabbitMQ exchange and rebroadcasts every matching event to connected browsers. The same hub also handles trains it runs locally, which fire the SignalR sink directly without a transport hop.
+The hub subscribes to the RabbitMQ exchange and rebroadcasts every matching event to the browsers its posture admits (see [MapTraxTrainEventHub: Authorization](/docs/sdk-reference/configuration/map-trax-train-event-hub#authorization)). The same hub also handles trains it runs locally, which fire the SignalR sink directly without a transport hop.
 
 ## When to use SignalR vs GraphQL subscriptions
 

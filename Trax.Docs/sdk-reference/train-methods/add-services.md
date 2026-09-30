@@ -60,7 +60,7 @@ public class ProcessOrderTrain(
 
 1. Stores each service under the type parameter in its own position: `AddServices<IReader, IWriter>(store, store)` fills both the `IReader` and the `IWriter` slot with `store`, whatever else `store` implements.
 2. The chain check records the same slots, so what it verifies is what the run fills.
-3. If a service is `null`, throws an `Exception` (`AddServices<IMyService> received null`). While a chain is being read, records a refusal instead.
+3. If a service is `null`, sets the train exception to a `TrainException` naming the type argument and, when several services are passed, its position (`AddServices<IWriter> received null for the service at position 2 of 2. A service cannot be null.`). None of that call's services is stored, and the train fails like any other invalid argument rather than throwing out of `Junctions()`. While a chain is being read, records a refusal instead.
 4. If a service's concrete type is not a class, sets the train exception. A struct passed as an interface is also refused while the chain is read.
 5. If a service does not implement the interface it was passed as, sets the train exception.
 

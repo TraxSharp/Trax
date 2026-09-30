@@ -26,7 +26,7 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `serializeJunctionData` | `bool` | No | `false` | Whether to serialize junction input/output data. Adds detail but increases storage and may impact performance. |
+| `serializeJunctionData` | `bool` | No | `false` | Whether to serialize each junction's output. Adds detail but increases log volume and serialization work per junction. |
 
 ## Returns
 
@@ -47,7 +47,8 @@ services.AddTrax(trax => trax
 
 - This is a **junction-level effect** (runs per junction, not per train).
 - Junction metadata includes: junction name, start/end times, duration, input/output types.
-- When `serializeJunctionData` is `true`, the actual junction input and output values are serialized to JSON. Members marked `[TraxSensitive]` are written as `{"_redacted": true}`, and the copies a train is run from (a manifest's `Properties`, a queued entry's `Input`, a background job's `Input`) as `{"_omitted": true}`.
+- When `serializeJunctionData` is `true`, each successful junction's output is serialized to JSON (junction input is not). Members marked `[TraxSensitive]` are written as `{"_redacted": true}`, and the copies a train is run from (a manifest's `Properties`, a queued entry's `Input`, a background job's `Input`) as `{"_omitted": true}`.
+- The output is not serialized for a train whose output `SaveTrainParameters` excludes, is bounded by `MaxParameterBytes` (1 MiB by default) past which it is written as `{"_truncated": true, "_maxBytes": N}`, and is written as `{"_unserializable": true, "_error": "<exception type>"}` when it cannot be serialized. Serializing it never fails the train. See [Junction Logger](/docs/effect/effect-providers/junction-logger#the-serializejunctiondata-option).
 - Registered as a toggleable effect.
 
 ## Package

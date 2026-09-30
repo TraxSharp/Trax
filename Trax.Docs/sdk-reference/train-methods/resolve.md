@@ -74,7 +74,7 @@ public class EchoTrain : ServiceTrain<string, string>, IEchoTrain
 2. **Short-circuit value**: if a [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) junction returned `Right`, return `Right(shortCircuitValue)`.
 3. **Memory lookup**: take `TReturn` from Memory by its exact type.
 4. **Container**: if Memory does not hold it, ask the service provider the chain carries.
-5. **Fallback**: if neither has it, return `Left(TrainException("Could not find type: (TReturn)."))`.
+5. **Fallback**: if neither has it, return `Left(TrainException)` naming the train and the missing type, for example `"Train 'CreateUserTrain' has no 'User' to resolve: nothing in the chain produced one and it is not registered in the container. Chain a junction that outputs 'User' before Resolve()."`. That holds for a value type too: a missing `int` or `Guid` fails rather than resolving to its default.
 
 ## Remarks
 

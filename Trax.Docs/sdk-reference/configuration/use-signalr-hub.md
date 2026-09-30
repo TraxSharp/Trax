@@ -47,9 +47,9 @@ When `WithProjection` is not called, every event that passes the filters is proj
 | `TrainName` | `string` | `TrainLifecycleEventMessage.TrainName` (interface FullName) |
 | `EventType` | `string` | `Started` \| `Completed` \| `Failed` \| `Cancelled` \| `StateChanged` |
 | `Timestamp` | `DateTime` | `TrainLifecycleEventMessage.Timestamp` |
-| `FailureReason` | `string?` | `TrainLifecycleEventMessage.FailureReason` (null when not a failure) |
+| `FailureReason` | `string?` | Always `null`, and left off the wire |
 
-The `Executor`, `TrainState`, `Output`, `HostName`, and `HostEnvironment` fields on the original message are intentionally dropped. Use `WithProjection` to keep them.
+The failure reason is the text the failing code put in its exception message, and every client the hub admits receives every train's events, so the default projection does not send it. The `Executor`, `TrainState`, `Output`, `HostName`, `HostEnvironment` and `FailureException` fields on the original message are dropped too. Use `WithProjection` to send any of them, once you know they are fit for every subscriber. The reasoning is recorded in Trax.Effect's ADR 0017.
 
 ## Example
 
@@ -67,10 +67,12 @@ builder.Services.AddTrax(trax =>
                     .OnlyForTrains<ICheckGeocodeDriftTrain, IRunAuditTrain>()))));
 
 var app = builder.Build();
-app.MapTraxTrainEventHub();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapTraxTrainEventHub(hub => hub.RequireAuthorization("TraxEvents"));
 ```
 
-Browsers connect to `/hubs/trax-events` and receive a `TrainEvent` callback for every `Completed` or `Failed` lifecycle event of the listed trains. The example wires RabbitMQ alongside, so events from remote worker processes also reach the browser.
+Browsers that the `TraxEvents` policy admits connect to `/hubs/trax-events` and receive a `TrainEvent` callback for every `Completed` or `Failed` lifecycle event of the listed trains. The example wires RabbitMQ alongside, so events from remote worker processes also reach the browser.
 
 ## Custom projection
 
@@ -80,7 +82,8 @@ b.UseSignalRHub(opts => opts.WithProjection(msg =>
         msg.ExternalId,
         msg.TrainName,
         msg.EventType,
-        Output = msg.Output  // ship the train's Output through to the browser
+        Output = msg.Output,             // ship the train's Output through to the browser
+        msg.FailureReason                // only when every subscriber may read it
     }))
 ```
 
@@ -109,11 +112,12 @@ The same singleton dispatcher is registered twice in DI:
 - As an `ITrainLifecycleHook`, so trains running in the same process fire it directly with no transport hop.
 - As an `ITrainEventHandler`, so events arriving via `TrainEventReceiverService` (the broadcaster's transport-side consumer) also flow through.
 
-The `TrainEventReceiverService` skips events whose `Executor` matches the local process, so the dispatcher does not double-fire when both paths exist on one host.
+The `TrainEventReceiverService` skips events stamped with this host's own instance id, so the dispatcher does not double-fire when both paths exist on one host, while replicas of the same app still receive each other's events. Data-change signals (`DataChanged`) arrive over the same transport but are not train events, so the event handler path does not send them to clients.
 
 ## Prerequisites
 
 - Call `builder.Services.AddSignalR()` on the host. Without it, [`MapTraxTrainEventHub`](/docs/sdk-reference/configuration/map-trax-train-event-hub) throws an `InvalidOperationException` at startup.
+- Map the hub with an authorization posture (`RequireAuthorization`, `RequireRoles`, or an explicit `AllowAnonymous`). See [MapTraxTrainEventHub: Authorization](/docs/sdk-reference/configuration/map-trax-train-event-hub#authorization).
 
 ## Packages
 

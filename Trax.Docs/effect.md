@@ -24,7 +24,7 @@ Everything in [Core](core.md), plus:
 - **Dependency injection** - junctions resolved from your DI container
 - **Effect providers** - pluggable providers for persistence, logging, and serialization
 - **Lifecycle hooks** - fire on train state transitions (started, completed, failed, cancelled) for notifications, metrics, or real-time updates
-- **Atomic side effects** - all providers save together; metadata (state, timing, errors) is always persisted regardless of outcome
+- **Independent side effects** - each provider saves in turn, and one that throws does not stop the others; metadata (state, timing, errors) is persisted regardless of outcome
 
 ## Train vs ServiceTrain
 

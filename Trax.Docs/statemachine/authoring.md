@@ -58,8 +58,8 @@ Guards and reducers are named code, never serialized. The snapshot carries struc
 ## Wire it into a host
 
 One builder step. `AddStateMachines` discovers every machine and wires the store, the effect-claim ledger,
-the exactly-once runner, and the registry. It also auto-registers the `SnapshotDbContext` against the provider
-you configured in `AddEffects`, and contributes the four generic mutation trains to the mediator scan (they
+the exactly-once runner, and the registry, over the data context of the provider you configured in
+`AddEffects`, and contributes the four generic mutation trains to the mediator scan (they
 ship in the persistence package, not your assembly, so Trax can route them by input type). Call it before
 `AddMediator`. The host binds only the two things a machine can't know: how to map its auth to a user key, and
 each effect implementation.

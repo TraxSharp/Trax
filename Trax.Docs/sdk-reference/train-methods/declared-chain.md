@@ -39,7 +39,7 @@ public sealed class ChainRecorder
 | Member | Description |
 |--------|-------------|
 | `Steps` | The declared steps, in order |
-| `Refusals` | Things the declaration did that no step can express, each phrased for whoever has to fix it: awaiting before returning, returning a result instead of ending in `Resolve()`, ending in `Resolve(value)`, `IChain` or `AddServices` of a class, `AddServices` of null, `Chain` or `ShortCircuit` of a type that is not a junction |
+| `Refusals` | Things the declaration did that no step can express, each phrased for whoever has to fix it: awaiting before returning, returning a result instead of ending in `Resolve()`, ending in `Resolve(value)`, `IChain` or `AddServices` of a class, `AddServices` of null, `Chain` or `ShortCircuit` of a type that is not a junction, `Chain<T>()` or `ShortCircuit<T>()` of a junction Trax cannot build (not exactly one public constructor, abstract, or an interface) |
 
 ## ChainStep and ChainStepKind
 

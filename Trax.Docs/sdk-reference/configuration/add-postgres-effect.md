@@ -79,6 +79,8 @@ services.AddTrax(trax => trax
 
 - Returns `TraxEffectBuilderWithData`, which makes `AddDataContextLogging()` available at compile time. Methods that don't require a data provider (like `AddJson()`, `SaveTrainParameters()`) use generic self-type preservation and work on both `TraxEffectBuilder` and `TraxEffectBuilderWithData`.
 - The database migration runs synchronously on startup. The database server must be accessible at application start time. To skip migration (e.g., in Lambda runners), call [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) before `UsePostgres()`.
+- Postgres cannot store the NUL character: a `text` column refuses `\0` and a `jsonb` column refuses the `\u0000` escape. Every string Trax writes through this provider has each NUL replaced with U+FFFD, the Unicode replacement character, so a train whose output or failure message contains one (a byte buffer rendered as a string, `int.Parse` quoting its input) still records its outcome. SQLite and the in-memory provider store NUL unchanged.
+- If a run's outcome still cannot be written because of what the row carries, Trax writes it again with the output replaced by `{"_unrecorded": true}` and the failure message and stack trace replaced by fixed text, keeping the state, end time, failure type, junction and class. The original error is logged. It propagates only if that second write fails too.
 - For lightweight deployments or local development without a database server, use [UseSqlite](/docs/sdk-reference/configuration/use-sqlite). For tests without any persistence, use [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect).
 
 ## Package

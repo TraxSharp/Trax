@@ -32,6 +32,10 @@ When `true`, after each junction completes, the logger serializes the junction's
 
 The output is written with the same logging options as a model's `ToString()`: members marked `[TraxSensitive]` are written as `{"_redacted": true}`, a manifest's `Properties`, a queued entry's `Input` and a background job's `Input` as `{"_omitted": true}`, and a metadata row's `Manifest`, `Parent`, `Children` and `Logs` are left out. A junction that returns queued entries therefore logs them without the inputs they will run with.
 
+The copy follows the same rules as the copy of a train's output that lifecycle hooks receive. For a train whose output [`SaveTrainParameters`](/docs/sdk-reference/configuration/save-train-parameters) excludes (`ExcludeOutput`, `ShouldSaveOutputs`, or `SaveOutputs = false`), junction outputs are not serialized either and `OutputJson` stays `null`. Any other copy is bounded by `MaxParameterBytes` (1 MiB when nothing sets it), and one that would cross it is written as `{"_truncated": true, "_maxBytes": N}`.
+
+The junction has already succeeded when its output is serialized, so an output the serializer cannot represent (a `Type` member, a graph nested deeper than 8 levels, a getter that throws) never fails the train. It is written as `{"_unserializable": true, "_error": "<exception type>"}`, the same placeholder the parameter effect uses.
+
 ## How It Works
 
 The junction logger is a **junction effect provider**, not a regular effect provider. It hooks into the `EffectJunction` lifecycle rather than the train-level `Track`/`SaveChanges` cycle.

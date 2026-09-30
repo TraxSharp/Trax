@@ -31,7 +31,9 @@ provider registration, synchronously, when `UsePostgres(...)` or `UseSqlite(...)
 the Postgres package.
 
 Scripts run in ordinal filename order, which is what the `NNN_` prefix is for. Applied
-scripts are journaled and never re-run. The Postgres migrator journals to `trax.migrations`;
+scripts are journaled and never re-run. On Postgres the migrator holds a session advisory lock
+for the whole run, so hosts that start together against one database migrate one after another,
+and every session it opens has its time zone pinned to UTC. The Postgres migrator journals to `trax.migrations`;
 the Sqlite one sets no journal and so lands on DbUp's default `SchemaVersions` table. The
 runner scans exactly one assembly, the provider's own, so there is no cross-assembly
 discovery.
@@ -54,6 +56,39 @@ A table that must work on both needs a file in both.
    `EveryTableIsModelledTests` and its Sqlite twin already check that every migrated table is
    mapped and every mapped column exists; a table the context should not map goes in their
    exceptions list with its reason.
+
+## Every Postgres script can run again
+
+The Postgres migrator runs a script without a transaction, one statement at a time. A script that
+stops partway (a failed statement, a killed process) keeps the statements before the failure and is
+not journaled, so at the next start it runs again from its first statement. From 046 on, every
+statement has to survive that:
+
+| Statement | Written as |
+|---|---|
+| a table, index, schema or sequence | `CREATE ... IF NOT EXISTS` |
+| a drop | `DROP ... IF EXISTS` |
+| a column | `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` |
+| an enum value | `ALTER TYPE ... ADD VALUE IF NOT EXISTS` |
+| a default or `NOT NULL` | `ALTER COLUMN ... SET DEFAULT` / `SET NOT NULL`, which repeat harmlessly |
+| a type change, a new constraint, a rename, a new enum type | inside a `DO $$ ... $$` block that checks the catalog first |
+| a row | `INSERT ... ON CONFLICT`, or an `UPDATE`/`DELETE` whose `WHERE` excludes rows already done |
+
+An index on `metadata`, `log` or `work_queue` is built `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, so
+enqueue, dispatch and run writes carry on while it builds; a plain build blocks them for as long as
+it takes. That works because the script is not in a transaction. A concurrent build that fails leaves
+an `INVALID` index behind, which `IF NOT EXISTS` would skip forever, so the migrator drops every
+invalid index in the `trax` schema before it runs the pending scripts.
+
+`PostgresMigrationRerunTests` reads each script from 046 on and refuses a statement that is not in
+one of these forms, and `PostgresMigrationTests` runs every one of them again over a migrated
+database. `Trax.Effect/docs/adr/0014` records why the migrator works this way.
+
+SQLite runs each script in its own transaction, so a script there lands whole or not at all.
+
+A timestamp column is `timestamptz` defaulting to `now()`, never `timestamp without time zone` and
+never `now() AT TIME ZONE 'utc'`: a plain timestamp stores the writing session's wall-clock time
+(`Trax.Effect/docs/adr/0015`).
 
 ## Provider dialects
 
@@ -81,9 +116,8 @@ the model, with LINQ, `ExecuteUpdate` and `ExecuteDelete`, not with SQL of its o
 `DbContext` of its own. Persisted operations in Trax.Api and the runner nonce store in
 Trax.Scheduler both work this way. When the providers differ in a way the feature must handle,
 such as how a key conflict is reported, the difference goes in `ISqlDialect` in Trax.Effect:
-`IsUniqueViolation` is how the nonce store tells a repeated nonce from any other failed save.
-State-machine persistence predates this and still maps its two tables on its own
-`SnapshotDbContext`.
+`IsUniqueViolation` is how the nonce store tells a repeated nonce from any other failed save, and how
+the state-machine stores tell a lost race for a draft or an effect claim from a real failure.
 
 ## Integration test databases
 
