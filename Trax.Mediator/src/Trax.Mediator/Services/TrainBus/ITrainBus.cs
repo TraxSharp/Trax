@@ -106,6 +106,68 @@ public interface ITrainBus
     );
 
     /// <summary>
+    /// Runs the train registered under <paramref name="trainName"/> and returns its output. Unlike
+    /// the input-keyed <c>RunAsync</c>, this runs that train even when another train takes the
+    /// same input type. Creates a child DI scope for the run and disposes it afterwards.
+    /// </summary>
+    /// <typeparam name="TOut">The train's output type.</typeparam>
+    /// <param name="trainName">
+    /// The full name of the train's service type, as <c>TrainRegistration.ServiceType.FullName</c>
+    /// and a run's metadata name record it.
+    /// </param>
+    /// <param name="trainInput">The input; it must be of the train's input type.</param>
+    /// <param name="cancellationToken">Passed to the train's <c>Run</c>.</param>
+    /// <param name="metadata">
+    /// A pre-created, <c>Pending</c> metadata record for the train to run as, or null for the train
+    /// to create its own. See <see cref="RunAsync{TOut}(object, Metadata?)"/>.
+    /// </param>
+    /// <returns>A task that resolves to the train's output.</returns>
+    /// <remarks>
+    /// Like the rest of the bus this is an in-process call and checks no authorization:
+    /// <c>ITrainExecutionService.RunAsync</c> authorizes a caller and then runs the train it
+    /// authorized through this method. The default implementation throws
+    /// <see cref="NotSupportedException"/>; the bus <c>AddMediator</c> registers implements it.
+    /// </remarks>
+    /// <exception cref="Trax.Core.Exceptions.TrainException">
+    /// No train is registered under <paramref name="trainName"/>, the input is not of its input
+    /// type, or <paramref name="metadata"/> is not <c>Pending</c>.
+    /// </exception>
+    public Task<TOut> RunByNameAsync<TOut>(
+        string trainName,
+        object trainInput,
+        CancellationToken cancellationToken,
+        Metadata? metadata = null
+    ) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement {nameof(RunByNameAsync)}."
+        );
+
+    /// <summary>
+    /// Runs the train registered under <paramref name="trainName"/> and discards its output. See
+    /// <see cref="RunByNameAsync{TOut}(string, object, CancellationToken, Metadata?)"/>.
+    /// </summary>
+    /// <param name="trainName">The full name of the train's service type.</param>
+    /// <param name="trainInput">The input; it must be of the train's input type.</param>
+    /// <param name="cancellationToken">Passed to the train's <c>Run</c>.</param>
+    /// <param name="metadata">
+    /// A pre-created, <c>Pending</c> metadata record for the train to run as, or null for the train
+    /// to create its own.
+    /// </param>
+    /// <exception cref="Trax.Core.Exceptions.TrainException">
+    /// No train is registered under <paramref name="trainName"/>, the input is not of its input
+    /// type, or <paramref name="metadata"/> is not <c>Pending</c>.
+    /// </exception>
+    public Task RunByNameAsync(
+        string trainName,
+        object trainInput,
+        CancellationToken cancellationToken,
+        Metadata? metadata = null
+    ) =>
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement {nameof(RunByNameAsync)}."
+        );
+
+    /// <summary>
     /// Resolves and constructs a train instance for the given input type without executing it.
     /// Used internally by the scheduler and job runner.
     /// </summary>

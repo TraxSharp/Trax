@@ -31,6 +31,14 @@ public static class ServiceExtensions
     /// <summary>
     /// Registers all effect trains found in the specified assemblies with the dependency injection container.
     /// </summary>
+    /// <remarks>
+    /// Each train is registered under its own interface, the one deriving from
+    /// <c>IServiceTrain&lt;TIn, TOut&gt;</c>, or under the closed <c>IServiceTrain&lt;TIn, TOut&gt;</c>
+    /// when it has none. Other interfaces it or a base class implements are not considered.
+    /// </remarks>
+    /// <exception cref="TrainException">
+    /// A train implements two train interfaces neither of which extends the other.
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="serviceLifetime"/> is Singleton: a train instance is one run.
     /// </exception>
@@ -61,17 +69,7 @@ public static class ServiceExtensions
                         .Select(y => y.GetGenericTypeDefinition())
                         .Contains(trainType)
                 )
-                .Select(type =>
-                    (
-                        type.GetInterfaces()
-                            .FirstOrDefault(y => !y.IsGenericType && y != typeof(IDisposable))
-                            ?? type.GetInterfaces().FirstOrDefault()
-                            ?? throw new TrainException(
-                                $"Could not find an interface attached to ({type.Name}) with Full Name ({type.FullName}) on Assembly ({type.AssemblyQualifiedName}). At least one Interface is required."
-                            ),
-                        type
-                    )
-                );
+                .Select(type => (TrainServiceType.Select(type), type));
 
             types.AddRange(trainTypes);
         }
@@ -153,13 +151,16 @@ public static class ServiceExtensions
     /// <remarks>
     /// .NET starts hosted services in registration order, and <c>AddMediator</c> runs wherever the
     /// host happens to call it. A worker registered first therefore began claiming and running work
-    /// before the chain check had refused the host, and with
-    /// <c>HostOptions.ServicesStartConcurrently</c> it ran alongside it: the host was then disposed
-    /// under those runs, leaving their rows <c>InProgress</c> and holding their subjects.
+    /// before the chain check had refused the host: the host was then disposed under those runs,
+    /// leaving their rows <c>InProgress</c> and holding their subjects.
     /// <para>
-    /// Prepending settles it wherever <c>AddMediator</c> is called, which is why it is done rather
-    /// than reading the collection to find out what is already there. A startup gate that only
-    /// sometimes runs first is not a gate.
+    /// Order alone does not settle it. Under <c>HostOptions.ServicesStartConcurrently</c> every
+    /// <c>StartAsync</c> begins at once, so the gates are <see cref="IHostedLifecycleService"/>s
+    /// and check in <c>StartingAsync</c>, which the host finishes for every service before it calls
+    /// any <c>StartAsync</c>, concurrent or not. Prepending still puts them first among the
+    /// <c>StartingAsync</c> calls of the services the host registered earlier, so a host that starts
+    /// its services one after another stops at the gate before starting anyone else's lifecycle
+    /// hook. A startup gate that only sometimes runs first is not a gate.
     /// </para>
     /// </remarks>
     private static IServiceCollection PrependHostedService<THostedService>(

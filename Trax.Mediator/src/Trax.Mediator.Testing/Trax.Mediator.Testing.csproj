@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Mediator.Testing.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="NUnit" />
   </ItemGroup>

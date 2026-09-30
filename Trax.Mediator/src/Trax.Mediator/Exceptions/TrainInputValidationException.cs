@@ -3,7 +3,8 @@ namespace Trax.Mediator.Exceptions;
 /// <summary>
 /// Thrown by <see cref="Services.TrainExecution.TrainExecutionService"/> when the
 /// caller-supplied input JSON fails a pre-deserialization check (for example, it
-/// exceeds the configured maximum size).
+/// exceeds the configured maximum size), or when a queued input's stored form exceeds
+/// its cap (see <see cref="Services.TrainExecution.TrainInputReader.StoredInputGrowthFactor"/>).
 /// </summary>
 /// <remarks>
 /// The public <see cref="Exception.Message"/> is intentionally generic. Detailed
@@ -15,10 +16,17 @@ public class TrainInputValidationException : InvalidOperationException
     /// <summary>The short (unqualified) service type name of the train whose input was refused.</summary>
     public string TrainName { get; }
 
-    /// <summary>The UTF-8 byte length of the input JSON the caller sent.</summary>
+    /// <summary>
+    /// The UTF-8 byte length of the input JSON the caller sent, or of the stored form when that
+    /// is what was refused.
+    /// </summary>
     public int ObservedBytes { get; }
 
-    /// <summary>The cap in force, from <c>MediatorConfiguration.MaxInputJsonBytes</c>.</summary>
+    /// <summary>
+    /// The cap in force: <c>MediatorConfiguration.MaxInputJsonBytes</c> for the caller's JSON,
+    /// or that times <see cref="Services.TrainExecution.TrainInputReader.StoredInputGrowthFactor"/>
+    /// for a queued input's stored form.
+    /// </summary>
     public int MaxBytes { get; }
 
     /// <summary>

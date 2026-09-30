@@ -11,6 +11,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainRegistry;
+using ScanningTrainRegistry = Trax.Mediator.Services.TrainRegistry.TrainRegistry;
 
 namespace Trax.Mediator.Services.TrainBus;
 
@@ -23,7 +24,9 @@ namespace Trax.Mediator.Services.TrainBus;
 /// the appropriate train for a given input type.
 ///
 /// Each <c>RunAsync</c> call creates a child DI scope, resolves the train from that scope,
-/// executes it, and disposes the scope when done. This ensures each train execution is fully
+/// executes it, and disposes the scope asynchronously when done, so a scoped dependency that is
+/// only <see cref="IAsyncDisposable"/> is released without replacing the run's outcome with a
+/// disposal error. This ensures each train execution is fully
 /// isolated — scoped services like <c>DbContext</c> are not shared across train executions.
 /// This is especially important in Blazor Server where the circuit-level scope persists for
 /// the entire connection.
@@ -46,7 +49,7 @@ namespace Trax.Mediator.Services.TrainBus;
 /// <param name="serviceProvider">The service provider used to resolve train instances for <see cref="InitializeTrain"/></param>
 /// <param name="scopeFactory">Factory for creating child scopes per <c>RunAsync</c> call</param>
 /// <param name="registryService">The registry service that maps input types to train types</param>
-internal class TrainBus(
+internal partial class TrainBus(
     IServiceProvider serviceProvider,
     IServiceScopeFactory scopeFactory,
     ITrainRegistry registryService
@@ -165,12 +168,31 @@ internal class TrainBus(
         var foundTrain = registry.InputTypeToTrain.TryGetValue(inputType, out var correctTrain);
 
         if (foundTrain == false || correctTrain == null)
-            throw new TrainException($"Could not find train with input type ({inputType.Name})");
+            throw new TrainException(NoTrainForInputMessage(inputType, registry));
 
         var trainService = provider.GetRequiredService(correctTrain);
         provider.InjectProperties(trainService);
 
         return trainService;
+    }
+
+    /// <summary>
+    /// What the host is told when no registered train takes an input: the input type, where the
+    /// registry looked, and the two ways to fix it. This is a configuration error in the host,
+    /// unlike <c>TrainNotFoundException</c>, whose message is generic on purpose.
+    /// </summary>
+    private static string NoTrainForInputMessage(Type inputType, ITrainRegistry registry)
+    {
+        var scanned = registry is ScanningTrainRegistry scanning
+            ? "Scanned assemblies: ["
+                + string.Join(", ", scanning.ScannedAssemblies.Select(a => a.GetName().Name))
+                + "]. "
+            : "";
+
+        return $"Could not find train with input type ({inputType.FullName}): no "
+            + $"IServiceTrain<{inputType.Name}, TOut> is registered for it. {scanned}Add a train "
+            + "that takes this input type, or add the assembly that holds its train to "
+            + "ScanAssemblies(...).";
     }
 
     /// <summary>
@@ -200,7 +222,7 @@ internal class TrainBus(
     /// </exception>
     public async Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null)
     {
-        using var scope = scopeFactory.CreateScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 
@@ -278,8 +300,23 @@ internal class TrainBus(
         Metadata? metadata = null
     )
     {
-        using var scope = scopeFactory.CreateScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
+
+        return await RunResolvedAsync<TOut>(trainService, trainInput, metadata, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs an already-resolved train through <c>Run(input, metadata, ct)</c> when
+    /// <paramref name="metadata"/> is given, or <c>Run(input, ct)</c> when it is not.
+    /// </summary>
+    private static async Task<TOut> RunResolvedAsync<TOut>(
+        object trainService,
+        object trainInput,
+        Metadata? metadata,
+        CancellationToken cancellationToken
+    )
+    {
         var trainType = trainService.GetType();
 
         if (metadata != null)
@@ -357,7 +394,7 @@ internal class TrainBus(
     /// </exception>
     public async Task RunAsync(object trainInput, Metadata? metadata = null)
     {
-        using var scope = scopeFactory.CreateScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 
@@ -436,7 +473,7 @@ internal class TrainBus(
         Metadata? metadata = null
     )
     {
-        using var scope = scopeFactory.CreateScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var trainService = InitializeTrainFromProvider(scope.ServiceProvider, trainInput);
         var trainType = trainService.GetType();
 

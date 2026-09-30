@@ -1,5 +1,6 @@
 using System.Reflection;
 using NUnit.Framework;
+using Trax.Core.Testing;
 
 // The [Test] method name is the documentation; an XML doc comment on it would be pure redundancy.
 #pragma warning disable CS1591
@@ -27,9 +28,21 @@ public abstract class TrainGuardFixture
     protected abstract IReadOnlyList<Assembly> TrainAssemblies { get; }
 
     [Test]
-    public void Every_train_has_a_companion_interface()
+    public void Every_train_has_a_companion_interface() =>
+        AssertCheckedAndClean(TrainGuards.EveryTrainHasInterface(TrainAssemblies));
+
+    /// <summary>
+    /// The guard looked at a train, and found nothing wrong. A fixture whose
+    /// <see cref="TrainAssemblies"/> hold no train checked nothing, so it fails rather than passes.
+    /// </summary>
+    internal static void AssertCheckedAndClean(GuardResult result)
     {
-        var result = TrainGuards.EveryTrainHasInterface(TrainAssemblies);
+        Assert.That(
+            result.Inspected,
+            Is.GreaterThan(0),
+            "The guard found no train in TrainAssemblies, so it checked nothing. Point "
+                + "TrainAssemblies at the assemblies that declare your trains."
+        );
         Assert.That(result.Offenders, Is.Empty, result.FailureMessage);
     }
 }

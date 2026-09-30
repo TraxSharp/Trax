@@ -39,6 +39,13 @@ because the caller was told the outer one failed. A side-effect it writes elsewh
 after the failure; that is the same exposure as a hook that throws after writing elsewhere. What it
 throws afterwards is logged.
 
+**A caller that cancels loses the hook the same way.** The enqueue awaits the hook on a token linked
+to the caller's, so a cancelled caller (a GraphQL client disconnecting, say) stops the wait at once
+whether or not the hook stops. The enqueue then treats a hook still running exactly as it treats one
+past the limit: the transaction rolls back, an enqueue the hook starts afterwards is refused, and
+what it throws afterwards is logged. Letting that enqueue join instead was rejected, because the
+transaction it would join has already been rolled back.
+
 **A hook that blocks its thread is not interrupted until it yields.** The limit is enforced by
 awaiting the hook with a deadline, which needs the hook to return a task first.
 
@@ -56,6 +63,8 @@ inside another hook runs within that hook's time, so the outer limit covers it.
   enqueues and free a pool of two for an unrelated enqueue, that a write the hook flushed before
   the limit is rolled back, that the hook's token is cancelled, that an enqueue a hook starts after
   the limit is refused, and that a hook within the limit is unaffected.
+- `CancelledEnqueueHookTests` (Postgres suite) pins that an enqueue a hook starts after its caller
+  cancelled is refused and leaves no row.
 - [OnQueue: enqueue-time hook](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) is the
   rule this produces.
 
@@ -63,4 +72,5 @@ Not covered: a hook that blocks its thread without yielding.
 
 ## Changelog
 
+- **2026-09-30**: A caller's cancellation abandons a hook that is still running, as the limit does.
 - **2026-09-27**: Recorded.

@@ -12,20 +12,21 @@ public interface IGoodTrain : IServiceTrain<int, int>;
 
 public sealed class GoodTrain : ServiceTrain<int, int>, IGoodTrain;
 
-public sealed class BadTrain : ServiceTrain<int, int>; // no companion interface
-
 [TestFixture]
 public class TrainGuardsTests
 {
     [Test]
     public void EveryTrainHasInterface_FlagsTrainsMissingInterface()
     {
-        var result = TrainGuards.EveryTrainHasInterface([typeof(GoodTrain).Assembly]);
+        var result = TrainGuards.EveryTrainHasInterface([
+            typeof(GoodTrain).Assembly,
+            BadTrainAssembly.Instance,
+        ]);
 
         result
             .Inspected.Should()
             .BeGreaterThanOrEqualTo(2, "GoodTrain and BadTrain are both trains");
-        result.Offenders.Should().Contain(o => o.Contains(nameof(BadTrain)));
+        result.Offenders.Should().Contain(o => o.Contains("BadTrain"));
         result.Offenders.Should().NotContain(o => o.Contains(nameof(GoodTrain)));
     }
 }

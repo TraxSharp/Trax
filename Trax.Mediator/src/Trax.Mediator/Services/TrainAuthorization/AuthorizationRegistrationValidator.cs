@@ -22,31 +22,38 @@ namespace Trax.Mediator.Services.TrainAuthorization;
 /// </item>
 /// </list>
 /// </summary>
+/// <remarks>
+/// Checks in <see cref="StartingAsync"/>, which the host finishes for every hosted service before
+/// it calls any <c>StartAsync</c>, so a refusal stops the host before a worker starts, even under
+/// <c>HostOptions.ServicesStartConcurrently</c>.
+/// </remarks>
 internal sealed class AuthorizationRegistrationValidator(
     ITrainDiscoveryService discoveryService,
     MediatorConfiguration configuration,
     IServiceProvider serviceProvider
-) : IHostedService
+) : IHostedLifecycleService
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartingAsync(CancellationToken cancellationToken)
     {
         var registrations = discoveryService.DiscoverTrains();
 
         ValidateAttributeShapes(registrations);
-        ValidateAuthServicePresence(registrations);
-
-        return Task.CompletedTask;
+        await ValidateAuthServicePresenceAsync(registrations);
     }
 
-    private void ValidateAuthServicePresence(IReadOnlyList<TrainRegistration> registrations)
+    private async Task ValidateAuthServicePresenceAsync(
+        IReadOnlyList<TrainRegistration> registrations
+    )
     {
         if (configuration.AllowMissingAuthorizationService)
             return;
 
         // ITrainAuthorizationService is registered Scoped, so we must resolve it
         // inside a scope. Startup runs against the root provider, which trips
-        // ServiceProvider's scope validation in dev / test hosts.
-        using (var scope = serviceProvider.CreateScope())
+        // ServiceProvider's scope validation in dev / test hosts. Disposed asynchronously, because
+        // an implementation may be disposable only asynchronously, and disposing that scope
+        // synchronously throws.
+        await using (var scope = serviceProvider.CreateAsyncScope())
         {
             var authService = scope.ServiceProvider.GetService<ITrainAuthorizationService>();
             if (authService is not null)
@@ -106,5 +113,13 @@ internal sealed class AuthorizationRegistrationValidator(
         }
     }
 
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

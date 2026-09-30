@@ -13,8 +13,9 @@ namespace Trax.Mediator.Services.ConcurrencyLimiter;
 /// </summary>
 /// <remarks>
 /// A per-train limit is resolved once per train, on first use: a builder override first, then
-/// <c>[TraxConcurrencyLimit]</c>. One semaphore is kept per distinct principal id for the life of
-/// the limiter and is never evicted.
+/// <c>[TraxConcurrencyLimit]</c>. A principal's semaphore exists only while a run for that
+/// principal holds or waits for a slot: the last one to leave removes it, so the limiter's memory
+/// follows the principals running now rather than every principal it has ever seen.
 /// </remarks>
 public class ConcurrencyLimiter : IConcurrencyLimiter
 {
@@ -22,7 +23,10 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
     private readonly ITrainDiscoveryService _discoveryService;
     private readonly ICurrentPrincipalProvider _principalProvider;
     private readonly ConcurrentDictionary<string, Lazy<SemaphoreSlim?>> _perTrainSemaphores = new();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _perPrincipalSemaphores = new();
+    private readonly Dictionary<string, PrincipalSlot> _perPrincipalSlots = new(
+        StringComparer.Ordinal
+    );
+    private readonly object _perPrincipalLock = new();
     private readonly SemaphoreSlim? _globalSemaphore;
 
     /// <summary>
@@ -51,20 +55,24 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
     public async Task<IDisposable> AcquireAsync(string trainFullName, CancellationToken ct)
     {
         var perTrainSemaphore = GetOrCreatePerTrainSemaphore(trainFullName);
-        var perPrincipalSemaphore = GetOrCreatePerPrincipalSemaphore();
 
         // Acquire in a deterministic order (per-train → per-principal → global)
         // to prevent cross-lock deadlocks. Release in reverse.
         if (perTrainSemaphore is not null)
             await perTrainSemaphore.WaitAsync(ct);
 
+        // Rented after the per-train wait, so a run queued behind the per-train limit does not
+        // keep its principal's entry alive while it waits there.
+        var perPrincipalSlot = RentPerPrincipalSlot();
+
         try
         {
-            if (perPrincipalSemaphore is not null)
-                await perPrincipalSemaphore.WaitAsync(ct);
+            if (perPrincipalSlot is not null)
+                await perPrincipalSlot.Semaphore.WaitAsync(ct);
         }
         catch
         {
+            ReturnPerPrincipalSlot(perPrincipalSlot);
             perTrainSemaphore?.Release();
             throw;
         }
@@ -76,12 +84,26 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         }
         catch
         {
-            perPrincipalSemaphore?.Release();
+            perPrincipalSlot?.Semaphore.Release();
+            ReturnPerPrincipalSlot(perPrincipalSlot);
             perTrainSemaphore?.Release();
             throw;
         }
 
-        return new ConcurrencyPermit(perTrainSemaphore, perPrincipalSemaphore, _globalSemaphore);
+        return new ConcurrencyPermit(this, perTrainSemaphore, perPrincipalSlot, _globalSemaphore);
+    }
+
+    /// <summary>
+    /// How many principals currently have a semaphore: those with a run holding or waiting for a
+    /// slot. Zero when nothing is running.
+    /// </summary>
+    internal int PerPrincipalEntryCount
+    {
+        get
+        {
+            lock (_perPrincipalLock)
+                return _perPrincipalSlots.Count;
+        }
     }
 
     private SemaphoreSlim? GetOrCreatePerTrainSemaphore(string trainFullName)
@@ -98,7 +120,12 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
             .Value;
     }
 
-    private SemaphoreSlim? GetOrCreatePerPrincipalSemaphore()
+    /// <summary>
+    /// Returns the current principal's slot, counting this run in, or null when there is no
+    /// per-principal limit or no principal. Every non-null result is handed back exactly once
+    /// through <see cref="ReturnPerPrincipalSlot"/>.
+    /// </summary>
+    private PrincipalSlot? RentPerPrincipalSlot()
     {
         if (_configuration.PerPrincipalMaxConcurrentRun is not { } limit)
             return null;
@@ -107,7 +134,34 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         if (string.IsNullOrEmpty(principalId))
             return null;
 
-        return _perPrincipalSemaphores.GetOrAdd(principalId, _ => new SemaphoreSlim(limit, limit));
+        lock (_perPrincipalLock)
+        {
+            if (!_perPrincipalSlots.TryGetValue(principalId, out var slot))
+            {
+                slot = new PrincipalSlot(principalId, limit);
+                _perPrincipalSlots.Add(principalId, slot);
+            }
+
+            slot.Users++;
+            return slot;
+        }
+    }
+
+    /// <summary>
+    /// Counts a run out of its principal's slot, and removes the slot when it was the last run
+    /// holding or waiting for it. Nobody can be waiting on a removed semaphore, so the next run
+    /// for that principal starts a fresh one with the full limit.
+    /// </summary>
+    private void ReturnPerPrincipalSlot(PrincipalSlot? slot)
+    {
+        if (slot is null)
+            return;
+
+        lock (_perPrincipalLock)
+        {
+            if (--slot.Users == 0)
+                _perPrincipalSlots.Remove(slot.PrincipalId);
+        }
     }
 
     private int? ResolveLimit(string trainFullName)
@@ -124,9 +178,23 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
         return registration?.MaxConcurrentRun;
     }
 
+    /// <summary>
+    /// One principal's semaphore and the number of runs holding or waiting for it. The count is
+    /// guarded by the limiter's per-principal lock.
+    /// </summary>
+    private sealed class PrincipalSlot(string principalId, int limit)
+    {
+        public string PrincipalId { get; } = principalId;
+
+        public SemaphoreSlim Semaphore { get; } = new(limit, limit);
+
+        public int Users { get; set; }
+    }
+
     private sealed class ConcurrencyPermit(
+        ConcurrencyLimiter limiter,
         SemaphoreSlim? perTrain,
-        SemaphoreSlim? perPrincipal,
+        PrincipalSlot? perPrincipal,
         SemaphoreSlim? global
     ) : IDisposable
     {
@@ -139,7 +207,8 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
 
             // Release in reverse order of acquisition
             global?.Release();
-            perPrincipal?.Release();
+            perPrincipal?.Semaphore.Release();
+            limiter.ReturnPerPrincipalSlot(perPrincipal);
             perTrain?.Release();
         }
     }

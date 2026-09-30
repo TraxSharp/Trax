@@ -36,8 +36,8 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `auth` | [0001](./0001-authorization-is-fail-closed.md) |
-| `platform` | [0001](./0001-authorization-is-fail-closed.md), [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md), [0003](./0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md), [0004](./0004-an-onqueue-hook-runs-under-a-time-limit.md) |
+| `auth` | [0001](./0001-authorization-is-fail-closed.md), [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md) |
+| `platform` | [0001](./0001-authorization-is-fail-closed.md), [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md), [0003](./0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md), [0004](./0004-an-onqueue-hook-runs-under-a-time-limit.md), [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md) |
 
 ## All of them
 
@@ -47,3 +47,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0002](./0002-an-enqueue-resolves-its-train-in-a-scope-of-its-own.md) | An enqueue resolves its train in a scope of its own | platform |
 | [0003](./0003-a-nested-enqueue-joins-the-enqueue-it-runs-inside.md) | A nested enqueue joins the enqueue it runs inside | platform |
 | [0004](./0004-an-onqueue-hook-runs-under-a-time-limit.md) | An OnQueue hook runs under a time limit | platform |
+| [0005](./0005-a-train-run-by-name-is-the-train-that-runs.md) | A train run by name is the train that runs | auth, platform |

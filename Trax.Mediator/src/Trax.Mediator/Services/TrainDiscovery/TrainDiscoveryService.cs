@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Exceptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Mediator.Services.TrainRegistry;
 
 namespace Trax.Mediator.Services.TrainDiscovery;
 
@@ -31,145 +33,212 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
     /// <inheritdoc/>
     /// <remarks>
-    /// One registration is returned per input type. When a train is registered under both its
-    /// interface and its concrete class, the interface is used as
+    /// One registration is returned per train, and two trains that take the same input type are
+    /// both listed. A train registered under both its interface and its concrete class, as
+    /// <c>AddScopedTraxRoute</c> does, is listed once, with the interface as
     /// <see cref="TrainRegistration.ServiceType"/> and the class as
-    /// <see cref="TrainRegistration.ImplementationType"/>. Not synchronized: two threads making the
-    /// first call at once both scan, and either result is kept.
+    /// <see cref="TrainRegistration.ImplementationType"/>. The two are only paired when resolving
+    /// that interface yields that class, so a registration's requirements and attributes are always
+    /// those of the train its service type resolves. Not synchronized: two threads making the first
+    /// call at once both scan, and either result is kept.
     /// </remarks>
     public IReadOnlyList<TrainRegistration> DiscoverTrains()
     {
         if (_cachedRegistrations != null)
             return _cachedRegistrations;
 
-        var serviceTrainType = typeof(IServiceTrain<,>);
-        var registrations = new List<TrainRegistration>();
+        // Classes registered as themselves (the first registration of each), and the last
+        // descriptor of each train interface, which is the one DI resolves.
+        var classes = new List<RegisteredClass>();
+        var seenClasses = new HashSet<(Type, Type)>();
+        var interfaces = new Dictionary<Type, (int Index, ServiceDescriptor Descriptor)>();
 
-        foreach (var descriptor in _serviceCollection)
+        for (var index = 0; index < _serviceCollection.Count; index++)
         {
+            var descriptor = _serviceCollection[index];
             var serviceType = descriptor.ServiceType;
 
-            // Find IServiceTrain<,> either directly or via interface hierarchy
-            Type? effectInterface = FindServiceTrainInterface(serviceType, serviceTrainType);
-
-            if (effectInterface == null)
+            if (TrainServiceType.FindClosedServiceTrain(serviceType) is null)
                 continue;
 
-            // Skip concrete type registrations from the dual-registration pattern
-            // (AddScopedTraxRoute registers both TImplementation and TService)
-            if (descriptor.ImplementationFactory != null && !serviceType.IsInterface)
+            if (serviceType.IsInterface)
+            {
+                var firstIndex = interfaces.TryGetValue(serviceType, out var earlier)
+                    ? earlier.Index
+                    : index;
+                interfaces[serviceType] = (firstIndex, descriptor);
+                continue;
+            }
+
+            // A class registered through a factory cannot be read without running the factory.
+            if (KnownImplementation(descriptor) is not { } implementation)
                 continue;
 
-            var genericArgs = effectInterface.GetGenericArguments();
-            var inputType = genericArgs[0];
-            var outputType = genericArgs[1];
+            if (seenClasses.Add((serviceType, implementation)))
+                classes.Add(
+                    new RegisteredClass(index, serviceType, implementation, descriptor.Lifetime)
+                );
+        }
 
-            var implementationType =
-                descriptor.ImplementationType
-                ?? descriptor.ImplementationInstance?.GetType()
-                ?? descriptor.ServiceType;
+        var registrations = new List<(int Index, TrainRegistration Registration)>();
+        var pairedInterfaces = new HashSet<Type>();
 
-            var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implementationType);
-            var hasAllowAnonymous = HasAllowAnonymousAttribute(implementationType);
-            var graphql = GetGraphQLMetadata(implementationType);
-            var broadcastEnabled = HasBroadcastAttribute(implementationType);
-            var isRemote = HasRemoteAttribute(implementationType);
-            var concurrencyLimit = GetConcurrencyLimit(implementationType);
+        foreach (var registered in classes)
+        {
+            var own =
+                registered.ServiceType == registered.Implementation
+                    ? OwnInterface(registered.Implementation)
+                    : null;
+
+            if (
+                own is not null
+                && interfaces.TryGetValue(own, out var entry)
+                && ResolvesTo(entry.Descriptor, own, registered.Implementation, classes)
+            )
+            {
+                pairedInterfaces.Add(own);
+                registrations.Add(
+                    (
+                        registered.Index,
+                        Build(own, registered.Implementation, entry.Descriptor.Lifetime)
+                    )
+                );
+                continue;
+            }
 
             registrations.Add(
-                new TrainRegistration
-                {
-                    ServiceType = serviceType,
-                    ImplementationType = implementationType,
-                    InputType = inputType,
-                    OutputType = outputType,
-                    Lifetime = descriptor.Lifetime,
-                    ServiceTypeName = GetFriendlyTypeName(serviceType),
-                    ImplementationTypeName = GetFriendlyTypeName(implementationType),
-                    InputTypeName = GetFriendlyTypeName(inputType),
-                    OutputTypeName = GetFriendlyTypeName(outputType),
-                    RequiredPolicies = policies,
-                    RequiredRoles = roles,
-                    HasAuthorizeAttribute = hasAuthorize,
-                    HasAllowAnonymousAttribute = hasAllowAnonymous,
-                    IsQuery = graphql.IsQuery,
-                    IsMutation = graphql.IsMutation,
-                    IsBroadcastEnabled = broadcastEnabled,
-                    IsRemote = isRemote,
-                    GraphQLName = graphql.Name,
-                    GraphQLDescription = graphql.Description,
-                    GraphQLDeprecationReason = graphql.DeprecationReason,
-                    GraphQLOperations = graphql.Operations,
-                    GraphQLNamespace = graphql.Namespace,
-                    MaxConcurrentRun = concurrencyLimit,
-                    HasQueueSubjectKey =
-                        QueueMemberOverrides.QueueSubjectKey(implementationType) is not null,
-                }
+                (
+                    registered.Index,
+                    Build(registered.ServiceType, registered.Implementation, registered.Lifetime)
+                )
             );
         }
 
-        // Deduplicate: each InputType maps to one train in the registry.
-        // Prefer the interface for ServiceType and the concrete class for ImplementationType.
-        _cachedRegistrations = registrations
-            .GroupBy(r => r.InputType)
-            .Select(g =>
+        foreach (var (serviceType, (index, descriptor)) in interfaces)
+        {
+            if (pairedInterfaces.Contains(serviceType))
+                continue;
+
+            var implementation = KnownImplementation(descriptor);
+
+            if (implementation is null)
             {
-                var interfaceReg = g.FirstOrDefault(r => r.ServiceType.IsInterface);
-                var concreteReg = g.FirstOrDefault(r => !r.ServiceType.IsInterface);
-                var preferred = interfaceReg ?? concreteReg ?? g.First();
+                // A factory whose class cannot be read. When a registered class implements the
+                // interface, that class is listed under its own entry already, and listing this
+                // interface could name a different train from the one whose attributes were read.
+                if (classes.Any(c => serviceType.IsAssignableFrom(c.Implementation)))
+                    continue;
 
-                var implType = concreteReg?.ImplementationType ?? preferred.ImplementationType;
-                var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implType);
-                var hasAllowAnonymous = HasAllowAnonymousAttribute(implType);
-                var graphql = GetGraphQLMetadata(implType);
-                var broadcastEnabled = HasBroadcastAttribute(implType);
-                var isRemote = HasRemoteAttribute(implType);
-                var concurrencyLimit = GetConcurrencyLimit(implType);
+                implementation = serviceType;
+            }
 
-                return new TrainRegistration
-                {
-                    ServiceType = preferred.ServiceType,
-                    ImplementationType = implType,
-                    InputType = preferred.InputType,
-                    OutputType = preferred.OutputType,
-                    Lifetime = preferred.Lifetime,
-                    ServiceTypeName = preferred.ServiceTypeName,
-                    ImplementationTypeName =
-                        concreteReg?.ImplementationTypeName ?? preferred.ImplementationTypeName,
-                    InputTypeName = preferred.InputTypeName,
-                    OutputTypeName = preferred.OutputTypeName,
-                    RequiredPolicies = policies,
-                    RequiredRoles = roles,
-                    HasAuthorizeAttribute = hasAuthorize,
-                    HasAllowAnonymousAttribute = hasAllowAnonymous,
-                    IsQuery = graphql.IsQuery,
-                    IsMutation = graphql.IsMutation,
-                    IsBroadcastEnabled = broadcastEnabled,
-                    IsRemote = isRemote,
-                    GraphQLName = graphql.Name,
-                    GraphQLDescription = graphql.Description,
-                    GraphQLDeprecationReason = graphql.DeprecationReason,
-                    GraphQLOperations = graphql.Operations,
-                    GraphQLNamespace = graphql.Namespace,
-                    MaxConcurrentRun = concurrencyLimit,
-                    HasQueueSubjectKey = QueueMemberOverrides.QueueSubjectKey(implType) is not null,
-                };
-            })
+            registrations.Add((index, Build(serviceType, implementation, descriptor.Lifetime)));
+        }
+
+        _cachedRegistrations = registrations
+            .OrderBy(r => r.Index)
+            .Select(r => r.Registration)
             .ToList()
             .AsReadOnly();
 
         return _cachedRegistrations;
     }
 
-    private static Type? FindServiceTrainInterface(Type type, Type serviceTrainType)
-    {
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == serviceTrainType)
-            return type;
+    private sealed record RegisteredClass(
+        int Index,
+        Type ServiceType,
+        Type Implementation,
+        ServiceLifetime Lifetime
+    );
 
-        return type.GetInterfaces()
-            .FirstOrDefault(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == serviceTrainType
-            );
+    /// <summary>The class a descriptor resolves to without running a factory, or null.</summary>
+    private static Type? KnownImplementation(ServiceDescriptor descriptor) =>
+        descriptor.ImplementationType ?? descriptor.ImplementationInstance?.GetType();
+
+    /// <summary>
+    /// The interface scanning registers <paramref name="implementation"/> under, or null when that
+    /// is not a single train interface.
+    /// </summary>
+    private static Type? OwnInterface(Type implementation)
+    {
+        // Select returns an interface or throws: the train's own interface, or the closed
+        // IServiceTrain<,> when it has none.
+        try
+        {
+            return TrainServiceType.Select(implementation);
+        }
+        catch (TrainException)
+        {
+            // Discovery is permissive; scanning is where an ambiguous train is refused.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether resolving <paramref name="descriptor"/> yields <paramref name="implementation"/>.
+    /// A typed descriptor says so itself. A factory is taken to when no other registered class
+    /// implements the interface, which is the shape <c>AddScopedTraxRoute</c> leaves.
+    /// </summary>
+    private static bool ResolvesTo(
+        ServiceDescriptor descriptor,
+        Type serviceType,
+        Type implementation,
+        IReadOnlyList<RegisteredClass> classes
+    )
+    {
+        var known = KnownImplementation(descriptor);
+        if (known is not null)
+            return known == implementation;
+
+        return classes
+            .Select(c => c.Implementation)
+            .Where(serviceType.IsAssignableFrom)
+            .All(c => c == implementation);
+    }
+
+    private static TrainRegistration Build(
+        Type serviceType,
+        Type implementationType,
+        ServiceLifetime lifetime
+    )
+    {
+        var genericArgs = TrainServiceType
+            .FindClosedServiceTrain(serviceType)!
+            .GetGenericArguments();
+        var inputType = genericArgs[0];
+        var outputType = genericArgs[1];
+
+        var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implementationType);
+        var graphql = GetGraphQLMetadata(implementationType);
+
+        return new TrainRegistration
+        {
+            ServiceType = serviceType,
+            ImplementationType = implementationType,
+            InputType = inputType,
+            OutputType = outputType,
+            Lifetime = lifetime,
+            ServiceTypeName = GetFriendlyTypeName(serviceType),
+            ImplementationTypeName = GetFriendlyTypeName(implementationType),
+            InputTypeName = GetFriendlyTypeName(inputType),
+            OutputTypeName = GetFriendlyTypeName(outputType),
+            RequiredPolicies = policies,
+            RequiredRoles = roles,
+            HasAuthorizeAttribute = hasAuthorize,
+            HasAllowAnonymousAttribute = HasAllowAnonymousAttribute(implementationType),
+            IsQuery = graphql.IsQuery,
+            IsMutation = graphql.IsMutation,
+            IsBroadcastEnabled = HasBroadcastAttribute(implementationType),
+            IsRemote = HasRemoteAttribute(implementationType),
+            GraphQLName = graphql.Name,
+            GraphQLDescription = graphql.Description,
+            GraphQLDeprecationReason = graphql.DeprecationReason,
+            GraphQLOperations = graphql.Operations,
+            GraphQLNamespace = graphql.Namespace,
+            MaxConcurrentRun = GetConcurrencyLimit(implementationType),
+            HasQueueSubjectKey =
+                QueueMemberOverrides.QueueSubjectKey(implementationType) is not null,
+        };
     }
 
     private static (

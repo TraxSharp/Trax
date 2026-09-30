@@ -45,7 +45,7 @@ public class AuthorizationRegistrationValidatorTests
     }
 
     [Test]
-    public async Task StartAsync_WhenAuthTrainRegistered_AndNoAuthServiceRegistered_Throws()
+    public async Task StartingAsync_WhenAuthTrainRegistered_AndNoAuthServiceRegistered_Throws()
     {
         var services = new ServiceCollection();
         services.AddScopedTraxRoute<ITestAuthedTrain, TestAuthedTrain>();
@@ -55,7 +55,7 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () => await validator.StartingAsync(CancellationToken.None);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>(
@@ -67,7 +67,7 @@ public class AuthorizationRegistrationValidatorTests
     }
 
     [Test]
-    public async Task StartAsync_WhenAuthTrainRegistered_AndAllowOptedIn_Allows()
+    public async Task StartingAsync_WhenAuthTrainRegistered_AndAllowOptedIn_Allows()
     {
         var services = new ServiceCollection();
         services.AddScopedTraxRoute<ITestAuthedTrain, TestAuthedTrain>();
@@ -77,11 +77,11 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        await validator.StartAsync(CancellationToken.None);
+        await validator.StartingAsync(CancellationToken.None);
     }
 
     [Test]
-    public async Task StartAsync_WhenAuthServiceRegistered_Allows()
+    public async Task StartingAsync_WhenAuthServiceRegistered_Allows()
     {
         var services = new ServiceCollection();
         services.AddScopedTraxRoute<ITestAuthedTrain, TestAuthedTrain>();
@@ -93,11 +93,11 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        await validator.StartAsync(CancellationToken.None);
+        await validator.StartingAsync(CancellationToken.None);
     }
 
     [Test]
-    public async Task StartAsync_WhenAuthServiceScoped_AndScopeValidationOn_DoesNotThrow()
+    public async Task StartingAsync_WhenAuthServiceScoped_AndScopeValidationOn_DoesNotThrow()
     {
         // Regression: the validator previously resolved ITrainAuthorizationService
         // off the root IServiceProvider. Once the real service is registered
@@ -117,11 +117,11 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        await validator.StartAsync(CancellationToken.None);
+        await validator.StartingAsync(CancellationToken.None);
     }
 
     [Test]
-    public async Task StartAsync_WhenNoAuthorizedTrainsExist_Allows()
+    public async Task StartingAsync_WhenNoAuthorizedTrainsExist_Allows()
     {
         var services = new ServiceCollection();
         services.AddScopedTraxRoute<IPlainTrain, PlainTrain>();
@@ -131,11 +131,11 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        await validator.StartAsync(CancellationToken.None);
+        await validator.StartingAsync(CancellationToken.None);
     }
 
     [Test]
-    public async Task StartAsync_RolesWhitespaceOnly_Throws()
+    public async Task StartingAsync_RolesWhitespaceOnly_Throws()
     {
         // Use a manual ServiceCollection rather than assembly-scan so the bad
         // fixture doesn't pollute other test assemblies. The validator walks
@@ -150,7 +150,7 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () => await validator.StartingAsync(CancellationToken.None);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()
@@ -158,7 +158,7 @@ public class AuthorizationRegistrationValidatorTests
     }
 
     [Test]
-    public async Task StartAsync_EmptyPolicy_Throws()
+    public async Task StartingAsync_EmptyPolicy_Throws()
     {
         var services = new ServiceCollection();
         services.AddScopedTraxRoute<IEmptyPolicyTrain, EmptyPolicyTrain>();
@@ -170,7 +170,7 @@ public class AuthorizationRegistrationValidatorTests
 
         var validator = new AuthorizationRegistrationValidator(discovery, config, sp);
 
-        var act = async () => await validator.StartAsync(CancellationToken.None);
+        var act = async () => await validator.StartingAsync(CancellationToken.None);
 
         await act.Should()
             .ThrowAsync<InvalidOperationException>()

@@ -20,8 +20,9 @@ namespace Trax.Mediator.Services.Principal;
 /// <para>
 /// Return an id the caller cannot choose, such as the authenticated user's subject claim. An id
 /// taken from a request header or other client input lets a caller spread its runs across many
-/// buckets and escape the limit. The limiter keeps one semaphore per distinct id for the life of
-/// the process, so the set of ids must stay bounded: never a per-request or random value.
+/// buckets and escape the limit, since a fresh id starts with a full budget: never a per-request
+/// or random value. The limiter keeps a semaphore for an id only while a run for it holds or waits
+/// for a slot.
 /// </para>
 /// </remarks>
 public interface ICurrentPrincipalProvider

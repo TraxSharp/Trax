@@ -3,6 +3,7 @@ using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -160,6 +161,64 @@ public class QueueHookTests
         (await CountWorkQueueAsync()).Should().Be(2);
     }
 
+    [Test]
+    public async Task QueueAsync_CallerCancelsWhileAHookIgnoresItsToken_FailsAndLogsTheHooksLateFault()
+    {
+        // Its own host, to see the warnings. The in-memory provider has no transactions, so there
+        // is no nested enqueue for the abandoned hook to be refused.
+        var warnings = new WarningRecorder();
+        var services = new ServiceCollection();
+        services.AddLogging(logging => logging.AddProvider(warnings));
+        services.AddSingleton<QueueHookProbe>();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(assemblies: [typeof(QueueHookTests).Assembly])
+        );
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var svc = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
+        LateFaultQueueTrain.Reset();
+
+        using var cancel = new CancellationTokenSource();
+        var enqueue = svc.QueueAsync(
+            typeof(ILateFaultQueueTrain).FullName!,
+            Serialize(new LateFaultInput("x")),
+            ct: cancel.Token
+        );
+        await LateFaultQueueTrain.Started.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        await cancel.CancelAsync();
+
+        var act = async () => await enqueue.WaitAsync(TimeSpan.FromSeconds(15));
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        // The caller has its answer. Now the hook, still running, fails.
+        LateFaultQueueTrain.Gate.TrySetResult();
+
+        var logged = await warnings.Logged.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        logged
+            .Message.Should()
+            .Be(
+                $"{typeof(ILateFaultQueueTrain).FullName}.OnQueue threw after its enqueue had "
+                    + "already been cancelled by its caller.",
+                "nothing else observes a hook the enqueue stopped waiting for"
+            );
+        logged
+            .Exception.Should()
+            .BeOfType<AggregateException>()
+            .Which.InnerException.Should()
+            .BeOfType<InvalidOperationException>()
+            .Which.Message.Should()
+            .Be(LateFaultQueueTrain.Reason);
+        (await CountAsync(provider)).Should().Be(0, "a cancelled enqueue writes no entry");
+    }
+
+    private static async Task<long> CountAsync(IServiceProvider provider)
+    {
+        var factory = provider.GetRequiredService<IDataContextProviderFactory>();
+        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+        return await context.WorkQueues.LongCountAsync();
+    }
+
     #region Test infrastructure
 
     public class QueueHookProbe(IDataContextProviderFactory factory)
@@ -231,6 +290,67 @@ public class QueueHookTests
 
         protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
             throw new InvalidOperationException("OnQueue rejected the enqueue");
+    }
+
+    /// <summary>Hands the first warning that carries an exception to the test.</summary>
+    private sealed class WarningRecorder : ILoggerProvider, ILogger
+    {
+        public TaskCompletionSource<(string Message, Exception? Exception)> Logged { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ILogger CreateLogger(string categoryName) => this;
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => logLevel == LogLevel.Warning;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == LogLevel.Warning && exception is not null)
+                Logged.TrySetResult((formatter(state, exception), exception));
+        }
+
+        public void Dispose() { }
+    }
+
+    public record LateFaultInput(string Value);
+
+    public interface ILateFaultQueueTrain : IServiceTrain<LateFaultInput, string>;
+
+    /// <summary>A hook that ignores its token and fails once the test lets it go on.</summary>
+    public class LateFaultQueueTrain : ServiceTrain<LateFaultInput, string>, ILateFaultQueueTrain
+    {
+        public const string Reason = "the hook failed after its caller had gone";
+
+        public static TaskCompletionSource Started { get; private set; } = new();
+
+        public static TaskCompletionSource Gate { get; private set; } = new();
+
+        public static void Reset()
+        {
+            Started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Task.FromResult(Extract<LateFaultInput, string>().Resolve());
+
+        protected override async Task OnQueue(Metadata metadata, CancellationToken ct)
+        {
+            Started.TrySetResult();
+
+            // Deliberately ignores the token.
+            await Gate.Task;
+
+            throw new InvalidOperationException(Reason);
+        }
     }
 
     #endregion

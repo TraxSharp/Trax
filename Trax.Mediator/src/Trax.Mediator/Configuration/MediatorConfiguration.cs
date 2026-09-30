@@ -59,11 +59,18 @@ public class MediatorConfiguration
     /// 256 KiB. Override via <c>TraxMediatorBuilder.WithMaxInputJsonBytes(int)</c>.
     /// </summary>
     /// <remarks>
-    /// The cap is enforced post-authorization but pre-deserialization so that
-    /// attacker-controlled JSON cannot exhaust memory or trigger deserializer
-    /// gadget chains before any fail-closed check has run. Queued work entries
-    /// created by <c>QueueAsync</c> are re-serialized from the parsed CLR object
-    /// and are therefore governed by the same cap indirectly.
+    /// The cap is enforced post-authorization but pre-deserialization, so oversized JSON never
+    /// reaches the deserializer and no fail-closed check is skipped for it. Caller input is read
+    /// without JSON reference handling (<c>$id</c>, <c>$ref</c>, <c>$values</c> are not
+    /// honoured), so the parsed input is the tree the caller wrote.
+    /// <para>
+    /// A work queue entry created by <c>QueueAsync</c> stores the input re-serialized from the
+    /// parsed object, indented and with every member present, which is larger than compact caller
+    /// JSON. That stored form has a cap of its own,
+    /// <see cref="Services.TrainExecution.TrainInputReader.StoredInputGrowthFactor"/> times this
+    /// value, checked before the entry is created; an enqueue whose stored input would be larger
+    /// is refused with <see cref="Exceptions.TrainInputValidationException"/>.
+    /// </para>
     /// </remarks>
     public int MaxInputJsonBytes { get; internal set; } = 262_144;
 

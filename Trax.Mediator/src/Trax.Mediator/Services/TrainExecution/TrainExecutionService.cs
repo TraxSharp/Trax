@@ -1,12 +1,10 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Extensions;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextTransaction;
 using Trax.Effect.Data.Services.EnqueueContext;
@@ -18,7 +16,6 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.ConcurrencyLimiter;
@@ -87,10 +84,12 @@ public class TrainExecutionService(
 
         registration.ServiceType.FullName.AssertLoaded();
 
-        var serializedInput = JsonSerializer.Serialize(
+        // Measured before the entry exists: the stored form is written indented and with every
+        // member present, so it is capped too, not only the caller's text.
+        var serializedInput = TrainInputReader.WriteForStorage(
             input,
-            registration.InputType,
-            TraxJsonSerializationOptions.ManifestProperties
+            registration,
+            mediatorConfiguration.MaxInputJsonBytes
         );
 
         // The train is resolved at most once per enqueue, in a scope of its own that is disposed
@@ -335,13 +334,15 @@ public class TrainExecutionService(
 
         // A run needs an input instance, and the runner refuses an entry that has none, so
         // storing null only deferred the failure to dispatch, where nobody who could fix it would
-        // see it. No input is read as an empty object instead, which is refused here when the
-        // input type needs values (see DeserializeInput).
-        var missing = string.IsNullOrWhiteSpace(inputJson);
-        var json = missing ? EmptyInput : inputJson!;
+        // see it. No input is read as an empty object instead, which is refused when the input
+        // type needs values (see TrainInputReader.Read).
+        var input = TrainInputReader.Read(
+            inputJson,
+            registration,
+            mediatorConfiguration.MaxInputJsonBytes
+        );
 
-        EnforceInputSizeCap(json, registration);
-        return (registration, DeserializeInput(json, registration, missing));
+        return (registration, input);
     }
 
     /// <summary>
@@ -672,10 +673,10 @@ public class TrainExecutionService(
     /// Exceptions are intentionally not caught: a failed <c>OnQueue</c> aborts the enqueue.
     /// </summary>
     /// <remarks>
-    /// The hook is invoked via reflection rather than a marker interface on purpose: a non-generic
-    /// interface on <c>ServiceTrain&lt;,&gt;</c> would collide with the canonical-interface
-    /// selection in train discovery (it picks the first non-generic interface), so every train
-    /// could register under the marker instead of its own interface.
+    /// The hook is invoked via reflection, not through a marker interface. Registration would not
+    /// mistake a marker for the train's service type, since it selects the interface that derives
+    /// from <c>IServiceTrain&lt;,&gt;</c>, but reflection finds only trains that override the
+    /// hook, so a train without one is never resolved for it.
     /// </remarks>
     private static async Task InvokeQueueHookAsync(
         TrainRegistration registration,
@@ -722,9 +723,11 @@ public class TrainExecutionService(
     /// connection (mediator/0004).
     /// </summary>
     /// <remarks>
-    /// A hook still running after that has lost its enqueue: an enqueue it starts is refused
-    /// rather than committing on its own, because the caller was told this one failed. Whatever it
-    /// later throws is logged, since nobody is left to observe it.
+    /// The enqueue also stops waiting when the caller cancels, and the hook may still be running
+    /// then too. Either way, a hook still running after its enqueue stopped waiting has lost that
+    /// enqueue: an enqueue it starts is refused rather than committing on its own, because the
+    /// caller was told this one failed. Whatever it later throws is logged, since nobody is left
+    /// to observe it.
     /// </remarks>
     private async Task InvokeQueueHookWithinLimitAsync(
         TrainRegistration registration,
@@ -767,22 +770,52 @@ public class TrainExecutionService(
                 limit
             );
 
-            if (!hook.IsCompleted)
-                _ = hook.ContinueWith(
-                    abandoned =>
-                        logger?.LogWarning(
-                            abandoned.Exception,
-                            "{Train}.OnQueue threw after its enqueue had already failed on "
-                                + "MaxQueueHookDuration.",
-                            trainName
-                        ),
-                    CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted,
-                    TaskScheduler.Default
-                );
+            LogWhenAbandonedHookFaults(hook, trainName, logger, "failed on MaxQueueHookDuration");
 
             throw new QueueHookTimeoutException(trainName, limit);
         }
+        catch (OperationCanceledException) when (!hook.IsCompleted)
+        {
+            // The caller cancelled, and the hook has not stopped. The caller is told the enqueue
+            // failed and the transaction rolls back, so the hook has nothing left to join: an
+            // enqueue it starts from here on is refused, the same as after the limit.
+            joinable?.Abandon();
+
+            var trainName = registration.ServiceType.FullName ?? registration.ServiceTypeName;
+            var logger = serviceProvider.GetService<ILogger<TrainExecutionService>>();
+
+            LogWhenAbandonedHookFaults(hook, trainName, logger, "been cancelled by its caller");
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Logs what a hook throws after its enqueue stopped waiting for it, since nothing else
+    /// observes that task any more.
+    /// </summary>
+    private static void LogWhenAbandonedHookFaults(
+        Task hook,
+        string trainName,
+        ILogger? logger,
+        string outcome
+    )
+    {
+        if (hook.IsCompleted)
+            return;
+
+        _ = hook.ContinueWith(
+            abandoned =>
+                logger?.LogWarning(
+                    abandoned.Exception,
+                    "{Train}.OnQueue threw after its enqueue had already {Outcome}.",
+                    trainName,
+                    outcome
+                ),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default
+        );
     }
 
     /// <summary>
@@ -848,114 +881,6 @@ public class TrainExecutionService(
 
         throw new TrainNotFoundException(trainName);
     }
-
-    private void EnforceInputSizeCap(string inputJson, TrainRegistration registration)
-    {
-        // Enforced post-authorization so unauthenticated callers can't map the cap,
-        // and pre-deserialization so oversized JSON never reaches the deserializer.
-        // Byte length (UTF-8) is the bounded resource — char length would miscount
-        // surrogate pairs and multi-byte sequences.
-        var byteCount = System.Text.Encoding.UTF8.GetByteCount(inputJson);
-        if (byteCount > mediatorConfiguration.MaxInputJsonBytes)
-            throw new TrainInputValidationException(
-                registration.ServiceTypeName,
-                byteCount,
-                mediatorConfiguration.MaxInputJsonBytes
-            );
-    }
-
-    /// <summary>What a missing input is read as.</summary>
-    private const string EmptyInput = "{}";
-
-    private static object DeserializeInput(
-        string inputJson,
-        TrainRegistration registration,
-        bool missing
-    )
-    {
-        object? input;
-
-        if (missing)
-        {
-            // A missing input stands in for an input with no values, which is only honest for a
-            // type that needs none. System.Text.Json builds a positional record from {} with every
-            // constructor parameter at its default, so without this a train taking
-            // record RenamePlayer(string Id, string NewName) would be queued with a null Id.
-            // Respecting required constructor parameters refuses exactly that, and leaves Unit,
-            // an input with only settable properties, and parameters with defaults unaffected.
-            try
-            {
-                input = JsonSerializer.Deserialize(
-                    inputJson,
-                    registration.InputType,
-                    InputOptions().Missing
-                );
-            }
-            catch (JsonException refused)
-            {
-                throw new JsonException(
-                    $"No input was given, and {registration.InputTypeName} cannot be built "
-                        + $"without one: {refused.Message}",
-                    refused
-                );
-            }
-        }
-        else
-        {
-            input = JsonSerializer.Deserialize(
-                inputJson,
-                registration.InputType,
-                InputOptions().Given
-            );
-        }
-
-        // A JSON null is well-formed but is not an input, so it is reported the way any other
-        // input the train cannot use is: as a JSON problem the caller can fix.
-        if (input is null)
-            throw new JsonException(
-                $"InputJson deserialized to null. Expected an instance of {registration.InputTypeName}."
-            );
-
-        return input;
-    }
-
-    private static CallerInputOptions? _inputOptions;
-
-    /// <summary>
-    /// How a caller's input is read: the system options, with property names matched whatever
-    /// their case and a property given twice (in any casing) refused, so the API and the
-    /// dashboard accept the same JSON and ambiguous input is never resolved silently to its last
-    /// value (Trax.Docs/adr/0023). The missing-input reading also respects required constructor
-    /// parameters. Rebuilt only if the system options object itself is replaced.
-    /// </summary>
-    private static CallerInputOptions InputOptions()
-    {
-        var source = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
-        var cached = _inputOptions;
-
-        if (cached is not null && ReferenceEquals(cached.Source, source))
-            return cached;
-
-        var given = new JsonSerializerOptions(source)
-        {
-            PropertyNameCaseInsensitive = true,
-            AllowDuplicateProperties = false,
-        };
-        var missing = new JsonSerializerOptions(given)
-        {
-            RespectRequiredConstructorParameters = true,
-        };
-
-        var built = new CallerInputOptions(source, given, missing);
-        _inputOptions = built;
-        return built;
-    }
-
-    private sealed record CallerInputOptions(
-        JsonSerializerOptions Source,
-        JsonSerializerOptions Given,
-        JsonSerializerOptions Missing
-    );
 
     /// <summary>
     /// The train one enqueue reads its subject key, its deferral flag and its hook from: resolved
@@ -1071,9 +996,10 @@ public class TrainExecutionService(
                 if (_abandoned)
                     throw new InvalidOperationException(
                         "This enqueue was started from an OnQueue hook whose own enqueue already "
-                            + "failed on MaxQueueHookDuration and was rolled back, so there is "
-                            + "nothing for it to join, and committing on its own would queue work "
-                            + "for a mutation the caller was told failed."
+                            + "failed while the hook was still running (it ran past "
+                            + "MaxQueueHookDuration, or its caller cancelled) and was rolled back, "
+                            + "so there is nothing for it to join, and committing on its own would "
+                            + "queue work for a mutation the caller was told failed."
                     );
 
                 if (_closed)
@@ -1112,8 +1038,9 @@ public class TrainExecutionService(
         }
 
         /// <summary>
-        /// Ends joining for good: the outer hook ran past its limit and the enqueue failed while
-        /// it was still running, so anything it enqueues from now on is refused.
+        /// Ends joining for good: the enqueue stopped waiting for the outer hook while it was
+        /// still running (the hook ran past its limit, or the caller cancelled), so anything it
+        /// enqueues from now on is refused.
         /// </summary>
         public void Abandon()
         {

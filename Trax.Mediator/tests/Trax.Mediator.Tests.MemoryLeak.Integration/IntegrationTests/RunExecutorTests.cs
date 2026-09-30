@@ -76,7 +76,7 @@ public class RunExecutorTests
         var input = new RunExecInput { Name = "test-player" };
 
         var result = await executor.ExecuteAsync(
-            typeof(RunExecTrain).FullName!,
+            typeof(IRunExecTrain).FullName!,
             input,
             typeof(RunExecOutput)
         );
@@ -98,7 +98,7 @@ public class RunExecutorTests
         var input = new RunUnitInput { Id = "abc" };
 
         var result = await executor.ExecuteAsync(
-            typeof(RunUnitTrain).FullName!,
+            typeof(IRunUnitTrain).FullName!,
             input,
             typeof(Unit)
         );
@@ -114,13 +114,13 @@ public class RunExecutorTests
         var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
 
         var result1 = await executor.ExecuteAsync(
-            typeof(RunExecTrain).FullName!,
+            typeof(IRunExecTrain).FullName!,
             new RunExecInput { Name = "a" },
             typeof(RunExecOutput)
         );
 
         var result2 = await executor.ExecuteAsync(
-            typeof(RunExecTrain).FullName!,
+            typeof(IRunExecTrain).FullName!,
             new RunExecInput { Name = "b" },
             typeof(RunExecOutput)
         );
@@ -244,7 +244,7 @@ public class RunExecutorTests
 
         var act = async () =>
             await executor.ExecuteAsync(
-                typeof(SlowRunTrain).FullName!,
+                typeof(ISlowRunTrain).FullName!,
                 new SlowRunInput(),
                 typeof(Unit),
                 cts.Token

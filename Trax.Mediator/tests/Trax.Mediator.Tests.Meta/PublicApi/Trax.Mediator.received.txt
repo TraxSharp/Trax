@@ -72,6 +72,23 @@ namespace Trax.Mediator.Exceptions
 }
 namespace Trax.Mediator.Extensions
 {
+    public static class BuilderOrderExtensions
+    {
+        [System.Obsolete("Call AddEffects(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
+        [System.Obsolete("Call AddEffects(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, params System.Reflection.Assembly[] assemblies) { }
+        [System.Obsolete("AddMediator(...) is already called. Call it once and configure everything in that" +
+            " call.", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
+        [System.Obsolete("AddMediator(...) is already called. Call it once and configure everything in that" +
+            " call.", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, params System.Reflection.Assembly[] assemblies) { }
+        [System.Obsolete("Call AddStateMachines(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddStateMachines(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, params System.Reflection.Assembly[] assemblies) { }
+        [System.Obsolete("Call AddStateMachines(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddStateMachines(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, System.Action<dynamic> configure, params System.Reflection.Assembly[] assemblies) { }
+    }
     public static class ServiceExtensions
     {
         public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
@@ -127,6 +144,8 @@ namespace Trax.Mediator.Services.TrainBus
         System.Threading.Tasks.Task RunAsync(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
         System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null);
         System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task RunByNameAsync(string trainName, object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task<TOut> RunByNameAsync<TOut>(string trainName, object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
     }
 }
 namespace Trax.Mediator.Services.TrainDiscovery
@@ -201,6 +220,11 @@ namespace Trax.Mediator.Services.TrainExecution
         public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.PreparedTrain> PrepareAsync(string trainName, string? inputJson, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string? inputJson, int priority = 0, System.DateTime? scheduledAt = default, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunAsync(string trainName, string inputJson, System.Threading.CancellationToken ct = default) { }
+    }
+    public static class TrainInputReader
+    {
+        public const int StoredInputGrowthFactor = 4;
+        public static object Read(string? inputJson, Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, int maxInputJsonBytes) { }
     }
 }
 namespace Trax.Mediator.Services.TrainRegistry
