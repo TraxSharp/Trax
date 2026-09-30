@@ -1,219 +1,125 @@
 # Trax.Mediator
 
-[![Build](https://github.com/TraxSharp/Trax.Mediator/actions/workflows/nuget_release.yml/badge.svg)](https://github.com/TraxSharp/Trax.Mediator/actions/workflows/nuget_release.yml)
-[![NuGet Version](https://img.shields.io/nuget/v/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
-[![NuGet Downloads](https://img.shields.io/nuget/dt/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator/)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Mediator/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Mediator)](https://github.com/TraxSharp/Trax.Mediator/commits/main)
+[![Build](https://github.com/TraxSharp/Trax.Mediator/actions/workflows/nuget_release.yml/badge.svg?branch=main)](https://github.com/TraxSharp/Trax.Mediator/actions/workflows/nuget_release.yml?query=branch%3Amain)
+[![NuGet](https://img.shields.io/nuget/v/Trax.Mediator)](https://www.nuget.org/packages/Trax.Mediator)
 [![codecov](https://codecov.io/gh/TraxSharp/Trax.Mediator/branch/main/graph/badge.svg)](https://codecov.io/gh/TraxSharp/Trax.Mediator)
-[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Mediator/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/mediator)
 
-Dispatch station for [Trax](https://www.nuget.org/packages/Trax.Effect/) trains. Hand it the cargo and it routes it to the right train, no need to know which train handles what.
+> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
-Trax is a .NET framework for writing business operations as trains: a `ServiceTrain<TIn, TOut>` runs a chain of junctions, and every run is recorded. Trax.Mediator adds the `ITrainBus`, which finds the train registered for an input's type and runs it, so callers depend on the input type rather than on a train class. It also scans assemblies to register trains, keeps the registry of known trains, enforces `[TraxAuthorize]` on trains, and caps concurrent runs.
+Trax.Mediator is the train bus for Trax: run a train by its input type, with every chain checked at host startup. It
+builds on [Trax.Effect](https://github.com/TraxSharp/Trax.Effect), and Trax.Scheduler and Trax.Api run their trains
+through it.
 
-```bash
-dotnet add package Trax.Mediator
-dotnet add package Trax.Effect.Data.InMemory   # or Trax.Effect.Data.Postgres
-```
-
-A minimal host: one train, registered by scanning, run through the bus.
-
-```csharp
-using LanguageExt;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Trax.Core.Junction;
-using Trax.Effect.Data.InMemory.Extensions;
-using Trax.Effect.Extensions;
-using Trax.Effect.Services.ServiceTrain;
-using Trax.Mediator.Extensions;
-using Trax.Mediator.Services.TrainBus;
-
-var builder = Host.CreateApplicationBuilder(args);
-
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UseInMemory())
-        .AddMediator(mediator => mediator.ScanAssemblies(typeof(Program).Assembly))
-);
-
-using var host = builder.Build();
-await host.StartAsync(); // startup checks every train's chain and refuses to start on a bad one
-
-using var scope = host.Services.CreateScope();
-var trainBus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
-
-var greeting = await trainBus.RunAsync<Greeting>(new GreetRequest("Jane"));
-Console.WriteLine(greeting.Message); // Hello, Jane!
-
-public record GreetRequest(string Name);
-public record Greeting(string Message);
-
-// Every train needs its own interface; the bus resolves the train through it.
-public interface IGreetTrain : IServiceTrain<GreetRequest, Greeting>;
-
-public class GreetTrain : ServiceTrain<GreetRequest, Greeting>, IGreetTrain
-{
-    protected override Task<Either<Exception, Greeting>> Junctions() =>
-        Chain<BuildGreetingJunction>().Resolve();
-}
-
-public class BuildGreetingJunction : Junction<GreetRequest, Greeting>
-{
-    public override Task<Greeting> Run(GreetRequest input) =>
-        Task.FromResult(new Greeting($"Hello, {input.Name}!"));
-}
-```
-
-`ITrainBus` is scoped, so resolve it from a scope (in ASP.NET Core, inject it into a controller or endpoint). The documentation is at [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## The Trax Stack
-
-Trax is a layered framework split across several repos. You can stop at whatever layer solves your problem. **You are here: Trax.Mediator.**
-
-| Repo | Adds |
-|------|------|
-| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Pipelines, junctions, railway error propagation |
-| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | Execution logging, DI, pluggable storage |
-| **[Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator)** | Decoupled dispatch via `TrainBus` |
-| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron schedules, retries, dead-letter queues |
-| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL API for remote access |
-| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | Blazor monitoring UI |
-| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | `trax-cli` project scaffolding tool |
-| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Sample apps and a `dotnet new` template |
-
-Full documentation: [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## The Problem
-
-When one part of your system needs to send a train, it has to know exactly which train class to use. Controllers depend on concrete train types, stops that trigger other trains need direct references, and everything gets coupled together.
-
-## With TrainBus
-
-`TrainBus` is a dispatch station. At startup it builds a map of what cargo goes on which train. To send something, you just drop off the cargo:
-
-```csharp
-public class OrderController(ITrainBus trainBus) : ControllerBase
-{
-    [HttpPost]
-    public async Task<IActionResult> Create(OrderRequest request)
-    {
-        var receipt = await trainBus.RunAsync<OrderReceipt>(request);
-        return Ok(receipt);
-    }
-}
-```
-
-No reference to `ProcessOrderTrain`. The dispatch station looks at the cargo type and sends it on the right train.
-
-## Installation
+## Install
 
 ```bash
 dotnet add package Trax.Mediator
+dotnet add package Trax.Effect.Data.Postgres    # or Trax.Effect.Data.Sqlite, Trax.Effect.Data.InMemory
+dotnet add package Trax.Mediator.Testing        # optional, architecture guards for your test project
 ```
 
-Trax.Mediator depends on [Trax.Effect](https://www.nuget.org/packages/Trax.Effect/), which depends on [Trax.Core](https://www.nuget.org/packages/Trax.Core/). Both are pulled in transitively.
+Trax.Effect and Trax.Core come in transitively. The storage package is where each run's record is written.
 
-For tests, `Trax.Mediator.Testing` ships `TrainGuards.EveryTrainHasInterface(assemblies)`, an architecture guard that lists every `ServiceTrain` missing its `I{Name}` interface:
+## Example
 
-```bash
-dotnet add package Trax.Mediator.Testing
-```
-
-## Setup
-
-Register your train assemblies during startup. The dispatch station scans them for all `IServiceTrain<TIn, TOut>` implementations and builds the cargo-to-train map automatically:
+Adapted from the game server sample. Register the assembly that holds your trains, then hand an input to `ITrainBus`:
 
 ```csharp
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(connectionString))
-        .AddMediator(typeof(Program).Assembly)
-);
-```
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(RecalculateLeaderboardTrain).Assembly));
 
-Multiple assemblies:
-
-```csharp
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UsePostgres(connectionString))
-        .AddMediator(
-            typeof(Program).Assembly,
-            typeof(SomeTrainInAnotherProject).Assembly
-        )
-);
-```
-
-That's it. Every `IServiceTrain<TIn, TOut>` in those assemblies is now dispatchable through `ITrainBus`.
-
-## Usage
-
-### Dispatching a train
-
-```csharp
-// With a return value: send cargo, get a delivery back
-var user = await trainBus.RunAsync<User>(new CreateUserRequest
+public class LeaderboardController(ITrainBus trains) : ControllerBase
 {
-    Email = "jane@example.com",
-    Name = "Jane"
-});
-
-// One-way: send cargo, no delivery expected
-await trainBus.RunAsync(new SendNotificationRequest { UserId = userId });
-```
-
-### Cancellation
-
-```csharp
-var receipt = await trainBus.RunAsync<OrderReceipt>(request, cancellationToken);
-```
-
-The cancellation signal is forwarded to the train and all its stops.
-
-### Nested trains
-
-A stop can dispatch another train mid-journey. The nested train records its own run, which is not linked to the outer one: the bus does not set its `ParentId`. Do not pass the current train's `Metadata` to try to link them; the `metadata` argument is for running as a pre-created `Pending` record, and a running train's metadata is refused with a `TrainException`.
-
-```csharp
-public class SendWelcomeEmailJunction(ITrainBus trainBus) : Junction<User, Unit>
-{
-    public override async Task<Unit> Run(User input)
-    {
-        await trainBus.RunAsync(new SendEmailRequest
-        {
-            To = input.Email,
-            Template = "welcome"
-        });
-
-        return Unit.Default;
-    }
+    [HttpPost("leaderboard/{region}/recalculate")]
+    public Task<RecalculateLeaderboardOutput> Recalculate(string region) =>
+        trains.RunAsync<RecalculateLeaderboardOutput>(
+            new RecalculateLeaderboardInput { Region = region });
 }
 ```
 
-### The departure board
+The controller never names `RecalculateLeaderboardTrain`. The bus looks up the train registered for
+`RecalculateLeaderboardInput`, resolves it through its `IRecalculateLeaderboardTrain` interface, runs it in the current
+request and returns its output. The run gets a row in `trax.metadata` like any other. `ITrainBus` is scoped, so inject it
+into a controller or resolve it from a scope.
 
-The dispatch station exposes a registry of all known trains, which is useful for tooling and dashboards:
+## Dispatch by input type
 
-```csharp
-public class TrainListEndpoint(ITrainRegistry registry)
-{
-    public IEnumerable<string> GetTrainNames()
-        => registry.InputTypeToTrain.Values.Select(t => t.Name);
-}
-```
+`AddMediator` scans the assemblies you pass for every `IServiceTrain<TIn, TOut>` and maps each input type to its train.
+Each train needs its own interface (`IRecalculateLeaderboardTrain`), which is the name it is registered and recorded
+under. When two trains take the same input type, `RunAsync` reaches only the first one registered. Run the other with
+`RunByNameAsync`, which takes the interface's full name and runs exactly that train.
 
-## How It Works
+A junction can call `ITrainBus` to run another train. The inner run gets its own record; the bus does not link it to the
+outer run.
 
-At startup, `AddMediator` scans the provided assemblies for types implementing `IServiceTrain<TIn, TOut>`. It builds a dictionary from cargo type (input) to train type and registers each train in the DI container. When you call `RunAsync<TOut>(input)`, the dispatch station looks up `input.GetType()`, resolves the matching train from DI, and sends it on its way.
+## Checked at startup
 
-## Next Layer
+Before any hosted service starts, the host reads every registered train's chain and refuses to start if one cannot run:
+a junction whose input no earlier junction (or the train's input) provides, or a junction Trax cannot construct. Every
+train is checked first, so one failed start lists all of them. `AddMediator(m => m.SkipChainVerification())` turns the
+check off.
 
-When you need recurring background jobs with retries and dead-lettering, move up to [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler).
+The host also refuses to start when a train carries `[TraxAuthorize]` and no `ITrainAuthorizationService` is registered.
+
+## Authorization and concurrency limits
+
+The bus is an in-process call and checks no authorization. `ITrainExecutionService` is the path for outside callers,
+and the one Trax.Api uses: it runs or queues a train by name from JSON input, and checks the caller against the train's
+`[TraxAuthorize]` before reading the input. Its runs are also where concurrency limits apply:
+
+| Limit | Set with |
+|---|---|
+| All trains together | `GlobalConcurrentRunLimit(n)` |
+| One train | `ConcurrentRunLimit<TTrain>(n)`, or `[TraxConcurrencyLimit(n)]` on the train |
+| One authenticated caller | `PerPrincipalMaxConcurrentRun(n)` |
+
+A run that hits a limit waits for a slot. Queued work is not gated here.
+
+## Packages
+
+| Package | What it adds |
+|---|---|
+| [Trax.Mediator](https://www.nuget.org/packages/Trax.Mediator) | The train bus, train discovery and registry, the startup chain check, `[TraxAuthorize]` enforcement and concurrency limits |
+| [Trax.Mediator.Testing](https://www.nuget.org/packages/Trax.Mediator.Testing) | `TrainGuards.EveryTrainHasInterface`, an architecture guard that lists every train missing its interface |
+
+## Where this fits
+
+Trax is split into layers, one repo each. Take the ones you need; the trains you wrote do not change. **You are here: Trax.Mediator.**
+
+| Repo | What it adds |
+|---|---|
+| [Trax.Core](https://github.com/TraxSharp/Trax.Core) | Trains, junctions and the chain, with no database and no DI container |
+| [Trax.Effect](https://github.com/TraxSharp/Trax.Effect) | A recorded run for every execution (Postgres, SQLite or in memory), DI, effect providers, the state-machine engine |
+| **[Trax.Mediator](https://github.com/TraxSharp/Trax.Mediator)** | **The train bus: run a train by handing over its input, with every chain checked at startup** |
+| [Trax.Scheduler](https://github.com/TraxSharp/Trax.Scheduler) | Cron and interval schedules, retries, dead letters, and workers on other machines or in Lambda |
+| [Trax.Api](https://github.com/TraxSharp/Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients |
+| [Trax.Dashboard](https://github.com/TraxSharp/Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
+| [Trax.Cli](https://github.com/TraxSharp/Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
+| [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
+
+Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
+
+## Documentation
+
+- [Mediator overview](https://traxsharp.net/docs/mediator)
+- [Train discovery](https://traxsharp.net/docs/mediator/train-discovery)
+- [ITrainBus reference](https://traxsharp.net/docs/sdk-reference/mediator-api/train-bus)
+- [Train execution service](https://traxsharp.net/docs/sdk-reference/mediator-api/train-execution)
+- [Concurrency limiting](https://traxsharp.net/docs/sdk-reference/mediator-api/concurrency-limiting)
+- [Registration order](https://traxsharp.net/docs/reference/registration-order)
+
+## Contributing
+
+Read [AGENTS.md](https://github.com/TraxSharp/Trax.Mediator/blob/main/AGENTS.md) before changing code. Report vulnerabilities
+privately as described in [SECURITY.md](https://github.com/TraxSharp/Trax.Mediator/blob/main/SECURITY.md).
 
 ## License
 
-MIT
+MIT. There is no commercial edition, and there will not be one.
 
-## Trademark & Brand Notice
-
-Trax is an open-source .NET framework provided by TraxSharp. This project is an independent community effort and is not affiliated with, sponsored by, or endorsed by the Utah Transit Authority, Trax Retail, or any other entity using the "Trax" name in other industries.
+Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+other organization using the Trax name.
