@@ -186,10 +186,16 @@ public partial class Monad<TInput, TReturn>
                 var serviceType = typeArray[i];
 
                 if (services[i] is null)
-                    Recorder.Refuse(NullServiceMessage(i, typeArray, whileRecording: true));
+                    Recorder.RefuseStep(
+                        ChainStepKind.Seed,
+                        null,
+                        NullServiceMessage(i, typeArray, whileRecording: true)
+                    );
                 else if (services[i]!.GetType().IsValueType)
                     // A struct passed as an interface is boxed, and the runtime refuses it.
-                    Recorder.Refuse(
+                    Recorder.RefuseStep(
+                        ChainStepKind.Seed,
+                        null,
                         $"AddServices<{serviceType.Name}> received a value of the struct type "
                             + $"{services[i]!.GetType().Name}; a service must be a class."
                     );
@@ -197,7 +203,9 @@ public partial class Monad<TInput, TReturn>
                 // A value is stored under an interface it implements; the runtime refuses a
                 // class on every run.
                 if (!serviceType.IsInterface)
-                    Recorder.Refuse(
+                    Recorder.RefuseStep(
+                        ChainStepKind.Seed,
+                        null,
                         $"AddServices<{serviceType.Name}> names a class; a service is stored "
                             + "under an interface it implements. Pass it as that interface."
                     );
@@ -208,14 +216,13 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
-        // Checked before anything is stored, so a failed call leaves Memory as it found it.
+        // Every service is checked before any is stored, so a failed call leaves Memory as it
+        // found it.
         for (var i = 0; i < typeArray.Length; i++)
         {
-            if (services[i] is null)
+            if (ServiceProblem(services[i], typeArray, i) is { } problem)
             {
-                Exception ??= new TrainException(
-                    NullServiceMessage(i, typeArray, whileRecording: false)
-                );
+                Exception ??= new TrainException(problem);
                 return this;
             }
         }
@@ -226,40 +233,45 @@ public partial class Monad<TInput, TReturn>
         for (var i = 0; i < typeArray.Length; i++)
         {
             var service = services[i]!;
-            var slot = typeArray[i];
-            var serviceType = service.GetType();
 
-            // Special handling for Moq mock objects
-            if (serviceType.IsMoqProxy())
+            // A Moq mock goes under the type it mocks.
+            if (service.GetType().IsMoqProxy())
             {
-                var mockedType = service.GetMockedTypeFromObject();
-                if (mockedType is not null)
+                if (service.GetMockedTypeFromObject() is { } mockedType)
                     Memory[mockedType] = service;
+
                 continue;
             }
 
-            // Services must be classes
-            if (!serviceType.IsClass)
-            {
-                Exception ??= new TrainException(
-                    $"Params ({serviceType}) to AddServices must be Classes."
-                );
-                return this;
-            }
-
-            if (!slot.IsInterface || !slot.IsInstanceOfType(service))
-            {
-                Exception ??= new TrainException(
-                    $"Class ({serviceType}) passed to AddServices as ({slot}) must be passed as an "
-                        + "interface it implements."
-                );
-                return this;
-            }
-
-            Memory[slot] = service;
+            Memory[typeArray[i]] = service;
         }
 
         return this;
+    }
+
+    /// <summary>
+    /// Why the service at <paramref name="position"/> cannot be stored, or null when it can.
+    /// </summary>
+    private static string? ServiceProblem(object? service, Type[] typeArray, int position)
+    {
+        if (service is null)
+            return NullServiceMessage(position, typeArray, whileRecording: false);
+
+        var serviceType = service.GetType();
+
+        if (serviceType.IsMoqProxy())
+            return null;
+
+        if (!serviceType.IsClass)
+            return $"Params ({serviceType}) to AddServices must be Classes.";
+
+        var slot = typeArray[position];
+
+        if (!slot.IsInterface || !slot.IsInstanceOfType(service))
+            return $"Class ({serviceType}) passed to AddServices as ({slot}) must be passed as an "
+                + "interface it implements.";
+
+        return null;
     }
 
     private static string NullServiceMessage(int position, Type[] typeArray, bool whileRecording)

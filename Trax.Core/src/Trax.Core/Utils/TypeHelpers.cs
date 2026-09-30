@@ -12,10 +12,24 @@ internal static class TypeHelpers
     /// The name a developer would write for <paramref name="type"/> in C#, such as
     /// <c>List&lt;String&gt;</c> rather than <c>List`1</c>, for messages that name a type.
     /// </summary>
-    internal static string ReadableName(this Type type)
+    /// <remarks>
+    /// A type nested in a generic type carries the outer type's arguments ahead of its own, so
+    /// <c>Outer&lt;T&gt;.Inner</c> is written with its outer type, which owns <c>T</c>. Any other
+    /// nested type is written by its own name.
+    /// </remarks>
+    internal static string ReadableName(this Type type) =>
+        ReadableName(type, type.IsGenericType ? type.GetGenericArguments() : []);
+
+    private static string ReadableName(Type type, Type[] arguments)
     {
-        if (!type.IsGenericType)
-            return type.Name;
+        var prefix = "";
+        var inherited = 0;
+
+        if (type.IsNested && type.DeclaringType is { IsGenericType: true } outer)
+        {
+            inherited = Math.Min(outer.GetGenericArguments().Length, arguments.Length);
+            prefix = ReadableName(outer, arguments[..inherited]) + ".";
+        }
 
         var name = type.Name;
         var tick = name.IndexOf('`');
@@ -23,7 +37,11 @@ internal static class TypeHelpers
         if (tick >= 0)
             name = name[..tick];
 
-        return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(ReadableName))}>";
+        var own = arguments[inherited..];
+
+        return own.Length == 0
+            ? prefix + name
+            : $"{prefix}{name}<{string.Join(", ", own.Select(ReadableName))}>";
     }
 
     /// <summary>

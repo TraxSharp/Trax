@@ -67,7 +67,7 @@ internal static class MonadExtensions
         // from an earlier junction or from the container.
         var constructorParameters = monad.ExtractTypesFromMemory(
             constructorArguments,
-            missing => MissingConstructorArgumentMessage(junctionType, missing, monad.Train)
+            missing => NeedsConstructorArgument(junctionType, missing, monad.Train)
         );
 
         if (monad.Exception is not null)
@@ -109,13 +109,13 @@ internal static class MonadExtensions
     public static dynamic?[] ExtractTypesFromMemory<TInput, TReturn>(
         this Monad<TInput, TReturn> monad,
         IEnumerable<Type> types,
-        Func<Type, string>? missingMessage = null
+        Func<Type, string>? need = null
     )
     {
         var typeArray = types as Type[] ?? types.ToArray();
         var result = new dynamic?[typeArray.Length];
         for (var i = 0; i < typeArray.Length; i++)
-            result[i] = monad.ExtractTypeFromMemory(typeArray[i], missingMessage);
+            result[i] = monad.ExtractTypeFromMemory(typeArray[i], need);
         return result;
     }
 
@@ -124,16 +124,17 @@ internal static class MonadExtensions
     /// </summary>
     public static T? ExtractTypeFromMemory<T, TInput, TReturn>(
         this Monad<TInput, TReturn> monad,
-        Func<Type, string>? missingMessage = null
+        Func<Type, string>? need = null
     )
     {
-        var type = monad.ExtractTypeFromMemory(typeof(T), missingMessage);
+        var type = monad.ExtractTypeFromMemory(typeof(T), need);
 
         return type is null ? default : (T)type;
     }
 
     /// <summary>
-    /// Extracts a logger from a logger factory.
+    /// Extracts a logger from a logger factory, or null when <paramref name="tIn"/> is not an
+    /// <c>ILogger&lt;T&gt;</c> or Memory holds no factory to make one.
     /// </summary>
     internal static dynamic? ExtractLoggerFromLoggerFactory<TInput, TReturn>(
         this Monad<TInput, TReturn> monad,
@@ -143,13 +144,12 @@ internal static class MonadExtensions
         if (tIn.IsGenericType == false || tIn.GetGenericTypeDefinition() != typeof(ILogger<>))
             return null;
 
+        // Without a factory the caller reports the logger as missing, saying who needed it.
         if (
             monad.Memory.GetValueOrDefault(typeof(ILoggerFactory))
             is not ILoggerFactory loggerFactory
         )
-            throw new TrainException(
-                $"Could not find ILoggerFactory for input type: ({tIn}). Have you injected an ILoggerFactory into the Monad's services?"
-            );
+            return null;
 
         var generics = tIn.GetGenericArguments();
 
@@ -179,27 +179,40 @@ internal static class MonadExtensions
 
     /// <summary>
     /// Extracts a value from Memory by its type, falling back to the container and then to the
-    /// logger factory. When nothing supplies it, the chain fails with
-    /// <paramref name="missingMessage"/>'s text, which should say who needed the value.
+    /// logger factory. When nothing supplies it, the chain fails with a message that opens with
+    /// <paramref name="need"/>'s text, which should say who needed the value and as what, and goes
+    /// on to say where it was looked for.
     /// </summary>
     public static dynamic? ExtractTypeFromMemory<TInput, TReturn>(
         this Monad<TInput, TReturn> monad,
         Type tIn,
-        Func<Type, string>? missingMessage = null
+        Func<Type, string>? need = null
     )
     {
         try
         {
-            var input = tIn.IsTuple()
-                ? monad.ExtractTuple(tIn)
-                : monad.Memory.GetValueOrDefault(tIn)
-                    ?? monad.ExtractTypeFromServiceProvider(tIn)
-                    ?? monad.ExtractLoggerFromLoggerFactory(tIn);
+            if (tIn.IsTuple())
+            {
+                // A tuple is assembled from Memory alone, so an element missing from Memory is
+                // missing, whatever the container holds.
+                var absent = tIn.GetGenericArguments()
+                    .FirstOrDefault(element => monad.Memory.GetValueOrDefault(element) is null);
+
+                if (absent is not null)
+                    throw new TrainException(
+                        MissingValueMessage(monad, tIn, need, missingTupleElement: absent)
+                    );
+
+                return monad.ExtractTuple(tIn);
+            }
+
+            var input =
+                monad.Memory.GetValueOrDefault(tIn)
+                ?? monad.ExtractTypeFromServiceProvider(tIn)
+                ?? monad.ExtractLoggerFromLoggerFactory(tIn);
 
             if (input is null)
-                throw new TrainException(
-                    missingMessage?.Invoke(tIn) ?? MissingValueMessage(tIn, monad.Train)
-                );
+                throw new TrainException(MissingValueMessage(monad, tIn, need));
 
             return input;
         }
@@ -208,6 +221,56 @@ internal static class MonadExtensions
             monad.Exception ??= e;
             return null;
         }
+    }
+
+    /// <summary>
+    /// Says who needed <paramref name="missing"/>, then where it was looked for and how to supply
+    /// it. Where it was looked for depends on the run: a train with no container has only Memory,
+    /// so telling its author to register the type would send them after the wrong fix.
+    /// </summary>
+    private static string MissingValueMessage<TInput, TReturn>(
+        Monad<TInput, TReturn> monad,
+        Type missing,
+        Func<Type, string>? need,
+        Type? missingTupleElement = null
+    )
+    {
+        var who =
+            need?.Invoke(missing)
+            ?? $"Train '{monad.Train.GetType().ReadableName()}' needs '{missing.ReadableName()}'";
+
+        if (missingTupleElement is not null)
+            return $"{who}, but nothing earlier in the chain produced "
+                + $"'{missingTupleElement.ReadableName()}'. A tuple is assembled from Memory only, "
+                + "never from the container, so chain a junction that outputs "
+                + $"'{missingTupleElement.ReadableName()}' first.";
+
+        var hasContainer = monad.Memory.ContainsKey(typeof(IServiceProvider));
+
+        if (missing.IsGenericType && missing.GetGenericTypeDefinition() == typeof(ILogger<>))
+            return hasContainer
+                ? $"{who}, but nothing earlier in the chain produced one, the container does not "
+                    + "register it, and no ILoggerFactory was passed to AddServices to create one. "
+                    + "Register logging in the container, or pass an ILoggerFactory with "
+                    + "AddServices."
+                : $"{who}, but nothing earlier in the chain produced one, the train has no "
+                    + "container to fall back on, and no ILoggerFactory was passed to AddServices "
+                    + "to create one. Pass an ILoggerFactory with AddServices.";
+
+        // AddServices stores a service under an interface, so it is a fix only for one.
+        if (hasContainer)
+            return $"{who}, but nothing earlier in the chain produced one and it is not registered "
+                + "in the container. "
+                + (
+                    missing.IsInterface
+                        ? "Register it, pass one with AddServices, or chain a junction that "
+                            + "outputs it first."
+                        : "Register it or chain a junction that outputs it first."
+                );
+
+        return $"{who}, but nothing earlier in the chain produced one, and the train has no "
+            + "container to fall back on. Chain a junction that outputs it first"
+            + (missing.IsInterface ? ", or pass one with AddServices." : ".");
     }
 
     /// <summary>
@@ -237,32 +300,21 @@ internal static class MonadExtensions
             + "Trax builds a junction through its single public constructor. Give it exactly one.";
     }
 
-    internal static string MissingConstructorArgumentMessage<TInput, TReturn>(
+    internal static string NeedsConstructorArgument<TInput, TReturn>(
         Type junctionType,
         Type missing,
         Train.Train<TInput, TReturn> train
     ) =>
         $"Junction '{junctionType.ReadableName()}' (train '{train.GetType().ReadableName()}') "
-        + $"needs '{missing.ReadableName()}' as a constructor argument, but nothing earlier in "
-        + "the chain produced one and it is not registered in the container. Register it or "
-        + "chain a junction that outputs it first.";
+        + $"needs '{missing.ReadableName()}' as a constructor argument";
 
-    internal static string MissingJunctionInputMessage<TInput, TReturn>(
+    internal static string NeedsJunctionInput<TInput, TReturn>(
         Type junctionType,
         Type missing,
         Train.Train<TInput, TReturn> train
     ) =>
         $"Junction '{junctionType.ReadableName()}' (train '{train.GetType().ReadableName()}') "
-        + $"needs '{missing.ReadableName()}' as its input, but nothing earlier in the chain "
-        + "produced one and it is not registered in the container. Chain a junction that "
-        + "outputs it first, or register it.";
-
-    private static string MissingValueMessage<TInput, TReturn>(
-        Type missing,
-        Train.Train<TInput, TReturn> train
-    ) =>
-        $"Train '{train.GetType().ReadableName()}' needs '{missing.ReadableName()}', but nothing "
-        + "earlier in the chain produced one and it is not registered in the container.";
+        + $"needs '{missing.ReadableName()}' as its input";
 
     /// <summary>
     /// Extracts a tuple from Memory.

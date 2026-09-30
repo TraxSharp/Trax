@@ -57,14 +57,16 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
     }
 
     [Test]
-    public void ExtractLoggerFromLoggerFactory_NoLoggerFactoryInMemory_Throws()
+    public void ExtractLoggerFromLoggerFactory_NoLoggerFactoryInMemory_ReturnsNull()
     {
+        // The caller reports the missing logger, naming who needed it.
         var monad = new TestTrain().Activate(0);
 
-        Action act = () =>
-            monad.ExtractLoggerFromLoggerFactory(typeof(ILogger<MonadExtensionsEdgeCasesTests>));
+        var logger = monad.ExtractLoggerFromLoggerFactory(
+            typeof(ILogger<MonadExtensionsEdgeCasesTests>)
+        );
 
-        act.Should().Throw<TrainException>().WithMessage("*ILoggerFactory*");
+        ((object?)logger).Should().BeNull();
     }
 
     [Test]

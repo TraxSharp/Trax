@@ -104,8 +104,7 @@ public partial class Monad<TInput, TReturn>
         var input = MonadExtensions.ExtractTypeFromMemory(
             this,
             tIn,
-            missing =>
-                MonadExtensions.MissingJunctionInputMessage(typeof(TJunction), missing, Train)
+            missing => MonadExtensions.NeedsJunctionInput(typeof(TJunction), missing, Train)
         );
 
         if (input is null)

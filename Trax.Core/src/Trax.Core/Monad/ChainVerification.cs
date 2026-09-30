@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using LanguageExt;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Trax.Core.Extensions;
 
 namespace Trax.Core.Monad;
@@ -11,12 +13,24 @@ namespace Trax.Core.Monad;
 /// <param name="Kind">Which chain primitive declared the step.</param>
 /// <param name="Junction">The junction the step names, or null for a step that names none.</param>
 /// <param name="Reason">What is wrong, phrased for whoever has to fix it.</param>
+/// <remarks>
+/// A refusal about the chain as a whole, rather than one step, has a <see cref="StepIndex"/> one
+/// past the last step, <see cref="ChainStepKind.Resolve"/> as its kind and no junction.
+/// </remarks>
 public readonly record struct ChainFault(
     int StepIndex,
     ChainStepKind Kind,
     Type? Junction,
     string Reason
-);
+)
+{
+    /// <summary>
+    /// True when the fault is one of <see cref="ChainRecorder.Refusals"/>: something reading the
+    /// chain refused, rather than a type the replay found missing. A refused step records no
+    /// output, so later faults may be its consequences rather than faults of their own.
+    /// </summary>
+    public bool IsRefusal { get; init; }
+}
 
 /// <summary>
 /// Replays a declared chain over the types Memory would hold, without running anything.
@@ -59,9 +73,50 @@ public static class ChainVerification
         Type input,
         Type output,
         Func<Type, bool>? availableElsewhere = null
+    ) => Verify(chain, input, output, availableElsewhere, checkConstructors: false);
+
+    /// <summary>
+    /// Replays <paramref name="chain"/> for a train run with a container, and also checks that
+    /// every junction Trax builds from its constructor can be handed each argument.
+    /// </summary>
+    /// <remarks>
+    /// A junction's constructor arguments are found the way its input is: in Memory as the chain
+    /// has filled it by that step, then in the container. <paramref name="container"/> answers the
+    /// second without building anything, so a service only a request can construct still counts
+    /// as available. Junctions passed as instances or resolved by <c>IChain</c> are already built
+    /// and are not checked.
+    /// </remarks>
+    /// <param name="chain">The steps the train declares.</param>
+    /// <param name="input">The train's input type, which seeds Memory.</param>
+    /// <param name="output">The train's return type, which the chain must end holding.</param>
+    /// <param name="container">
+    /// Answers whether the container the train runs with can supply a type.
+    /// </param>
+    public static IReadOnlyList<ChainFault> Verify(
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        IServiceProviderIsService container
+    )
+    {
+        ArgumentNullException.ThrowIfNull(container);
+
+        return Verify(chain, input, output, container.IsService, checkConstructors: true);
+    }
+
+    private static IReadOnlyList<ChainFault> Verify(
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        Func<Type, bool>? availableElsewhere,
+        bool checkConstructors
     )
     {
         var memory = new System.Collections.Generic.HashSet<Type> { typeof(Unit) };
+
+        // A train run with a container finds the container itself in Memory.
+        if (checkConstructors)
+            memory.Add(typeof(IServiceProvider));
         var faults = new List<ChainFault>();
         var steps = chain.Steps;
 
@@ -75,6 +130,11 @@ public static class ChainVerification
         for (var i = 0; i < steps.Count; i++)
         {
             var step = steps[i];
+
+            // A step naming a type that is not a junction is kept, without types, only so later
+            // steps keep their written positions. Its refusal says what is wrong with it.
+            if (step.Kind != ChainStepKind.Seed && step.In is null && step.Out is null)
+                continue;
 
             switch (step.Kind)
             {
@@ -159,6 +219,33 @@ public static class ChainVerification
                     )
                 );
 
+            // The constructor runs before the input is extracted, against the same Memory.
+            if (checkConstructors && chain.IsBuilt(i) && step.Junction is { } built)
+                foreach (
+                    var argument in UnsuppliedConstructorArguments(
+                        built,
+                        memory,
+                        availableElsewhere
+                    )
+                )
+                    faults.Add(
+                        new ChainFault(
+                            i,
+                            step.Kind,
+                            step.Junction,
+                            $"needs '{Name(argument)}' as a constructor argument"
+                                + (
+                                    argument.IsTuple()
+                                        ? "; a tuple is assembled from Memory only, and nothing "
+                                            + "before it puts every element there. Chain "
+                                            + "junctions that produce them first."
+                                        : "; nothing before it puts one in Memory and the "
+                                            + "container does not register it. Register it or "
+                                            + "chain a junction that produces it first."
+                                )
+                        )
+                    );
+
             if (step.In is { } required && !Satisfied(memory, required, availableElsewhere))
                 faults.Add(
                     new ChainFault(
@@ -189,10 +276,42 @@ public static class ChainVerification
             }
         }
 
-        foreach (var refusal in chain.Refusals)
-            faults.Add(new ChainFault(steps.Count, ChainStepKind.Resolve, null, refusal));
+        foreach (var refusal in chain.RecordedRefusals)
+            faults.Add(
+                new ChainFault(
+                    refusal.StepIndex ?? steps.Count,
+                    refusal.Kind ?? ChainStepKind.Resolve,
+                    refusal.Junction,
+                    refusal.Reason
+                )
+                {
+                    IsRefusal = true,
+                }
+            );
 
         return faults;
+    }
+
+    /// <summary>
+    /// The arguments of <paramref name="junction"/>'s one public constructor that neither Memory
+    /// nor the container can supply. A junction Trax cannot build at all is refused when the
+    /// chain is read, so it has nothing to report here.
+    /// </summary>
+    private static IEnumerable<Type> UnsuppliedConstructorArguments(
+        Type junction,
+        System.Collections.Generic.HashSet<Type> memory,
+        Func<Type, bool>? availableElsewhere
+    )
+    {
+        if (MonadExtensions.JunctionConstructorProblem(junction) is not null)
+            return [];
+
+        return junction
+            .GetConstructors()[0]
+            .GetParameters()
+            .Select(p => p.ParameterType)
+            .Where(t => !Satisfied(memory, t, availableElsewhere))
+            .Distinct();
     }
 
     /// <summary>
@@ -201,7 +320,8 @@ public static class ChainVerification
     /// <remarks>
     /// Mirrors the ways the runtime finds one: a tuple is assembled from elements already in
     /// Memory, and anything else is taken from Memory by its exact type or, failing that, from
-    /// the container.
+    /// the container. An <c>ILogger&lt;T&gt;</c> can also be made by an <c>ILoggerFactory</c>
+    /// in Memory.
     /// </remarks>
     private static bool Satisfied(
         System.Collections.Generic.HashSet<Type> memory,
@@ -214,7 +334,13 @@ public static class ChainVerification
         if (required.IsTuple())
             return required.GetGenericArguments().All(memory.Contains);
 
-        return memory.Contains(required) || (availableElsewhere?.Invoke(required) ?? false);
+        return memory.Contains(required)
+            || (availableElsewhere?.Invoke(required) ?? false)
+            || (
+                required.IsGenericType
+                && required.GetGenericTypeDefinition() == typeof(ILogger<>)
+                && memory.Contains(typeof(ILoggerFactory))
+            );
     }
 
     /// <summary>

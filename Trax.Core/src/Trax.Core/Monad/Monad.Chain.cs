@@ -61,7 +61,7 @@ public partial class Monad<TInput, TReturn>
             return this;
 
         var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>(missing =>
-            MonadExtensions.MissingJunctionInputMessage(typeof(TJunction), missing, Train)
+            MonadExtensions.NeedsJunctionInput(typeof(TJunction), missing, Train)
         );
 
         if (input is null)
@@ -88,7 +88,9 @@ public partial class Monad<TInput, TReturn>
 
         // The runtime refuses a non-interface on every run, so the declaration is refused too.
         if (!typeof(TJunction).IsInterface)
-            Recorder.Refuse(
+            Recorder.RefuseStep(
+                ChainStepKind.IChain,
+                typeof(TJunction),
                 $"IChain<{typeof(TJunction).Name}> names a class; IChain resolves a junction by "
                     + "its interface. Use Chain with a class."
             );
@@ -117,10 +119,8 @@ public partial class Monad<TInput, TReturn>
             return Task.FromResult(this);
 
         var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>(missing =>
-            $"IChain<{missing.ReadableName()}> (train '{Train.GetType().ReadableName()}') found "
-            + $"no junction implementing '{missing.ReadableName()}': none was passed to "
-            + "AddServices and it is not registered in the container. Pass one with AddServices "
-            + "or register it."
+            $"IChain<{missing.ReadableName()}> (train '{Train.GetType().ReadableName()}') needs "
+            + $"a junction implementing '{missing.ReadableName()}'"
         );
 
         if (junctionService is null)
@@ -226,8 +226,20 @@ public partial class Monad<TInput, TReturn>
     /// Writes one step to the recorder and hands back a completed monad, so a route reads as a
     /// sequence of types without resolving a junction or running one.
     /// </summary>
-    private MonadTask<TInput, TReturn> RecordStep<TJunction>(ChainStepKind kind)
+    private MonadTask<TInput, TReturn> RecordStep<TJunction>(ChainStepKind kind) =>
+        RecordStep<TJunction>(kind, built: false);
+
+    /// <summary>
+    /// Records a step whose junction Trax builds from its constructor, refusing a junction it
+    /// cannot build. Only the constructor count is decided here: the arguments come from Memory
+    /// and the container as the chain runs, and verification checks them only when asked to.
+    /// </summary>
+    private MonadTask<TInput, TReturn> RecordBuiltStep<TJunction>(ChainStepKind kind) =>
+        RecordStep<TJunction>(kind, built: true);
+
+    private MonadTask<TInput, TReturn> RecordStep<TJunction>(ChainStepKind kind, bool built)
     {
+        var junction = typeof(TJunction);
         Type tIn,
             tOut;
 
@@ -238,31 +250,30 @@ public partial class Monad<TInput, TReturn>
         catch (InvalidOperationException)
         {
             // A type that is not a junction fails every run; reading the chain reports it
-            // alongside everything else instead of throwing out of DeclaredChain.
-            Recorder!.Refuse(
-                $"{kind} names {typeof(TJunction).Name}, which does not implement "
-                    + "IJunction<TIn, TOut>."
+            // alongside everything else instead of throwing out of DeclaredChain. The step is
+            // still recorded, without types, so every later step keeps its written position.
+            // Whether such a type could be built is beside the point, so that is not asked.
+            Recorder!.RefuseStep(
+                kind,
+                junction,
+                $"{kind} names {junction.Name}, which does not implement IJunction<TIn, TOut>."
             );
+            Recorder.Record(kind, junction, null, null);
 
             return new MonadTask<TInput, TReturn>(Task.FromResult(this));
         }
 
-        Recorder!.Record(kind, typeof(TJunction), tIn, tOut);
+        if (!built)
+            Recorder!.Record(kind, junction, tIn, tOut);
+        else if (MonadExtensions.JunctionConstructorProblem(junction) is { } problem)
+        {
+            Recorder!.RefuseStep(kind, junction, $"{kind}<{junction.ReadableName()}>: {problem}");
+            Recorder.Record(kind, junction, tIn, tOut);
+        }
+        else
+            Recorder!.RecordBuilt(kind, junction, tIn, tOut);
 
         return new MonadTask<TInput, TReturn>(Task.FromResult(this));
-    }
-
-    /// <summary>
-    /// Records a step whose junction Trax builds from its constructor, refusing a junction it
-    /// cannot build. Only the constructor count is decided here: the arguments come from Memory
-    /// and the container as the chain runs.
-    /// </summary>
-    private MonadTask<TInput, TReturn> RecordBuiltStep<TJunction>(ChainStepKind kind)
-    {
-        if (MonadExtensions.JunctionConstructorProblem(typeof(TJunction)) is { } problem)
-            Recorder!.Refuse($"{kind}<{typeof(TJunction).ReadableName()}>: {problem}");
-
-        return RecordStep<TJunction>(kind);
     }
 
     /// <summary>

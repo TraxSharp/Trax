@@ -75,6 +75,7 @@ namespace Trax.Core.Monad
     public readonly struct ChainFault : System.IEquatable<Trax.Core.Monad.ChainFault>
     {
         public ChainFault(int StepIndex, Trax.Core.Monad.ChainStepKind Kind, System.Type? Junction, string Reason) { }
+        public bool IsRefusal { get; init; }
         public System.Type? Junction { get; init; }
         public Trax.Core.Monad.ChainStepKind Kind { get; init; }
         public string Reason { get; init; }
@@ -104,6 +105,7 @@ namespace Trax.Core.Monad
     }
     public static class ChainVerification
     {
+        public static System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainFault> Verify(Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, Microsoft.Extensions.DependencyInjection.IServiceProviderIsService container) { }
         public static System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainFault> Verify(Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, System.Func<System.Type, bool>? availableElsewhere = null) { }
     }
     public class Monad<TInput, TReturn>

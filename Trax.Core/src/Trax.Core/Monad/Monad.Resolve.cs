@@ -57,10 +57,8 @@ public partial class Monad<TInput, TReturn>
             return ShortCircuitValue;
 
         var result = this.ExtractTypeFromMemory<TReturn, TInput, TReturn>(missing =>
-            $"Train '{Train.GetType().ReadableName()}' has no '{missing.ReadableName()}' to "
-            + "resolve: nothing in the chain produced one and it is not registered in the "
-            + $"container. Chain a junction that outputs '{missing.ReadableName()}' before "
-            + "Resolve()."
+            $"Train '{Train.GetType().ReadableName()}' needs '{missing.ReadableName()}' for "
+            + "Resolve() to return"
         );
 
         // Checked before the value: a missing value type comes back as its default, not null.

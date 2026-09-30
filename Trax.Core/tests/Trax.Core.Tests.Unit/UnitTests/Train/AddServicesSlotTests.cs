@@ -60,6 +60,21 @@ public class AddServicesSlotTests : TestSetup
         monad.Memory.Should().NotContainKey(typeof(IWriter));
     }
 
+    [TestCase(false, TestName = "AFailingServiceAfterAGoodOne_StoresNoneOfTheCallsServices(class)")]
+    [TestCase(true, TestName = "AFailingServiceAfterAGoodOne_StoresNoneOfTheCallsServices(struct)")]
+    public void AFailingServiceAfterAGoodOne_StoresNoneOfTheCallsServices(bool failAsStruct)
+    {
+        var monad = new TwoRolesTrain(new Store()).Activate("x");
+        object failing = failAsStruct ? 5 : new ReadOnly();
+
+        monad.AddServices([new Store(), failing], [typeof(IReader), typeof(IWriter)]);
+
+        monad.Exception.Should().NotBeNull();
+        monad
+            .Memory.Should()
+            .NotContainKey(typeof(IReader), "a failed call leaves Memory as it found it");
+    }
+
     [Test]
     public void AStructPassedAsAService_IsRefusedWhileTheChainIsRead() =>
         new StructServiceTrain()
