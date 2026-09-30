@@ -1,70 +1,69 @@
 # Trax.Website
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/TraxSharp/Trax.Website)](https://github.com/TraxSharp/Trax.Website/commits/main)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Website/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
-Source for [traxsharp.net](https://traxsharp.net), the documentation and marketing site for the Trax .NET framework.
+> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
+
+Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landing page, and the docs site rendered from
+[Trax.Docs](https://github.com/TraxSharp/Trax.Docs), with raw Markdown and `llms.txt` for agents.
 
 ## Stack
 
-- **Next.js 15** (App Router, static export)
-- **Tailwind CSS 4** (dark theme)
-- **Shiki** for server-side syntax highlighting
-- **MDX** via `next-mdx-remote` for docs rendering
-- **Trax.Docs** as content source (local workspace or cloned at build time)
+| Piece | What it does |
+|---|---|
+| Next.js 16 (App Router) | Server-rendered site. It is not a static export: `next.config.ts` rewrites `/docs/<slug>.md` to the raw Markdown route. |
+| Tailwind CSS 4 | Styling, dark theme |
+| `next-mdx-remote`, `rehype-pretty-code` and Shiki | Render the docs Markdown with highlighted code |
+| Trax.Docs | The page content, synced in at dev and build time |
 
-## Getting Started
+## Run it locally
 
 ```bash
 git clone https://github.com/TraxSharp/Trax.Website.git
 cd Trax.Website
-npm install
+npm ci
 npm run dev
 ```
 
-If you're working in the [Trax monorepo workspace](https://github.com/TraxSharp), the dev server automatically picks up docs from `../Trax.Docs/`. Otherwise it clones the latest from GitHub.
+`npm run dev` and `npm run build` both run `scripts/sync-docs.sh` first. It copies every `.md` file from a sibling
+`../Trax.Docs` checkout into `.docs-cache/` (gitignored), skipping `README.md`, `adr/`, `.claude/`, `tools/`, `tests/`
+and `.github/`. With no sibling checkout it shallow-clones `main` from GitHub instead. To preview a docs change, clone
+Trax.Docs next to this repo, edit it there, and restart the dev server.
 
-## Docs Sync
+Before committing, run `npm run lint` and `npm run build`.
 
-Documentation markdown lives in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs). The sync script runs automatically on `npm run dev` and `npm run build`:
-
-1. Uses the local workspace (`../Trax.Docs/`) if it exists
-2. Otherwise shallow-clones `main` from GitHub
-3. Copies all `.md` files into `.docs-cache/` (gitignored)
-
-## Project Structure
+## Project structure
 
 ```
 src/
-├── app/              # Next.js pages (landing, docs)
+├── app/
+│   ├── page.tsx                  # landing page
+│   ├── docs/                     # docs home and [...slug] pages
+│   ├── docs-markdown/[...slug]/  # raw Markdown, served at /docs/<slug>.md
+│   ├── llms.txt/                 # /llms.txt index for agents
+│   ├── llms-full/[bundle]/       # full docs text in per-section bundles
+│   ├── robots.ts, sitemap.ts
+│   └── layout.tsx, not-found.tsx
 ├── components/
-│   ├── landing/      # Landing page sections
-│   ├── docs/         # Docs layout, sidebar, table of contents
-│   ├── layout/       # Header, footer, mobile nav
-│   └── mdx/          # Custom MDX components
+│   ├── landing/                  # landing page sections
+│   ├── docs/                     # docs layout, sidebar, breadcrumb, table of contents
+│   ├── layout/                   # header, footer, mobile nav
+│   └── mdx/                      # MDX component overrides
 └── lib/
-    ├── docs.ts       # Markdown parsing, frontmatter, Jekyll transforms
-    └── nav-tree.ts   # Sidebar navigation tree builder
+    ├── docs.ts                   # reads .docs-cache, front matter, page summaries
+    ├── nav-tree.ts               # sidebar tree
+    ├── llms.ts                   # llms.txt and the full-text bundles
+    ├── mdx-options.ts            # remark and rehype plugins shared by docs pages
+    └── site.ts                   # site URL and description
 scripts/
-└── sync-docs.sh      # Docs sync script
+└── sync-docs.sh                  # copies Trax.Docs into .docs-cache
 ```
-
-## Environment Variables
-
-Copy `.env.example` to `.env.local` and fill in:
-
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_GRAPHQL_URL` | Trax GraphQL endpoint (default: `http://localhost:5200/trax/graphql`) |
-| `NEXT_PUBLIC_GRAPHQL_API_KEY` | API key for the GraphQL endpoint |
-
-These are only needed for the `/demo` page. The rest of the site is fully static.
 
 ## License
 
-[MIT](LICENSE)
+MIT. There is no commercial edition, and there will not be one.
 
-## Trademark & Brand Notice
-
-Trax is an open-source .NET framework provided by TraxSharp. This project is an independent community effort and is not affiliated with, sponsored by, or endorsed by the Utah Transit Authority, Trax Retail, or any other entity using the "Trax" name in other industries.
+Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+other organization using the Trax name.

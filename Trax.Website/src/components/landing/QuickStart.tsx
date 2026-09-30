@@ -5,7 +5,7 @@ export default function QuickStart() {
     <section className="border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">
-          Import an existing API.
+          Import an existing API
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
           OpenAPI or GraphQL. The CLI reads the schema, generates typed trains
@@ -13,10 +13,13 @@ export default function QuickStart() {
         </p>
 
         <div className="mt-8 max-w-2xl">
-          <p className="text-sm text-text-muted">From an OpenAPI spec:</p>
+          <p className="text-sm text-text-muted">From an OpenAPI 3.0 spec:</p>
           <div className="mt-3 border-l-2 border-accent/30 bg-bg-secondary py-4 pl-5 pr-5 font-mono text-sm">
             <div className="text-text-muted">
               $ dotnet tool install -g Trax.Cli
+            </div>
+            <div className="mt-1 text-text-muted">
+              $ dotnet new install Trax.Samples.Templates
             </div>
             <div className="mt-1 text-text-primary">
               $ trax generate --schema ./payments-api.json --output ./Payments
@@ -43,19 +46,19 @@ export default function QuickStart() {
     └── Trains/
         └── Transactions/
             ├── ListTransactions/
-            │   ├── IListTransactionsTrain.cs       `}
+            │   ├── IListTransactionsTrain.cs
+            │   ├── ListTransactionsTrain.cs        `}
             <span className="text-accent">[TraxQuery]</span>
             {`
-            │   ├── ListTransactionsTrain.cs
             │   └── Junctions/
             │       └── ListTransactionsJunction.cs  `}
             <span className="text-text-muted">← your code here</span>
             {`
             └── ChargeCard/
-                ├── IChargeCardTrain.cs              `}
+                ├── IChargeCardTrain.cs
+                ├── ChargeCardTrain.cs               `}
             <span className="text-accent">[TraxMutation]</span>
             {`
-                ├── ChargeCardTrain.cs
                 └── Junctions/
                     └── ChargeCardJunction.cs        `}
             <span className="text-text-muted">← your code here</span>

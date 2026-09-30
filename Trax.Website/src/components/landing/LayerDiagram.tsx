@@ -22,7 +22,7 @@ const layers = [
     name: "Mediator",
     cmd: "dotnet add package Trax.Mediator",
     desc: "Run a train by handing over its input. The host checks every registered chain at startup and refuses to start if a junction's input can never be provided.",
-    replaces: "MediatR",
+    replaces: "hand-written dispatch",
     href: "/docs/mediator",
   },
   {
@@ -30,7 +30,7 @@ const layers = [
     name: "Scheduler",
     cmd: "dotnet add package Trax.Scheduler",
     desc: "Cron, intervals and one-off delays. Retries with backoff, dead letters, trains that wait on other trains, and workers on other machines or in Lambda.",
-    replaces: "Hangfire, Quartz.NET",
+    replaces: "a separate job scheduler",
     href: "/docs/scheduler",
   },
   {

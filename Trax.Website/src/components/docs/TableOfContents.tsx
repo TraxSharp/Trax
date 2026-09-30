@@ -22,7 +22,9 @@ export default function TableOfContents() {
       text: el.textContent || "",
       level: parseInt(el.tagName[1]),
     }));
-    setHeadings(items);
+    // Set the headings from a frame callback: a synchronous setState in the
+    // effect body is flagged as a cascading render.
+    const frame = requestAnimationFrame(() => setHeadings(items));
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -36,7 +38,10 @@ export default function TableOfContents() {
     );
 
     elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   if (headings.length === 0) return null;

@@ -83,7 +83,7 @@ public class RecalculateLeaderboardTrain
   {
     label: "Move it",
     caption:
-      "Start worker processes on other machines against the same database. Each one polls Postgres and claims jobs with FOR UPDATE SKIP LOCKED, so each job is claimed by exactly one worker. Nothing calls the workers over HTTP, and the train class does not change.",
+      "Start worker processes on other machines against the same database. Each one polls Postgres and claims jobs with FOR UPDATE SKIP LOCKED, so each job is claimed by one worker at a time. Nothing calls the workers over HTTP, and the train class does not change.",
     blocks: [
       {
         file: "Worker / Program.cs",
@@ -127,8 +127,9 @@ export default async function FourWays() {
           One train, four ways to run it
         </h2>
         <p className="mt-3 max-w-2xl text-text-secondary">
-          This train recalculates a game&apos;s leaderboard. It comes from the
-          game server sample, and nothing in it knows how it will be run.
+          This train recalculates a game&apos;s leaderboard. It is adapted
+          from the game server sample, and nothing in it knows how it will be
+          run.
         </p>
 
         <div

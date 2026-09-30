@@ -8,7 +8,8 @@ export default function Footer() {
           <div>
             <span className="font-bold text-accent">Trax</span>
             <p className="mt-1 max-w-xs text-sm text-text-muted">
-              Railway Oriented Programming for .NET. MIT licensed.
+              Business logic you can call, schedule, or serve as an API. MIT
+              licensed.
             </p>
           </div>
 
@@ -37,7 +38,7 @@ export default function Footer() {
                 GitHub
               </a>
               <a
-                href="https://www.nuget.org/profiles/TraxSharp"
+                href="https://www.nuget.org/profiles/Theauxm"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-text-muted hover:text-text-secondary"

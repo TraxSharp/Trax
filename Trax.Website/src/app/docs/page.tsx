@@ -13,7 +13,7 @@ export function generateMetadata(): Metadata {
     title: "Documentation",
     description:
       doc?.description ??
-      "Trax documentation — Railway Oriented Programming for .NET",
+      "Trax documentation: business logic you can call, schedule, or serve as an API.",
     alternates: {
       canonical: "/docs",
       ...(doc ? { types: { "text/markdown": markdownPath("") } } : {}),
