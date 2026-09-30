@@ -83,7 +83,11 @@ It exposes three operations that fan out to every active provider, awaiting each
 - **`SaveChanges(ct)`**: Persist all accumulated changes across all providers
 - **`TryClaimPendingRun(metadata, ct)`**: For a run started from a pre-created row, move that row from `Pending` to `InProgress` in the store only if it is still `Pending`, through each provider that implements `IPendingRunClaim` (the data providers do). A refused claim fails the start with `TrainAlreadyStartedException` before the train body runs
 
+A test double for `IEffectRunner` built with NSubstitute or Moq does not inherit the interface's default `TryClaimPendingRun`, which returns `true`: the double implements the member itself and returns `false` until configured, so a run from a pre-created row throws `TrainAlreadyStartedException`. Configure it, for example `runner.TryClaimPendingRun(default!, default).ReturnsForAnyArgs(true)`.
+
 In `Track`, `Update` and `SaveChanges`, a provider that throws does not stop the providers after it. Every provider is called, in registration order, and then the failure is rethrown: one exception as it was, several cancellations as the first of them, anything else as an `AggregateException` carrying each one. So the order you register effects in does not decide whether the run is recorded: with `AddJson()` or a broadcaster registered before `UsePostgres()`, a failure in the first still leaves the data provider to write the terminal state.
+
+The train writes a run's row a second time, with its content replaced by placeholders, only when the store says it refused the row for a value it carries, by throwing `StoreRefusedContentException` (Trax's data contexts do for the Postgres errors that name a value). Any other provider's failure propagates as it is, so a row the store already saved in full is not overwritten. A custom provider that stores the run throws the same exception, around its own error, to take part; a provider that does not store the run should not.
 
 A factory whose `Create()` throws is different: the runner is never built, the train cannot be resolved, and the failure surfaces there rather than as a run with a provider silently missing.
 

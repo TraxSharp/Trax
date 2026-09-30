@@ -27,14 +27,15 @@ branching.
 | `too-large` | save, advance | the snapshot, the trigger input, or the advanced snapshot exceeds `SnapshotLimits.MaxSnapshotBytes` (64 KiB); nothing was written |
 | `request-id-reused` | advance, send | the request id was last used for a different trigger, so this is not a retry of it; send a new id. A send is refused before its effect runs |
 | `effect-bound` | advance | the trigger runs the machine's irreversible effect from this state, so only a send fires it; nothing was written |
-| `state-reserved` | save | the snapshot is in a committed state or an effect's target and the stored draft is not already there; only a send puts a draft there, and nothing was written |
-| `draft-committed` | save | the stored draft is in a committed state and the save would move it anywhere but that state or the initial state |
+| `state-reserved` | save | the snapshot is in a committed state or an effect's target and the stored draft is not; only a send puts a draft there, and nothing was written |
+| `draft-committed` | save | the stored draft is in a committed state or an effect's target and the save would change it; only a reset to the initial state that the machine declares from that state is accepted, and a save identical to the stored draft succeeds without a write |
 | `draft-unreadable` | save | the stored draft fails rehydration, so only a reset to the initial state may overwrite it |
-| `conflict` | save, advance, send | another write changed the draft between this request reading it and writing it, for example a second tab saving at the same moment; nothing was written, reload and retry |
+| `conflict` | save, advance, send | another write changed the draft between this request reading it and writing it, for example a second tab saving at the same moment; nothing was written, reload and retry. On a send, the draft was written while the effect ran: the effect's receipt is kept, and sending again replays it without running the effect once the draft holds the content the effect ran on (`draft-changed` until then) |
 | `internal-error` | advance, send | a guard, reducer or validator threw. The message is fixed and carries a reference; the exception is logged on the server under that reference |
 | `no-effect` | send | the machine binds no irreversible effect (`RunsOnce`), so there is nothing to send; drive it with advance |
+| `draft-changed` | send | this draft's effect already ran, on content the draft no longer holds (it was edited after the effect loaded it). Nothing was run and nothing was written, and the receipt stays with the claim. Restore the content the effect ran on, for example by saving the snapshot the send was made from, and send again to record it |
 | `effect-in-progress` | send | another send is running this draft's effect right now and holds its lease; nothing was run, retry with the same request id once it finishes |
-| `delivery-failed` | send | the effect threw, or returned no receipt; the draft was not advanced, so the send can be retried. The message is fixed and carries a reference; the exception is logged on the server under that reference. A cancelled request is not a failed delivery: it propagates as a cancellation |
+| `delivery-failed` | send | the effect threw, or returned no receipt; the draft was not advanced, so the send can be retried. The message is fixed and carries a reference; the exception is logged on the server under that reference. A cancelled request is not a failed delivery: it propagates as a cancellation. An `OperationCanceledException` from the effect itself, such as an outbound call's timeout, is a `delivery-failed`, and its claim stays in flight until the lease passes |
 
 Over GraphQL these surface on the mutation's `problem` field, so a client reads the code and reacts (re-enable
 a control on `guard-failed`, start fresh on `version-mismatch`) without ever seeing a stack trace. When the

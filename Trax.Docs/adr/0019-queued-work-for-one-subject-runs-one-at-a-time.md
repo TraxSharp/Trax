@@ -52,7 +52,9 @@ A character is at most four bytes in UTF-8, so the longest key is 2048 bytes, in
 2704-byte Postgres btree entry limit that the subject index is bound by. Counting characters
 rather than units raised that worst case from 1536 bytes, so the limit has little room left to
 grow. A key holding an unpaired surrogate is refused by `WorkQueue.Create`: it is half a
-character, UTF-8 cannot encode it, and the insert would otherwise fail far from the caller. The
+character, UTF-8 cannot encode it, and the insert would otherwise fail far from the caller. A key
+holding a NUL character is refused for the same reason: Postgres cannot store it in text, and the
+key is compared exactly, so it must not be rewritten into a different key either. The
 enqueue passes the key to `WorkQueue.Create` rather than assigning it afterwards, so `Create`'s checks
 apply to every entry the Mediator writes. The
 guarantee holds only until something writes a terminal state for a run that has not finished,
@@ -109,6 +111,8 @@ overrides `LockSubject()`.
 
 ## Changelog
 
+- **2026-09-30**: `WorkQueue.Create` refuses a key holding a NUL character, and the Postgres
+  provider no longer rewrites a NUL in a key column.
 - **2026-09-27**: The enqueue passes the key through `WorkQueue.Create` and refuses an unpaired
   surrogate; `SubjectKeyGoesThroughCreateTests` in Trax.Mediator keeps the key out of later assignment.
 - **2026-09-27**: The enqueue refuses a key that is only whitespace, as it refuses an empty one.

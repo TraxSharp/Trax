@@ -94,8 +94,9 @@ builder.Services.AddScoped<ICharge, StripeCharge>();
 
 `snapshot_draft` and `effect_claim` (both in the `trax` schema) ship as migrations in the core data
 providers and apply automatically when you register one. `UsePostgres(...)` runs
-`040_state_machine_snapshots.sql`, `048_snapshot_draft_request_scope.sql` and
-`051_snapshot_draft_machine_key.sql`; `UseSqlite(...)` runs `006`, `013` and `015` of the same names. A host
+`040_state_machine_snapshots.sql`, `048_snapshot_draft_request_scope.sql`,
+`051_snapshot_draft_machine_key.sql` and `053_effect_claim_content_fingerprint.sql`; `UseSqlite(...)` runs `006`,
+`013`, `015` and `018` of the same names. A host
 that calls `AddStateMachines` gets the tables for free; one that does not just carries two empty tables. You do
 not create or migrate them yourself, and there is no `EnsureCreated` step. Their models are
 `Trax.Effect.Models.SnapshotDraft.SnapshotDraft` and `Trax.Effect.Models.EffectClaim.EffectClaim`, mapped on the

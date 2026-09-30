@@ -46,7 +46,7 @@ services.AddTrax(trax => trax
 
 ## Remarks
 
-- **Requires** a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)). This is enforced at compile time. `AddDataContextLogging` is only available on `TraxEffectBuilderWithData`, which is returned by the data provider methods. If you try to call it without a data provider, the code will not compile.
+- **Requires** a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect), [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)). This is enforced at compile time. `AddDataContextLogging` is only available on `TraxEffectBuilderWithData`, which is returned by the data provider methods. Called before one, it fails with CS0619 and the instruction as its text: `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLogging(...).`
 - Registers `DataContextLoggingProvider` as an `ILoggerProvider`.
 - EF Core's command log, `Microsoft.EntityFrameworkCore.Database.Command`, is always skipped, because writing a row would log another one. Listing it in `blacklist` changes nothing.
 - When the host stops, the provider writes the entries already queued, waiting up to five seconds, before it lets go.

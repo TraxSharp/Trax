@@ -60,13 +60,16 @@ PostgreSQL advisory locks are application-level locks managed by the database bu
 
 The lock key is `hashtext('trax_manifest_manager')`, which produces a stable 32-bit integer from the string. It uses the single-key form of the advisory lock functions. Another application's single-key advisory lock on the same database would conflict only if its key hashed to the same integer, which is unlikely with a descriptive string. The dispatcher's [subject lock](#subject-serialization-advisory-lock-per-subject) uses the two-key form, which Postgres keeps in a separate space, so it can never contend with the leader lock.
 
-Each lock name is hashed on its own. Trax.Effect releases before this was fixed put the name inside
-SQL quotes, so Postgres hashed the text of EF's parameter placeholder and every leader lock, whatever
-its name, was the same key. The ManifestManager is the only caller, so nothing contended, but the key
-changed with the fix: during a rolling upgrade from one of those releases, an old instance and a new
-one take different keys and both can run the ManifestManager until the old instances stop. The
-one-queued-entry-per-manifest index still refuses a duplicate queue row; finish the rollout promptly,
-or stop the old instances before starting the new ones.
+Each lock name is hashed on its own. Trax.Effect 1.57.2 and earlier put the name inside SQL quotes,
+so Postgres hashed the text of EF's parameter placeholder and every leader lock, whatever its name,
+was the same key. The ManifestManager is the only caller, so nothing contended, but the key changed
+in 1.57.3: an old instance and a new one take different keys, and both run the ManifestManager at
+once for as long as both are up.
+
+**Upgrading from Trax.Effect 1.57.2 or earlier: stop every scheduler host before you start one on the
+new version.** A rolling deploy is not safe across this change. The one-queued-entry-per-manifest
+index still refuses a duplicate queue row, but two leaders each run a full cycle (reaping, dead
+letters, queue entries) against the same manifests. Later upgrades can roll as usual.
 
 ### Transaction Scope
 

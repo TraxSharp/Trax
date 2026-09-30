@@ -135,9 +135,17 @@ Options:
 
 The RabbitMQ transport uses a **fanout exchange** so all connected hub instances receive every event. Each receiver creates its own exclusive, auto-delete queue.
 
-Publishing never waits on the broker. A lifecycle hook is awaited inside the train, so the broadcaster writes each event to a bounded queue (1024 events) and returns; one background sender publishes the queue in order. While the broker is unreachable the sender retries the event it holds with a growing delay (1 second, doubling to 30), each connection attempt bounded at 5 seconds, and further events wait in the queue. When the queue is full, new events are dropped and a `Warning` is logged, followed by a second one giving the count when the queue drains. A connection the broker closed is disposed before it is replaced. On shutdown the broadcaster waits up to 5 seconds for queued events to be sent. Delivery is best effort: a consumer that must not miss an event reads it from the store.
+Publishing never waits on the broker. A lifecycle hook is awaited inside the train, so the broadcaster writes each event to a bounded queue (1024 events) and returns; one background sender publishes the queue in order.
 
-Stopping the receiver tolerates a connection the broker has already closed, for example when the broker restarts or another host sharing it shuts down first.
+Each publish waits for the broker's publisher confirm, for at most 5 seconds. An event the broker has not confirmed is sent again, so a receiver can occasionally see the same event twice, but an event lost on a connection that died while still reporting open is not counted as sent. An attempt that times out discards the connection as well as the channel. The exchange is declared on every channel the sender opens, so one deleted, or lost with a broker restart, is recreated.
+
+While the broker is unreachable the sender retries the event it holds with a growing delay (1 second, doubling to 30), each connection attempt bounded at 5 seconds, and further events wait in the queue. An event the broker refuses, by closing the channel on it with a channel-level error (`403`, `404`, `405`, `406`) or by rejecting the publish, is tried 3 times, then dropped and logged as an `Error`, so a refusal that does not clear, such as an exchange of the same name declared with another type, does not hold up the events behind it.
+
+When the queue is full, non-terminal events give way first. A new `Started`, `StateChanged` or `DataChanged` event is dropped. A new `Completed`, `Failed` or `Cancelled` event takes the place of the oldest queued non-terminal event, and is dropped itself only when every queued event is terminal. So a run whose `Started` reached subscribers keeps its outcome, although a subscriber can see an outcome without the `Started` before it. The first drop logs a `Warning`, followed by a second one giving the count when the queue drains.
+
+A connection the broker closed is disposed before it is replaced. On shutdown the broadcaster waits up to 5 seconds for queued events to be sent, and does not wait at all while it is failing to reach the broker. Delivery is best effort: a consumer that must not miss an event reads it from the store.
+
+Stopping the receiver tolerates a connection the broker has already closed, for example when the broker restarts or another host sharing it shuts down first. When `TrainEventReceiverService` retries a receiver that failed to start, each new start closes and disposes the connection the previous attempt opened, and a start that fails partway releases what it opened.
 
 ```csharp
 effects.UseBroadcaster(b =>

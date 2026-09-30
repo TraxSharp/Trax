@@ -16,6 +16,16 @@ run them yourself before the new version serves traffic.
 Postgres and SQLite number their migrations independently, so where both have one, both names
 are given.
 
+On Postgres each script waits at most five seconds for a table lock, so a migration behind a long
+transaction on a running instance does not stall enqueue and dispatch on every host. A script that
+gives up is run again, up to ten times, and then startup fails with `55P03`
+([why](/docs/reference/writing-migrations#every-postgres-script-can-run-again)).
+
+**Upgrading a scheduler from Trax.Effect 1.57.2 or earlier:** stop every scheduler host before
+starting one on the new version. The leader-lock key changed in 1.57.3, so an old host and a new one
+would both run the ManifestManager
+([details](/docs/scheduler/concurrency)).
+
 ## ManifestGroup (014)
 
 `014_manifest_group.sql` promotes a manifest's group from a denormalized string (`group_id`) to
@@ -118,12 +128,13 @@ variance schedules fired early or late. Each stored value is read as UTC, which 
 with a UTC session wrote. A row written from another zone before the upgrade was shifted when it was
 stored, and keeps that shift.
 
-**Plan a maintenance window on a large database.** Each `ALTER` rewrites its table under an
-`ACCESS EXCLUSIVE` lock. `work_queue` is the one that matters: it keeps dispatched rows until metadata
-cleanup removes them, so on a large queue the rewrite blocks enqueue and dispatch, on every host, for
-as long as it takes. Stop the scheduler (or every host) first, or run the migration yourself with
-[SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) at a quiet time. Each change checks
-the column's type first, so an interrupted run resumes where it stopped.
+It does not rewrite the tables. Each block sets its own transaction's time zone to UTC and changes the
+type with no `USING`, and in a UTC session Postgres reads each stored value as UTC and keeps the
+table's storage as it is, so the `ACCESS EXCLUSIVE` lock each `ALTER` takes lasts for a catalog change,
+not a copy of the table. That holds even when the scripts run from a session in another zone. The lock
+still has to be granted, so it waits for transactions already open on those tables, at most five
+seconds per try (see the top of this page). Each change checks the column's type first, so an
+interrupted run resumes where it stopped.
 
 ## External Id Index (050)
 
@@ -137,7 +148,8 @@ it without a cast.
 
 It is built `CREATE INDEX CONCURRENTLY`, so runs keep being written while it builds, and the build
 takes as long as the table is large. It waits for transactions already open on `metadata` to finish
-before it starts, so a long transaction on a running instance delays startup of the upgraded one.
+before it starts, so a long transaction on a running instance delays startup of the upgraded one, and
+one that stays open for about a minute fails it with `55P03` until that transaction ends.
 
 ## SQLite enum partial indexes (014)
 
@@ -151,3 +163,25 @@ Because that unique index was inert, a SQLite database can hold two queued entri
 and the index cannot be built over them. Before rebuilding it, 014 keeps each manifest's oldest queued
 entry and cancels the rest (status `Cancelled`), which is what the queue would have held had the index
 worked.
+
+## SQLite fixed-width offset timestamps (017)
+
+`017_fixed_width_offset_timestamps.sql` (SQLite only) rewrites `effect_claim.lease_expires_at` and
+`created_at` and `snapshot_draft.updated_at` into the fixed-width UTC text Trax now writes
+(`2026-09-29 12:00:00.1200000+00:00`). SQLite compares these columns as text, and a row written before
+the fixed-width form held EF's default text, with the shortest fraction and the value's own offset. At
+the exact instant it compared as earlier than itself, so a lease or a draft's age read one tick early,
+and a non-UTC offset sorted wrong outright. The whole seconds are converted to UTC and the fraction is
+padded, so no precision is lost. Rows already in the fixed-width form are not touched, and a second
+run changes nothing.
+
+## Effect claim content fingerprint (053, SQLite 018)
+
+`053_effect_claim_content_fingerprint.sql` (Postgres) and `018_effect_claim_content_fingerprint.sql` (SQLite) add a
+nullable `content_fingerprint` text column to `effect_claim`. The state-machine effect runner records the SHA-256 of
+the draft's canonical wire there when it claims the effect, and replays the claim's receipt only onto a draft with
+the same content; see [effects](/docs/sdk-reference/statemachine-api/effects#exactly-once-and-the-receipt).
+
+Nothing is backfilled. A claim written before the upgrade has no fingerprint and replays as it did, and a host still
+on the previous version reads and writes the table unchanged, so a rolling deploy is safe. Adding a nullable column
+is a catalog change on both providers, not a rewrite of the table.

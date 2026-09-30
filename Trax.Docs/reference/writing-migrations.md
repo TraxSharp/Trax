@@ -77,8 +77,25 @@ statement has to survive that:
 An index on `metadata`, `log` or `work_queue` is built `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, so
 enqueue, dispatch and run writes carry on while it builds; a plain build blocks them for as long as
 it takes. That works because the script is not in a transaction. A concurrent build that fails leaves
-an `INVALID` index behind, which `IF NOT EXISTS` would skip forever, so the migrator drops every
-invalid index in the `trax` schema before it runs the pending scripts.
+an `INVALID` index behind, which `IF NOT EXISTS` would skip forever, so before it runs the pending
+scripts the migrator drops every invalid index in the `trax` schema whose name a shipped script
+creates. It reads those names from the scripts, so an index a new script builds is covered with no
+list to update. Any other invalid index, such as your own or the `_ccnew` copy of a
+`REINDEX CONCURRENTLY` in progress, is left alone.
+
+The scripts run with a five-second `lock_timeout`. An `ALTER TABLE` waiting behind a transaction on
+another instance would otherwise hold every later write to that table behind itself, and
+`UsePostgres` migrates at startup, so that is a rolling deploy stalling enqueue and dispatch on every
+host. When a script gives up (`55P03`), the migrator drops any index that left invalid and runs the
+pending scripts again, up to ten times, then fails startup. That is why a script has to survive
+running again even when nothing crashed. `CREATE INDEX CONCURRENTLY`'s wait for older transactions is
+a lock wait too, so an index build behind a transaction that stays open for about a minute fails
+startup rather than waiting it out.
+
+A type change that Postgres can make without rewriting the table should be written so it does.
+`timestamp` to `timestamptz` is one, but only in a UTC session and with no `USING`; migration 049 sets
+the zone for its own transaction with `PERFORM set_config('TimeZone', 'UTC', true)` inside each `DO`
+block. A rewrite holds `ACCESS EXCLUSIVE` for as long as it copies the table.
 
 `PostgresMigrationRerunTests` reads each script from 046 on and refuses a statement that is not in
 one of these forms, and `PostgresMigrationTests` runs every one of them again over a migrated

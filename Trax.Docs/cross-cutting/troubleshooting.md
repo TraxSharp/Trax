@@ -59,6 +59,7 @@ The step builder pattern enforces configuration ordering at compile time. `AddMe
 | `Call AddEffects(...) before AddMediator(...).` | `AddMediator()` called before `AddEffects()` |
 | `AddMediator(...) is already called. Call it once and configure everything in that call.` | `AddMediator()` called twice |
 | `Call AddStateMachines(...) before AddMediator(...).` | `AddStateMachines()` called after `AddMediator()` |
+| `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLogging(...).` | `AddDataContextLogging()` called before a data provider |
 
 `AddScheduler()` called before `AddMediator()` still reports CS1929, `'TraxBuilderWithEffects' does not contain a definition for 'AddScheduler'`. It is the same mistake.
 

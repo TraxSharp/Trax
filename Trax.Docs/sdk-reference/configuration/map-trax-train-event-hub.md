@@ -37,16 +37,26 @@ public static HubEndpointConventionBuilder MapTraxTrainEventHub(
 
 | Method | Parameters | Description |
 |--------|------------|-------------|
-| `RequireAuthorization` | `params string[] policies` | Admits callers the host's authorization accepts. With no arguments, any authenticated caller (the host's default policy); with policy names, a caller must satisfy every one. Repeated calls add policies. |
-| `RequireRoles` | `params string[] roles` | Admits authenticated callers in at least one of the roles. Throws `ArgumentException` with no roles. Combines with `RequireAuthorization`, and then both apply. |
+| `RequireAuthorization` | `params string[] policies` | Admits callers the host's authorization accepts. With no arguments, a caller must satisfy the host's default policy and, when the host sets a `FallbackPolicy`, that too. With policy names, a caller must satisfy every one, and each must be registered on the host. Repeated calls add policies. |
+| `RequireRoles` | `params string[] roles` | Admits authenticated callers in at least one of the roles. Throws `ArgumentException` with no roles, or with a role name containing a comma: pass each role as its own argument. Combines with `RequireAuthorization`, and then both apply. |
 | `AllowAnonymous` | none | Opens the hub to any client that can reach it, overriding a fallback policy on the host. Logs a `Warning` at startup. For a hub reachable only from a trusted network. |
-| `ConfigureConnection` | `Action<HttpConnectionDispatcherOptions>` | Adjusts the hub's connection options after Trax applies its defaults, so a value set here wins. |
+| `ConfigureConnection` | `Action<HttpConnectionDispatcherOptions>` | Adjusts the hub's connection options after Trax applies its defaults, so a value set here wins, except `CloseOnAuthenticationExpiration` (see [Connection lifetime](#connection-lifetime)). |
 
-`MapTraxTrainEventHub` throws `InvalidOperationException` at startup when `configure` chooses no posture, or when it combines `AllowAnonymous()` with `RequireAuthorization` or `RequireRoles`.
+`MapTraxTrainEventHub` throws `InvalidOperationException` at startup when `configure` chooses no posture, when it combines `AllowAnonymous()` with `RequireAuthorization` or `RequireRoles`, or when it names a policy the host has not registered. Each policy name is resolved through the host's `IAuthorizationPolicyProvider` where the hub is mapped, so a misspelled name stops the host rather than failing the first connection.
 
-The posture is applied to the hub's endpoints (the negotiate request and the connection), so the host's `UseAuthentication()` and `UseAuthorization()` decide who connects. A refused client gets `401` or `403` from the negotiate request, and a SignalR client reports it as an `HttpRequestException` from `StartAsync`. Browser clients pass their credential the way the host expects it, for example `accessTokenFactory` in the JavaScript client for a bearer token, which SignalR sends as the `access_token` query parameter on WebSocket requests.
+A bare `RequireAuthorization()` keeps the host's fallback policy. ASP.NET Core applies `FallbackPolicy` only to endpoints with no authorization of their own, so an endpoint marked with a bare `[Authorize]` is checked against the default policy alone. The hub adds the fallback policy back, so it is never more open than an endpoint with no annotation: on a host whose default policy is "authenticated" and whose fallback requires the `Operator` role, `RequireAuthorization()` admits only operators. Named policies and roles are applied as given, without the fallback.
 
-The choice and its alternatives are recorded in Trax.Effect's ADR 0017.
+The posture is applied to the hub's endpoints (the negotiate request and the connection), so the host's `UseAuthentication()` and `UseAuthorization()` decide who connects. A refused client gets `401` or `403` from the negotiate request, and a SignalR client reports it as an `HttpRequestException` from `StartAsync`. A client that skips negotiation and opens a WebSocket directly is checked on the upgrade request in the same way. Browser clients pass their credential the way the host expects it, for example `accessTokenFactory` in the JavaScript client for a bearer token, which SignalR sends as the `access_token` query parameter on WebSocket requests.
+
+The choice and its alternatives are recorded in Trax.Effect's ADR 0016.
+
+## Connection lifetime
+
+Authorization runs when a connection opens. The hub sets `HttpConnectionDispatcherOptions.CloseOnAuthenticationExpiration`, so a connection is closed once the authentication it was admitted on expires, for example when a bearer token's lifetime ends. It is set after `ConfigureConnection` runs, so a host cannot turn it off. A client using `WithAutomaticReconnect()` reconnects, and is authorized again with whatever credential it presents then.
+
+The expiry is the bound: a user whose access is revoked stays connected until the credential they connected with expires. Keep the lifetime of the credentials that reach the hub as short as that delay allows.
+
+Access is all or nothing per connection. A connection the posture admits receives every train's events that the sink's filters let through; the hub does not filter by who started a run.
 
 ## Send timeout
 

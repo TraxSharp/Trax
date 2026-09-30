@@ -130,6 +130,12 @@ Trax.Mediator's are in `BuilderOrderExtensions`:
 | `AddMediator(...)` on `TraxBuilderWithMediator`, a second time | `AddMediator(...) is already called. Call it once and configure everything in that call.` |
 | `AddStateMachines(...)` on `TraxBuilderWithMediator`, after `AddMediator` | `Call AddStateMachines(...) before AddMediator(...).` |
 
+Trax.Effect.Data's is in its own `BuilderOrderExtensions`:
+
+| Wrong call | Error text |
+|---|---|
+| `AddDataContextLogging(...)` on `TraxEffectBuilder`, before a data provider | `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLogging(...).` |
+
 When you add one, take the real method's parameter list and names exactly, so a call that uses
 named arguments or a lambda binds to the overload and reports the instruction rather than an
 argument error. The receiver has to be a marker the real method does not accept, or the correct
@@ -137,8 +143,8 @@ order becomes ambiguous. The overload lives in the package that owns the later m
 that is the one that can name both types: `AddStateMachines` is Trax.Effect's, but the
 `TraxBuilderWithMediator` overload is Trax.Mediator's, and its options parameter is
 `Action<dynamic>` because Trax.Mediator does not reference the options type. The body throws and
-never runs. `BuilderOrderDiagnosticsTests` in Trax.Mediator compiles each wrong order in memory
-and asserts the one error it produces, and compiles each right order and asserts none.
+never runs. `BuilderOrderDiagnosticsTests`, in Trax.Mediator and in Trax.Effect, compiles each wrong
+order in memory and asserts the one error it produces, and compiles each right order and asserts none.
 
 ## SDK Reference
 

@@ -37,7 +37,9 @@ failures still propagate).
 
 A draft is keyed by its user, its machine and its id: two machines may each give one user a draft under the same
 id. The writes take the machine from the snapshot, and the draft service reads and deletes through the overloads
-that name it.
+that name it. A store that implements only the members without a machine keys a draft by user and id alone; the
+draft service then reads before every save and creates through `Insert`, so one machine's save is refused as a
+`conflict` rather than replacing another machine's draft under the same id.
 
 | Method | Returns | Does |
 | --- | --- | --- |
@@ -45,7 +47,8 @@ that name it.
 | `Get(userKey, id, ct)` | `StoredSnapshot?` | reads one of the caller's drafts under that id, whichever machine it belongs to, or `null` if there is none |
 | `Delete(userKey, machine, id, ct)` | `Task` | deletes the caller's draft of that machine, leaving another machine's under the same id; idempotent. Its default implementation deletes through `Delete(userKey, id, ct)` only when the draft there is this machine's |
 | `Delete(userKey, id, ct)` | `Task` | deletes the caller's drafts under that id; idempotent (deleting a gone row is a no-op) |
-| `Upsert(userKey, id, snapshot, ct)` | `bool` | the autosave path; `false` on a concurrent-write conflict |
+| `Insert(userKey, id, snapshot, ct)` | `bool` | creates the draft and only creates it: `false` when one already exists. The draft service creates every new draft through this, so a save that read no draft never overwrites one created since. Its default implementation checks `Get(userKey, id, ct)` and then calls `Upsert`, so it refuses while the user has any draft under the id, whichever machine it belongs to; the check and the write are two steps, so a store that can make them one statement should override it (`EfSnapshotStore` does) |
+| `Upsert(userKey, id, snapshot, ct)` | `bool` | the last-writer-wins autosave of a machine with no committed state and no effect; `false` on a concurrent-write conflict |
 | `Update(userKey, id, snapshot, expectedToken, requestId, ct)` | `bool` | writes only if the row still carries `expectedToken`, and records `requestId` as the last applied idempotency key with no trigger or from-state; `false` if the row changed |
 | `UpdateWithRequest(userKey, id, snapshot, expectedToken, request, ct)` | `bool` | the authoritative path: `Update` that records the whole `AppliedRequest` (id, trigger, from-state), or clears it when `request` is `null`. It has a default implementation that calls `Update` with the id alone, so a custom store keeps compiling; override it, or every retry against that store is refused as `request-id-reused` rather than replayed |
 
@@ -96,13 +99,22 @@ effect-bound transition lands in, because only send knows the effect ran:
 | Path | Refuses | Code |
 | --- | --- | --- |
 | advance | a trigger bound to the machine's effect from the stored state | `effect-bound` |
-| autosave | creating a draft in, or moving one into, a committed state or an effect's target, unless the stored draft is already in that state | `state-reserved` |
-| autosave | moving a committed draft anywhere but its own state or the initial state | `draft-committed` |
+| autosave | creating a draft in, or moving one into, a committed state or an effect's target | `state-reserved` |
+| autosave | any change to a draft already in a committed state or an effect's target, except a reset to the initial state that the machine declares from that state | `draft-committed` |
 | autosave | overwriting a stored draft that fails rehydration with anything but the initial state | `draft-unreadable` |
+| send | recording the receipt on a draft that was written while the effect ran | `conflict` |
+| send | replaying a receipt onto a draft whose content is not what the effect ran on | `draft-changed` |
 
-A same-state save of a committed draft, and a reset to the initial state, are allowed; a reset releases the
-draft's effect claims, so the next draft runs its effect afresh. To seed a draft in a committed state in a test,
-write it through the store.
+The receipt a draft in a committed state holds is the one the effect produced for that draft's content, so its
+content is as fixed as its state. A save identical to the stored draft, the snapshot a send returned for instance,
+is answered as saved without a write. A reset is allowed only where the machine itself has a transition from that
+state back to the initial state; a machine with none has no soft reset out of it.
+
+A reset releases the draft's effect claims once their outcome is settled on the draft, so the next draft runs its
+effect afresh. A claim whose effect is still running inside its lease is kept, and so is a completed claim whose
+receipt the draft never recorded (its send reported a conflict): the next send replays that receipt rather than
+running the effect a second time, provided the draft again holds the content the effect ran on, and is refused as
+`draft-changed` otherwise. To seed a draft in a committed state in a test, write it through the store.
 
 ## EfSnapshotStore and EfEffectClaimStore
 
@@ -116,3 +128,17 @@ public EfEffectClaimStore(IDataContext db, ISqlDialect? dialect = null)
 The dialect is how a lost race (a concurrent create of one draft, a claim on a key someone else holds) is told
 apart from a real failure, on Postgres and SQLite alike. Without one, such a race throws instead of returning
 `false` or `Lost`. Both stores stop tracking what they write, so they can share a request's data context.
+
+`IEffectClaimStore.ReleaseForReset(effectKey, receiptRecorded, ct)` is the release a reset uses: it keeps an
+in-flight claim whose lease has not passed, and deletes a completed claim only when `receiptRecorded` accepts its
+receipt. `Release` deletes whatever is there, and is what deleting an expired draft uses. A custom claim store
+that does not override `ReleaseForReset` gets a default that releases only a completed claim whose receipt was
+recorded, and keeps every in-flight claim until the lease lets the next send reclaim it.
+
+`TryClaim(effectKey, lease, contentFingerprint, ct)` records the fingerprint of the content the effect runs on in
+`effect_claim.content_fingerprint`, on a new claim or on an expired one it takes over, and
+`GetCompleted(effectKey, ct)` returns a completed claim's receipt with that fingerprint in one read as a
+`CompletedEffect`. `IdempotentEffect.RunOnce(effectKey, contentFingerprint, effect, lease, ct)` passes it through,
+and a lost claim's `EffectOutcome.AlreadyRan` carries the recorded `ContentFingerprint`; the effect runner compares it
+with the draft's before replaying. Both members have defaults, so a custom claim store keeps compiling: one that does
+not override them records no fingerprint, and its claims replay without the content check.

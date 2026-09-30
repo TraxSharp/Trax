@@ -174,7 +174,7 @@ public class MyService(ITraxChangeSignal changeSignal)
 }
 ```
 
-`Notify` never throws and never blocks the caller. Each domain is held once while it waits to be read, so repeated signals for a domain collapse into one and a burst for one domain never crowds out another's. A background coalescer flushes the distinct set of changed domains to the `onDataChanged` topic. Trax's own scheduler and GraphQL write paths already call `Notify`, so the dashboard gets live updates out of the box; call it yourself only from custom write paths that should nudge a dashboard view.
+`Notify` never throws and never blocks the caller. Each domain is held once while it waits to be read, so repeated signals for a domain collapse into one and a burst for one domain never crowds out another's. A value outside `ChangeDomain` (a cast integer) signals nothing and logs a throttled warning. A background coalescer flushes the distinct set of changed domains to the `onDataChanged` topic. Trax's own scheduler and GraphQL write paths already call `Notify`, so the dashboard gets live updates out of the box; call it yourself only from custom write paths that should nudge a dashboard view.
 
 ## WebSocket Connection
 

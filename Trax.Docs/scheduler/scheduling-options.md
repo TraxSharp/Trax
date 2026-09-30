@@ -140,7 +140,7 @@ scheduler.Schedule<IMyTrain>(
 
 ## Management Operations
 
-`ITraxScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
+`ITraxScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. Work a disabled job had already queued waits as well, a retry waiting out its backoff included, and is dispatched once the job is re-enabled; a dead-letter requeue runs either way. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
 
 `TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](delayed-jobs.md) for usage patterns.
 

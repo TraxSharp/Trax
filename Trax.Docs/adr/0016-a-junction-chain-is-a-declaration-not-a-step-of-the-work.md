@@ -187,7 +187,7 @@ each `AddServices` argument fills the slot of the type argument it was passed as
 slot the replay counts, that a struct passed as a service is refused, and that a call that fails
 on any service stores none of them. `ChainVerificationStepAndConstructorTests` in Trax.Core pins
 that a refusal is marked as one and sits at its step (or past the last step when it is about the
-whole chain), that a refused step keeps later steps at their written positions, that a type which
+whole chain), that a refused step keeps the steps after it at their written positions, that a type which
 is neither a junction nor buildable is refused once, and that, handed the container, `Verify`
 reports a constructor argument nothing supplies while accepting one the container registers, an
 earlier junction produces, `AddServices` passes, the container itself, or a logger that logging or

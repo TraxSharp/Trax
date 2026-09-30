@@ -25,7 +25,7 @@ public abstract class Machine<TState, TTrigger>
 
 | Method | Description |
 |--------|-------------|
-| `Id(string id)` | The machine's stable name (what the `machine` mutation field selects). It must be kebab-case, matching `^[a-z][a-z0-9]*(-[a-z0-9]+)*$` (`checkout`, `turnstile-two`), because it becomes a file name, a module name and a key segment in everything generated from the machine. Anything else throws `ArgumentException`. |
+| `Id(string id)` | The machine's stable name (what the `machine` mutation field selects). It must be kebab-case, matching `^[a-z][a-z0-9]*(-[a-z0-9]+)*\z` (`checkout`, `turnstile-two`; a trailing newline is refused too), because it becomes a file name, a module name and a key segment in everything generated from the machine. Anything else throws `ArgumentException`. |
 | `Version(int version)` | The definition version stamped onto every snapshot. |
 | `StartsAt(TState state, Func<JsonObject> context)` | The initial state and a factory for its context. A factory, not a value, so instances never alias. |
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
@@ -37,7 +37,10 @@ public abstract class Machine<TState, TTrigger>
 `Build()` throws `InvalidOperationException` for a custom rule or reduction whose name has no handler bound,
 so an unbound name fails when the machine is built rather than refusing its edge forever. It also throws for a
 machine that binds more than one effect with `RunsOnce`: a machine runs exactly one irreversible effect, and a
-second binding would otherwise be declared and never run. Handlers may be
+second binding would otherwise be declared and never run. And it throws for a machine that enters its effect's
+target state by any transition other than the effect's own: that state means the effect ran, and a plain advance
+of the other edge would put a draft there without it. A self-loop on the target does not enter it and is
+allowed. Handlers may be
 bound before or after the rules that name them. `CustomGuard` and `CustomReducer` are default interface
 methods that throw `NotSupportedException` on a custom `IMachineBuilder` implementation that does not
 override them.
