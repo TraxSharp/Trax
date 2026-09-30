@@ -349,7 +349,8 @@ Lookup is by exact type, then the container, with one exception: a junction whos
 tuple has each element assembled from Memory only, never from the container, because that is how a
 run builds it. A junction asking for an interface that the previous
 junction's declared output only implements is a fault, because the run would not find it either.
-`Extract` reads Memory only and never falls back to the container. Container availability is
+`Extract` reads Memory only and never falls back to the container. An `ILogger<T>` the container
+does not supply can also be made by an `ILoggerFactory` passed to `AddServices`. Container availability is
 checked without constructing anything, so a service whose factory only works inside a request does
 not crash startup. Reading a chain runs no junction: a monad the train creates while declaring,
 including through `NewMonad()`, records its steps instead of executing them.

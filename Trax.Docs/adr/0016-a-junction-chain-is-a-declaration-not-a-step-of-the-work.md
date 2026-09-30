@@ -60,10 +60,14 @@ identifier onto its input declares a junction that does it.
 **Reading a chain resolves nothing.** Steps are recorded from type arguments, so a junction that
 cannot be constructed is still declared. What is decidable from the type alone is checked: a
 junction without exactly one public constructor, or one that is abstract or an interface, is
-recorded as a refusal. Whether its constructor arguments will be found is not: a junction takes
-them from Memory, which the chain fills as it runs, or from the container, and the replay has no
-option for that yet. The container is consulted only to decide whether a junction's input can be
-supplied from outside Memory.
+recorded as a refusal. Whether its constructor arguments will be found is decided by the replay
+only when it is handed the container: a junction takes them from Memory, which the chain fills as
+it runs, or from the container, so `Verify` checks them against the Memory the replay has built by
+that step and the container's `IServiceProviderIsService`, which answers without building
+anything. Without the container the replay consults an `availableElsewhere` answer only to decide
+whether a junction's input can be supplied from outside Memory. A refusal carries the step it
+belongs to, and a step naming a type that is not a junction is still recorded, so a step's index
+is its written position.
 
 **A declaration that does work is refused.** `Junctions()` runs when a chain is read, so a body
 that awaits before returning, returns a result instead of ending in `Resolve()`, or ends in
@@ -180,7 +184,14 @@ running, and that naming a type which is not a junction is refused rather than t
 an unawaited junction step is refused, while synchronous calls before the first junction, a
 statement after an awaited chain, and a linked chain still verify. `AddServicesSlotTests` pins that
 each `AddServices` argument fills the slot of the type argument it was passed as, which is the
-slot the replay counts, and that a struct passed as a service is refused.
+slot the replay counts, that a struct passed as a service is refused, and that a call that fails
+on any service stores none of them. `ChainVerificationStepAndConstructorTests` in Trax.Core pins
+that a refusal is marked as one and sits at its step (or past the last step when it is about the
+whole chain), that a refused step keeps later steps at their written positions, that a type which
+is neither a junction nor buildable is refused once, and that, handed the container, `Verify`
+reports a constructor argument nothing supplies while accepting one the container registers, an
+earlier junction produces, `AddServices` passes, the container itself, or a logger that logging or
+an `ILoggerFactory` supplies.
 
 Not covered: nothing detects a chain that branches on ambient state or on instance state other
 than the input and output. The replay knows the train's declared input type, not the subtype that
@@ -191,6 +202,9 @@ Trax the Cli is pinned to; nothing checks a project an older Cli scaffolded agai
 release, or that Trax.Cli ships its template before Trax.Core ships a removal.
 
 ## Changelog
+- **2026-09-30**: Recorded that refusals carry their step and are marked as refusals, that a step
+  naming a non-junction keeps its position, and that `Verify` checks junction constructor arguments
+  when handed the container. Added `ChainVerificationStepAndConstructorTests`.
 - **2026-09-30**: Recorded that a junction Trax cannot build is refused at startup, that a train
   whose constructor needs an unregistered type is refused rather than skipped, and that the check
   runs in `StartingAsync`. Added `StartupGateHostTests`.
