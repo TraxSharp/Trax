@@ -22,8 +22,7 @@ dotnet add package Trax.Effect.Data.Postgres    # or Trax.Effect.Data.Sqlite for
 
 ## Example
 
-Adapted from the game server sample. Schedules, the work queue and dead letters live in the database, so the scheduler
-needs a storage package:
+Adapted from the game server sample:
 
 ```csharp
 builder.Services.AddTrax(trax => trax
@@ -37,68 +36,8 @@ builder.Services.AddTrax(trax => trax
             options => options.MaxRetries(3))));
 ```
 
-At startup this writes a manifest with the id `leaderboard-na` (updating it if it exists). Every five minutes the
-scheduler queues a run of the train with that input, and a worker in the same process claims it and runs it. Each run
-gets a row in `trax.metadata`, like any other. The input type implements `IManifestProperties` so it can be stored with
-the manifest.
-
-## Schedules
-
-| Helper | Example |
-|---|---|
-| `Every.Seconds/Minutes/Hours/Days(n)` | `Every.Minutes(5)` |
-| `Cron.Minutely/Hourly/Daily/Weekly/Monthly(...)` | `Cron.Weekly(DayOfWeek.Monday, hour: 6)` |
-| `Cron.Expression("...")` | 5 fields, or 6 with seconds first: `Cron.Expression("*/15 * * * * *")` |
-| `ScheduleOnce<TTrain>(id, input, delay)` | runs once after the delay, then disables the manifest |
-
-Skip runs with exclusions: `options.Exclude(Exclude.DaysOfWeek(DayOfWeek.Saturday, DayOfWeek.Sunday))`, and likewise
-`Exclude.Dates`, `Exclude.DateRange` and `Exclude.TimeWindow` (which may cross midnight). `ITraxScheduler` creates,
-triggers and cancels manifests at runtime.
-
-## Retries and dead letters
-
-A failed run is retried with backoff: 5 minutes, doubling each time, capped at an hour, all configurable on the builder
-(`DefaultRetryDelay`, `RetryBackoffMultiplier`, `MaxRetryDelay`). Once a manifest's failures reach `MaxRetries` (default
-3), it gets a dead letter and is not queued again until someone requeues or acknowledges it, from the dashboard, the
-GraphQL API or `ITraxScheduler.RequeueDeadLetterAsync`.
-
-## Dependent trains
-
-`.Include<T>()` schedules a train that runs after the root manifest succeeds, and `.ThenInclude<T>()` one that runs after
-the previous one. `IncludeMany` and `ThenIncludeMany` fan out. A dependent marked `options.Dormant()` runs only when a
-junction of the parent activates it through `IDormantDependentContext.ActivateAsync`.
-
-## Where trains run
-
-The train class is the same in every case; only the host configuration changes.
-
-| Where | Configure | Package |
-|---|---|---|
-| The scheduler host | Nothing: local worker threads claim queued jobs from the database | Trax.Scheduler |
-| Worker processes against the same Postgres | `AddTraxWorker(o => o.WorkerCount = 4)` in each worker. Workers poll and claim jobs with `FOR UPDATE SKIP LOCKED`, one worker at a time; nothing calls them over HTTP | Trax.Scheduler |
-| An HTTP runner | `UseRemoteWorkers(...)` for queued jobs and `UseRemoteRun(...)` for direct runs; the runner calls `AddTraxJobRunner` and `UseTraxJobRunner()` or `UseTraxRunEndpoint()` | Trax.Scheduler |
-| Amazon SQS | `UseSqsWorkers(...)`, consumed by `SqsJobRunnerHandler` | Trax.Scheduler.Sqs |
-| AWS Lambda | `UseLambdaWorkers(...)` and `UseLambdaRun(...)`; the function derives from `TraxLambdaFunction` | Trax.Scheduler.Lambda, Trax.Runner.Lambda |
-
-The remote options route only the trains you name with `ForTrain<T>()` or mark `[TraxRemote]`; the rest keep running
-locally. The scheduler's own work is done by five internal trains (ManifestManager, JobDispatcher, JobRunner,
-MetadataCleanup and DeadLetterCleanup), and their runs are recorded too.
-
-## Packages
-
-| Package | What it adds |
-|---|---|
-| [Trax.Scheduler](https://www.nuget.org/packages/Trax.Scheduler) | Schedules, retries, dead letters, dependent trains, local and HTTP workers |
-| [Trax.Scheduler.Sqs](https://www.nuget.org/packages/Trax.Scheduler.Sqs) | Dispatch jobs through Amazon SQS |
-| [Trax.Scheduler.Lambda](https://www.nuget.org/packages/Trax.Scheduler.Lambda) | Dispatch jobs and runs to AWS Lambda |
-| [Trax.Runner.Lambda](https://www.nuget.org/packages/Trax.Runner.Lambda) | Base class for a Lambda function that runs trains |
-
-## What it does not do
-
-- If a process dies halfway through a run, the run is marked failed and a scheduled train is retried from its first
-  junction, so junctions that call other systems should be safe to repeat.
-- Postgres is the production database: workers coordinate through its row and advisory locks. SQLite works for a single
-  process and in-memory storage for tests. There is no SQL Server or MySQL provider.
+Every five minutes the scheduler queues a run with that input and a worker claims it. A failed run retries with backoff,
+then lands in the dead-letter queue.
 
 ## Where this fits
 
@@ -116,15 +55,6 @@ Trax is split into layers, one repo each. Take the ones you need; the trains you
 | [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
 
 Docs live in [Trax.Docs](https://github.com/TraxSharp/Trax.Docs) and are published at [traxsharp.net/docs](https://traxsharp.net/docs).
-
-## Documentation
-
-- [Scheduler overview](https://traxsharp.net/docs/scheduler)
-- [Scheduling options](https://traxsharp.net/docs/scheduler/scheduling-options)
-- [Exclusions](https://traxsharp.net/docs/scheduler/exclusions)
-- [Dead letters and cleanup](https://traxsharp.net/docs/scheduler/dead-letters-and-cleanup)
-- [Dependent trains](https://traxsharp.net/docs/scheduler/dependent-trains)
-- [Remote execution](https://traxsharp.net/docs/scheduler/remote-execution)
 
 ## Contributing
 
