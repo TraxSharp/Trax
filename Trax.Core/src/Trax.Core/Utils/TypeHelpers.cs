@@ -9,6 +9,24 @@ namespace Trax.Core.Utils;
 internal static class TypeHelpers
 {
     /// <summary>
+    /// The name a developer would write for <paramref name="type"/> in C#, such as
+    /// <c>List&lt;String&gt;</c> rather than <c>List`1</c>, for messages that name a type.
+    /// </summary>
+    internal static string ReadableName(this Type type)
+    {
+        if (!type.IsGenericType)
+            return type.Name;
+
+        var name = type.Name;
+        var tick = name.IndexOf('`');
+
+        if (tick >= 0)
+            name = name[..tick];
+
+        return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(ReadableName))}>";
+    }
+
+    /// <summary>
     /// Extracts types and values from Memory to create a tuple.
     /// </summary>
     /// <param name="memory">The Memory dictionary</param>

@@ -31,7 +31,8 @@ public class MonadExtensionsEdgeCasesTests : TestSetup
 
         result.Should().BeNull();
         monad.Exception.Should().BeOfType<TrainException>();
-        monad.Exception!.Message.Should().Contain("single constructor");
+        monad.Exception!.Message.Should().Contain(nameof(MultiCtorJunction));
+        monad.Exception!.Message.Should().Contain("2 public constructors");
     }
 
     [Test]

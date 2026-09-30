@@ -1,6 +1,7 @@
 using LanguageExt;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
@@ -55,10 +56,19 @@ public partial class Monad<TInput, TReturn>
         if (ShortCircuitValueSet)
             return ShortCircuitValue;
 
-        var result = this.ExtractTypeFromMemory<TReturn, TInput, TReturn>();
+        var result = this.ExtractTypeFromMemory<TReturn, TInput, TReturn>(missing =>
+            $"Train '{Train.GetType().ReadableName()}' has no '{missing.ReadableName()}' to "
+            + "resolve: nothing in the chain produced one and it is not registered in the "
+            + $"container. Chain a junction that outputs '{missing.ReadableName()}' before "
+            + "Resolve()."
+        );
+
+        // Checked before the value: a missing value type comes back as its default, not null.
+        if (Exception is not null)
+            return Exception;
 
         if (result is null)
-            return new TrainException($"Could not find type: ({typeof(TReturn)}).");
+            return new TrainException($"'{typeof(TReturn).ReadableName()}' is null.");
 
         return (TReturn)result;
     }

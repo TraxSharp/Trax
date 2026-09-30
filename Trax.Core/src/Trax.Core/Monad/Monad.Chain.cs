@@ -60,7 +60,9 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return this;
 
-        var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>();
+        var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>(missing =>
+            MonadExtensions.MissingJunctionInputMessage(typeof(TJunction), missing, Train)
+        );
 
         if (input is null)
             return this;
@@ -114,7 +116,12 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return Task.FromResult(this);
 
-        var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>();
+        var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>(missing =>
+            $"IChain<{missing.ReadableName()}> (train '{Train.GetType().ReadableName()}') found "
+            + $"no junction implementing '{missing.ReadableName()}': none was passed to "
+            + "AddServices and it is not registered in the container. Pass one with AddServices "
+            + "or register it."
+        );
 
         if (junctionService is null)
             return Task.FromResult(this);
@@ -128,7 +135,7 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> Chain<TJunction>()
         where TJunction : class =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.Chain)
+            ? RecordBuiltStep<TJunction>(ChainStepKind.Chain)
             : new(ChainAsync<TJunction>());
 
     private Task<Monad<TInput, TReturn>> ChainAsync<TJunction>()
@@ -243,6 +250,19 @@ public partial class Monad<TInput, TReturn>
         Recorder!.Record(kind, typeof(TJunction), tIn, tOut);
 
         return new MonadTask<TInput, TReturn>(Task.FromResult(this));
+    }
+
+    /// <summary>
+    /// Records a step whose junction Trax builds from its constructor, refusing a junction it
+    /// cannot build. Only the constructor count is decided here: the arguments come from Memory
+    /// and the container as the chain runs.
+    /// </summary>
+    private MonadTask<TInput, TReturn> RecordBuiltStep<TJunction>(ChainStepKind kind)
+    {
+        if (MonadExtensions.JunctionConstructorProblem(typeof(TJunction)) is { } problem)
+            Recorder!.Refuse($"{kind}<{typeof(TJunction).ReadableName()}>: {problem}");
+
+        return RecordStep<TJunction>(kind);
     }
 
     /// <summary>

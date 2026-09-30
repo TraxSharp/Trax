@@ -1,5 +1,6 @@
 using System.Reflection;
 using Trax.Core.Exceptions;
+using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
 
@@ -19,7 +20,12 @@ public partial class Monad<TInput, TReturn>
         // Try to get the source object from Memory
         if (!Memory.TryGetValue(typeof(TIn), out var stored) || stored is not TIn typeFromMemory)
         {
-            Exception ??= new TrainException($"Could not find type: ({typeof(TIn)}).");
+            Exception ??= new TrainException(
+                $"Extract<{typeof(TIn).ReadableName()}, {typeof(TOut).ReadableName()}> (train "
+                    + $"'{Train.GetType().ReadableName()}') found no '{typeof(TIn).ReadableName()}' "
+                    + $"in Memory. Chain a junction that outputs '{typeof(TIn).ReadableName()}' "
+                    + "before the Extract."
+            );
 
             return this;
         }

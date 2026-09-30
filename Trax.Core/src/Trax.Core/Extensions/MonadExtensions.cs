@@ -38,12 +38,10 @@ internal static class MonadExtensions
             junctionType,
             type =>
             {
-                if (!type.IsClass)
+                if (JunctionConstructorProblem(type) is not null)
                     return null;
 
                 var constructors = type.GetConstructors();
-                if (constructors.Length != 1)
-                    return null;
 
                 var parameterTypes = constructors[0]
                     .GetParameters()
@@ -56,21 +54,21 @@ internal static class MonadExtensions
 
         if (cached is null)
         {
-            if (!junctionType.IsClass)
-                monad.Exception ??= new TrainException(
-                    $"Junction ({junctionType}) must be a class."
-                );
-            else
-                monad.Exception ??= new TrainException(
-                    $"Junction classes can only have a single constructor ({junctionType})."
-                );
+            monad.Exception ??= new TrainException(
+                JunctionConstructorProblem(junctionType, monad.Train.GetType())!
+            );
             return null;
         }
 
         var (constructor, constructorArguments) = cached.Value;
 
-        // Extract the constructor parameters from Memory
-        var constructorParameters = monad.ExtractTypesFromMemory(constructorArguments);
+        // Extract the constructor parameters from Memory, naming the junction when one is missing:
+        // the type alone does not say which junction asked for it, or whether it was expected
+        // from an earlier junction or from the container.
+        var constructorParameters = monad.ExtractTypesFromMemory(
+            constructorArguments,
+            missing => MissingConstructorArgumentMessage(junctionType, missing, monad.Train)
+        );
 
         if (monad.Exception is not null)
             return null;
@@ -110,22 +108,26 @@ internal static class MonadExtensions
     /// </summary>
     public static dynamic?[] ExtractTypesFromMemory<TInput, TReturn>(
         this Monad<TInput, TReturn> monad,
-        IEnumerable<Type> types
+        IEnumerable<Type> types,
+        Func<Type, string>? missingMessage = null
     )
     {
         var typeArray = types as Type[] ?? types.ToArray();
         var result = new dynamic?[typeArray.Length];
         for (var i = 0; i < typeArray.Length; i++)
-            result[i] = monad.ExtractTypeFromMemory(typeArray[i]);
+            result[i] = monad.ExtractTypeFromMemory(typeArray[i], missingMessage);
         return result;
     }
 
     /// <summary>
     /// Extracts a value of type T from Memory.
     /// </summary>
-    public static T? ExtractTypeFromMemory<T, TInput, TReturn>(this Monad<TInput, TReturn> monad)
+    public static T? ExtractTypeFromMemory<T, TInput, TReturn>(
+        this Monad<TInput, TReturn> monad,
+        Func<Type, string>? missingMessage = null
+    )
     {
-        var type = monad.ExtractTypeFromMemory(typeof(T));
+        var type = monad.ExtractTypeFromMemory(typeof(T), missingMessage);
 
         return type is null ? default : (T)type;
     }
@@ -176,11 +178,14 @@ internal static class MonadExtensions
     }
 
     /// <summary>
-    /// Extracts a value from Memory by its type.
+    /// Extracts a value from Memory by its type, falling back to the container and then to the
+    /// logger factory. When nothing supplies it, the chain fails with
+    /// <paramref name="missingMessage"/>'s text, which should say who needed the value.
     /// </summary>
     public static dynamic? ExtractTypeFromMemory<TInput, TReturn>(
         this Monad<TInput, TReturn> monad,
-        Type tIn
+        Type tIn,
+        Func<Type, string>? missingMessage = null
     )
     {
         try
@@ -192,7 +197,9 @@ internal static class MonadExtensions
                     ?? monad.ExtractLoggerFromLoggerFactory(tIn);
 
             if (input is null)
-                throw new TrainException($"Could not find type: ({tIn}).");
+                throw new TrainException(
+                    missingMessage?.Invoke(tIn) ?? MissingValueMessage(tIn, monad.Train)
+                );
 
             return input;
         }
@@ -202,6 +209,60 @@ internal static class MonadExtensions
             return null;
         }
     }
+
+    /// <summary>
+    /// Why Trax cannot build <paramref name="junctionType"/> from its constructor, or null when
+    /// it can. Trax builds a junction through its one public constructor, so anything else fails
+    /// every run; the chain recorder asks the same question so the host refuses it at startup.
+    /// </summary>
+    internal static string? JunctionConstructorProblem(Type junctionType, Type? trainType = null)
+    {
+        var train = trainType is null ? "" : $" (train '{trainType.ReadableName()}')";
+
+        if (!junctionType.IsClass)
+            return $"Junction '{junctionType.ReadableName()}'{train} must be a class; Trax builds "
+                + "a junction from its class. Chain the class that implements it, or use IChain "
+                + "to resolve it by its interface.";
+
+        if (junctionType.IsAbstract)
+            return $"Junction '{junctionType.ReadableName()}'{train} is abstract, so Trax cannot "
+                + "build it. Chain a concrete class.";
+
+        var count = junctionType.GetConstructors().Length;
+
+        if (count == 1)
+            return null;
+
+        return $"Junction '{junctionType.ReadableName()}'{train} has {count} public constructors; "
+            + "Trax builds a junction through its single public constructor. Give it exactly one.";
+    }
+
+    internal static string MissingConstructorArgumentMessage<TInput, TReturn>(
+        Type junctionType,
+        Type missing,
+        Train.Train<TInput, TReturn> train
+    ) =>
+        $"Junction '{junctionType.ReadableName()}' (train '{train.GetType().ReadableName()}') "
+        + $"needs '{missing.ReadableName()}' as a constructor argument, but nothing earlier in "
+        + "the chain produced one and it is not registered in the container. Register it or "
+        + "chain a junction that outputs it first.";
+
+    internal static string MissingJunctionInputMessage<TInput, TReturn>(
+        Type junctionType,
+        Type missing,
+        Train.Train<TInput, TReturn> train
+    ) =>
+        $"Junction '{junctionType.ReadableName()}' (train '{train.GetType().ReadableName()}') "
+        + $"needs '{missing.ReadableName()}' as its input, but nothing earlier in the chain "
+        + "produced one and it is not registered in the container. Chain a junction that "
+        + "outputs it first, or register it.";
+
+    private static string MissingValueMessage<TInput, TReturn>(
+        Type missing,
+        Train.Train<TInput, TReturn> train
+    ) =>
+        $"Train '{train.GetType().ReadableName()}' needs '{missing.ReadableName()}', but nothing "
+        + "earlier in the chain produced one and it is not registered in the container.";
 
     /// <summary>
     /// Extracts a tuple from Memory.

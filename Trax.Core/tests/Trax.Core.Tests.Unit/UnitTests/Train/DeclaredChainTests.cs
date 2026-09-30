@@ -437,9 +437,13 @@ public class DeclaredChainTests : TestSetup
 
     private class AwaitingTrain : Train<string, bool>
     {
+        // Never completes. Task.Yield raced the check: on a fast thread pool the rest of the body
+        // could finish before DeclaredChain looked, and the declaration then read as complete.
+        private static readonly TaskCompletionSource Never = new();
+
         protected override async Task<Either<Exception, bool>> Junctions()
         {
-            await Task.Yield();
+            await Never.Task;
             return await Chain<StringLength>().Chain<IntToBool>().Resolve();
         }
     }

@@ -55,7 +55,7 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
         where TJunction : class =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.ShortCircuit)
+            ? RecordBuiltStep<TJunction>(ChainStepKind.ShortCircuit)
             : new(ShortCircuitAsync<TJunction>());
 
     private Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>()
@@ -101,13 +101,15 @@ public partial class Monad<TInput, TReturn>
             TReturn
         >(this, tIn, tOut, 2);
 
-        var input = MonadExtensions.ExtractTypeFromMemory(this, tIn);
+        var input = MonadExtensions.ExtractTypeFromMemory(
+            this,
+            tIn,
+            missing =>
+                MonadExtensions.MissingJunctionInputMessage(typeof(TJunction), missing, Train)
+        );
 
         if (input is null)
-        {
-            Exception ??= new TrainException($"Could not find ({tIn}) in Memory.");
             return this;
-        }
 
         // Invoke the generic ShortCircuitJunction — returns Task<(Monad, Either<Exception, TOut>)>
         var taskObj = chainMethod.Invoke(this, [junctionInstance, input])!;

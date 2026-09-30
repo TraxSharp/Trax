@@ -13,9 +13,11 @@ public partial class Monad<TInput, TReturn>
     /// object may be passed under several interfaces. A Moq mock is stored under the type it mocks.
     /// </summary>
     /// <remarks>
-    /// A null service throws immediately rather than failing the chain. While the chain is read at
-    /// startup, null, a struct or a class type argument is recorded as a refusal instead, so the
-    /// argument must already be assigned when <c>Junctions()</c> runs.
+    /// A null service fails the chain with a <see cref="Exceptions.TrainException"/> naming its
+    /// type argument and position, like every other invalid argument, and nothing from that call is
+    /// stored. While the chain is read at startup, null, a struct or a class type argument is
+    /// recorded as a refusal instead, so the argument must already be assigned when
+    /// <c>Junctions()</c> runs.
     /// </remarks>
     /// <param name="service">The service to store under <typeparamref name="T1"/>.</param>
     public Monad<TInput, TReturn> AddServices<T1>(T1 service)
@@ -169,7 +171,7 @@ public partial class Monad<TInput, TReturn>
     /// Internal method that adds services to the chain's memory.
     /// </summary>
     /// <remarks>
-    /// A null service is refused while a chain is recorded and throws when it runs. Either way
+    /// A null service is refused while a chain is recorded and fails the chain when it runs. Either way
     /// the argument has to exist when <c>Junctions()</c> runs: a field assigned later, in a
     /// lifecycle hook say, is still null when the chain is read at startup.
     /// </remarks>
@@ -184,7 +186,7 @@ public partial class Monad<TInput, TReturn>
                 var serviceType = typeArray[i];
 
                 if (services[i] is null)
-                    Recorder.Refuse(NullServiceMessage(serviceType, whileRecording: true));
+                    Recorder.Refuse(NullServiceMessage(i, typeArray, whileRecording: true));
                 else if (services[i]!.GetType().IsValueType)
                     // A struct passed as an interface is boxed, and the runtime refuses it.
                     Recorder.Refuse(
@@ -206,9 +208,17 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
+        // Checked before anything is stored, so a failed call leaves Memory as it found it.
         for (var i = 0; i < typeArray.Length; i++)
+        {
             if (services[i] is null)
-                throw new Exception(NullServiceMessage(typeArray[i], whileRecording: false));
+            {
+                Exception ??= new TrainException(
+                    NullServiceMessage(i, typeArray, whileRecording: false)
+                );
+                return this;
+            }
+        }
 
         // Each service goes under the type argument it was passed as, in the same position:
         // one object may be passed under several interfaces, and each is a separate slot the
@@ -252,10 +262,20 @@ public partial class Monad<TInput, TReturn>
         return this;
     }
 
-    private static string NullServiceMessage(Type serviceType, bool whileRecording) =>
-        whileRecording
-            ? $"AddServices<{serviceType.Name}> received null while the chain was being recorded. "
-                + "A service cannot be null, and the argument must be available when Junctions() "
-                + "runs; assigning it later, in OnStarted say, is not supported."
-            : $"AddServices<{serviceType.Name}> received null. A service cannot be null.";
+    private static string NullServiceMessage(int position, Type[] typeArray, bool whileRecording)
+    {
+        var received =
+            $"AddServices<{typeArray[position].Name}> received null"
+            + (
+                typeArray.Length > 1
+                    ? $" for the service at position {position + 1} of {typeArray.Length}"
+                    : ""
+            );
+
+        return whileRecording
+            ? $"{received} while the chain was being recorded. A service cannot be null, and the "
+                + "argument must be available when Junctions() runs; assigning it later, in "
+                + "OnStarted say, is not supported."
+            : $"{received}. A service cannot be null.";
+    }
 }
