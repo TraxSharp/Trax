@@ -275,7 +275,7 @@ The cap bucket key is the `trax:principal-id` claim. Anonymous callers (no authe
 
 `WithMaxInputJsonBytes(int)` on `TraxMediatorBuilder` caps the UTF-8 byte length of caller-supplied train input JSON. Default is 256 KiB. Oversize inputs are rejected with `TrainInputValidationException` (code `TRAX_INVALID_INPUT`) after authorization runs but before deserialization, so attacker-controlled JSON never reaches the deserializer.
 
-Input is read without JSON reference handling: `$id`, `$ref` and `$values` are not honoured, so the parsed input is the tree the caller sent. An enqueue also caps the input as it is stored on the work queue entry (indented, every member written) at 4 times `MaxInputJsonBytes`, and refuses a larger one with the same exception before the entry is written. See [TrainInputReader](/docs/sdk-reference/mediator-api/train-execution#traininputreader).
+Input is read without JSON reference handling: `$id`, `$ref` and `$values` are not honoured, so the parsed input is the tree the caller sent. An enqueue also caps the input as it is stored on the work queue entry (indented, every member written) at 4 times `MaxInputJsonBytes`, and refuses a larger one with the same exception before the entry is written. Writing that form stops the moment it crosses the cap, so an oversized one is never built in full. See [TrainInputReader](/docs/sdk-reference/mediator-api/train-execution#traininputreader).
 
 ### OnQueue Time Limit
 

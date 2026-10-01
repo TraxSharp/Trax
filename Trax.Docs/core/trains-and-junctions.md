@@ -283,8 +283,9 @@ The check is a hosted service that `AddMediator` registers, so it runs wherever 
 starts hosted services; the Lambda runner and a bare `ServiceProvider` never run it. It checks in
 `StartingAsync`, which the host finishes for every hosted service before it calls any
 `StartAsync`, so a refusal stops the host before any worker starts, including under
-`HostOptions.ServicesStartConcurrently`. The `[TraxAuthorize]` enforcer check runs the same way. It
-refuses to start when:
+`HostOptions.ServicesStartConcurrently`. Something that starts hosted services itself and calls
+only `StartAsync`, such as a custom `IHost` or a test harness, gets the check from `StartAsync`
+instead. The `[TraxAuthorize]` enforcer check runs the same way. It refuses to start when:
 
 - the chain could not be read, because it reads the input
 - `Junctions()` throws anything else, for example a `NullReferenceException` from reading
@@ -305,6 +306,11 @@ refuses to start when:
 - `Chain<T>` or `ShortCircuit<T>` names a type that is not a junction
 - `Chain<T>` or `ShortCircuit<T>` names a junction Trax cannot build, because it does not have
   exactly one public constructor, or is abstract or an interface
+- a junction Trax builds (`Chain<T>` or `ShortCircuit<T>`) has a constructor argument that neither
+  Memory, as the chain has filled it by that step, nor the container supplies:
+  `IScheduleTrain: step 2 (ClockJunction) needs 'IClock' as a constructor argument; nothing before
+  it puts one in Memory and the container does not register it. Register it or chain a junction
+  that produces it first.`
 - a second chain call is made on the train as a separate statement after a junction step the body
   did not await, as in `Chain<A>(); return Chain<B>().Resolve();`. Both calls start from the
   train, so the two chains run at the same time over one Memory. Link them
@@ -318,17 +324,27 @@ refuses to start when:
 - the train's own constructor needs a type the container does not register at all, which would
   fail every run of the train: `ITdTrain cannot be built: its constructor needs 'IClock', which is
   not registered. Register it before building the host.`
+- a registered dependency of the train needs such a type in its own constructor. The check follows
+  registrations that name an implementation class, open generics included, and names the path:
+  `INeedsNestedTrain cannot be built: ProbeRepository needs 'IClock', which is not registered, and
+  the train's constructor reaches it through 'IProbeRepository'. Register it before building the
+  host.` A registration made through a factory or an instance is not followed
+- the train's class has no public constructor: `IFooTrain cannot be built: FooTrain has no public
+  constructor. Give it one.`
 
 Every train is checked before anything is reported, so one start tells you about all of them. Each
-fault is on its own line, prefixed with the train. A step's fault names the step counting from one
-and its junction, as in `IOrderTrain: step 2 (ChargeCard) needs 'Payment' in Memory and nothing
-before it puts one there.` A refusal (naming a type that is not a junction, say) is listed first,
-and while a chain has one, the "chain ends without" fault it causes is left out; fix the refusal
-and start again.
+fault is on its own line, prefixed with the train. Steps are numbered from one by their written
+position, and a step's fault names its junction, as in `IOrderTrain: step 2 (ChargeCard) needs
+'Payment' in Memory and nothing before it puts one there.` A refusal (naming a type that is not a
+junction, say) is listed first and carries its step, as in `step 2: Chain names NotAJunction, which
+does not implement IJunction<TIn, TOut>.`; the steps after it keep their written positions. A
+refused step that produced nothing leaves the chain without whatever it would have produced, so a
+"chain ends without" fault after such a step is left out as a consequence. A "chain ends without"
+fault that does not follow from a refusal is listed alongside it.
 
-A train the check cannot build is logged as a warning and skipped, not refused, when everything its
-constructor needs is registered: it cannot be constructed at startup because a registered service
-only works inside a request, such as a current user read from `HttpContext`. A registered train
+A train the check cannot build is logged as a warning and skipped, not refused, when nothing shows
+it can never be built: it cannot be constructed at startup because a service only works inside a
+request, such as a current user read from `HttpContext` through a factory registration. A registered train
 that does not derive from `Train<,>` is skipped the same way. A train that cannot be built for that
 reason is not evidence of a chain that cannot run, but its chain goes unverified, so read the
 warning. A train that *can* be built but whose `Junctions()` throws is a different case, and is

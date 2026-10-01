@@ -29,7 +29,7 @@ Task<TOut> RunAsync<TOut>(object trainInput, CancellationToken cancellationToken
 
 **Returns**: `Task<TOut>`, the train's output.
 
-**Throws**: `TrainException` if no train is registered for the input's type (the message names the input type, the scanned assemblies and `ScanAssemblies(...)`; see [Troubleshooting](/docs/cross-cutting/troubleshooting#could-not-find-train-with-input-type-x)), or if `metadata` is not `Pending`. `TrainAlreadyStartedException` (a `TrainException`, namespace `Trax.Effect.Exceptions`) if `metadata` says `Pending` but the stored row no longer is, because another execution started it first: the start is claimed with one conditional write in the store, so of two executions handed the same row only one runs the train. The refused one has run nothing and written nothing, and the row belongs to the other: do not record a failure on it. `OperationCanceledException` if the token is cancelled.
+**Throws**: [`NoTrainForInputException`](#notrainforinputexception) if no train is registered for the input's type (the message names the input type, the scanned assemblies and `ScanAssemblies(...)`; see [Troubleshooting](/docs/cross-cutting/troubleshooting#could-not-find-train-with-input-type-x)). `TrainException` if `metadata` is not `Pending`. `TrainAlreadyStartedException` (a `TrainException`, namespace `Trax.Effect.Exceptions`) if `metadata` says `Pending` but the stored row no longer is, because another execution started it first: the start is claimed with one conditional write in the store, so of two executions handed the same row only one runs the train. The refused one has run nothing and written nothing, and the row belongs to the other: do not record a failure on it. `OperationCanceledException` if the token is cancelled.
 
 ### RunAsync (void)
 
@@ -60,7 +60,7 @@ Task RunByNameAsync(string trainName, object trainInput, CancellationToken cance
 
 **Throws**: `TrainException` if no discovered train has that name, if the input is not of its input type (both before anything is resolved), or if `metadata` is not `Pending`. Otherwise as `RunAsync`.
 
-Like the rest of the bus it is an in-process call and checks no authorization. `ITrainExecutionService.RunAsync` authorizes the caller for the train it looked up and then runs that train through this method. Each call gets its own DI scope, as `RunAsync` does. The interface ships a default implementation that throws `NotSupportedException`, so a test double implementing `ITrainBus` keeps compiling; the bus `AddMediator` registers implements it.
+Like the rest of the bus it is an in-process call and checks no authorization. `ITrainExecutionService.RunAsync` authorizes the caller for the train it looked up and then runs that train through this method. Each call gets its own DI scope, as `RunAsync` does. The interface ships a default implementation that throws `NotSupportedException`, so a test double implementing `ITrainBus` keeps compiling; the bus `AddMediator` registers implements it. A host that replaces the bus with one keeping that default cannot run trains by name: `ITrainExecutionService.RunAsync` throws `NotSupportedException` before it writes any record (see [RunAsync](/docs/sdk-reference/mediator-api/train-execution#runasync)).
 
 ### InitializeTrain
 
@@ -75,6 +75,26 @@ object InitializeTrain(object trainInput)
 | `trainInput` | `object` | Yes | The input object used to discover the train |
 
 **Returns**: The initialized train instance (as `object`).
+
+**Throws**: [`NoTrainForInputException`](#notrainforinputexception) if no train is registered for the input's type.
+
+## NoTrainForInputException
+
+`Trax.Mediator.Exceptions.NoTrainForInputException`, an `InvalidOperationException`, is what `RunAsync` and `InitializeTrain` throw when no registered train takes the input's type. Before Trax.Mediator 1.24.0 they threw a `TrainException` with the same message.
+
+```csharp
+public class NoTrainForInputException : InvalidOperationException
+{
+    public NoTrainForInputException(Type inputType, IReadOnlyList<string> scannedAssemblies);
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `InputType` | `Type` | The runtime type of the input no registered train takes |
+| `ScannedAssemblies` | `IReadOnlyList<string>` | The names of the assemblies the registry scanned for trains; empty when the registry does not scan |
+
+The message is a host configuration error and names how the host is built, so it is for the host's log, not for a caller. That is why it is not a `TrainException`: Trax.Api's error filter and the scheduler's runner endpoints pass a `TrainException`'s message through as a train author's words, and they do not treat other exception types that way.
 
 ## Examples
 

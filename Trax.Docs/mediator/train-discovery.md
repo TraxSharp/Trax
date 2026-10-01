@@ -43,8 +43,9 @@ The canonical name is the preferred identifier. It is stable across implementati
 
 1. **Must be concrete classes** (not abstract)
 2. **Must implement IServiceTrain<,>**
-3. **Must have parameterless constructor or be registered in DI**
+3. **Must have a public constructor the container can satisfy.** The startup check refuses a train with no public constructor, or one whose constructor needs a type nothing registers.
 4. **Should implement its own interface**, a non-generic one deriving from `IServiceTrain<TIn, TOut>`. That interface is the train's service type and its canonical name. Other interfaces the class or its base classes implement are ignored.
+5. **One class per service type.** Two different classes registered under one class service type (`AddTransient<BaseTrain, A>()` and `AddTransient<BaseTrain, B>()`) make `DiscoverTrains` throw `TrainException`, so the host fails at startup: a train is found by the name of the type it is registered under, and the container runs only the last registration, so the name would not describe the train that runs. Register each train under its own interface or class.
 
 ## SDK Reference
 

@@ -7,7 +7,7 @@ nav_order: 5
 
 # Architecture Guards
 
-Trax ships per-concern "guard" packages that let any repo enforce the same architectural conventions the Trax samples follow: one project / one schema / one context, cross-schema reads that never leak the model graph, cross-schema GraphQL edges that batch, trains that expose a companion interface, and basic test hygiene. The rules are framework-agnostic checkers that return an offender list; you assert on them with your own test framework.
+Trax ships per-concern "guard" packages that let any repo enforce the same architectural conventions the Trax samples follow: one project / one schema / one context, cross-schema reads that never leak the model graph, cross-schema GraphQL edges that batch, trains that each have their own train interface, and basic test hygiene. The rules are framework-agnostic checkers that return an offender list; you assert on them with your own test framework.
 
 ## Packages
 
@@ -59,6 +59,8 @@ That is the whole test project. `dotnet test` discovers the inherited `[Test]` m
 `ArchitectureGuardOptions` carries the per-repo configuration: scan roots, allowlists, and the expected versions. Allowlist entries are repo-relative paths; the source guards walk up from the test assembly to the nearest `*.slnx` to find the repo root.
 
 If you prefer not to use NUnit, the same checks are available as framework-agnostic methods (`DataLayerGuards.*`, `CrossSchemaGuards.*`, `TrainGuards.*`, `HygieneGuards.*`) that return a `GuardResult` you assert on however you like.
+
+`EveryTrainHasInterface` applies the rule the train registry applies when it scans. A train is any concrete class that derives from `ServiceTrain<,>` or implements `IServiceTrain<,>` directly, and each one needs exactly one most-derived non-generic interface deriving `IServiceTrain<TIn, TOut>`, whose `FullName` is the train's canonical name. The interface is conventionally named `I{Name}`, but any name passes. The guard flags a train with no such interface, which the registry would list only under the shared `IServiceTrain<TIn, TOut>`, and a train with two train interfaces neither of which extends the other, which the registry refuses.
 
 ## The owner-scope census
 

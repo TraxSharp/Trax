@@ -9,7 +9,7 @@ nav_order: 4
 
 ## "Could not find train with input type (X)"
 
-The `TrainBus` has no train registered for the input's type. The message names the type, the assemblies the mediator scanned, and the two fixes:
+The `TrainBus` has no train registered for the input's type, and throws `NoTrainForInputException`. The message names the type, the assemblies the mediator scanned, and the two fixes:
 
 ```text
 Could not find train with input type (MyApp.Orders.OrderInput): no IServiceTrain<OrderInput, TOut> is registered for it. Scanned assemblies: [MyApp.Api]. Add a train that takes this input type, or add the assembly that holds its train to ScanAssemblies(...).
@@ -29,7 +29,7 @@ services.AddTrax(trax => trax
 );
 ```
 
-This is a host configuration error, reported to the host. A caller that asks `ITrainExecutionService` for a train name that does not exist gets `TrainNotFoundException` instead, whose message is always "The requested train was not found." and does not say what is registered.
+This is a host configuration error, reported to the host. The exception is not a `TrainException`, so Trax.Api and the scheduler's runner endpoints, which pass a `TrainException`'s message through as a train's own words, do not pass this one through that way; read it in the host's log. A caller that asks `ITrainExecutionService` for a train name that does not exist gets `TrainNotFoundException` instead, whose message is always "The requested train was not found." and does not say what is registered.
 
 The scheduler checks the same thing when a train is scheduled (`Schedule`, `ScheduleMany`, `ScheduleOnceAsync` and the rest) and throws `InvalidOperationException` with the same fix:
 
@@ -95,7 +95,11 @@ services.AddScoped<IEmailService, EmailService>();
 
 The host refused to start because a train's own constructor asks for a type that nothing registers
 in the container, so the train would fail every run. Register the type before building the host.
-A type that *is* registered but can only be built inside a request (one reading `HttpContext`, say)
+The same refusal names a registered dependency whose own constructor needs an unregistered type,
+with the path the train reaches it through: `ProbeRepository needs 'IClock', which is not
+registered, and the train's constructor reaches it through 'IProbeRepository'.` A train class with
+no public constructor is refused as `FooTrain has no public constructor. Give it one.` A dependency
+registered through a factory that can only build inside a request (one reading `HttpContext`, say)
 is not refused: the train is skipped with a warning, "was not verified at startup".
 
 ## "Junction 'X' (train 'Y') needs 'Z' as a constructor argument"
@@ -105,8 +109,10 @@ hold. Trax builds a junction through its single public constructor, taking each 
 Memory first and the container second, so the message names the junction, the train and the
 missing type.
 
-**Fix:** Register the missing service, or chain a junction that outputs it before this one. The
-startup chain check does not verify constructor arguments, so this surfaces on the first run.
+**Fix:** Register the missing service, or chain a junction that outputs it before this one. On a
+generic host the startup chain check finds this before the first run and refuses to start, with
+`step N (X) needs 'Z' as a constructor argument`. The run-time message above is what a host that
+skips the check (the Lambda runner, a bare `ServiceProvider`, `SkipChainVerification()`) sees.
 
 ## "Junction 'X' has 2 public constructors"
 
