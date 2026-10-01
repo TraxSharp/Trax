@@ -46,8 +46,6 @@ public class ServerSettingsPageTests
     [Test]
     public async Task A_saved_edit_is_applied_and_persisted()
     {
-        // Equal intervals, so the save carries no change other than the edit itself.
-        _config.JobDispatcherPollingInterval = _config.ManifestManagerPollingInterval;
         var page = RenderPage();
 
         page.Find("input[name=DefaultMaxRetries]").Change("7");
@@ -92,18 +90,112 @@ public class ServerSettingsPageTests
     }
 
     [Test]
-    public async Task Reset_fills_the_form_and_Save_writes_the_defaults_through_the_service()
+    public async Task Discard_changes_returns_the_form_to_the_settings_in_force()
     {
-        _config.DefaultMaxRetries = 7;
+        var page = RenderPage();
+        page.Find("input[name=DefaultMaxRetries]").Change("7");
+
+        await ClickButton(page, "Discard Changes");
+
+        page.FindAll(".cs-fieldset-dirty").Should().BeEmpty("the edit was discarded");
+        page.Find("input[name=DefaultMaxRetries]").GetAttribute("value").Should().Be("3");
+        _config.DefaultMaxRetries.Should().Be(3);
+        (await PersistedRow()).Should().BeNull("discarding writes nothing");
+    }
+
+    [Test]
+    public async Task A_save_stores_only_the_field_the_operator_changed()
+    {
         var page = RenderPage();
 
-        await ClickButton(page, "Reset Default");
-        _config.DefaultMaxRetries.Should().Be(7, "Reset only fills the form; Save applies it");
-        (await PersistedRow()).Should().BeNull();
-
+        page.Find("input[name=DefaultMaxRetries]").Change("7");
         await ClickButton(page, "Save");
-        _config.DefaultMaxRetries.Should().Be(new SchedulerConfiguration().DefaultMaxRetries);
-        (await PersistedRow())!.DefaultMaxRetries.Should().Be(3);
+
+        var row = await PersistedRow();
+        row!.TryGetOverride<int>("DefaultMaxRetries", out var retries).Should().BeTrue();
+        retries.Should().Be(7);
+        row.TryGetOverride<TimeSpan>("StalePendingTimeout", out _)
+            .Should()
+            .BeFalse("the operator did not touch it, so the save must not pin it");
+        row.TryGetOverride<bool>("ManifestManagerEnabled", out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task A_save_keeps_a_change_another_writer_made_after_the_page_loaded()
+    {
+        var page = RenderPage();
+        var otherWriter = _ctx.Services.GetRequiredService<IOperationsService>();
+        await otherWriter.UpdateSchedulerConfigAsync(
+            new UpdateSchedulerConfigInput(StalePendingTimeout: TimeSpan.FromMinutes(42)),
+            CancellationToken.None
+        );
+
+        page.Find("input[name=DefaultMaxRetries]").Change("7");
+        await ClickButton(page, "Save");
+
+        _config
+            .StalePendingTimeout.Should()
+            .Be(TimeSpan.FromMinutes(42), "the page did not edit it, so it must not revert it");
+        (await PersistedRow())!
+            .TryGetOverride<TimeSpan>("StalePendingTimeout", out var stored)
+            .Should()
+            .BeTrue();
+        stored.Should().Be(TimeSpan.FromMinutes(42));
+    }
+
+    [Test]
+    public async Task After_a_save_the_form_shows_the_settings_in_force()
+    {
+        var page = RenderPage();
+        var otherWriter = _ctx.Services.GetRequiredService<IOperationsService>();
+        await otherWriter.UpdateSchedulerConfigAsync(
+            new UpdateSchedulerConfigInput(StalePendingTimeout: TimeSpan.FromMinutes(42)),
+            CancellationToken.None
+        );
+
+        page.Find("input[name=DefaultMaxRetries]").Change("7");
+        await ClickButton(page, "Save");
+
+        page.Find("input[name=StalePendingTimeout]").GetAttribute("value").Should().Be("42");
+        page.FindAll(".cs-fieldset-dirty")
+            .Should()
+            .BeEmpty("the form was refreshed from the service");
+    }
+
+    [Test]
+    public async Task A_failure_count_window_edit_is_saved()
+    {
+        // The default window is 24 hours, which the form shows as 1 day.
+        var page = RenderPage();
+
+        page.Find("input[name=FailureCountWindow]").Change("5");
+        await ClickButton(page, "Save");
+
+        _config.FailureCountWindow.Should().Be(TimeSpan.FromDays(5));
+        (await PersistedRow())!
+            .TryGetOverride<TimeSpan>("FailureCountWindow", out var stored)
+            .Should()
+            .BeTrue();
+        stored.Should().Be(TimeSpan.FromDays(5));
+    }
+
+    [Test]
+    public async Task A_duration_too_large_for_a_TimeSpan_renders_and_Save_is_refused()
+    {
+        // One day, so the field's unit is days.
+        _config.ManifestManagerPollingInterval = TimeSpan.FromDays(1);
+        var page = RenderPage();
+
+        page.Find("input[name=PollingInterval]").Change("100000000");
+
+        page.Markup.Should().Contain("Polling Interval", "the page still renders");
+        page.FindAll(".cs-field-invalid")
+            .Should()
+            .ContainSingle("the field says it is out of range");
+        SaveButton(page).HasAttribute("disabled").Should().BeTrue("Save is refused while invalid");
+        await page.InvokeAsync(() => SaveButton(page).ClickAsync(new()));
+        _config.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromDays(1));
+        (await PersistedRow()).Should().BeNull();
     }
 
     [Test]
@@ -166,6 +258,10 @@ public class ServerSettingsPageTests
         var button = page.FindAll("button").Single(b => b.TextContent.Trim().EndsWith(text));
         await button.ClickAsync(new());
     }
+
+    private static AngleSharp.Dom.IElement SaveButton(
+        IRenderedComponent<ServerSettingsPage> page
+    ) => page.FindAll("button").Single(b => b.TextContent.Trim().EndsWith("Save"));
 
     private async Task<Trax.Effect.Models.SchedulerConfig.SchedulerConfig?> PersistedRow()
     {

@@ -1,11 +1,8 @@
 @page "/trax/data/persisted-operations"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using Microsoft.Extensions.DependencyInjection
-@using Trax.Api.GraphQL.PersistedOperations
-@using Trax.Api.GraphQL.PersistedOperations.GraphQL
 @using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
-@using Trax.Effect.Data.Services.IDataContextFactory
-@inject IDataContextProviderFactory DataContextFactory
+@using Trax.Api.GraphQL.PersistedOperations.Services
 @inject NavigationManager Navigation
 @inject IServiceProvider ServiceProvider
 @inject DialogService DialogService
@@ -30,7 +27,7 @@
 @if (!_available)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
-        Persisted Operations is not enabled on this server. Call <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder to enable management.
+        Persisted Operations is not enabled on this server. Call <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder, or <code>AddPersistedOperationStore(...)</code> on a host that serves no GraphQL, to enable management.
     </RadzenAlert>
 }
 else
@@ -110,6 +107,7 @@ else
     private static readonly string[] StatusScopes = [StatusAll, StatusActive, StatusInactive];
 
     private bool _available;
+    private IPersistedOperationsService? _service;
     private TraxDataGrid<PersistedOperationDto>? _grid;
     private string _tenantScope = TenantScopeAll;
     private string _tenantKey = "";
@@ -118,27 +116,27 @@ else
 
     protected override Task OnInitializedAsync()
     {
-        _available = ServiceProvider.GetService<IPersistedOperationsCapability>() is not null;
+        // Resolved, not injected, so a host without persisted operations gets the notice above
+        // rather than a page that fails to construct. UsePersistedOperations and
+        // AddPersistedOperationStore both register it.
+        _service = ServiceProvider.GetService<IPersistedOperationsService>();
+        _available = _service is not null;
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// One page of rows from the resolver the API's <c>persistedOperations</c> field runs, with
-    /// the same filter, ordering and page bounds (central ADR 0022). Nothing is capped: the
-    /// grid pages through every row the filter admits.
+    /// One page of rows from the shared persisted-operations service the API's
+    /// <c>persistedOperations</c> field calls, with the same filter, ordering and page bounds
+    /// (central ADR 0022). Nothing is capped: the grid pages through every row the filter admits.
     /// </summary>
     private async Task<ServerDataResult<PersistedOperationDto>> LoadPageAsync(
         LoadDataArgs args,
         CancellationToken ct
     )
     {
-        var page = await new PersistedOperationQueries().PersistedOperations(
-            DataContextFactory,
-            ct,
-            BuildFilter(),
-            skip: args.Skip ?? 0,
-            take: args.Top ?? 25
-        );
+        if (_service is null)
+            return new ServerDataResult<PersistedOperationDto>([], 0);
+        var page = await _service.ListAsync(BuildFilter(), skip: args.Skip ?? 0, take: args.Top ?? 25, ct);
         return new ServerDataResult<PersistedOperationDto>(page.Items, page.TotalCount);
     }
 

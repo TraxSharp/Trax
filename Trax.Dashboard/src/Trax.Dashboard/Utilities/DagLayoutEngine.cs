@@ -94,7 +94,9 @@ internal static class DagLayoutEngine
     /// <summary>
     /// Computes node positions and edge curves. Each node's layer is the length of the longest
     /// path to it from a node with no predecessors; nodes with no edges at all go in one extra
-    /// layer on the far right. Within a layer, nodes are ordered by label and then by two
+    /// layer on the far right. A cyclic graph is laid out too: a group graph can be cyclic even
+    /// when the manifest dependencies under it are not, so the edges that close a cycle (found by
+    /// a depth-first walk in input order) are left out of the layering and drawn backwards. Within a layer, nodes are ordered by label and then by two
     /// barycenter sweeps to reduce edge crossings. The result is deterministic for the same input.
     /// </summary>
     /// <param name="nodes">The nodes. Ids must be unique, or the method throws.</param>
@@ -103,11 +105,6 @@ internal static class DagLayoutEngine
     /// <paramref name="nodes"/> are ignored.
     /// </param>
     /// <returns>The layout, or an empty <see cref="DagLayout"/> when there are no nodes.</returns>
-    /// <exception cref="System.InvalidOperationException">
-    /// The edges contain a cycle and a node in it has no predecessor earlier in
-    /// <paramref name="nodes"/>. For a cyclic graph the input order replaces the topological
-    /// order, so layering needs a predecessor already placed.
-    /// </exception>
     public static DagLayout ComputeLayout(
         IReadOnlyList<DagNode> nodes,
         IReadOnlyList<DagEdge> edges
@@ -131,27 +128,35 @@ internal static class DagLayoutEngine
             predecessors[edge.ToId].Add(edge.FromId);
         }
 
-        // Topological sort via shared DagValidator
+        // Topological sort via shared DagValidator. A cyclic graph is layered without the edges
+        // that close its cycles, which leaves an acyclic graph to sort.
         var sortResult = DagValidator.TopologicalSort(
             nodeIds,
             validEdges.Select(e => (e.FromId, e.ToId))
         );
 
-        // Use sorted order if acyclic, fall back to original order for resilience
-        var sorted = sortResult.IsAcyclic ? sortResult.Sorted : nodes.Select(n => n.Id).ToList();
+        var layeringEdges = sortResult.IsAcyclic
+            ? validEdges
+            : WithoutBackEdges(nodes, validEdges, successors);
+
+        var layeringPredecessors = nodes.ToDictionary(n => n.Id, _ => new List<long>());
+        foreach (var edge in layeringEdges)
+            layeringPredecessors[edge.ToId].Add(edge.FromId);
+
+        var sorted = sortResult.IsAcyclic
+            ? sortResult.Sorted
+            : DagValidator
+                .TopologicalSort(nodeIds, layeringEdges.Select(e => (e.FromId, e.ToId)))
+                .Sorted;
 
         // Layer assignment (longest path from roots)
         var layer = new Dictionary<long, int>();
         foreach (var id in sorted)
         {
-            if (predecessors[id].Count == 0)
-            {
-                layer[id] = 0;
-            }
-            else
-            {
-                layer[id] = predecessors[id].Where(layer.ContainsKey).Max(p => layer[p]) + 1;
-            }
+            layer[id] =
+                layeringPredecessors[id].Count == 0
+                    ? 0
+                    : layeringPredecessors[id].Max(p => layer[p]) + 1;
         }
 
         // Separate isolated nodes (no edges at all) into their own rightmost layer
@@ -290,6 +295,59 @@ internal static class DagLayoutEngine
             Width = totalWidth,
             Height = totalHeight,
         };
+    }
+
+    /// <summary>
+    /// The edges minus those that close a cycle: an edge is dropped when a depth-first walk,
+    /// started from each node in input order, reaches a node still on its own path. What remains
+    /// is acyclic, and the choice is deterministic for the same input.
+    /// </summary>
+    private static List<DagEdge> WithoutBackEdges(
+        IReadOnlyList<DagNode> nodes,
+        List<DagEdge> edges,
+        Dictionary<long, List<long>> successors
+    )
+    {
+        var onPath = new HashSet<long>();
+        var done = new HashSet<long>();
+        var backEdges = new HashSet<(long From, long To)>();
+
+        foreach (var root in nodes.Select(n => n.Id))
+        {
+            if (done.Contains(root))
+                continue;
+
+            // Iterative, so a long chain cannot overflow the stack.
+            var stack = new Stack<(long Id, int Next)>();
+            stack.Push((root, 0));
+            onPath.Add(root);
+
+            while (stack.Count > 0)
+            {
+                var (id, next) = stack.Pop();
+                var children = successors[id];
+
+                if (next == children.Count)
+                {
+                    onPath.Remove(id);
+                    done.Add(id);
+                    continue;
+                }
+
+                stack.Push((id, next + 1));
+                var child = children[next];
+
+                if (onPath.Contains(child))
+                    backEdges.Add((id, child));
+                else if (!done.Contains(child))
+                {
+                    onPath.Add(child);
+                    stack.Push((child, 0));
+                }
+            }
+        }
+
+        return edges.Where(e => !backEdges.Contains((e.FromId, e.ToId))).ToList();
     }
 
     /// <summary>

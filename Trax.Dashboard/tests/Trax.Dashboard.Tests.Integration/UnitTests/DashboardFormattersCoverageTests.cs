@@ -127,6 +127,22 @@ public class DashboardFormattersCoverageTests
         DashboardFormatters.FormatSchedule(m).Should().Be("Every 2h");
     }
 
+    [TestCase(90, "Every 1m 30s")]
+    [TestCase(3661, "Every 1h 1m 1s")]
+    [TestCase(5400, "Every 1h 30m")]
+    [TestCase(3605, "Every 1h 5s")]
+    public void FormatSchedule_IntervalNotAWholeUnit_KeepsEveryPart(int seconds, string expected)
+    {
+        var m = NewManifest();
+        m.ScheduleType = ScheduleType.Interval;
+        m.IntervalSeconds = seconds;
+
+        DashboardFormatters
+            .FormatSchedule(m)
+            .Should()
+            .Be(expected, "an interval is shown as configured, not rounded down to a whole unit");
+    }
+
     [Test]
     public void FormatSchedule_IntervalNullSeconds_ReturnsDash()
     {

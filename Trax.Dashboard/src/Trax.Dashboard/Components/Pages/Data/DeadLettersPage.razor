@@ -81,12 +81,12 @@
             <HeaderTemplate>
                 <RadzenCheckBox TValue="bool"
                                 Value="@(_selectedDeadLetters.Count > 0)"
-                                Change="@(args => { if (!(bool)args!) _selectedDeadLetters.Clear(); })" />
+                                Change="@(args => { if (!(bool)args!) ClearSelection(); })" />
             </HeaderTemplate>
             <Template Context="d">
                 <RadzenCheckBox TValue="bool"
-                                Value="@(_selectedDeadLetters.Contains(d))"
-                                Change="@(args => { if ((bool)args!) _selectedDeadLetters.Add(d); else _selectedDeadLetters.Remove(d); PausePolling = _selectedDeadLetters.Count > 0; })" />
+                                Value="@(_selectedDeadLetters.Contains(d.Id))"
+                                Change="@(args => ToggleSelection(d.Id, (bool)args!))" />
             </Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="DeadLetter"
@@ -148,10 +148,30 @@
 
 @code {
     private TraxDataGrid<DeadLetter>? _grid;
-    private IList<DeadLetter> _selectedDeadLetters = new List<DeadLetter>();
+    private readonly GridCount _count = new();
+
+    // Keyed by id: the grid reads a fresh page of dead letters on every load, so a selection kept
+    // by reference would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedDeadLetters = [];
     private bool _showBatchAcknowledgeInput;
     private bool _acknowledgeSelectedOnly;
     private string _batchAcknowledgeNote = "";
+
+    private void ToggleSelection(long id, bool selected)
+    {
+        if (selected)
+            _selectedDeadLetters.Add(id);
+        else
+            _selectedDeadLetters.Remove(id);
+        PausePolling = _selectedDeadLetters.Count > 0;
+    }
+
+    // Polling pauses while anything is selected, so emptying the selection resumes it.
+    private void ClearSelection()
+    {
+        _selectedDeadLetters.Clear();
+        PausePolling = false;
+    }
 
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -164,6 +184,8 @@
             DataContextFactory,
             db => db.DeadLetters.AsNoTracking().OrderByDescending(d => d.Id),
             args,
+            _count,
+            scope: null,
             ct
         );
 
@@ -171,14 +193,14 @@
     {
         var result = await Scheduler.RequeueAllDeadLettersAsync();
         NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
-    }, () => _selectedDeadLetters.Clear());
+    }, ClearSelection);
 
     private Task RequeueSelected() => RunBatchOperationAsync(async () =>
     {
-        var ids = _selectedDeadLetters.Select(d => d.Id).ToArray();
+        var ids = _selectedDeadLetters.ToArray();
         var result = await Scheduler.RequeueDeadLettersAsync(ids);
         NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
-    }, () => _selectedDeadLetters.Clear());
+    }, ClearSelection);
 
     private Task AcknowledgeBatch() => RunBatchOperationAsync(async () =>
     {
@@ -186,7 +208,7 @@
 
         if (_acknowledgeSelectedOnly)
         {
-            var ids = _selectedDeadLetters.Select(d => d.Id).ToArray();
+            var ids = _selectedDeadLetters.ToArray();
             result = await Scheduler.AcknowledgeDeadLettersAsync(ids, _batchAcknowledgeNote);
         }
         else
@@ -199,5 +221,5 @@
         _showBatchAcknowledgeInput = false;
         _acknowledgeSelectedOnly = false;
         _batchAcknowledgeNote = "";
-    }, () => _selectedDeadLetters.Clear());
+    }, ClearSelection);
 }

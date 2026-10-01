@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Services.ThemeState;
@@ -26,6 +27,16 @@ public partial class DashboardLayout
     /// and from the header's toggle, and persists each toggle.
     /// </summary>
     private bool SidebarExpanded { get; set; } = true;
+
+    private ErrorBoundary? _pageErrorBoundary;
+
+    /// <summary>
+    /// Clears a page error when the page changes (the router sets a new <c>Body</c> on every
+    /// navigation), so the next page renders instead of the error that stopped the previous one.
+    /// </summary>
+    protected override void OnParametersSet() => _pageErrorBoundary?.Recover();
+
+    private void RecoverPage() => _pageErrorBoundary?.Recover();
 
     /// <summary>
     /// On the first render only, initializes the theme and restores the stored sidebar state,

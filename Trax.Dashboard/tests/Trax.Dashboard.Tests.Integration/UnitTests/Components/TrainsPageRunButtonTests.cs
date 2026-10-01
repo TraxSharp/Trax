@@ -14,7 +14,8 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainDiscovery;
-using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Mediator.Services.TrustedExecution;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
@@ -43,7 +44,9 @@ public class TrainsPageRunButtonTests
         services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         services.AddSingleton<IDataContextProviderFactory>(new InMemoryDataContextFactory());
-        services.AddSingleton<IJobSubmitter, UnusedJobSubmitter>();
+        // Opening the dialog runs nothing; it only needs the services it injects.
+        services.AddSingleton(UnusedService<IOperationsService>.Create());
+        services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
     }
 
     [TearDown]
@@ -71,16 +74,6 @@ public class TrainsPageRunButtonTests
             TimeSpan.FromSeconds(10)
         );
         dialogs.Markup.Should().Contain("Run IPingTrain");
-    }
-
-    /// <summary>Opening the dialog submits nothing; the dialog only needs one injected.</summary>
-    private sealed class UnusedJobSubmitter : IJobSubmitter
-    {
-        public Task<string> EnqueueAsync(long metadataId) =>
-            throw new InvalidOperationException("Opening the Run dialog must not submit.");
-
-        public Task<string> EnqueueAsync(long metadataId, object input) =>
-            throw new InvalidOperationException("Opening the Run dialog must not submit.");
     }
 
     public record PingInput

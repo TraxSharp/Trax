@@ -29,6 +29,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Dashboard/Trax.Dashboard.csproj" />
     <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" />
     <PackageReference Include="Trax.Mediator" />
     <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
   </ItemGroup>

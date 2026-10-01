@@ -13,7 +13,19 @@
         <DashboardSidebar Expanded="@SidebarExpanded" />
         <RadzenBody>
             <div class="rz-p-4">
-                @Body
+                @* A backstop: an exception a page lets out of rendering or a lifecycle method stops
+                   that page, not the operator's circuit with every open dialog and unsaved edit. *@
+                <ErrorBoundary @ref="_pageErrorBoundary">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent Context="error">
+                        <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
+                            This page hit an error and stopped: @error.Message
+                        </RadzenAlert>
+                        <RadzenButton Text="Try again" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="@RecoverPage" class="rz-mt-2" />
+                    </ErrorContent>
+                </ErrorBoundary>
             </div>
         </RadzenBody>
         <DashboardFooter />

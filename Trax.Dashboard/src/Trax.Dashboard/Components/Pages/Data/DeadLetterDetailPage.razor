@@ -14,6 +14,10 @@
         {
             <text>Dead Letter #@_deadLetter.Id</text>
         }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
         else if (!IsLoading)
         {
             <text>Dead Letter Not Found</text>
@@ -53,6 +57,13 @@
 
 @if (_deadLetter is null)
 {
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load dead letter @DeadLetterId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
     <RadzenText TextStyle="TextStyle.Body1">No dead letter found with ID @DeadLetterId.</RadzenText>
     return;
 }
@@ -162,11 +173,11 @@
                 </RadzenStack>
             </RadzenColumn>
         </RadzenRow>
-        @if (!string.IsNullOrWhiteSpace(manifest.Properties))
+        @if (!string.IsNullOrWhiteSpace(_maskedManifestProperties))
         {
             <RadzenStack Gap="0" class="rz-mt-3">
                 <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Properties</RadzenText>
-                <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(manifest.Properties)</pre>
+                <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("properties", _maskedManifestProperties)</pre>
             </RadzenStack>
         }
     </RadzenCard>
@@ -207,7 +218,7 @@
                 {
                     <RadzenStack Gap="0" class="rz-mt-3">
                         <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color); margin: 0;">Input</RadzenText>
-                        <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_latestFailedRun.Input)</pre>
+                        <pre style="font-size: 0.75rem; max-height: 200px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("latest-input", _latestFailedRun.Input)</pre>
                     </RadzenStack>
                 }
             </RadzenColumn>
@@ -221,10 +232,10 @@
     @if (_failedRunCount > 0)
     {
         <TraxDataGrid @ref="_failedRunsGrid"
-                      TItem="Metadata"
+                      TItem="RunRow"
                       ServerLoadData="@LoadFailedRunsPageAsync">
             <Columns>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Title=""
                                       Width="50px"
                                       Sortable="false"
@@ -238,12 +249,12 @@
                                       Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="Id"
                                       Title="Id"
                                       Width="80px"
                                       SortOrder="SortOrder.Descending" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="TrainState"
                                       Title="State"
                                       Width="120px">
@@ -252,28 +263,28 @@
                                      Text="@m.TrainState.ToString()" />
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="StartTime"
                                       Title="Start Time"
                                       Width="180px"
                                       FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="EndTime"
                                       Title="End Time"
                                       Width="180px"
                                       FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Title="Duration"
                                       Width="120px"
                                       Sortable="false"
                                       Filterable="false">
                     <Template Context="m">@FormatDuration(m)</Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="FailureJunction"
                                       Title="Failure Junction"
                                       Width="150px" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="FailureReason"
                                       Title="Failure Reason"
                                       Width="250px" />

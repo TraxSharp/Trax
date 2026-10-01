@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
@@ -21,7 +20,7 @@ namespace Trax.Dashboard.Components.Pages.Data;
 
 /// <summary>
 /// The page for one run (metadata row), at <c>/trax/data/metadata/{id}</c>: its state, input,
-/// output, failure details and a paged grid of its logs. The user can cancel it while it is in
+/// output, failure details and a paged grid of its logs. The user can cancel it while it is pending or in
 /// progress, or queue the train again with the run's saved input. Part of the dashboard UI, routed by the package; not intended to be used directly.
 /// </summary>
 public partial class MetadataDetailPage
@@ -44,25 +43,30 @@ public partial class MetadataDetailPage
     [Inject]
     private IOperationsService OperationsService { get; set; } = default!;
 
-    [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = default!;
-
     /// <summary>The run's (metadata row's) database id, from the route.</summary>
     [Parameter]
     public long MetadataId { get; set; }
 
     private Metadata? _metadata;
     private int _logCount;
-    private TraxDataGrid<Log>? _logsGrid;
+    private TraxDataGrid<LogRow>? _logsGrid;
+    private readonly GridCount _logsCount = new();
 
-    private Task<ServerDataResult<Log>> LoadLogsPageAsync(
+    // The input and output are re-indented once per change, not on every render.
+    private readonly JsonDisplayCache _json = new();
+
+    // The row without the entry's stack trace, which the grid does not show.
+    private Task<ServerDataResult<LogRow>> LoadLogsPageAsync(
         LoadDataArgs args,
         CancellationToken ct
     ) =>
         DataGridQueryHelper.LoadPageAsync(
             DataContextFactory,
             db => db.Logs.AsNoTracking().Where(l => l.MetadataId == MetadataId).OrderBy(l => l.Id),
+            LogRow.Projection,
             args,
+            _logsCount,
+            MetadataId,
             ct
         );
 
@@ -74,6 +78,14 @@ public partial class MetadataDetailPage
     /// <inheritdoc/>
     /// <remarks>Returns <see cref="MetadataId"/>.</remarks>
     private protected override object? GetRouteKey() => MetadataId;
+
+    /// <inheritdoc/>
+    /// <remarks>Drops the previous run, so a failed reload does not show it under the new route.</remarks>
+    private protected override void OnRouteKeyChanged()
+    {
+        _metadata = null;
+        _rerunError = null;
+    }
 
     /// <summary>
     /// Loads the run and the number of its log entries, and reloads the logs grid, which pages its
@@ -101,9 +113,15 @@ public partial class MetadataDetailPage
         }
     }
 
+    // Through the operations service, as the API's cancelExecution is: a Pending or InProgress
+    // run is flagged, and one that finished since the page last loaded is reported as not
+    // cancellable rather than as cancelled.
     private async Task CancelTrain()
     {
-        if (_metadata is null || _metadata.TrainState != TrainState.InProgress)
+        if (
+            _metadata is null
+            || _metadata.TrainState is not (TrainState.Pending or TrainState.InProgress)
+        )
             return;
 
         _cancelError = null;
@@ -111,17 +129,22 @@ public partial class MetadataDetailPage
 
         try
         {
-            await CancellationHelper.CancelTrainsAsync(
-                DataContextFactory,
-                ServiceProvider,
-                [MetadataId],
+            var result = await RunCancellation.CancelOneAsync(
+                OperationsService,
+                MetadataId,
                 DisposalToken
             );
+
+            if (!result.Success)
+            {
+                _cancelError = result.Message;
+                return;
+            }
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Cancellation Requested",
-                $"Cancel signal sent for {ShortName(_metadata.Name)}.",
+                $"Cancellation requested for {ShortName(_metadata.Name)}.",
                 duration: 4000
             );
         }
@@ -137,10 +160,21 @@ public partial class MetadataDetailPage
 
     private async Task RequeueTrain()
     {
-        if (_metadata is null || string.IsNullOrWhiteSpace(_metadata.Input))
+        if (_metadata is null)
             return;
 
         _rerunError = null;
+
+        // Re-queueing reads the saved input back as the train's input. Nothing saved, a
+        // placeholder saved in its place, or masked [TraxSensitive] members would all read back
+        // as defaults, and the train would run with values it never had.
+        var refusal = RequeueInputCheck.RefusalFor(MetadataId, _metadata.Input);
+        if (refusal is not null || _metadata.Input is not { } savedInput)
+        {
+            _rerunError = refusal;
+            return;
+        }
+
         _rerunning = true;
 
         try
@@ -158,7 +192,7 @@ public partial class MetadataDetailPage
 
             // Parse the saved input to check it still fits the train before queueing it again.
             var deserializedInput = JsonSerializer.Deserialize(
-                _metadata.Input,
+                savedInput,
                 registration.InputType,
                 TraxJsonSerializationOptions.ManifestProperties
             );

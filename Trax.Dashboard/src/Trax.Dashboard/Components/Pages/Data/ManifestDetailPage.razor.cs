@@ -8,6 +8,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
@@ -32,6 +33,9 @@ public partial class ManifestDetailPage
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
+    [Inject]
+    private IOperationsService OperationsService { get; set; } = default!;
+
     /// <summary>The manifest's database id, from the route.</summary>
     [Parameter]
     public long ManifestId { get; set; }
@@ -40,8 +44,13 @@ public partial class ManifestDetailPage
     /// <remarks>Returns <see cref="ManifestId"/>.</remarks>
     private protected override object? GetRouteKey() => ManifestId;
 
+    /// <inheritdoc/>
+    /// <remarks>Drops the previous manifest, so a failed reload does not show it under the new route.</remarks>
+    private protected override void OnRouteKeyChanged() => _manifest = null;
+
     private Manifest? _manifest;
-    private TraxDataGrid<Metadata>? _runsGrid;
+    private TraxDataGrid<RunRow>? _runsGrid;
+    private readonly GridCount _runsCount = new();
     private long _totalRuns;
     private long _completedRuns;
     private long _failedRuns;
@@ -69,29 +78,24 @@ public partial class ManifestDetailPage
         {
             _exclusions = _manifest.GetExclusions();
 
-            // Counted over every run of the manifest, the way the API's manifestStats counts
-            // them, rather than over the page of runs the grid shows.
-            var byState = await context
-                .Metadatas.AsNoTracking()
-                .Where(m => m.ManifestId == ManifestId)
-                .GroupBy(m => m.TrainState)
-                .Select(g => new { State = g.Key, Count = (long)g.Count() })
-                .ToListAsync(cancellationToken);
-
-            long CountOf(TrainState state) =>
-                byState.FirstOrDefault(x => x.State == state)?.Count ?? 0;
-
-            _totalRuns = byState.Sum(x => x.Count);
-            _completedRuns = CountOf(TrainState.Completed);
-            _failedRuns = CountOf(TrainState.Failed);
-            _inProgressRuns = CountOf(TrainState.InProgress);
+            // Counted over every run of the manifest by the call the API's manifestStats makes,
+            // rather than over the page of runs the grid shows.
+            var stats = await OperationsService.GetManifestExecutionStatsAsync(
+                ManifestId,
+                cancellationToken
+            );
+            _totalRuns = stats.Total;
+            _completedRuns = stats.Completed;
+            _failedRuns = stats.Failed;
+            _inProgressRuns = stats.InProgress;
 
             if (_runsGrid is not null)
                 await _runsGrid.ReloadAsync();
         }
     }
 
-    private Task<ServerDataResult<Metadata>> LoadRunsPageAsync(
+    // The row without the run's input, output and stack trace, which the grid does not show.
+    private Task<ServerDataResult<RunRow>> LoadRunsPageAsync(
         LoadDataArgs args,
         CancellationToken ct
     ) =>
@@ -101,7 +105,10 @@ public partial class ManifestDetailPage
                 db.Metadatas.AsNoTracking()
                     .Where(m => m.ManifestId == ManifestId)
                     .OrderByDescending(m => m.StartTime),
+            RunRow.Projection,
             args,
+            _runsCount,
+            ManifestId,
             ct
         );
 

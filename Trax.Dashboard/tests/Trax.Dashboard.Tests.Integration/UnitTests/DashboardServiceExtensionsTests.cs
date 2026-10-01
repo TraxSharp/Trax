@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Extensions;
@@ -16,6 +17,11 @@ namespace Trax.Dashboard.Tests.Integration.UnitTests;
 /// discovery itself: ITrainDiscoveryService comes from AddMediator(), so AddTrax() with only
 /// AddEffects() passes this check and then fails at render time, because the Trains page and
 /// the metadata detail page both take it as a required injection.</para>
+///
+/// <para>The dashboard also needs the Scheduler: its pages inject <c>IOperationsService</c>,
+/// which only <c>AddScheduler()</c> registers, so <c>UseTraxDashboard()</c> refuses to map
+/// pages that would fail on their first request. And it is registered once: a second
+/// <c>AddTraxDashboard</c> would replace the first one's authorization posture, so it throws.</para>
 ///
 /// <para>Enforces <c>docs/adr/0001-the-dashboard-mounts-into-the-host-app.md</c>.</para>
 /// </summary>
@@ -125,5 +131,46 @@ public class DashboardServiceExtensionsTests
                     == typeof(Trax.Dashboard.Services.DashboardSettings.IDashboardSettingsService)
                 && sd.Lifetime == ServiceLifetime.Scoped
             );
+    }
+
+    [Test]
+    public void AddTraxDashboard_CalledTwice_Throws()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<TraxMarker>();
+        services.AddTraxDashboard(o => o.RequireRoles("Admin"));
+
+        Action act = () => services.AddTraxDashboard(o => o.AllowAnonymousDashboard());
+
+        act.Should()
+            .Throw<InvalidOperationException>(
+                "a second call would replace the first one's posture and could map the "
+                    + "dashboard ungated. See docs/adr/0001-the-dashboard-mounts-into-the-host-app.md."
+            )
+            .WithMessage("*already been called*");
+        services
+            .Count(d => d.ServiceType == typeof(DashboardOptions))
+            .Should()
+            .Be(1, "the first call's options stay the only ones");
+    }
+
+    [Test]
+    public void UseTraxDashboard_WithoutScheduler_ThrowsNamingAddScheduler()
+    {
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions { EnvironmentName = "Production" }
+        );
+        builder.Services.AddSingleton<TraxMarker>();
+        builder.AddTraxDashboard(o => o.AllowAnonymousDashboard());
+        using var app = builder.Build();
+
+        Action act = () => app.UseTraxDashboard();
+
+        act.Should()
+            .Throw<InvalidOperationException>(
+                "without IOperationsService the pages fail on their first request. See "
+                    + "docs/adr/0001-the-dashboard-mounts-into-the-host-app.md."
+            )
+            .WithMessage("*AddScheduler*");
     }
 }

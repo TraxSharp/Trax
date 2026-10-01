@@ -6,6 +6,7 @@ using Trax.Dashboard.Utilities;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.Operations;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
@@ -31,6 +32,9 @@ public partial class WorkQueueDetailPage
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
+    [Inject]
+    private ITrainDiscoveryService TrainDiscovery { get; set; } = default!;
+
     /// <summary>The work queue entry's database id, from the route.</summary>
     [Parameter]
     public long WorkQueueId { get; set; }
@@ -41,9 +45,24 @@ public partial class WorkQueueDetailPage
     private bool _cancelling;
     private string? _error;
 
+    // The entry's input with its [TraxSensitive] members masked: the stored copy keeps them in
+    // clear because the run reads it.
+    private string? _maskedInput;
+
+    // The input is re-indented once per change, not on every render.
+    private readonly JsonDisplayCache _json = new();
+
     /// <inheritdoc/>
     /// <remarks>Returns <see cref="WorkQueueId"/>.</remarks>
     private protected override object? GetRouteKey() => WorkQueueId;
+
+    /// <inheritdoc/>
+    /// <remarks>Drops the previous entry, so a failed reload does not show it under the new route.</remarks>
+    private protected override void OnRouteKeyChanged()
+    {
+        _entry = null;
+        _maskedInput = null;
+    }
 
     /// <summary>
     /// Loads the entry and, when it is queued with a subject key, the id of the dispatched entry
@@ -56,6 +75,12 @@ public partial class WorkQueueDetailPage
         _entry = await context
             .WorkQueues.AsNoTracking()
             .FirstOrDefaultAsync(q => q.Id == WorkQueueId, cancellationToken);
+
+        _maskedInput = TransportInputRedaction.Redact(
+            TrainDiscovery,
+            _entry?.Input,
+            _entry?.InputTypeName
+        );
 
         // A queued entry whose subject has a run in flight is skipped by dispatch until that run
         // finishes. Without saying so it looks like an entry that is simply never picked up.

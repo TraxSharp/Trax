@@ -1,18 +1,22 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Radzen;
 using Trax.Dashboard.Components;
 using Trax.Dashboard.Configuration;
+using Trax.Dashboard.Services.Authorization;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Services.LogLevels;
 using Trax.Dashboard.Services.ThemeState;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Extensions;
 
@@ -28,8 +32,9 @@ public static class DashboardServiceExtensions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Call it after <c>builder.Services.AddTrax(...)</c>. It checks for the Trax registration and
-    /// throws <see cref="InvalidOperationException"/> when <c>AddTrax</c> has not run yet.
+    /// Call it after <c>builder.Services.AddTrax(...)</c>, once. It checks for the Trax registration
+    /// and throws <see cref="InvalidOperationException"/> when <c>AddTrax</c> has not run yet or
+    /// when <c>AddTraxDashboard</c> already has.
     /// </para>
     /// <para>
     /// Unlike the <see cref="IServiceCollection"/> overload, this one also changes the host outside
@@ -47,7 +52,9 @@ public static class DashboardServiceExtensions
     /// <param name="builder">The host builder, after <c>AddTrax(...)</c> has been called on its services.</param>
     /// <param name="configure">Optional callback to adjust <see cref="DashboardOptions"/>.</param>
     /// <returns>The same builder, for chaining.</returns>
-    /// <exception cref="InvalidOperationException"><c>AddTrax(...)</c> has not been called.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// <c>AddTrax(...)</c> has not been called, or <c>AddTraxDashboard</c> has already been called.
+    /// </exception>
     public static WebApplicationBuilder AddTraxDashboard(
         this WebApplicationBuilder builder,
         Action<DashboardOptions>? configure = null
@@ -71,7 +78,8 @@ public static class DashboardServiceExtensions
     /// <remarks>
     /// <para>
     /// Call it after <c>services.AddTrax(...)</c>. It checks for the Trax registration and throws
-    /// <see cref="InvalidOperationException"/> when <c>AddTrax</c> has not run yet.
+    /// <see cref="InvalidOperationException"/> when <c>AddTrax</c> has not run yet. Call it once:
+    /// a second call throws rather than replacing the first call's options.
     /// </para>
     /// <para>
     /// This overload only touches DI. Outside Development the dashboard's static assets are not
@@ -84,7 +92,9 @@ public static class DashboardServiceExtensions
     /// <param name="services">The service collection, after <c>AddTrax(...)</c> has been called on it.</param>
     /// <param name="configure">Optional callback to adjust <see cref="DashboardOptions"/>.</param>
     /// <returns>The same service collection, for chaining.</returns>
-    /// <exception cref="InvalidOperationException"><c>AddTrax(...)</c> has not been called.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// <c>AddTrax(...)</c> has not been called, or <c>AddTraxDashboard</c> has already been called.
+    /// </exception>
     public static IServiceCollection AddTraxDashboard(
         this IServiceCollection services,
         Action<DashboardOptions>? configure = null
@@ -96,10 +106,28 @@ public static class DashboardServiceExtensions
                     + "Call services.AddTrax(trax => ...) before services.AddTraxDashboard()."
             );
 
+        // A second call would register a second options singleton, and the last one would win:
+        // a shared bootstrap calling AddTraxDashboard(o => o.AllowAnonymousDashboard()) after the
+        // host's AddTraxDashboard(o => o.RequireRoles("Admin")) would map the dashboard ungated.
+        if (services.Any(sd => sd.ServiceType == typeof(DashboardOptions)))
+            throw new InvalidOperationException(
+                "AddTraxDashboard() has already been called on this host. Call it once, with "
+                    + "every dashboard option in that one call: a second call would replace the "
+                    + "first one's authorization posture."
+            );
+
         var options = new DashboardOptions();
         configure?.Invoke(options);
 
         services.AddSingleton(options);
+
+        // Re-checks the posture inside an established circuit: on an interval, whenever the
+        // host's AuthenticationStateProvider reports a change, and before every inbound circuit
+        // message. It reads the host's provider and registers none of its own.
+        services.AddScoped<DashboardCircuitAuthorization>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<CircuitHandler, DashboardAuthorizationCircuitHandler>()
+        );
 
         services.AddScoped<ILocalStorageService, LocalStorageService>();
         services.AddScoped<IThemeStateService, ThemeStateService>();
@@ -143,6 +171,17 @@ public static class DashboardServiceExtensions
     /// under <c>/trax</c>, so leave it at its default.
     /// </para>
     /// <para>
+    /// The dashboard's pages queue, run and inspect work through the Scheduler, so the host must
+    /// call <c>AddScheduler()</c> inside <c>AddTrax(...)</c>. Without it this method throws rather
+    /// than mapping pages that fail on their first request.
+    /// </para>
+    /// <para>
+    /// Inside an established circuit the posture is re-checked against the host's
+    /// <c>AuthenticationStateProvider</c>: whenever it reports a change, on an interval, and
+    /// before every message the circuit receives. A circuit whose user no longer satisfies it is
+    /// closed. The dashboard registers no <c>AuthenticationStateProvider</c> of its own.
+    /// </para>
+    /// <para>
     /// The host project must set <c>&lt;RequiresAspNetWebAssets&gt;true&lt;/RequiresAspNetWebAssets&gt;</c>
     /// in its csproj. Without it <c>_framework/blazor.web.js</c> is missing, the Blazor Server
     /// circuit never connects, and the dashboard renders but does not respond to clicks.
@@ -159,8 +198,8 @@ public static class DashboardServiceExtensions
     /// <exception cref="InvalidOperationException">
     /// No posture was chosen (call <see cref="DashboardOptions.RequirePolicy"/>,
     /// <see cref="DashboardOptions.RequireRoles"/> or
-    /// <see cref="DashboardOptions.AllowAnonymousDashboard"/>), or the named policy is not
-    /// registered.
+    /// <see cref="DashboardOptions.AllowAnonymousDashboard"/>), the named policy is not
+    /// registered, or the Scheduler is not (call <c>AddScheduler()</c> inside <c>AddTrax(...)</c>).
     /// </exception>
     public static RazorComponentsEndpointConventionBuilder UseTraxDashboard(
         this WebApplication app,
@@ -172,6 +211,7 @@ public static class DashboardServiceExtensions
 
         var options = app.Services.GetRequiredService<DashboardOptions>();
         VerifyAuthorizationPosture(app, options);
+        VerifySchedulerRegistered(app);
 
         options.RoutePrefix = routePrefix;
 
@@ -208,6 +248,22 @@ public static class DashboardServiceExtensions
             }
         );
         return endpoints;
+    }
+
+    // The pages inject IOperationsService unconditionally, and only AddScheduler() registers it,
+    // so without it the first request is a 500 or a dead circuit. This asks the built provider
+    // whether the service is registered, without constructing it.
+    private static void VerifySchedulerRegistered(WebApplication app)
+    {
+        var isService = app.Services.GetService<IServiceProviderIsService>();
+        if (isService is not null && isService.IsService(typeof(IOperationsService)))
+            return;
+
+        throw new InvalidOperationException(
+            "UseTraxDashboard() requires the Trax Scheduler: the dashboard queues, runs and "
+                + "cancels trains through IOperationsService, which AddScheduler() registers. "
+                + "Call AddScheduler(...) inside AddTrax(trax => ...) before mapping the dashboard."
+        );
     }
 
     private static void VerifyAuthorizationPosture(WebApplication app, DashboardOptions options)

@@ -87,9 +87,8 @@
         );
     }
 
-    // Runs the train now on its job submitter, bypassing the work queue and its subject lock
-    // (docs/0019 names this bypass). The dialog still builds the run itself; it moves to
-    // IOperationsService.RunTrainAsync once a Scheduler release carries it (docs/0022).
+    // Runs the train now through IOperationsService.RunTrainAsync, the path the API's run takes
+    // (docs/0022). It bypasses the work queue and its subject lock (docs/0019 names this bypass).
     private async Task OpenRunDialog(TrainRegistration registration)
     {
         await DialogService.OpenAsync<RunTrainDialog>(

@@ -10,6 +10,10 @@
         {
             @_group.Name
         }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
         else if (!IsLoading)
         {
             <text>Group Not Found</text>
@@ -50,6 +54,13 @@
 
 @if (_group is null)
 {
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load manifest group @ManifestGroupId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
     <RadzenText TextStyle="TextStyle.Body1">No manifest group found with ID @ManifestGroupId.</RadzenText>
     return;
 }
@@ -71,46 +82,49 @@
 }
 
 @* ── Group Settings ── *@
-<RadzenFieldset Text="Group Settings" class="@(IsSettingsDirty ? "cs-fieldset-dirty rz-mb-4" : "rz-mb-4")">
-    <RadzenStack Gap="1.5rem">
-        <RadzenStack Gap="0.25rem">
-            <RadzenLabel Text="Enabled" />
-            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                When disabled, manifests in this group will not be queued or dispatched.
-            </RadzenText>
-            <RadzenSwitch @bind-Value="_group.IsEnabled" />
-        </RadzenStack>
+@if (_settings is { } settings)
+{
+    <RadzenFieldset Text="Group Settings" class="@(IsSettingsDirty ? "cs-fieldset-dirty rz-mb-4" : "rz-mb-4")">
+        <RadzenStack Gap="1.5rem">
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Enabled" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    When disabled, manifests in this group will not be queued or dispatched.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="settings.IsEnabled" />
+            </RadzenStack>
 
-        <RadzenStack Gap="0.25rem">
-            <RadzenLabel Text="Priority" Component="GroupPriority" />
-            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                Dispatch priority for this group (0–31). Higher values are dispatched first.
-            </RadzenText>
-            <RadzenNumeric @bind-Value="_group.Priority" TValue="int" Min="0" Max="31" Style="max-width: 400px;" Name="GroupPriority" />
-        </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Priority" Component="GroupPriority" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Dispatch priority for this group (0–31). Higher values are dispatched first.
+                </RadzenText>
+                <RadzenNumeric @bind-Value="settings.Priority" TValue="int" Min="0" Max="31" Style="max-width: 400px;" Name="GroupPriority" />
+            </RadzenStack>
 
-        <RadzenStack Gap="0.25rem">
-            <RadzenLabel Text="Max Active Jobs" Component="GroupMaxActiveJobs" />
-            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
-                Maximum number of concurrent active jobs for this group. Leave empty for no per-group limit.
-            </RadzenText>
-            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem" Style="max-width: 400px;">
-                <RadzenNumeric @bind-Value="_group.MaxActiveJobs" TValue="int?" Min="1" Style="flex: 1;" Name="GroupMaxActiveJobs" />
-                @if (_group.MaxActiveJobs.HasValue)
-                {
-                    <RadzenButton Icon="close" Variant="Variant.Text" Size="ButtonSize.Small"
-                                  Click="@(() => _group.MaxActiveJobs = null)"
-                                  title="Clear limit" />
-                }
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Max Active Jobs" Component="GroupMaxActiveJobs" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Maximum number of concurrent active jobs for this group. Leave empty for no per-group limit.
+                </RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem" Style="max-width: 400px;">
+                    <RadzenNumeric @bind-Value="settings.MaxActiveJobs" TValue="int?" Min="1" Style="flex: 1;" Name="GroupMaxActiveJobs" />
+                    @if (settings.MaxActiveJobs.HasValue)
+                    {
+                        <RadzenButton Icon="close" Variant="Variant.Text" Size="ButtonSize.Small"
+                                      Click="@(() => settings.MaxActiveJobs = null)"
+                                      title="Clear limit" />
+                    }
+                </RadzenStack>
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                <RadzenButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="@SaveSettings" Disabled="@(!IsSettingsDirty)" />
+                <RadzenButton Text="Reset" Icon="undo" ButtonStyle="ButtonStyle.Light" Click="@ResetSettings" Disabled="@(!IsSettingsDirty)" />
             </RadzenStack>
         </RadzenStack>
-
-        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
-            <RadzenButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="@SaveSettings" Disabled="@(!IsSettingsDirty)" />
-            <RadzenButton Text="Reset" Icon="undo" ButtonStyle="ButtonStyle.Light" Click="@ResetSettings" Disabled="@(!IsSettingsDirty)" />
-        </RadzenStack>
-    </RadzenStack>
-</RadzenFieldset>
+    </RadzenFieldset>
+}
 
 @* ── Summary Cards ── *@
 <RadzenRow Gap="1rem" class="rz-mb-4">
@@ -156,10 +170,10 @@
 <RadzenCard class="rz-mb-4">
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Manifests</RadzenText>
     <TraxDataGrid @ref="_manifestsGrid"
-                        TItem="Manifest"
+                        TItem="ManifestRow"
                         ServerLoadData="@LoadManifestPageAsync">
         <Columns>
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Title=""
                                   Width="50px"
                                   Sortable="false"
@@ -173,30 +187,30 @@
                                   Click="@(() => Navigation.NavigateTo($"trax/data/manifests/{m.Id}"))" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Property="Id"
                                   Title="Id"
                                   Width="80px"
                                   SortOrder="SortOrder.Descending" />
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Property="Name"
                                   Title="Name"
                                   Width="250px">
                 <Template Context="m">@ShortName(m.Name)</Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Property="ExternalId"
                                   Title="External Id"
                                   Width="200px" />
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Property="IsEnabled"
                                   Title="Enabled"
                                   Width="100px" />
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Property="ScheduleType"
                                   Title="Schedule Type"
                                   Width="150px" />
-            <RadzenDataGridColumn TItem="Manifest"
+            <RadzenDataGridColumn TItem="ManifestRow"
                                   Property="LastSuccessfulRun"
                                   Title="Last Successful Run"
                                   Width="200px"
@@ -209,10 +223,10 @@
 <RadzenCard>
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Executions</RadzenText>
     <TraxDataGrid @ref="_executionsGrid"
-                        TItem="Metadata"
+                        TItem="RunRow"
                         ServerLoadData="@LoadExecutionPageAsync">
         <Columns>
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Title=""
                                   Width="50px"
                                   Sortable="false"
@@ -226,12 +240,12 @@
                                   Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="Id"
                                   Title="Id"
                                   Width="80px"
                                   SortOrder="SortOrder.Descending" />
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="TrainState"
                                   Title="State"
                                   Width="120px">
@@ -240,34 +254,34 @@
                                  Text="@m.TrainState.ToString()" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="Name"
                                   Title="Train"
                                   Width="200px">
                 <Template Context="m">@ShortName(m.Name)</Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="StartTime"
                                   Title="Start Time"
                                   Width="180px"
                                   FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="EndTime"
                                   Title="End Time"
                                   Width="180px"
                                   FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Title="Duration"
                                   Width="120px"
                                   Sortable="false"
                                   Filterable="false">
                 <Template Context="m">@FormatDuration(m)</Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="FailureJunction"
                                   Title="Failure Junction"
                                   Width="150px" />
-            <RadzenDataGridColumn TItem="Metadata"
+            <RadzenDataGridColumn TItem="RunRow"
                                   Property="FailureReason"
                                   Title="Failure Reason"
                                   Width="250px" />

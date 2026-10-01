@@ -57,6 +57,10 @@
                         <RadzenNumeric @bind-Value="_pollingInterval.Value" TValue="double" Min="1" Style="width: 60%" Name="PollingInterval" />
                         <RadzenDropDown @bind-Value="_pollingInterval.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
+                    @if (!_pollingInterval.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_pollingInterval.InvalidText</RadzenText>
+                    }
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -92,6 +96,21 @@
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
+                    <RadzenLabel Text="Failure Count Window" Component="FailureCountWindow" />
+                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                        How far back a manifest's failed runs count toward its retry backoff and its dead letter. A manifest scheduled with its own failure window uses that instead.
+                    </RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Style="max-width: 400px;">
+                        <RadzenNumeric @bind-Value="_failureCountWindow.Value" TValue="double" Min="1" Style="width: 60%" Name="FailureCountWindow" />
+                        <RadzenDropDown @bind-Value="_failureCountWindow.Unit" Data="TimeUnits" Style="width: 40%" />
+                    </RadzenStack>
+                    @if (!_failureCountWindow.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_failureCountWindow.InvalidText</RadzenText>
+                    }
+                </RadzenStack>
+
+                <RadzenStack Gap="0.25rem">
                     <RadzenLabel Text="Default Retry Delay" Component="DefaultRetryDelay" />
                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
                         Base delay between retry attempts. Combined with the backoff multiplier for exponential backoff.
@@ -100,6 +119,10 @@
                         <RadzenNumeric @bind-Value="_defaultRetryDelay.Value" TValue="double" Min="0" Style="width: 60%" Name="DefaultRetryDelay" />
                         <RadzenDropDown @bind-Value="_defaultRetryDelay.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
+                    @if (!_defaultRetryDelay.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_defaultRetryDelay.InvalidText</RadzenText>
+                    }
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -119,6 +142,10 @@
                         <RadzenNumeric @bind-Value="_maxRetryDelay.Value" TValue="double" Min="0" Style="width: 60%" Name="MaxRetryDelay" />
                         <RadzenDropDown @bind-Value="_maxRetryDelay.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
+                    @if (!_maxRetryDelay.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_maxRetryDelay.InvalidText</RadzenText>
+                    }
                 </RadzenStack>
             </RadzenStack>
         </RadzenFieldset>
@@ -135,6 +162,10 @@
                         <RadzenNumeric @bind-Value="_defaultJobTimeout.Value" TValue="double" Min="1" Style="width: 60%" Name="DefaultJobTimeout" />
                         <RadzenDropDown @bind-Value="_defaultJobTimeout.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
+                    @if (!_defaultJobTimeout.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_defaultJobTimeout.InvalidText</RadzenText>
+                    }
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -146,6 +177,10 @@
                         <RadzenNumeric @bind-Value="_stalePendingTimeout.Value" TValue="double" Min="1" Style="width: 60%" Name="StalePendingTimeout" />
                         <RadzenDropDown @bind-Value="_stalePendingTimeout.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
+                    @if (!_stalePendingTimeout.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_stalePendingTimeout.InvalidText</RadzenText>
+                    }
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -170,6 +205,10 @@
                         <RadzenNumeric @bind-Value="_deadLetterRetentionPeriod.Value" TValue="double" Min="0" Style="width: 60%" Name="DeadLetterRetention" />
                         <RadzenDropDown @bind-Value="_deadLetterRetentionPeriod.Unit" Data="TimeUnits" Style="width: 40%" />
                     </RadzenStack>
+                    @if (!_deadLetterRetentionPeriod.IsValid)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_deadLetterRetentionPeriod.InvalidText</RadzenText>
+                    }
                 </RadzenStack>
 
                 <RadzenStack Gap="0.25rem">
@@ -196,6 +235,10 @@
                             <RadzenNumeric @bind-Value="_cleanupInterval.Value" TValue="double" Min="1" Style="width: 60%" Name="CleanupInterval" />
                             <RadzenDropDown @bind-Value="_cleanupInterval.Unit" Data="TimeUnits" Style="width: 40%" />
                         </RadzenStack>
+                        @if (!_cleanupInterval.IsValid)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_cleanupInterval.InvalidText</RadzenText>
+                        }
                     </RadzenStack>
 
                     <RadzenStack Gap="0.25rem">
@@ -208,6 +251,10 @@
                             <RadzenNumeric @bind-Value="_cleanupRetentionPeriod.Value" TValue="double" Min="1" Style="width: 60%" Name="CleanupRetention" />
                             <RadzenDropDown @bind-Value="_cleanupRetentionPeriod.Unit" Data="TimeUnits" Style="width: 40%" />
                         </RadzenStack>
+                        @if (!_cleanupRetentionPeriod.IsValid)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="cs-field-invalid" Style="color: var(--rz-danger);">@_cleanupRetentionPeriod.InvalidText</RadzenText>
+                        }
                     </RadzenStack>
                 </RadzenStack>
             </RadzenFieldset>
@@ -253,13 +300,14 @@
 
     @* ── Actions ── *@
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End" class="cs-settings-actions">
-        <RadzenButton Text="Reset Default"
-                      Icon="restart_alt"
+        <RadzenButton Text="Discard Changes"
+                      Icon="undo"
                       ButtonStyle="ButtonStyle.Light"
-                      Click="ResetDefaults" />
+                      Click="DiscardChanges" />
         <RadzenButton Text="Save"
                       Icon="save"
                       ButtonStyle="ButtonStyle.Primary"
+                      Disabled="HasInvalidField"
                       Click="Save" />
     </RadzenStack>
 

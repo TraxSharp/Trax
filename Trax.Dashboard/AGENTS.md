@@ -19,8 +19,9 @@ if your work contradicts one, say so rather than silently overriding it.
 | the dashboard's authorization, or anything `UseTraxDashboard` maps | [0002](./docs/adr/0002-the-dashboard-requires-an-authorization-posture.md), it refuses to start without a policy, roles or `AllowAnonymousDashboard()`, and the posture covers every endpoint `MapRazorComponents<App>()` maps |
 | the queue dialog, the Re-queue button, or anything else that enqueues | central `docs/0017`: enqueue through `IOperationsService` inside the `"dashboard"` trusted scope, never by building a work queue row; per-train `[TraxAuthorize]` does not apply because the dashboard is gated as a whole by its host |
 | the work queue pages (Staged, Subject, Waiting On) or the Failure Class field | central `docs/0018`, `docs/0019` and `docs/0020` |
-| the Run dialog | central `docs/0019`: it submits straight to the job submitter and bypasses subject serialization by design, so it warns and points at Queue rather than waiting |
-| the persisted-operations pages | [0004](./docs/adr/0004-persisted-operations-pages-call-the-api-resolvers.md): read and write through the API package's resolvers, addressed by tenant and id |
+| the Run dialog | central `docs/0022` and `docs/0019`: it runs through `IOperationsService.RunTrainAsync` inside the `"dashboard"` trusted scope, the path the API's run takes, and bypasses subject serialization by design, so for a train that overrides `QueueSubjectKey` it warns and points at Queue rather than waiting |
+| the persisted-operations pages | [0005](./docs/adr/0005-persisted-operations-pages-call-the-shared-service.md): read and write through the API package's `IPersistedOperationsService`, gated on that service being registered, addressed by tenant and id |
+| a third-party pin in `Directory.Packages.props` | [0006](./docs/adr/0006-radzen-and-test-di-float-within-their-major.md): `Radzen.Blazor` and the test DI container float within their major on purpose; the lockfiles hold the version |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
 index lists them by repo. Nineteen name `dashboard`: the workspace-wide conventions, `0016`
@@ -70,3 +71,7 @@ that reads as a deferral is not.
 ```bash
 dotnet test
 ```
+
+`tests/Trax.Dashboard.Tests.Stress/` times the grids' page queries against Postgres at a million
+runs. It is `[Explicit]`, so a plain `dotnet test` skips it; run it with
+`TRAX_TEST_PG_PORT=<port> dotnet test --filter TestCategory=Stress` (port 5432 when unset).

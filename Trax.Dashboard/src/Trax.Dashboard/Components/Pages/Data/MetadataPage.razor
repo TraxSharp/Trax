@@ -4,8 +4,8 @@
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
-@inject IServiceProvider ServiceProvider
 @inject NotificationService NotificationService
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Metadata</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
@@ -30,21 +30,21 @@
 }
 
 <TraxDataGrid @ref="_grid"
-                    TItem="Metadata"
+                    TItem="RunRow"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Width="40px"
                               Sortable="false"
                               Filterable="false"
                               Frozen="true">
             <Template Context="m">
                 <RadzenCheckBox TValue="bool"
-                                Value="@(_selectedMetadata.Contains(m))"
-                                Change="@(args => { if ((bool)args!) _selectedMetadata.Add(m); else _selectedMetadata.Remove(m); PausePolling = _selectedMetadata.Count > 0; })" />
+                                Value="@(_selectedMetadata.Contains(m.Id))"
+                                Change="@(args => ToggleSelection(m.Id, (bool)args!))" />
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Title=""
                               Width="80px"
                               Sortable="false"
@@ -57,7 +57,8 @@
                                   Variant="Variant.Text"
                                   Size="ButtonSize.Small"
                                   Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
-                    @if (m.TrainState == TrainState.InProgress)
+                    @* Pending or InProgress: the runs the operations service will flag. *@
+                    @if (m.TrainState is TrainState.Pending or TrainState.InProgress)
                     {
                         <RadzenButton Icon="cancel"
                                       Variant="Variant.Text"
@@ -68,67 +69,67 @@
                 </RadzenStack>
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="Id"
                               Title="Id"
                               Width="80px"
                               SortOrder="SortOrder.Descending" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="Name"
                               Title="Name"
                               Width="200px">
             <Template Context="m">@ShortName(m.Name)</Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="TrainState"
                               Title="State"
                               Width="120px" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="CurrentlyRunningJunction"
                               Title="Current Junction"
                               Width="150px">
             <Template Context="m">@(m.TrainState == TrainState.InProgress ? (m.CurrentlyRunningJunction ?? "—") : "—")</Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="ExternalId"
                               Title="External Id"
                               Width="200px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="StartTime"
                               Title="Start Time"
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="EndTime"
                               Title="End Time"
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="FailureJunction"
                               Title="Failure Junction"
                               Width="150px" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="FailureReason"
                               Title="Failure Reason"
                               Width="250px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="ParentId"
                               Title="Parent Id"
                               Width="140px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="ManifestId"
                               Title="Manifest Id"
                               Width="140px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="HostEnvironment"
                               Title="Host Env"
                               Width="120px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Metadata"
+        <RadzenDataGridColumn TItem="RunRow"
                               Property="HostName"
                               Title="Host"
                               Width="150px"
@@ -137,22 +138,39 @@
 </TraxDataGrid>
 
 @code {
-    private TraxDataGrid<Metadata>? _grid;
-    private HashSet<Metadata> _selectedMetadata = [];
+    private TraxDataGrid<RunRow>? _grid;
+    private readonly GridCount _count = new();
 
+    // Keyed by id: the grid reads a fresh page of runs on every load, so a selection kept by
+    // reference would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedMetadata = [];
+
+    private void ToggleSelection(long id, bool selected)
+    {
+        if (selected)
+            _selectedMetadata.Add(id);
+        else
+            _selectedMetadata.Remove(id);
+        PausePolling = _selectedMetadata.Count > 0;
+    }
+
+    // Through the operations service, as the API's cancelExecution is, so the dashboard and the
+    // API flag the same runs and report the same outcome.
     private async Task CancelTrain(long metadataId, string trainName)
     {
         try
         {
-            var count = await CancellationHelper.CancelTrainsAsync(
-                DataContextFactory, ServiceProvider, [metadataId], DisposalToken);
+            var result = await RunCancellation.CancelOneAsync(OperationsService, metadataId, DisposalToken);
 
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Cancellation Requested",
-                $"Cancel signal sent for {ShortName(trainName)}.",
-                duration: 4000
-            );
+            if (result.Success)
+                NotificationService.Notify(
+                    NotificationSeverity.Success,
+                    "Cancellation Requested",
+                    $"Cancellation requested for {ShortName(trainName)}.",
+                    duration: 4000
+                );
+            else
+                NotificationService.Notify(NotificationSeverity.Error, "Cancel Failed", result.Message ?? "", duration: 6000);
         }
         catch (Exception ex)
         {
@@ -165,28 +183,12 @@
         }
     }
 
-    private Task CancelSelected() => RunBatchOperationAsync(async () =>
-    {
-        var inProgressIds = _selectedMetadata
-            .Where(m => m.TrainState == TrainState.InProgress)
-            .Select(m => m.Id)
-            .ToList();
-
-        if (inProgressIds.Count == 0)
-        {
-            BatchError = "No in-progress executions selected. Only in-progress executions can be cancelled.";
-            return;
-        }
-
-        var count = await CancellationHelper.CancelTrainsAsync(
-            DataContextFactory, ServiceProvider, inProgressIds, DisposalToken);
-
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            "Batch Cancellation",
-            $"Cancel signal sent for {count} execution(s).",
-            duration: 4000);
-    }, () => _selectedMetadata.Clear());
+    // The state each run had when it was ticked is not checked here: the service flags the
+    // selected runs that are Pending or InProgress now, and says how many that was.
+    private Task CancelSelected() => RunBatchOperationAsync(
+        "Batch Cancellation",
+        () => OperationsService.CancelExecutionsAsync(_selectedMetadata.ToList(), DisposalToken),
+        () => _selectedMetadata.Clear());
 
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -194,19 +196,15 @@
             await _grid.ReloadAsync();
     }
 
-    private Task<ServerDataResult<Metadata>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+    // The row without the run's input, output and stack trace, which the grid does not show.
+    private Task<ServerDataResult<RunRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
         => DataGridQueryHelper.LoadPageAsync(
             DataContextFactory,
-            db =>
-            {
-                IQueryable<Metadata> query = db.Metadatas.AsNoTracking();
-
-                if (DashboardSettings.HideAdminTrains)
-                    query = query.ExcludeAdmin(AdminTrains.FullNames);
-
-                return query.OrderByDescending(m => m.Id);
-            },
+            db => GridQueries.Runs(db, DashboardSettings.HideAdminTrains),
+            RunRow.Projection,
             args,
+            _count,
+            DashboardSettings.HideAdminTrains,
             ct
         );
 }

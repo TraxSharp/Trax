@@ -125,7 +125,6 @@ public class LoadFailureVisibilityTests
         public DateTime LastPollTime { get; private set; } = DateTime.UtcNow;
         public string? LastPollError { get; private set; }
         public bool HideAdminTrains => true;
-        public IReadOnlyList<string> AdminTrainNames => [];
 
         public Task InitializeAsync() => Task.CompletedTask;
 

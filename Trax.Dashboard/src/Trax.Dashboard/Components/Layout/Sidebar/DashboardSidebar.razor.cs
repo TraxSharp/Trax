@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Api.GraphQL.PersistedOperations;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 
 namespace Trax.Dashboard.Components.Layout.Sidebar;
 
 /// <summary>
 /// The dashboard's navigation menu, with links built from <c>DashboardOptions.RoutePrefix</c>.
 /// The persisted operations link appears only when the host registers Trax.Api's persisted
-/// operations capability. Part of the dashboard UI; not intended to be used directly.
+/// operations service, which <c>UsePersistedOperations</c> and <c>AddPersistedOperationStore</c>
+/// both do. Part of the dashboard UI; not intended to be used directly.
 /// </summary>
 public partial class DashboardSidebar
 {
@@ -23,12 +24,12 @@ public partial class DashboardSidebar
     private bool _persistedOperationsAvailable;
 
     /// <summary>
-    /// Checks once whether <c>IPersistedOperationsCapability</c> is registered, which decides
+    /// Checks once whether <c>IPersistedOperationsService</c> is registered, which decides
     /// whether the persisted operations link is shown.
     /// </summary>
     protected override void OnInitialized()
     {
         _persistedOperationsAvailable =
-            Services.GetService<IPersistedOperationsCapability>() is not null;
+            Services.GetService<IPersistedOperationsService>() is not null;
     }
 }

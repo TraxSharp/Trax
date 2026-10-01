@@ -10,6 +10,10 @@
         {
             @ShortName(_entry.TrainName)
         }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
         else if (!IsLoading)
         {
             <text>Work Queue Entry Not Found</text>
@@ -38,6 +42,13 @@
 
 @if (_entry is null)
 {
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load work queue entry @WorkQueueId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
     <RadzenText TextStyle="TextStyle.Body1">No work queue entry found with ID @WorkQueueId.</RadzenText>
     return;
 }
@@ -110,10 +121,10 @@
 </RadzenCard>
 
 @* ── Input JSON ── *@
-@if (!string.IsNullOrWhiteSpace(_entry.Input))
+@if (!string.IsNullOrWhiteSpace(_maskedInput))
 {
     <RadzenCard class="rz-mb-4">
         <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Input</RadzenText>
-        <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_entry.Input)</pre>
+        <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("input", _maskedInput)</pre>
     </RadzenCard>
 }

@@ -30,9 +30,20 @@
                 <RadzenFormField Text="@FormatLabel(prop.Name)" Variant="Variant.Outlined" class="rz-w-100">
                     <RadzenTextBox Value="@(GetFormValue<string>(prop.Name))"
                                    Change="@(v => SetFormValue(prop.Name, v))"
-                                   Placeholder="@GetPlaceholder(underlying)" />
+                                   Placeholder="@FormValueParser.Placeholder(underlying)" />
                 </RadzenFormField>
             }
+        }
+
+        @foreach (var prop in _readOnlyProperties)
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem"
+                         data-testid="@($"set-in-code-{prop.Name}")">
+                <RadzenLabel Text="@FormatLabel(prop.Name)" />
+                <RadzenText TextStyle="TextStyle.Caption">
+                    @(prop.GetValue(Configuration) is null ? "Not set" : "Set in code") (not editable here)
+                </RadzenText>
+            </RadzenStack>
         }
     </RadzenStack>
 

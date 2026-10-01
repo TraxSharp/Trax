@@ -9,31 +9,31 @@
 </RadzenText>
 
 <TraxDataGrid @ref="_grid"
-                    TItem="Log"
+                    TItem="LogRow"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
-        <RadzenDataGridColumn TItem="Log"
+        <RadzenDataGridColumn TItem="LogRow"
                               Property="Id"
                               Title="Id"
                               Width="80px"
                               SortOrder="SortOrder.Descending" />
-        <RadzenDataGridColumn TItem="Log"
+        <RadzenDataGridColumn TItem="LogRow"
                               Property="MetadataId"
                               Title="Metadata Id"
                               Width="140px" />
-        <RadzenDataGridColumn TItem="Log"
+        <RadzenDataGridColumn TItem="LogRow"
                               Property="Level"
                               Title="Level"
                               Width="120px" />
-        <RadzenDataGridColumn TItem="Log"
+        <RadzenDataGridColumn TItem="LogRow"
                               Property="Category"
                               Title="Category"
                               Width="200px" />
-        <RadzenDataGridColumn TItem="Log"
+        <RadzenDataGridColumn TItem="LogRow"
                               Property="Message"
                               Title="Message"
                               Width="350px" />
-        <RadzenDataGridColumn TItem="Log"
+        <RadzenDataGridColumn TItem="LogRow"
                               Property="Exception"
                               Title="Exception"
                               Width="250px" />
@@ -41,7 +41,8 @@
 </TraxDataGrid>
 
 @code {
-    private TraxDataGrid<Log>? _grid;
+    private TraxDataGrid<LogRow>? _grid;
+    private readonly GridCount _count = new();
 
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -49,11 +50,15 @@
             await _grid.ReloadAsync();
     }
 
-    private Task<ServerDataResult<Log>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+    // The row without the entry's stack trace, which the grid does not show.
+    private Task<ServerDataResult<LogRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
         => DataGridQueryHelper.LoadPageAsync(
             DataContextFactory,
             db => db.Logs.AsNoTracking().OrderByDescending(l => l.Id),
+            LogRow.Projection,
             args,
+            _count,
+            scope: null,
             ct
         );
 }

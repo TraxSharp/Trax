@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Radzen;
+using Trax.Dashboard.Models;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
@@ -39,6 +40,15 @@ internal static class DashboardFormatters
     }
 
     /// <summary>
+    /// <see cref="FormatDuration(Metadata)"/> for a run as a grid shows it.
+    /// </summary>
+    /// <param name="run">The run.</param>
+    public static string FormatDuration(RunRow run) =>
+        run.EndTime is null
+            ? "—"
+            : FormatDuration((run.EndTime.Value - run.StartTime).TotalMilliseconds);
+
+    /// <summary>
     /// Formats a duration as whole milliseconds under a second (<c>850ms</c>), seconds with one
     /// decimal under a minute (<c>12.3s</c>), and minutes with one decimal beyond that
     /// (<c>75.0m</c>, never hours).
@@ -54,9 +64,9 @@ internal static class DashboardFormatters
     }
 
     /// <summary>
-    /// Describes a manifest's schedule: the cron expression; <c>Every Ns</c>, <c>Every Nm</c> or
-    /// <c>Every Nh</c> for an interval, rounded down to the largest whole unit (so 90 seconds reads
-    /// <c>Every 1m</c>); or, for a one-off, <c>Once at {time}</c>, <c>Once (fired)</c> once the
+    /// Describes a manifest's schedule: the cron expression; for an interval, <c>Every</c> with its
+    /// hours, minutes and seconds, the zero ones left out and nothing rounded (so 90 seconds reads
+    /// <c>Every 1m 30s</c>); or, for a one-off, <c>Once at {time}</c>, <c>Once (fired)</c> once the
     /// time has passed, or <c>Once (no time set)</c>. Missing values give an em dash; other
     /// schedule types give the enum name.
     /// </summary>
@@ -68,9 +78,8 @@ internal static class DashboardFormatters
             ScheduleType.Interval => manifest.IntervalSeconds switch
             {
                 null => "—",
-                < 60 => $"Every {manifest.IntervalSeconds}s",
-                < 3600 => $"Every {manifest.IntervalSeconds / 60}m",
-                _ => $"Every {manifest.IntervalSeconds / 3600}h",
+                <= 0 => $"Every {manifest.IntervalSeconds}s",
+                { } seconds => $"Every {FormatIntervalSeconds(seconds)}",
             },
             ScheduleType.Once => manifest.ScheduledAt switch
             {
@@ -80,6 +89,22 @@ internal static class DashboardFormatters
             },
             _ => manifest.ScheduleType.ToString(),
         };
+
+    /// <summary>
+    /// A whole number of seconds as hours, minutes and seconds, leaving out the zero parts:
+    /// 90 is "1m 30s", 3600 is "1h", 3661 is "1h 1m 1s". Nothing is rounded away.
+    /// </summary>
+    private static string FormatIntervalSeconds(int seconds)
+    {
+        var parts = new List<string>(3);
+        if (seconds / 3600 is var hours and > 0)
+            parts.Add($"{hours}h");
+        if (seconds % 3600 / 60 is var minutes and > 0)
+            parts.Add($"{minutes}m");
+        if (seconds % 60 is var rest and > 0)
+            parts.Add($"{rest}s");
+        return string.Join(" ", parts);
+    }
 
     /// <summary>
     /// Re-indents <paramref name="json"/> for display. Returns the input unchanged when it is not

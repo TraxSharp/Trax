@@ -11,6 +11,10 @@
         {
             @ShortName(_metadata.Name)
         }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
         else if (!IsLoading)
         {
             <text>Metadata Not Found</text>
@@ -20,7 +24,7 @@
     @if (_metadata is not null)
     {
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
-            @if (_metadata.TrainState == TrainState.InProgress)
+            @if (_metadata.TrainState is TrainState.Pending or TrainState.InProgress)
             {
                 <RadzenButton Text="Cancel"
                               Icon="cancel"
@@ -54,6 +58,13 @@
 
 @if (_metadata is null)
 {
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load metadata @MetadataId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
     <RadzenText TextStyle="TextStyle.Body1">No metadata found with ID @MetadataId.</RadzenText>
     return;
 }
@@ -145,7 +156,7 @@
                 <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
                     <RadzenStack Gap="0.75rem">
                         <FieldDisplay Label="Labels">
-                            <pre style="font-size: 0.75rem; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_metadata.HostLabels)</pre>
+                            <pre style="font-size: 0.75rem; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("host-labels", _metadata.HostLabels)</pre>
                         </FieldDisplay>
                     </RadzenStack>
                 </RadzenColumn>
@@ -185,7 +196,7 @@
             <RadzenColumn Size="12" SizeMD="6">
                 <RadzenCard>
                     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Input</RadzenText>
-                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_metadata.Input)</pre>
+                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("input", _metadata.Input)</pre>
                 </RadzenCard>
             </RadzenColumn>
         }
@@ -194,7 +205,7 @@
             <RadzenColumn Size="12" SizeMD="6">
                 <RadzenCard>
                     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Output</RadzenText>
-                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@FormatJson(_metadata.Output)</pre>
+                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("output", _metadata.Output)</pre>
                 </RadzenCard>
             </RadzenColumn>
         }
@@ -207,15 +218,15 @@
     @if (_logCount > 0)
     {
         <TraxDataGrid @ref="_logsGrid"
-                      TItem="Log"
+                      TItem="LogRow"
                       ServerLoadData="@LoadLogsPageAsync">
             <Columns>
-                <RadzenDataGridColumn TItem="Log"
+                <RadzenDataGridColumn TItem="LogRow"
                                       Property="Id"
                                       Title="Id"
                                       Width="80px"
                                       SortOrder="SortOrder.Descending" />
-                <RadzenDataGridColumn TItem="Log"
+                <RadzenDataGridColumn TItem="LogRow"
                                       Property="Level"
                                       Title="Level"
                                       Width="120px">
@@ -224,16 +235,16 @@
                                      Text="@l.Level.ToString()" />
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Log"
+                <RadzenDataGridColumn TItem="LogRow"
                                       Property="Category"
                                       Title="Category"
                                       Width="200px">
                     <Template Context="l">@ShortName(l.Category)</Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Log"
+                <RadzenDataGridColumn TItem="LogRow"
                                       Property="Message"
                                       Title="Message" />
-                <RadzenDataGridColumn TItem="Log"
+                <RadzenDataGridColumn TItem="LogRow"
                                       Property="Exception"
                                       Title="Exception"
                                       Width="250px" />

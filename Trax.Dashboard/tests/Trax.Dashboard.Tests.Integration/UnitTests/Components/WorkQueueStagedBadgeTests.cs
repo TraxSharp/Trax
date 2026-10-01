@@ -11,6 +11,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
@@ -40,6 +41,8 @@ public class WorkQueueStagedBadgeTests
         _ctx.Services.AddSingleton<IDataContextProviderFactory>(_data);
         _ctx.Services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         _ctx.Services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
+        // The page cancels through it; these tests only read.
+        _ctx.Services.AddSingleton(UnusedService<IOperationsService>.Create());
     }
 
     [TearDown]

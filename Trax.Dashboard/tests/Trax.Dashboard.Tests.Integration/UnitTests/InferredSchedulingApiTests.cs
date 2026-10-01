@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.EffectRegistry;
@@ -23,8 +24,8 @@ public class InferredSchedulingApiTests
     public void SetUp()
     {
         _services = new ServiceCollection();
-        var root = new TraxBuilder(_services, new EffectRegistry()) { HasDataProvider = true };
-        _parentBuilder = root.AddEffects(effects => effects)
+        var root = new TraxBuilder(_services, new EffectRegistry());
+        _parentBuilder = root.AddEffects(effects => effects.UseInMemory())
             .AddMediator(typeof(IFakeSchedulerTrainA).Assembly);
     }
 

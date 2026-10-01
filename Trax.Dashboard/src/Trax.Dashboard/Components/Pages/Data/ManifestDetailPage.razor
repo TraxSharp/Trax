@@ -10,6 +10,10 @@
         {
             @ShortName(_manifest.Name)
         }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
         else if (!IsLoading)
         {
             <text>Manifest Not Found</text>
@@ -38,6 +42,13 @@
 
 @if (_manifest is null)
 {
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load manifest @ManifestId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
     <RadzenText TextStyle="TextStyle.Body1">No manifest found with ID @ManifestId.</RadzenText>
     return;
 }
@@ -152,10 +163,10 @@
     @if (_totalRuns > 0)
     {
         <TraxDataGrid @ref="_runsGrid"
-                      TItem="Metadata"
+                      TItem="RunRow"
                       ServerLoadData="@LoadRunsPageAsync">
             <Columns>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Title=""
                                       Width="50px"
                                       Sortable="false"
@@ -169,12 +180,12 @@
                                       Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="Id"
                                       Title="Id"
                                       Width="80px"
                                       SortOrder="SortOrder.Descending" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="TrainState"
                                       Title="State"
                                       Width="120px">
@@ -183,36 +194,36 @@
                                      Text="@m.TrainState.ToString()" />
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="ExternalId"
                                       Title="External Id"
                                       Width="200px" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="StartTime"
                                       Title="Start Time"
                                       Width="180px"
                                       FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="EndTime"
                                       Title="End Time"
                                       Width="180px"
                                       FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Title="Duration"
                                       Width="120px"
                                       Sortable="false"
                                       Filterable="false">
                     <Template Context="m">@FormatDuration(m)</Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="FailureJunction"
                                       Title="Failure Junction"
                                       Width="150px" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="FailureReason"
                                       Title="Failure Reason"
                                       Width="250px" />
-                <RadzenDataGridColumn TItem="Metadata"
+                <RadzenDataGridColumn TItem="RunRow"
                                       Property="ParentId"
                                       Title="Parent Id"
                                       Width="100px">

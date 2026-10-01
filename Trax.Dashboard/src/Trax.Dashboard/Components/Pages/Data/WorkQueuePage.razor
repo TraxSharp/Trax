@@ -3,7 +3,7 @@
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
-@inject NotificationService NotificationService
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Work Queue</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
@@ -28,21 +28,21 @@
 }
 
 <TraxDataGrid @ref="_grid"
-                    TItem="WorkQueue"
+                    TItem="WorkQueueRow"
                     ServerLoadData="@LoadPageAsync">
     <Columns>
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Width="40px"
                               Sortable="false"
                               Filterable="false"
                               Frozen="true">
             <Template Context="q">
                 <RadzenCheckBox TValue="bool"
-                                Value="@(_selectedEntries.Contains(q))"
-                                Change="@(args => { if ((bool)args!) _selectedEntries.Add(q); else _selectedEntries.Remove(q); PausePolling = _selectedEntries.Count > 0; })" />
+                                Value="@(_selectedEntries.Contains(q.Id))"
+                                Change="@(args => ToggleSelection(q.Id, (bool)args!))" />
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Title=""
                               Width="50px"
                               Sortable="false"
@@ -56,18 +56,18 @@
                               Click="@(() => Navigation.NavigateTo($"trax/data/work-queue/{q.Id}"))" />
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="Id"
                               Title="Id"
                               Width="80px"
                               SortOrder="SortOrder.Descending" />
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="TrainName"
                               Title="Train"
                               Width="200px">
             <Template Context="q">@ShortName(q.TrainName)</Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="Status"
                               Title="Status"
                               Width="120px">
@@ -76,29 +76,29 @@
                              Text="@q.Status.ToString()" />
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="Priority"
                               Title="Priority"
                               Width="90px" />
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="ManifestId"
                               Title="Manifest Id"
                               Width="140px" />
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="MetadataId"
                               Title="Metadata Id"
                               Width="140px" />
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="CreatedAt"
                               Title="Created At"
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="DispatchedAt"
                               Title="Dispatched At"
                               Width="180px"
                               FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="SubjectKey"
                               Title="Subject"
                               Width="160px">
@@ -107,7 +107,7 @@
         @* An entry staged by a two-phase enqueue is Queued but not yet dispatchable; it is
            normally confirmed moments later, once its OnQueue hook returns. Only a queued entry
            can be staged: a cancelled one keeps a null ConfirmedAt but is simply cancelled. *@
-        <RadzenDataGridColumn TItem="WorkQueue"
+        <RadzenDataGridColumn TItem="WorkQueueRow"
                               Property="ConfirmedAt"
                               Title="Confirmed"
                               Width="120px">
@@ -130,8 +130,21 @@
 </TraxDataGrid>
 
 @code {
-    private TraxDataGrid<WorkQueue>? _grid;
-    private HashSet<WorkQueue> _selectedEntries = [];
+    private TraxDataGrid<WorkQueueRow>? _grid;
+    private readonly GridCount _count = new();
+
+    // Keyed by id: the grid reads a fresh page of entries on every load, so a selection kept by
+    // reference would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedEntries = [];
+
+    private void ToggleSelection(long id, bool selected)
+    {
+        if (selected)
+            _selectedEntries.Add(id);
+        else
+            _selectedEntries.Remove(id);
+        PausePolling = _selectedEntries.Count > 0;
+    }
 
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -139,38 +152,22 @@
             await _grid.ReloadAsync();
     }
 
-    private Task CancelSelected() => RunBatchOperationAsync(async () =>
-    {
-        var queuedIds = _selectedEntries
-            .Where(e => e.Status == WorkQueueStatus.Queued)
-            .Select(e => e.Id)
-            .ToList();
+    // Through the operations service, as the API's cancelWorkQueueEntries is. It cancels the
+    // selected entries that are still Queued and says how many that was.
+    private Task CancelSelected() => RunBatchOperationAsync(
+        "Entries Cancelled",
+        () => OperationsService.CancelWorkQueueEntriesAsync(_selectedEntries.ToList(), DisposalToken),
+        () => _selectedEntries.Clear());
 
-        if (queuedIds.Count == 0)
-        {
-            BatchError = "No queued entries selected. Only queued entries can be cancelled.";
-            return;
-        }
-
-        using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-        var count = await context.WorkQueues
-            .Where(wq => queuedIds.Contains(wq.Id) && wq.Status == WorkQueueStatus.Queued)
-            .ExecuteUpdateAsync(
-                s => s.SetProperty(wq => wq.Status, WorkQueueStatus.Cancelled),
-                DisposalToken);
-
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            "Entries Cancelled",
-            $"{count} work queue entry(s) cancelled.",
-            duration: 4000);
-    }, () => _selectedEntries.Clear());
-
-    private Task<ServerDataResult<WorkQueue>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+    // The row without the entry's input, which the grid does not show.
+    private Task<ServerDataResult<WorkQueueRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
         => DataGridQueryHelper.LoadPageAsync(
             DataContextFactory,
-            db => db.WorkQueues.AsNoTracking().OrderByDescending(q => q.Id),
+            GridQueries.WorkQueue,
+            WorkQueueRow.Projection,
             args,
+            _count,
+            scope: null,
             ct
         );
 

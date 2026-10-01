@@ -60,7 +60,7 @@ template, `Routes.razor` is a plain `<Router>` over the assembly, and
 `DashboardSidebar`, to build the navigation links. `UseTraxDashboard("/admin")` therefore
 moves the links and not the pages, and every link 404s. Blazor route templates are
 compile-time constants, so making the prefix real means changing how the pages are routed,
-not changing this method.
+not changing this method. The setter is `internal`, so that argument is the only way to set it.
 
 **The host must be a Blazor-capable ASP.NET Core app.** Interactive server components need a
 circuit, which means SignalR and sticky sessions if the host scales out. A pure Web API
@@ -77,20 +77,30 @@ refuse rather than silently changing behaviour. Only the first is the shape `api
 describes, which is about reading the `IServiceCollection` during registration; the second
 resolves from a built provider, where asking is safe by construction.
 
-**The `TraxMarker` check is coarser than the dependency it guards.** The dashboard registers
-no train discovery of its own and injects `ITrainDiscoveryService` into the Trains page and
-the metadata detail page, but
-that service comes from `AddMediator()`, while `TraxMarker` is registered by `AddTrax()`
-unconditionally. A host calling `AddTrax(t => t.AddEffects(...))` and nothing else passes the
-check and still has no discovery. What the check actually catches is a host that never called
-`AddTrax()` at all, which is the common mistake and the one with the least legible failure.
+**`AddTraxDashboard()` is called once.** A second call throws instead of registering a second
+`DashboardOptions`: the last registration would win, so a shared bootstrap could replace the
+host's posture with `AllowAnonymousDashboard()`.
+
+**The Scheduler is required, and checked when the dashboard is mapped.** The pages inject
+`IOperationsService`, which only `AddScheduler()` registers, so a host with `AddTrax()` and
+`AddMediator()` alone used to start and then serve a 500 or a dead circuit on `/trax`.
+`UseTraxDashboard()` asks the built provider whether `IOperationsService` is registered and
+throws naming `AddScheduler()`. It checks there rather than in `AddTraxDashboard()`, so the two
+registrations can come in either order. `AddScheduler()` only compiles after `AddMediator()`,
+so this also covers the train discovery the Trains and metadata pages inject.
+
+**The `TraxMarker` check is coarser than the dependencies it guards.** It catches a host that
+never called `AddTrax()` at all, which is the common mistake and the one with the least legible
+failure. The Scheduler check above is what catches a pipeline built without the parts the pages
+need.
 
 ## Exemplars
 
 - `DashboardServiceExtensionsTests` pins part of the registration half: the options that land,
   the defaults (`/trax`), the scoped services, that the dashboard registers **no** train
-  discovery of its own, and that the `TraxMarker` precondition throws with a message naming
-  the call to add.
+  discovery of its own, that the `TraxMarker` precondition throws with a message naming
+  the call to add, that a second `AddTraxDashboard()` throws, and that `UseTraxDashboard()`
+  without the Scheduler throws naming `AddScheduler()`.
 
 Not covered: three things, in descending order of reach. (Authorization was the first of
 four until [0002](./0002-the-dashboard-requires-an-authorization-posture.md), whose
@@ -99,23 +109,26 @@ exemplars now pin it.)
 **`RoutePrefix` does not move the pages**, and nothing fails when the sidebar and the routes
 disagree. The tests set a custom prefix and assert it reaches `DashboardOptions`, which is the
 option plumbing working exactly as designed; nothing asserts where a page is then served, so
-the divergence stays invisible until a consumer passes an argument and clicks a link. There is
-a second way in: `UseTraxDashboard()` writes its prefix argument unconditionally, so a prefix
-set through `AddTraxDashboard(o => ...)` is silently overwritten by a bare `UseTraxDashboard()`.
+the divergence stays invisible until a consumer passes an argument and clicks a link.
 
 **Nothing asserts what `UseTraxDashboard()` does to the host's pipeline.** A change to the
 middleware it adds, or to the order it adds it in, is invisible here and visible to every
 consumer.
 
 **Nothing asserts the `WebApplicationBuilder` overload of `AddTraxDashboard()`**, the one its
-own documentation calls the recommended one. Every test builds a bare `ServiceCollection`, so
-that overload's two mutations outside DI, `UseStaticWebAssets()` outside Development and an
-in-memory source pushed to the top of the host's configuration root, are unasserted. Inside
+own documentation calls the recommended one. Tests call it to build a host, but none asserts
+its one mutation outside DI, `UseStaticWebAssets()` outside Development. Inside
 the overload the tests do exercise, `AddRadzenComponents()` and
 `AddRazorComponents().AddInteractiveServerComponents()` are unasserted too.
 
 ## Changelog
 
+- **2026-10-01**: `UseTraxDashboard()` refuses to start without the Scheduler, naming
+  `AddScheduler()`, and a second `AddTraxDashboard()` throws. Corrected two stale claims:
+  `RoutePrefix` has an `internal` setter, so a prefix can no longer be set through
+  `AddTraxDashboard(o => ...)` and then overwritten; and the `WebApplicationBuilder` overload no
+  longer pushes an in-memory configuration source (log levels saved on Server Settings reach
+  the logger filter options through `DashboardLogLevelOverrides`).
 - **2026-09-27**: The authorization half moved to
   [0002](./0002-the-dashboard-requires-an-authorization-posture.md): the dashboard now refuses
   to start without a posture, so the host can no longer skip the gate silently.

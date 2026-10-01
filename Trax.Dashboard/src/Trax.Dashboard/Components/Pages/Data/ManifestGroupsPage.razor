@@ -5,7 +5,6 @@
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
 @inject ITraxScheduler Scheduler
-@inject IServiceProvider ServiceProvider
 @inject NotificationService NotificationService
 @inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
@@ -20,14 +19,14 @@
                           Variant="Variant.Outlined"
                           Size="ButtonSize.Small"
                           Click="@(() => SetAllGroupsEnabled(true))"
-                          Disabled="@(_operating || _items.All(g => g.IsEnabled))" />
+                          Disabled="@(BatchOperating || _items.All(g => g.IsEnabled))" />
             <RadzenButton Text="Disable All"
                           Icon="pause"
                           ButtonStyle="ButtonStyle.Danger"
                           Variant="Variant.Outlined"
                           Size="ButtonSize.Small"
                           Click="@(() => SetAllGroupsEnabled(false))"
-                          Disabled="@(_operating || _items.All(g => !g.IsEnabled))" />
+                          Disabled="@(BatchOperating || _items.All(g => !g.IsEnabled))" />
         </RadzenStack>
     }
 </RadzenStack>
@@ -90,8 +89,8 @@
                               Frozen="true">
             <Template Context="g">
                 <RadzenCheckBox TValue="bool"
-                                Value="@(_selectedGroups.Contains(g))"
-                                Change="@(args => { if ((bool)args!) _selectedGroups.Add(g); else _selectedGroups.Remove(g); PausePolling = _selectedGroups.Count > 0; })" />
+                                Value="@(_selectedGroups.Contains(g.Id))"
+                                Change="@(args => ToggleSelection(g.Id, (bool)args!))" />
             </Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="GroupSummary"
@@ -147,7 +146,7 @@
                               Width="120px"
                               Sortable="false"
                               Filterable="false">
-            <Template Context="g">@_inProgressByGroup.GetValueOrDefault(g.Id)</Template>
+            <Template Context="g">@g.InProgressCount</Template>
         </RadzenDataGridColumn>
         <RadzenDataGridColumn TItem="GroupSummary"
                               Property="LastRun"
@@ -159,45 +158,50 @@
 
 @code {
     private List<GroupSummary> _items = [];
-    private Dictionary<long, int> _inProgressByGroup = [];
-    private HashSet<GroupSummary> _selectedGroups = [];
+    // Keyed by id: a refresh replaces every summary object, so a selection kept by reference
+    // would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedGroups = [];
     private DagLayout? _dagLayout;
-    private bool _operating;
 
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
 
-        _items = await context.ManifestGroups
+        var groups = await context.ManifestGroups
             .AsNoTracking()
-            .Select(g => new GroupSummary
-            {
-                Id = g.Id,
-                Name = g.Name,
-                MaxActiveJobs = g.MaxActiveJobs,
-                Priority = g.Priority,
-                IsEnabled = g.IsEnabled,
-                ManifestCount = g.Manifests.Count,
-                TotalExecutions = g.Manifests.SelectMany(m => m.Metadatas).Count(),
-                CompletedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.TrainState == TrainState.Completed),
-                FailedCount = g.Manifests.SelectMany(m => m.Metadatas).Count(md => md.TrainState == TrainState.Failed),
-                LastRun = g.Manifests.SelectMany(m => m.Metadatas).Max(md => (DateTime?)md.StartTime),
-            })
+            .OrderBy(g => g.Id)
+            .Select(g => new { g.Id, g.Name, g.MaxActiveJobs, g.Priority, g.IsEnabled })
             .ToListAsync(cancellationToken);
 
-        // In-progress runs per group, which the API's group stats report alongside the rest.
-        _inProgressByGroup = await context.Metadatas
-            .AsNoTracking()
-            .Where(md => md.TrainState == TrainState.InProgress && md.ManifestId != null)
-            .Join(
-                context.Manifests.AsNoTracking(),
-                md => md.ManifestId,
-                m => (long?)m.Id,
-                (md, m) => m.ManifestGroupId
-            )
-            .GroupBy(groupId => groupId)
-            .Select(g => new { GroupId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.GroupId, x => x.Count, cancellationToken);
+        // The counts come from the operations service, the call the API's group stats make. It
+        // takes at most OperationsService.MaxBatchSize ids per call and this page lists every group.
+        var stats = new Dictionary<long, Trax.Scheduler.Services.Operations.ManifestGroupExecutionStats>();
+        foreach (var chunk in groups.Select(g => g.Id).Chunk(Trax.Scheduler.Services.Operations.OperationsService.MaxBatchSize))
+        {
+            foreach (var row in await OperationsService.GetManifestGroupExecutionStatsAsync(chunk, cancellationToken))
+                stats[row.GroupId] = row;
+        }
+
+        _items = groups
+            .Select(g =>
+            {
+                var s = stats.GetValueOrDefault(g.Id);
+                return new GroupSummary
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    MaxActiveJobs = g.MaxActiveJobs,
+                    Priority = g.Priority,
+                    IsEnabled = g.IsEnabled,
+                    ManifestCount = s?.ManifestCount ?? 0,
+                    TotalExecutions = s?.TotalExecutions ?? 0,
+                    CompletedCount = s?.Completed ?? 0,
+                    FailedCount = s?.Failed ?? 0,
+                    InProgressCount = s?.InProgress ?? 0,
+                    LastRun = s?.LastRun,
+                };
+            })
+            .ToList();
 
         // The group-level dependency graph comes from the shared operations service, so it is
         // the graph the GraphQL dependencyGraph query returns, not a second copy of its query.
@@ -214,104 +218,79 @@
         _dagLayout = DagLayoutEngine.ComputeLayout(dagNodes, dagEdges);
     }
 
-    private async Task SetAllGroupsEnabled(bool enabled)
+    private void ToggleSelection(long id, bool selected)
     {
-        _operating = true;
-
-        try
-        {
-            using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-
-            await context.ManifestGroups
-                .Where(g => g.IsEnabled != enabled)
-                .ExecuteUpdateAsync(
-                    s => s
-                        .SetProperty(g => g.IsEnabled, enabled)
-                        .SetProperty(g => g.UpdatedAt, DateTime.UtcNow),
-                    DisposalToken
-                );
-
-            NotificationService.Notify(
-                new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Success,
-                    Summary = enabled ? "All Groups Enabled" : "All Groups Disabled",
-                    Detail = enabled
-                        ? "All manifest groups have been enabled."
-                        : "All manifest groups have been disabled. No new jobs will be queued.",
-                    Duration = 4000,
-                }
-            );
-
-            await RefreshNowAsync();
-        }
-        catch (Exception ex)
-        {
-            NotificationService.Notify(
-                new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Error,
-                    Summary = "Update Failed",
-                    Detail = ex.Message,
-                    Duration = 6000,
-                }
-            );
-        }
-        finally
-        {
-            _operating = false;
-        }
+        if (selected)
+            _selectedGroups.Add(id);
+        else
+            _selectedGroups.Remove(id);
+        PausePolling = _selectedGroups.Count > 0;
     }
 
-    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(async () =>
+    // Through the operations service, as the API's setAllManifestGroupsEnabled is. A selection
+    // is left as it is: this acts on every group, not the selected ones.
+    private Task SetAllGroupsEnabled(bool enabled) => RunBatchOperationAsync(
+        enabled ? "All Groups Enabled" : "All Groups Disabled",
+        () => OperationsService.SetAllManifestGroupsEnabledAsync(enabled, DisposalToken));
+
+    // Through the operations service, as the API's setManifestGroupsEnabled is. Only groups whose
+    // flag differs are written, and the count says how many that was.
+    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(
+        enabled ? "Groups Enabled" : "Groups Disabled",
+        () => OperationsService.SetManifestGroupsEnabledAsync(_selectedGroups.ToList(), enabled, DisposalToken),
+        () => _selectedGroups.Clear());
+
+    // One call per group, as the scheduler offers no batch trigger or cancel yet. Each group is
+    // tried in turn, so one that fails does not stop the rest. A group's trigger skips a member
+    // that already has a queued entry and counts only the manifests it queued.
+    private Task TriggerSelected() => RunEachAsync("Groups Triggered", async () =>
     {
-        var ids = _selectedGroups.Select(g => g.Id).ToList();
-
-        using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-        var count = await context.ManifestGroups
-            .Where(g => ids.Contains(g.Id))
-            .ExecuteUpdateAsync(
-                s => s
-                    .SetProperty(g => g.IsEnabled, enabled)
-                    .SetProperty(g => g.UpdatedAt, DateTime.UtcNow),
-                DisposalToken);
-
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            enabled ? "Groups Enabled" : "Groups Disabled",
-            $"{count} group(s) {(enabled ? "enabled" : "disabled")}.",
-            duration: 4000);
-    }, () => _selectedGroups.Clear());
-
-    private Task TriggerSelected() => RunBatchOperationAsync(async () =>
-    {
-        var totalQueued = 0;
-        foreach (var group in _selectedGroups)
+        var queued = 0;
+        var failures = new List<string>();
+        foreach (var groupId in _selectedGroups.ToList())
         {
-            totalQueued += await Scheduler.TriggerGroupAsync(group.Id);
+            try
+            {
+                queued += await Scheduler.TriggerGroupAsync(groupId, DisposalToken);
+            }
+            catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
+            {
+                failures.Add($"Group {GroupName(groupId)} was not triggered: {ex.Message}");
+            }
         }
 
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            "Groups Triggered",
-            $"{totalQueued} manifest(s) queued across {_selectedGroups.Count} group(s).",
-            duration: 4000);
+        var triggered = _selectedGroups.Count - failures.Count;
+        var message = $"{queued} manifest(s) queued across {triggered} group(s)";
+        if (failures.Count > 0)
+            message += $", {failures.Count} group(s) failed";
+        return new EachOutcome(message + ".", failures);
     }, () => _selectedGroups.Clear());
 
-    private Task CancelSelectedRunning() => RunBatchOperationAsync(async () =>
+    private Task CancelSelectedRunning() => RunEachAsync("Cancellation Requested", async () =>
     {
-        var totalCancelled = 0;
-        foreach (var group in _selectedGroups)
+        var flagged = 0;
+        var failures = new List<string>();
+        foreach (var groupId in _selectedGroups.ToList())
         {
-            totalCancelled += await Scheduler.CancelGroupAsync(group.Id);
+            try
+            {
+                flagged += await Scheduler.CancelGroupAsync(groupId, DisposalToken);
+            }
+            catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
+            {
+                failures.Add($"Group {GroupName(groupId)} was not cancelled: {ex.Message}");
+            }
         }
 
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            "Cancellation Requested",
-            $"Cancel signal sent for {totalCancelled} execution(s) across {_selectedGroups.Count} group(s).",
-            duration: 4000);
+        var cancelled = _selectedGroups.Count - failures.Count;
+        var message = $"Cancellation requested for {flagged} execution(s) across {cancelled} group(s)";
+        if (failures.Count > 0)
+            message += $", {failures.Count} group(s) failed";
+        return new EachOutcome(message + ".", failures);
     }, () => _selectedGroups.Clear());
+
+    private string GroupName(long groupId) =>
+        _items.FirstOrDefault(g => g.Id == groupId)?.Name ?? groupId.ToString();
 
     private void OnDagNodeClick(long groupId)
     {

@@ -16,6 +16,7 @@
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="PublicApiGenerator" />
+    <PackageReference Include="Trax.Core.Testing" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
 

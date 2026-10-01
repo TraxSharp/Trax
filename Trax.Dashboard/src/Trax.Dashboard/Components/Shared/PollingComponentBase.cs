@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
+using Radzen;
 using Trax.Dashboard.Services.DashboardSettings;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Shared;
 
@@ -21,8 +23,10 @@ namespace Trax.Dashboard.Components.Shared;
 /// <see cref="NavigationManager.RegisterLocationChangingHandler"/> — the navigation is
 /// prevented and <see cref="RefreshNowAsync"/> is called instead.
 ///
-/// A load that throws during a background tick is reported through
-/// <see cref="IDashboardSettingsService.NotifyPollFailed"/> and retried on the next tick.
+/// A load that throws, whether the first load, a route-change reload or a background tick, is
+/// reported through <see cref="IDashboardSettingsService.NotifyPollFailed"/>, recorded in
+/// <see cref="LoadError"/> and retried on the next tick. It never leaves a lifecycle method,
+/// where Blazor Server would treat it as fatal and end the operator's circuit.
 /// Infrastructure for the dashboard's own pages; it is public only because those pages derive
 /// from it, and is not intended for use outside this package.
 /// </summary>
@@ -39,6 +43,9 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     [Inject]
     private NavigationManager NavigationManager { get; set; } = default!;
 
+    [Inject]
+    private NotificationService BatchNotifications { get; set; } = default!;
+
     private CancellationTokenSource? _cts;
     private object? _lastRouteKey;
     private IDisposable? _locationChangingRegistration;
@@ -49,6 +56,13 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// ticks never set it.
     /// </summary>
     private protected bool IsLoading { get; set; } = true;
+
+    /// <summary>
+    /// The message of the most recent load that failed, or <see langword="null"/> once a load
+    /// succeeds. A page whose data is still empty after a failed load renders this as "could not
+    /// load" rather than "not found", because nothing is known about whether the row exists.
+    /// </summary>
+    private protected string? LoadError { get; private set; }
 
     /// <summary>
     /// When true, the polling loop skips data refreshes until the value is set back to false.
@@ -102,6 +116,109 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// Runs a batch operation answered by the operations service, and reports what the service
+    /// said. A refusal (no ids, more than the service's batch limit) is shown as
+    /// <see cref="BatchError"/> and leaves the selection and polling as they are, so the operator
+    /// can change the selection and try again. An accepted batch is reported with the service's
+    /// message, as a warning when it changed nothing; then <paramref name="onSuccess"/> runs,
+    /// polling resumes and the data reloads. An exception is shown as <see cref="BatchError"/>.
+    /// </summary>
+    /// <param name="summary">The notification's title, such as "Entries Cancelled".</param>
+    /// <param name="operation">The service call.</param>
+    /// <param name="onSuccess">Optional callback invoked after the service accepted the batch.</param>
+    private protected async Task RunBatchOperationAsync(
+        string summary,
+        Func<Task<OperationResult>> operation,
+        Action? onSuccess = null
+    )
+    {
+        BatchError = null;
+        BatchOperating = true;
+
+        try
+        {
+            var result = await operation();
+            if (!result.Success)
+            {
+                BatchError = result.Message ?? $"{summary}: the request was refused.";
+                return;
+            }
+
+            BatchNotifications.Notify(
+                result.Count == 0 ? NotificationSeverity.Warning : NotificationSeverity.Success,
+                summary,
+                result.Message ?? "",
+                duration: 4000
+            );
+            onSuccess?.Invoke();
+            PausePolling = false;
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex)
+        {
+            BatchError = ex.Message;
+        }
+        finally
+        {
+            BatchOperating = false;
+        }
+    }
+
+    /// <summary>
+    /// Runs an action once per selected item, for the batch actions the scheduler offers only one
+    /// item at a time. <paramref name="operation"/> handles every item, carries on past an item
+    /// that fails, and returns what happened. The summary is reported as a notification (a
+    /// warning when any item failed) and the failures, each naming its item, as
+    /// <see cref="BatchError"/>. The selection is cleared either way, because the items that
+    /// succeeded must not be sent again; then polling resumes and the data reloads.
+    /// </summary>
+    /// <param name="summary">The notification's title, such as "Batch Trigger".</param>
+    /// <param name="operation">Handles every item and returns the outcome.</param>
+    /// <param name="clearSelection">Empties the page's selection.</param>
+    private protected async Task RunEachAsync(
+        string summary,
+        Func<Task<EachOutcome>> operation,
+        Action clearSelection
+    )
+    {
+        BatchError = null;
+        BatchOperating = true;
+
+        try
+        {
+            var outcome = await operation();
+            BatchNotifications.Notify(
+                outcome.Failures.Count > 0
+                    ? NotificationSeverity.Warning
+                    : NotificationSeverity.Success,
+                summary,
+                outcome.Message,
+                duration: 6000
+            );
+            if (outcome.Failures.Count > 0)
+                BatchError = string.Join(" ", outcome.Failures);
+
+            clearSelection();
+            PausePolling = false;
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex)
+        {
+            BatchError = ex.Message;
+        }
+        finally
+        {
+            BatchOperating = false;
+        }
+    }
+
+    /// <summary>
+    /// What <see cref="RunEachAsync"/> reports: a one-line count of what happened, and a line
+    /// for each item that failed.
+    /// </summary>
+    private protected sealed record EachOutcome(string Message, IReadOnlyList<string> Failures);
+
+    /// <summary>
     /// A CancellationToken that is cancelled when the component is disposed.
     /// Event handlers can pass this to async operations so they abort when the user navigates away.
     /// </summary>
@@ -110,7 +227,7 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// <summary>
     /// Loads the page's data into component state. Called once on initialization, on every
     /// poll tick that is not paused, on <see cref="RefreshNowAsync"/>, and after a successful
-    /// <see cref="RunBatchOperationAsync"/>. Background ticks run it on the renderer's
+    /// either <c>RunBatchOperationAsync</c>. Background ticks run it on the renderer's
     /// synchronization context and re-render afterwards.
     /// </summary>
     /// <param name="cancellationToken">
@@ -124,6 +241,13 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     /// the component cancels the current poll cycle, reloads data immediately, and restarts polling.
     /// </summary>
     private protected virtual object? GetRouteKey() => null;
+
+    /// <summary>
+    /// Called when <see cref="GetRouteKey"/> changes, before the reload for the new route. Override
+    /// to drop state that belongs to the previous route (the loaded row, unsaved edits), so a
+    /// reload that fails does not leave the previous entity on screen under the new URL.
+    /// </summary>
+    private protected virtual void OnRouteKeyChanged() { }
 
     /// <summary>
     /// Registers the same-URL navigation handler, initializes <see cref="DashboardSettings"/>,
@@ -146,8 +270,11 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
         if (token.IsCancellationRequested)
             return;
 
-        await LoadDataAsync(token);
-        DashboardSettings.NotifyPolled();
+        await LoadOnceAsync(token);
+
+        if (token.IsCancellationRequested)
+            return;
+
         IsLoading = false;
 
         _lastRouteKey = GetRouteKey();
@@ -165,7 +292,10 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
         var key = GetRouteKey();
 
         if (_lastRouteKey is not null && !Equals(key, _lastRouteKey))
+        {
+            OnRouteKeyChanged();
             await RefreshNowAsync(showLoading: true);
+        }
 
         _lastRouteKey = key;
     }
@@ -212,11 +342,38 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
         if (token.IsCancellationRequested)
             return;
 
-        await LoadDataAsync(token);
-        DashboardSettings.NotifyPolled();
+        await LoadOnceAsync(token);
+
+        if (token.IsCancellationRequested)
+            return;
+
         IsLoading = false;
 
         _ = PollAsync(token);
+    }
+
+    /// <summary>
+    /// Runs one load outside the poll loop, recording a failure the way a failed tick is recorded
+    /// instead of letting it out of the calling lifecycle method or event handler. A load this
+    /// component cancelled (superseded or disposed) ends quietly.
+    /// </summary>
+    private async Task LoadOnceAsync(CancellationToken token)
+    {
+        try
+        {
+            await LoadDataAsync(token);
+            LoadError = null;
+            DashboardSettings.NotifyPolled();
+        }
+        catch (Exception) when (token.IsCancellationRequested)
+        {
+            // Superseded by a newer load or disposed: the newer load owns the outcome.
+        }
+        catch (Exception ex)
+        {
+            LoadError = ex.Message;
+            DashboardSettings.NotifyPollFailed(ex.Message);
+        }
     }
 
     private async Task PollAsync(CancellationToken ct)
@@ -235,6 +392,7 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
                     await InvokeAsync(async () =>
                     {
                         await LoadDataAsync(ct);
+                        LoadError = null;
                         DashboardSettings.NotifyPolled();
                         StateHasChanged();
                     });
@@ -243,6 +401,7 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
                 {
                     // Keep polling: the next tick may succeed. Until one does, the header says
                     // the rows on screen are from the last refresh that worked.
+                    LoadError = ex.Message;
                     DashboardSettings.NotifyPollFailed(ex.Message);
                 }
             }

@@ -5,6 +5,7 @@
 @inject NavigationManager Navigation
 @inject ITraxScheduler Scheduler
 @inject NotificationService NotificationService
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifests</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
@@ -43,10 +44,10 @@
 }
 
 <TraxDataGrid @ref="_grid"
-              TItem="Manifest"
+              TItem="ManifestRow"
               ServerLoadData="@LoadPageAsync">
     <Columns>
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Width="40px"
                               Sortable="false"
                               Filterable="false"
@@ -57,7 +58,7 @@
                                 Change="@(args => { if ((bool)args!) _selectedManifests[m.Id] = m; else _selectedManifests.Remove(m.Id); PausePolling = _selectedManifests.Count > 0; })" />
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Title=""
                               Width="50px"
                               Sortable="false"
@@ -71,55 +72,55 @@
                               Click="@(() => Navigation.NavigateTo($"trax/data/manifests/{m.Id}"))" />
             </Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="Id"
                               Title="Id"
                               Width="80px"
                               SortOrder="SortOrder.Descending" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="Name"
                               Title="Name"
                               Width="250px">
             <Template Context="m">@ShortName(m.Name)</Template>
         </RadzenDataGridColumn>
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="ExternalId"
                               Title="External Id"
                               Width="200px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Manifest"
-                              Property="ManifestGroup.Name"
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="GroupName"
                               Title="Group"
                               Width="180px" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="IsEnabled"
                               Title="Enabled"
                               Width="100px" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="ScheduleType"
                               Title="Schedule Type"
                               Width="150px" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="CronExpression"
                               Title="Cron Expression"
                               Width="170px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="IntervalSeconds"
                               Title="Interval (s)"
                               Width="130px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="MaxRetries"
                               Title="Max Retries"
                               Width="140px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="TimeoutSeconds"
                               Title="Timeout (s)"
                               Width="130px"
                               Visible="false" />
-        <RadzenDataGridColumn TItem="Manifest"
+        <RadzenDataGridColumn TItem="ManifestRow"
                               Property="LastSuccessfulRun"
                               Title="Last Successful Run"
                               Width="200px"
@@ -128,11 +129,12 @@
 </TraxDataGrid>
 
 @code {
-    private TraxDataGrid<Manifest>? _grid;
+    private TraxDataGrid<ManifestRow>? _grid;
+    private readonly GridCount _count = new();
 
     // Keyed by id: the grid reads a fresh page of manifests on every load, so a selection kept
     // by reference would stop matching the rows it was made on.
-    private Dictionary<long, Manifest> _selectedManifests = [];
+    private Dictionary<long, ManifestRow> _selectedManifests = [];
 
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -141,53 +143,67 @@
     }
 
     // One page at a time from the database, as the API's manifests query reads them.
-    private Task<ServerDataResult<Manifest>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+    // The row without the manifest's properties and exclusions, which the grid does not show.
+    private Task<ServerDataResult<ManifestRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
         => DataGridQueryHelper.LoadPageAsync(
             DataContextFactory,
-            db =>
-            {
-                IQueryable<Manifest> query = db.Manifests.Include(m => m.ManifestGroup).AsNoTracking();
-
-                if (DashboardSettings.HideAdminTrains)
-                    query = query.ExcludeAdmin(AdminTrains.FullNames);
-
-                return query.OrderByDescending(m => m.Id);
-            },
+            db => GridQueries.Manifests(db, DashboardSettings.HideAdminTrains),
+            ManifestRow.Projection,
             args,
+            _count,
+            DashboardSettings.HideAdminTrains,
             ct
         );
 
-    private Task TriggerSelected() => RunBatchOperationAsync(async () =>
+    // One trigger per manifest, as the scheduler offers no batch trigger yet. Each is tried in
+    // turn, so one that fails does not stop the rest. A manifest that already has a queued entry
+    // gets nothing more queued: the scheduler marks that entry as the triggered run instead, so
+    // it is reported apart from the manifests that were queued.
+    private Task TriggerSelected() => RunEachAsync("Batch Trigger", async () =>
     {
-        var count = 0;
-        foreach (var manifest in _selectedManifests.Values)
+        var selected = _selectedManifests.Values.ToList();
+        var ids = selected.Select(m => m.Id).ToList();
+
+        HashSet<long> hadEntry;
+        using (var context = await DataContextFactory.CreateDbContextAsync(DisposalToken))
+            hadEntry = (await context.WorkQueues
+                .AsNoTracking()
+                .Where(q => q.ManifestId != null && ids.Contains(q.ManifestId.Value) && q.Status == WorkQueueStatus.Queued)
+                .Select(q => q.ManifestId!.Value)
+                .ToListAsync(DisposalToken))
+                .ToHashSet();
+
+        var queued = 0;
+        var alreadyQueued = 0;
+        var failures = new List<string>();
+        foreach (var manifest in selected)
         {
-            await Scheduler.TriggerAsync(manifest.ExternalId);
-            count++;
+            try
+            {
+                await Scheduler.TriggerAsync(manifest.ExternalId, DisposalToken);
+                if (hadEntry.Contains(manifest.Id))
+                    alreadyQueued++;
+                else
+                    queued++;
+            }
+            catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
+            {
+                failures.Add($"{ShortName(manifest.Name)} ({manifest.ExternalId}) was not triggered: {ex.Message}");
+            }
         }
 
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            "Batch Trigger",
-            $"{count} manifest(s) triggered.",
-            duration: 4000);
+        var message = $"{queued} queued";
+        if (alreadyQueued > 0)
+            message += $", {alreadyQueued} already queued (that entry now runs as the trigger)";
+        if (failures.Count > 0)
+            message += $", {failures.Count} failed";
+        return new EachOutcome(message + ".", failures);
     }, () => _selectedManifests.Clear());
 
-    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(async () =>
-    {
-        var ids = _selectedManifests.Keys.ToList();
-
-        using var context = await DataContextFactory.CreateDbContextAsync(DisposalToken);
-        var count = await context.Manifests
-            .Where(m => ids.Contains(m.Id))
-            .ExecuteUpdateAsync(
-                s => s.SetProperty(m => m.IsEnabled, enabled),
-                DisposalToken);
-
-        NotificationService.Notify(
-            NotificationSeverity.Success,
-            enabled ? "Manifests Enabled" : "Manifests Disabled",
-            $"{count} manifest(s) {(enabled ? "enabled" : "disabled")}.",
-            duration: 4000);
-    }, () => _selectedManifests.Clear());
+    // Through the operations service, as the API's setManifestsEnabled is. Only manifests whose
+    // flag differs are written, and the count says how many that was.
+    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(
+        enabled ? "Manifests Enabled" : "Manifests Disabled",
+        () => OperationsService.SetManifestsEnabledAsync(_selectedManifests.Keys.ToList(), enabled, DisposalToken),
+        () => _selectedManifests.Clear());
 }

@@ -7,7 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Extensions;
+using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests;
 
@@ -184,6 +186,7 @@ public class DashboardAuthorizationTests
             }
         );
         builder.Services.AddSingleton<TraxMarker>();
+        builder.Services.AddScoped(_ => UnusedService<IOperationsService>.Create());
         builder.Services.AddAuthorization(o =>
             o.AddPolicy("DashboardAdmin", p => p.RequireRole("Admin"))
         );

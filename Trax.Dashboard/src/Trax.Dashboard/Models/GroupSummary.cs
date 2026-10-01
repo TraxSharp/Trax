@@ -27,16 +27,19 @@ internal class GroupSummary
     public bool IsEnabled { get; init; }
 
     /// <summary>Number of manifests in the group.</summary>
-    public int ManifestCount { get; init; }
+    public long ManifestCount { get; init; }
 
     /// <summary>Number of runs (metadata rows) of the group's manifests, in any state, over all time.</summary>
-    public int TotalExecutions { get; init; }
+    public long TotalExecutions { get; init; }
 
     /// <summary>Number of those runs that completed.</summary>
-    public int CompletedCount { get; init; }
+    public long CompletedCount { get; init; }
 
     /// <summary>Number of those runs that failed.</summary>
-    public int FailedCount { get; init; }
+    public long FailedCount { get; init; }
+
+    /// <summary>Number of those runs in progress.</summary>
+    public long InProgressCount { get; init; }
 
     /// <summary>
     /// Start time of the group's most recent run, as stored (UTC), or <see langword="null"/> when

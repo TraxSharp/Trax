@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Dashboard.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Dashboard.Tests.Stress" />
   </ItemGroup>
 
   <ItemGroup>

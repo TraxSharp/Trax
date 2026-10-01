@@ -92,12 +92,21 @@ public partial class EffectsSettingsPage
             entry.Enabled = false;
     }
 
+    /// <summary>
+    /// Applies the toggles the operator changed, then reads the registry again. A toggle left
+    /// alone is not applied: applying it would put back the state this page loaded over a change
+    /// another writer (another operator, the GraphQL <c>setEffectEnabled</c> mutation) made since.
+    /// </summary>
     private void Save()
     {
         if (_effectRegistry is null)
             return;
 
-        foreach (var entry in _effects.Where(e => e.Toggleable))
+        foreach (
+            var entry in _effects.Where(e =>
+                e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FactoryType)
+            )
+        )
         {
             if (entry.Enabled)
                 _effectRegistry.Enable(entry.FactoryType);
@@ -105,7 +114,7 @@ public partial class EffectsSettingsPage
                 _effectRegistry.Disable(entry.FactoryType);
         }
 
-        SnapshotEffectState();
+        ReloadEffects();
 
         NotificationService.Notify(
             new NotificationMessage
@@ -118,20 +127,29 @@ public partial class EffectsSettingsPage
         );
     }
 
-    private void ResetDefaults()
+    /// <summary>Drops unsaved toggles and shows the registry's current state.</summary>
+    private void DiscardChanges()
     {
-        foreach (var entry in _effects.Where(e => e.Toggleable))
-            entry.Enabled = _savedEffectStates.GetValueOrDefault(entry.FactoryType);
+        if (_effectRegistry is null)
+            return;
+
+        ReloadEffects();
 
         NotificationService.Notify(
             new NotificationMessage
             {
                 Severity = NotificationSeverity.Info,
-                Summary = "Defaults Restored",
-                Detail = "Effect settings have been reset to their saved values.",
+                Summary = "Changes Discarded",
+                Detail = "The page shows the effects' current state.",
                 Duration = 4000,
             }
         );
+    }
+
+    private void ReloadEffects()
+    {
+        LoadEffects();
+        SnapshotEffectState();
     }
 
     private void SnapshotEffectState()

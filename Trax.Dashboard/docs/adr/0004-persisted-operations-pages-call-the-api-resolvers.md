@@ -1,7 +1,7 @@
 ---
 authors: [Theauxm]
 areas: [platform, ui]
-status: accepted
+status: superseded-by-0005
 ---
 
 # The persisted-operations pages call the API package's resolvers
@@ -16,7 +16,9 @@ central ADR 0022 (one shared path per action) for an action the Scheduler's
 
 ## Status
 
-**Accepted.**
+**Superseded by** [0005](./0005-persisted-operations-pages-call-the-shared-service.md). The
+persisted-operations service this ADR named as the end state was released, and the pages now call
+it instead of the resolvers.
 
 ## Why this is written down
 
@@ -50,13 +52,11 @@ A persisted operation is addressed by tenant and id: the detail page takes the t
 
 ## Exemplars
 
-- `PersistedOperationsTenantTests` pins the pages to the resolvers' behaviour: rows sharing
-  an id open and deactivate only themselves, the list counts every row and reads one page,
-  and an upload is refused with the API's message.
-
-Not covered: nothing stops a future page from querying the table directly again. The guard
-is the test above, which fails only for the behaviour it exercises.
+**Unenforced:** superseded by 0005, whose exemplars now hold the tests that pinned this one;
+the pages no longer construct the resolvers, so no test here could fail for this decision.
 
 ## Changelog
 
+- **2026-10-01**: Superseded by
+  [0005](./0005-persisted-operations-pages-call-the-shared-service.md); its exemplar moved there.
 - **2026-09-27**: Recorded.

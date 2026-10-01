@@ -1,10 +1,6 @@
-using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Dashboard.Utilities;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.Operations;
@@ -47,37 +43,12 @@ public partial class QueueTrainDialog : IDisposable
     private bool _running;
     private int _priority;
 
-    private PropertyInfo[] _inputProperties = [];
-    private readonly Dictionary<string, object?> _formValues = new();
+    private TrainInputForm _form = null!;
 
     /// <summary>
-    /// Builds one form field per public readable property of the train's input type, starting
-    /// booleans at <see langword="false"/>, enums at their first name and everything else empty.
+    /// Builds one form field per public readable property of the train's input type.
     /// </summary>
-    protected override void OnInitialized()
-    {
-        _inputProperties = Registration
-            .InputType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead)
-            .ToArray();
-
-        foreach (var prop in _inputProperties)
-        {
-            var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
-
-            if (underlying == typeof(bool))
-                _formValues[prop.Name] = false;
-            else if (underlying.IsEnum)
-                _formValues[prop.Name] = Enum.GetNames(underlying).FirstOrDefault() ?? "";
-            else
-                _formValues[prop.Name] = "";
-        }
-    }
-
-    private T GetFormValue<T>(string name) =>
-        _formValues.TryGetValue(name, out var value) && value is T typed ? typed : default!;
-
-    private void SetFormValue(string name, object? value) => _formValues[name] = value;
+    protected override void OnInitialized() => _form = new TrainInputForm(Registration.InputType);
 
     private async Task QueueTrain()
     {
@@ -86,10 +57,17 @@ public partial class QueueTrainDialog : IDisposable
 
         try
         {
-            // The form-builder tab produces strongly typed values; the JSON tab is already
-            // a JSON string. Either way we end up with a JSON string to hand the shared
-            // IOperationsService, which performs the actual deserialization + validation.
-            string? inputJson = _selectedTab == 0 ? BuildInputJsonFromForm() : _jsonInput;
+            // The form tab's fields are read in the invariant culture, and a field that does not
+            // read as its type is refused here. Either tab ends as a JSON string handed to the
+            // shared IOperationsService, which reads and validates the input.
+            string inputJson;
+            if (_selectedTab != 0)
+                inputJson = _jsonInput;
+            else if (!_form.TryBuildJson(out inputJson))
+            {
+                _error = _form.ErrorSummary();
+                return;
+            }
 
             OperationResult result;
             // The dashboard is the admin surface, gated as a whole by its host, so it enqueues as
@@ -125,122 +103,6 @@ public partial class QueueTrainDialog : IDisposable
             _running = false;
         }
     }
-
-    private string BuildInputJsonFromForm()
-    {
-        var jsonObj = new JsonObject();
-        var names = JsonPropertyNames(Registration.InputType);
-
-        foreach (var prop in _inputProperties)
-        {
-            var value = _formValues.GetValueOrDefault(prop.Name);
-            jsonObj[names.GetValueOrDefault(prop.Name, prop.Name)] = ToJsonNode(
-                value,
-                prop.PropertyType
-            );
-        }
-
-        return jsonObj.ToJsonString();
-    }
-
-    /// <summary>
-    /// The name each input property is read by, keyed by its C# name. The operations service
-    /// reads the input with the host's train parameter options, which use a camelCase naming
-    /// policy and match names exactly, so a form key written as the C# name matched nothing
-    /// and its value was dropped. Asking those options' contract for the names also honours
-    /// <c>[JsonPropertyName]</c>, which the naming policy alone would not.
-    /// </summary>
-    private static Dictionary<string, string> JsonPropertyNames(Type inputType)
-    {
-        var options = new JsonSerializerOptions(
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-        );
-        options.MakeReadOnly(populateMissingResolver: true);
-
-        return options
-            .GetTypeInfo(inputType)
-            .Properties.Where(p => p.AttributeProvider is MemberInfo)
-            .GroupBy(p => ((MemberInfo)p.AttributeProvider!).Name)
-            .ToDictionary(g => g.Key, g => g.First().Name);
-    }
-
-    private static JsonNode? ToJsonNode(object? value, Type targetType)
-    {
-        var underlying = Nullable.GetUnderlyingType(targetType) ?? targetType;
-
-        if (value is bool b)
-            return JsonValue.Create(b);
-
-        if (value is not string s || string.IsNullOrEmpty(s))
-            return Nullable.GetUnderlyingType(targetType) is not null
-                ? null
-                : ToDefault(underlying);
-
-        if (underlying == typeof(string))
-            return JsonValue.Create(s);
-        if (underlying.IsEnum)
-            return JsonValue.Create(s);
-        if (underlying == typeof(int) && int.TryParse(s, out var i))
-            return JsonValue.Create(i);
-        if (underlying == typeof(long) && long.TryParse(s, out var l))
-            return JsonValue.Create(l);
-        if (underlying == typeof(double) && double.TryParse(s, out var d))
-            return JsonValue.Create(d);
-        if (underlying == typeof(decimal) && decimal.TryParse(s, out var dec))
-            return JsonValue.Create(dec);
-        if (underlying == typeof(float) && float.TryParse(s, out var f))
-            return JsonValue.Create(f);
-        if (underlying == typeof(short) && short.TryParse(s, out var sh))
-            return JsonValue.Create(sh);
-        if (underlying == typeof(byte) && byte.TryParse(s, out var by))
-            return JsonValue.Create(by);
-        if (underlying == typeof(Guid) && Guid.TryParse(s, out var g))
-            return JsonValue.Create(g);
-        if (underlying == typeof(DateTime) && DateTime.TryParse(s, out var dt))
-            return JsonValue.Create(dt);
-        if (underlying == typeof(DateTimeOffset) && DateTimeOffset.TryParse(s, out var dto))
-            return JsonValue.Create(dto);
-        if (underlying == typeof(bool) && bool.TryParse(s, out var bo))
-            return JsonValue.Create(bo);
-
-        // Complex types: try parsing as JSON, fall back to string
-        try
-        {
-            return JsonNode.Parse(s);
-        }
-        catch
-        {
-            return JsonValue.Create(s);
-        }
-    }
-
-    private static JsonNode? ToDefault(Type type)
-    {
-        if (type == typeof(string))
-            return JsonValue.Create("");
-        if (type == typeof(bool))
-            return JsonValue.Create(false);
-        if (type.IsValueType)
-            return JsonValue.Create(0);
-        return null;
-    }
-
-    private static string FormatLabel(string name) =>
-        Regex.Replace(name, @"(?<=[a-z0-9])(?=[A-Z])", " ");
-
-    private static string GetPlaceholder(Type type) =>
-        type switch
-        {
-            _ when type == typeof(string) => "Enter text",
-            _ when type == typeof(int) || type == typeof(long) || type == typeof(short) =>
-                "Enter number",
-            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal) =>
-                "Enter decimal",
-            _ when type == typeof(Guid) => "Enter GUID",
-            _ when type == typeof(DateTime) || type == typeof(DateTimeOffset) =>
-                "yyyy-MM-dd HH:mm:ss",
-            _ => $"Enter {type.Name}",
-        };
 
     /// <summary>
     /// Cancels a queue request still in flight when the dialog closes.

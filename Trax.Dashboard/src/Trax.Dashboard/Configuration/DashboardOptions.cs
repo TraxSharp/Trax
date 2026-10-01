@@ -38,6 +38,12 @@ public class DashboardOptions
 
     internal bool AnonymousAllowed { get; private set; }
 
+    /// <summary>
+    /// How often an established circuit re-checks the posture against the host's current
+    /// authentication state, besides re-checking whenever that state changes.
+    /// </summary>
+    internal TimeSpan AuthorizationRevalidationInterval { get; set; } = TimeSpan.FromMinutes(1);
+
     internal bool HasAuthorizationPosture =>
         Policy is not null || Roles is not null || AnonymousAllowed;
 

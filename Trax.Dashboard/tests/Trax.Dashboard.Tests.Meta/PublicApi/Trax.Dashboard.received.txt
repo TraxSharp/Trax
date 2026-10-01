@@ -62,6 +62,7 @@ namespace Trax.Dashboard.Components.Layout
         public DashboardLayout() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
+        protected override void OnParametersSet() { }
     }
 }
 namespace Trax.Dashboard.Components.Layout.Footer
@@ -274,6 +275,12 @@ namespace Trax.Dashboard.Components.Shared
         public Microsoft.AspNetCore.Components.EventCallback<long> OnNodeClick { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
     }
+    public sealed class DashboardAuthorizationMonitor : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
+    {
+        public DashboardAuthorizationMonitor() { }
+        public void Dispose() { }
+        protected override void OnInitialized() { }
+    }
     public class ExceptionViewer : Microsoft.AspNetCore.Components.ComponentBase
     {
         public ExceptionViewer() { }
@@ -301,6 +308,35 @@ namespace Trax.Dashboard.Components.Shared
         [Microsoft.AspNetCore.Components.Parameter]
         public string Value { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    public class LargeTextArea : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
+    {
+        public LargeTextArea() { }
+        [Microsoft.AspNetCore.Components.Parameter(CaptureUnmatchedValues=true)]
+        public System.Collections.Generic.IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public int MaxLength { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Name { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Placeholder { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool ReadOnly { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public int Rows { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Value { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback<string> ValueChanged { get; set; }
+        [Microsoft.JSInterop.JSInvokable]
+        public void AppendText(long id, string chunk) { }
+        [Microsoft.JSInterop.JSInvokable]
+        public void BeginText(long id, int length) { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        [Microsoft.JSInterop.JSInvokable]
+        public System.Threading.Tasks.Task CommitText(long id) { }
+        public void Dispose() { }
+        protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
     }
     public abstract class PollingComponentBase : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
     {
@@ -383,7 +419,6 @@ namespace Trax.Dashboard.Services.DashboardSettings
 {
     public interface IDashboardSettingsService
     {
-        System.Collections.Generic.IReadOnlyList<string> AdminTrainNames { get; }
         bool HideAdminTrains { get; }
         string? LastPollError { get; }
         System.DateTime LastPollTime { get; }

@@ -1,5 +1,4 @@
 using Trax.Dashboard.Services.LocalStorage;
-using Trax.Scheduler.Configuration;
 
 namespace Trax.Dashboard.Services.DashboardSettings;
 
@@ -37,10 +36,6 @@ internal class DashboardSettingsService(ILocalStorageService localStorage)
 
     /// <inheritdoc/>
     public bool HideAdminTrains { get; private set; } = DefaultHideAdminTrains;
-
-    /// <inheritdoc/>
-    /// <remarks>Taken from the scheduler's <see cref="AdminTrains.ShortNames"/>.</remarks>
-    public IReadOnlyList<string> AdminTrainNames => AdminTrains.ShortNames;
 
     /// <inheritdoc/>
     public bool ShowSummaryCards { get; private set; } = DefaultComponentVisibility;

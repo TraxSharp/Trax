@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
+using Trax.Dashboard.Utilities;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
@@ -35,37 +37,49 @@ public partial class ConfigureEffectDialog
     public required object Configuration { get; set; }
 
     private PropertyInfo[] _configProperties = [];
+    private PropertyInfo[] _readOnlyProperties = [];
     private readonly Dictionary<string, object?> _formValues = new();
+    private readonly Dictionary<string, object?> _openedWith = new();
     private string? _error;
 
     /// <summary>
-    /// Reads the current value of every editable property of <see cref="Configuration"/> into the form.
+    /// Reads the current value of every editable property of <see cref="Configuration"/> into the
+    /// form. A property is editable when it is a boolean, an enum or a scalar
+    /// <see cref="FormValueParser"/> reads; any other property, a predicate delegate for example,
+    /// is shown as set in code and never written, since its text form cannot be read back.
     /// </summary>
     protected override void OnInitialized()
     {
-        _configProperties = ConfigurationType
+        var properties = ConfigurationType
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite)
+            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
             .ToArray();
+
+        _configProperties = properties.Where(IsEditable).ToArray();
+        _readOnlyProperties = properties.Where(p => !IsEditable(p)).ToArray();
 
         foreach (var prop in _configProperties)
         {
             var currentValue = prop.GetValue(Configuration);
-            var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+            var underlying = Underlying(prop);
 
-            if (underlying == typeof(bool))
-            {
-                _formValues[prop.Name] = currentValue is bool b && b;
-            }
-            else if (underlying.IsEnum)
-            {
-                _formValues[prop.Name] = currentValue?.ToString() ?? "";
-            }
-            else
-            {
-                _formValues[prop.Name] = currentValue?.ToString() ?? "";
-            }
+            _formValues[prop.Name] =
+                underlying == typeof(bool) ? currentValue is true
+                : underlying.IsEnum ? currentValue?.ToString() ?? ""
+                : FormValueParser.Format(currentValue);
         }
+
+        foreach (var (name, value) in _formValues)
+            _openedWith[name] = value;
+    }
+
+    private static Type Underlying(PropertyInfo prop) =>
+        Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+    private static bool IsEditable(PropertyInfo prop)
+    {
+        var underlying = Underlying(prop);
+        return underlying.IsEnum || FormValueParser.IsScalar(underlying);
     }
 
     private T GetFormValue<T>(string name) =>
@@ -74,23 +88,33 @@ public partial class ConfigureEffectDialog
     private void SetFormValue(string name, object? value) => _formValues[name] = value;
 
     /// <summary>
-    /// Applies the form to the live configuration all or nothing. The object is the effect's
-    /// process-wide configuration, read by every train that runs next, so every field is
-    /// converted before any is written, and if a setter throws part way the fields already
-    /// written are put back.
+    /// Applies the fields this dialog changed to the live configuration, all or nothing. The
+    /// object is the effect's process-wide configuration, read by every train that runs next, so
+    /// every changed field is converted and validated before any is written, and if a setter
+    /// throws part way the fields already written are put back. A field left as it opened is not
+    /// written, so a value saved from elsewhere while the dialog was open is not reverted.
     /// </summary>
     private void Save()
     {
         _error = null;
 
-        List<(PropertyInfo Property, object? Value)> converted;
-        try
+        var changed = _configProperties
+            .Where(p => !Equals(_formValues.GetValueOrDefault(p.Name), _openedWith[p.Name]))
+            .ToList();
+
+        var converted = new List<(PropertyInfo Property, object? Value)>();
+        var refused = new List<string>();
+        foreach (var prop in changed)
         {
-            converted = _configProperties.Select(p => (p, Convert(p))).ToList();
+            if (TryConvert(prop, out var value, out var error))
+                converted.Add((prop, value));
+            else
+                refused.Add($"{FormatLabel(prop.Name)}: {error}");
         }
-        catch (Exception ex)
+
+        if (refused.Count > 0)
         {
-            _error = $"Failed to save configuration: {ex.Message}";
+            _error = $"Failed to save configuration. {string.Join(" ", refused)}";
             return;
         }
 
@@ -127,20 +151,48 @@ public partial class ConfigureEffectDialog
         DialogService.Close();
     }
 
-    private object? Convert(PropertyInfo prop)
+    /// <summary>
+    /// Reads a field as its property's type: blank is <see langword="null"/> for a property that
+    /// accepts null and refused for one that does not, text is read by
+    /// <see cref="FormValueParser"/>, and the result must pass the property's own
+    /// <see cref="ValidationAttribute"/>s.
+    /// </summary>
+    private bool TryConvert(PropertyInfo prop, out object? value, out string? error)
     {
         var formValue = _formValues.GetValueOrDefault(prop.Name);
-        var underlying = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+        var underlying = Underlying(prop);
+        value = null;
+        error = null;
 
         if (underlying == typeof(bool))
-            return formValue is bool b && b;
+            value = formValue is true;
+        else if (formValue is not string text || string.IsNullOrWhiteSpace(text))
+        {
+            if (underlying == typeof(string) && !FormValueParser.AcceptsNull(prop))
+                value = "";
+            else if (!FormValueParser.AcceptsNull(prop))
+            {
+                error = "A value is required.";
+                return false;
+            }
+        }
+        else if (!FormValueParser.TryParse(text, underlying, out value, out error))
+            return false;
 
-        if (underlying.IsEnum)
-            return formValue is string s && !string.IsNullOrEmpty(s)
-                ? Enum.Parse(underlying, s)
-                : prop.GetValue(Configuration);
+        foreach (var rule in prop.GetCustomAttributes<ValidationAttribute>(inherit: true))
+        {
+            var result = rule.GetValidationResult(
+                value,
+                new ValidationContext(Configuration) { MemberName = prop.Name }
+            );
+            if (result != ValidationResult.Success)
+            {
+                error = result?.ErrorMessage ?? $"{value} is not allowed.";
+                return false;
+            }
+        }
 
-        return ConvertValue(formValue?.ToString(), underlying);
+        return true;
     }
 
     /// <summary>
@@ -150,41 +202,6 @@ public partial class ConfigureEffectDialog
     /// </summary>
     private void Cancel() => DialogService.Close();
 
-    private static object? ConvertValue(string? value, Type targetType)
-    {
-        if (string.IsNullOrEmpty(value))
-            return targetType.IsValueType ? Activator.CreateInstance(targetType) : null;
-
-        if (targetType == typeof(string))
-            return value;
-        if (targetType == typeof(int) && int.TryParse(value, out var i))
-            return i;
-        if (targetType == typeof(long) && long.TryParse(value, out var l))
-            return l;
-        if (targetType == typeof(double) && double.TryParse(value, out var d))
-            return d;
-        if (targetType == typeof(decimal) && decimal.TryParse(value, out var dec))
-            return dec;
-        if (targetType == typeof(float) && float.TryParse(value, out var f))
-            return f;
-        if (targetType == typeof(Guid) && Guid.TryParse(value, out var g))
-            return g;
-
-        return System.Convert.ChangeType(value, targetType);
-    }
-
     private static string FormatLabel(string name) =>
         Regex.Replace(name, @"(?<=[a-z0-9])(?=[A-Z])", " ");
-
-    private static string GetPlaceholder(Type type) =>
-        type switch
-        {
-            _ when type == typeof(string) => "Enter text",
-            _ when type == typeof(int) || type == typeof(long) || type == typeof(short) =>
-                "Enter number",
-            _ when type == typeof(double) || type == typeof(float) || type == typeof(decimal) =>
-                "Enter decimal",
-            _ when type == typeof(Guid) => "Enter GUID",
-            _ => $"Enter {type.Name}",
-        };
 }

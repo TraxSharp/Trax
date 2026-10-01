@@ -47,14 +47,22 @@ public partial class ServerSettingsPage
     private bool _recoverStuckJobsOnStartup;
     private bool _autoPurgeDeadLetters;
 
-    private TimeSpanField _pollingInterval = new();
-    private TimeSpanField _defaultRetryDelay = new();
-    private TimeSpanField _maxRetryDelay = new();
-    private TimeSpanField _defaultJobTimeout = new();
-    private TimeSpanField _stalePendingTimeout = new();
-    private TimeSpanField _deadLetterRetentionPeriod = new();
-    private TimeSpanField _cleanupInterval = new();
-    private TimeSpanField _cleanupRetentionPeriod = new();
+    // Each duration field carries the range the operations service accepts for its setting, so
+    // the form can refuse a value before Save instead of sending one the service will refuse, and
+    // never builds a TimeSpan too large to exist. The service stays the authority on the ranges.
+    private static readonly TimeSpan OneSecond = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MaxTimerInterval = TimeSpan.FromDays(30);
+    private static readonly TimeSpan MaxDuration = TimeSpan.FromDays(3650);
+
+    private readonly TimeSpanField _pollingInterval = new(OneSecond, MaxTimerInterval);
+    private readonly TimeSpanField _failureCountWindow = new(OneSecond, MaxDuration);
+    private readonly TimeSpanField _defaultRetryDelay = new(TimeSpan.Zero, MaxDuration);
+    private readonly TimeSpanField _maxRetryDelay = new(TimeSpan.Zero, MaxDuration);
+    private readonly TimeSpanField _defaultJobTimeout = new(OneSecond, MaxDuration);
+    private readonly TimeSpanField _stalePendingTimeout = new(OneSecond, MaxDuration);
+    private readonly TimeSpanField _deadLetterRetentionPeriod = new(TimeSpan.Zero, MaxDuration);
+    private readonly TimeSpanField _cleanupInterval = new(OneSecond, MaxTimerInterval);
+    private readonly TimeSpanField _cleanupRetentionPeriod = new(OneSecond, MaxDuration);
 
     private static readonly List<string> TimeUnits = ["seconds", "minutes", "hours", "days"];
 
@@ -76,6 +84,26 @@ public partial class ServerSettingsPage
         "None",
     ];
 
+    // ── Validation ──
+    private bool HasInvalidField =>
+        _schedulerAvailable
+        && new[]
+        {
+            _pollingInterval,
+            _failureCountWindow,
+            _defaultRetryDelay,
+            _maxRetryDelay,
+            _defaultJobTimeout,
+            _stalePendingTimeout,
+            _deadLetterRetentionPeriod,
+        }
+            .Concat(
+                _hasMetadataCleanup
+                    ? new[] { _cleanupInterval, _cleanupRetentionPeriod }
+                    : Array.Empty<TimeSpanField>()
+            )
+            .Any(f => !f.IsValid);
+
     // ── Dirty tracking ──
     private bool IsAdminTrainsDirty =>
         _schedulerAvailable
@@ -96,6 +124,7 @@ public partial class ServerSettingsPage
         _schedulerAvailable
         && (
             _defaultMaxRetries != _saved.DefaultMaxRetries
+            || _failureCountWindow.ToTimeSpan() != _saved.FailureCountWindow
             || _defaultRetryDelay.ToTimeSpan() != _saved.DefaultRetryDelay
             || _retryBackoffMultiplier != _saved.RetryBackoffMultiplier
             || _maxRetryDelay.ToTimeSpan() != _saved.MaxRetryDelay
@@ -168,55 +197,85 @@ public partial class ServerSettingsPage
     {
         _manifestManagerEnabled = settings.ManifestManagerEnabled;
         _jobDispatcherEnabled = settings.JobDispatcherEnabled;
-        _pollingInterval = TimeSpanField.FromTimeSpan(settings.ManifestManagerPollingInterval);
+        _pollingInterval.Set(settings.ManifestManagerPollingInterval);
         _maxActiveJobs = settings.MaxActiveJobs;
         _workerCount = settings.LocalWorkerCount ?? 0;
         _defaultMaxRetries = settings.DefaultMaxRetries;
-        _defaultRetryDelay = TimeSpanField.FromTimeSpan(settings.DefaultRetryDelay);
+        _failureCountWindow.Set(settings.FailureCountWindow);
+        _defaultRetryDelay.Set(settings.DefaultRetryDelay);
         _retryBackoffMultiplier = settings.RetryBackoffMultiplier;
-        _maxRetryDelay = TimeSpanField.FromTimeSpan(settings.MaxRetryDelay);
-        _defaultJobTimeout = TimeSpanField.FromTimeSpan(settings.DefaultJobTimeout);
-        _stalePendingTimeout = TimeSpanField.FromTimeSpan(settings.StalePendingTimeout);
+        _maxRetryDelay.Set(settings.MaxRetryDelay);
+        _defaultJobTimeout.Set(settings.DefaultJobTimeout);
+        _stalePendingTimeout.Set(settings.StalePendingTimeout);
         _recoverStuckJobsOnStartup = settings.RecoverStuckJobsOnStartup;
-        _deadLetterRetentionPeriod = TimeSpanField.FromTimeSpan(settings.DeadLetterRetentionPeriod);
+        _deadLetterRetentionPeriod.Set(settings.DeadLetterRetentionPeriod);
         _autoPurgeDeadLetters = settings.AutoPurgeDeadLetters;
 
         if (settings.MetadataCleanupInterval is { } interval)
-            _cleanupInterval = TimeSpanField.FromTimeSpan(interval);
+            _cleanupInterval.Set(interval);
         if (settings.MetadataCleanupRetention is { } retention)
-            _cleanupRetentionPeriod = TimeSpanField.FromTimeSpan(retention);
+            _cleanupRetentionPeriod.Set(retention);
     }
 
     /// <summary>
-    /// Writes the form through the shared operations service, so the dashboard save and the
-    /// GraphQL <c>updateSchedulerConfig</c> mutation make the same write. The service applies
-    /// the values that differ to the live settings and persists the row. The dispatcher's
-    /// polling interval is not sent: the page has no field for it, and its one polling field
-    /// is the ManifestManager's.
+    /// Reads the settings in force from the operations service and shows them in the form, so the
+    /// form never holds a value some other writer (another operator, the GraphQL mutation) has
+    /// since replaced.
+    /// </summary>
+    private void ReloadSchedulerForm()
+    {
+        _saved = OperationsService.GetSchedulerConfig();
+        LoadSchedulerForm(_saved);
+    }
+
+    /// <summary>
+    /// Writes the fields the operator changed through the shared operations service, so the
+    /// dashboard save and the GraphQL <c>updateSchedulerConfig</c> mutation make the same write.
+    /// A field left alone is not sent: sending it would pin it in the stored row, and would put
+    /// back the value this page loaded over a change another writer made since. The dispatcher's
+    /// polling interval is never sent: the page has no field for it, and its one polling field is
+    /// the ManifestManager's. Callers check <see cref="HasInvalidField"/> first.
     /// </summary>
     private async Task<OperationResult> SaveScheduler()
     {
+        var maxActiveJobsChanged = _maxActiveJobs != _saved.MaxActiveJobs;
         var input = new UpdateSchedulerConfigInput(
-            ManifestManagerEnabled: _manifestManagerEnabled,
-            JobDispatcherEnabled: _jobDispatcherEnabled,
-            ManifestManagerPollingInterval: _pollingInterval.ToTimeSpan(),
-            MaxActiveJobs: _maxActiveJobs,
-            ClearMaxActiveJobs: _maxActiveJobs is null,
-            DefaultMaxRetries: _defaultMaxRetries,
-            DefaultRetryDelay: _defaultRetryDelay.ToTimeSpan(),
-            RetryBackoffMultiplier: _retryBackoffMultiplier,
-            MaxRetryDelay: _maxRetryDelay.ToTimeSpan(),
-            DefaultJobTimeout: _defaultJobTimeout.ToTimeSpan(),
-            StalePendingTimeout: _stalePendingTimeout.ToTimeSpan(),
-            RecoverStuckJobsOnStartup: _recoverStuckJobsOnStartup,
-            DeadLetterRetentionPeriod: _deadLetterRetentionPeriod.ToTimeSpan(),
-            AutoPurgeDeadLetters: _autoPurgeDeadLetters,
-            LocalWorkerCount: _hasLocalWorkers ? _workerCount : null,
-            MetadataCleanupInterval: _hasMetadataCleanup ? _cleanupInterval.ToTimeSpan() : null,
+            ManifestManagerEnabled: Changed(_manifestManagerEnabled, _saved.ManifestManagerEnabled),
+            JobDispatcherEnabled: Changed(_jobDispatcherEnabled, _saved.JobDispatcherEnabled),
+            ManifestManagerPollingInterval: Changed(
+                _pollingInterval,
+                _saved.ManifestManagerPollingInterval
+            ),
+            MaxActiveJobs: maxActiveJobsChanged ? _maxActiveJobs : null,
+            ClearMaxActiveJobs: maxActiveJobsChanged && _maxActiveJobs is null,
+            DefaultMaxRetries: Changed(_defaultMaxRetries, _saved.DefaultMaxRetries),
+            DefaultRetryDelay: Changed(_defaultRetryDelay, _saved.DefaultRetryDelay),
+            RetryBackoffMultiplier: Changed(_retryBackoffMultiplier, _saved.RetryBackoffMultiplier),
+            MaxRetryDelay: Changed(_maxRetryDelay, _saved.MaxRetryDelay),
+            DefaultJobTimeout: Changed(_defaultJobTimeout, _saved.DefaultJobTimeout),
+            StalePendingTimeout: Changed(_stalePendingTimeout, _saved.StalePendingTimeout),
+            RecoverStuckJobsOnStartup: Changed(
+                _recoverStuckJobsOnStartup,
+                _saved.RecoverStuckJobsOnStartup
+            ),
+            DeadLetterRetentionPeriod: Changed(
+                _deadLetterRetentionPeriod,
+                _saved.DeadLetterRetentionPeriod
+            ),
+            AutoPurgeDeadLetters: Changed(_autoPurgeDeadLetters, _saved.AutoPurgeDeadLetters),
+            LocalWorkerCount: _hasLocalWorkers
+                ? Changed(_workerCount, _saved.LocalWorkerCount ?? 0)
+                : null,
+            MetadataCleanupInterval: _hasMetadataCleanup
+                ? Changed(_cleanupInterval, _saved.MetadataCleanupInterval)
+                : null,
             MetadataCleanupRetention: _hasMetadataCleanup
-                ? _cleanupRetentionPeriod.ToTimeSpan()
+                ? Changed(_cleanupRetentionPeriod, _saved.MetadataCleanupRetention)
                 : null
-        );
+        )
+        {
+            FailureCountWindow = Changed(_failureCountWindow, _saved.FailureCountWindow),
+        };
 
         var result = await OperationsService.UpdateSchedulerConfigAsync(
             input,
@@ -224,37 +283,16 @@ public partial class ServerSettingsPage
         );
 
         if (result.Success)
-            _saved = OperationsService.GetSchedulerConfig();
+            ReloadSchedulerForm();
 
         return result;
     }
 
-    /// <summary>
-    /// Fills the form with the library defaults for every setting the page shows. Nothing is
-    /// applied until Save, which writes them through the service like any other edit.
-    /// </summary>
-    private void ResetSchedulerDefaults()
-    {
-        var defaults = new SchedulerConfiguration();
-        var cleanupDefaults = new MetadataCleanupConfiguration();
+    private static T? Changed<T>(T value, T loaded)
+        where T : struct => EqualityComparer<T>.Default.Equals(value, loaded) ? null : value;
 
-        _manifestManagerEnabled = defaults.ManifestManagerEnabled;
-        _jobDispatcherEnabled = defaults.JobDispatcherEnabled;
-        _pollingInterval = TimeSpanField.FromTimeSpan(defaults.ManifestManagerPollingInterval);
-        _maxActiveJobs = defaults.MaxActiveJobs;
-        _workerCount = new LocalWorkerOptions().WorkerCount;
-        _defaultMaxRetries = defaults.DefaultMaxRetries;
-        _defaultRetryDelay = TimeSpanField.FromTimeSpan(defaults.DefaultRetryDelay);
-        _retryBackoffMultiplier = defaults.RetryBackoffMultiplier;
-        _maxRetryDelay = TimeSpanField.FromTimeSpan(defaults.MaxRetryDelay);
-        _defaultJobTimeout = TimeSpanField.FromTimeSpan(defaults.DefaultJobTimeout);
-        _stalePendingTimeout = TimeSpanField.FromTimeSpan(defaults.StalePendingTimeout);
-        _recoverStuckJobsOnStartup = defaults.RecoverStuckJobsOnStartup;
-        _deadLetterRetentionPeriod = TimeSpanField.FromTimeSpan(defaults.DeadLetterRetentionPeriod);
-        _autoPurgeDeadLetters = defaults.AutoPurgeDeadLetters;
-        _cleanupInterval = TimeSpanField.FromTimeSpan(cleanupDefaults.CleanupInterval);
-        _cleanupRetentionPeriod = TimeSpanField.FromTimeSpan(cleanupDefaults.RetentionPeriod);
-    }
+    private static TimeSpan? Changed(TimeSpanField field, TimeSpan? loaded) =>
+        field.ToTimeSpan() is { } value && value != loaded ? value : null;
 
     // ── Logging helpers ──
 
@@ -309,7 +347,7 @@ public partial class ServerSettingsPage
         return notApplied;
     }
 
-    private void ResetLoggingDefaults()
+    private void DiscardLoggingChanges()
     {
         foreach (var entry in _logLevels)
             entry.Level = _savedLogLevels.GetValueOrDefault(entry.Category, "Information");
@@ -324,6 +362,20 @@ public partial class ServerSettingsPage
 
     private async Task Save()
     {
+        if (HasInvalidField)
+        {
+            NotificationService.Notify(
+                new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Settings not saved",
+                    Detail = "A duration is out of range. Correct the highlighted field first.",
+                    Duration = 8000,
+                }
+            );
+            return;
+        }
+
         var details = new List<string>();
 
         if (_schedulerAvailable)
@@ -388,20 +440,26 @@ public partial class ServerSettingsPage
         );
     }
 
-    private void ResetDefaults()
+    /// <summary>
+    /// Drops every unsaved edit: the scheduler fields are read again from the operations service,
+    /// so they show the settings in force now, and each log level goes back to the one last saved.
+    /// There is no way to return to the values the host's code configured: once a setting is
+    /// saved, the stored value is what every scheduler host runs with.
+    /// </summary>
+    private void DiscardChanges()
     {
         if (_schedulerAvailable)
-            ResetSchedulerDefaults();
+            ReloadSchedulerForm();
 
         if (_loggingAvailable)
-            ResetLoggingDefaults();
+            DiscardLoggingChanges();
 
         NotificationService.Notify(
             new NotificationMessage
             {
                 Severity = NotificationSeverity.Info,
-                Summary = "Defaults Restored",
-                Detail = "The form now holds the default values. Save to apply them.",
+                Summary = "Changes Discarded",
+                Detail = "The form shows the settings in force now.",
                 Duration = 4000,
             }
         );
@@ -409,29 +467,75 @@ public partial class ServerSettingsPage
 
     // ── Inner types ──
 
-    private class TimeSpanField
+    /// <summary>
+    /// A duration edited as a number and a unit, bounded by the range its setting accepts. A value
+    /// outside that range, including one too large for a <see cref="TimeSpan"/>, is invalid rather
+    /// than an exception, because the dirty checks read it on every render. The box itself is not
+    /// given a maximum: Radzen would clamp to it silently, including when the unit changes, and
+    /// save a value the operator never typed.
+    /// </summary>
+    private sealed class TimeSpanField(TimeSpan min, TimeSpan max)
     {
         public double Value { get; set; }
         public string Unit { get; set; } = "seconds";
 
-        public TimeSpan ToTimeSpan() =>
+        public bool IsValid => ToTimeSpan() is not null;
+
+        public string InvalidText =>
+            $"Enter a duration between {Describe(min)} and {Describe(max)}.";
+
+        private double UnitSeconds =>
             Unit switch
+            {
+                "days" => 86400,
+                "hours" => 3600,
+                "minutes" => 60,
+                _ => 1,
+            };
+
+        /// <summary>The duration, or null when it is outside the setting's range.</summary>
+        public TimeSpan? ToTimeSpan()
+        {
+            if (!double.IsFinite(Value))
+                return null;
+
+            var seconds = Value * UnitSeconds;
+            if (
+                !double.IsFinite(seconds)
+                || seconds > max.TotalSeconds
+                || seconds < min.TotalSeconds
+            )
+                return null;
+
+            return Unit switch
             {
                 "days" => TimeSpan.FromDays(Value),
                 "hours" => TimeSpan.FromHours(Value),
                 "minutes" => TimeSpan.FromMinutes(Value),
                 _ => TimeSpan.FromSeconds(Value),
             };
+        }
 
-        public static TimeSpanField FromTimeSpan(TimeSpan ts)
+        public void Set(TimeSpan ts)
+        {
+            (Value, Unit) = Split(ts);
+        }
+
+        private static (double Value, string Unit) Split(TimeSpan ts)
         {
             if (ts.TotalDays >= 1 && ts.TotalDays == Math.Floor(ts.TotalDays))
-                return new() { Value = ts.TotalDays, Unit = "days" };
+                return (ts.TotalDays, "days");
             if (ts.TotalHours >= 1 && ts.TotalHours == Math.Floor(ts.TotalHours))
-                return new() { Value = ts.TotalHours, Unit = "hours" };
+                return (ts.TotalHours, "hours");
             if (ts.TotalMinutes >= 1 && ts.TotalMinutes == Math.Floor(ts.TotalMinutes))
-                return new() { Value = ts.TotalMinutes, Unit = "minutes" };
-            return new() { Value = ts.TotalSeconds, Unit = "seconds" };
+                return (ts.TotalMinutes, "minutes");
+            return (ts.TotalSeconds, "seconds");
+        }
+
+        private static string Describe(TimeSpan ts)
+        {
+            var (value, unit) = Split(ts);
+            return $"{value} {unit}";
         }
     }
 

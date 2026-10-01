@@ -1,26 +1,29 @@
 using Bunit;
 using FluentAssertions;
 using LanguageExt;
+using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
+using Trax.Core.Exceptions;
 using Trax.Dashboard.Components.Dialogs;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;
-using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
 /// <summary>
-/// The Run dialog builds a train's input from its Form or JSON tab, writes the run's metadata
-/// row and hands both to the job submitter. The Form tab reads its input with the same
-/// serializer options a host configures for train parameters, and a submit the job submitter
-/// refuses does not leave the row it wrote waiting as Pending for a job that never existed.
+/// The Run dialog builds a train's input from its Form or JSON tab and runs it through the
+/// scheduler's operations service inside the <c>"dashboard"</c> trusted scope, the path the API's
+/// run takes: the service reads the input, writes the run's row, applies the train's queue hook
+/// and submits to the job submitter. The operations service and the mediator are the real ones,
+/// over an in-memory store; only the job submitter is recorded.
 ///
 /// <para>Both tabs read property names in any case and refuse a property given twice, as
 /// <c>Trax.Docs/adr/0023-caller-supplied-train-input-is-read-case-insensitively.md</c> decides
@@ -40,7 +43,6 @@ public class RunTrainDialogTests
         _ctx.Services.AddRadzenComponents();
         _ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         _data = new InMemoryDataContextFactory();
-        _ctx.Services.AddSingleton<IDataContextProviderFactory>(_data);
     }
 
     [TearDown]
@@ -50,7 +52,7 @@ public class RunTrainDialogTests
     }
 
     [Test]
-    public async Task Form_tab_submits_an_enum_input()
+    public async Task Form_tab_submits_an_enum_input_and_opens_the_run()
     {
         var submitter = new RecordingJobSubmitter();
         _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
@@ -58,13 +60,16 @@ public class RunTrainDialogTests
         var dialog = RenderDialog();
         await ClickEnqueue(dialog);
 
-        dialog.FindAll(ErrorAlerts).Select(a => a.TextContent.Trim()).Should().BeEmpty();
+        dialog.FindAll(".rz-alert").Select(a => a.TextContent.Trim()).Should().BeEmpty();
         submitter
             .Input.Should()
             .BeEquivalentTo(
                 new ModeInput { Mode = RunMode.Fast, Label = "" },
                 "the form's first enum name is its initial value, and it reaches the train"
             );
+        _ctx.Services.GetRequiredService<NavigationManager>()
+            .Uri.Should()
+            .EndWith($"trax/data/metadata/{submitter.MetadataId}");
     }
 
     [Test]
@@ -74,34 +79,17 @@ public class RunTrainDialogTests
         _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
 
         var dialog = RenderDialog();
-        await dialog
-            .FindAll("button[role=tab]")
-            .Single(a => a.TextContent.Contains("JSON"))
-            .ClickAsync(new());
+        await SwitchToJson(dialog);
         dialog.Find("textarea").Change("""{"Mode":"Slow","Label":"from json"}""");
         await ClickEnqueue(dialog);
 
-        dialog.FindAll(ErrorAlerts).Select(a => a.TextContent.Trim()).Should().BeEmpty();
+        dialog.FindAll(".rz-alert").Select(a => a.TextContent.Trim()).Should().BeEmpty();
         submitter
             .Input.Should()
             .BeEquivalentTo(
                 new ModeInput { Mode = RunMode.Slow, Label = "from json" },
                 "the C# property names read the same as their camelCase form"
             );
-    }
-
-    [Test]
-    public async Task Submit_passes_the_dialog_cancellation_token()
-    {
-        var submitter = new RecordingJobSubmitter();
-        _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
-
-        var dialog = RenderDialog();
-        await ClickEnqueue(dialog);
-
-        submitter
-            .Token.CanBeCanceled.Should()
-            .BeTrue("closing the dialog cancels a submit that is still in flight");
     }
 
     [Test]
@@ -115,7 +103,7 @@ public class RunTrainDialogTests
         dialog.WaitForAssertion(
             () =>
                 dialog
-                    .FindAll(ErrorAlerts)
+                    .FindAll(".rz-alert")
                     .Select(a => a.TextContent)
                     .Should()
                     .ContainSingle()
@@ -127,7 +115,7 @@ public class RunTrainDialogTests
         await using var db = await _data.CreateDbContextAsync(default);
         var run = (await db.Metadatas.AsNoTracking().ToListAsync()).Should().ContainSingle().Which;
         run.TrainState.Should()
-            .Be(TrainState.Failed, "no job exists to move a Pending run on, so it failed here");
+            .Be(TrainState.Failed, "no job exists to move a Pending run on, so it failed");
         run.EndTime.Should().NotBeNull();
         run.FailureReason.Should().Contain("submitter refused the job");
     }
@@ -139,10 +127,7 @@ public class RunTrainDialogTests
         _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
 
         var dialog = RenderDialog(typeof(IAmountTrain));
-        await dialog
-            .FindAll("button[role=tab]")
-            .Single(a => a.TextContent.Contains("JSON"))
-            .ClickAsync(new());
+        await SwitchToJson(dialog);
         dialog.Find("textarea").Change("""{"amount":1,"Amount":999}""");
         await ClickEnqueue(dialog);
 
@@ -156,6 +141,7 @@ public class RunTrainDialogTests
         _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
 
         var dialog = RenderDialog(typeof(IAmountTrain));
+        dialog.FindAll("input").First().Change("1");
         // A complex property's form field takes JSON, so the duplicate reaches the reader there.
         dialog.FindAll("input").Last().Change("""{"amount":1,"Amount":999}""");
         await ClickEnqueue(dialog);
@@ -163,19 +149,60 @@ public class RunTrainDialogTests
         AssertRefusedAsDuplicate(dialog, submitter);
     }
 
-    private void AssertRefusedAsDuplicate(
+    [Test]
+    public async Task A_run_applies_the_trains_OnQueue_hook_and_a_refusal_submits_nothing()
+    {
+        var submitter = new RecordingJobSubmitter();
+        _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
+
+        var dialog = RenderDialog(typeof(IRefusingTrain));
+        await ClickEnqueue(dialog);
+
+        dialog
+            .FindAll(".rz-alert")
+            .Select(a => a.TextContent)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("refused by the hook", "a run gets the per-record checks a queue gets");
+        submitter.Input.Should().BeNull("the hook refused the run before anything was submitted");
+        await using var db = await _data.CreateDbContextAsync(default);
+        (await db.Metadatas.CountAsync()).Should().Be(0, "a refused run writes no row");
+    }
+
+    [Test]
+    public async Task A_subject_keyed_train_runs_because_the_dialog_is_a_trusted_caller()
+    {
+        var submitter = new RecordingJobSubmitter();
+        _ctx.Services.AddSingleton<IJobSubmitter>(submitter);
+
+        var dialog = RenderDialog(typeof(IKeyedTrain));
+        await ClickEnqueue(dialog);
+
+        dialog
+            .FindAll(".rz-alert:not([data-testid='run-subject-bypass-warning'])")
+            .Select(a => a.TextContent.Trim())
+            .Should()
+            .BeEmpty(
+                "the service runs a subject-keyed train now only for a trusted caller, and the "
+                    + "dialog runs inside the dashboard's trusted scope"
+            );
+        submitter.Input.Should().BeOfType<KeyedInput>();
+    }
+
+    private static void AssertRefusedAsDuplicate(
         IRenderedComponent<RunTrainDialog> dialog,
         RecordingJobSubmitter submitter
     )
     {
         dialog
-            .FindAll(ErrorAlerts)
+            .FindAll(".rz-alert")
             .Select(a => a.TextContent)
             .Should()
             .ContainSingle()
             .Which.Should()
             .Contain(
-                "Invalid JSON",
+                "Invalid InputJson",
                 "a property given twice is ambiguous, so it is refused rather than resolved to "
                     + "one of its values (Trax.Docs/adr/0023-caller-supplied-train-input-is-read-case-insensitively.md)"
             )
@@ -186,19 +213,23 @@ public class RunTrainDialogTests
     private IRenderedComponent<RunTrainDialog> RenderDialog(Type? serviceType = null)
     {
         serviceType ??= typeof(IModeTrain);
-        var trains = new ServiceCollection();
-        trains.AddScopedTraxRoute<IModeTrain, ModeTrain>();
-        trains.AddScopedTraxRoute<IAmountTrain, AmountTrain>();
-        var registration = new TrainDiscoveryService(trains)
-            .DiscoverTrains()
-            .Single(r => r.ServiceType == serviceType);
+        var services = _ctx.Services;
+        services.AddScopedTraxRoute<IModeTrain, ModeTrain>();
+        services.AddScopedTraxRoute<IAmountTrain, AmountTrain>();
+        services.AddScopedTraxRoute<IRefusingTrain, RefusingTrain>();
+        services.AddScopedTraxRoute<IKeyedTrain, KeyedTrain>();
+        var discovery = new TrainDiscoveryService(services);
+        services.AddRealOperationsService(discovery, _data);
+        var registration = discovery.DiscoverTrains().Single(r => r.ServiceType == serviceType);
 
         return _ctx.RenderComponent<RunTrainDialog>(p => p.Add(x => x.Registration, registration));
     }
 
-    // The dialog always shows the subject-serialization warning as an alert of its own; these
-    // tests are about the error alert beside it.
-    private const string ErrorAlerts = ".rz-alert:not([data-testid='run-subject-bypass-warning'])";
+    private static Task SwitchToJson(IRenderedComponent<RunTrainDialog> dialog) =>
+        dialog
+            .FindAll("button[role=tab]")
+            .Single(a => a.TextContent.Contains("JSON"))
+            .ClickAsync(new());
 
     private static async Task ClickEnqueue(IRenderedComponent<RunTrainDialog> dialog)
     {
@@ -224,6 +255,10 @@ public class RunTrainDialogTests
         public AmountInput? Nested { get; init; }
     }
 
+    public record RefusedInput;
+
+    public record KeyedInput;
+
     public interface IAmountTrain : IServiceTrain<AmountInput, Unit> { }
 
     public class AmountTrain : ServiceTrain<AmountInput, Unit>, IAmountTrain
@@ -240,25 +275,39 @@ public class RunTrainDialogTests
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);
     }
 
+    public interface IRefusingTrain : IServiceTrain<RefusedInput, Unit> { }
+
+    public class RefusingTrain : ServiceTrain<RefusedInput, Unit>, IRefusingTrain
+    {
+        protected override Task OnQueue(Metadata metadata, CancellationToken ct) =>
+            throw new TrainException("refused by the hook");
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(Unit.Default);
+    }
+
+    public interface IKeyedTrain : IServiceTrain<KeyedInput, Unit> { }
+
+    public class KeyedTrain : ServiceTrain<KeyedInput, Unit>, IKeyedTrain
+    {
+        protected override string? QueueSubjectKey(Metadata metadata) => "subject";
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(Unit.Default);
+    }
+
     private sealed class RecordingJobSubmitter : IJobSubmitter
     {
         public object? Input { get; private set; }
-        public CancellationToken Token { get; private set; }
+        public long? MetadataId { get; private set; }
 
         public Task<string> EnqueueAsync(long metadataId) =>
-            throw new NotSupportedException("the Run dialog always passes an input");
+            throw new NotSupportedException("a run always passes an input");
 
-        public Task<string> EnqueueAsync(long metadataId, object input) =>
-            EnqueueAsync(metadataId, input, CancellationToken.None);
-
-        public Task<string> EnqueueAsync(
-            long metadataId,
-            object input,
-            CancellationToken cancellationToken
-        )
+        public Task<string> EnqueueAsync(long metadataId, object input)
         {
             Input = input;
-            Token = cancellationToken;
+            MetadataId = metadataId;
             return Task.FromResult("job-1");
         }
     }

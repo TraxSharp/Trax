@@ -5,39 +5,44 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Radzen.Blazor;
-using Trax.Api.GraphQL.PersistedOperations;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
-using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Api.GraphQL.PersistedOperations.GraphQL;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Dashboard.Components.Pages.Data;
+using Trax.Dashboard.Configuration;
+using Trax.Dashboard.Services.Authorization;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.PersistedOperation;
+using DeactivatePersistedOperationInput = Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.DeactivatePersistedOperationInput;
 using PersistedOperationDto = Trax.Api.GraphQL.PersistedOperations.GraphQL.Models.PersistedOperationDto;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
 /// <summary>
 /// The persisted-operations pages address a row by its tenant and its id, as the API's
-/// <c>operations.persistedOperations</c> fields do, and read and write through the same
-/// resolver methods those fields run (central ADR 0022). The primary key is
+/// <c>operations.persistedOperations</c> fields do, and read and write through the
+/// <c>IPersistedOperationsService</c> those fields call (central ADR 0022). The primary key is
 /// <c>(tenant_key, id)</c>, so two rows may share an id; each must open, and change, only
-/// itself. The list is read one page at a time from the server rather than capped.
+/// itself. The list is read one page at a time from the server rather than capped. The host here
+/// registers only <c>AddPersistedOperationStore</c>, as an out-of-process dashboard does, and no
+/// GraphQL capability marker.
 ///
-/// <para>The store is the package's real one, over the in-memory data context.</para>
+/// <para>The store and service are the package's real ones, over the in-memory data context.</para>
 ///
-/// <para>Enforces <c>docs/adr/0004-persisted-operations-pages-call-the-api-resolvers.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0005-persisted-operations-pages-call-the-shared-service.md</c>.</para>
 /// </summary>
 [TestFixture]
 // The ADR guard pairs a class with the last adr property above it, so the local ADR is last.
 [Property("adr", "Trax.Docs/adr/0022-the-dashboard-and-the-api-share-one-operation-per-action.md")]
-[Property("adr", "docs/adr/0004-persisted-operations-pages-call-the-api-resolvers.md")]
+[Property("adr", "docs/adr/0005-persisted-operations-pages-call-the-shared-service.md")]
 public class PersistedOperationsTenantTests
 {
     private const string Adr =
-        " (docs/adr/0004-persisted-operations-pages-call-the-api-resolvers.md)";
+        " (docs/adr/0005-persisted-operations-pages-call-the-shared-service.md)";
 
     private const string SharedId = "greet.v1";
     private const string DefaultDocument = "query Greet { defaultTenantField }";
@@ -57,16 +62,19 @@ public class PersistedOperationsTenantTests
         var services = _ctx.Services;
         services.AddLogging();
         services.AddPersistedOperationStore("Host=unused");
-        // The published AddPersistedOperationStore does not register the internal cache
-        // invalidator its store needs outside a GraphQL host, so the test adds it.
-        services.AddSingleton(
-            typeof(IPersistedOperationStore).Assembly.GetType(
-                "Trax.Api.GraphQL.PersistedOperations.Storage.HotChocolateOperationCacheInvalidator",
-                throwOnError: true
-            )!
+        // Wrap the package's own service, so a test can see that the pages called it.
+        var registered = services.Single(d => d.ServiceType == typeof(IPersistedOperationsService));
+        services.Remove(registered);
+        services.AddSingleton(sp => new ScriptedPersistedOperationsService(
+            (IPersistedOperationsService)
+                ActivatorUtilities.CreateInstance(sp, registered.ImplementationType!)
+        ));
+        services.AddSingleton<IPersistedOperationsService>(sp =>
+            sp.GetRequiredService<ScriptedPersistedOperationsService>()
         );
         services.AddSingleton<IDataContextProviderFactory>(_data);
-        services.AddSingleton<IPersistedOperationsCapability, FakeCapability>();
+        services.AddSingleton(new DashboardOptions().AllowAnonymousDashboard());
+        services.AddScoped<DashboardCircuitAuthorization>();
         services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
     }
@@ -112,6 +120,60 @@ public class PersistedOperationsTenantTests
         other
             .IsActive.Should()
             .BeTrue("a row with the same id in another tenant is untouched" + Adr);
+    }
+
+    [Test]
+    public async Task The_detail_page_reads_and_writes_through_the_registered_service()
+    {
+        await SeedSharedIdAsync();
+        var page = RenderDetail(tenant: null);
+
+        var deactivate = page.WaitForElement("button:contains('Deactivate')", Wait);
+        var click = deactivate.ClickAsync(new());
+        var dialogs = _ctx.Services.GetRequiredService<DialogService>();
+        await page.InvokeAsync(() => dialogs.Close("retired"));
+        await click;
+
+        _ctx.Services.GetRequiredService<ScriptedPersistedOperationsService>()
+            .Calls.Should()
+            .Contain(
+                ["GetAsync", "DeactivateAsync"],
+                "the host's IPersistedOperationsService, which carries its broadcaster, does the "
+                    + "work rather than a store handed to a resolver"
+                    + Adr
+            );
+    }
+
+    [Test]
+    public async Task A_deactivation_the_API_refuses_is_reported_with_the_APIs_message()
+    {
+        await SeedSharedIdAsync();
+        var page = RenderDetail(tenant: null);
+        var deactivate = page.WaitForElement("button:contains('Deactivate')", Wait);
+
+        // Another writer deactivates the row after the page loaded it.
+        var service = _ctx.Services.GetRequiredService<IPersistedOperationsService>();
+        await service.DeactivateAsync(
+            new DeactivatePersistedOperationInput(SharedId, "elsewhere"),
+            CancellationToken.None
+        );
+        var api = await new PersistedOperationMutations().DeactivatePersistedOperation(
+            new DeactivatePersistedOperationInput(SharedId, "retired"),
+            service,
+            CancellationToken.None
+        );
+        api.Success.Should().BeFalse("the premise: the API refuses this deactivation");
+
+        var click = deactivate.ClickAsync(new());
+        var dialogs = _ctx.Services.GetRequiredService<DialogService>();
+        await page.InvokeAsync(() => dialogs.Close("retired"));
+        await click;
+
+        _ctx.Services.GetRequiredService<NotificationService>()
+            .Messages.Should()
+            .ContainSingle(m => m.Severity == NotificationSeverity.Error)
+            .Which.Detail.Should()
+            .Be(string.Join(" ", api.Errors.Select(e => e.Message)), Adr);
     }
 
     [Test]
@@ -217,6 +279,4 @@ public class PersistedOperationsTenantTests
         using var ctx = await _data.CreateDbContextAsync(CancellationToken.None);
         return await ctx.PersistedOperations.AsNoTracking().ToListAsync();
     }
-
-    private sealed class FakeCapability : IPersistedOperationsCapability { }
 }

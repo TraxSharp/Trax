@@ -1,0 +1,164 @@
+@using System.Text
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<textarea @ref="_element"
+          @attributes="AdditionalAttributes"
+          class="@CssClass"
+          rows="@Rows"
+          name="@Name"
+          placeholder="@Placeholder"
+          readonly="@ReadOnly"
+          data-trax-large-text=""
+          value="@Value"
+          @onchange="OnChangeAsync"></textarea>
+@if (_tooLong)
+{
+    <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-danger);">
+        The text is longer than @MaxLength.ToString("N0") characters and was not taken.
+    </RadzenText>
+}
+
+@code {
+    // Characters per interop call. A chunk is JSON-escaped inside the hub message, so one
+    // character can take up to seven bytes there; 3,000 keeps each message well under SignalR's
+    // default 32 KB receive limit.
+    internal const int ChunkLength = 3_000;
+
+    private ElementReference _element;
+    private DotNetObjectReference<LargeTextArea>? _self;
+    private readonly StringBuilder _incoming = new();
+    private long _incomingId = -1;
+    private bool _incomingTooLong;
+    private bool _tooLong;
+
+    /// <summary>The text. Bind it with <c>@bind-Value</c>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    /// <summary>Raised with the whole text when the operator changes it.</summary>
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>The number of visible lines.</summary>
+    [Parameter] public int Rows { get; set; } = 10;
+
+    /// <summary>The placeholder shown while the text is empty.</summary>
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Whether the text can be edited.</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>The element's <c>name</c>.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>
+    /// The longest text taken, in characters. Longer text is refused and the previous value kept.
+    /// Defaults to 1,048,576, the size of the largest train input Trax stores.
+    /// </summary>
+    [Parameter] public int MaxLength { get; set; } = 1_048_576;
+
+    /// <summary>Any other attributes, such as <c>class</c> and <c>style</c>, passed to the element.</summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string CssClass =>
+        AdditionalAttributes is not null && AdditionalAttributes.TryGetValue("class", out var extra)
+            ? $"rz-textarea {extra}"
+            : "rz-textarea";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // From here on the browser sends this element's changes in chunks rather than in the
+        // change event (dashboard.js). Until then, or without the script, the change event
+        // below carries them, and only text that fits in one hub message gets through.
+        _self = DotNetObjectReference.Create(this);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "traxDashboard.registerLargeText",
+                _element,
+                _self,
+                ChunkLength
+            );
+        }
+        catch (JSException)
+        {
+            // The script is missing: the change event still works for text that fits.
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit went away before the first render finished.
+        }
+    }
+
+    private Task OnChangeAsync(ChangeEventArgs e) => SetValueAsync(e.Value as string ?? "");
+
+    /// <summary>The browser starts sending a changed text of <paramref name="length"/> characters.</summary>
+    [JSInvokable]
+    public void BeginText(long id, int length)
+    {
+        _incomingId = id;
+        _incoming.Clear();
+        _incomingTooLong = length > MaxLength;
+    }
+
+    /// <summary>The next chunk of the text the browser is sending.</summary>
+    [JSInvokable]
+    public void AppendText(long id, string chunk)
+    {
+        if (id != _incomingId || _incomingTooLong)
+            return;
+        if (_incoming.Length + chunk.Length > MaxLength)
+        {
+            _incomingTooLong = true;
+            _incoming.Clear();
+            return;
+        }
+        _incoming.Append(chunk);
+    }
+
+    /// <summary>
+    /// The browser has sent the whole text. Each call runs on the circuit's dispatcher in the
+    /// order the browser sent it, before any click sent after the change, so a Save clicked right
+    /// after a paste sees the pasted text.
+    /// </summary>
+    [JSInvokable]
+    public Task CommitText(long id)
+    {
+        if (id != _incomingId)
+            return Task.CompletedTask;
+        _incomingId = -1;
+
+        if (_incomingTooLong)
+        {
+            _incoming.Clear();
+            _tooLong = true;
+            StateHasChanged();
+            return Task.CompletedTask;
+        }
+
+        var text = _incoming.ToString();
+        _incoming.Clear();
+        return SetValueAsync(text);
+    }
+
+    private async Task SetValueAsync(string text)
+    {
+        if (text.Length > MaxLength)
+        {
+            _tooLong = true;
+            StateHasChanged();
+            return;
+        }
+
+        _tooLong = false;
+        Value = text;
+        await ValueChanged.InvokeAsync(text);
+        StateHasChanged();
+    }
+
+    public void Dispose() => _self?.Dispose();
+}
