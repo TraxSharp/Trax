@@ -119,12 +119,9 @@ internal sealed class LifecycleSubscriptionAccess(
         if (train.RequiredRoles.Count == 0)
             return true;
 
-        // Discovery upper-cases required roles; match the way TrainAuthorizationService does.
-        var held = user!
-            .FindAll(ClaimTypes.Role)
-            .Select(c => c.Value.ToUpperInvariant())
-            .ToHashSet(StringComparer.Ordinal);
-        return train.RequiredRoles.Any(r => held.Contains(r.ToUpperInvariant()));
+        // Exact, as TrainAuthorizationService and @authorize compare roles (Trax.Docs
+        // adr/0026-train-roles-match-exactly-like-authorize.md).
+        return train.RequiredRoles.Any(user!.IsInRole);
     }
 
     private static bool IsAuthenticated(ClaimsPrincipal? user) =>

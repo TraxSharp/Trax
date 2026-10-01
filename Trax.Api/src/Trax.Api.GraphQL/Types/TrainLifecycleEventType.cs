@@ -25,6 +25,13 @@ internal class TrainLifecycleEventType : ObjectType<TrainLifecycleEvent>
         descriptor.Field(e => e.FailureReason);
         descriptor.Field(e => e.HostName);
         descriptor.Field(e => e.HostEnvironment);
+        descriptor
+            .Field(e => e.Sequence)
+            .Description(
+                "This event's position in the subscription: 1 for the first event and one more for "
+                    + "each after it. A jump of more than one means events were lost on the way to "
+                    + "this subscriber; refetch what you show. The live feed is lossy under load."
+            );
 
         descriptor
             .Field("output")

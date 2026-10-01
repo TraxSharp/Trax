@@ -11,10 +11,13 @@ namespace Trax.Api.GraphQL.Client;
 public interface ISchemaProvider
 {
     /// <summary>
-    /// Returns the schema. The built-in providers load it once, on the first call, and return that
-    /// result (or that failure) on every later call; they ignore <paramref name="cancellationToken"/>.
+    /// Returns the schema. The built-in providers load it on the first call and share that schema
+    /// with every later call. A load that fails is not kept: the next call loads again, so a
+    /// server that was unreachable once does not leave the client unable to validate.
+    /// <paramref name="cancellationToken"/> cancels the caller's wait; a load other callers are
+    /// waiting on carries on.
     /// </summary>
-    /// <param name="cancellationToken">Cancels the load, for providers that support it.</param>
+    /// <param name="cancellationToken">Cancels waiting for the schema.</param>
     /// <exception cref="GraphQLSchemaIntrospectionException">The schema could not be loaded.</exception>
     Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default);
 }

@@ -41,11 +41,17 @@ public static class TraxBuilderExtensions
     }
 
     /// <summary>
-    /// Validate every <see cref="IGenericGraphQLClientRequest"/> in the supplied assemblies
-    /// during host startup. Schema drift surfaces as a startup failure with the offending
-    /// query, not a runtime 400 hours into production. The hosted service runs once on
-    /// <c>StartAsync</c>; if any query fails validation, the host throws and refuses to
-    /// accept traffic.
+    /// Validate this client's <see cref="IGenericGraphQLClientRequest"/> types in the supplied
+    /// assemblies during host startup. Schema drift surfaces as a startup failure with the
+    /// offending query, not a runtime 400 hours into production. The hosted service runs once on
+    /// <c>StartAsync</c>; if any query fails validation, the host throws and refuses to accept
+    /// traffic.
+    ///
+    /// <para>A keyed client (<c>AddKeyedTraxGraphQLClient</c>) validates only the request types
+    /// marked <c>[GraphQLClient(key)]</c> with its key; the unkeyed client validates only the types
+    /// that carry no such mark. Requests for several servers can therefore share an assembly.
+    /// Finding no request type for this client also refuses startup, because that is a request
+    /// left unmarked rather than nothing to check.</para>
     /// </summary>
     public static TraxGraphQLClientBuilder UseStartupValidation(
         this TraxGraphQLClientBuilder builder,
@@ -60,12 +66,14 @@ public static class TraxBuilderExtensions
                 nameof(assemblies)
             );
 
-        builder.Services.AddHostedService(sp => new GraphQLClientStartupValidator(
-            builder.ResolveValidator(sp),
-            assemblies,
-            typeFilter: null,
-            sp.GetService<ILogger<GraphQLClientStartupValidator>>()
-        ));
+        builder.Services.AddHostedService(sp =>
+            GraphQLClientStartupValidator.ForClient(
+                builder.ResolveValidator(sp),
+                assemblies,
+                builder.ServiceKey,
+                sp.GetService<ILogger<GraphQLClientStartupValidator>>()
+            )
+        );
         return builder;
     }
 }

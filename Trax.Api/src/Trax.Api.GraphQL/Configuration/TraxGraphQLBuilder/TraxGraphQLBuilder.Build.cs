@@ -90,6 +90,9 @@ public partial class TraxGraphQLBuilder
             GetRequestsAllowed = GetRequestsAllowed,
             SocketAllowedOrigins = SocketAllowedOrigins,
             MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
+            NavigationTargets = NavigationTargetPosture.Discover(
+                modelRegistrations.Select(r => r.EntityType)
+            ),
         };
     }
 
@@ -166,7 +169,7 @@ public partial class TraxGraphQLBuilder
     /// reference identity so a single attribute instance is not counted twice when the
     /// CLR returns it via multiple inheritance paths.
     /// </summary>
-    private static IReadOnlyList<TraxAuthorizeAttribute> DiscoverAuthorizeAttributes(
+    internal static IReadOnlyList<TraxAuthorizeAttribute> DiscoverAuthorizeAttributes(
         Type entityType
     )
     {
@@ -230,7 +233,7 @@ public partial class TraxGraphQLBuilder
     /// walk in <see cref="DiscoverAuthorizeAttributes"/> so the two attributes
     /// have symmetric discovery semantics.
     /// </summary>
-    private static bool DiscoverAllowAnonymous(Type entityType)
+    internal static bool DiscoverAllowAnonymous(Type entityType)
     {
         if (entityType.GetCustomAttribute<TraxAllowAnonymousAttribute>(inherit: true) is not null)
             return true;

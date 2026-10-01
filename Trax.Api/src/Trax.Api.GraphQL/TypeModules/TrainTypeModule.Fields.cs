@@ -66,7 +66,8 @@ public partial class TrainTypeModule
     private static void AddMutationField(
         IObjectTypeDescriptor descriptor,
         TrainRegistration registration,
-        string trainName
+        string trainName,
+        string responseTypeName
     )
     {
         var fieldName = char.ToLowerInvariant(trainName[0]) + trainName[1..];
@@ -96,8 +97,9 @@ public partial class TrainTypeModule
         if (hasQueue)
             field.Argument("priority", a => a.Type<IntType>());
 
-        // Set return type to the per-train response type
-        field.Type(new NamedTypeNode($"{trainName}Response"));
+        // The per-train response type, under the name CreateTypesAsync gave it
+        // ("{trainName}MutationResponse" when an output class already has "{trainName}Response").
+        field.Type(new NamedTypeNode(responseTypeName));
 
         // Resolver logic depends on the operations configuration
         if (hasRun && hasQueue)
@@ -135,8 +137,9 @@ public partial class TrainTypeModule
     {
         var inputJson = SerializeInput(ctx, registration.InputType);
         var executionService = ctx.Service<ITrainExecutionService>();
+        // The canonical train name is the interface FullName; the short name is not unique.
         return await executionService.RunAsync(
-            registration.ServiceTypeName,
+            registration.ServiceType.FullName!,
             inputJson,
             ctx.RequestAborted
         );
@@ -155,7 +158,7 @@ public partial class TrainTypeModule
         var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
         var executionService = ctx.Service<ITrainExecutionService>();
         return await executionService.QueueAsync(
-            registration.ServiceTypeName,
+            registration.ServiceType.FullName!,
             inputJson,
             priority,
             ct: ctx.RequestAborted

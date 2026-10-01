@@ -23,5 +23,7 @@
     <!-- Exposes the ProcessCpuSampler test seam (internal ctor + ComputePercent) for deterministic
          unit tests without widening the public API. -->
     <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <!-- The GraphQL subscriptions number lifecycle events through TrainLifecycleEvent.PublishSequence. -->
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
   </ItemGroup>
 </Project>

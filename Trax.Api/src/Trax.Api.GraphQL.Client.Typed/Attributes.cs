@@ -108,10 +108,12 @@ public sealed class GraphQLArgumentAttribute : Attribute
 }
 
 /// <summary>
-/// Overrides the field selection name for a result-POCO property. Without it the generator uses
-/// the property's <c>[JsonPropertyName]</c>, or else the camel-cased property name. This changes
-/// the selection only: the response is still deserialized by the JSON options, so give the
-/// property a matching <c>[JsonPropertyName]</c> when the names differ by more than case.
+/// Names the schema field a result-POCO property is read from. Without it the generator selects
+/// the property's <c>[JsonPropertyName]</c>, or else the camel-cased property name. When the field
+/// differs from that response key, the generator aliases it (<c>displayName: name</c>), so the
+/// server answers under the key the property is deserialized from and no matching
+/// <c>[JsonPropertyName]</c> is needed. A <c>[JsonPropertyName]</c> that is not a valid GraphQL
+/// name cannot be an alias, and the query is refused when generated.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
 public sealed class GraphQLFieldAttribute : Attribute

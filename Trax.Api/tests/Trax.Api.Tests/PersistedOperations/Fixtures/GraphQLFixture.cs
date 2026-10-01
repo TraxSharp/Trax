@@ -44,7 +44,18 @@ public static class GraphQLFixture
     /// <summary>A valid document with a different response shape (extra field).</summary>
     public const string ShapeChangingDocument = "query Greet { hello version }";
 
-    public static async Task<ServiceProvider> BuildAsync()
+    public static Task<ServiceProvider> BuildAsync() => BuildAsync(po => po.SingleNode());
+
+    /// <summary>
+    /// Builds the stack with the persisted-operations options <paramref name="topology"/> adds
+    /// to the database connection: <c>SingleNode()</c> or <c>UseRabbitMqInvalidation(...)</c>.
+    /// </summary>
+    public static async Task<ServiceProvider> BuildAsync(
+        Func<
+            Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder,
+            Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder
+        > topology
+    )
     {
         await DatabaseMigrator.Migrate(PostgresFixture.ConnectionString);
         var sc = new ServiceCollection();
@@ -60,7 +71,9 @@ public static class GraphQLFixture
                 .ExposeOperationMutations()
                 .AllowAnonymousOperations()
                 .AddTypeExtension<HelloQuery>()
-                .UsePersistedOperations(po => po.UseDatabase(PostgresFixture.ConnectionString))
+                .UsePersistedOperations(po =>
+                    topology(po.UseDatabase(PostgresFixture.ConnectionString))
+                )
         );
         return sc.BuildServiceProvider();
     }

@@ -18,7 +18,9 @@ public class PersistedOperationsEnforcementReporterTests
         bool shadowLogging = false
     )
     {
-        var builder = new PersistedOperationsBuilder().UseDatabase("Host=fake;Database=fake");
+        var builder = new PersistedOperationsBuilder()
+            .UseDatabase("Host=fake;Database=fake")
+            .SingleNode();
         builder.RequirePersisted(requirePersisted);
 
         // Enforcement off with no shadow logging is refused by Build(), so the shadow flag comes

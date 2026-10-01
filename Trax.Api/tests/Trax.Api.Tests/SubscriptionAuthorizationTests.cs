@@ -32,7 +32,7 @@ public class SubscriptionAuthorizationTests
         "docs/adr/0011-subscriptions-carry-the-authorization-of-the-data-they-stream.md";
 
     private const string LifecycleQuery =
-        "subscription { onTrainCompleted { trainName failureReason hostName output } }";
+        "subscription { onTrainCompleted { sequence trainName failureReason hostName output } }";
     private const string DataChangedQuery = "subscription { onDataChanged { domain } }";
 
     public interface IAdminOnlyTrain;
@@ -106,6 +106,7 @@ public class SubscriptionAuthorizationTests
         received["trainName"].Should().Be("Some.Unbroadcast.Train");
         received["failureReason"].Should().Be("db at 10.0.0.5 refused");
         received["hostName"].Should().Be("worker-1");
+        received["sequence"].Should().Be(1L, "the first event a subscription delivers is number 1");
     }
 
     #endregion
@@ -117,7 +118,7 @@ public class SubscriptionAuthorizationTests
     {
         var executor = await BuildAsync(
             g => g,
-            Broadcast<IAdminOnlyTrain>(roles: "ADMIN"),
+            Broadcast<IAdminOnlyTrain>(roles: "Admin"),
             Broadcast<IPublicTrain>(anonymous: true)
         );
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Player"));
@@ -142,12 +143,38 @@ public class SubscriptionAuthorizationTests
     [Test]
     public async Task BroadcastTrainGatedByRole_IsDeliveredToAnAdmin()
     {
-        var executor = await BuildAsync(g => g, Broadcast<IAdminOnlyTrain>(roles: "ADMIN"));
+        var executor = await BuildAsync(g => g, Broadcast<IAdminOnlyTrain>(roles: "Admin"));
         await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
 
         var received = await sub.NextAsync(() => Publish(Event(typeof(IAdminOnlyTrain).FullName!)));
 
         received["trainName"].Should().Be(typeof(IAdminOnlyTrain).FullName);
+    }
+
+    [Test]
+    public async Task BroadcastTrainGatedByRole_IsNotDeliveredToARoleDifferingOnlyInCase()
+    {
+        // Roles match exactly, as IsInRole compares them (Trax.Docs
+        // adr/0026-train-roles-match-exactly-like-authorize.md).
+        var executor = await BuildAsync(
+            g => g,
+            Broadcast<IAdminOnlyTrain>(roles: "Admin"),
+            Broadcast<IPublicTrain>(anonymous: true)
+        );
+        await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("admin"));
+
+        var received = await sub.NextAsync(() =>
+        {
+            Publish(Event(typeof(IAdminOnlyTrain).FullName!));
+            Publish(Event(typeof(IPublicTrain).FullName!));
+        });
+
+        received["trainName"]
+            .Should()
+            .Be(
+                typeof(IPublicTrain).FullName,
+                "a role differing only in case does not satisfy the train, per " + Adr
+            );
     }
 
     [Test]

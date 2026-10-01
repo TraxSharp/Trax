@@ -94,7 +94,12 @@ internal static class ResponseShapeValidator
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (prop.GetCustomAttribute<JsonIgnoreAttribute>() is not null)
+            // Only Condition = Always stops System.Text.Json reading the property; the other
+            // conditions affect writing, so the property is still expected in the response.
+            if (
+                prop.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition
+                == JsonIgnoreCondition.Always
+            )
                 continue;
 
             var explicitName = prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;

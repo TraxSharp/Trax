@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Trax.Api.GraphQL.Audit;
 
 /// <summary>
@@ -13,13 +15,18 @@ namespace Trax.Api.GraphQL.Audit;
 /// the moment it was persisted. Audit sinks that care about persist time should
 /// add their own column.
 /// </para>
+/// <para>
+/// <paramref name="Document"/> is the request's document with every string and numeric literal
+/// replaced by a placeholder (<c>""</c> or <c>0</c>). <paramref name="Variables"/> is what the
+/// registered <see cref="ITraxAuditRedactor"/> returned, which by default is <c>null</c>.
+/// </para>
 /// </remarks>
 public sealed record TraxAuditEntry(
     string PrincipalId,
     string? PrincipalType,
     string? OperationName,
     string Document,
-    IReadOnlyDictionary<string, object?>? Variables,
+    JsonObject? Variables,
     long DurationMs,
     DateTimeOffset Timestamp,
     bool Success,

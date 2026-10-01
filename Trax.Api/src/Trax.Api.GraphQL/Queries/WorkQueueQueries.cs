@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.GraphQL.Queries;
 
@@ -17,6 +19,7 @@ public class WorkQueueQueries
     /// train input; <c>detail</c> does.
     /// </summary>
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="sqlDialect">Resolved from DI when the provider registers one; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
     /// <param name="skip">How many entries to skip (negative is treated as 0).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
@@ -30,7 +33,8 @@ public class WorkQueueQueries
         int take = 25,
         WorkQueueStatus? status = null,
         string? trainName = null,
-        long? afterId = null
+        long? afterId = null,
+        [Service] ISqlDialect? sqlDialect = null
     )
     {
         take = OperationsPageBounds.Take(take);
@@ -50,17 +54,16 @@ public class WorkQueueQueries
 
         var hasFilter = status.HasValue || !string.IsNullOrWhiteSpace(trainName);
 
-        // CountEstimator only applies when there are no filters AND no cursor —
-        // otherwise we must use an exact count.
-        var (totalCount, isEstimate) =
-            (afterId.HasValue || hasFilter)
-                ? (await baseQuery.CountAsync(ct), false)
-                : await CountEstimator.EstimateOrCountAsync(
-                    db,
-                    "work_queue",
-                    () => baseQuery.CountAsync(ct),
-                    ct
-                );
+        // An unfiltered total is estimated on every page, so the cursor never changes it.
+        var (totalCount, isEstimate) = hasFilter
+            ? (await baseQuery.CountAsync(ct), false)
+            : await CountEstimator.EstimateOrCountAsync(
+                db,
+                sqlDialect,
+                "work_queue",
+                () => baseQuery.CountAsync(ct),
+                ct
+            );
 
         var query = afterId.HasValue ? baseQuery.Where(q => q.Id < afterId.Value) : baseQuery;
 
@@ -138,11 +141,15 @@ public class WorkQueueQueries
     /// Full detail for one work queue entry: its train input, and for a queued entry with a
     /// subject, what it is waiting on. The input is on this single-row read only, never on the
     /// <c>workQueues</c> list, the way an execution's input is on <c>executionDetail</c> alone.
+    /// The entry keeps the input unmasked because the run starts from it; here each
+    /// <c>[TraxSensitive]</c> member reads <c>{"_redacted": true}</c>, as in an execution's
+    /// recorded input, and an input this host cannot read as its type is masked whole.
     /// Returns <c>null</c> when the entry does not exist.
     /// </summary>
     public async Task<WorkQueueDetail?> GetDetail(
         long id,
         [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] ITrainDiscoveryService discovery,
         CancellationToken ct
     )
     {
@@ -200,7 +207,7 @@ public class WorkQueueQueries
             entry.InputTypeName,
             entry.ConfirmedAt,
             entry.SubjectKey,
-            entry.Input,
+            TransportInputRedaction.Redact(discovery, entry.Input, entry.InputTypeName),
             heldBy,
             queuedBehind
         );

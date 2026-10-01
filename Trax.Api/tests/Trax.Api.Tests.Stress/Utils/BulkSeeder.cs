@@ -203,7 +203,7 @@ public static class BulkSeeder
                 + "SELECT 'wq-' || g, "
                 + $"       '{TrainName}' || (g % {profile.TrainNames}), "
                 + "       (ARRAY['dispatched','dispatched','cancelled','queued']::trax.work_queue_status[])[1 + (g % 4)], "
-                + $"       (now() at time zone 'utc') - ((g % {MinuteSpread}) * interval '1 minute'), "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
                 + "       (g % 32), "
                 + "       (g % 5), "
                 + $"       CASE WHEN (g % 4) = 3 THEN NULL ELSE 1 + (g % {profile.Manifests}) END "

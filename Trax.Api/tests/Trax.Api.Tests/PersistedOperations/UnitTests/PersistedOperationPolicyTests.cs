@@ -14,7 +14,9 @@ public class PersistedOperationPolicyTests
 {
     private static PersistedOperationPolicy Build(Action<PersistedOperationsBuilder> configure)
     {
-        var builder = new PersistedOperationsBuilder().UseDatabase("Host=fake;Database=fake");
+        var builder = new PersistedOperationsBuilder()
+            .UseDatabase("Host=fake;Database=fake")
+            .SingleNode();
         configure(builder);
         var options = builder.Build();
         return new PersistedOperationPolicy(options, new AllowlistMatcher(options));

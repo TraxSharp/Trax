@@ -42,9 +42,12 @@ validated.
 
 ## Consequences
 
-**The HTTP interceptor still refuses first on HTTP.** It remains until the HTTP authentication
-path is consolidated; the pipeline check agrees with it, so an HTTP request that passes it passes
-this one.
+**The pipeline check is the only refusal on HTTP.** The HTTP interceptor authenticates the
+request with the policy's schemes and refuses nothing. It used to refuse first, by throwing from
+`OnCreateAsync`, but HotChocolate then answers without executing, so the request never reached the
+diagnostic listeners and the audit trail had no record of a refused request. Refusing inside
+execution gives the same response (400, `TRAX_AUTHORIZATION`) and is audited like any other
+request.
 
 **A named-scheme socket principal carries its scheme as its authentication type**, the same as
 the HTTP path.
@@ -56,6 +59,8 @@ the HTTP path.
   reaches the scheduler, a key with it runs the mutation; an anonymous `connection_init` on a
   cookie-only gated host is refused; and an operation handed straight to the executor is refused
   for a principal without the policy or an anonymous one, and runs for one with it.
+- `AuditRefusedRequestTests` pins that an HTTP request the policy refuses is refused inside
+  execution: it reaches the audit sink as an unsuccessful entry.
 - `EverySchemeAuthenticatesTheSocketTests` pins named JWT schemes without a dispatcher: a token
   for either scheme is accepted under that scheme, and an empty payload or a token signed with
   the wrong key is rejected.
@@ -66,4 +71,6 @@ it is treated as anonymous and refused.
 
 ## Changelog
 
+- **2026-09-30**: The HTTP interceptor no longer refuses; the pipeline check is the only refusal,
+  so a refused HTTP request is audited.
 - **2026-09-27**: Recorded.

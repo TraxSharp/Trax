@@ -89,12 +89,14 @@ public partial class TraxGraphQLBuilder
     }
 
     /// <summary>
-    /// Caps the number of top-level selections in a single GraphQL request
-    /// (aliased fields + batched operations both count, and selections inside
-    /// fragment spreads or inline fragments count as if written in place).
-    /// Default is <c>50</c>.
-    /// Rejects amplification attacks that submit hundreds of aliased train
-    /// invocations in a single HTTP request.
+    /// Caps the number of operations a single GraphQL request invokes. Default is <c>50</c>.
+    /// An operation is a root field or a field under a namespace (<c>dispatch</c>,
+    /// <c>discover</c>, <c>operations</c>, a nested namespace such as
+    /// <c>operations { deadLetters }</c>, or a train's declared <c>Namespace</c>); the namespace
+    /// field itself is not counted. Aliases and batched operations both count, selections inside
+    /// fragment spreads or inline fragments count as if written in place, and selections sharing
+    /// a response path count once. A request over the cap is refused during validation with
+    /// <c>TRAX_TOO_MANY_OPERATIONS</c>, before any resolver runs.
     /// </summary>
     public TraxGraphQLBuilder MaxOperationsPerRequest(int maxOperations)
     {
@@ -128,10 +130,14 @@ public partial class TraxGraphQLBuilder
     }
 
     /// <summary>
-    /// Gates GraphQL execution behind an authorization policy. The Banana Cake
-    /// Pop tool page (HTML GET) and schema introspection are governed
-    /// independently and remain reachable; only requests that carry an actual
-    /// GraphQL operation are checked.
+    /// Gates every GraphQL operation the Trax schema executes behind an authorization policy, on
+    /// every transport: an HTTP request and each operation a subscription socket carries pass the
+    /// same check, introspection operations included. A principal that is not authenticated never
+    /// satisfies it, and a socket is also checked once at <c>connection_init</c>.
+    /// <para>
+    /// The GraphQL IDE page (HTML GET) and the schema download are not operations and are not
+    /// gated by this policy; they follow <c>AllowIntrospection</c>.
+    /// </para>
     /// <para>
     /// Pass no argument to use the combined Trax auth policy
     /// (<c>TraxAuthClaimTypes.TraxAuthPolicy</c>), which every <c>AddTrax*Auth</c>
@@ -143,8 +149,9 @@ public partial class TraxGraphQLBuilder
     /// Failed checks surface as a GraphQL error with code <c>TRAX_AUTHORIZATION</c>
     /// rather than an HTTP 401, so the IDE renders them in its result pane and
     /// the response shape stays consistent with per-train authorization failures.
-    /// Subscription auth is governed by the WebSocket interceptor wired by
-    /// <c>AddTraxApiKeyAuth</c>; this method only affects HTTP execution.
+    /// This is the endpoint gate the startup exposure checks honour; an ASP.NET endpoint
+    /// convention added when mapping the route does not count, because those checks run before
+    /// the route is mapped. See <c>docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md</c>.
     /// </para>
     /// </summary>
     public TraxGraphQLBuilder RequireAuthorization(string? policy = null)

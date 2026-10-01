@@ -89,7 +89,11 @@ public class TraxErrorFilterTests
             ErrorMessage: "Order 42 is already closed.",
             ExceptionType: nameof(TrainException),
             FailureJunction: "CloseOrderJunction"
-        ).ToTrainException();
+        )
+        {
+            // The runner offers a train author's own message, and only that (central 0028).
+            PublicMessage = "Order 42 is already closed.",
+        }.ToTrainException();
 
         var result = _filter.OnError(CreateError(remote));
 
@@ -119,15 +123,61 @@ public class TraxErrorFilterTests
     [Test]
     public void OnError_RemoteEndpointStatusFailure_ReturnsTheGenericMessage()
     {
-        // The shape HttpRunExecutor throws for a non-success status: the body is the worker's
-        // (or a proxy's) response, whatever it contains.
-        var ex = new TrainException(
+        // What HttpRunExecutor throws for a non-success status: the body is the worker's (or a
+        // proxy's) response, whatever it contains.
+        var ex = new RemoteRunException(
             "Remote run endpoint returned HTTP 502: <html>upstream 10.0.3.7:8080 refused</html>"
         );
 
         var result = _filter.OnError(CreateError(ex));
 
         result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
+        result.Code.Should().Be("TRAX_TRAIN_ERROR");
+    }
+
+    [Test]
+    public void OnError_LambdaFunctionError_ReturnsTheGenericMessage()
+    {
+        // What LambdaRunExecutor throws for a FunctionError: the payload is the function's raw
+        // error document, never written for a client.
+        var ex = new RemoteRunException(
+            "Lambda function 'trax-runner' returned error: Unhandled. "
+                + """{"errorType":"NpgsqlException","errorMessage":"Failed to connect to 10.0.3.7:5432"}"""
+        );
+
+        var result = _filter.OnError(CreateError(ex));
+
+        result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
+        result.Message.Should().NotContain("10.0.3.7").And.NotContain("trax-runner");
+    }
+
+    [Test]
+    public void OnError_RemoteRunFailure_FromARunnerThatOffersNoPublicMessage_ReturnsTheGenericMessage()
+    {
+        // A runner that predates the public message sends none, so even a TrainException it ran
+        // reads as a failed train (central 0028's stated consequence).
+        var remote = new RemoteRunResponse(
+            MetadataId: 7,
+            IsError: true,
+            ErrorMessage: "Order 42 is already closed.",
+            ExceptionType: nameof(TrainException)
+        ).ToTrainException();
+
+        var result = _filter.OnError(CreateError(remote));
+
+        result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
+    }
+
+    [Test]
+    public void OnError_PlainTrainException_WhoseMessageStartsLikeATransportFailure_PassesThrough()
+    {
+        // The filter reads the exception's type, not its wording: only a RemoteRunException is a
+        // remote failure, so an author's message is never masked for what it happens to say.
+        var ex = new TrainException("Remote run endpoint returned nothing for order 42.");
+
+        var result = _filter.OnError(CreateError(ex));
+
+        result.Message.Should().Be("Remote run endpoint returned nothing for order 42.");
     }
 
     #endregion
@@ -208,6 +258,27 @@ public class TraxErrorFilterTests
         result.Message.Should().Contain("Ns.A.IMyTrain");
         result.Message.Should().Contain("Ns.B.IMyTrain");
         result.Code.Should().Be("TRAX_AMBIGUOUS_TRAIN");
+    }
+
+    #endregion
+
+    #region NoTrainForInputException
+
+    [Test]
+    public void OnError_NoTrainForInputException_ReturnsGenericMessageWithHostConfigurationCode()
+    {
+        var ex = new NoTrainForInputException(typeof(TraxErrorFilterTests), ["Contoso.Trains"]);
+
+        var result = _filter.OnError(CreateError(ex));
+
+        result.Message.Should().Be(TraxErrorFilter.TrainNotRunMessage);
+        result.Message.Should().NotContain("Contoso").And.NotContain(nameof(TraxErrorFilterTests));
+        result.Code.Should().Be("TRAX_HOST_CONFIGURATION");
+        result
+            .Exception.Should()
+            .BeNull(
+                "an attached exception is written to the response when exception details are on"
+            );
     }
 
     #endregion

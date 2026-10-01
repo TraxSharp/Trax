@@ -1,50 +1,54 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 
 namespace Trax.Api.GraphQL.Queries;
 
 /// <summary>
-/// Uses PostgreSQL's <c>pg_class.reltuples</c> to estimate row counts for large tables
-/// without a full sequential scan. Falls back to exact COUNT(*) for small tables.
+/// The total for an unfiltered list of a large table: the database's own row estimate when the
+/// provider keeps one and the table is large, otherwise an exact count.
 /// </summary>
+/// <remarks>
+/// The estimate comes from <see cref="ISqlDialect.EstimateRowCount"/>, which on Postgres reads
+/// <c>pg_class.reltuples</c> (the planner's estimate, refreshed by <c>ANALYZE</c>, <c>VACUUM</c> and
+/// autovacuum). An exact <c>COUNT(*)</c> of a table with millions of rows scans all of it, which is
+/// not worth paying for a number a pager shows to a person. A provider with no estimate (Sqlite,
+/// and InMemory, which registers no dialect at all) counts exactly, as does a table the database
+/// has no estimate for yet or one below <see cref="EstimateThreshold"/> rows, where an exact count
+/// is cheap and an estimate would visibly disagree with the rows on screen.
+/// </remarks>
 internal static class CountEstimator
 {
-    private const int EstimateThreshold = 10_000;
+    /// <summary>Below this many estimated rows the count is exact.</summary>
+    internal const int EstimateThreshold = 10_000;
 
     /// <summary>
-    /// Returns the estimated row count and whether it is an estimate.
-    /// For tables with fewer than <see cref="EstimateThreshold"/> estimated rows,
-    /// falls back to an exact count via <paramref name="exactCountAsync"/>.
+    /// Returns the total and whether it is an estimate.
     /// </summary>
+    /// <param name="db">The context the estimate is read through.</param>
+    /// <param name="dialect">The provider's dialect, or null when none is registered.</param>
+    /// <param name="tableName">The table's unqualified name in the <c>trax</c> schema.</param>
+    /// <param name="exactCountAsync">The exact count, used whenever there is no usable estimate.</param>
+    /// <param name="ct">Cancels the read.</param>
     public static async Task<(int Count, bool IsEstimate)> EstimateOrCountAsync(
         IDataContext db,
+        ISqlDialect? dialect,
         string tableName,
         Func<Task<int>> exactCountAsync,
         CancellationToken ct
     )
     {
-        var dbContext = (DbContext)db;
-        var connection = dbContext.Database.GetDbConnection();
+        var sql = dialect?.EstimateRowCount();
+        if (sql is not null)
+        {
+            var estimates = await ((DbContext)db)
+                .Database.SqlQueryRaw<long>(sql, tableName)
+                .ToListAsync(ct);
 
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync(ct);
+            if (estimates is [var estimate] && estimate >= EstimateThreshold)
+                return ((int)Math.Min(estimate, int.MaxValue), true);
+        }
 
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            "SELECT reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = @table AND n.nspname = 'trax'";
-
-        var param = command.CreateParameter();
-        param.ParameterName = "table";
-        param.Value = tableName;
-        command.Parameters.Add(param);
-
-        var result = await command.ExecuteScalarAsync(ct);
-
-        if (result is long estimate && estimate >= EstimateThreshold)
-            return ((int)Math.Min(estimate, int.MaxValue), true);
-
-        // Below threshold or ANALYZE hasn't run yet — do exact count
-        var exactCount = await exactCountAsync();
-        return (exactCount, false);
+        return (await exactCountAsync(), false);
     }
 }

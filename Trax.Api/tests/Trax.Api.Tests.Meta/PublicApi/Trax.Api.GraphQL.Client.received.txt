@@ -5,6 +5,12 @@ namespace Trax.Api.GraphQL.Client
         public FileSchemaProvider(string path) { }
         public System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default) { }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class GraphQLClientAttribute : System.Attribute
+    {
+        public GraphQLClientAttribute(object key) { }
+        public object Key { get; }
+    }
     public class GraphQLClientConfigurationBuilder
     {
         public GraphQLClientConfigurationBuilder(System.Uri baseAddress) { }
@@ -14,7 +20,6 @@ namespace Trax.Api.GraphQL.Client
         public System.Text.Json.JsonSerializerOptions JsonSerializerOptions { get; set; }
         public bool RemoveSubscriptionsFromSchema { get; set; }
         public Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; set; }
-        public bool ValidateAssemblies { get; set; }
         public GraphQL.Client.Abstractions.Websocket.IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; set; }
         public Trax.Api.GraphQL.Client.IGraphQLClientConfiguration Build() { }
     }

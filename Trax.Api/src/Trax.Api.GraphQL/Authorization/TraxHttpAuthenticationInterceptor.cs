@@ -12,8 +12,8 @@ namespace Trax.Api.GraphQL.Authorization;
 
 /// <summary>
 /// The one HotChocolate HTTP request interceptor Trax installs: it establishes
-/// <see cref="HttpContext.User"/> for a GraphQL HTTP request, and refuses the request early when an
-/// endpoint policy is set and the user does not satisfy it.
+/// <see cref="HttpContext.User"/> for a GraphQL HTTP request. It never refuses one; the endpoint
+/// policy is evaluated in the request pipeline.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,8 +23,9 @@ namespace Trax.Api.GraphQL.Authorization;
 /// <para>
 /// <b>With an endpoint policy</b> (<c>RequireAuthorization(...)</c> on the GraphQL builder), the
 /// request is authenticated with that policy's own schemes, which is what ASP.NET Core does for an
-/// endpoint gated by the same policy, and the policy is then evaluated. The request pipeline
-/// evaluates it again for every operation on every transport; this is the early refusal for HTTP.
+/// endpoint gated by the same policy. The policy is evaluated by the request pipeline, for every
+/// operation on every transport, inside execution: a refused request therefore reaches the
+/// diagnostic listeners, so the audit trail records it.
 /// </para>
 /// <para>
 /// <b>Without one</b>, a request that nothing upstream authenticated is authenticated against
@@ -67,13 +68,8 @@ internal sealed class TraxHttpAuthenticationInterceptor(GraphQLConfiguration con
             else
                 await AuthenticateWithAnySchemeAsync(context);
 
-            var satisfied = await EndpointPolicy.IsSatisfiedAsync(
-                services.GetRequiredService<IAuthorizationService>(),
-                configuration,
-                context.User
-            );
-            if (!satisfied)
-                throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
+            // The policy itself is evaluated in the request pipeline, which refuses the request
+            // from inside execution so the refusal is instrumented like any other request.
         }
         else
         {

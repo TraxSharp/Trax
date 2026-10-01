@@ -157,9 +157,13 @@ public class CoverageGapTests
             IsMutation: false,
             GraphQLName: "fooQuery",
             IsBroadcastEnabled: true
-        );
+        )
+        {
+            FullName = "My.App.IFoo",
+        };
 
         dto.ServiceTypeName.Should().Be("IFoo");
+        dto.FullName.Should().Be("My.App.IFoo");
         dto.ImplementationTypeName.Should().Be("Foo");
         dto.InputTypeName.Should().Be("FooIn");
         dto.OutputTypeName.Should().Be("FooOut");

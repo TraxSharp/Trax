@@ -37,12 +37,25 @@ internal class GraphQLClientValidator : IGraphQLClientValidator
 
         var document = _documentBuilder.Build(query);
 
-        if (document.Definitions.FirstOrDefault() is not GraphQLOperationDefinition operation)
+        // Definition order carries no meaning in GraphQL: fragments may come before or after
+        // the operation. The executor sends no operationName, so the document must hold exactly
+        // one operation, which is the one a server would pick without a name (spec GetOperation).
+        var operations = document.Definitions.OfType<GraphQLOperationDefinition>().ToList();
+        if (operations.Count == 0)
             throw new GraphQLValidationException(
                 query,
                 Array.Empty<global::GraphQL.ExecutionError>(),
                 "No operation definition found in query."
             );
+        if (operations.Count > 1)
+            throw new GraphQLValidationException(
+                query,
+                Array.Empty<global::GraphQL.ExecutionError>(),
+                $"A request must contain exactly one operation; this one has {operations.Count}. "
+                    + "The request is sent without an operation name, so the server could not tell "
+                    + "which to run. Split it into one request per operation."
+            );
+        var operation = operations[0];
 
         var schema = await _schemaProvider.GetSchemaAsync(cancellationToken).ConfigureAwait(false);
 

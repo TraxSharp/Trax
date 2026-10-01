@@ -32,8 +32,21 @@ internal sealed class ClearableDocumentCache(int capacity) : IDocumentCache
     public bool TryGetDocument(string documentId, out CachedDocument document) =>
         _cache.TryGet(documentId, out document!);
 
-    public void TryAddDocument(string documentId, CachedDocument document) =>
+    /// <summary>
+    /// Caches a document under <paramref name="documentId"/>. A document the store did not supply
+    /// is cached only under its own hash: the id a request names is the store's to define, and an
+    /// inline document cached under it would become what that id runs.
+    /// </summary>
+    public void TryAddDocument(string documentId, CachedDocument document)
+    {
+        if (
+            !document.IsPersisted
+            && !string.Equals(documentId, document.Hash.Value, StringComparison.Ordinal)
+        )
+            return;
+
         _cache.Set(documentId, document);
+    }
 
     public void Clear() => _cache.Clear();
 }

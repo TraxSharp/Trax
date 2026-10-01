@@ -1,124 +1,83 @@
 using System.ComponentModel;
 using HotChocolate;
-using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Effect.Data.Services.IDataContextFactory;
 
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 
 /// <summary>
-/// Body of the <c>operations.persistedOperations</c> query namespace. Reads
-/// hit the Trax data context directly via <see cref="IDataContextProviderFactory"/>.
+/// Body of the <c>operations.persistedOperations</c> query namespace. Each field calls
+/// <see cref="IPersistedOperationsService"/>.
 /// </summary>
+/// <remarks>
+/// The overloads taking <see cref="IDataContextProviderFactory"/> are kept for callers built
+/// against them and are not part of the schema. New code calls
+/// <see cref="IPersistedOperationsService"/>.
+/// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class PersistedOperationQueries
 {
-    /// <summary>List persisted operations, newest-first, paginated.</summary>
-    public async Task<PersistedOperationsPage> PersistedOperations(
-        [Service] IDataContextProviderFactory contextFactory,
+    /// <summary>List persisted operations, most recently updated first, paginated.</summary>
+    public Task<PersistedOperationsPage> PersistedOperations(
+        [Service] IPersistedOperationsService service,
         CancellationToken ct,
         PersistedOperationFilter? filter = null,
         int skip = 0,
         int take = 50
-    )
-    {
-        if (take is <= 0 or > 200)
-            take = 50;
-        if (skip < 0)
-            skip = 0;
-
-        await using var ctx = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        IQueryable<Trax.Effect.Models.PersistedOperation.PersistedOperation> q =
-            ctx.PersistedOperations.AsNoTracking();
-
-        if (filter is not null)
-        {
-            if (filter.IsActive.HasValue)
-                q = q.Where(p => p.IsActive == filter.IsActive.Value);
-            if (!string.IsNullOrWhiteSpace(filter.TenantKey))
-                q = q.Where(p => p.TenantKey == filter.TenantKey);
-            else if (filter.TenantKey == "")
-                q = q.Where(p => p.TenantKey == "");
-            if (!string.IsNullOrWhiteSpace(filter.IdStartsWith))
-                q = q.Where(p => p.Id.StartsWith(filter.IdStartsWith));
-        }
-
-        var total = await q.CountAsync(ct).ConfigureAwait(false);
-        var items = await q.OrderByDescending(p => p.UpdatedAt)
-            .Skip(skip)
-            .Take(take)
-            .Select(p => new PersistedOperationDto(
-                p.Id,
-                p.TenantKey == "" ? null : p.TenantKey,
-                p.OperationName,
-                p.Version,
-                p.Document,
-                p.ShapeFingerprint,
-                p.IsActive,
-                p.DeprecationReason,
-                p.Description,
-                p.CreatedAt,
-                p.UpdatedAt
-            ))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        return new PersistedOperationsPage(items, total);
-    }
+    ) => service.ListAsync(filter, skip, take, ct);
 
     /// <summary>Look up a single persisted operation. Returns null when missing.</summary>
-    public async Task<PersistedOperationDto?> PersistedOperation(
+    public Task<PersistedOperationDto?> PersistedOperation(
         string id,
-        [Service] IDataContextProviderFactory contextFactory,
+        [Service] IPersistedOperationsService service,
         CancellationToken ct,
         string? tenantKey = null
-    )
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        var sentinel = tenantKey ?? string.Empty;
-        await using var ctx = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var row = await ctx
-            .PersistedOperations.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.TenantKey == sentinel && p.Id == id, ct)
-            .ConfigureAwait(false);
-        return row is null ? null : PersistedOperationDto.From(row);
-    }
+    ) => service.GetAsync(id, tenantKey, ct);
 
     /// <summary>Audit history for an operation, most-recent-first.</summary>
-    public async Task<IReadOnlyList<PersistedOperationHistoryDto>> PersistedOperationHistory(
+    public Task<IReadOnlyList<PersistedOperationHistoryDto>> PersistedOperationHistory(
         string id,
-        [Service] IDataContextProviderFactory contextFactory,
+        [Service] IPersistedOperationsService service,
         CancellationToken ct,
         string? tenantKey = null,
         int skip = 0,
         int take = 50
-    )
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        if (take is <= 0 or > 200)
-            take = 50;
-        if (skip < 0)
-            skip = 0;
-        var sentinel = tenantKey ?? string.Empty;
+    ) => service.GetHistoryAsync(id, tenantKey, skip, take, ct);
 
-        await using var ctx = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        return await ctx
-            .PersistedOperationHistories.AsNoTracking()
-            .Where(h => h.TenantKey == sentinel && h.Id == id)
-            .OrderByDescending(h => h.HistoryId)
-            .Skip(skip)
-            .Take(take)
-            .Select(h => new PersistedOperationHistoryDto(
-                h.HistoryId,
-                h.Id,
-                h.TenantKey == "" ? null : h.TenantKey,
-                h.Document,
-                h.ShapeFingerprint,
-                h.ChangeType,
-                h.ChangedAt,
-                h.ChangedReason
-            ))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-    }
+    /// <summary>Kept for callers built against it; calls <see cref="IPersistedOperationsService.ListAsync"/>.</summary>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Task<PersistedOperationsPage> PersistedOperations(
+        IDataContextProviderFactory contextFactory,
+        CancellationToken ct,
+        PersistedOperationFilter? filter = null,
+        int skip = 0,
+        int take = 50
+    ) => PersistedOperationsService.ForReads(contextFactory).ListAsync(filter, skip, take, ct);
+
+    /// <summary>Kept for callers built against it; calls <see cref="IPersistedOperationsService.GetAsync"/>.</summary>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Task<PersistedOperationDto?> PersistedOperation(
+        string id,
+        IDataContextProviderFactory contextFactory,
+        CancellationToken ct,
+        string? tenantKey = null
+    ) => PersistedOperationsService.ForReads(contextFactory).GetAsync(id, tenantKey, ct);
+
+    /// <summary>Kept for callers built against it; calls <see cref="IPersistedOperationsService.GetHistoryAsync"/>.</summary>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Task<IReadOnlyList<PersistedOperationHistoryDto>> PersistedOperationHistory(
+        string id,
+        IDataContextProviderFactory contextFactory,
+        CancellationToken ct,
+        string? tenantKey = null,
+        int skip = 0,
+        int take = 50
+    ) =>
+        PersistedOperationsService
+            .ForReads(contextFactory)
+            .GetHistoryAsync(id, tenantKey, skip, take, ct);
 }

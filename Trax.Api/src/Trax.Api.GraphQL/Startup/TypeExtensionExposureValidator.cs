@@ -1,6 +1,7 @@
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Api.Auth;
 using Trax.Api.GraphQL.Configuration;
 
 namespace Trax.Api.GraphQL.Startup;
@@ -20,12 +21,12 @@ namespace Trax.Api.GraphQL.Startup;
 internal sealed class TypeExtensionExposureValidator(
     TypeExtensionExposureReport report,
     IServiceProvider serviceProvider
-) : IHostedService
+) : StartupGate
 {
     /// <summary>Schema name registered by Trax for the GraphQL endpoint.</summary>
     private const string TraxSchemaName = "trax";
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
         using var scope = serviceProvider.CreateScope();
         var provider = scope.ServiceProvider.GetRequiredService<IRequestExecutorProvider>();
@@ -49,6 +50,4 @@ internal sealed class TypeExtensionExposureValidator(
                 )
         );
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

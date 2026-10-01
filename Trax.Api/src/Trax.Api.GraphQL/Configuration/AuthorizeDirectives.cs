@@ -1,5 +1,8 @@
 using HotChocolate.Authorization;
+using HotChocolate.Internal;
 using HotChocolate.Types;
+using HotChocolate.Types.Descriptors;
+using HotChocolate.Types.Descriptors.Configurations;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration;
@@ -55,6 +58,38 @@ internal static class AuthorizeDirectives
             descriptor.Authorize(roles);
         else if (policies.Length == 0 && attributes.Count > 0)
             descriptor.Authorize(ApplyPolicy.BeforeResolver);
+    }
+
+    /// <summary>
+    /// Emits the same directives onto a type-system configuration, for the places that run inside
+    /// a type interceptor and have no descriptor to call. One <c>@authorize</c> per policy plus a
+    /// single unioned roles directive, so a train, an entity and a resolver carrying the same
+    /// attribute get the same rules.
+    /// </summary>
+    public static void Emit(
+        IDirectiveConfigurationProvider target,
+        IReadOnlyList<TraxAuthorizeAttribute> attributes,
+        ITypeInspector inspector
+    )
+    {
+        ExtractRules(attributes, out var policies, out var roles);
+
+        // ConfigurationHelper is how HotChocolate itself turns a directive instance into a
+        // configuration: it builds the type reference from the inspector, which is not something
+        // a caller can construct.
+        foreach (var policy in policies)
+            target.AddDirective(
+                new AuthorizeDirective(policy, apply: ApplyPolicy.BeforeResolver),
+                inspector
+            );
+
+        if (roles.Length > 0)
+            target.AddDirective(
+                new AuthorizeDirective(roles, apply: ApplyPolicy.BeforeResolver),
+                inspector
+            );
+        else if (policies.Length == 0)
+            target.AddDirective(new AuthorizeDirective(ApplyPolicy.BeforeResolver), inspector);
     }
 
     /// <summary>

@@ -10,11 +10,22 @@ When a host wires Trax's GraphQL surface wrongly, it throws while starting, with
 naming the call to change. It does not build a schema that looks fine and then fails on the
 request that happens to touch the broken part.
 
-**Five** validators enforce it: `QueryModelAuthorizationSchemaValidator`,
+**Seven** validators enforce it: `QueryModelAuthorizationSchemaValidator`,
 `QueryModelAuthorizationValidator`, `TraxOperationsServiceValidator`,
-`TraxSubscriptionAuthWiringValidator` and `TraxGraphQLAuthPolicyValidator`. Each is an
-`IHostedService`, so it runs after the container is complete and sees the truth regardless
-of the order the host registered anything in, and each names the call to change.
+`TraxSubscriptionAuthWiringValidator`, `TraxGraphQLAuthPolicyValidator`,
+`TypeExtensionExposureValidator` and `TrainRegistrationOrderValidator`, which names a train
+registered after `AddTraxGraphQL()`. `DemoApiKeyEnvironmentValidator` in `Trax.Api.Auth.ApiKey`
+applies the same policy to a demo key outside Development. Each is a hosted service, so it runs
+after the container is complete and sees the truth regardless of the order the host registered
+anything in, and each names the call to change.
+
+Each checks in `IHostedLifecycleService.StartingAsync` (through the `StartupGate` base), which
+the host finishes for every hosted service before it calls any `StartAsync`. Kestrel and a
+host's own workers start in `StartAsync`, so a refused host never binds a port or claims work,
+even under `HostOptions.ServicesStartConcurrently`, where every `StartAsync` begins at once and
+an ordinary `StartAsync` check would race them. A host that calls only `StartAsync` (a custom
+`IHost`, a test harness) gets the same check from `StartAsync`, so skipping a lifecycle step does
+not open the gate. Trax.Mediator's startup gates work the same way.
 
 `QueryModelScalarCollectionIndexValidator` sits in the same folder and is **not** one of
 them: it is advisory, logs a warning about a missing GIN index and never blocks startup. A
@@ -59,6 +70,9 @@ design, so it is the one place Trax cannot control.
 
 ## Exemplars
 
+- `StartupGateHostTests` starts real hosts, sequentially and with `ServicesStartConcurrently`:
+  a refused host never starts a worker registered before Trax, and a train registered after
+  `AddTraxGraphQL()` refuses the host naming it.
 - `TraxOperationsServiceValidatorTests` pins the fail-fast behaviour for the operations
   surface, including the message.
 - `QueryModelAuthorizeSchemaValidatorTests` drives the schema validator directly: it asserts
@@ -84,6 +98,9 @@ Not covered:
 
 ## Changelog
 
+- **2026-09-30**: The validators check in `StartingAsync`, so a refusal precedes Kestrel and the
+  host's workers under concurrent start; `TrainRegistrationOrderValidator` added; the count
+  corrected to seven, with `TypeExtensionExposureValidator`, which was missing.
 - **2026-09-27**: `TraxSubscriptionAuthWiringValidator` is a backstop now, not an ordering
   check: [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md) made subscription
   auth independent of registration order, so its message no longer names an order to fix.

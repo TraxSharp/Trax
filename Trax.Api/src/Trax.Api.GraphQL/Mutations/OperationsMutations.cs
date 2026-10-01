@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
+using Trax.Api.GraphQL.Validation;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Effect.Services.EffectRegistry;
+using Trax.Effect.Utils;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -17,21 +20,25 @@ public class OperationsMutations
     /// <summary>
     /// Nested namespace exposing dead letter mutations (requeue, acknowledge, batch ops).
     /// </summary>
+    [NamespaceField]
     public DeadLetterMutations DeadLetters() => new();
 
     /// <summary>
     /// Nested namespace exposing work queue mutations (queue a train, cancel queued entries).
     /// </summary>
+    [NamespaceField]
     public WorkQueueMutations WorkQueue() => new();
 
     /// <summary>
     /// Nested namespace exposing manifest group mutations (<c>updateManifestGroup</c>).
     /// </summary>
+    [NamespaceField]
     public ManifestGroupMutations ManifestGroups() => new();
 
     /// <summary>
     /// Nested namespace exposing scheduler config mutations (<c>updateScheduler</c>).
     /// </summary>
+    [NamespaceField]
     public ConfigMutations Config() => new();
 
     /// <summary>
@@ -145,37 +152,58 @@ public class OperationsMutations
     /// <summary>
     /// Requests cancellation of a single execution by id, when it is still pending or in
     /// progress. The request is durable: the process running the train sees it and ends the run
-    /// as Cancelled. <c>count</c> is 1 when the execution was flagged and 0 when it is already
-    /// finished or does not exist.
+    /// as Cancelled, and a run on this host is cancelled at once. <c>count</c> is 1 when the
+    /// execution was flagged; an execution that is already finished or does not exist returns
+    /// <c>success: false</c> with <c>count</c> 0.
     /// </summary>
     public async Task<OperationResponse> CancelExecution(
         long id,
-        [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] IOperationsService operationsService,
         CancellationToken ct
     )
     {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var result = await operationsService.CancelExecutionsAsync([id], ct);
+        if (!result.Success)
+            return ToResponse(result);
 
-        var flagged = await db
-            .Metadatas.Where(m =>
-                m.Id == id
-                && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
-            )
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.CancellationRequested, true), ct);
-
-        return new OperationResponse(
-            flagged > 0,
-            Count: flagged,
-            Message: flagged > 0
-                ? "Cancellation requested"
-                : $"Execution {id} is not cancellable (missing or already terminal)."
-        );
+        return result.Count > 0
+            ? new OperationResponse(true, Count: result.Count, Message: "Cancellation requested")
+            : new OperationResponse(
+                false,
+                Count: 0,
+                Message: $"Execution {id} is not cancellable (missing or already terminal)."
+            );
     }
+
+    /// <summary>
+    /// Requests cancellation of the listed executions, as <c>cancelExecution</c> does for one:
+    /// every one still pending or in progress is flagged, and finished or unknown ids are skipped.
+    /// <c>count</c> is the number flagged, zero included. An empty list, or more than 1000 ids,
+    /// returns <c>success: false</c> and flags nothing.
+    /// </summary>
+    public async Task<OperationResponse> CancelExecutions(
+        long[] ids,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) => ToResponse(await operationsService.CancelExecutionsAsync(ids, ct));
+
+    /// <summary>
+    /// Enables or disables the listed manifests by id. Only manifests whose flag differs are
+    /// written; <c>count</c> is the number changed, zero included. An empty list, or more than
+    /// 1000 ids, returns <c>success: false</c> and changes nothing.
+    /// </summary>
+    public async Task<OperationResponse> SetManifestsEnabled(
+        long[] ids,
+        bool enabled,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) => ToResponse(await operationsService.SetManifestsEnabledAsync(ids, enabled, ct));
 
     /// <summary>
     /// Re-queues an execution: queues a fresh run of the same train with the input the execution
     /// recorded, mirroring the dashboard's Re-queue action. Fails without queueing when the
-    /// execution does not exist, recorded no input, or recorded only a truncated placeholder.
+    /// execution does not exist, recorded no input, recorded only a truncated placeholder, or
+    /// recorded an input with <c>[TraxSensitive]</c> members masked.
     /// </summary>
     public async Task<OperationResponse> RequeueExecution(
         long id,
@@ -213,11 +241,20 @@ public class OperationsMutations
                     + "re-queued with what it ran with."
             );
 
+        // A [TraxSensitive] member is recorded as {"_redacted": true}, not as its value, so the
+        // run cannot be re-queued with what it ran with.
+        if (TraxRedaction.ContainsRedaction(meta.Input))
+            return new OperationResponse(
+                false,
+                Message: $"Execution {id}'s input has values masked by [TraxSensitive], so it "
+                    + "cannot be re-queued with what it ran with."
+            );
+
         var result = await operationsService.QueueTrainAsync(
             new QueueTrainInput(meta.Name, meta.Input),
             ct
         );
-        return new OperationResponse(result.Success, result.Count, result.Message);
+        return ToResponse(result);
     }
 
     /// <summary>
@@ -260,6 +297,53 @@ public class OperationsMutations
         changeSignal.Notify(ChangeDomain.Manifest);
         return new OperationResponse(true, Count: 1, Message: "Manifest updated");
     }
+
+    /// <summary>
+    /// Turns the observational effect whose factory has this full type name on or off in THIS
+    /// process, through the effect registry exactly as the dashboard's effects page does. The
+    /// change is in memory: it does not reach the scheduler or worker processes where trains
+    /// usually run, and a restart restores the configured state. An effect the registry does not
+    /// track, or tracks as not toggleable, is refused and nothing changes. On success
+    /// <c>count</c> is 1.
+    /// </summary>
+    public OperationResponse SetEffectEnabled(
+        string fullName,
+        bool enabled,
+        [Service] IEffectRegistry registry
+    )
+    {
+        var factoryType = registry
+            .GetAll()
+            .Keys.FirstOrDefault(t =>
+                string.Equals(t.FullName ?? t.Name, fullName, StringComparison.Ordinal)
+            );
+
+        if (factoryType is null)
+            return new OperationResponse(
+                false,
+                Message: $"No effect named '{fullName}' is registered in this process."
+            );
+
+        if (!registry.IsToggleable(factoryType))
+            return new OperationResponse(
+                false,
+                Message: $"The effect '{fullName}' is registered as not toggleable."
+            );
+
+        if (enabled)
+            registry.Enable(factoryType);
+        else
+            registry.Disable(factoryType);
+
+        return new OperationResponse(
+            true,
+            Count: 1,
+            Message: enabled ? "Effect enabled in this process" : "Effect disabled in this process"
+        );
+    }
+
+    private static OperationResponse ToResponse(OperationResult result) =>
+        new(result.Success, result.Count, result.Message) { Id = result.Id };
 
     private static bool IsTruncatedPlaceholder(string input)
     {

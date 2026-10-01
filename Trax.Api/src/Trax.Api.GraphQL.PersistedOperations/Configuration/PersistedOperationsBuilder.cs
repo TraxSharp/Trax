@@ -28,6 +28,7 @@ public sealed partial class PersistedOperationsBuilder
 
     // ----- broadcasting -----
     private string? _rabbitMqConnectionString;
+    private bool _singleNode;
 
     // ----- database -----
     private string? _databaseConnectionString;

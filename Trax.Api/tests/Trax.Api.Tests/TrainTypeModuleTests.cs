@@ -4,12 +4,14 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
 
 namespace Trax.Api.Tests;
 
@@ -440,7 +442,7 @@ public class TrainTypeModuleTests
     #region Name Collision
 
     [Test]
-    public async Task CreateTypesAsync_DuplicateNames_FallsBackToFullyQualifiedName()
+    public async Task CreateTypesAsync_DuplicateNames_RefusesNamingTheField()
     {
         var reg1 = CreateRegistration<TypedInput>(
             "DupeTrain",
@@ -456,7 +458,69 @@ public class TrainTypeModuleTests
         var module = new TrainTypeModule(discovery);
 
         var act = async () => await module.CreateTypesAsync(null!, CancellationToken.None);
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*both map to the field 'dupe' under dispatch*Set Name*");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_SameNameInDifferentNamespaces_QueriesBuild()
+    {
+        // Query fields live in their namespace, and a query has no response type, so two
+        // query trains named alike in different namespaces do not clash.
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+            CreateRegistration<TypedInput2>(
+                "LookupTrain",
+                typeof(TypedOutput2),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "alerts"
+            ),
+        ]);
+
+        var act = async () =>
+            await new TrainTypeModule(discovery).CreateTypesAsync(null!, CancellationToken.None);
+
         await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_SameMutationNameInDifferentNamespaces_RefusesNamingTheResponseType()
+    {
+        // The fields would not clash, but both would need the type "CreateResponse", and type
+        // names are schema-wide.
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "CreateTrain",
+                typeof(TypedOutput),
+                name: "Create",
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+            CreateRegistration<TypedInput2>(
+                "CreateTrain",
+                typeof(TypedOutput2),
+                name: "Create",
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "alerts"
+            ),
+        ]);
+
+        var act = async () =>
+            await new TrainTypeModule(discovery).CreateTypesAsync(null!, CancellationToken.None);
+
+        await act.Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*both map to the response type 'CreateResponse'*");
     }
 
     #endregion
@@ -710,6 +774,82 @@ public class TrainTypeModuleTests
 
         schema.Types.Should().Contain(t => t.Name == "AddressValidationResponse");
         schema.Types.Should().NotContain(t => t.Name == "AddressValidationMutationResponse");
+    }
+
+    [Test]
+    public async Task OutputClassNameMatchesResponseWrapperName_TheMutationReturnsItsWrapper()
+    {
+        // The field must be typed as the renamed wrapper, so externalId and output resolve.
+        var executionService = Substitute.For<ITrainExecutionService>();
+        executionService
+            .RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new RunTrainResult(
+                    7,
+                    "ext-7",
+                    new AddressValidationResponse { IsValid = true, Errors = [] }
+                )
+            );
+        var executor = await BuildExecutorWithDiscoveryAsync(
+            [
+                CreateRegistration<TypedInput>(
+                    trainName: "AddressValidationTrain",
+                    outputType: typeof(AddressValidationResponse),
+                    name: "AddressValidation",
+                    serviceTypeName: "IAddressValidationTrain",
+                    operations: GraphQLOperation.Run
+                ),
+            ],
+            executionService
+        );
+
+        var result = await executor.ExecuteAsync(
+            """
+            mutation {
+              dispatch {
+                addressValidation(input: { value: "a" }) { externalId output { isValid } }
+              }
+            }
+            """
+        );
+
+        var operation = result.ExpectOperationResult();
+        operation.Errors.Should().BeNullOrEmpty();
+        var field =
+            (IReadOnlyDictionary<string, object?>)
+                ((IReadOnlyDictionary<string, object?>)operation.DataMap()["dispatch"]!)[
+                    "addressValidation"
+                ]!;
+        field["externalId"].Should().Be("ext-7");
+        ((IReadOnlyDictionary<string, object?>)field["output"]!)["isValid"].Should().Be(true);
+    }
+
+    private static async Task<IRequestExecutor> BuildExecutorWithDiscoveryAsync(
+        IReadOnlyList<TrainRegistration> registrations,
+        ITrainExecutionService executionService
+    )
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ITrainDiscoveryService>(new StubDiscoveryService(registrations));
+        services.AddSingleton<TrainTypeModule>();
+        services.AddSingleton(executionService);
+        services
+            .AddGraphQLServer("trax")
+            .AddQueryType(d =>
+                d.Name("RootQuery").Field("_ping").Type<StringType>().Resolve("pong")
+            )
+            .AddMutationType<RootMutation>()
+            .AddTypeExtension(
+                new ObjectTypeExtension(d =>
+                    d.Name("RootMutation").Field("_ping").Type<StringType>().Resolve("pong")
+                )
+            )
+            .AddTypeModule<TrainTypeModule>();
+
+        return await services
+            .BuildServiceProvider()
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
     }
 
     private static async Task<ISchemaDefinition> BuildSchemaWithDiscoveryAsync(
@@ -1032,7 +1172,7 @@ public class TrainTypeModuleTests
         types.OfType<ObjectTypeExtension>().Should().HaveCount(3);
 
         // Namespace base type should be registered
-        config.RegisteredNamespaceTypes.Should().Contain("PlayersDiscoverQueries");
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
     }
 
     [Test]
@@ -1064,10 +1204,7 @@ public class TrainTypeModuleTests
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
         // Only one namespace base type should be registered
-        config.RegisteredNamespaceTypes.Count(n => n == "PlayersDiscoverQueries").Should().Be(1);
-
-        // Only one namespace field extension on DiscoverQueries
-        config.RegisteredNamespaceTypes.Should().Contain("DiscoverQueries.players");
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
     }
 
     [Test]
@@ -1098,8 +1235,8 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        config.RegisteredNamespaceTypes.Should().Contain("PlayersDiscoverQueries");
-        config.RegisteredNamespaceTypes.Should().Contain("AlertsDiscoverQueries");
+        // One namespace base type each (PlayersDiscoverQueries, AlertsDiscoverQueries)
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(2);
     }
 
     [Test]
@@ -1136,7 +1273,7 @@ public class TrainTypeModuleTests
         types.OfType<ObjectTypeExtension>().Should().HaveCountGreaterThanOrEqualTo(3);
 
         // Namespace type should exist
-        config.RegisteredNamespaceTypes.Should().Contain("PlayersDiscoverQueries");
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
     }
 
     [Test]
@@ -1158,7 +1295,7 @@ public class TrainTypeModuleTests
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
         // No namespace types should be registered
-        config.RegisteredNamespaceTypes.Should().BeEmpty();
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(0);
 
         // Should still have DiscoverQueries extension + RootQuery extension
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
@@ -1191,9 +1328,9 @@ public class TrainTypeModuleTests
 
         var types = await module.CreateTypesAsync(null!, CancellationToken.None);
 
-        // Should create separate namespace types for queries vs mutations
-        config.RegisteredNamespaceTypes.Should().Contain("AlertsDiscoverQueries");
-        config.RegisteredNamespaceTypes.Should().Contain("AlertsDispatchMutations");
+        // Separate namespace types for queries and mutations (AlertsDiscoverQueries,
+        // AlertsDispatchMutations), plus the CreateAlert response type
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(3);
     }
 
     [Test]

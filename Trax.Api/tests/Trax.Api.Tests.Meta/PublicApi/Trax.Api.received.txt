@@ -263,6 +263,7 @@ namespace Trax.Api.DTOs
     {
         public OperationResponse(bool Success, int? Count = default, string? Message = null) { }
         public int? Count { get; init; }
+        public long? Id { get; init; }
         public string? Message { get; init; }
         public bool Success { get; init; }
     }
@@ -303,6 +304,7 @@ namespace Trax.Api.DTOs
     public class TrainInfo : System.IEquatable<Trax.Api.DTOs.TrainInfo>
     {
         public TrainInfo(string ServiceTypeName, string ImplementationTypeName, string InputTypeName, string OutputTypeName, string Lifetime, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema, System.Collections.Generic.IReadOnlyList<string> RequiredPolicies, System.Collections.Generic.IReadOnlyList<string> RequiredRoles, bool IsQuery, bool IsMutation, string? GraphQLName, bool IsBroadcastEnabled) { }
+        public required string FullName { get; init; }
         public string? GraphQLName { get; init; }
         public string ImplementationTypeName { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema { get; init; }
@@ -327,6 +329,7 @@ namespace Trax.Api.DTOs
         public string? HostName { get; init; }
         public long MetadataId { get; init; }
         public string? Output { get; init; }
+        public long Sequence { get; init; }
         public System.DateTime Timestamp { get; init; }
         public string TrainName { get; init; }
         public Trax.Effect.Enums.TrainState TrainState { get; init; }

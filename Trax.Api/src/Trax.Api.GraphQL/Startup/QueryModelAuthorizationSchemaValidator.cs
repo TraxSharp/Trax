@@ -3,6 +3,7 @@ using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Api.Auth;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Attributes;
@@ -36,12 +37,12 @@ namespace Trax.Api.GraphQL.Startup;
 internal sealed class QueryModelAuthorizationSchemaValidator(
     GraphQLConfiguration configuration,
     IServiceProvider serviceProvider
-) : IHostedService
+) : StartupGate
 {
     /// <summary>Schema name registered by Trax for the GraphQL endpoint.</summary>
     private const string TraxSchemaName = "trax";
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
         var gated = configuration
             .ModelRegistrations.Where(r => r.AuthorizeAttributes.Count > 0)
@@ -261,6 +262,4 @@ internal sealed class QueryModelAuthorizationSchemaValidator(
 
     private static bool HasAuthorizeDirective(IEnumerable<IDirective> directives) =>
         directives.Any(d => d.Definition.Name == "authorize");
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

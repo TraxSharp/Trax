@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.ShapeDiff;
+using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.PersistedOperation;
@@ -192,6 +193,7 @@ internal sealed class DbPersistedOperationStorage
         // or GraphQL error payloads. No row is written and no broadcast fires
         // if validation fails.
         await _validator.ValidateAsync(document, ct).ConfigureAwait(false);
+        RequireExactlyOneOperation(document);
 
         // OperationName is taken from the document's operation definition
         // (the GraphQL spec sense). The id is opaque — no parse rule.
@@ -428,6 +430,30 @@ internal sealed class DbPersistedOperationStorage
                 id
             );
         }
+    }
+
+    /// <summary>
+    /// A persisted document holds exactly one operation, so its id names one thing to run and the
+    /// shape fingerprint has one operation to describe. Checked here rather than in the validator
+    /// so a host using the no-op validator gets the same refusal.
+    /// </summary>
+    private static void RequireExactlyOneOperation(string document)
+    {
+        DocumentNode parsed;
+        try
+        {
+            parsed = Utf8GraphQLParser.Parse(document);
+        }
+        catch (SyntaxException ex)
+        {
+            throw new PersistedOperationParseException(ex.Message, ex.Line, ex.Column, ex);
+        }
+
+        var operations = parsed.Definitions.OfType<OperationDefinitionNode>().Count();
+        if (operations != 1)
+            throw new PersistedOperationInputException(
+                $"A persisted operation document must contain exactly one operation; this one contains {operations}."
+            );
     }
 
     private static string Normalize(string? tenantKey) =>

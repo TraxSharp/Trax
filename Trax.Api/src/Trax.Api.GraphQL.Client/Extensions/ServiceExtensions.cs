@@ -116,28 +116,40 @@ public static class ServiceExtensions
 
     /// <summary>
     /// Walks the given assemblies, instantiates every <see cref="IGenericGraphQLClientRequest"/>
-    /// type without invoking its constructor, and validates each <c>Query</c> against the
-    /// schema. Call this after <c>app.Build()</c> to fail fast on schema-incompatible queries.
+    /// type that carries no <see cref="GraphQLClientAttribute"/> without invoking its constructor,
+    /// and validates each <c>Query</c> against the unkeyed client's schema. A request marked for a
+    /// keyed client is left to that client. Call this after <c>app.Build()</c> to fail fast on
+    /// schema-incompatible queries.
     ///
     /// For host-startup gating that fails the boot if validation throws, use
     /// <c>builder.UseStartupValidation(...)</c> on the Trax integration package instead.
     /// </summary>
+    /// <exception cref="GraphQLValidationException">A request's query is not valid against the schema.</exception>
+    /// <exception cref="InvalidOperationException">The assemblies hold no unmarked request type.</exception>
     public static Task ValidateGraphQLClientAssembliesAsync(
         this IServiceProvider services,
         params Assembly[] assemblies
     )
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(assemblies);
         var validator = services.GetRequiredService<IGraphQLClientValidator>();
-        return validator.ValidateAssembliesAsync(assemblies);
+        return validator.ValidateClientRequestsAsync(
+            assemblies,
+            serviceKey: null,
+            CancellationToken.None
+        );
     }
 
     /// <summary>
     /// Keyed counterpart of
     /// <see cref="ValidateGraphQLClientAssembliesAsync(IServiceProvider, Assembly[])"/>: validates
-    /// the supplied assemblies against the schema of the client registered under
-    /// <paramref name="serviceKey"/>. Use this when multiple keyed clients are registered.
+    /// the request types marked <c>[GraphQLClient(serviceKey)]</c> against the schema of the
+    /// client registered under <paramref name="serviceKey"/>. Use this when multiple keyed
+    /// clients are registered; requests for the other servers can share the assemblies.
     /// </summary>
+    /// <exception cref="GraphQLValidationException">A request's query is not valid against the schema.</exception>
+    /// <exception cref="InvalidOperationException">No request type is marked with <paramref name="serviceKey"/>, or no client is registered under it.</exception>
     public static Task ValidateGraphQLClientAssembliesAsync(
         this IServiceProvider services,
         object serviceKey,
@@ -146,7 +158,12 @@ public static class ServiceExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(serviceKey);
+        ArgumentNullException.ThrowIfNull(assemblies);
         var validator = services.GetRequiredKeyedService<IGraphQLClientValidator>(serviceKey);
-        return validator.ValidateAssembliesAsync(assemblies);
+        return validator.ValidateClientRequestsAsync(
+            assemblies,
+            serviceKey,
+            CancellationToken.None
+        );
     }
 }

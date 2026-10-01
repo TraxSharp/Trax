@@ -4,7 +4,6 @@ using HotChocolate.AspNetCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -38,26 +37,16 @@ public static class E2EHost
         $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};"
         + "Include Error Detail=true;Maximum Pool Size=20";
 
-    /// <summary>Drop and recreate a throwaway database, then create the snapshot tables on it.</summary>
+    /// <summary>
+    /// Drop and recreate a throwaway database. The snapshot tables come with the rest of the Trax schema from
+    /// <c>UsePostgres</c>'s migrations when the host builds.
+    /// </summary>
     public static async Task RecreateDatabaseAsync(string database)
     {
-        await using (var admin = new NpgsqlConnection(Maintenance))
-        {
-            await admin.OpenAsync();
-            await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
-            await Exec(admin, $"CREATE DATABASE {database}");
-        }
-
-        // Create the snapshot_draft + effect_claim tables on the empty database BEFORE the host boots. The
-        // Trax framework tables are created by UsePostgres's DbUp migration when the host builds; DbUp's
-        // `create schema if not exists trax` is a no-op against the schema EnsureCreated just made, so the
-        // two table sets coexist in the `trax` schema.
-        await using var db = new SnapshotDbContext(
-            new DbContextOptionsBuilder<SnapshotDbContext>()
-                .UseNpgsql(ConnectionString(database))
-                .Options
-        );
-        await db.Database.EnsureCreatedAsync();
+        await using var admin = new NpgsqlConnection(Maintenance);
+        await admin.OpenAsync();
+        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+        await Exec(admin, $"CREATE DATABASE {database}");
     }
 
     public static async Task DropDatabaseAsync(string database)
@@ -90,10 +79,10 @@ public static class E2EHost
 
                         // Trax core + state machines + mediator in one chain. AddStateMachines discovers the
                         // machines, wires the store / claim ledger / exactly-once runner / registry,
-                        // auto-registers the SnapshotDbContext against the Postgres provider, and contributes
+                        // and contributes
                         // the four generic mutation trains to the mediator scan (they ship in the persistence
                         // package, not this one) so Trax routes them by input type. The host names neither the
-                        // SnapshotDbContext nor the mutations' assembly. AddStateMachines precedes AddMediator.
+                        // snapshot tables nor the mutations' assembly. AddStateMachines precedes AddMediator.
                         services.AddTrax(trax =>
                             trax.AddEffects(effects =>
                                     effects.UsePostgres(connectionString).AddJson()

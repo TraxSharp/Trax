@@ -10,13 +10,20 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 
 /// <summary>
 /// Listens for <see cref="PersistedOperationChangedMessage"/> events on the
-/// RabbitMQ fanout exchange and invalidates the local
-/// <see cref="IPersistedOperationCache"/> entry for the affected id.
+/// RabbitMQ fanout exchange and empties this node's persisted-operation caches: the
+/// <see cref="IPersistedOperationCache"/> entry for the affected id, and HotChocolate's
+/// document and prepared-operation caches.
 /// </summary>
 /// <remarks>
 /// Each node binds an exclusive, auto-delete queue to the fanout, mirroring
 /// the train-event receiver pattern in <c>Trax.Effect.Broadcaster.RabbitMQ</c>.
 /// Wired only when the consumer calls <c>UseRabbitMqInvalidation()</c>.
+/// <para>
+/// A broadcast sent while the connection is down never reaches this node, because its queue
+/// goes with the connection. So, as with any pub/sub invalidation channel, losing the connection
+/// empties every cache, and so does recovering it: what was cached in between may already be
+/// out of date.
+/// </para>
 /// </remarks>
 internal sealed class PersistedOperationReceiverService : IHostedService, IAsyncDisposable
 {
@@ -57,6 +64,12 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
 
         var factory = new ConnectionFactory { Uri = new Uri(_options.RabbitMqConnectionString) };
         _connection = await factory.CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+        _connection.ConnectionShutdownAsync += (_, args) =>
+            args.Initiator == ShutdownInitiator.Application
+                ? Task.CompletedTask
+                : EmptyEveryCacheAsync("the connection to the broker was lost");
+        _connection.RecoverySucceededAsync += (_, _) =>
+            EmptyEveryCacheAsync("the connection to the broker recovered");
         _channel = await _connection
             .CreateChannelAsync(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
@@ -152,6 +165,20 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
                 // Channel may already be closed during shutdown; nothing else to do.
             }
         }
+    }
+
+    /// <summary>
+    /// Empties every persisted-operation cache on this node, for when a broadcast may have been
+    /// missed.
+    /// </summary>
+    internal async Task EmptyEveryCacheAsync(string reason)
+    {
+        _logger.LogWarning(
+            "Emptying the persisted-operation caches because {Reason}; a change broadcast meanwhile may not have arrived.",
+            reason
+        );
+        (_cache as InMemoryPersistedOperationCache)?.InvalidateAll();
+        await _hcInvalidator.InvalidateAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

@@ -240,19 +240,21 @@ public class KeyedRegistrationTests
     }
 
     [Test]
-    public async Task KeyedValidateAssemblies_ResolvesKeyedValidator_AndCompletes()
+    public async Task KeyedValidateAssemblies_NoRequestMarkedForTheKey_Refuses()
     {
         var services = new ServiceCollection();
         services.AddKeyedTraxGraphQLClient("serverB", ServerB);
         using var sp = services.BuildServiceProvider();
 
-        // An assembly with no IGenericGraphQLClientRequest types resolves the keyed validator and
-        // delegates to it without a schema fetch, covering the overload's happy path.
+        // An assembly with no request marked [GraphQLClient("serverB")] resolves the keyed
+        // validator, finds nothing to check without a schema fetch, and refuses: a validation
+        // that checks nothing is a request someone forgot to mark.
         await sp.Invoking(p =>
                 p.ValidateGraphQLClientAssembliesAsync("serverB", typeof(object).Assembly)
             )
             .Should()
-            .NotThrowAsync();
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*serverB*");
     }
 
     [Test]

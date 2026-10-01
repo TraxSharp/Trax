@@ -145,6 +145,10 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         services.AddSingleton<IPersistedOperationStore>(sp =>
             sp.GetRequiredService<DbPersistedOperationStorage>()
         );
+        services.TryAddSingleton<
+            Services.IPersistedOperationsService,
+            Services.PersistedOperationsService
+        >();
 
         // Allowlist matcher and the decision the enforcement middleware asks.
         services.AddSingleton<AllowlistMatcher>();
@@ -190,6 +194,15 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 })
             );
             schema.UsePersistedOperationPipeline();
+            // A persisted-operation id runs only the document the store holds for it. This runs
+            // before the document cache is consulted, so a document sent alongside an id is never
+            // bound to it. See
+            // docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md.
+            schema.UseRequest(
+                PersistedOperationIdBindingMiddleware.Create,
+                key: PersistedOperationIdBindingMiddleware.Key,
+                before: WellKnownRequestMiddleware.DocumentCacheMiddleware
+            );
             // Enforcement runs here, after the document is parsed and before it is validated, so
             // every transport that reaches the executor gets the same decision. See
             // docs/adr/0013-persisted-operation-enforcement-runs-in-the-execution-pipeline.md.
@@ -198,10 +211,6 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
                 key: PersistedOperationEnforcementMiddleware.Key,
                 after: WellKnownRequestMiddleware.DocumentParserMiddleware
             );
-            schema.ModifyRequestOptions(opts =>
-            {
-                opts.PersistedOperations.AllowDocumentBody = true;
-            });
         });
 
         return builder;

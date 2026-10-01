@@ -15,6 +15,9 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -44,6 +47,9 @@ public class WorkQueueOperationsTests
 
     private ServiceProvider _provider = null!;
     private IDataContextProviderFactory _factory = null!;
+
+    // No train is registered, so a stored input can't be read as its type and shows masked.
+    private static ITrainDiscoveryService Discovery => Substitute.For<ITrainDiscoveryService>();
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -109,8 +115,7 @@ public class WorkQueueOperationsTests
         var signal = new RecordingChangeSignal();
         var resp = await new WorkQueueMutations().CancelWorkQueueEntries(
             ids,
-            _factory,
-            signal,
+            OperationsSignalling(signal),
             default
         );
 
@@ -127,20 +132,30 @@ public class WorkQueueOperationsTests
     }
 
     [Test]
-    public async Task CancelWorkQueueEntries_EmptyIds_ReturnsZero()
+    public async Task CancelWorkQueueEntries_EmptyIds_IsRefusedAndSignalsNothing()
     {
         var signal = new RecordingChangeSignal();
         var resp = await new WorkQueueMutations().CancelWorkQueueEntries(
             [],
-            _factory,
-            signal,
+            OperationsSignalling(signal),
             default
         );
 
-        resp.Success.Should().BeTrue();
+        // The dashboard's batch cancel refuses an empty selection; the API answers the same.
+        resp.Success.Should().BeFalse();
         resp.Count.Should().Be(0);
+        resp.Message.Should().Be("No ids were given.");
         signal.Domains.Should().BeEmpty("nothing was cancelled, so no work-queue change fired");
     }
+
+    private IOperationsService OperationsSignalling(ITraxChangeSignal signal) =>
+        new OperationsService(
+            Substitute.For<ITrainDiscoveryService>(),
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>(),
+            changeSignal: signal
+        );
 
     #endregion
 
@@ -436,11 +451,13 @@ public class WorkQueueOperationsTests
     {
         var id = await AddEntry(subject: "customer-1", priority: 4, input: "{\"amount\": 12}");
 
-        var detail = await new WorkQueueQueries().GetDetail(id, _factory, default);
+        var detail = await new WorkQueueQueries().GetDetail(id, _factory, Discovery, default);
 
         detail.Should().NotBeNull();
         detail!.Id.Should().Be(id);
-        detail.Input.Should().Contain("\"amount\"");
+        // No train on this host takes Trax.Tests.SubjectInput, so nothing shows the stored copy
+        // holds no [TraxSensitive] member: the read masks it whole.
+        detail.Input.Should().Contain("_redacted").And.NotContain("amount");
         detail.InputTypeName.Should().Be("Trax.Tests.SubjectInput");
         detail.SubjectKey.Should().Be("customer-1");
         detail.Priority.Should().Be(4);
@@ -455,7 +472,7 @@ public class WorkQueueOperationsTests
         var holder = await AddEntry("customer-2", WorkQueueStatus.Dispatched, metadataId: running);
         var waiting = await AddEntry("customer-2");
 
-        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, default);
+        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, Discovery, default);
 
         detail!.SubjectHeldBy.Should().Be(holder);
         detail
@@ -470,7 +487,7 @@ public class WorkQueueOperationsTests
         await AddEntry("customer-3", WorkQueueStatus.Dispatched, metadataId: done);
         var waiting = await AddEntry("customer-3");
 
-        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, default);
+        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, Discovery, default);
 
         detail!.SubjectHeldBy.Should().BeNull();
         detail.SubjectQueuedBehind.Should().BeNull();
@@ -490,11 +507,13 @@ public class WorkQueueOperationsTests
 
         var queries = new WorkQueueQueries();
 
-        (await queries.GetDetail(younger, _factory, default))!
+        (await queries.GetDetail(younger, _factory, Discovery, default))!
             .SubjectQueuedBehind.Should()
             .Be(older);
-        (await queries.GetDetail(older, _factory, default))!.SubjectQueuedBehind.Should().BeNull();
-        (await queries.GetDetail(ordinary, _factory, default))!
+        (await queries.GetDetail(older, _factory, Discovery, default))!
+            .SubjectQueuedBehind.Should()
+            .BeNull();
+        (await queries.GetDetail(ordinary, _factory, Discovery, default))!
             .SubjectQueuedBehind.Should()
             .Be(urgent);
     }
@@ -520,7 +539,7 @@ public class WorkQueueOperationsTests
         }
         var dueNow = await AddEntry("customer-6");
 
-        var detail = await new WorkQueueQueries().GetDetail(dueNow, _factory, default);
+        var detail = await new WorkQueueQueries().GetDetail(dueNow, _factory, Discovery, default);
 
         later.Should().BePositive();
         detail!
@@ -537,8 +556,8 @@ public class WorkQueueOperationsTests
         var noSubject = await AddEntry(subject: null);
 
         var queries = new WorkQueueQueries();
-        var d1 = await queries.GetDetail(dispatched, _factory, default);
-        var d2 = await queries.GetDetail(noSubject, _factory, default);
+        var d1 = await queries.GetDetail(dispatched, _factory, Discovery, default);
+        var d2 = await queries.GetDetail(noSubject, _factory, Discovery, default);
 
         d1!.SubjectHeldBy.Should().BeNull();
         d1.SubjectQueuedBehind.Should().BeNull();
@@ -549,7 +568,9 @@ public class WorkQueueOperationsTests
     [Test]
     public async Task GetDetail_MissingId_ReturnsNull()
     {
-        (await new WorkQueueQueries().GetDetail(99999, _factory, default)).Should().BeNull();
+        (await new WorkQueueQueries().GetDetail(99999, _factory, Discovery, default))
+            .Should()
+            .BeNull();
     }
 
     #endregion

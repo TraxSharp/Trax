@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
@@ -16,6 +17,10 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
 
@@ -44,6 +49,15 @@ public class OperationsPageBoundsTests
 
     private ServiceProvider _provider = null!;
     private IDataContextProviderFactory _factory = null!;
+
+    private static IOperationsService OperationsOver(IDataContextProviderFactory factory) =>
+        new OperationsService(
+            Substitute.For<ITrainDiscoveryService>(),
+            factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>()
+        );
+
     private long _parentId;
 
     [OneTimeSetUp]
@@ -167,7 +181,8 @@ public class OperationsPageBoundsTests
         );
         yield return Case(
             "logs",
-            (f, skip, take) => new LogQueries().GetLogs(f, default, skip: skip, take: take)
+            (f, skip, take) =>
+                new LogQueries().GetLogs(OperationsOver(f), f, default, skip: skip, take: take)
         );
         yield return Case(
             "deadLetters",

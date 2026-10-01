@@ -11,7 +11,11 @@ public sealed partial class PersistedOperationsBuilder
     /// message names the misconfigured method, explains the constraint, and
     /// suggests a fix.
     /// </exception>
-    internal PersistedOperationsOptions Build()
+    /// <param name="requireNodeTopology">
+    /// False only for <c>AddPersistedOperationStore</c>, which serves no requests and so caches
+    /// nothing to keep consistent.
+    /// </param>
+    internal PersistedOperationsOptions Build(bool requireNodeTopology = true)
     {
         if (!_requirePersisted && !_logNonPersistedRequests)
             throw new InvalidOperationException(
@@ -26,11 +30,21 @@ public sealed partial class PersistedOperationsBuilder
                     + "Pass non-empty operation names only."
             );
 
-        if (_rabbitMqConnectionString is not null && !_cacheEnabled)
+        if (requireNodeTopology && _rabbitMqConnectionString is null && !_singleNode)
             throw new InvalidOperationException(
-                "UseRabbitMqInvalidation requires WithInMemoryCache() to be configured first. "
-                    + "Broadcasts have nothing to invalidate without a cache layer. "
-                    + "Either remove UseRabbitMqInvalidation, or add WithInMemoryCache() before it."
+                "Persisted operations need to know how a change reaches every node. "
+                    + "Each node caches the documents it serves, and HotChocolate's caches do not expire, "
+                    + "so an upload, deactivation or restore made on one node is seen by another only "
+                    + "if it is broadcast. Call UseRabbitMqInvalidation(connectionString) when more than "
+                    + "one node serves this endpoint, or SingleNode() when exactly one process serves it "
+                    + "and writes the store."
+            );
+
+        if (_rabbitMqConnectionString is not null && _singleNode)
+            throw new InvalidOperationException(
+                "SingleNode() and UseRabbitMqInvalidation(...) contradict each other. "
+                    + "Keep UseRabbitMqInvalidation when more than one node serves this endpoint, "
+                    + "or SingleNode() when exactly one does."
             );
 
         if (string.IsNullOrWhiteSpace(_databaseConnectionString))
@@ -49,6 +63,7 @@ public sealed partial class PersistedOperationsBuilder
             CacheEnabled = _cacheEnabled,
             CacheTtl = _cacheTtl,
             RabbitMqConnectionString = _rabbitMqConnectionString,
+            SingleNode = _singleNode,
             DatabaseConnectionString = _databaseConnectionString!,
             ExposeOperationsNamespace = _exposeOperationsNamespace,
         };

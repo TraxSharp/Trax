@@ -29,9 +29,9 @@ internal sealed class TraxSubscriptionAuthWiringValidator(
     IServiceProviderIsService isService,
     IRequestExecutorProvider executorProvider,
     string schemaName
-) : IHostedService
+) : StartupGate
 {
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
         var executor = await executorProvider
             .GetExecutorAsync(schemaName, cancellationToken)
@@ -71,6 +71,4 @@ internal sealed class TraxSubscriptionAuthWiringValidator(
                 + "b.AddSocketSessionInterceptor<T>())."
         );
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

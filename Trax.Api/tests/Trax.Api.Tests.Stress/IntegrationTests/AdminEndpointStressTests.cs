@@ -8,6 +8,7 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Metrics;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectRegistry;
@@ -36,6 +37,10 @@ public class AdminEndpointStressTests : StressTestSetup
 {
     private static IDataContextProviderFactory Factory(IServiceProvider sp) =>
         sp.GetRequiredService<IDataContextProviderFactory>();
+
+    // What HotChocolate injects into the list resolvers: the provider's dialect, whose row
+    // estimate stands in for an exact count of an unfiltered table.
+    private static ISqlDialect Dialect(IServiceProvider sp) => sp.GetRequiredService<ISqlDialect>();
 
     private static IOperationsService Operations(IServiceProvider sp) =>
         sp.GetRequiredService<IOperationsService>();
@@ -316,7 +321,12 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new OperationsQueries().GetExecutions(Factory(sp), ct, take: 25);
+                var page = await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().HaveCount(25);
                 page.TotalCount.Should().BeGreaterThan(0);
             }
@@ -337,7 +347,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    afterId: 200
+                    afterId: 200,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
             }
@@ -368,7 +379,13 @@ public class AdminEndpointStressTests : StressTestSetup
         // Keyset at the far end stays within budget.
         var keyset = await TimeAsync(
             async (sp, ct) =>
-                await new OperationsQueries().GetExecutions(Factory(sp), ct, take: 25, afterId: 200)
+                await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    afterId: 200,
+                    sqlDialect: Dialect(sp)
+                )
         );
 
         // OFFSET near the end of the table must scan every skipped row.
@@ -379,7 +396,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     skip: deepSkip,
-                    take: 25
+                    take: 25,
+                    sqlDialect: Dialect(sp)
                 )
         );
 
@@ -414,7 +432,12 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new WorkQueueQueries().GetWorkQueues(Factory(sp), ct, take: 25);
+                var page = await new WorkQueueQueries().GetWorkQueues(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().HaveCount(25);
                 page.TotalCount.Should().BeGreaterThan(0);
             }
@@ -433,7 +456,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    status: WorkQueueStatus.Dispatched
+                    status: WorkQueueStatus.Dispatched,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(x => x.Status == WorkQueueStatus.Dispatched);
@@ -454,7 +478,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    trainName: "Trax.Stress.Trains.IStressTrain7"
+                    trainName: "Trax.Stress.Trains.IStressTrain7",
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should()
@@ -514,7 +539,13 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new LogQueries().GetLogs(Factory(sp), ct, take: 25);
+                var page = await new LogQueries().GetLogs(
+                    Operations(sp),
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().HaveCount(25);
                 page.TotalCount.Should().BeGreaterThan(0);
             }
@@ -529,7 +560,14 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new LogQueries().GetLogs(Factory(sp), ct, take: 25, metadataId: 1);
+                var page = await new LogQueries().GetLogs(
+                    Operations(sp),
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    metadataId: 1,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().OnlyContain(x => x.MetadataId == 1);
             }
         );
@@ -544,10 +582,12 @@ public class AdminEndpointStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var page = await new LogQueries().GetLogs(
+                    Operations(sp),
                     Factory(sp),
                     ct,
                     take: 25,
-                    minimumLevel: LogLevel.Error
+                    minimumLevel: LogLevel.Error,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(x => x.Level >= LogLevel.Error);
@@ -564,10 +604,12 @@ public class AdminEndpointStressTests : StressTestSetup
             async (sp, ct) =>
             {
                 var page = await new LogQueries().GetLogs(
+                    Operations(sp),
                     Factory(sp),
                     ct,
                     take: 25,
-                    category: "Trax.Stress.Category3"
+                    category: "Trax.Stress.Category3",
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(x => x.Category == "Trax.Stress.Category3");
@@ -587,7 +629,12 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new OperationsQueries().GetManifests(Factory(sp), ct, take: 25);
+                var page = await new OperationsQueries().GetManifests(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().NotBeEmpty();
             }
         );
@@ -601,7 +648,12 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new ManifestGroupQueries().GetGroups(Factory(sp), ct, take: 25);
+                var page = await new ManifestGroupQueries().GetGroups(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().NotBeEmpty();
             }
         );
@@ -654,7 +706,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    manifestId: 1
+                    manifestId: 1,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(e => e.ManifestId == 1);
@@ -675,7 +728,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    manifestGroupId: 1
+                    manifestGroupId: 1,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.TotalCount.Should().BeGreaterThan(0);
@@ -695,7 +749,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    manifestGroupId: 1
+                    manifestGroupId: 1,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(m => m.ManifestGroupId == 1);
@@ -711,7 +766,7 @@ public class AdminEndpointStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var stats = await new OperationsQueries().GetManifestStats(1, Factory(sp), ct);
+                var stats = await new OperationsQueries().GetManifestStats(1, Operations(sp), ct);
                 stats.ManifestId.Should().Be(1);
                 stats.Total.Should().BeGreaterThan(0);
             }
@@ -751,7 +806,7 @@ public class AdminEndpointStressTests : StressTestSetup
             MetricsBudget,
             async (sp, ct) =>
             {
-                var stats = await new ManifestGroupQueries().GetStats(groupIds, Factory(sp), ct);
+                var stats = await new ManifestGroupQueries().GetStats(groupIds, Operations(sp), ct);
                 stats.Should().HaveCount(25);
                 stats.Should().Contain(s => s.TotalExecutions > 0);
             }
@@ -794,7 +849,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    startedAfter: DateTime.UtcNow.AddHours(-24)
+                    startedAfter: DateTime.UtcNow.AddHours(-24),
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.TotalCount.Should().BeGreaterThan(0);
@@ -814,7 +870,8 @@ public class AdminEndpointStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    order: SortOrder.Oldest
+                    order: SortOrder.Oldest,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().HaveCount(25);
                 page.Items.Select(e => e.Id).Should().BeInAscendingOrder();
@@ -864,7 +921,7 @@ public class AdminEndpointStressTests : StressTestSetup
                 // ExecuteUpdate stays fast against the huge metadata table.
                 await new OperationsMutations().CancelExecution(
                     Profile.Metadata / 2,
-                    Factory(sp),
+                    Operations(sp),
                     ct
                 );
             }
@@ -881,8 +938,7 @@ public class AdminEndpointStressTests : StressTestSetup
             {
                 await new WorkQueueMutations().CancelWorkQueueEntries(
                     [1, 2, 3, 4, 5],
-                    Factory(sp),
-                    sp.GetRequiredService<ITraxChangeSignal>(),
+                    Operations(sp),
                     ct
                 );
             }

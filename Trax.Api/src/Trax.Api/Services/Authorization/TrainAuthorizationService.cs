@@ -81,17 +81,10 @@ public class TrainAuthorizationService(
 
         if (registration.RequiredRoles.Count > 0)
         {
-            // Discovery normalizes RequiredRoles to upper-invariant. Do the same here
-            // defensively on both sides so hosts that build registrations by hand (tests,
-            // custom discovery) still get case-insensitive matching. user.IsInRole() uses
-            // ordinal equality on the raw claim value and would silently deny when a train
-            // declares [TraxAuthorize(Roles="admin")] but the principal carries
-            // ClaimTypes.Role = "Admin" (or vice-versa).
-            var userRoles = user.FindAll(ClaimTypes.Role)
-                .Select(c => c.Value.ToUpperInvariant())
-                .ToHashSet();
-
-            if (!registration.RequiredRoles.Any(r => userRoles.Contains(r.ToUpperInvariant())))
+            // Exact, case-sensitive comparison, as ASP.NET Core's RequireRole and @authorize make
+            // it: IsInRole matches each identity's role claim type ordinally. See Trax.Docs
+            // adr/0026-train-roles-match-exactly-like-authorize.md.
+            if (!registration.RequiredRoles.Any(user.IsInRole))
                 throw new TrainAuthorizationException(
                     registration.ServiceTypeName,
                     $"User lacks required role. Required one of: {string.Join(", ", registration.RequiredRoles)}"

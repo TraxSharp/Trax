@@ -8,9 +8,9 @@ namespace Trax.Api.Auth.ApiKey;
 /// <see cref="ApiKeyBuilder.DemoKeyMarker"/>, the marker the Trax templates and samples put on
 /// their plaintext demo keys. Registered only when such a key was added.
 /// </summary>
-internal sealed class DemoApiKeyEnvironmentValidator(IHostEnvironment environment) : IHostedService
+internal sealed class DemoApiKeyEnvironmentValidator(IHostEnvironment environment) : StartupGate
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    protected override Task CheckAsync(CancellationToken cancellationToken)
     {
         if (!environment.IsDevelopment())
             throw new InvalidOperationException(
@@ -22,6 +22,4 @@ internal sealed class DemoApiKeyEnvironmentValidator(IHostEnvironment environmen
             );
         return Task.CompletedTask;
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

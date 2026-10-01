@@ -15,10 +15,15 @@ parent is a root type, must carry `[TraxAuthorize]` or `[TraxAllowAnonymous]`, a
 at startup when it carries neither.
 
 Inheritance is what makes this narrow enough to ship. A field on a gated parent is already
-behind that parent's `@authorize`, so it needs no marker, and a field on a type carrying
-neither marker reaches the schema only inside a train's output, where the train's posture
-governs. Only two rows have to declare: an anonymous parent, which inherits nothing, and a
-root type, which has no parent at all.
+behind that parent's `@authorize`, so it needs no marker. A field on a type carrying neither
+marker is reached only inside some other surface's output: a train's, whose posture governs, or
+a query model's navigation, whose target must itself declare a posture under
+[0025](./0025-every-entity-a-query-model-reaches-declares-its-posture.md). The operations
+namespace's types take the posture the host declared for the whole namespace
+([0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md)). What has to
+declare is an anonymous parent, which inherits nothing, and a root, which has no parent: the
+root types themselves and the namespaces Trax hangs off them through ungated fields
+(`discover`, `dispatch`, and the per-namespace types under them).
 
 ## Status
 
@@ -82,6 +87,14 @@ extension contributes, which is what someone writing it there means.
 extension's own configuration, which is early enough for HotChocolate to turn `@authorize` into
 resolver middleware. `OnBeforeCompleteType`, where the census runs, is too late for that and is
 the only place the merged parent is known, which is why the two phases sit at different hooks.
+Both read the same member, method or property, and the census asserts that every field it
+accepts on the strength of `[TraxAuthorize]` carries the emitted directive, so the two phases
+cannot disagree about which fields are gated.
+
+**The census runs whenever a type extension can exist**: a host that adds one through
+`AddTypeExtension(s)`, contributes one from a type module (`AddTypeModule<T>()`), or registers a
+`ConfigureSchema` callback. HotChocolate's authorization is wired in all three cases, since a type
+module's types cannot be inspected before the schema builds.
 
 **Return type is not an exemption.** A field returning a gated entity still has to declare.
 What the field returns is not what the field does, and a census that reasons about return
@@ -116,6 +129,13 @@ Not covered:
   have been gated satisfies the census, which asks only that somebody decided.
 
 ## Changelog
+
+- **2026-09-30**: Corrected the premise that a type carrying neither marker reaches the schema
+  only inside a train's output: a query model's navigation target does too, and
+  [0025](./0025-every-entity-a-query-model-reaches-declares-its-posture.md) now requires it to
+  declare. Trax's `discover` and `dispatch` namespaces resolve to the root posture, the operations
+  types to the posture declared for the namespace. A property field takes its extension's
+  class-level posture as a method does, and the census runs for type modules too.
 
 - **2026-09-15**: Reversed the vocabulary decision. The markers are `[TraxAuthorize]` and
   `[TraxAllowAnonymous]`, widened to methods in

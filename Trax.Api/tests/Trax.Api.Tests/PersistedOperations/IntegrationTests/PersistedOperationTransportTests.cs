@@ -241,6 +241,7 @@ public class PersistedOperationTransportTests
                 .UsePersistedOperations(po =>
                 {
                     po.UseDatabase(PostgresFixture.ConnectionString)
+                        .SingleNode()
                         .ExposeOperationsNamespace(false);
                     configure(po);
                 })

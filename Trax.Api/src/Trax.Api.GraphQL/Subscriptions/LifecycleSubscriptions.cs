@@ -70,38 +70,43 @@ public class LifecycleSubscriptions
 
     internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainStarted(
         [Service] ITopicEventReceiver receiver,
+        [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainStarted), receiver, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainStarted), receiver, sender, access, user, ct);
 
     internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainCompleted(
         [Service] ITopicEventReceiver receiver,
+        [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainCompleted), receiver, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainCompleted), receiver, sender, access, user, ct);
 
     internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainFailed(
         [Service] ITopicEventReceiver receiver,
+        [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainFailed), receiver, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainFailed), receiver, sender, access, user, ct);
 
     internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainCancelled(
         [Service] ITopicEventReceiver receiver,
+        [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainCancelled), receiver, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainCancelled), receiver, sender, access, user, ct);
 
     internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainStateChanged(
         [Service] ITopicEventReceiver receiver,
+        [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainStateChanged), receiver, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainStateChanged), receiver, sender, access, user, ct);
 
     internal async ValueTask<IAsyncEnumerable<DataChangedEvent>> SubscribeToDataChanged(
         [Service] ITopicEventReceiver receiver,
@@ -116,12 +121,13 @@ public class LifecycleSubscriptions
         var stream = await receiver
             .SubscribeAsync<DataChangedEvent>(nameof(OnDataChanged), ct)
             .ConfigureAwait(false);
-        return Read(stream, e => e);
+        return Read(stream);
     }
 
     private static async ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeLifecycle(
         string topic,
         ITopicEventReceiver receiver,
+        ITopicEventSender sender,
         LifecycleSubscriptionAccess access,
         ClaimsPrincipal? user,
         CancellationToken ct
@@ -134,30 +140,84 @@ public class LifecycleSubscriptions
         var stream = await receiver
             .SubscribeAsync<TrainLifecycleEvent>(topic, ct)
             .ConfigureAwait(false);
-        return Read(stream, visibility.Present);
+
+        // Read once the subscription is registered: every event numbered above it is sent to this
+        // subscription, so a later jump past it is a loss, not an event from before it existed.
+        var baseline = await LifecycleEventPublisher
+            .For(sender)
+            .LastPublishedAsync(topic, ct)
+            .ConfigureAwait(false);
+        return ReadLifecycle(stream, visibility, baseline);
     }
 
     /// <summary>
-    /// Reads <paramref name="stream"/>, passing each event through <paramref name="present"/> and
-    /// dropping the ones it returns <c>null</c> for, and disposes the topic subscription when the
-    /// subscriber goes away.
+    /// Reads a lifecycle topic for one subscriber: passes each event through
+    /// <paramref name="visibility"/>, and numbers the events it delivers in
+    /// <see cref="TrainLifecycleEvent.Sequence"/>, skipping a number after any lost publish.
     /// </summary>
-    private static async IAsyncEnumerable<T> Read<T>(
-        ISourceStream<T> stream,
-        Func<T, T?> present,
+    /// <remarks>
+    /// The topic buffer drops events silently when a subscriber falls behind. A publish number
+    /// more than one past the last one read means events were dropped in between. Some of them may
+    /// be events this subscriber could not see anyway; the gap is reported regardless, because the
+    /// cost of a needless refetch is small and the alternative is a feed that misses state changes
+    /// without saying so. The gap is always one skipped number, so a broadcast subscriber does not
+    /// learn how many events other trains produced. See
+    /// <c>docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md</c>.
+    /// </remarks>
+    internal static async IAsyncEnumerable<TrainLifecycleEvent> ReadLifecycle(
+        ISourceStream<TrainLifecycleEvent> stream,
+        LifecycleVisibility visibility,
+        long baseline,
         [EnumeratorCancellation] CancellationToken ct = default
     )
-        where T : class
     {
+        var lastPublished = baseline;
+        var lost = false;
+        long sequence = 0;
+
         await using (stream.ConfigureAwait(false))
         {
             await foreach (
                 var e in stream.ReadEventsAsync().WithCancellation(ct).ConfigureAwait(false)
             )
             {
-                if (present(e) is { } visible)
-                    yield return visible;
+                // An event sent without a number (by host code using the transport directly)
+                // carries no information about losses and is delivered as it is.
+                if (e.PublishSequence > 0)
+                {
+                    if (e.PublishSequence > lastPublished + 1)
+                        lost = true;
+                    lastPublished = Math.Max(lastPublished, e.PublishSequence);
+                }
+
+                if (visibility.Present(e) is not { } visible)
+                    continue;
+
+                sequence += lost ? 2 : 1;
+                lost = false;
+                yield return visible with
+                {
+                    Sequence = sequence,
+                };
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads <paramref name="stream"/> and disposes the topic subscription when the subscriber
+    /// goes away.
+    /// </summary>
+    private static async IAsyncEnumerable<T> Read<T>(
+        ISourceStream<T> stream,
+        [EnumeratorCancellation] CancellationToken ct = default
+    )
+    {
+        await using (stream.ConfigureAwait(false))
+        {
+            await foreach (
+                var e in stream.ReadEventsAsync().WithCancellation(ct).ConfigureAwait(false)
+            )
+                yield return e;
         }
     }
 }

@@ -91,6 +91,39 @@ public class ValidatorBehaviorTests
     }
 
     [Test]
+    public async Task ValidateAsync_FragmentDeclaredBeforeTheOperation_IsAValidMutation()
+    {
+        // Definition order carries no meaning in GraphQL; a document may declare its
+        // fragments first. The operation is the one OperationDefinition in the document.
+        const string mutation = """
+            fragment PlayerFields on Player { id name }
+            mutation Rename($input: RenamePlayerInput!) {
+              renamePlayer(input: $input) { ...PlayerFields }
+            }
+            """;
+
+        var op = await _validator.ValidateAsync(mutation);
+
+        op.Should().Be(OperationType.Mutation);
+    }
+
+    [Test]
+    public async Task ValidateAsync_TwoOperations_IsRefusedBecauseNoOperationNameIsSent()
+    {
+        // The executor never sends an operationName, so a server could not tell which of two
+        // operations to run. The document is refused before it is sent.
+        const string twoOps = """
+            query First { allItems { id } }
+            query Second { allItems { name } }
+            """;
+
+        var act = async () => await _validator.ValidateAsync(twoOps);
+
+        var ex = await act.Should().ThrowAsync<GraphQLValidationException>();
+        ex.Which.Message.Should().Contain("exactly one operation").And.Contain("2");
+    }
+
+    [Test]
     public void ValidateAsync_NullQuery_ThrowsArgumentNull()
     {
         var act = async () => await _validator.ValidateAsync(null!);

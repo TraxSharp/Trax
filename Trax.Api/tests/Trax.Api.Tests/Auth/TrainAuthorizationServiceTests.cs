@@ -345,50 +345,45 @@ public class TrainAuthorizationServiceTests
         await service.AuthorizeAsync(reg);
     }
 
-    [Test]
-    public async Task Role_CaseInsensitive_LowercaseClaim_UpperRequired_Allows()
+    [TestCase("admin", "Admin")]
+    [TestCase("ADMIN", "Admin")]
+    [TestCase("adm\u0131n", "ADMIN")]
+    [TestCase("\u017Fuperuser", "SUPERUSER")]
+    [TestCase("SUPERUSER", "\u017Fuperuser")]
+    public async Task Role_DiffersOnlyInCaseOrUnderCaseMapping_Denies(string held, string required)
     {
-        // Discovery normalizes required roles to upper-invariant. The auth service
-        // uppercases the user's role claims for comparison. A train declared with
-        // Roles="Admin" and a principal with ClaimTypes.Role="admin" must match.
-        var service = CreateService(AuthenticatedContext(roles: ["admin"]));
-        var reg = Registration(hasAuthorize: true, roles: ["ADMIN"]);
+        // Roles are compared exactly, as IsInRole and @authorize compare them. A dotless i or a
+        // long s upper-cases to I or S under culture mapping, which must not make them equal.
+        // See Trax.Docs adr/0026-train-roles-match-exactly-like-authorize.md.
+        var service = CreateService(AuthenticatedContext(roles: [held]));
+        var reg = Registration(hasAuthorize: true, roles: [required]);
 
-        await service.AuthorizeAsync(reg);
+        await AssertDeniedWithReason(
+            async () => await service.AuthorizeAsync(reg),
+            "*User lacks required role*"
+        );
     }
 
     [Test]
-    public async Task Role_CaseInsensitive_UpperClaim_LowerRequired_Allows()
-    {
-        var service = CreateService(AuthenticatedContext(roles: ["ADMIN"]));
-        // Simulating what the registration pipeline produces when someone writes
-        // [TraxAuthorize(Roles="admin")]: the roles are normalized upper at discovery.
-        var reg = Registration(hasAuthorize: true, roles: ["ADMIN"]);
-
-        await service.AuthorizeAsync(reg);
-    }
-
-    [Test]
-    public async Task Role_CaseInsensitive_MixedCasing_Allows()
+    public async Task Role_ExactMatch_Allows()
     {
         var service = CreateService(AuthenticatedContext(roles: ["MaNaGeR"]));
-        var reg = Registration(hasAuthorize: true, roles: ["MANAGER"]);
+        var reg = Registration(hasAuthorize: true, roles: ["MaNaGeR"]);
 
         await service.AuthorizeAsync(reg);
     }
 
     [Test]
-    public async Task Role_UsesClaimType_NotIsInRole()
+    public async Task Role_OnlyRoleClaimsCount()
     {
-        // user.IsInRole() is ordinal case-sensitive. The service must enumerate
-        // ClaimTypes.Role claims and compare upper-invariant instead.
+        // A value under another claim type is not a role, whatever it says.
         var service = CreateService(
             AuthenticatedContext(
                 roles: ["editor"],
                 claims: [new KeyValuePair<string, string>("custom-role", "admin")]
             )
         );
-        var reg = Registration(hasAuthorize: true, roles: ["ADMIN"]);
+        var reg = Registration(hasAuthorize: true, roles: ["admin"]);
 
         // "admin" only appears under a non-Role claim type; the check must deny.
         await AssertDeniedWithReason(

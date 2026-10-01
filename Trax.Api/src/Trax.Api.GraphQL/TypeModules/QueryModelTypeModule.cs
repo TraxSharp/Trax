@@ -12,6 +12,7 @@ using HotChocolate.Types.Descriptors;
 using HotChocolate.Types.Pagination;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Projection;
 using Trax.Api.GraphQL.Queries;
@@ -59,8 +60,12 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
             }
         }
 
-        // Group model registrations by namespace
-        var byNamespace = registrations.GroupBy(r => r.Attribute.Namespace);
+        // Group model registrations by namespace. A namespace that holds any query model is
+        // owned by this module: it declares the namespace type and its field on DiscoverQueries,
+        // and TrainTypeModule only extends the type with its train fields.
+        var byNamespace = registrations.GroupBy(r =>
+            r.Attribute.Namespace is { } ns ? TrainTypeModule.CamelCase(ns) : null
+        );
 
         foreach (var group in byNamespace)
         {
@@ -75,45 +80,21 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
                             AddModelQueryField(d, reg);
                     })
                 );
+                continue;
             }
-            else
-            {
-                // Namespace — create/extend intermediate type
-                var nsTypeName = TrainTypeModule.NamespaceTypeName(group.Key, "DiscoverQueries");
-                var nsFieldName = TrainTypeModule.CamelCase(group.Key);
 
-                // Register the base ObjectType for this namespace (only once across modules)
-                if (configuration.RegisteredNamespaceTypes.Add(nsTypeName))
+            var nsTypeName = TrainTypeModule.NamespaceTypeName(group.Key, "DiscoverQueries");
+
+            types.Add(NamespaceTypes.Base(nsTypeName));
+            types.Add(
+                new ObjectTypeExtension(d =>
                 {
-                    types.Add(new ObjectType(d => d.Name(nsTypeName)));
-                }
-
-                // Add fields to the namespace type
-                types.Add(
-                    new ObjectTypeExtension(d =>
-                    {
-                        d.Name(nsTypeName);
-                        foreach (var reg in group)
-                            AddModelQueryField(d, reg);
-                    })
-                );
-
-                // Add the namespace field to DiscoverQueries (only once across modules)
-                var nsFieldKey = $"DiscoverQueries.{nsFieldName}";
-                if (configuration.RegisteredNamespaceTypes.Add(nsFieldKey))
-                {
-                    var capturedNsTypeName = nsTypeName;
-                    types.Add(
-                        new ObjectTypeExtension(d =>
-                        {
-                            d.Name("DiscoverQueries");
-                            d.Field(nsFieldName)
-                                .Type(new NamedTypeNode(capturedNsTypeName))
-                                .Resolve(_ => new object());
-                        })
-                    );
-                }
-            }
+                    d.Name(nsTypeName);
+                    foreach (var reg in group)
+                        AddModelQueryField(d, reg);
+                })
+            );
+            types.Add(NamespaceTypes.Field("DiscoverQueries", group.Key, nsTypeName));
         }
 
         return new(types);
@@ -165,8 +146,10 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         // `pageInfo.hasNextPage` never resolves a node of the entity type,
         // so the type-level directive does not fire. Field-level enforcement
         // blocks the entry point unconditionally; type-level enforcement
-        // (in CreateObjectType) covers transitive navigation from ungated
-        // parents.
+        // (in CreateObjectType) covers the type wherever a navigation from an
+        // ungated parent selects it. A navigation used only inside where or
+        // order selects nothing, so NavigationInputAuthorization (below)
+        // evaluates the same directives for it.
         //
         // [TraxAllowAnonymous] short-circuits both gates: the entity is
         // explicitly anonymous-readable, so emitting @authorize on its entry
@@ -176,6 +159,12 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         // mutually exclusive with the directive emission below.
         if (!reg.AllowAnonymous)
             AuthorizeDirectives.Apply(field, reg.AuthorizeAttributes);
+
+        // A gated type reached through a navigation in the caller's where or order is
+        // authorized as if it were selected. Registered first so it runs before paging,
+        // filtering and sorting touch the database.
+        if (attr.Filtering || attr.Sorting)
+            field.Use(NavigationInputAuthorization.Create(typeof(TEntity)));
 
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
@@ -189,61 +178,24 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         if (attr.Projection)
             field.Use(QueryModelProjection.CreateMiddleware<TEntity>());
 
+        // Filtering and sorting follow the exposed field set: the input types are bound to the
+        // entity in the conventions (see GraphQLServiceExtensions), so a model's own entry field
+        // and every navigation reaching it from another model offer the same fields its object
+        // type does.
         if (attr.Filtering)
         {
             if (reg.FilterInputType is not null)
-            {
                 field.UseFiltering(reg.FilterInputType);
-            }
-            else if (attr.ExposeAs is { } exposeAs)
-            {
-                // Restrict the auto-generated filter input type to the
-                // interface's property set so consumers cannot filter on
-                // hidden navigation properties.
-                var allowedProps = GetExposedEntityProperties<TEntity>(exposeAs);
-                field.UseFiltering<TEntity>(descriptor =>
-                {
-                    descriptor.BindFieldsExplicitly();
-                    foreach (var prop in allowedProps)
-                    {
-                        var selector = BuildPropertySelector<TEntity>(prop);
-                        FilterFieldGeneric
-                            .MakeGenericMethod(typeof(TEntity), prop.PropertyType)
-                            .Invoke(null, [descriptor, selector]);
-                    }
-                });
-            }
             else
-            {
-                field.UseFiltering<TEntity>();
-            }
+                field.UseFiltering<QueryModelFilterInputType<TEntity>>();
         }
 
         if (attr.Sorting)
         {
             if (reg.SortInputType is not null)
-            {
                 field.UseSorting(reg.SortInputType);
-            }
-            else if (attr.ExposeAs is { } exposeAs)
-            {
-                var allowedProps = GetExposedEntityProperties<TEntity>(exposeAs);
-                field.UseSorting<TEntity>(descriptor =>
-                {
-                    descriptor.BindFieldsExplicitly();
-                    foreach (var prop in allowedProps)
-                    {
-                        var selector = BuildPropertySelector<TEntity>(prop);
-                        SortFieldGeneric
-                            .MakeGenericMethod(typeof(TEntity), prop.PropertyType)
-                            .Invoke(null, [descriptor, selector]);
-                    }
-                });
-            }
             else
-            {
-                field.UseSorting<TEntity>();
-            }
+                field.UseSorting<QueryModelSortInputType<TEntity>>();
         }
 
         field.Resolve(ctx =>
@@ -326,43 +278,6 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
             if (!allowAnonymous)
                 AuthorizeDirectives.Apply(descriptor, authorizeAttributes);
         });
-    }
-
-    private static readonly MethodInfo FilterFieldGeneric = typeof(QueryModelTypeModule).GetMethod(
-        nameof(AddFilterField),
-        BindingFlags.NonPublic | BindingFlags.Static
-    )!;
-
-    private static readonly MethodInfo SortFieldGeneric = typeof(QueryModelTypeModule).GetMethod(
-        nameof(AddSortField),
-        BindingFlags.NonPublic | BindingFlags.Static
-    )!;
-
-    private static void AddFilterField<TEntity, TField>(
-        IFilterInputTypeDescriptor<TEntity> descriptor,
-        Expression<Func<TEntity, TField>> selector
-    ) => descriptor.Field(selector);
-
-    private static void AddSortField<TEntity, TField>(
-        ISortInputTypeDescriptor<TEntity> descriptor,
-        Expression<Func<TEntity, TField>> selector
-    ) => descriptor.Field(selector);
-
-    private static object BuildPropertySelector<TEntity>(PropertyInfo prop)
-    {
-        var param = Expression.Parameter(typeof(TEntity), "x");
-        var body = Expression.Property(param, prop);
-        var funcType = typeof(Func<,>).MakeGenericType(typeof(TEntity), prop.PropertyType);
-        return Expression.Lambda(funcType, body, param);
-    }
-
-    private static IReadOnlyList<PropertyInfo> GetExposedEntityProperties<TEntity>(Type exposeAs)
-    {
-        var allowed = GetExposedPropertyNames(exposeAs);
-        return typeof(TEntity)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => allowed.Contains(p.Name))
-            .ToList();
     }
 
     /// <summary>

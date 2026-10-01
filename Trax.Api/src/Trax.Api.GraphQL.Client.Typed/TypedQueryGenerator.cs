@@ -9,7 +9,9 @@ namespace Trax.Api.GraphQL.Client.Typed;
 /// Walks a request type and its result POCO, emitting a complete GraphQL operation string.
 /// The generator handles the 80% case: typed projection of one schema object type, scalar
 /// and nested-object property selection, schema-validated arguments. Out of scope for v1:
-/// fragments, unions, interfaces, aliases, directives.
+/// fragments, unions, interfaces, directives. A field is aliased only when <see cref="GraphQLFieldAttribute"/>
+/// names a field other than the property's response key, and a result type that refers back to
+/// itself is refused, since a selection set must be finite.
 ///
 /// Generation is deterministic and reproducible: the same POCO always produces the same query
 /// string. Snapshot tests pin this contract.
@@ -179,33 +181,109 @@ internal static class TypedQueryGenerator
         return result;
     }
 
-    private static void WriteSelectionSet(StringBuilder sb, Type type, int indent)
+    private static void WriteSelectionSet(StringBuilder sb, Type type, int indent) =>
+        WriteSelectionSet(sb, type, indent, new List<(Type Type, string? Via)> { (type, null) });
+
+    // `path` holds the object types from the result type down to `type`, each with the
+    // property that reached the next one. A GraphQL selection set is explicit and finite (the
+    // spec's NoFragmentCycles rule exists for the same reason), so a property that leads back
+    // to a type already on the path has no query to generate and is refused, naming the loop.
+    // The same type under two sibling properties is not on one path and is fine.
+    private static void WriteSelectionSet(
+        StringBuilder sb,
+        Type type,
+        int indent,
+        List<(Type Type, string? Via)> path
+    )
     {
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (prop.GetCustomAttribute<JsonIgnoreAttribute>() is not null)
+            if (IsNeverRead(prop))
                 continue;
 
-            var name =
-                prop.GetCustomAttribute<GraphQLFieldAttribute>()?.FieldName
-                ?? prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name
-                ?? CamelCase(prop.Name);
+            var responseKey =
+                prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? CamelCase(prop.Name);
+            var fieldName = prop.GetCustomAttribute<GraphQLFieldAttribute>()?.FieldName;
 
             var elementType = UnwrapEnumerable(prop.PropertyType);
             var nested = elementType ?? prop.PropertyType;
             var underlying = Nullable.GetUnderlyingType(nested) ?? nested;
 
-            sb.Append(new string(' ', indent)).Append(name);
+            sb.Append(new string(' ', indent));
+            if (fieldName is null || fieldName == responseKey)
+            {
+                sb.Append(responseKey);
+            }
+            else
+            {
+                // [GraphQLField] names the schema field; the response must still come back under
+                // the key the deserializer binds this property to, so alias the field to it.
+                if (!IsGraphQLName(responseKey))
+                    throw new InvalidOperationException(
+                        $"'{type.Name}.{prop.Name}' selects field '{fieldName}' under the response key "
+                            + $"'{responseKey}', which is not a valid GraphQL alias. Give the property a "
+                            + "[JsonPropertyName] that is a GraphQL name (letters, digits and '_', not "
+                            + "starting with a digit), or one equal to the field name."
+                    );
+                sb.Append(responseKey).Append(": ").Append(fieldName);
+            }
 
             if (HasGraphQLType(underlying))
             {
+                var loopStart = path.FindIndex(p => p.Type == underlying);
+                if (loopStart >= 0)
+                    throw new InvalidOperationException(
+                        $"Result type '{path[0].Type.FullName}' cannot be turned into a query because it "
+                            + $"refers back to itself: {DescribeLoop(path, loopStart, prop, underlying)}. "
+                            + "A GraphQL selection must be finite. Give the nested level its own type "
+                            + "that stops where the query should stop, or mark the property "
+                            + "[JsonIgnore] to leave it out."
+                    );
+
                 sb.Append(" {\n");
-                WriteSelectionSet(sb, underlying, indent + 2);
+                path[^1] = (path[^1].Type, prop.Name);
+                path.Add((underlying, null));
+                WriteSelectionSet(sb, underlying, indent + 2, path);
+                path.RemoveAt(path.Count - 1);
+                path[^1] = (path[^1].Type, null);
                 sb.Append(new string(' ', indent)).Append('}');
             }
 
             sb.Append('\n');
         }
+    }
+
+    // Only Condition = Always keeps System.Text.Json from reading a property. WhenWritingNull,
+    // WhenWritingDefault and Never affect serialization only, so such a property is still
+    // populated from the response and has to be selected.
+    private static bool IsNeverRead(PropertyInfo prop) =>
+        prop.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition == JsonIgnoreCondition.Always;
+
+    private static string DescribeLoop(
+        List<(Type Type, string? Via)> path,
+        int loopStart,
+        PropertyInfo closing,
+        Type target
+    )
+    {
+        var sb = new StringBuilder();
+        for (var i = loopStart; i < path.Count - 1; i++)
+            sb.Append(path[i].Type.Name).Append('.').Append(path[i].Via).Append(" -> ");
+        sb.Append(path[^1].Type.Name).Append('.').Append(closing.Name).Append(" -> ");
+        sb.Append(target.Name);
+        return sb.ToString();
+    }
+
+    private static bool IsGraphQLName(string name)
+    {
+        if (name.Length == 0 || char.IsDigit(name[0]))
+            return false;
+        foreach (var c in name)
+        {
+            if (!(c is '_' or (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')))
+                return false;
+        }
+        return true;
     }
 
     private static bool HasGraphQLType(Type t)

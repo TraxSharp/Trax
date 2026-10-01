@@ -6,8 +6,10 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.Tests.Stress.Fixtures;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Services.TrainDiscovery;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
@@ -37,6 +39,13 @@ public class ReadFieldStressTests : StressTestSetup
     private static IDataContextProviderFactory Factory(IServiceProvider sp) =>
         sp.GetRequiredService<IDataContextProviderFactory>();
 
+    private static ITrainDiscoveryService Discovery(IServiceProvider sp) =>
+        sp.GetRequiredService<ITrainDiscoveryService>();
+
+    // What HotChocolate injects into the list resolvers: the provider's dialect, whose row
+    // estimate stands in for an exact count of an unfiltered table.
+    private static ISqlDialect Dialect(IServiceProvider sp) => sp.GetRequiredService<ISqlDialect>();
+
     private static async Task EnsureSubjectRowsAsync(IServiceProvider sp, CancellationToken ct)
     {
         await SeedLock.WaitAsync(ct);
@@ -58,8 +67,8 @@ public class ReadFieldStressTests : StressTestSetup
                     SELECT 'wqs-' || g, 'Trax.Stress.Trains.IStressTrain1',
                            CASE WHEN g % 10 = 0 THEN 'dispatched'::trax.work_queue_status
                                 ELSE 'queued'::trax.work_queue_status END,
-                           (now() at time zone 'utc') - ((g % 20160) * interval '1 minute'),
-                           (g % 32), 0, 'subject-' || (g % {Subjects}), now() at time zone 'utc',
+                           now() - ((g % 20160) * interval '1 minute'),
+                           (g % 32), 0, 'subject-' || (g % {Subjects}), now(),
                            CASE WHEN g % 10 = 0 THEN 1 + (g % {metadataRows}) ELSE NULL END
                     FROM generate_series(1, {missing}) g
                     """,
@@ -98,7 +107,12 @@ public class ReadFieldStressTests : StressTestSetup
             ListBudget,
             async (sp, ct) =>
             {
-                var page = await new OperationsQueries().GetManifests(Factory(sp), ct, take: 25);
+                var page = await new OperationsQueries().GetManifests(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    sqlDialect: Dialect(sp)
+                );
                 page.Items.Should().HaveCount(25);
                 page.Items.Should().OnlyContain(m => m.ManifestGroupName != null);
             }
@@ -117,7 +131,8 @@ public class ReadFieldStressTests : StressTestSetup
                     Factory(sp),
                     ct,
                     take: 25,
-                    afterId: 30
+                    afterId: 30,
+                    sqlDialect: Dialect(sp)
                 );
                 page.Items.Should().NotBeEmpty();
                 page.Items.Should().OnlyContain(m => m.ManifestGroupName != null);
@@ -136,6 +151,7 @@ public class ReadFieldStressTests : StressTestSetup
                 var detail = await new OperationsQueries().GetManifestDetail(
                     Profile.Manifests / 2,
                     Factory(sp),
+                    Discovery(sp),
                     ct
                 );
                 detail.Should().NotBeNull();
@@ -155,7 +171,12 @@ public class ReadFieldStressTests : StressTestSetup
             {
                 if (id == 0)
                     id = await QueuedEntryFor(sp, "subject-7", ct);
-                var detail = await new WorkQueueQueries().GetDetail(id, Factory(sp), ct);
+                var detail = await new WorkQueueQueries().GetDetail(
+                    id,
+                    Factory(sp),
+                    Discovery(sp),
+                    ct
+                );
                 detail.Should().NotBeNull();
                 detail!.SubjectKey.Should().Be("subject-7");
             }
@@ -192,7 +213,12 @@ public class ReadFieldStressTests : StressTestSetup
                     await db.SaveChanges(ct);
                     id = entry.Id;
                 }
-                var detail = await new WorkQueueQueries().GetDetail(id, Factory(sp), ct);
+                var detail = await new WorkQueueQueries().GetDetail(
+                    id,
+                    Factory(sp),
+                    Discovery(sp),
+                    ct
+                );
                 detail!.SubjectQueuedBehind.Should().BeNull();
                 detail.SubjectHeldBy.Should().BeNull();
             }
@@ -210,6 +236,7 @@ public class ReadFieldStressTests : StressTestSetup
                 var detail = await new WorkQueueQueries().GetDetail(
                     Profile.WorkQueue / 2,
                     Factory(sp),
+                    Discovery(sp),
                     ct
                 );
                 detail.Should().NotBeNull();

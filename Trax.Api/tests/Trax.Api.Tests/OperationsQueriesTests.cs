@@ -21,6 +21,8 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 
@@ -49,6 +51,17 @@ public class OperationsQueriesTests
 
     private ServiceProvider _provider = null!;
     private IDataContextProviderFactory _factory = null!;
+
+    // No train is registered, so a stored input can't be read as its type and shows masked.
+    private static ITrainDiscoveryService Discovery => Substitute.For<ITrainDiscoveryService>();
+
+    private IOperationsService Operations =>
+        new OperationsService(
+            Substitute.For<ITrainDiscoveryService>(),
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>()
+        );
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -806,7 +819,7 @@ public class OperationsQueriesTests
         await SeedExecutionsForManifest(m1, 2, TrainState.Failed);
         await SeedExecutionsForManifest(m1, 1, TrainState.InProgress);
 
-        var stats = await new OperationsQueries().GetManifestStats(m1, _factory, default);
+        var stats = await new OperationsQueries().GetManifestStats(m1, Operations, default);
 
         stats.ManifestId.Should().Be(m1);
         stats.Total.Should().Be(6);
@@ -825,7 +838,7 @@ public class OperationsQueriesTests
         var groupId = await SeedManifestGroup("g");
         var m1 = await SeedManifestInGroup(groupId);
 
-        var stats = await new OperationsQueries().GetManifestStats(m1, _factory, default);
+        var stats = await new OperationsQueries().GetManifestStats(m1, Operations, default);
 
         stats.Total.Should().Be(0);
         stats.Completed.Should().Be(0);
@@ -847,7 +860,7 @@ public class OperationsQueriesTests
 
         var stats = await new ManifestGroupQueries().GetStats(
             new[] { groupA, groupB },
-            _factory,
+            Operations,
             default
         );
 
@@ -869,7 +882,7 @@ public class OperationsQueriesTests
     {
         var stats = await new ManifestGroupQueries().GetStats(
             Array.Empty<long>(),
-            _factory,
+            Operations,
             default
         );
 
@@ -881,7 +894,11 @@ public class OperationsQueriesTests
     {
         var groupId = await SeedManifestGroup("empty");
 
-        var stats = await new ManifestGroupQueries().GetStats(new[] { groupId }, _factory, default);
+        var stats = await new ManifestGroupQueries().GetStats(
+            new[] { groupId },
+            Operations,
+            default
+        );
 
         stats.Should().ContainSingle();
         stats[0].GroupId.Should().Be(groupId);
@@ -1029,7 +1046,7 @@ public class OperationsQueriesTests
             id = meta.Id;
         }
 
-        var resp = await new OperationsMutations().CancelExecution(id, _factory, default);
+        var resp = await new OperationsMutations().CancelExecution(id, Operations, default);
 
         resp.Success.Should().BeTrue();
         resp.Count.Should().Be(1);
@@ -1042,7 +1059,7 @@ public class OperationsQueriesTests
     [Test]
     public async Task CancelExecution_MissingOrTerminal_ReturnsZero()
     {
-        var resp = await new OperationsMutations().CancelExecution(999999, _factory, default);
+        var resp = await new OperationsMutations().CancelExecution(999999, Operations, default);
 
         resp.Success.Should().BeFalse();
         resp.Count.Should().Be(0);
@@ -1515,6 +1532,29 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task GetDeadLetters_CursorPage_TotalCountIsEveryMatchingRecord()
+    {
+        var manifest = await SeedManifestForDeadLetter();
+        await SeedDeadLetters(5, manifest);
+        var queries = new DeadLetterQueries();
+        var first = await queries.GetDeadLetters(_factory, default, take: 2);
+
+        var page2 = await queries.GetDeadLetters(
+            _factory,
+            default,
+            skip: 3,
+            take: 2,
+            afterId: first.NextCursor
+        );
+
+        // Every other paged operations read counts the filter, not the rows after the cursor,
+        // and reports skip as 0 once a cursor is given ("skip is ignored").
+        first.TotalCount.Should().Be(5);
+        page2.TotalCount.Should().Be(5, "totalCount is the number of records matching the query");
+        page2.Skip.Should().Be(0, "skip is ignored when afterId is supplied");
+    }
+
+    [Test]
     public async Task GetDeadLetters_SkipHonored()
     {
         var manifest = await SeedManifestForDeadLetter();
@@ -1645,14 +1685,21 @@ public class OperationsQueriesTests
             id = m.Id;
         }
 
-        var detail = await new OperationsQueries().GetManifestDetail(id, _factory, default);
+        var detail = await new OperationsQueries().GetManifestDetail(
+            id,
+            _factory,
+            Discovery,
+            default
+        );
 
         detail.Should().NotBeNull();
         detail!.Id.Should().Be(id);
         detail.ManifestGroupId.Should().Be(groupId);
         detail.ManifestGroupName.Should().Be("detail-group");
         detail.PropertyTypeName.Should().Be("Trax.X.BillingInput");
-        detail.Properties.Should().Contain("acct-1");
+        // No train on this host takes Trax.X.BillingInput, so nothing shows the stored properties
+        // hold no [TraxSensitive] member: the read masks them whole.
+        detail.Properties.Should().Contain("_redacted").And.NotContain("acct-1");
         detail.MisfirePolicy.Should().Be(MisfirePolicy.DoNothing);
         detail.MisfireThresholdSeconds.Should().Be(90);
         detail.VarianceSeconds.Should().Be(30);
@@ -1662,7 +1709,7 @@ public class OperationsQueriesTests
     [Test]
     public async Task GetManifestDetail_MissingId_ReturnsNull()
     {
-        (await new OperationsQueries().GetManifestDetail(99999, _factory, default))
+        (await new OperationsQueries().GetManifestDetail(99999, _factory, Discovery, default))
             .Should()
             .BeNull();
     }
@@ -1742,6 +1789,38 @@ public class OperationsQueriesTests
             .Equal("Bronze", "Silver", "Gold");
         schema.Single(p => p.Name == "playerId").EnumValues.Should().BeNull();
     }
+
+    [Test]
+    public void GetTrains_InputSchema_ListsConditionallyIgnoredPropertiesTheReaderAccepts()
+    {
+        var discovery =
+            NSubstitute.Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>();
+        var registration = FakeRegistration(typeof(IUserTrain), typeof(IgnoreConditionInput));
+        NSubstitute.SubstituteExtensions.Returns(discovery.DiscoverTrains(), [registration]);
+
+        var schema = new OperationsQueries().GetTrains(discovery).Single().InputSchema;
+
+        schema
+            .Select(p => p.Name)
+            .Should()
+            .BeEquivalentTo(
+                ["playerId", "nickname", "bonus"],
+                "only Condition = Always hides a property from the reader"
+            );
+    }
+
+    public record IgnoreConditionInput(
+        string PlayerId,
+        [property: System.Text.Json.Serialization.JsonIgnore(
+            Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        )]
+            string? Nickname,
+        [property: System.Text.Json.Serialization.JsonIgnore(
+            Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
+        )]
+            int Bonus,
+        [property: System.Text.Json.Serialization.JsonIgnore] string? Internal
+    );
 
     public enum SchemaTier
     {

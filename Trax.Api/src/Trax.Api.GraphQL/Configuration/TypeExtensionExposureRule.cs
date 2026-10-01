@@ -104,7 +104,7 @@ internal static class TypeExtensionExposureRule
                     + "it, or [TraxAllowAnonymous] to open it to anonymous callers. Both apply to "
                     + "a method, and Trax emits the matching @authorize directive. To gate the "
                     + "entire endpoint instead, call "
-                    + "UseTraxGraphQL(configure: e => e.RequireAuthorization(...)).",
+                    + "AddTraxGraphQL(graphql => graphql.RequireAuthorization(...)).",
             ExposureViolation.Conflict =>
                 $"GraphQL field '{fieldPath}' ({resolver}) declares both [TraxAuthorize] and "
                     + "[TraxAllowAnonymous]. The two are mutually exclusive: [TraxAllowAnonymous] "

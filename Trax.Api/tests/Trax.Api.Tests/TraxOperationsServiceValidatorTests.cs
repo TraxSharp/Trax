@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Startup;
 using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -79,6 +80,47 @@ public class TraxOperationsServiceValidatorTests
     }
 
     [Test]
+    public async Task Throws_WhenMutationsExposedButNoJobSubmitterIsRegistered()
+    {
+        // runTrain hands a run straight to a job submitter. AddTraxJobRunner() registers
+        // ITraxScheduler and no submitter, so an API-only host passes every other check.
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+                s.AddScoped(_ => Substitute.For<ITraxScheduler>());
+            }),
+            mutationsExposed: true
+        );
+
+        var act = async () => await validator.StartAsync(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*IJobSubmitter*PostgresJobSubmitter*",
+            "runTrain would fail every request, and the message names what to register"
+        );
+    }
+
+    [Test]
+    public async Task QueriesOnly_DoesNotRequireAJobSubmitter()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+            }),
+            mutationsExposed: false
+        );
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .NotThrowAsync("runTrain is a mutation");
+    }
+
+    [Test]
     public async Task DoesNotThrow_WhenBothRegistered()
     {
         var validator = new TraxOperationsServiceValidator(
@@ -87,6 +129,7 @@ public class TraxOperationsServiceValidatorTests
                 s.AddScoped(_ => Substitute.For<IOperationsService>());
                 s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
                 s.AddScoped(_ => Substitute.For<ITraxScheduler>());
+                s.AddScoped(_ => Substitute.For<IJobSubmitter>());
             }),
             mutationsExposed: true
         );

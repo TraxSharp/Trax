@@ -18,7 +18,7 @@ namespace Trax.Api.GraphQL.Client.Trax;
 public sealed class AssemblySchemaProvider : ISchemaProvider
 {
     private readonly Action<IRequestExecutorBuilder> _configure;
-    private readonly Lazy<Task<ISchema>> _schema;
+    private readonly RetryingAsyncLazy<ISchema> _schema;
 
     /// <summary>Creates a provider that builds the schema from <paramref name="configure"/> when it is first requested.</summary>
     /// <param name="configure">Configures a HotChocolate request executor builder the same way the server does.</param>
@@ -27,15 +27,17 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
     {
         ArgumentNullException.ThrowIfNull(configure);
         _configure = configure;
-        _schema = new Lazy<Task<ISchema>>(
-            LoadSchemaAsync,
-            LazyThreadSafetyMode.ExecutionAndPublication
-        );
+        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the schema, loading it on the first call and sharing the result. A load that
+    /// fails is not kept, so the next call loads again. <paramref name="cancellationToken"/>
+    /// cancels this caller's wait, not a load other callers share.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels waiting for the schema.</param>
     public Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default) =>
-        _schema.Value;
+        _schema.GetValueAsync(cancellationToken);
 
     private async Task<ISchema> LoadSchemaAsync()
     {

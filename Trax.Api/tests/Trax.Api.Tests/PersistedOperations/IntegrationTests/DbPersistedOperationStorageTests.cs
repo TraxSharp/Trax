@@ -37,6 +37,7 @@ public class DbPersistedOperationStorageTests
 
         var options = new PersistedOperationsBuilder()
             .UseDatabase(PostgresFixture.ConnectionString)
+            .SingleNode()
             .Build();
 
         _factory = PostgresFixture.Services.GetRequiredService<IDataContextProviderFactory>();
@@ -278,6 +279,7 @@ public class DbPersistedOperationStorageTests
         var throwing = new ThrowingBroadcaster();
         var options = new PersistedOperationsBuilder()
             .UseDatabase(PostgresFixture.ConnectionString)
+            .SingleNode()
             .Build();
         var storage = new DbPersistedOperationStorage(
             _factory,
@@ -599,12 +601,16 @@ public class DbPersistedOperationStorageTests
             ),
             new PersistedOperationsBuilder()
                 .UseDatabase(PostgresFixture.ConnectionString)
+                .SingleNode()
                 .WithInMemoryCache()
                 .Build()
         );
         var storage = new DbPersistedOperationStorage(
             _factory,
-            new PersistedOperationsBuilder().UseDatabase(PostgresFixture.ConnectionString).Build(),
+            new PersistedOperationsBuilder()
+                .UseDatabase(PostgresFixture.ConnectionString)
+                .SingleNode()
+                .Build(),
             memCache,
             new NoOpPersistedOperationBroadcaster(),
             new NoOpPersistedOperationValidator(),

@@ -19,7 +19,7 @@ namespace Trax.Api.GraphQL.Hooks;
 /// </summary>
 public class GraphQLTrainEventHandler : ITrainEventHandler
 {
-    private readonly ITopicEventSender _eventSender;
+    private readonly LifecycleEventPublisher _publisher;
     private readonly ILogger<GraphQLTrainEventHandler>? _logger;
     private readonly bool _streamAllTrains;
     private readonly HashSet<string> _enabledTrains;
@@ -39,7 +39,7 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
         ILogger<GraphQLTrainEventHandler>? logger = null
     )
     {
-        _eventSender = eventSender;
+        _publisher = LifecycleEventPublisher.For(eventSender);
         _logger = logger;
         _streamAllTrains = options.StreamAllTrains;
         _enabledTrains = discoveryService
@@ -102,9 +102,14 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
             Output: message.Output,
             HostName: message.HostName,
             HostEnvironment: message.HostEnvironment
-        );
+        )
+        {
+            // The exception type decides whether a broadcast subscriber may see the reason, so a
+            // remote failure is presented exactly as the same failure on this node would be.
+            FailureException = message.FailureException,
+        };
 
-        await _eventSender.SendAsync(topicName, lifecycleEvent, ct);
+        await _publisher.PublishAsync(topicName, lifecycleEvent, ct);
 
         _logger?.LogDebug(
             "Forwarded remote {EventType} event for train {TrainName} ({ExternalId}) to GraphQL subscriptions.",

@@ -50,7 +50,7 @@ public class ExtensionMethodTests
             StubDataContextFactory
         >();
         var builder = new TraxGraphQLBuilder(sc);
-        builder.UsePersistedOperations(opts => opts.UseDatabase(FakeConn));
+        builder.UsePersistedOperations(opts => opts.UseDatabase(FakeConn).SingleNode());
 
         await using var sp = sc.BuildServiceProvider();
 
@@ -83,7 +83,9 @@ public class ExtensionMethodTests
             StubDataContextFactory
         >();
         var builder = new TraxGraphQLBuilder(sc);
-        builder.UsePersistedOperations(opts => opts.UseDatabase(FakeConn).WithInMemoryCache());
+        builder.UsePersistedOperations(opts =>
+            opts.UseDatabase(FakeConn).SingleNode().WithInMemoryCache()
+        );
 
         await using var sp = sc.BuildServiceProvider();
 
@@ -411,7 +413,7 @@ public class ExtensionMethodTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn));
+        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn).SingleNode());
 
         var config = builder.AllowAnonymousOperations().Build();
         config.OperationQueriesExposed.Should().BeTrue();
@@ -430,7 +432,7 @@ public class ExtensionMethodTests
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
         builder.UsePersistedOperations(po =>
-            po.UseDatabase(FakeConn).ExposeOperationsNamespace(false)
+            po.UseDatabase(FakeConn).SingleNode().ExposeOperationsNamespace(false)
         );
 
         var config = builder.Build();
@@ -460,7 +462,7 @@ public class ExtensionMethodTests
         var builder = new TraxGraphQLBuilder(sc);
 
         builder.UsePersistedOperations(po =>
-            po.UseDatabase(FakeConn).ExposeOperationsNamespace(false)
+            po.UseDatabase(FakeConn).SingleNode().ExposeOperationsNamespace(false)
         );
 
         sc.Any(d => d.ServiceType == typeof(IPersistedOperationStore)).Should().BeTrue();
@@ -476,7 +478,7 @@ public class ExtensionMethodTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
         builder.UsePersistedOperations(po =>
-            po.UseDatabase(FakeConn).ExposeOperationsNamespace(false)
+            po.UseDatabase(FakeConn).SingleNode().ExposeOperationsNamespace(false)
         );
 
         Action act = () => builder.Build();
@@ -488,7 +490,7 @@ public class ExtensionMethodTests
     public void ExposeOperationsNamespaceTrue_IsTheDefaultAndStillRequiresAnAnswer()
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
-        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn));
+        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn).SingleNode());
 
         Action act = () => builder.Build();
 

@@ -94,7 +94,7 @@ public class AddAuditTests
     }
 
     [Test]
-    public void AddAudit_WithoutCustomRedactor_UsesDefaultPassthrough()
+    public void AddAudit_WithoutCustomRedactor_UsesTheDefaultThatRecordsNoVariables()
     {
         var (services, builder) = NewBuilder();
 
@@ -197,8 +197,8 @@ public class AddAuditTests
 
     private sealed class DroppingRedactor : ITraxAuditRedactor
     {
-        public IReadOnlyDictionary<string, object?>? Redact(
-            IReadOnlyDictionary<string, object?>? variables
+        public System.Text.Json.Nodes.JsonObject? Redact(
+            System.Text.Json.Nodes.JsonObject? variables
         ) => null;
     }
 }

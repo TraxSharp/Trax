@@ -138,6 +138,22 @@ public class ExposureAuthorizationRuleTests
     }
 
     [Test]
+    public void BuildMessage_MissingMarker_PointsAtTheGateTheRuleHonours()
+    {
+        // The rule reads the builder's RequireAuthorization(); an endpoint convention added by
+        // UseTraxGraphQL(configure: ...) runs after AddTraxGraphQL has already refused, and the
+        // authorization guide says it does not count. Advice to use it cannot clear the error.
+        var msg = ExposureAuthorizationRule.BuildMessage(
+            "GraphQL-exposed train",
+            "My.Trains.IThingTrain",
+            ExposureViolation.MissingMarker
+        );
+
+        msg.Should().NotContain("UseTraxGraphQL(configure");
+        msg.Should().Contain("AddTraxGraphQL(graphql => graphql.RequireAuthorization(");
+    }
+
+    [Test]
     public void BuildMessage_None_Throws()
     {
         // None is not a violation, so it has no message. Callers guard against it; the

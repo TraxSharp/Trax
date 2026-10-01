@@ -8,7 +8,10 @@ namespace Trax.Api.GraphQL.Client;
 
 /// <summary>
 /// Fetches the schema from the configured endpoint via introspection on first call, then
-/// caches it for the lifetime of the provider. The introspection JSON is parsed into a
+/// caches it for the lifetime of the provider; a failed fetch is not cached and the next call
+/// tries again. A Trax server allows introspection only in Development unless its host admits
+/// this client, so against a production Trax server use <see cref="FileSchemaProvider"/> or the
+/// in-process provider from <c>Trax.Api.GraphQL.Client.Trax</c>. The introspection JSON is parsed into a
 /// local POCO model and reprinted as SDL so the validator can build a graphql-dotnet
 /// <see cref="ISchema"/> from it.
 /// </summary>
@@ -93,22 +96,24 @@ public class IntrospectingSchemaProvider : ISchemaProvider
     };
 
     private readonly IGraphQLClientConfiguration _configuration;
-    private readonly Lazy<Task<ISchema>> _schema;
+    private readonly RetryingAsyncLazy<ISchema> _schema;
 
     /// <summary>Creates a provider that introspects the endpoint in <paramref name="configuration"/> when the schema is first requested.</summary>
     /// <param name="configuration">Supplies the endpoint, HTTP client and subscription setting.</param>
     public IntrospectingSchemaProvider(IGraphQLClientConfiguration configuration)
     {
         _configuration = configuration;
-        _schema = new Lazy<Task<ISchema>>(
-            LoadSchemaAsync,
-            LazyThreadSafetyMode.ExecutionAndPublication
-        );
+        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the schema, loading it on the first call and sharing the result. A load that
+    /// fails is not kept, so the next call loads again. <paramref name="cancellationToken"/>
+    /// cancels this caller's wait, not a load other callers share.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels waiting for the schema.</param>
     public Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default) =>
-        _schema.Value;
+        _schema.GetValueAsync(cancellationToken);
 
     private async Task<ISchema> LoadSchemaAsync()
     {

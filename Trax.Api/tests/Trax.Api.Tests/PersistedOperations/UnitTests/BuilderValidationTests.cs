@@ -3,6 +3,13 @@ using Trax.Api.GraphQL.PersistedOperations.Configuration;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
+/// <summary>
+/// What <c>UsePersistedOperations</c> accepts. A host must say how a change reaches every node,
+/// with a broadcaster or by declaring a single node.
+///
+/// <para>Enforces <c>docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md")]
 [TestFixture]
 public class BuilderValidationTests
 {
@@ -11,19 +18,20 @@ public class BuilderValidationTests
     [Test]
     public void Build_DefaultConfig_Succeeds()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn);
+        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn).SingleNode();
         var opts = b.Build();
         opts.RequirePersisted.Should().BeTrue();
         opts.LogNonPersistedRequests.Should().BeFalse();
         opts.AllowIntrospection.Should().BeTrue();
         opts.CacheEnabled.Should().BeFalse();
         opts.RabbitMqConnectionString.Should().BeNull();
+        opts.SingleNode.Should().BeTrue();
     }
 
     [Test]
     public void Build_NoDatabase_Throws()
     {
-        var b = new PersistedOperationsBuilder();
+        var b = new PersistedOperationsBuilder().SingleNode();
         Action act = () => b.Build();
         act.Should().Throw<InvalidOperationException>().WithMessage("*UseDatabase*");
     }
@@ -33,6 +41,7 @@ public class BuilderValidationTests
     {
         var b = new PersistedOperationsBuilder()
             .UseDatabase(FakeConn)
+            .SingleNode()
             .RequirePersisted(false)
             .LogNonPersistedRequests(false);
 
@@ -43,16 +52,44 @@ public class BuilderValidationTests
     }
 
     [Test]
-    public void Build_RabbitMqWithoutCache_Throws()
+    public void Build_NeitherABroadcasterNorSingleNode_RefusesToStart()
     {
-        var b = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
-            .UseRabbitMqInvalidation("amqp://localhost");
+        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn);
 
         Action act = () => b.Build();
         act.Should()
-            .Throw<InvalidOperationException>()
-            .WithMessage("*UseRabbitMqInvalidation*WithInMemoryCache*");
+            .Throw<InvalidOperationException>(
+                "persisted operations refuse to start until the host says how a change reaches "
+                    + "every node (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md)"
+            )
+            .WithMessage("*UseRabbitMqInvalidation*SingleNode()*");
+    }
+
+    [Test]
+    public void Build_BothABroadcasterAndSingleNode_RefusesToStart()
+    {
+        var b = new PersistedOperationsBuilder()
+            .UseDatabase(FakeConn)
+            .SingleNode()
+            .UseRabbitMqInvalidation("amqp://localhost");
+
+        Action act = () => b.Build();
+        act.Should().Throw<InvalidOperationException>().WithMessage("*contradict*");
+    }
+
+    [Test]
+    public void Build_RabbitMqWithoutTheTraxCache_Succeeds()
+    {
+        // The broadcast empties HotChocolate's caches too, which exist whether or not the Trax
+        // lookup cache is on, so it is not tied to WithInMemoryCache.
+        var opts = new PersistedOperationsBuilder()
+            .UseDatabase(FakeConn)
+            .UseRabbitMqInvalidation("amqp://localhost")
+            .Build();
+
+        opts.CacheEnabled.Should().BeFalse();
+        opts.RabbitMqConnectionString.Should().Be("amqp://localhost");
+        opts.SingleNode.Should().BeFalse();
     }
 
     [Test]
@@ -73,6 +110,7 @@ public class BuilderValidationTests
     {
         var b = new PersistedOperationsBuilder()
             .UseDatabase(FakeConn)
+            .SingleNode()
             .AllowOperations("ValidName", string.Empty);
 
         Action act = () => b.Build();
@@ -94,6 +132,7 @@ public class BuilderValidationTests
     {
         var opts = new PersistedOperationsBuilder()
             .UseDatabase(FakeConn)
+            .SingleNode()
             .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(5)))
             .Build();
 
@@ -145,6 +184,7 @@ public class BuilderValidationTests
     {
         var opts = new PersistedOperationsBuilder()
             .UseDatabase(FakeConn)
+            .SingleNode()
             .DisableIntrospection()
             .Build();
 

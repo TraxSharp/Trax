@@ -441,9 +441,8 @@ public class QueryModelTypeModuleTests
         // (namespace fields + namespace field on DiscoverQueries)
         types.OfType<ObjectTypeExtension>().Should().HaveCount(2);
 
-        // Namespace type should be tracked
-        config.RegisteredNamespaceTypes.Should().Contain("GameDiscoverQueries");
-        config.RegisteredNamespaceTypes.Should().Contain("DiscoverQueries.game");
+        // One namespace base type (GameDiscoverQueries), declared by this module
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
     }
 
     [Test]
@@ -467,7 +466,7 @@ public class QueryModelTypeModuleTests
 
         // Should still have one extension directly on DiscoverQueries
         types.OfType<ObjectTypeExtension>().Should().HaveCount(1);
-        config.RegisteredNamespaceTypes.Should().BeEmpty();
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(0);
     }
 
     [Test]
@@ -511,7 +510,7 @@ public class QueryModelTypeModuleTests
         // Root model extension on DiscoverQueries + namespace field extension on DiscoverQueries
         // + namespace type extension (GameDiscoverQueries)
         types.OfType<ObjectTypeExtension>().Should().HaveCount(3);
-        config.RegisteredNamespaceTypes.Should().Contain("GameDiscoverQueries");
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
     }
 
     #endregion

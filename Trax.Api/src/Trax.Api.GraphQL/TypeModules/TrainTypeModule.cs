@@ -5,6 +5,7 @@ using HotChocolate.Types.Descriptors;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.Validation;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -36,10 +37,13 @@ public partial class TrainTypeModule(
     {
         var registrations = discoveryService.DiscoverTrains();
         var types = new List<ITypeSystemMember>();
-        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var trainNames = AssignTrainNames(registrations);
         var usedInputTypes = new HashSet<Type>();
         var usedOutputTypes = new HashSet<Type>();
         var mutationFields = new List<(TrainRegistration Registration, string TrainName)>();
+        var responseTypeNames = new Dictionary<TrainRegistration, string>(
+            ReferenceEqualityComparer.Instance
+        );
         var queryFields = new List<(TrainRegistration Registration, string TrainName)>();
         var needsExecutionModeEnum = false;
 
@@ -73,13 +77,7 @@ public partial class TrainTypeModule(
                 );
             }
 
-            // Derive a unique GraphQL name — fall back to fully-qualified name on collision
-            var trainName = reg.GraphQLName ?? DeriveTrainName(reg.ServiceTypeName);
-            if (!usedNames.Add(trainName))
-            {
-                trainName = DeriveTrainName(reg.ServiceType.FullName ?? reg.ServiceTypeName);
-                usedNames.Add(trainName);
-            }
+            var trainName = trainNames[reg];
 
             // Register HotChocolate InputObjectType / ObjectType once per CLR type.
             // Skip Unit — it has no properties, so InputObjectType<Unit> is invalid in HotChocolate.
@@ -113,6 +111,7 @@ public partial class TrainTypeModule(
                     ? $"{trainName}MutationResponse"
                     : defaultResponseName;
                 types.Add(BuildResponseType(responseTypeName, reg));
+                responseTypeNames[reg] = responseTypeName;
 
                 if (
                     reg.GraphQLOperations.HasFlag(GraphQLOperation.Run)
@@ -137,13 +136,19 @@ public partial class TrainTypeModule(
                 new ObjectTypeExtension(d =>
                 {
                     d.Name("RootMutation");
-                    d.Field("dispatch")
+                    NamespaceField
+                        .Mark(d.Field("dispatch"))
                         .Type<ObjectType<DispatchMutations>>()
                         .Resolve(_ => new DispatchMutations());
                 })
             );
 
-            AddGroupedFields(types, mutationFields, "DispatchMutations", AddMutationField);
+            AddGroupedFields(
+                types,
+                mutationFields,
+                "DispatchMutations",
+                (d, reg, name) => AddMutationField(d, reg, name, responseTypeNames[reg])
+            );
         }
 
         // Register DiscoverQueries type + extend RootQuery with a "discover" field.
@@ -160,7 +165,8 @@ public partial class TrainTypeModule(
                     new ObjectTypeExtension(d =>
                     {
                         d.Name("RootQuery");
-                        d.Field("discover")
+                        NamespaceField
+                            .Mark(d.Field("discover"))
                             .Type<ObjectType<DiscoverQueries>>()
                             .Resolve(_ => new DiscoverQueries());
                     })
@@ -171,6 +177,65 @@ public partial class TrainTypeModule(
         }
 
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
+    }
+
+    /// <summary>
+    /// Gives every exposed train its GraphQL name: the attribute's <c>Name</c>, or one derived
+    /// from the interface name (<c>ICreatePlayerTrain</c> becomes <c>CreatePlayer</c>). Two
+    /// trains whose names would produce the same field in the same place (the same root and
+    /// namespace), or two mutation trains that would produce the same response type, refuse the
+    /// schema, naming both trains, so the host sets <c>Name</c> on one of them. A name is never
+    /// chosen silently on a train's behalf. See docs/adr/0001-a-misconfigured-host-fails-at-startup.md.
+    /// </summary>
+    internal static Dictionary<TrainRegistration, string> AssignTrainNames(
+        IEnumerable<TrainRegistration> registrations
+    )
+    {
+        var names = new Dictionary<TrainRegistration, string>(ReferenceEqualityComparer.Instance);
+        var fieldOwners = new Dictionary<string, TrainRegistration>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        var responseOwners = new Dictionary<string, TrainRegistration>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        var clashes = new List<string>();
+
+        foreach (var reg in registrations)
+        {
+            if (!reg.IsQuery && !reg.IsMutation)
+                continue;
+
+            var trainName = reg.GraphQLName ?? DeriveTrainName(reg.ServiceTypeName);
+            names[reg] = trainName;
+
+            var parent = reg.IsQuery ? "discover" : "dispatch";
+            var place = reg.GraphQLNamespace is { } ns ? $"{parent} {{ {CamelCase(ns)} }}" : parent;
+            var fieldName = CamelCase(trainName);
+
+            if (!fieldOwners.TryAdd($"{place}/{fieldName}", reg))
+            {
+                clashes.Add(
+                    $"'{fieldOwners[$"{place}/{fieldName}"].ServiceType.FullName}' and "
+                        + $"'{reg.ServiceType.FullName}' both map to the field '{fieldName}' under {place}"
+                );
+                continue;
+            }
+
+            if (reg.IsMutation && !responseOwners.TryAdd(trainName, reg))
+                clashes.Add(
+                    $"'{responseOwners[trainName].ServiceType.FullName}' and "
+                        + $"'{reg.ServiceType.FullName}' both map to the response type '{trainName}Response'"
+                );
+        }
+
+        if (clashes.Count > 0)
+            throw new InvalidOperationException(
+                "Two exposed trains map to the same GraphQL name: "
+                    + string.Join("; ", clashes)
+                    + ". Set Name on [TraxQuery] or [TraxMutation] to give one of them its own name."
+            );
+
+        return names;
     }
 
     /// <summary>
@@ -186,7 +251,9 @@ public partial class TrainTypeModule(
         Action<IObjectTypeDescriptor, TrainRegistration, string> addField
     )
     {
-        var byNamespace = fields.GroupBy(f => f.Registration.GraphQLNamespace);
+        var byNamespace = fields.GroupBy(f =>
+            f.Registration.GraphQLNamespace is { } ns ? CamelCase(ns) : null
+        );
 
         foreach (var group in byNamespace)
         {
@@ -201,47 +268,40 @@ public partial class TrainTypeModule(
                             addField(d, reg, name);
                     })
                 );
+                continue;
             }
-            else
-            {
-                // Namespace — create intermediate type and add fields to it
-                var nsTypeName = NamespaceTypeName(group.Key, parentTypeName);
-                var nsFieldName = CamelCase(group.Key);
 
-                // Register the base ObjectType for this namespace (only once across modules)
-                if (graphQLConfiguration?.RegisteredNamespaceTypes.Add(nsTypeName) ?? true)
+            // Namespace — an intermediate type (e.g. "AlertsDiscoverQueries") holds the fields,
+            // reached through a field on the parent type.
+            var nsTypeName = NamespaceTypeName(group.Key, parentTypeName);
+
+            // A DiscoverQueries namespace that also holds query models belongs to
+            // QueryModelTypeModule, which declares its type and field. Decided from the
+            // registrations on every build, so building the schema twice builds it the same way.
+            if (!NamespaceOwnedByQueryModels(parentTypeName, group.Key))
+                types.Add(NamespaceTypes.Base(nsTypeName));
+
+            types.Add(
+                new ObjectTypeExtension(d =>
                 {
-                    types.Add(new ObjectType(d => d.Name(nsTypeName)));
-                }
+                    d.Name(nsTypeName);
+                    foreach (var (reg, name) in group)
+                        addField(d, reg, name);
+                })
+            );
 
-                // Add fields to the namespace type
-                types.Add(
-                    new ObjectTypeExtension(d =>
-                    {
-                        d.Name(nsTypeName);
-                        foreach (var (reg, name) in group)
-                            addField(d, reg, name);
-                    })
-                );
-
-                // Add the namespace field to the parent type (only once across modules)
-                var nsFieldKey = $"{parentTypeName}.{nsFieldName}";
-                if (graphQLConfiguration?.RegisteredNamespaceTypes.Add(nsFieldKey) ?? true)
-                {
-                    var capturedNsTypeName = nsTypeName;
-                    types.Add(
-                        new ObjectTypeExtension(d =>
-                        {
-                            d.Name(parentTypeName);
-                            d.Field(nsFieldName)
-                                .Type(new NamedTypeNode(capturedNsTypeName))
-                                .Resolve(_ => new object());
-                        })
-                    );
-                }
-            }
+            if (!NamespaceOwnedByQueryModels(parentTypeName, group.Key))
+                types.Add(NamespaceTypes.Field(parentTypeName, group.Key, nsTypeName));
         }
     }
+
+    private bool NamespaceOwnedByQueryModels(string parentTypeName, string namespaceField) =>
+        parentTypeName == "DiscoverQueries"
+        && graphQLConfiguration is not null
+        && graphQLConfiguration.ModelRegistrations.Any(m =>
+            m.Attribute.Namespace is { } ns
+            && string.Equals(CamelCase(ns), namespaceField, StringComparison.Ordinal)
+        );
 
     /// <summary>
     /// Builds the ExecutionMode enum type with RUN and QUEUE values.

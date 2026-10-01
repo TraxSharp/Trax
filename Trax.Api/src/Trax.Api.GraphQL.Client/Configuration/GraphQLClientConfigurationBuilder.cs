@@ -74,15 +74,6 @@ public class GraphQLClientConfigurationBuilder
     public bool DisposeHttpClient { get; set; } = false;
 
     /// <summary>
-    /// Has no effect: nothing reads it, and it is not carried into the built configuration. To
-    /// validate request types up front, call <c>UseStartupValidation(...)</c> from
-    /// <c>Trax.Api.GraphQL.Client.Trax</c>, or
-    /// <see cref="GraphQLClientValidatorExtensions.ValidateAssembliesAsync(IGraphQLClientValidator, IEnumerable{System.Reflection.Assembly}, CancellationToken)"/>
-    /// yourself.
-    /// </summary>
-    public bool ValidateAssemblies { get; set; } = false;
-
-    /// <summary>
     /// Subscriptions in the schema require a subscription type on every client query regardless
     /// of intent, so they may be removed from the introspected schema if subscriptions aren't used.
     /// </summary>

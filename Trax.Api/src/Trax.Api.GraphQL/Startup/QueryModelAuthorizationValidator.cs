@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Hosting;
+using Trax.Api.Auth;
 using Trax.Api.GraphQL.Configuration;
 
 namespace Trax.Api.GraphQL.Startup;
@@ -19,9 +20,9 @@ namespace Trax.Api.GraphQL.Startup;
 internal sealed class QueryModelAuthorizationValidator(
     GraphQLConfiguration configuration,
     IAuthorizationPolicyProvider policyProvider
-) : IHostedService
+) : StartupGate
 {
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -45,6 +46,4 @@ internal sealed class QueryModelAuthorizationValidator(
             }
         }
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

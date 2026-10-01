@@ -7,13 +7,17 @@ status: accepted
 # Only a TrainException's own message reaches the client
 
 A `TrainException` message is passed to GraphQL clients because a train author writes it for
-them. A `TrainException` can also carry another exception: a remote worker's failure comes home
-as `TrainExceptionData` JSON naming the worker's exception type and message, and the scheduler's
-remote executors wrap a worker's HTTP reply in a message of their own. Those carry text nobody
-wrote for a client. So `TraxErrorFilter` passes a message through only when it is a train
-author's: a plain message, or the carried message of a carried `TrainException`. Every other
-carried type, and the remote-transport messages, become `"The train failed."` with the same
-`TRAX_TRAIN_ERROR` code. The full detail is still recorded in the metadata row and the logs.
+them. A `TrainException` can also carry another exception: a nested train's failure comes home
+as `TrainExceptionData` JSON naming the exception type and message, and a run on a remote runner
+fails as a `RemoteRunException` whose message is the calling side's full record of the failure,
+the runner's reply included. Those carry text nobody wrote for a client. So `TraxErrorFilter`
+passes a message through only when it is a train author's: a plain message, the carried message
+of a carried `TrainException`, or a `RemoteRunException`'s `PublicMessage`, which the runner sets
+only from a train author's own `TrainException`
+([docs/0028](../../../Trax.Docs/adr/0028-a-remote-runs-client-message-is-chosen-by-the-runner.md)).
+Every other carried type, and every remote failure without a public message, transport failures
+included, becomes `"The train failed."` with the same `TRAX_TRAIN_ERROR` code. The full detail is
+still recorded in the metadata row and the logs.
 
 ## Status
 
@@ -29,21 +33,22 @@ network failure is internal detail.
 client: a train author's refusal ("Order 42 is already closed") would read the same as a
 crashed worker.
 
-**Have the scheduler carry a separate public message.** The better end state, because it stops
-the filter from reading the scheduler's message formats. It needs a scheduler release and a
-new field on the remote response; the filter's rule is what holds until then, and it stays
-correct afterwards.
+**Recognise the scheduler's remote-transport messages by prefix.** What this filter did until
+Trax.Scheduler 1.34.0 shipped `RemoteRunException.PublicMessage`. It coupled the API to strings
+another repo writes, and it missed the Lambda executor's `"Lambda function '…' returned error"`,
+which matched neither prefix. Replaced by the public message, the end state this option was
+waiting for.
 
 ## Exemplars
 
 - `TraxErrorFilterTests` pins the public shape of each exception type, including a remote
-  failure carrying a driver exception, a carried `TrainException`, a remote failure with no
-  type, and a non-success status from the remote endpoint.
-
-Not covered: the remote-transport messages are recognised by the prefixes the scheduler builds
-today. A new message format in the scheduler that does not use them passes through until the
-filter learns it.
+  failure carrying a driver exception, a remote `TrainException` with and without a public
+  message, a remote failure with no type, a non-success status from the remote endpoint, a
+  Lambda function error, and a plain `TrainException` whose wording resembles a transport
+  failure (it passes through: the filter reads the type, not the text).
 
 ## Changelog
 
+- **2026-09-30**: A remote failure is read from `RemoteRunException.PublicMessage` (docs/0028)
+  instead of by the transport messages' prefixes, which missed the Lambda executor's.
 - **2026-09-27**: Recorded.

@@ -98,6 +98,13 @@ public static class TraxPrincipalExtensions
     /// <see cref="TraxPrincipal.Id"/> is the qualified id the claim carries,
     /// <c>{scheme}:{id}</c>.
     /// </summary>
+    /// <remarks>
+    /// Every value is the first of its claim type, in the principal's claim order, the value
+    /// <see cref="ClaimsPrincipal.FindFirst(string)"/> returns. A principal that merges several
+    /// identities (a policy naming several schemes) therefore reads as its first identity, and a
+    /// custom claim type carried more than once keeps its first value. Read
+    /// <see cref="ClaimsPrincipal.FindAll(string)"/> for every value of a multi-valued claim.
+    /// </remarks>
     public static bool TryGetTraxPrincipal(
         this ClaimsPrincipal claimsPrincipal,
         [NotNullWhen(true)] out TraxPrincipal? principal
@@ -116,9 +123,16 @@ public static class TraxPrincipalExtensions
         var roles = claimsPrincipal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
         var principalType = claimsPrincipal.FindFirst(TraxAuthClaimTypes.PrincipalType)?.Value;
 
-        var customClaims = claimsPrincipal
-            .Claims.Where(c => !ReservedClaimTypes.Contains(c.Type))
-            .ToDictionary(c => c.Type, c => c.Value, StringComparer.Ordinal);
+        // A claim type can repeat: an IClaimsTransformation adding one claim per permission, or a
+        // policy naming several schemes, whose evaluator merges each scheme's identity into one
+        // principal. The first value of each type is kept, the one FindFirst returns, so the bag
+        // agrees with the id, name and type read above.
+        var customClaims = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var claim in claimsPrincipal.Claims)
+        {
+            if (!ReservedClaimTypes.Contains(claim.Type))
+                customClaims.TryAdd(claim.Type, claim.Value);
+        }
 
         principal = new TraxPrincipal(
             Id: idClaim.Value,

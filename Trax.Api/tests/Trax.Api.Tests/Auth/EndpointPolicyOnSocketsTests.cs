@@ -21,6 +21,7 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -256,6 +257,7 @@ public class EndpointPolicyOnSocketsTests
             Substitute.For<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
         );
         services.AddScoped(_ => scheduler);
+        services.AddScoped(_ => Substitute.For<IJobSubmitter>());
     }
 
     private static void Pipeline(IApplicationBuilder app)

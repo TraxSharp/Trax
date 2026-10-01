@@ -5,6 +5,8 @@ namespace Trax.Api.GraphQL.Client;
 /// <summary>
 /// Loads the schema from a checked-in SDL file (typically <c>schema.graphql</c>). The file is
 /// read once, parsed into an <see cref="ISchema"/>, and cached for the lifetime of the provider.
+/// A read that fails (the file is missing, empty or not valid SDL) is not cached, so the next
+/// call reads the file again.
 ///
 /// Use this when:
 /// <list type="bullet">
@@ -20,7 +22,7 @@ namespace Trax.Api.GraphQL.Client;
 public class FileSchemaProvider : ISchemaProvider
 {
     private readonly string _path;
-    private readonly Lazy<Task<ISchema>> _schema;
+    private readonly RetryingAsyncLazy<ISchema> _schema;
 
     /// <summary>Creates a provider for the SDL file at <paramref name="path"/>. The file is not read until the schema is first requested.</summary>
     /// <param name="path">An absolute path, or one relative to the process's working directory.</param>
@@ -29,15 +31,17 @@ public class FileSchemaProvider : ISchemaProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _path = path;
-        _schema = new Lazy<Task<ISchema>>(
-            LoadSchemaAsync,
-            LazyThreadSafetyMode.ExecutionAndPublication
-        );
+        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the schema, loading it on the first call and sharing the result. A load that
+    /// fails is not kept, so the next call loads again. <paramref name="cancellationToken"/>
+    /// cancels this caller's wait, not a load other callers share.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels waiting for the schema.</param>
     public Task<ISchema> GetSchemaAsync(CancellationToken cancellationToken = default) =>
-        _schema.Value;
+        _schema.GetValueAsync(cancellationToken);
 
     private async Task<ISchema> LoadSchemaAsync()
     {

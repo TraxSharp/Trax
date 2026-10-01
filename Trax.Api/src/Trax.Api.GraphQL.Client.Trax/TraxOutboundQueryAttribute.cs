@@ -5,7 +5,8 @@ namespace Trax.Api.GraphQL.Client.Trax;
 /// external GraphQL endpoint, so tooling can answer "which requests in this app call which
 /// servers" without grepping the codebase.
 ///
-/// The attribute is metadata-only: applying it does not change runtime behavior.
+/// The attribute is metadata-only: applying it does not change runtime behavior, and it does not
+/// say which keyed client validates the request; <see cref="GraphQLClientAttribute"/> does that.
 /// <see cref="OutboundQueryDiscovery"/> reads it; the dashboard does not display it today.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]

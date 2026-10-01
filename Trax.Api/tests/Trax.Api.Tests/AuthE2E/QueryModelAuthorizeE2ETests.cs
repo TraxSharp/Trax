@@ -504,6 +504,137 @@ public class QueryModelAuthorizeE2ETests
         raw.Should().NotContain("Admin", "role name should not leak in the error body");
     }
 
+    // ── Filter and sort inputs carry the target type's authorization ─────
+
+    private const string PublicBooksFilteredByLinkedBookQuery = """
+        {
+          discover {
+            vault {
+              publicBooks(where: { linkedOwnedBook: { title: { startsWith: "Alice" } } }) {
+                nodes { title }
+              }
+            }
+          }
+        }
+        """;
+
+    private const string PublicBooksSortedByLinkedBookQuery = """
+        {
+          discover {
+            vault {
+              publicBooks(order: [{ linkedOwnedBook: { title: DESC } }]) {
+                nodes { title }
+              }
+            }
+          }
+        }
+        """;
+
+    private const string OwnersFilteredByBooksQuery = """
+        {
+          discover {
+            vault {
+              owners(where: { books: { some: { title: { startsWith: "Bob" } } } }) {
+                nodes { name }
+              }
+            }
+          }
+        }
+        """;
+
+    [Test]
+    public async Task FilterThroughGatedNavigation_Anonymous_ReturnsAuthorizationError()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(PublicBooksFilteredByLinkedBookQuery);
+
+        AssertTraxAuthorizationError(doc);
+        doc.RootElement.GetRawText().Should().NotContain("Alice's Public Notice");
+    }
+
+    [Test]
+    public async Task FilterThroughGatedNavigation_AsPlayer_ReturnsAuthorizationError()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(
+            PublicBooksFilteredByLinkedBookQuery,
+            req => req.Headers.Add("X-Api-Key", PlayerApiKey)
+        );
+
+        AssertTraxAuthorizationError(doc);
+        doc.RootElement.GetRawText().Should().NotContain("Alice's Public Notice");
+    }
+
+    [Test]
+    public async Task FilterThroughGatedNavigation_AsAdmin_Filters()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(
+            PublicBooksFilteredByLinkedBookQuery,
+            req => req.Headers.Add("X-Api-Key", AdminApiKey)
+        );
+
+        AssertNoErrors(doc);
+        var nodes = VaultField(doc, "publicBooks").GetProperty("nodes");
+        nodes.GetArrayLength().Should().Be(1);
+        nodes[0].GetProperty("title").GetString().Should().Be("Alice's Public Notice");
+    }
+
+    [Test]
+    public async Task SortThroughGatedNavigation_Anonymous_ReturnsAuthorizationError()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(PublicBooksSortedByLinkedBookQuery);
+
+        AssertTraxAuthorizationError(doc);
+    }
+
+    [Test]
+    public async Task SortThroughGatedNavigation_AsAdmin_Sorts()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(
+            PublicBooksSortedByLinkedBookQuery,
+            req => req.Headers.Add("X-Api-Key", AdminApiKey)
+        );
+
+        AssertNoErrors(doc);
+    }
+
+    [Test]
+    public async Task FilterThroughGatedCollectionNavigation_AsPlayer_ReturnsAuthorizationError()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(
+            OwnersFilteredByBooksQuery,
+            req => req.Headers.Add("X-Api-Key", PlayerApiKey)
+        );
+
+        AssertTraxAuthorizationError(doc);
+        doc.RootElement.GetRawText().Should().NotContain("Bob");
+    }
+
+    [Test]
+    public async Task FilterOnOwnColumns_Anonymous_IsNotAffected()
+    {
+        using var host = await StartAsync(Schemes.ApiKey);
+
+        using var doc = await host.PostGraphQLAsync(
+            """
+            { discover { vault { publicBooks(where: { title: { startsWith: "Bob" } }) { nodes { title } } } } }
+            """
+        );
+
+        AssertNoErrors(doc);
+        VaultField(doc, "publicBooks").GetProperty("nodes").GetArrayLength().Should().Be(1);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private static JsonElement OwnedBooksField(JsonDocument doc) => VaultField(doc, "ownedBooks");

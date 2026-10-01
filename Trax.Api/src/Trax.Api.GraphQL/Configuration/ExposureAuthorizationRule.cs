@@ -82,7 +82,7 @@ internal static class ExposureAuthorizationRule
                     + "authorization posture explicitly: add [TraxAuthorize] (optionally with a "
                     + "policy or roles) to gate it, or [TraxAllowAnonymous] to open it to anonymous "
                     + "callers. To gate the entire endpoint instead, call "
-                    + "UseTraxGraphQL(configure: e => e.RequireAuthorization(...)).",
+                    + "AddTraxGraphQL(graphql => graphql.RequireAuthorization(...)).",
             ExposureViolation.Conflict =>
                 $"{surfaceLabel} '{surfaceName}' declares both [TraxAllowAnonymous] and "
                     + "[TraxAuthorize] (directly or via base/interface). The two are mutually "

@@ -15,7 +15,7 @@ namespace Trax.Api.GraphQL.Hooks;
 /// </summary>
 public class GraphQLSubscriptionHook : ITrainLifecycleHook
 {
-    private readonly ITopicEventSender _eventSender;
+    private readonly LifecycleEventPublisher _publisher;
     private readonly bool _streamAllTrains;
     private readonly HashSet<string> _enabledTrains;
 
@@ -32,7 +32,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         TrainLifecycleStreamOptions options
     )
     {
-        _eventSender = eventSender;
+        _publisher = LifecycleEventPublisher.For(eventSender);
         _streamAllTrains = options.StreamAllTrains;
         _enabledTrains = discoveryService
             .DiscoverTrains()
@@ -53,7 +53,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _eventSender.SendAsync(
+        await _publisher.PublishAsync(
             nameof(LifecycleSubscriptions.OnTrainStarted),
             MapEvent(metadata),
             ct
@@ -68,7 +68,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _eventSender.SendAsync(
+        await _publisher.PublishAsync(
             nameof(LifecycleSubscriptions.OnTrainCompleted),
             MapEvent(metadata),
             ct
@@ -87,7 +87,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _eventSender.SendAsync(
+        await _publisher.PublishAsync(
             nameof(LifecycleSubscriptions.OnTrainFailed),
             MapEvent(metadata),
             ct
@@ -102,7 +102,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _eventSender.SendAsync(
+        await _publisher.PublishAsync(
             nameof(LifecycleSubscriptions.OnTrainCancelled),
             MapEvent(metadata),
             ct
@@ -117,7 +117,7 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
         if (!ShouldPublish(metadata.Name))
             return;
 
-        await _eventSender.SendAsync(
+        await _publisher.PublishAsync(
             nameof(LifecycleSubscriptions.OnTrainStateChanged),
             MapEvent(metadata),
             ct

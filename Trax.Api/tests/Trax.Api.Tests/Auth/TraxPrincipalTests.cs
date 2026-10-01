@@ -418,4 +418,61 @@ public class TraxPrincipalTests
     }
 
     #endregion
+
+    #region Repeated claim types
+
+    [Test]
+    public void TryGetTraxPrincipal_ClaimTypeRepeated_ByAClaimsTransformation_DoesNotThrow()
+    {
+        // ASP.NET Core runs IClaimsTransformation after every successful authentication, and a
+        // transformation that adds one claim per permission is the usual shape.
+        var claimsPrincipal = new TraxPrincipal("alice", "Alice", ["User"]).ToClaimsPrincipal(
+            Scheme
+        );
+        var identity = (ClaimsIdentity)claimsPrincipal.Identity!;
+        identity.AddClaim(new Claim("permission", "orders:read"));
+        identity.AddClaim(new Claim("permission", "orders:write"));
+
+        var read = () => claimsPrincipal.TryGetTraxPrincipal(out _);
+
+        read.Should().NotThrow();
+        claimsPrincipal.TryGetTraxPrincipal(out var principal).Should().BeTrue();
+        principal!.Id.Should().Be($"{Scheme}:alice");
+        principal
+            .Claims!["permission"]
+            .Should()
+            .Be("orders:read", "the first value of a type wins, as FindFirst does");
+    }
+
+    [Test]
+    public void TryGetTraxPrincipal_TwoSchemesAuthenticatedTheRequest_DoesNotThrow()
+    {
+        // A policy naming several schemes authenticates each and merges the identities into one
+        // principal (AuthorizationPolicy's PolicyEvaluator does this for the combined Trax policy).
+        // Two JWT-shaped identities both carry the token's registered claims.
+        var first = new TraxPrincipal(
+            "alice",
+            "Alice",
+            ["User"],
+            Claims: new Dictionary<string, string> { ["iss"] = "https://a.example" }
+        ).ToClaimsPrincipal("SchemeA");
+        var second = new TraxPrincipal(
+            "alice",
+            "Alice",
+            ["User"],
+            Claims: new Dictionary<string, string> { ["iss"] = "https://b.example" }
+        ).ToClaimsPrincipal("SchemeB");
+        var merged = new ClaimsPrincipal(first.Identities.Concat(second.Identities));
+
+        var read = () => merged.TryGetTraxPrincipal(out _);
+
+        read.Should().NotThrow();
+        merged.TryGetTraxPrincipal(out var principal).Should().BeTrue();
+        principal!
+            .Id.Should()
+            .Be("SchemeA:alice", "the id and the claims come from the first identity");
+        principal.Claims!["iss"].Should().Be("https://a.example");
+    }
+
+    #endregion
 }

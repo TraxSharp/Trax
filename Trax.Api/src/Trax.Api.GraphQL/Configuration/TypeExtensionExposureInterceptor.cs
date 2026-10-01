@@ -6,6 +6,7 @@ using HotChocolate.Types.Descriptors.Configurations;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Subscriptions;
+using Trax.Api.GraphQL.TypeModules;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration;
@@ -48,6 +49,38 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
         typeof(RootQuery),
         typeof(RootMutation),
         typeof(LifecycleSubscriptions),
+    ];
+
+    /// <summary>
+    /// The namespaces Trax hangs off a root type through an ungated field (<c>discover</c>,
+    /// <c>dispatch</c>). A field grafted onto one is as reachable as a field on the root itself.
+    /// The per-namespace types Trax builds under them have runtime type <c>object</c>, so those
+    /// are recognised by the marker <see cref="NamespaceTypes.Base"/> sets on each one.
+    /// </summary>
+    private static readonly HashSet<Type> RootNamespaceTypes =
+    [
+        typeof(DiscoverQueries),
+        typeof(DispatchMutations),
+    ];
+
+    /// <summary>
+    /// The types under the <c>operations</c> field, whose posture is the one the host declared
+    /// for the whole namespace (api/0004).
+    /// </summary>
+    private static readonly HashSet<Type> OperationsTypes =
+    [
+        typeof(OperationsQueries),
+        typeof(DeadLetterQueries),
+        typeof(WorkQueueQueries),
+        typeof(ManifestGroupQueries),
+        typeof(LogQueries),
+        typeof(MetricsQueries),
+        typeof(ConfigQueries),
+        typeof(OperationsMutations),
+        typeof(DeadLetterMutations),
+        typeof(WorkQueueMutations),
+        typeof(ManifestGroupMutations),
+        typeof(ConfigMutations),
     ];
 
     public TypeExtensionExposureInterceptor(
@@ -96,41 +129,8 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
             if (!declaration.HasAuthorize)
                 continue;
 
-            Emit(discoveryContext, field, declaration.Authorize);
+            AuthorizeDirectives.Emit(field, declaration.Authorize, discoveryContext.TypeInspector);
         }
-    }
-
-    /// <summary>
-    /// Emits one <c>@authorize</c> per policy plus a single unioned roles directive, matching
-    /// <see cref="AuthorizeDirectives"/> exactly so a train, an entity and a resolver carrying the
-    /// same attribute get the same rules.
-    /// </summary>
-    private static void Emit(
-        ITypeDiscoveryContext context,
-        ObjectFieldConfiguration field,
-        IReadOnlyList<TraxAuthorizeAttribute> attributes
-    )
-    {
-        AuthorizeDirectives.ExtractRules(attributes, out var policies, out var roles);
-
-        // ConfigurationHelper is how HotChocolate itself turns a directive instance into a
-        // configuration: it builds the type reference from the inspector, which is not something
-        // a caller can construct.
-        var inspector = context.TypeInspector;
-
-        foreach (var policy in policies)
-            field.AddDirective(
-                new AuthorizeDirective(policy, apply: ApplyPolicy.BeforeResolver),
-                inspector
-            );
-
-        if (roles.Length > 0)
-            field.AddDirective(
-                new AuthorizeDirective(roles, apply: ApplyPolicy.BeforeResolver),
-                inspector
-            );
-        else if (policies.Length == 0)
-            field.AddDirective(new AuthorizeDirective(ApplyPolicy.BeforeResolver), inspector);
     }
 
     // ── Phase 2: the census, on the merged type ─────────────────────────
@@ -147,7 +147,7 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
         if (configuration is not ObjectTypeConfiguration objectType)
             return;
 
-        var parent = ResolveParentPosture(objectType.RuntimeType);
+        var parent = ResolveParentPosture(objectType);
 
         foreach (var field in objectType.Fields)
         {
@@ -189,7 +189,26 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
             );
 
             if (violation is ExposureViolation.None)
+            {
+                // The census accepted a [TraxAuthorize] field on the strength of the gate Phase 1
+                // emits, so the gate has to be there. Asserting it keeps the two phases from
+                // reading different members again.
+                if (
+                    declaration.HasAuthorize
+                    && !declaration.AllowAnonymous
+                    && !field.Directives.Any(d => d.Value is AuthorizeDirective)
+                )
+                    _report.Add(
+                        new TypeExtensionExposureViolation(
+                            fieldPath,
+                            $"GraphQL field '{fieldPath}' ({resolver}) declares [TraxAuthorize], "
+                                + "but no @authorize directive was emitted for it, so the field "
+                                + "would be served ungated. This is a defect in Trax, not in the "
+                                + "host: report it."
+                        )
+                    );
                 continue;
+            }
 
             _report.Add(
                 new TypeExtensionExposureViolation(
@@ -197,7 +216,7 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
                     TypeExtensionExposureRule.BuildMessage(
                         fieldPath,
                         resolver,
-                        DescribeParent(objectType.RuntimeType, parent),
+                        DescribeParent(objectType, parent),
                         violation
                     )
                 )
@@ -280,12 +299,15 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
     }
 
     /// <summary>
-    /// The resolver behind a field, when it is a method Trax can read attributes off. A field with
+    /// The member behind a field, method or property, that Trax reads a posture off. A property
+    /// carries no attribute of its own (<c>[TraxAuthorize]</c> does not apply to one), but a field
+    /// HotChocolate builds from an extension class's property takes the class-level posture
+    /// exactly as a method does, so emission and the census read the same members. A field with
     /// no member is a resolver built inline (Trax's own <c>discover</c> and <c>operations</c>
     /// entry fields are built this way), which has no declaration site for an attribute.
     /// </summary>
-    private static MethodInfo? Resolver(ObjectFieldConfiguration field) =>
-        (field.ResolverMember ?? field.Member) as MethodInfo;
+    private static MemberInfo? Resolver(ObjectFieldConfiguration field) =>
+        field.ResolverMember ?? field.Member;
 
     /// <summary>
     /// The CLR member behind a field that a type extension contributed, or <c>null</c> when the
@@ -305,19 +327,41 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
             : null;
     }
 
-    private TypeExtensionParentPosture ResolveParentPosture(Type runtimeType)
+    private TypeExtensionParentPosture ResolveParentPosture(ObjectTypeConfiguration objectType)
     {
-        // A root type has nothing above it, so a field on one inherits nothing.
-        if (RootTypes.Contains(runtimeType))
+        var runtimeType = objectType.RuntimeType;
+
+        // A root type has nothing above it, so a field on one inherits nothing; nor does a field
+        // on a namespace Trax reaches from the root through an ungated field.
+        if (IsRootLike(objectType))
             return TypeExtensionParentPosture.Anonymous;
+
+        // The operations namespace always carries a declared posture before the schema exists:
+        // the builder refuses to expose it without GateOperations(), RequireAuthorization() or
+        // AllowAnonymousOperations() (api/0004). A field grafted onto it, Trax's own persisted
+        // operation namespaces among them, inherits that decision.
+        if (OperationsTypes.Contains(runtimeType))
+            return _configuration.OperationsAuthorizeAttributes.Count > 0
+                ? TypeExtensionParentPosture.Gated
+                : TypeExtensionParentPosture.NotExposed;
 
         return _postureByEntityType.TryGetValue(runtimeType, out var posture)
             ? posture
             : TypeExtensionParentPosture.NotExposed;
     }
 
-    private static string DescribeParent(Type runtimeType, TypeExtensionParentPosture parent) =>
-        parent is TypeExtensionParentPosture.Anonymous && RootTypes.Contains(runtimeType)
-            ? $"the schema root type '{runtimeType.Name}'"
-            : $"'{runtimeType.Name}', which is [TraxAllowAnonymous]";
+    private bool IsRootLike(ObjectTypeConfiguration objectType) =>
+        RootTypes.Contains(objectType.RuntimeType)
+        || RootNamespaceTypes.Contains(objectType.RuntimeType)
+        || NamespaceTypes.IsDeclaredNamespace(objectType);
+
+    private string DescribeParent(
+        ObjectTypeConfiguration objectType,
+        TypeExtensionParentPosture parent
+    ) =>
+        parent is not TypeExtensionParentPosture.Anonymous ? $"'{objectType.Name}'"
+        : RootTypes.Contains(objectType.RuntimeType) ? $"the schema root type '{objectType.Name}'"
+        : IsRootLike(objectType)
+            ? $"'{objectType.Name}', a namespace reached from the schema root through an ungated field"
+        : $"'{objectType.Name}', which is [TraxAllowAnonymous]";
 }

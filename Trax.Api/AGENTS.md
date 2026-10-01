@@ -18,7 +18,11 @@ if your work contradicts one, say so rather than silently overriding it.
 | anything in an `AddTrax*` extension | [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md), before you read the `IServiceCollection` |
 | a new host-configuration surface | [0001](./docs/adr/0001-a-misconfigured-host-fails-at-startup.md), it needs a startup validator |
 | subscriptions or socket auth | both, in that order, then [0006](./docs/adr/0006-one-socket-interceptor-composes-every-token-scheme.md), which removed the ordering from subscription auth. This is where the silent failure happened |
+| query models: navigations, filter or sort inputs, `BindFields`/`ExposeAs` | [0025](./docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md): every entity a model reaches declares its posture, and the inputs follow the exposed field set and the target's gate |
+| a type extension, type module or `ConfigureSchema` field | [0003](./docs/adr/0003-a-type-extension-field-declares-its-own-posture.md), the field declares its own posture unless its parent's gate covers it |
 | the HTTP transport (GET, preflight headers, `ModifyServerOptions`) | [0024](./docs/adr/0024-graphql-get-is-off-unless-the-host-opts-in.md), GET is off unless the host opts in |
+| `MaxOperationsPerRequest`, or a new namespace field | [0029](./docs/adr/0029-the-operation-cap-counts-the-operations-under-each-namespace.md): the cap counts the fields under each namespace, so a field that only groups others must be marked with `NamespaceField` |
+| persisted-operation ids, their caches, or cross-node invalidation | [0026](./docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): an id runs only the stored document, and a host declares a broadcaster or `SingleNode()` |
 | how a socket validates a JWT | [0022](./docs/adr/0022-a-socket-authenticates-through-the-schemes-handler.md): through the scheme's own handler, never a copy of its validation |
 | the principal id, or anything keyed on it | [0023](./docs/adr/0023-a-principal-id-is-qualified-by-its-scheme.md): it is `{scheme}:{id}`, built only by `ToClaimsPrincipal` |
 | `queueTrain` or `requeueExecution` | central `docs/0017`, they enqueue through the mediator so per-train authorization applies; manifest triggers and dead-letter requeues are governed by the operations gate |
@@ -63,9 +67,10 @@ no site in this repo to build a work queue row (`docs/0017`);
 `NoSilentRegistrationOrderDependenceTests` is unique to this repo and is the census behind
 [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md).
 
-Five runtime validators fail the host at startup rather than at request time: four under
+Seven runtime validators fail the host at startup rather than at request time: six under
 `src/Trax.Api.GraphQL/Startup/` and `TraxGraphQLAuthPolicyValidator` alongside the
-authorization code. They are `IHostedService`s so they run after the container is complete.
+authorization code. They derive from `StartupGate` and check in `StartingAsync`, after the
+container is complete and before Kestrel or any worker starts (Api ADR 0001).
 `QueryModelScalarCollectionIndexValidator` sits beside them and is advisory: it logs a
 missing-index warning and never blocks startup.
 

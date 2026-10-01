@@ -1,6 +1,7 @@
 using HotChocolate.Types;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.GraphQL.Validation;
 
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 
@@ -17,6 +18,7 @@ internal sealed class OperationsQueriesPersistedOperationsExtension
     /// Nested namespace exposing persisted-operation queries (paged list,
     /// single lookup, audit history).
     /// </summary>
+    [NamespaceField]
     public PersistedOperationQueries PersistedOperations() => new();
 }
 
@@ -31,5 +33,6 @@ internal sealed class OperationsMutationsPersistedOperationsExtension
     /// Nested namespace exposing persisted-operation mutations (upload,
     /// deactivate, restore).
     /// </summary>
+    [NamespaceField]
     public PersistedOperationMutations PersistedOperations() => new();
 }

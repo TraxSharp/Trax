@@ -3,10 +3,16 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration;
 public sealed partial class PersistedOperationsBuilder
 {
     /// <summary>
-    /// Enable an in-memory cache layer over the storage. Default is no cache:
-    /// every request hits the database. Caching is purely an optimization;
-    /// the default path is correct for almost every deployment.
+    /// Cache the store's lookups in memory, so a request for an id HotChocolate has not cached
+    /// yet does not read the database. Off by default.
     /// </summary>
+    /// <remarks>
+    /// This is the second of two cache layers. HotChocolate always caches the parsed document and
+    /// the prepared operation for each id it serves, so with this off the database is read the
+    /// first time a node serves an id, and again after a change to any operation empties those
+    /// caches. Either way a change reaches other nodes only through
+    /// <see cref="UseRabbitMqInvalidation"/>; the TTL here bounds only this layer.
+    /// </remarks>
     public PersistedOperationsBuilder WithInMemoryCache(Action<CacheOptions>? configure = null)
     {
         if (_cacheConfigured)
@@ -36,9 +42,10 @@ public sealed class CacheOptions
     internal CacheOptions() { }
 
     /// <summary>
-    /// Time-to-live for cached entries. Defaults to 15 minutes when null.
-    /// Acts as a backstop only; broadcast invalidation is the primary
-    /// invalidation mechanism for multi-node deployments.
+    /// Time-to-live for cached entries. Defaults to 15 minutes when null. Bounds only the Trax
+    /// lookup cache: HotChocolate's document and prepared-operation caches do not expire, so on
+    /// more than one node the broadcast from <c>UseRabbitMqInvalidation</c> is what keeps them
+    /// current, not this.
     /// </summary>
     public TimeSpan? Ttl { get; private set; }
 

@@ -26,6 +26,7 @@
     <InternalsVisibleTo Include="Trax.Api.Auth.ApiKey" />
     <InternalsVisibleTo Include="Trax.Api.Auth.Jwt" />
     <InternalsVisibleTo Include="Trax.Api.Auth.Oidc" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
     <InternalsVisibleTo Include="Trax.Api.Tests" />
   </ItemGroup>
 

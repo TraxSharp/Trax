@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Instrumentation;
 using HotChocolate.Execution.Processing;
@@ -165,15 +166,21 @@ public sealed class TraxGraphQLAuditListener(
     }
 
     /// <summary>
-    /// Returns the document as sent, or, past <see cref="TraxAuditOptions.MaxDocumentLength"/>,
-    /// its head followed by every field the compiled operation executes. The head alone can be
+    /// Returns the document with every string and numeric literal replaced by a placeholder
+    /// (<see cref="AuditLiteralStripper"/>), so a value written inline, such as
+    /// <c>login(password: "...")</c>, never reaches the sink. Past
+    /// <see cref="TraxAuditOptions.MaxDocumentLength"/> it returns
+    /// the head of that document followed by every field the compiled operation executes. The head alone can be
     /// filled by padding placed ahead of the fields that matter; the field list cannot, because
     /// it is read from the compiled operation after fragment expansion and holds each schema
     /// coordinate once, so its size is bounded by the schema rather than by the request.
     /// </summary>
     private string CaptureDocument(RequestContext context)
     {
-        var document = context.OperationDocumentInfo.Document?.ToString() ?? string.Empty;
+        var parsed = RequestDocument(context);
+        var document = parsed is null
+            ? string.Empty
+            : AuditLiteralStripper.Strip(parsed)?.ToString() ?? string.Empty;
         if (document.Length <= _options.MaxDocumentLength)
             return document;
 
@@ -188,6 +195,15 @@ public sealed class TraxGraphQLAuditListener(
             "]"
         );
     }
+
+    /// <summary>
+    /// The document the pipeline resolved, or, for a request refused before the pipeline looked
+    /// it up (the endpoint policy refuses ahead of the document cache), the document the transport
+    /// already parsed. A request that arrived as unparsed text and was refused that early has none.
+    /// </summary>
+    private static DocumentNode? RequestDocument(RequestContext context) =>
+        context.OperationDocumentInfo.Document
+        ?? (context.Request.Document as OperationDocument)?.Document;
 
     private const string TruncatedMarker = "...[truncated]";
     private const string ExecutedFieldsMarker = " [selected fields: ";
@@ -222,24 +238,44 @@ public sealed class TraxGraphQLAuditListener(
         return coordinates;
     }
 
-    private static IReadOnlyDictionary<string, object?>? BuildVariables(RequestContext context)
+    /// <summary>
+    /// The request's variables as a JSON object the redactor can walk: an input object becomes a
+    /// nested object and a list an array, so a field such as <c>$input.password</c> is reachable.
+    /// Each call builds a new object, so the redactor may change it in place.
+    /// </summary>
+    private static JsonObject? BuildVariables(RequestContext context)
     {
         // VariableValues holds one collection per operation so batched requests keep their
         // values separate. The inner collection enumerates VariableValue directly.
-        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var variables = new JsonObject();
         foreach (var collection in context.VariableValues)
         {
             if (collection is null)
                 continue;
             foreach (var variable in collection)
-                dict[variable.Name] = variable.Value?.ToString();
+                variables[variable.Name] = ToJson(variable.Value);
         }
-        return dict.Count == 0 ? null : dict;
+        return variables.Count == 0 ? null : variables;
     }
 
-    private IReadOnlyDictionary<string, object?>? SafeRedact(
-        IReadOnlyDictionary<string, object?>? variables
-    )
+    private static JsonNode? ToJson(IValueNode? value) =>
+        value switch
+        {
+            null or NullValueNode => null,
+            ObjectValueNode obj => new JsonObject(
+                obj.Fields.Select(f => KeyValuePair.Create(f.Name.Value, ToJson(f.Value)))
+            ),
+            ListValueNode list => new JsonArray([.. list.Items.Select(ToJson)]),
+            StringValueNode str => JsonValue.Create(str.Value),
+            // The literal's own text, so a number keeps its exact value in the JSON.
+            IntValueNode number => JsonNode.Parse(number.Value),
+            FloatValueNode number => JsonNode.Parse(number.Value),
+            BooleanValueNode boolean => JsonValue.Create(boolean.Value),
+            EnumValueNode enumValue => JsonValue.Create(enumValue.Value),
+            _ => JsonValue.Create(value.ToString()),
+        };
+
+    private JsonObject? SafeRedact(JsonObject? variables)
     {
         try
         {

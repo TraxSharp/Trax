@@ -15,9 +15,9 @@ namespace Trax.Api.GraphQL.Authorization;
 internal sealed class TraxGraphQLAuthPolicyValidator(
     GraphQLConfiguration configuration,
     IAuthorizationPolicyProvider policyProvider
-) : IHostedService
+) : StartupGate
 {
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task CheckAsync(CancellationToken cancellationToken)
     {
         if (!configuration.AuthorizationRequired)
             return;
@@ -34,8 +34,6 @@ internal sealed class TraxGraphQLAuthPolicyValidator(
                     + "an explicit existing policy name to RequireAuthorization()."
             );
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private static string FormatPolicyArg(string? policy) =>
         policy is null ? string.Empty : $"\"{policy}\"";

@@ -384,6 +384,48 @@ public class GraphQLTrainEventHandlerTests
 
     #endregion
 
+    #region Broadcast view of a remote failure
+
+    [Test]
+    public async Task HandleAsync_RemoteTrainExceptionFailure_KeepsItsMessageForABroadcastSubscriber()
+    {
+        // A worker's lifecycle event, as it arrives over the broadcaster, for a train that failed
+        // with a TrainException whose message its author wrote for clients. A local failure of the
+        // same train shows that message to a broadcast subscriber (ADR 0011); the remote one must
+        // carry enough to do the same.
+        var sender = new RecordingTopicEventSender();
+        var handler = CreateHandler(sender, enabledTrainName: "My.Train");
+        var message = System.Text.Json.JsonSerializer.Deserialize<TrainLifecycleEventMessage>(
+            """
+            {
+              "metadataId": 42, "externalId": "ext-1", "trainName": "My.Train",
+              "trainState": "Failed", "timestamp": "2026-09-28T12:00:00Z",
+              "failureJunction": "ChargeCard", "failureReason": "The card was declined.",
+              "failureException": "TrainException",
+              "eventType": "Failed", "executor": "RemoteWorker", "output": null
+            }
+            """
+        )!;
+
+        await handler.HandleAsync(message, CancellationToken.None);
+
+        var forwarded = (TrainLifecycleEvent)sender.Events.Single().Message;
+        var broadcastView = new LifecycleVisibility(
+            All: false,
+            new HashSet<string>(StringComparer.Ordinal) { "My.Train" }
+        );
+
+        broadcastView
+            .Present(forwarded)!
+            .FailureReason.Should()
+            .Be(
+                "The card was declined.",
+                "a TrainException's message is written for clients, whichever node ran the train"
+            );
+    }
+
+    #endregion
+
     #region Test Helpers
 
     private static GraphQLTrainEventHandler CreateHandler(

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
 
@@ -26,7 +27,8 @@ public class ManifestGroupQueries
         int skip = 0,
         int take = 25,
         string? nameContains = null,
-        long? afterId = null
+        long? afterId = null,
+        [Service] ISqlDialect? sqlDialect = null
     )
     {
         take = OperationsPageBounds.Take(take);
@@ -43,15 +45,15 @@ public class ManifestGroupQueries
 
         var hasFilter = !string.IsNullOrWhiteSpace(nameContains);
 
-        var (totalCount, isEstimate) =
-            (afterId.HasValue || hasFilter)
-                ? (await baseQuery.CountAsync(ct), false)
-                : await CountEstimator.EstimateOrCountAsync(
-                    db,
-                    "manifest_group",
-                    () => baseQuery.CountAsync(ct),
-                    ct
-                );
+        var (totalCount, isEstimate) = hasFilter
+            ? (await baseQuery.CountAsync(ct), false)
+            : await CountEstimator.EstimateOrCountAsync(
+                db,
+                sqlDialect,
+                "manifest_group",
+                () => baseQuery.CountAsync(ct),
+                ct
+            );
 
         var query = afterId.HasValue ? baseQuery.Where(g => g.Id < afterId.Value) : baseQuery;
 
@@ -115,73 +117,42 @@ public class ManifestGroupQueries
     /// <summary>
     /// Execution roll-up for a set of manifest groups: manifest count, executions by state, and
     /// last run per group. Batched so the dashboard's groups list fetches stats for just the
-    /// visible page in one round-trip. Every requested id gets a row (zeros when it has no
-    /// manifests or executions), in the order requested, so the caller can zip it to its rows.
+    /// visible page in one round-trip, through the same <see cref="IOperationsService"/> call.
+    /// Every requested id gets a row (zeros when it has no manifests or executions), once, in the
+    /// order requested, so the caller can zip it to its rows. More than 1000 distinct ids fails
+    /// the field with <c>TRAX_TOO_MANY_IDS</c>.
     /// </summary>
     public async Task<IReadOnlyList<ManifestGroupStats>> GetStats(
         long[] groupIds,
-        [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] IOperationsService operationsService,
         CancellationToken ct
     )
     {
         var ids = groupIds.Distinct().ToArray();
-        if (ids.Length == 0)
-            return Array.Empty<ManifestGroupStats>();
+        if (ids.Length > OperationsService.MaxBatchSize)
+            throw new GraphQLException(
+                ErrorBuilder
+                    .New()
+                    .SetMessage(
+                        $"At most {OperationsService.MaxBatchSize} group ids can be given at once; "
+                            + $"{ids.Length} were."
+                    )
+                    .SetCode("TRAX_TOO_MANY_IDS")
+                    .Build()
+            );
 
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        var stats = await operationsService.GetManifestGroupExecutionStatsAsync(ids, ct);
 
-        var manifestCounts = await db
-            .Manifests.AsNoTracking()
-            .Where(m => ids.Contains(m.ManifestGroupId))
-            .GroupBy(m => m.ManifestGroupId)
-            .Select(g => new { GroupId = g.Key, Count = (long)g.Count() })
-            .ToListAsync(ct);
-
-        // Join metadata to the group's manifests, then aggregate per (group, state). The join
-        // stays cheap: the manifest side is filtered to the requested groups first, and each
-        // manifest_id seek hits ix_metadata_manifest_state.
-        var execAgg = await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.ManifestId != null)
-            .Join(
-                db.Manifests.AsNoTracking().Where(mf => ids.Contains(mf.ManifestGroupId)),
-                m => m.ManifestId,
-                mf => (long?)mf.Id,
-                (m, mf) =>
-                    new
-                    {
-                        mf.ManifestGroupId,
-                        m.TrainState,
-                        m.StartTime,
-                    }
-            )
-            .GroupBy(x => new { x.ManifestGroupId, x.TrainState })
-            .Select(g => new
-            {
-                g.Key.ManifestGroupId,
-                g.Key.TrainState,
-                Count = (long)g.Count(),
-                LastRun = g.Max(x => (DateTime?)x.StartTime),
-            })
-            .ToListAsync(ct);
-
-        return ids.Select(id =>
-            {
-                var manifestCount = manifestCounts.FirstOrDefault(x => x.GroupId == id)?.Count ?? 0;
-                var rows = execAgg.Where(x => x.ManifestGroupId == id).ToList();
-                long StateCount(TrainState state) =>
-                    rows.Where(x => x.TrainState == state).Sum(x => x.Count);
-                var lastRun = rows.Count == 0 ? (DateTime?)null : rows.Max(x => x.LastRun);
-                return new ManifestGroupStats(
-                    id,
-                    ManifestCount: manifestCount,
-                    TotalExecutions: rows.Sum(x => x.Count),
-                    Completed: StateCount(TrainState.Completed),
-                    Failed: StateCount(TrainState.Failed),
-                    InProgress: StateCount(TrainState.InProgress),
-                    LastRun: lastRun
-                );
-            })
+        return stats
+            .Select(s => new ManifestGroupStats(
+                s.GroupId,
+                s.ManifestCount,
+                s.TotalExecutions,
+                s.Completed,
+                s.Failed,
+                s.InProgress,
+                s.LastRun
+            ))
             .ToList();
     }
 

@@ -187,7 +187,42 @@ public class TraxAuditWriterTests
     }
 
     [Test]
-    public async Task Stop_DuringRetryBackoff_PropagatesCancellation()
+    public async Task SinkThrowsBeyondMaxRetries_CountsTheDroppedEntries()
+    {
+        // The docs tell operators to alert on trax.audit.dropped: "A dropped entry is an
+        // invisible operation." A batch the sink refuses for good is dropped here too.
+        var sink = new AlwaysFailingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 2,
+                FlushInterval = TimeSpan.FromMilliseconds(100),
+                MaxRetries = 2,
+                RetryBackoff = TimeSpan.FromMilliseconds(5),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            channel.TryEnqueue(SampleEntry("a"));
+            channel.TryEnqueue(SampleEntry("b"));
+            await writer.StartAsync(cts.Token);
+
+            await WaitUntilAsync(() => sink.Attempts >= 3, TimeSpan.FromSeconds(10));
+            await WaitUntilAsync(() => channel.TotalDropped >= 2, TimeSpan.FromSeconds(2));
+
+            channel
+                .TotalDropped.Should()
+                .Be(2, "both entries were accepted and then dropped when the sink kept failing");
+
+            await writer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task Stop_DuringRetryBackoff_StopsAtTheShutdownTimeout_AndCountsTheBatchDropped()
     {
         var sink = new AlwaysFailingSink();
         var (channel, writer, sp) = Build(
@@ -197,7 +232,7 @@ public class TraxAuditWriterTests
                 BatchSize = 1,
                 FlushInterval = TimeSpan.FromMilliseconds(100),
                 MaxRetries = 10,
-                // Long backoff so the writer is sleeping when we stop it.
+                // Long backoff so the writer is sleeping when the shutdown timeout fires.
                 RetryBackoff = TimeSpan.FromSeconds(5),
                 ChannelCapacity = 100,
             }
@@ -206,12 +241,94 @@ public class TraxAuditWriterTests
         {
             await writer.StartAsync(CancellationToken.None);
             channel.TryEnqueue(SampleEntry("a"));
-            await Task.Delay(150);
+            await WaitUntilAsync(() => sink.Attempts >= 1, TimeSpan.FromSeconds(10));
 
-            // Stop while the writer is in Task.Delay backoff — the cancellation
-            // path inside the catch should propagate cleanly.
-            await writer.StopAsync(CancellationToken.None);
-            sink.Attempts.Should().BeGreaterThan(0);
+            // The host hands StopAsync a token that fires at HostOptions.ShutdownTimeout.
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            var stopping = writer.StopAsync(shutdown.Token);
+            // Throws TimeoutException if stopping is not bounded by the shutdown timeout.
+            await stopping.WaitAsync(TimeSpan.FromSeconds(10));
+
+            channel.TotalDropped.Should().Be(1, "the batch was never written");
+        }
+    }
+
+    [Test]
+    public async Task GracefulStop_WritesEveryAcceptedEntry()
+    {
+        var sink = new RecordingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 4,
+                // Longer than the test: only the shutdown drain can write the partial batch.
+                FlushInterval = TimeSpan.FromMinutes(5),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            for (var i = 0; i < 10; i++)
+                channel.TryEnqueue(SampleEntry($"e{i}")).Should().BeTrue();
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await writer.StopAsync(shutdown.Token);
+
+            sink.Batches.SelectMany(b => b)
+                .Select(e => e.PrincipalId)
+                .Should()
+                .BeEquivalentTo(Enumerable.Range(0, 10).Select(i => $"e{i}"));
+            channel.TotalDropped.Should().Be(0);
+        }
+    }
+
+    [Test]
+    public async Task Stop_SinkNeverReturns_StopsAtTheShutdownTimeout_AndCountsEveryUnwrittenEntry()
+    {
+        var sink = new HangingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 2,
+                FlushInterval = TimeSpan.FromMilliseconds(50),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            for (var i = 0; i < 5; i++)
+                channel.TryEnqueue(SampleEntry($"e{i}"));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            var stopping = writer.StopAsync(shutdown.Token);
+            // A sink that ignores cancellation cannot hold shutdown open past its timeout.
+            await stopping.WaitAsync(TimeSpan.FromSeconds(10));
+
+            channel
+                .TotalDropped.Should()
+                .Be(5, "two were in the stuck batch, three never left the channel");
+            channel.TryEnqueue(SampleEntry("late")).Should().BeFalse();
+            channel
+                .TotalDropped.Should()
+                .Be(6, "an entry offered after shutdown is refused and counted");
+        }
+    }
+
+    /// <summary>A sink whose write never completes and ignores its cancellation token.</summary>
+    private sealed class HangingSink : ITraxAuditSink
+    {
+        public TaskCompletionSource Entered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
+        {
+            Entered.TrySetResult();
+            return new TaskCompletionSource().Task;
         }
     }
 

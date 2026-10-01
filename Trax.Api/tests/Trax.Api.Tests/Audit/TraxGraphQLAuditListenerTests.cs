@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
@@ -21,10 +22,19 @@ namespace Trax.Api.Tests.Audit;
 /// one / many variable paths (the direct trigger for the CloudWatch cast bug)
 /// plus the full ShouldSkip / redactor / truncation / principal / result
 /// interpretation branches.
+/// <para>Enforces <c>docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md</c>: no literal from the document and no variable reaches the entry
+/// unless the host's redactor returns it.</para>
 /// </summary>
+[Property(
+    "adr",
+    "docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md"
+)]
 [TestFixture]
 public class TraxGraphQLAuditListenerTests
 {
+    private const string Adr =
+        "docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md";
+
     #region BuildVariables — repro and coverage
 
     [Test]
@@ -48,7 +58,7 @@ public class TraxGraphQLAuditListenerTests
     [Test]
     public async Task BuildVariables_SingleScalarVariable_CapturesName()
     {
-        await using var host = await TestHost.BuildAsync();
+        await using var host = await TestHost.BuildAsync(configureServices: KeepAllVariables);
 
         var result = await host.Executor.ExecuteAsync(
             QueryRequestBuilder("query Q($s: String!) { echo(s: $s) }")
@@ -60,14 +70,13 @@ public class TraxGraphQLAuditListenerTests
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
         entries[0].Variables.Should().NotBeNull();
-        entries[0].Variables!.Should().ContainKey("s");
-        entries[0].Variables!["s"].Should().NotBeNull();
+        entries[0].Variables!["s"]!.GetValue<string>().Should().Be("hi");
     }
 
     [Test]
     public async Task BuildVariables_MultipleMixedTypes_CapturesAll()
     {
-        await using var host = await TestHost.BuildAsync();
+        await using var host = await TestHost.BuildAsync(configureServices: KeepAllVariables);
 
         var variables = new Dictionary<string, object?>
         {
@@ -92,9 +101,36 @@ public class TraxGraphQLAuditListenerTests
         entries.Should().HaveCount(1);
         var captured = entries[0].Variables;
         captured.Should().NotBeNull();
-        captured!.Keys.Should().BeEquivalentTo(new[] { "s", "i", "e", "list", "obj" });
-        captured.Values.Should().NotContainNulls();
+        captured!.Select(p => p.Key).Should().BeEquivalentTo(["s", "i", "e", "list", "obj"]);
+        captured["s"]!.GetValue<string>().Should().Be("hello");
+        captured["i"]!.GetValue<int>().Should().Be(42);
+        captured["e"]!.GetValue<string>().Should().Be("HAPPY");
+        captured["list"]!.AsArray().Select(n => n!.GetValue<int>()).Should().Equal(1, 2, 3);
+        captured["obj"]!["name"]!.GetValue<string>().Should().Be("bob");
+        captured["obj"]!["count"]!.GetValue<int>().Should().Be(7);
     }
+
+    [Test]
+    public async Task DefaultRedactor_RecordsNoVariables()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync(
+            QueryRequestBuilder("query Q($s: String!) { echo(s: $s) }")
+                .SetVariableValues(new Dictionary<string, object?> { ["s"] = "hunter2" })
+                .Build()
+        );
+        AssertNoErrors(result);
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle()
+            .Which.Variables.Should()
+            .BeNull($"the default redactor records no variables ({Adr})");
+    }
+
+    private static void KeepAllVariables(IServiceCollection services) =>
+        services.AddSingleton<ITraxAuditRedactor>(new KeepAllRedactor());
 
     #endregion
 
@@ -249,7 +285,40 @@ public class TraxGraphQLAuditListenerTests
         var entries = host.DrainEntries();
         entries.Should().HaveCount(1);
         entries[0].Variables.Should().NotBeNull();
-        entries[0].Variables!.Should().ContainKey("u").And.NotContainKey("password");
+        entries[0].Variables!.ContainsKey("u").Should().BeTrue();
+        entries[0].Variables!.ContainsKey("password").Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Redactor_ReachesAFieldNestedInAnInputObject()
+    {
+        await using var host = await TestHost.BuildAsync(configureServices: s =>
+            s.AddSingleton<ITraxAuditRedactor>(new StripKeyRedactor("password"))
+        );
+
+        var result = await host.Executor.ExecuteAsync(
+            QueryRequestBuilder("mutation M($input: LoginInput!) { login(input: $input) }")
+                .SetVariableValues(
+                    new Dictionary<string, object?>
+                    {
+                        ["input"] = new Dictionary<string, object?>
+                        {
+                            ["user"] = "bob",
+                            ["password"] = "hunter2",
+                        },
+                    }
+                )
+                .Build()
+        );
+        AssertNoErrors(result);
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Variables!["input"]!["user"]!.GetValue<string>().Should().Be("bob");
+        entry.Variables!["input"]!.AsObject().ContainsKey("password").Should().BeFalse();
+        entry
+            .Variables!.ToJsonString()
+            .Should()
+            .NotContain("hunter2", $"a redactor reaches a nested input field ({Adr})");
     }
 
     [Test]
@@ -383,6 +452,59 @@ public class TraxGraphQLAuditListenerTests
 
     #endregion
 
+    #region Document literals
+
+    [Test]
+    public async Task InlineArgumentLiteral_IsNotRecorded()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync(
+            "mutation { login(input: { user: \"bob\", password: \"hunter2\" }) }"
+        );
+        AssertNoErrors(result);
+
+        var document = host.DrainEntries().Should().ContainSingle().Subject.Document;
+        document
+            .Should()
+            .NotContain("hunter2", $"an inline literal is replaced by a placeholder ({Adr})")
+            .And.NotContain("bob");
+        document.Should().Contain("login").And.Contain("password: \"\"");
+    }
+
+    [Test]
+    public async Task EveryStringAndNumberLiteral_IsReplaced_StructureIsKept()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync(
+            "query Q($s: String = \"default-secret\") { "
+                + "a: echo(s: $s) "
+                + "b: complex(s: \"s-secret\", i: 4242, e: HAPPY, list: [7, 8], obj: { name: \"n-secret\", count: 99 }) "
+                + "c: ping @include(if: true) "
+                + "d: decimal(f: 3.25) }"
+        );
+        AssertNoErrors(result);
+
+        var document = host.DrainEntries().Should().ContainSingle().Subject.Document;
+        document
+            .Should()
+            .NotContainAny(
+                "default-secret",
+                "s-secret",
+                "n-secret",
+                "4242",
+                "99",
+                "3.25",
+                "7",
+                "8"
+            );
+        document.Should().ContainAll("a: echo", "b: complex", "e: HAPPY", "name: \"\"", "count: 0");
+        document.Should().ContainAll("if: true", "$s: String = \"\"", "list: [0, 0]");
+    }
+
+    #endregion
+
     #region Document truncation
 
     [Test]
@@ -508,18 +630,35 @@ public class TraxGraphQLAuditListenerTests
         op!.Errors.Should().BeNullOrEmpty();
     }
 
+    /// <summary>The redactor the docs show: removes a named field at any depth.</summary>
     private sealed class StripKeyRedactor(string keyToStrip) : ITraxAuditRedactor
     {
-        public IReadOnlyDictionary<string, object?>? Redact(
-            IReadOnlyDictionary<string, object?>? variables
-        )
+        public JsonObject? Redact(JsonObject? variables)
         {
-            if (variables is null)
-                return null;
-            var copy = new Dictionary<string, object?>(variables, StringComparer.Ordinal);
-            copy.Remove(keyToStrip);
-            return copy;
+            Strip(variables);
+            return variables;
         }
+
+        private void Strip(JsonNode? node)
+        {
+            switch (node)
+            {
+                case JsonObject obj:
+                    obj.Remove(keyToStrip);
+                    foreach (var (_, child) in obj)
+                        Strip(child);
+                    break;
+                case JsonArray array:
+                    foreach (var child in array)
+                        Strip(child);
+                    break;
+            }
+        }
+    }
+
+    private sealed class KeepAllRedactor : ITraxAuditRedactor
+    {
+        public JsonObject? Redact(JsonObject? variables) => variables;
     }
 
     private sealed class FixedHttpContextAccessor(HttpContext context) : IHttpContextAccessor
@@ -533,9 +672,8 @@ public class TraxGraphQLAuditListenerTests
 
     private sealed class ThrowingRedactor : ITraxAuditRedactor
     {
-        public IReadOnlyDictionary<string, object?>? Redact(
-            IReadOnlyDictionary<string, object?>? variables
-        ) => throw new InvalidOperationException("boom");
+        public JsonObject? Redact(JsonObject? variables) =>
+            throw new InvalidOperationException("boom");
     }
 
     private sealed class TestHost : IAsyncDisposable
@@ -577,6 +715,7 @@ public class TraxGraphQLAuditListenerTests
             services
                 .AddGraphQLServer()
                 .AddQueryType<TestQuery>()
+                .AddMutationType<TestMutation>()
                 .AddSubscriptionType<TestSubscription>()
                 .AddInMemorySubscriptions()
                 // A request-level fault (as opposed to a resolver fault) reaches the
@@ -636,8 +775,21 @@ public class TraxGraphQLAuditListenerTests
         public int Count { get; set; }
     }
 
+    public sealed class LoginInput
+    {
+        public string User { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+
+    public sealed class TestMutation
+    {
+        public bool Login(LoginInput input) => input.Password.Length > 0;
+    }
+
     public sealed class TestQuery
     {
+        public decimal Decimal(decimal f) => f;
+
         public string Ping() => "pong";
 
         public string Echo(string s) => s;

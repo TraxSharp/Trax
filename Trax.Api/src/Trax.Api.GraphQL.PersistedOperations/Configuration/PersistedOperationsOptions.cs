@@ -60,26 +60,31 @@ public sealed class PersistedOperationsOptions
     public bool AllowIntrospection { get; internal set; } = true;
 
     /// <summary>
-    /// When true, the storage layer wraps DB lookups with an in-memory cache.
-    /// Default is false: every request hits the database. Caching is purely
-    /// an optimization and never the correctness path.
+    /// When true, the store's lookups are cached in memory as well. Default is false. HotChocolate
+    /// caches the parsed document and prepared operation for each id either way, so with this off
+    /// the database is read when a node first serves an id and after a change empties those
+    /// caches, not on every request.
     /// </summary>
     public bool CacheEnabled { get; internal set; }
 
     /// <summary>
-    /// In-memory cache TTL when <see cref="CacheEnabled"/> is true. Acts as a
-    /// backstop for the broadcaster: if a node misses an invalidation message,
-    /// the entry self-heals when the TTL expires. Defaults to 15 minutes.
+    /// In-memory cache TTL when <see cref="CacheEnabled"/> is true. Defaults to 15 minutes. It
+    /// bounds only the Trax lookup cache; HotChocolate's caches do not expire.
     /// </summary>
     public TimeSpan CacheTtl { get; internal set; } = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// RabbitMQ connection string for cross-node cache invalidation. Null when
-    /// no broadcaster is configured (single-node deployments). Required when
-    /// <see cref="CacheEnabled"/> is true and the deployment runs more than
-    /// one node.
+    /// RabbitMQ connection string for cross-node invalidation, set by
+    /// <c>UseRabbitMqInvalidation</c>. Every node empties its persisted-operation caches when a
+    /// change is broadcast on it. Null only when the host declared <see cref="SingleNode"/>.
     /// </summary>
     public string? RabbitMqConnectionString { get; internal set; }
+
+    /// <summary>
+    /// True when the host declared, with <c>SingleNode()</c>, that one process serves this
+    /// endpoint and writes the store, so no broadcast is needed.
+    /// </summary>
+    public bool SingleNode { get; internal set; }
 
     /// <summary>
     /// Database connection string for <c>trax.persisted_operation</c> reads

@@ -41,10 +41,12 @@ public class DeadLetterQueries
         if (status.HasValue)
             query = query.Where(dl => dl.Status == status.Value);
 
+        // The total is every record the filter matches, whatever page this is, so it is counted
+        // before the cursor narrows the query.
+        var totalCount = await query.CountAsync(ct);
+
         if (afterId.HasValue)
             query = query.Where(dl => dl.Id < afterId.Value);
-
-        var totalCount = await query.CountAsync(ct);
 
         if (!afterId.HasValue && skip > 0)
             query = query.Skip(skip);
@@ -71,7 +73,7 @@ public class DeadLetterQueries
         return new PagedResult<DeadLetterSummary>(
             items,
             totalCount,
-            skip,
+            afterId.HasValue ? 0 : skip,
             take,
             NextCursor: nextCursor
         );

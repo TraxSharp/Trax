@@ -84,6 +84,28 @@ public class PersistedOperationMutationTests
     }
 
     [Test]
+    public async Task Upload_TwoOperations_ReturnsInvalidInput_AndDoesNotPersist()
+    {
+        var json = await ExecuteMutationAsync(
+            "two_ops_v1",
+            "query Greet { hello } query Version { version }"
+        );
+
+        var payload = json
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("persistedOperations")
+            .GetProperty("uploadPersistedOperation");
+        payload.GetProperty("success").GetBoolean().Should().BeFalse(json.RootElement.ToString());
+        var errors = payload.GetProperty("errors");
+        errors.GetArrayLength().Should().Be(1);
+        errors[0].GetProperty("code").GetString().Should().Be("INVALID_INPUT");
+        errors[0].GetProperty("message").GetString().Should().Contain("exactly one operation");
+
+        (await _store.GetAsync("two_ops_v1", null, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Test]
     public async Task Upload_SchemaMismatch_ReturnsValidationError_AndDoesNotPersist()
     {
         var json = await ExecuteMutationAsync("schema_v1", GraphQLFixture.SchemaMismatchDocument);

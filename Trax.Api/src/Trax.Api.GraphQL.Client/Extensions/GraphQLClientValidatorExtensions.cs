@@ -43,6 +43,55 @@ public static class GraphQLClientValidatorExtensions
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(assemblies);
 
+        await ValidateMatchingAsync(validator, assemblies, typeFilter, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Validates the request types that belong to the client registered under
+    /// <paramref name="serviceKey"/> (see <see cref="GraphQLClientAttribute"/>): for a key, the
+    /// types marked with it; for <c>null</c>, the unmarked types. Finding none is refused, since a
+    /// validation that checks nothing is a request someone forgot to mark, not a passing check.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No request type in <paramref name="assemblies"/> belongs to the client.</exception>
+    internal static async Task ValidateClientRequestsAsync(
+        this IGraphQLClientValidator validator,
+        IReadOnlyCollection<Assembly> assemblies,
+        object? serviceKey,
+        CancellationToken cancellationToken
+    )
+    {
+        var validated = await ValidateMatchingAsync(
+                validator,
+                assemblies,
+                t => GraphQLClientAttribute.BelongsTo(t, serviceKey),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+        if (validated > 0)
+            return;
+
+        var scanned = string.Join(", ", assemblies.Select(a => a.GetName().Name));
+        throw new InvalidOperationException(
+            serviceKey is null
+                ? $"Validation for the unkeyed GraphQL client found no unmarked request type in {scanned}. "
+                    + "A request marked [GraphQLClient(key)] is validated only by the client registered "
+                    + "under that key; pass the assembly that holds this client's requests."
+                : $"Validation for the GraphQL client keyed '{serviceKey}' found no request type marked "
+                    + $"[GraphQLClient({serviceKey})] in {scanned}. Mark each request this server answers with "
+                    + "[GraphQLClient(...)] and the key the client was registered with."
+        );
+    }
+
+    private static async Task<int> ValidateMatchingAsync(
+        IGraphQLClientValidator validator,
+        IEnumerable<Assembly> assemblies,
+        Func<Type, bool>? typeFilter,
+        CancellationToken cancellationToken
+    )
+    {
+        var validated = 0;
         foreach (var assembly in assemblies)
         {
             var requestTypes = assembly
@@ -60,7 +109,9 @@ public static class GraphQLClientValidatorExtensions
                 await validator
                     .ValidateAsync(instance.Query, cancellationToken)
                     .ConfigureAwait(false);
+                validated++;
             }
         }
+        return validated;
     }
 }

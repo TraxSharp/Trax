@@ -37,9 +37,15 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 /// ExecuteAsync returns before the topic subscription is registered, so every subscriber is
 /// first confirmed live with a primer event, and the measurement starts only after that.
 /// </para>
+/// <para>
+/// The lifecycle feed is lossy under load and numbers its events so a subscriber can tell; the
+/// sustained case holds that contract. Enforces
+/// <c>docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md</c>.
+/// </para>
 /// </remarks>
 [TestFixture]
 [Category("Stress")]
+[Property("adr", "docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md")]
 [Explicit(
     "Stress suite: seeds millions of rows. Run with dotnet test --filter TestCategory=Stress"
 )]
@@ -184,10 +190,13 @@ public class SubscriptionStressTests
     }
 
     [Test]
-    public async Task OnTrainStateChanged_SustainedRuns_ReachEverySubscriberInFull()
+    public async Task OnTrainStateChanged_SustainedRuns_ReachEverySubscriberInFullOrSignalAGap()
     {
         // A busy host: 500 state changes a second (250 short runs, each publishing on start and
-        // on completion) for four seconds, published the way the hook publishes them.
+        // on completion) for four seconds, published the way the hooks publish them. The feed is
+        // lossy by design: a subscriber that falls behind loses its oldest buffered events. What
+        // must hold is that it is never silent about it: every subscriber either receives every
+        // event, or sees a skip in `sequence` and knows to refetch.
         const int Events = 2_000;
         const int PerTick = 50;
         var tick = TimeSpan.FromMilliseconds(100);
@@ -206,29 +215,50 @@ public class SubscriptionStressTests
         var published = sw.Elapsed;
 
         var delivered = await subscribers.WaitUntilAsync(
-            received => received.Contains(Events),
+            received => received.Any(e => e.MetadataId == Events),
             Deadline
         );
         var drained = sw.Elapsed - published;
 
-        var events = subscribers.EventCounts();
+        var outcomes = subscribers.Streams().Select(Outcome).ToArray();
+        var complete = outcomes.Count(o => o.Received == Events);
+        var gapped = outcomes.Count(o => o.Gap);
         TestContext.Out.WriteLine(
             $"onTrainStateChanged (sustained): {Events:N0} events over "
                 + $"{published.TotalMilliseconds:F0}ms reached all {SubscriberCount:N0} subscribers "
-                + $"{drained.TotalMilliseconds:F0}ms after the last publish; events per subscriber "
-                + $"min {events.Min()} max {events.Max()}"
+                + $"{drained.TotalMilliseconds:F0}ms after the last publish; {complete:N0} received "
+                + $"all of them, {gapped:N0} saw a gap in sequence; events per subscriber min "
+                + $"{outcomes.Min(o => o.Received)} max {outcomes.Max(o => o.Received)}"
         );
 
         delivered.Should().BeTrue("the last run's state change should reach every subscriber");
         drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
-        events
-            .Min()
+        outcomes
             .Should()
-            .Be(
-                Events,
-                "at a sustained rate a subscriber that falls behind loses state changes it never "
-                    + "sees again, and the dashboard's live feed shows stale runs until it refetches"
+            .OnlyContain(
+                o => o.Received == Events || o.Gap,
+                "a subscriber that lost state changes must see a skip in sequence, so it knows to "
+                    + "refetch, per docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md"
             );
+        outcomes
+            .Should()
+            .OnlyContain(
+                o => !o.Gap || o.Received < Events,
+                "a subscriber that received every event saw no loss, so it must see no skip"
+            );
+    }
+
+    /// <summary>
+    /// How many measured events one subscriber received, and whether its <c>sequence</c> skipped a
+    /// number anywhere from the last primer it saw onward.
+    /// </summary>
+    private static (int Received, bool Gap) Outcome(
+        (IReadOnlyList<Lifecycle> BeforeReset, IReadOnlyList<Lifecycle> Received) stream
+    )
+    {
+        var numbers = stream.BeforeReset.Concat(stream.Received).Select(e => e.Sequence).ToList();
+        var gap = numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(skipped => skipped);
+        return (stream.Received.Count, gap);
     }
 
     [Test]
@@ -248,7 +278,7 @@ public class SubscriptionStressTests
         var published = sw.Elapsed;
 
         var delivered = await subscribers.WaitUntilAsync(
-            received => received.Contains(Events),
+            received => received.Any(e => e.MetadataId == Events),
             Deadline
         );
         sw.Stop();
@@ -265,19 +295,26 @@ public class SubscriptionStressTests
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
     }
 
-    private Task<Subscribers<long>> AttachLifecycleSubscribersAsync() =>
-        Subscribers<long>.AttachAsync(
+    /// <summary>One lifecycle event as a subscriber received it.</summary>
+    private sealed record Lifecycle(long MetadataId, long Sequence);
+
+    private Task<Subscribers<Lifecycle>> AttachLifecycleSubscribersAsync() =>
+        Subscribers<Lifecycle>.AttachAsync(
             _executor,
-            "subscription { onTrainStateChanged { metadataId trainName trainState } }",
+            "subscription { onTrainStateChanged { sequence metadataId trainName trainState } }",
             SubscriberCount,
-            json => long.Parse(NumberField(json, "metadataId")),
+            json => new Lifecycle(
+                long.Parse(NumberField(json, "metadataId")),
+                long.Parse(NumberField(json, "sequence"))
+            ),
             prime: () => Publish(0)
         );
 
+    // Through the publisher the lifecycle hooks use, which numbers each event on its topic.
     private Task Publish(long metadataId) =>
-        _provider
-            .GetRequiredService<ITopicEventSender>()
-            .SendAsync(
+        LifecycleEventPublisher
+            .For(_provider.GetRequiredService<ITopicEventSender>())
+            .PublishAsync(
                 nameof(LifecycleSubscriptions.OnTrainStateChanged),
                 new TrainLifecycleEvent(
                     metadataId,
@@ -288,7 +325,8 @@ public class SubscriptionStressTests
                     FailureJunction: null,
                     FailureReason: null,
                     Output: null
-                )
+                ),
+                CancellationToken.None
             )
             .AsTask();
 
@@ -321,14 +359,19 @@ public class SubscriptionStressTests
 
     /// <summary>
     /// A set of live subscription streams, each drained by its own reader into what it has
-    /// received since the last <see cref="Reset"/>.
+    /// received since the last <see cref="Reset"/>, in the order it arrived.
     /// </summary>
     private sealed class Subscribers<T> : IAsyncDisposable
         where T : notnull
     {
         private readonly List<IResponseStream> _streams = [];
         private readonly List<Task> _readers = [];
-        private readonly ConcurrentDictionary<int, ConcurrentBag<T>> _received = new();
+        private readonly ConcurrentDictionary<int, ConcurrentQueue<T>> _received = new();
+        private readonly ConcurrentDictionary<int, T[]> _beforeReset = new();
+
+        // Disposing a response stream does not end an enumeration already in progress, so the
+        // readers are cancelled explicitly.
+        private readonly CancellationTokenSource _stop = new();
 
         public static async Task<Subscribers<T>> AttachAsync(
             IRequestExecutor executor,
@@ -339,30 +382,37 @@ public class SubscriptionStressTests
         )
         {
             var subscribers = new Subscribers<T>();
+            var stop = subscribers._stop.Token;
             for (var i = 0; i < count; i++)
             {
                 var result = await executor.ExecuteAsync(subscription);
                 var stream = result.ExpectResponseStream();
                 var index = i;
-                subscribers._received[index] = [];
+                subscribers._received[index] = new ConcurrentQueue<T>();
                 subscribers._streams.Add(stream);
                 subscribers._readers.Add(
                     Task.Run(async () =>
                     {
-                        await foreach (var item in stream.ReadResultsAsync())
+                        try
                         {
-                            // Serializing each event per subscriber is the work a socket
-                            // does too; the field is then read without a second parse, so
-                            // the readers are not the bottleneck being measured.
-                            subscribers._received[index].Add(read(item.ToJson()));
+                            await foreach (
+                                var item in stream.ReadResultsAsync().WithCancellation(stop)
+                            )
+                            {
+                                // Serializing each event per subscriber is the work a socket
+                                // does too; the field is then read without a second parse, so
+                                // the readers are not the bottleneck being measured.
+                                subscribers._received[index].Enqueue(read(item.ToJson()));
+                            }
                         }
+                        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
                     })
                 );
             }
 
             // Publish primers until every subscriber has one, then start clean.
             var deadline = Stopwatch.StartNew();
-            while (subscribers._received.Values.Any(b => b.IsEmpty) && deadline.Elapsed < Deadline)
+            while (subscribers._received.Values.Any(q => q.IsEmpty) && deadline.Elapsed < Deadline)
             {
                 await prime();
                 // allowed-delay: poll interval while subscriptions register, bounded by Deadline.
@@ -370,18 +420,38 @@ public class SubscriptionStressTests
             }
             subscribers
                 ._received.Values.Should()
-                .OnlyContain(b => !b.IsEmpty, "every subscriber must be live before measuring");
+                .OnlyContain(q => !q.IsEmpty, "every subscriber must be live before measuring");
             subscribers.Reset();
             return subscribers;
         }
 
+        /// <summary>
+        /// Starts every subscriber's received list afresh, remembering the last item each had, so
+        /// a measurement can tell what came immediately before it.
+        /// </summary>
         public void Reset()
         {
             foreach (var key in _received.Keys)
-                _received[key] = [];
+            {
+                var previous = _received[key];
+                _received[key] = new ConcurrentQueue<T>();
+                _beforeReset[key] = previous.IsEmpty ? [] : [previous.Last()];
+            }
         }
 
-        public int[] EventCounts() => _received.Values.Select(b => b.Count).ToArray();
+        public int[] EventCounts() => _received.Values.Select(q => q.Count).ToArray();
+
+        /// <summary>
+        /// For each subscriber, the item it had last before the reset (none, or one), and what it
+        /// has received since.
+        /// </summary>
+        public IEnumerable<(IReadOnlyList<T> BeforeReset, IReadOnlyList<T> Received)> Streams() =>
+            _received.Select(kv =>
+                (
+                    (IReadOnlyList<T>)_beforeReset.GetValueOrDefault(kv.Key, []),
+                    (IReadOnlyList<T>)kv.Value.ToArray()
+                )
+            );
 
         public async Task<bool> WaitUntilAsync(
             Func<IReadOnlyCollection<T>, bool> done,
@@ -391,7 +461,7 @@ public class SubscriptionStressTests
             var sw = Stopwatch.StartNew();
             while (sw.Elapsed < timeout)
             {
-                if (_received.Values.All(b => done(b)))
+                if (_received.Values.All(q => done(q)))
                     return true;
                 // allowed-delay: completion poll, bounded by the caller's timeout.
                 await Task.Delay(10);
@@ -401,9 +471,11 @@ public class SubscriptionStressTests
 
         public async ValueTask DisposeAsync()
         {
+            await _stop.CancelAsync();
             foreach (var stream in _streams)
                 await stream.DisposeAsync();
             await Task.WhenAll(_readers);
+            _stop.Dispose();
         }
     }
 }

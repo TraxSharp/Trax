@@ -39,13 +39,6 @@ public class GraphQLConfiguration
     internal IReadOnlyList<Action<IRequestExecutorBuilder>> SchemaConfigurations { get; }
 
     /// <summary>
-    /// Tracks which namespace base types and namespace fields have been registered
-    /// across type modules to prevent duplicate registrations. Populated at runtime
-    /// by <c>TrainTypeModule</c> and <c>QueryModelTypeModule</c>.
-    /// </summary>
-    internal HashSet<string> RegisteredNamespaceTypes { get; } = new(StringComparer.Ordinal);
-
-    /// <summary>
     /// Max GraphQL execution depth (default 15). Queries deeper than this are rejected
     /// during validation.
     /// </summary>
@@ -124,6 +117,12 @@ public class GraphQLConfiguration
     /// <c>docs/adr/0024-graphql-get-is-off-unless-the-host-opts-in.md</c>.
     /// </summary>
     internal bool GetRequestsAllowed { get; init; }
+
+    /// <summary>
+    /// The classes the query models reach through their properties that are not query models
+    /// themselves, with the posture each declares. See <see cref="NavigationTargetPosture"/>.
+    /// </summary>
+    internal IReadOnlyList<NavigationTargetPosture> NavigationTargets { get; init; } = [];
 
     /// <summary>
     /// Origins set through <c>TraxGraphQLBuilder.AllowSocketOrigins()</c>, normalized, or

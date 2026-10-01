@@ -19,7 +19,8 @@ public abstract class TypedRequest<TResponse> : IGraphQLClientRequest<TResponse>
     /// <summary>
     /// The query generated from the request and result types, built on first access and cached per
     /// request type. Throws <see cref="InvalidOperationException"/> when the request lacks
-    /// <see cref="GraphQLOperationAttribute"/> or the result type lacks <see cref="GraphQLTypeAttribute"/>.
+    /// <see cref="GraphQLOperationAttribute"/>, the result type lacks <see cref="GraphQLTypeAttribute"/>,
+    /// or the result type refers back to itself through its properties.
     /// </summary>
     public virtual string Query => GetOrGenerate().Query;
 

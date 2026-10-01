@@ -11,19 +11,11 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 /// is every dead letter awaiting intervention.
 /// </summary>
 /// <remarks>
-/// <para>
-/// These run against a bounded set, not the seed's 500,000 awaiting rows. The pinned
-/// Trax.Scheduler resolves them one tracked entity at a time, and a requeue-all that meets two
-/// awaiting dead letters for one manifest fails on the one-queued-entry-per-manifest index. So
-/// for the fixture's lifetime only the dead letters with ids up to <c>Manifests</c> stay awaiting
-/// (half of them, one per manifest), and the rest of the table stays at full size around them,
-/// resolved. Once a Scheduler release makes both writes set-based and skips duplicate manifests,
-/// the staging goes and these run over the whole seed.
-/// </para>
-/// <para>
-/// The fixture restores the seed's statuses when it finishes, so the read and single-row suites
-/// see the seed whichever order NUnit runs the fixtures in.
-/// </para>
+/// They run over the whole seed: every dead letter the seed leaves awaiting intervention, half of
+/// its <c>DeadLetter</c> rows, spread over every manifest. A requeue-all folds the dead letters
+/// that share a manifest into one work queue entry. Each run starts from the seed's statuses and
+/// with no dead-letter work queue entries, and the fixture puts them back when it finishes, so
+/// the read and single-row suites see the seed whichever order NUnit runs the fixtures in.
 /// </remarks>
 [TestFixture]
 [Category("Stress")]
@@ -33,10 +25,17 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 public class DeadLetterBatchStressTests : StressTestSetup
 {
     /// <summary>
-    /// A batch over the bounded set: about <c>Manifests / 2</c> rows, each a tracked update, and
-    /// for a requeue a work queue insert too.
+    /// Budget for acknowledging every awaiting dead letter in the seed (500,000 at the default
+    /// profile) in one call: measured at about 7.5 s, with headroom for a slower machine.
     /// </summary>
-    private static readonly TimeSpan BatchBudget = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan AcknowledgeAllBudget = TimeSpan.FromSeconds(12);
+
+    /// <summary>
+    /// Budget for requeueing every awaiting dead letter in the seed in one call, which also writes
+    /// one work queue entry per manifest: measured at about 36 s, with headroom for a slower
+    /// machine. It is the slowest operation on the surface, and an operator runs it rarely.
+    /// </summary>
+    private static readonly TimeSpan RequeueAllBudget = TimeSpan.FromSeconds(55);
 
     /// <summary>The seed's status for dead letter <c>g</c>.</summary>
     private const string SeededStatus =
@@ -46,54 +45,42 @@ public class DeadLetterBatchStressTests : StressTestSetup
     private static ITraxScheduler Scheduler(IServiceProvider sp) =>
         sp.GetRequiredService<ITraxScheduler>();
 
-    [OneTimeSetUp]
-    public async Task StageBoundedSet() =>
-        await ExecSqlAsync(
-            "UPDATE trax.dead_letter SET status = 'retried' "
-                + $"WHERE status = 'awaiting_intervention' AND id > {Profile.Manifests}"
-        );
-
-    [OneTimeTearDown]
-    public async Task RestoreSeed() =>
-        await ExecSqlAsync(
+    /// <summary>Puts every dead letter back to its seeded status, with no work queue entries.</summary>
+    private static Task RestoreSeed() =>
+        ExecSqlAsync(
             "DELETE FROM trax.work_queue WHERE dead_letter_id IS NOT NULL; "
                 + $"UPDATE trax.dead_letter SET status = {SeededStatus}, resolved_at = NULL, "
                 + "resolution_note = NULL, retry_metadata_id = NULL "
                 + $"WHERE status IS DISTINCT FROM {SeededStatus} OR resolved_at IS NOT NULL"
         );
 
-    /// <summary>Puts the bounded set back to awaiting, with no work queue entries of its own.</summary>
-    private Task ResetBoundedSet() =>
-        ExecSqlAsync(
-            "DELETE FROM trax.work_queue WHERE dead_letter_id IS NOT NULL; "
-                + $"UPDATE trax.dead_letter SET status = {SeededStatus}, resolved_at = NULL, "
-                + "resolution_note = NULL, retry_metadata_id = NULL "
-                + $"WHERE id <= {Profile.Manifests}"
-        );
+    [OneTimeTearDown]
+    public async Task RestoreSeedAfterwards() => await RestoreSeed();
 
-    private long BoundedAwaiting => (Profile.Manifests / 4) * 2;
+    /// <summary>The seed leaves dead letters 0 and 1 of every 4 awaiting intervention.</summary>
+    private long SeededAwaiting => Profile.DeadLetter / 4 * 2 + Math.Min(Profile.DeadLetter % 4, 1);
 
     [Test]
-    public async Task RequeueAllDeadLetters_BoundedSet_WithinBudget()
+    public async Task RequeueAllDeadLetters_WholeSeed_WithinBudget()
     {
         await MeasureWriteAsync(
             "operations.deadLetters.requeueAllDeadLetters",
-            BatchBudget,
-            ResetBoundedSet,
+            RequeueAllBudget,
+            RestoreSeed,
             async (sp, ct) =>
                 (await new DeadLetterMutations().RequeueAllDeadLetters(Scheduler(sp), ct))
                     .Count.Should()
-                    .BeCloseTo((int)BoundedAwaiting, 2)
+                    .Be((int)SeededAwaiting)
         );
     }
 
     [Test]
-    public async Task AcknowledgeAllDeadLetters_BoundedSet_WithinBudget()
+    public async Task AcknowledgeAllDeadLetters_WholeSeed_WithinBudget()
     {
         await MeasureWriteAsync(
             "operations.deadLetters.acknowledgeAllDeadLetters",
-            BatchBudget,
-            ResetBoundedSet,
+            AcknowledgeAllBudget,
+            RestoreSeed,
             async (sp, ct) =>
                 (
                     await new DeadLetterMutations().AcknowledgeAllDeadLetters(
@@ -103,7 +90,7 @@ public class DeadLetterBatchStressTests : StressTestSetup
                     )
                 )
                     .Count.Should()
-                    .BeCloseTo((int)BoundedAwaiting, 2)
+                    .Be((int)SeededAwaiting)
         );
     }
 }

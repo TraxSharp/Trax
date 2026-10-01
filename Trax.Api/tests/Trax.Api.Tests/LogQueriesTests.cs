@@ -1,14 +1,27 @@
+using System.Text.Json;
 using FluentAssertions;
+using HotChocolate;
+using HotChocolate.Execution;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.Services.HealthCheck;
+using Trax.Api.Tests.Fakes;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.Tests;
 
@@ -27,6 +40,14 @@ public class LogQueriesTests
 
     private ServiceProvider _provider = null!;
     private IDataContextProviderFactory _factory = null!;
+
+    private IOperationsService Operations =>
+        new OperationsService(
+            Substitute.For<ITrainDiscoveryService>(),
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>()
+        );
 
     [OneTimeSetUp]
     public void OneTimeSetUp()
@@ -98,7 +119,7 @@ public class LogQueriesTests
     {
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(_factory, default);
+        var result = await queries.GetLogs(Operations, _factory, default);
 
         result.Items.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
@@ -112,7 +133,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 5);
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(_factory, default, take: 2);
+        var result = await queries.GetLogs(Operations, _factory, default, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.NextCursor.Should().NotBeNull();
@@ -124,9 +145,15 @@ public class LogQueriesTests
         var metaId = await SeedMetadata();
         await SeedLogs(metaId, 5);
         var queries = new LogQueries();
-        var first = await queries.GetLogs(_factory, default, take: 2);
+        var first = await queries.GetLogs(Operations, _factory, default, take: 2);
 
-        var page2 = await queries.GetLogs(_factory, default, take: 2, afterId: first.NextCursor);
+        var page2 = await queries.GetLogs(
+            Operations,
+            _factory,
+            default,
+            take: 2,
+            afterId: first.NextCursor
+        );
 
         page2.Items.Should().HaveCount(2);
         page2
@@ -143,7 +170,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 5);
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(_factory, default, skip: 2, take: 2);
+        var result = await queries.GetLogs(Operations, _factory, default, skip: 2, take: 2);
 
         result.Items.Should().HaveCount(2);
         result.Skip.Should().Be(2);
@@ -158,8 +185,8 @@ public class LogQueriesTests
         await SeedLogs(meta2, 3);
         var queries = new LogQueries();
 
-        var meta1Logs = await queries.GetLogs(_factory, default, metadataId: meta1);
-        var meta2Logs = await queries.GetLogs(_factory, default, metadataId: meta2);
+        var meta1Logs = await queries.GetLogs(Operations, _factory, default, metadataId: meta1);
+        var meta2Logs = await queries.GetLogs(Operations, _factory, default, metadataId: meta2);
 
         meta1Logs.Items.Should().HaveCount(2);
         meta1Logs.Items.Should().OnlyContain(l => l.MetadataId == meta1);
@@ -176,6 +203,7 @@ public class LogQueriesTests
         var queries = new LogQueries();
 
         var warningOrAbove = await queries.GetLogs(
+            Operations,
             _factory,
             default,
             minimumLevel: LogLevel.Warning
@@ -193,7 +221,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 3, category: "Beta");
         var queries = new LogQueries();
 
-        var alpha = await queries.GetLogs(_factory, default, category: "Alpha");
+        var alpha = await queries.GetLogs(Operations, _factory, default, category: "Alpha");
 
         alpha.Items.Should().HaveCount(2);
         alpha.Items.Should().OnlyContain(l => l.Category == "Alpha");
@@ -206,7 +234,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 3);
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(_factory, default, category: "   ");
+        var result = await queries.GetLogs(Operations, _factory, default, category: "   ");
 
         result.Items.Should().HaveCount(3);
     }
@@ -218,7 +246,7 @@ public class LogQueriesTests
         await SeedLogs(metaId, 1, LogLevel.Error, "MyCat");
         var queries = new LogQueries();
 
-        var result = await queries.GetLogs(_factory, default);
+        var result = await queries.GetLogs(Operations, _factory, default);
 
         var entry = result.Items.Single();
         entry.MetadataId.Should().Be(metaId);
@@ -228,6 +256,138 @@ public class LogQueriesTests
         entry.Message.Should().Be("msg-0");
         entry.Exception.Should().BeNull();
         entry.StackTrace.Should().BeNull();
+    }
+
+    // Above CountEstimator's threshold, so the database's estimate is used when it has one.
+    private const int LargeTableRows = 12_000;
+
+    private async Task SeedLargeAnalyzedLogTable(long metadataId)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var ctx = (DbContext)db;
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) SELECT {metadataId}, g, 'information'::trax.log_level, 'msg', 'Test' FROM generate_series(1, {LargeTableRows}) g"
+        );
+        // reltuples is what ANALYZE (or autovacuum) last measured.
+        await ctx.Database.ExecuteSqlRawAsync("ANALYZE trax.log");
+    }
+
+    [Test]
+    public async Task GetLogs_UnfilteredTotalOfALargeTable_IsTheDatabasesEstimateOnEveryPage()
+    {
+        var metaId = await SeedMetadata();
+        await SeedLargeAnalyzedLogTable(metaId);
+        var dialect = _provider.GetRequiredService<ISqlDialect>();
+        var queries = new LogQueries();
+
+        var first = await queries.GetLogs(
+            Operations,
+            _factory,
+            default,
+            take: 10,
+            sqlDialect: dialect
+        );
+        var second = await queries.GetLogs(
+            Operations,
+            _factory,
+            default,
+            take: 10,
+            afterId: first.NextCursor,
+            sqlDialect: dialect
+        );
+
+        first.IsEstimatedCount.Should().BeTrue("an unfiltered total of a large table is estimated");
+        first.TotalCount.Should().BeCloseTo(LargeTableRows, 500);
+        second
+            .IsEstimatedCount.Should()
+            .BeTrue("the cursor does not change how the whole list is counted");
+        second.TotalCount.Should().Be(first.TotalCount, "totalCount does not depend on the page");
+    }
+
+    [Test]
+    public async Task GetLogs_FilteredTotalOfALargeTable_IsExact()
+    {
+        var metaId = await SeedMetadata();
+        await SeedLargeAnalyzedLogTable(metaId);
+        var dialect = _provider.GetRequiredService<ISqlDialect>();
+
+        var result = await new LogQueries().GetLogs(
+            Operations,
+            _factory,
+            default,
+            metadataId: metaId,
+            sqlDialect: dialect
+        );
+
+        result.IsEstimatedCount.Should().BeFalse();
+        result.TotalCount.Should().Be(LargeTableRows);
+    }
+
+    [Test]
+    public async Task GetLogs_ProviderWithoutAnEstimate_CountsExactly()
+    {
+        var metaId = await SeedMetadata();
+        await SeedLargeAnalyzedLogTable(metaId);
+        // Sqlite's dialect returns no estimate SQL, and InMemory registers no dialect at all.
+        var noEstimate = Substitute.For<ISqlDialect>();
+        noEstimate.EstimateRowCount().Returns((string?)null);
+
+        var withoutEstimate = await new LogQueries().GetLogs(
+            Operations,
+            _factory,
+            default,
+            sqlDialect: noEstimate
+        );
+        var withoutDialect = await new LogQueries().GetLogs(Operations, _factory, default);
+
+        withoutEstimate.IsEstimatedCount.Should().BeFalse();
+        withoutEstimate.TotalCount.Should().Be(LargeTableRows);
+        withoutDialect.IsEstimatedCount.Should().BeFalse();
+        withoutDialect.TotalCount.Should().Be(LargeTableRows);
+    }
+
+    [Test]
+    public async Task Logs_ThroughGraphQL_UsesTheRegisteredDialectsEstimate()
+    {
+        var metaId = await SeedMetadata();
+        await SeedLargeAnalyzedLogTable(metaId);
+
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([]);
+        var services = new ServiceCollection().AddDevelopmentEnvironment();
+        services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
+        services.AddSingleton(discovery);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+        services.AddSingleton(_factory);
+        services.AddSingleton(_provider.GetRequiredService<ISqlDialect>());
+        Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+            services,
+            graphql => graphql.ExposeOperationQueries().AllowAnonymousOperations()
+        );
+        services.AddScoped(_ => Substitute.For<ITraxHealthService>());
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        services.AddScoped(_ => Operations);
+        await using var serviceProvider = services.BuildServiceProvider();
+        var executor = await serviceProvider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
+
+        var result = (HotChocolate.Execution.OperationResult)
+            await executor.ExecuteAsync(
+                "{ operations { logs { logs(take: 1) { totalCount isEstimatedCount } } } }"
+            );
+
+        result.Errors.Should().BeNullOrEmpty();
+        using var document = JsonDocument.Parse(result.ToJson());
+        var page = document
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("logs")
+            .GetProperty("logs");
+        page.GetProperty("isEstimatedCount")
+            .GetBoolean()
+            .Should()
+            .BeTrue("HotChocolate injects the provider's dialect into the resolver");
     }
 
     [Test]

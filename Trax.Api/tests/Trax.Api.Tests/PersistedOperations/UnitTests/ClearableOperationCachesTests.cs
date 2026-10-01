@@ -45,6 +45,20 @@ public class ClearableOperationCachesTests
     }
 
     [Test]
+    public void DocumentCache_AnInlineDocument_IsCachedOnlyUnderItsOwnHash()
+    {
+        var cache = new ClearableDocumentCache(16);
+        var hash = new OperationDocumentHash("abc123", "MD5", HashFormat.Hex);
+        var inline = new CachedDocument(Utf8GraphQLParser.Parse("{ a }"), hash, isPersisted: false);
+
+        cache.TryAddDocument("SomeOperatorId", inline);
+        cache.TryAddDocument("abc123", inline);
+
+        cache.TryGetDocument("SomeOperatorId", out _).Should().BeFalse();
+        cache.TryGetDocument("abc123", out _).Should().BeTrue();
+    }
+
+    [Test]
     public void DocumentCache_MissingEntry_IsNotFound()
     {
         new ClearableDocumentCache(16).TryGetDocument("absent", out _).Should().BeFalse();
