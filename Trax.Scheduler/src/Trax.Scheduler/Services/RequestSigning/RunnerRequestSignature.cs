@@ -114,6 +114,13 @@ public static class RunnerRequestSignature
         return CryptographicOperations.FixedTimeEquals(expected, presented);
     }
 
+    /// <summary>
+    /// Whether <paramref name="signature"/> is well formed, and its timestamp when it is. Checks
+    /// nothing a body is needed for, so a request can be refused before its body is read.
+    /// </summary>
+    internal static bool TryReadTimestamp(string? signature, out long timestamp) =>
+        TryParse(signature, out timestamp, out _, out _);
+
     private static bool TryParse(
         string? signature,
         out long timestamp,

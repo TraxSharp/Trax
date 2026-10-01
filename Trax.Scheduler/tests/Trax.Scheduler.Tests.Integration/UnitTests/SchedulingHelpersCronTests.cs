@@ -21,6 +21,42 @@ public class SchedulingHelpersCronTests
         _logger = NullLoggerFactory.Instance.CreateLogger("test");
     }
 
+    // ── A cron with no occurrence ─────────────────────────────────────
+
+    [Test]
+    public void ShouldRunNow_ACronThatCanNeverFire_IsNeverDue()
+    {
+        // Stored without passing Schedule.FromCron (an operator edit, or a row written before it
+        // refused these), so scheduling recorded no first occurrence.
+        var manifest = new Manifest
+        {
+            ScheduleType = ScheduleType.Cron,
+            CronExpression = "0 0 30 2 *",
+            NextScheduledRun = null,
+        };
+
+        SchedulingHelpers
+            .ShouldRunNow(manifest, DateTime.UtcNow, _config, _logger)
+            .Should()
+            .BeFalse();
+    }
+
+    [Test]
+    public void ShouldRunNow_ANeverRunCronWithNoRecordedFirstOccurrence_IsStillDueAtOnce()
+    {
+        var manifest = new Manifest
+        {
+            ScheduleType = ScheduleType.Cron,
+            CronExpression = "0 3 * * *",
+            NextScheduledRun = null,
+        };
+
+        SchedulingHelpers
+            .ShouldRunNow(manifest, DateTime.UtcNow, _config, _logger)
+            .Should()
+            .BeTrue();
+    }
+
     // ── IsTimeForCron — 5-field ──────────────────────────────────────
 
     [Test]

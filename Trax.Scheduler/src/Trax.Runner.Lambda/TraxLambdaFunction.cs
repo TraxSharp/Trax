@@ -1,13 +1,17 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Amazon.Lambda.Core;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -145,28 +149,44 @@ public abstract class TraxLambdaFunction
     /// <c>InProgress</c> holding its subject until <c>StaleInProgressTimeout</c>, and the reaper
     /// then records <c>Failed</c> rather than <c>Cancelled</c>, which a manifest counts toward
     /// retries and dead letters. Widen this for a data provider with a slower write path.
+    /// <para>
+    /// At most half of the time left is held back, so a function whose timeout is at or below
+    /// the margin (AWS's default is three seconds) still runs its work, with a warning logged once
+    /// per instance that the margin was cut.
+    /// </para>
     /// </remarks>
     protected virtual TimeSpan TerminalWriteMargin => TimeSpan.FromSeconds(5);
+
+    private int _warnedMarginCut;
 
     /// <summary>
     /// Lambda entry point for direct SDK invocation.
     /// Receives a <see cref="LambdaEnvelope"/> and dispatches to the appropriate handler
     /// based on <see cref="LambdaEnvelope.Type"/>.
     /// Cancellation is derived from <see cref="ILambdaContext.RemainingTime"/>, less
-    /// <see cref="TerminalWriteMargin"/>.
+    /// <see cref="TerminalWriteMargin"/> or half the time left, whichever is smaller. An
+    /// <c>Execute</c> whose time runs out before its job starts records the job's run
+    /// <c>Cancelled</c> rather than leaving it <c>Pending</c>.
     /// </summary>
     public async Task<object?> FunctionHandler(LambdaEnvelope envelope, ILambdaContext context)
     {
-        // Clamped rather than allowed to go negative: with less time left than the write needs,
-        // cancelling immediately reports the run as cancelled, where starting it would leave work
-        // that cannot be recorded.
-        var budget = context.RemainingTime - TerminalWriteMargin;
-        using var cts = new CancellationTokenSource(
-            budget > TimeSpan.Zero ? budget : TimeSpan.Zero
-        );
+        var remaining =
+            context.RemainingTime > TimeSpan.Zero ? context.RemainingTime : TimeSpan.Zero;
+        var halfRemaining = remaining / 2;
+        var margin = TerminalWriteMargin < halfRemaining ? TerminalWriteMargin : halfRemaining;
+        using var cts = new CancellationTokenSource(remaining - margin);
         using var scope = _serviceProvider.Value.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<TraxLambdaFunction>>();
+
+        if (remaining <= TerminalWriteMargin && Interlocked.Exchange(ref _warnedMarginCut, 1) == 0)
+            logger.LogWarning(
+                "The function had {Remaining} left, no more than the terminal write margin of "
+                    + "{Margin}; half of it is held back instead. Raise the function's timeout so "
+                    + "a run cancelled by it can record its outcome",
+                remaining,
+                TerminalWriteMargin
+            );
 
         var purpose = envelope.Type switch
         {
@@ -205,7 +225,8 @@ public abstract class TraxLambdaFunction
                 envelope.PayloadJson,
                 handler,
                 logger,
-                cts.Token
+                cts.Token,
+                recordCancelledIn: scope.ServiceProvider
             ),
             LambdaRequestType.Run => await HandleRun(
                 envelope.PayloadJson,
@@ -225,6 +246,14 @@ public abstract class TraxLambdaFunction
     /// incoming request bodies into <see cref="LambdaEnvelope"/> payloads and execute
     /// them through the same handler logic as the Lambda entry point.
     /// </summary>
+    /// <remarks>
+    /// The routes take their own posture. With a signing key, every request must carry a valid
+    /// <c>Trax-Signature</c> header, checked before its body is read, from wherever it comes.
+    /// Without one (<c>AllowUnsignedRequests()</c>, a posture meant for the Lambda invocation entry
+    /// point, which only the scheduler's IAM role can reach), the routes serve only requests from
+    /// this machine's loopback address and refuse any other with 401, whatever address the server
+    /// listens on. A body larger than <c>MaxRequestBodyBytes</c> is refused with 413.
+    /// </remarks>
     /// <example>
     /// <code>
     /// // Program.cs
@@ -247,97 +276,108 @@ public abstract class TraxLambdaFunction
     /// </summary>
     internal void ConfigureRoutes(IEndpointRouteBuilder routes)
     {
-        routes.MapPost(
+        MapLocalRoute(
+            routes,
             "/trax/execute",
-            async (HttpContext ctx) =>
-            {
-                using var reader = new StreamReader(ctx.Request.Body);
-                var body = await reader.ReadToEndAsync();
-
-                using var scope = _serviceProvider.Value.CreateScope();
-                var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
-                var logger = scope.ServiceProvider.GetRequiredService<
-                    ILogger<TraxLambdaFunction>
-                >();
-
-                var verdict = await RequireVerifier(scope.ServiceProvider)
-                    .VerifyAsync(
-                        RunnerRequestPurpose.Execute,
-                        Encoding.UTF8.GetBytes(body),
-                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
-                        requireFresh: true,
-                        ctx.RequestAborted
-                    );
-                if (verdict != RunnerRequestVerdict.Accepted)
-                {
-                    logger.LogWarning(
-                        "Refused a request to {Path}: signature {Verdict}",
-                        ctx.Request.Path,
-                        verdict
-                    );
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return;
-                }
-                var result = await HandleExecute(body, handler, logger, ctx.RequestAborted);
-
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(result, RemoteRunJson.Write)
-                );
-            }
+            RunnerRequestPurpose.Execute,
+            async (body, handler, logger, ct) => await HandleExecute(body, handler, logger, ct)
         );
-
-        routes.MapPost(
+        MapLocalRoute(
+            routes,
             "/trax/run",
-            async (HttpContext ctx) =>
-            {
-                using var reader = new StreamReader(ctx.Request.Body);
-                var body = await reader.ReadToEndAsync();
-
-                using var scope = _serviceProvider.Value.CreateScope();
-                var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
-                var logger = scope.ServiceProvider.GetRequiredService<
-                    ILogger<TraxLambdaFunction>
-                >();
-
-                var verdict = await RequireVerifier(scope.ServiceProvider)
-                    .VerifyAsync(
-                        RunnerRequestPurpose.Run,
-                        Encoding.UTF8.GetBytes(body),
-                        ctx.Request.Headers[RunnerRequestSignature.HeaderName].ToString(),
-                        requireFresh: true,
-                        ctx.RequestAborted
-                    );
-                if (verdict != RunnerRequestVerdict.Accepted)
-                {
-                    logger.LogWarning(
-                        "Refused a request to {Path}: signature {Verdict}",
-                        ctx.Request.Path,
-                        verdict
-                    );
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return;
-                }
-                var result = await HandleRun(body, handler, logger, ctx.RequestAborted);
-
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(result, RemoteRunJson.Write)
-                );
-            }
+            RunnerRequestPurpose.Run,
+            async (body, handler, logger, ct) => await HandleRun(body, handler, logger, ct)
         );
     }
 
+    private void MapLocalRoute(
+        IEndpointRouteBuilder routes,
+        string route,
+        RunnerRequestPurpose purpose,
+        Func<string, ITraxRequestHandler, ILogger, CancellationToken, Task<object>> handle
+    ) =>
+        routes.MapPost(
+            route,
+            async (HttpContext ctx) =>
+            {
+                using var scope = _serviceProvider.Value.CreateScope();
+                var verifier = RequireVerifier(scope.ServiceProvider);
+
+                // Unsigned is a posture for the Lambda invocation entry point. Over HTTP it is
+                // honoured only for a caller on this machine.
+                if (!verifier.RequiresSignature && !IsFromThisMachine(ctx))
+                {
+                    verifier.ReportRefusal(
+                        ctx.Request.Path,
+                        "unsigned request from another machine; the local routes accept unsigned "
+                            + "requests only from loopback"
+                    );
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return;
+                }
+
+                var (body, refusedStatus) = await verifier.ReadVerifiedBodyAsync(
+                    ctx.Request,
+                    purpose
+                );
+                if (refusedStatus is { } status)
+                {
+                    ctx.Response.StatusCode = status;
+                    return;
+                }
+
+                var handler = scope.ServiceProvider.GetRequiredService<ITraxRequestHandler>();
+                var logger = scope.ServiceProvider.GetRequiredService<
+                    ILogger<TraxLambdaFunction>
+                >();
+                var result = await handle(
+                    Encoding.UTF8.GetString(body.Span),
+                    handler,
+                    logger,
+                    ctx.RequestAborted
+                );
+
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(
+                    JsonSerializer.Serialize(result, result.GetType(), RemoteRunJson.Write)
+                );
+            }
+        );
+
+    private static bool IsFromThisMachine(HttpContext ctx) =>
+        ctx.Connection.RemoteIpAddress is { } caller
+        && IPAddress.IsLoopback(caller.IsIPv4MappedToIPv6 ? caller.MapToIPv4() : caller);
+
+    // recordCancelledIn: when given, a job whose token is cancelled before it starts has its
+    // Pending run recorded Cancelled through this provider's data context. The Lambda entry point
+    // passes it, because its token is the function's own time; the local routes do not, because
+    // theirs is the request's.
     private static async Task<RemoteJobResponse> HandleExecute(
         string payloadJson,
         ITraxRequestHandler handler,
         ILogger logger,
-        CancellationToken ct
+        CancellationToken ct,
+        IServiceProvider? recordCancelledIn = null
     )
     {
         var request =
             JsonSerializer.Deserialize<RemoteJobRequest>(payloadJson, CaseInsensitiveOptions)
             ?? throw new InvalidOperationException("Failed to deserialize RemoteJobRequest.");
+
+        if (ct.IsCancellationRequested && recordCancelledIn is not null)
+        {
+            logger.LogWarning(
+                "No time was left to run MetadataId {MetadataId}; not starting it",
+                request.MetadataId
+            );
+            await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger);
+            return new RemoteJobResponse(
+                request.MetadataId,
+                IsError: true,
+                ErrorMessage: "The function's time ran out before the job started.",
+                ExceptionType: nameof(OperationCanceledException)
+            );
+        }
 
         try
         {
@@ -352,6 +392,16 @@ public abstract class TraxLambdaFunction
                 request.MetadataId
             );
 
+            // Cancelled before the job runner reached the run's row: nothing else will record it.
+            // A run that did start has recorded its own outcome, and the write below matches only
+            // a row still Pending.
+            if (
+                ex is OperationCanceledException
+                && ct.IsCancellationRequested
+                && recordCancelledIn is not null
+            )
+                await RecordCancelledAsync(recordCancelledIn, request.MetadataId, logger);
+
             // A TrainException's message is Trax's own account of the failure; anything else, and
             // every stack trace, stays in this function's log.
             return new RemoteJobResponse(
@@ -361,6 +411,63 @@ public abstract class TraxLambdaFunction
                     ? ex.Message
                     : "The runner could not complete the request; its log has the detail.",
                 ExceptionType: ex.GetType().Name
+            );
+        }
+    }
+
+    /// <summary>
+    /// Records a run that was never started <c>Cancelled</c>, if it is still <c>Pending</c>, on
+    /// <see cref="CancellationToken.None"/>: the function's own token is already cancelled. Left
+    /// Pending, the row would wait for the stale-pending reaper, which records it <c>Failed</c>
+    /// and so counts it toward the manifest's retries. A failure to write is logged, not thrown.
+    /// </summary>
+    private static async Task RecordCancelledAsync(
+        IServiceProvider services,
+        long metadataId,
+        ILogger logger
+    )
+    {
+        var factory = services.GetService<IDataContextProviderFactory>();
+        if (factory is null)
+        {
+            logger.LogWarning(
+                "No data provider is registered, so run {MetadataId} could not be recorded cancelled",
+                metadataId
+            );
+            return;
+        }
+
+        try
+        {
+            using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+            var now = DateTime.UtcNow;
+            var pending = context.Metadatas.Where(m =>
+                m.Id == metadataId && m.TrainState == TrainState.Pending
+            );
+
+            if (context is DbContext db && db.Database.IsRelational())
+                await pending.ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.TrainState, TrainState.Cancelled)
+                            .SetProperty(m => m.EndTime, now),
+                    CancellationToken.None
+                );
+            else
+            {
+                foreach (var run in await pending.ToListAsync(CancellationToken.None))
+                {
+                    run.TrainState = TrainState.Cancelled;
+                    run.EndTime = now;
+                }
+                await context.SaveChanges(CancellationToken.None);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Could not record run {MetadataId} cancelled; the stale-pending reaper will fail it",
+                metadataId
             );
         }
     }

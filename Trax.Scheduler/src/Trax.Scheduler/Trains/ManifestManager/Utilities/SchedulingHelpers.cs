@@ -19,12 +19,18 @@ internal static class SchedulingHelpers
     /// <param name="now">The current time</param>
     /// <param name="config">Scheduler configuration for resolving global defaults</param>
     /// <param name="logger">Logger for warnings and errors</param>
+    /// <param name="lastCancelledRun">
+    /// When the manifest's most recent cancelled run ended, if it has one. A cancelled run (a
+    /// timeout or an operator's cancel) consumes the occurrence it ran for, so when it is later
+    /// than <see cref="Manifest.LastSuccessfulRun"/> the schedule is evaluated from it instead.
+    /// </param>
     /// <returns>True if the manifest should run now, false otherwise</returns>
     public static bool ShouldRunNow(
         Manifest manifest,
         DateTime now,
         SchedulerConfiguration config,
-        ILogger logger
+        ILogger logger,
+        DateTime? lastCancelledRun = null
     )
     {
         // Check exclusions first — if the current time falls within any exclusion,
@@ -32,11 +38,13 @@ internal static class SchedulingHelpers
         if (IsExcluded(manifest, now, logger))
             return false;
 
+        var anchor = ScheduleAnchor.For(manifest, lastCancelledRun);
+
         return manifest.ScheduleType switch
         {
-            ScheduleType.Cron => ShouldRunByCron(manifest, now, config, logger),
-            ScheduleType.Interval => ShouldRunByInterval(manifest, now, config, logger),
-            ScheduleType.Once => ShouldRunOnce(manifest, now, logger),
+            ScheduleType.Cron => ShouldRunByCron(manifest, anchor, now, config, logger),
+            ScheduleType.Interval => ShouldRunByInterval(manifest, anchor, now, config, logger),
+            ScheduleType.Once => ShouldRunOnce(manifest, lastCancelledRun, now, logger),
             ScheduleType.OnDemand => false, // OnDemand manifests are never auto-scheduled, only via BulkEnqueueAsync
             ScheduleType.Dependent => false, // Dependent manifests are evaluated separately in DetermineJobsToQueueJunction
             _ => false,
@@ -44,10 +52,26 @@ internal static class SchedulingHelpers
     }
 
     /// <summary>
+    /// The run a schedule is evaluated from: the manifest's last successful run, or its last
+    /// cancelled run when that is later. <see cref="NextScheduledRun"/> is the manifest's
+    /// pre-computed next run, which was computed from the last success and so is dropped when a
+    /// later cancelled run is the anchor.
+    /// </summary>
+    private readonly record struct ScheduleAnchor(DateTime? LastRun, DateTime? NextScheduledRun)
+    {
+        public static ScheduleAnchor For(Manifest manifest, DateTime? lastCancelledRun) =>
+            lastCancelledRun is { } cancelled
+            && (manifest.LastSuccessfulRun is null || cancelled > manifest.LastSuccessfulRun)
+                ? new ScheduleAnchor(cancelled, null)
+                : new ScheduleAnchor(manifest.LastSuccessfulRun, manifest.NextScheduledRun);
+    }
+
+    /// <summary>
     /// Checks if a cron-based manifest is due to run.
     /// </summary>
     private static bool ShouldRunByCron(
         Manifest manifest,
+        ScheduleAnchor anchor,
         DateTime now,
         SchedulerConfiguration config,
         ILogger logger
@@ -64,7 +88,7 @@ internal static class SchedulingHelpers
 
         try
         {
-            return EvaluateCronSchedule(manifest, now, config, logger);
+            return EvaluateCronSchedule(manifest, anchor, now, config, logger);
         }
         catch (Exception ex)
         {
@@ -83,6 +107,7 @@ internal static class SchedulingHelpers
     /// </summary>
     private static bool ShouldRunByInterval(
         Manifest manifest,
+        ScheduleAnchor anchor,
         DateTime now,
         SchedulerConfiguration config,
         ILogger logger
@@ -97,13 +122,19 @@ internal static class SchedulingHelpers
             return false;
         }
 
-        return EvaluateIntervalSchedule(manifest, now, config, logger);
+        return EvaluateIntervalSchedule(manifest, anchor, now, config, logger);
     }
 
     /// <summary>
-    /// Checks if a one-off manifest is due to run: ScheduledAt &lt;= now and never successfully run.
+    /// Checks if a one-off manifest is due to run: ScheduledAt &lt;= now, never successfully run,
+    /// and not cancelled since it came due.
     /// </summary>
-    private static bool ShouldRunOnce(Manifest manifest, DateTime now, ILogger logger)
+    private static bool ShouldRunOnce(
+        Manifest manifest,
+        DateTime? lastCancelledRun,
+        DateTime now,
+        ILogger logger
+    )
     {
         // Already ran successfully — should have been auto-disabled, but guard anyway
         if (manifest.LastSuccessfulRun is not null)
@@ -124,6 +155,16 @@ internal static class SchedulingHelpers
             return false;
         }
 
+        // A run cancelled after the manifest came due consumed its one occurrence.
+        if (lastCancelledRun is { } cancelled && cancelled >= manifest.ScheduledAt.Value)
+        {
+            logger.LogTrace(
+                "Manifest {ManifestId} has ScheduleType=Once and its run was cancelled, skipping",
+                manifest.Id
+            );
+            return false;
+        }
+
         return manifest.ScheduledAt.Value <= now;
     }
 
@@ -132,6 +173,7 @@ internal static class SchedulingHelpers
     /// </summary>
     private static bool EvaluateIntervalSchedule(
         Manifest manifest,
+        ScheduleAnchor anchor,
         DateTime now,
         SchedulerConfiguration config,
         ILogger logger
@@ -140,14 +182,12 @@ internal static class SchedulingHelpers
         var intervalSeconds = manifest.IntervalSeconds!.Value;
 
         // If never run, always fire immediately
-        if (manifest.LastSuccessfulRun is null)
+        if (anchor.LastRun is not { } lastRun)
             return true;
 
         // Use pre-computed next run time if available (variance-aware),
         // otherwise fall back to deterministic calculation.
-        var scheduledTime =
-            manifest.NextScheduledRun
-            ?? manifest.LastSuccessfulRun.Value.AddSeconds(intervalSeconds);
+        var scheduledTime = anchor.NextScheduledRun ?? lastRun.AddSeconds(intervalSeconds);
 
         // Not yet due
         if (scheduledTime > now)
@@ -170,7 +210,7 @@ internal static class SchedulingHelpers
 
         // DoNothing: advance to the most recent interval boundary and check threshold
         return EvaluateBoundary(
-            manifest.LastSuccessfulRun.Value,
+            lastRun,
             intervalSeconds,
             now,
             thresholdSeconds,
@@ -183,24 +223,37 @@ internal static class SchedulingHelpers
 
     /// <summary>
     /// Evaluates a cron-based schedule with misfire policy support.
-    /// Uses Cronos for precise next-occurrence calculation.
+    /// Uses Cronos for precise next-occurrence calculation, in UTC.
     /// </summary>
+    /// <remarks>
+    /// A cron that has never succeeded is due at <see cref="Manifest.NextScheduledRun"/>, which
+    /// scheduling it set to its first occurrence. One with neither value, written before that
+    /// was stamped, is due at once, unless its expression has no occurrence at all (one stored
+    /// without passing <see cref="Schedule.FromCron"/>), which is never due. A cancelled run later than the last success replaces it as
+    /// the anchor (see <see cref="ScheduleAnchor"/>), and then the next occurrence after it is due.
+    /// </remarks>
     private static bool EvaluateCronSchedule(
         Manifest manifest,
+        ScheduleAnchor anchor,
         DateTime now,
         SchedulerConfiguration config,
         ILogger logger
     )
     {
-        // If never run, always due
-        if (manifest.LastSuccessfulRun is null)
-            return true;
+        // Never run (no success and no cancelled run) and no first occurrence recorded: due at
+        // once, unless the expression can never fire. Scheduling records no first occurrence for
+        // one of those either, and it must not run once and then never again.
+        if (anchor.LastRun is null && anchor.NextScheduledRun is null)
+            return CronParser
+                .TryParse(manifest.CronExpression!)
+                ?.GetNextOccurrence(now, TimeZoneInfo.Utc)
+                is not null;
 
-        // Use pre-computed next run time if available (variance-aware)
+        // Use pre-computed next run time if available (variance-aware, or the first occurrence)
         DateTime nextDueValue;
-        if (manifest.NextScheduledRun.HasValue)
+        if (anchor.NextScheduledRun.HasValue)
         {
-            nextDueValue = manifest.NextScheduledRun.Value;
+            nextDueValue = anchor.NextScheduledRun.Value;
         }
         else
         {
@@ -215,10 +268,7 @@ internal static class SchedulingHelpers
                 return false;
             }
 
-            var nextDue = parsed.GetNextOccurrence(
-                manifest.LastSuccessfulRun.Value,
-                TimeZoneInfo.Utc
-            );
+            var nextDue = parsed.GetNextOccurrence(anchor.LastRun!.Value, TimeZoneInfo.Utc);
             if (nextDue is null)
                 return false;
 
@@ -250,9 +300,14 @@ internal static class SchedulingHelpers
         if (cronParsed is null)
             return false;
 
+        // Occurrences after the last run (success, or a later cancelled run) count; a cron that
+        // never ran counts from its first occurrence, inclusive.
+        var countFrom = anchor.LastRun ?? nextDueValue.AddTicks(-1);
+
         return EvaluateCronBoundary(
             cronParsed,
             manifest,
+            countFrom,
             now,
             thresholdSeconds,
             overdueSeconds,
@@ -262,31 +317,20 @@ internal static class SchedulingHelpers
 
     /// <summary>
     /// For DoNothing misfire policy on cron schedules: finds the most recent cron occurrence
-    /// before now and checks if we're within threshold of it.
+    /// at or before now (see <see cref="LatestOccurrence"/>) and checks if we're within threshold
+    /// of it.
     /// </summary>
     private static bool EvaluateCronBoundary(
         Cronos.CronExpression parsed,
         Manifest manifest,
+        DateTime countFrom,
         DateTime now,
         int thresholdSeconds,
         double overdueSeconds,
         ILogger logger
     )
     {
-        // Walk forward from last successful run to find the most recent occurrence <= now
-        var candidate = manifest.LastSuccessfulRun!.Value;
-        DateTime? mostRecent = null;
-        const int maxIterations = 100_000;
-
-        for (var i = 0; i < maxIterations; i++)
-        {
-            var next = parsed.GetNextOccurrence(candidate, TimeZoneInfo.Utc);
-            if (next is null || next.Value > now)
-                break;
-
-            mostRecent = next.Value;
-            candidate = next.Value;
-        }
+        var mostRecent = LatestOccurrence(parsed, countFrom, now);
 
         if (mostRecent is null)
             return false;
@@ -314,6 +358,52 @@ internal static class SchedulingHelpers
             nextIn
         );
         return false;
+    }
+
+    /// <summary>
+    /// Finds the latest occurrence of <paramref name="parsed"/> that is later than
+    /// <paramref name="after"/> and no later than <paramref name="now"/>, evaluated in UTC.
+    /// </summary>
+    /// <remarks>
+    /// Cronos only searches forward, so this bisects on the instant a forward search starts from:
+    /// an inclusive search from any instant up to the latest occurrence lands at or before
+    /// <paramref name="now"/>, and one from any later instant lands after it. That takes about
+    /// fifty cron evaluations whatever the gap, where walking forward one occurrence at a time
+    /// took one per missed occurrence: a year of a minutely cron is half a million.
+    /// </remarks>
+    /// <returns>The latest occurrence in <c>(after, now]</c>, or null when there is none.</returns>
+    internal static DateTime? LatestOccurrence(
+        Cronos.CronExpression parsed,
+        DateTime after,
+        DateTime now
+    )
+    {
+        var first = parsed.GetNextOccurrence(after, TimeZoneInfo.Utc);
+        if (first is null || first.Value > now)
+            return null;
+
+        // lo always starts a search that lands at or before now; hi never does.
+        var lo = first.Value.Ticks;
+        var hi = now.Ticks + 1;
+        while (hi - lo > 1)
+        {
+            var mid = lo + (hi - lo) / 2;
+            var next = parsed.GetNextOccurrence(
+                new DateTime(mid, DateTimeKind.Utc),
+                TimeZoneInfo.Utc,
+                inclusive: true
+            );
+            if (next is not null && next.Value <= now)
+                lo = mid;
+            else
+                hi = mid;
+        }
+
+        return parsed.GetNextOccurrence(
+            new DateTime(lo, DateTimeKind.Utc),
+            TimeZoneInfo.Utc,
+            inclusive: true
+        );
     }
 
     /// <summary>

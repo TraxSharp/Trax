@@ -27,8 +27,11 @@ namespace Trax.Scheduler.Services.LocalWorkerService;
 /// 2. Executes each train via <see cref="IJobRunnerTrain"/>
 /// 3. Deletes each job row on completion (success or failure)
 ///
-/// Crash recovery: if a worker dies mid-execution, the <c>fetched_at</c> timestamp becomes
-/// stale and the job is re-eligible for claim after <see cref="LocalWorkerOptions.VisibilityTimeout"/>.
+/// Until every job in a batch has finished, its worker refreshes <c>fetched_at</c> on each job it
+/// has not finished every third of <see cref="LocalWorkerOptions.VisibilityTimeout"/>, so a long
+/// job, and the jobs waiting behind it in the batch, keep their claim.
+/// Crash recovery: if a worker dies mid-execution, the <c>fetched_at</c> timestamp stops being
+/// refreshed and the job is re-eligible for claim after <see cref="LocalWorkerOptions.VisibilityTimeout"/>.
 /// </remarks>
 internal class LocalWorkerService(
     IServiceProvider serviceProvider,
@@ -131,28 +134,48 @@ internal class LocalWorkerService(
             );
         }
 
-        // Phase 2 + 3: Execute and clean up each job sequentially
-        for (var i = 0; i < claimedJobs.Count; i++)
+        // Phase 2 + 3: Execute and clean up each job sequentially. Every job in the batch that
+        // has not finished keeps its claim fresh, not only the one running: the jobs waiting
+        // behind a long one would otherwise become claimable by another worker once
+        // VisibilityTimeout passed.
+        var unfinished = new HashSet<long>(claimedJobs.Select(j => j.Id));
+        using var heartbeatStop = new CancellationTokenSource();
+        var heartbeat = HeartbeatAsync(workerId, unfinished, heartbeatStop.Token);
+        try
         {
-            // Once shutdown begins, a job not yet started is released rather than started: each
-            // would otherwise get a fresh ShutdownTimeout, so a batch could outlast the host's
-            // shutdown window, and a job cut off by the host is only re-claimed after
-            // VisibilityTimeout.
-            if (stoppingToken.IsCancellationRequested)
+            for (var i = 0; i < claimedJobs.Count; i++)
             {
-                await ReleaseUnstartedAsync(workerId, claimedJobs.Skip(i).ToList());
-                break;
-            }
+                // Once shutdown begins, a job not yet started is released rather than started:
+                // each would otherwise get a fresh ShutdownTimeout, so a batch could outlast the
+                // host's shutdown window, and a job cut off by the host is only re-claimed after
+                // VisibilityTimeout. The heartbeat stops first, so it cannot re-claim a released
+                // job by refreshing it afterwards.
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    await heartbeatStop.CancelAsync();
+                    await StopHeartbeatAsync(workerId, heartbeat);
+                    await ReleaseUnstartedAsync(workerId, claimedJobs.Skip(i).ToList());
+                    break;
+                }
 
-            var job = claimedJobs[i];
-            await ExecuteAndCleanupAsync(
-                workerId,
-                job.Id,
-                job.MetadataId,
-                job.InputJson,
-                job.InputType,
-                stoppingToken
-            );
+                var job = claimedJobs[i];
+                await ExecuteAndCleanupAsync(
+                    workerId,
+                    job.Id,
+                    job.MetadataId,
+                    job.InputJson,
+                    job.InputType,
+                    stoppingToken
+                );
+
+                lock (unfinished)
+                    unfinished.Remove(job.Id);
+            }
+        }
+        finally
+        {
+            await heartbeatStop.CancelAsync();
+            await StopHeartbeatAsync(workerId, heartbeat);
         }
 
         return claimedJobs.Count;
@@ -244,6 +267,7 @@ internal class LocalWorkerService(
             // triggers CancelAfter(ShutdownTimeout) to provide a grace period.
             using var shutdownCts = new CancellationTokenSource();
             cancellationRegistry.Register(metadataId, shutdownCts);
+
             try
             {
                 await using var shutdownRegistration = stoppingToken.Register(() =>
@@ -261,7 +285,7 @@ internal class LocalWorkerService(
             }
             finally
             {
-                cancellationRegistry.Unregister(metadataId);
+                cancellationRegistry.Unregister(metadataId, shutdownCts);
             }
         }
         catch (Exception ex)
@@ -304,6 +328,110 @@ internal class LocalWorkerService(
                 workerId,
                 jobId
             );
+        }
+    }
+
+    // What a PeriodicTimer accepts is one millisecond to about 49.7 days; the upper bound here
+    // is the scheduler's own ceiling for a timer, well inside it.
+    private static readonly TimeSpan MinHeartbeatInterval = TimeSpan.FromMilliseconds(1);
+
+    /// <summary>
+    /// The heartbeat's interval: a third of <see cref="LocalWorkerOptions.VisibilityTimeout"/>,
+    /// held to what a <see cref="PeriodicTimer"/> accepts, or zero (no heartbeat) when the timeout
+    /// is not positive.
+    /// </summary>
+    internal static TimeSpan HeartbeatInterval(TimeSpan visibilityTimeout)
+    {
+        if (visibilityTimeout <= TimeSpan.Zero)
+            return TimeSpan.Zero;
+
+        var interval = visibilityTimeout / 3;
+        if (interval < MinHeartbeatInterval)
+            return MinHeartbeatInterval;
+        if (interval > Operations.SchedulerConfigLimits.MaxTimerInterval)
+            return Operations.SchedulerConfigLimits.MaxTimerInterval;
+        return interval;
+    }
+
+    /// <summary>
+    /// Waits for a stopped heartbeat. A heartbeat that ended in an error is logged, never thrown:
+    /// the jobs it kept claimed have finished, and its fault is not theirs.
+    /// </summary>
+    private async Task StopHeartbeatAsync(int workerId, Task heartbeat)
+    {
+        try
+        {
+            await heartbeat;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Worker {WorkerId}'s claim refresh ended with an error",
+                workerId
+            );
+        }
+    }
+
+    /// <summary>
+    /// Refreshes <c>fetched_at</c> on every job in <paramref name="unfinished"/> every third of
+    /// <see cref="LocalWorkerOptions.VisibilityTimeout"/> until <paramref name="stop"/> fires. A
+    /// claim is only re-claimable once <c>fetched_at</c> is older than the visibility timeout, so
+    /// a job this worker has claimed and not finished, running or waiting its turn in the batch,
+    /// keeps its claim however long the batch takes, and a worker that dies stops refreshing and
+    /// its jobs are recovered as before.
+    /// </summary>
+    private async Task HeartbeatAsync(
+        int workerId,
+        HashSet<long> unfinished,
+        CancellationToken stop
+    )
+    {
+        var interval = HeartbeatInterval(options.VisibilityTimeout);
+        if (interval <= TimeSpan.Zero)
+            return;
+
+        try
+        {
+            using var timer = new PeriodicTimer(interval);
+            while (await timer.WaitForNextTickAsync(stop))
+            {
+                List<long> ids;
+                lock (unfinished)
+                    ids = unfinished.ToList();
+
+                if (ids.Count == 0)
+                    continue;
+
+                try
+                {
+                    using var heartbeatScope = serviceProvider.CreateScope();
+                    var heartbeatContext =
+                        heartbeatScope.ServiceProvider.GetRequiredService<IDataContext>();
+                    var now = DateTime.UtcNow;
+
+                    await heartbeatContext
+                        .BackgroundJobs.Where(j => ids.Contains(j.Id))
+                        .ExecuteUpdateAsync(
+                            s => s.SetProperty(j => j.FetchedAt, (DateTime?)now),
+                            stop
+                        );
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "Worker {WorkerId} could not refresh its claim on jobs [{JobIds}]; they "
+                            + "become claimable again once VisibilityTimeout passes without a refresh",
+                        workerId,
+                        string.Join(", ", ids)
+                    );
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            // The batch finished.
         }
     }
 

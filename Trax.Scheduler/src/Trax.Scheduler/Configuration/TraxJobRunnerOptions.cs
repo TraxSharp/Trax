@@ -46,6 +46,18 @@ public sealed class TraxJobRunnerOptions
     public string? AuthorizationPolicy { get; set; }
 
     /// <summary>
+    /// The largest request body, in bytes, that the HTTP entry points (<c>UseTraxJobRunner</c>,
+    /// <c>UseTraxRunEndpoint</c>, and <c>TraxLambdaFunction</c>'s local routes) read. A larger one
+    /// is refused with 413 before it runs. Default 8 MiB, which holds a train input at the
+    /// mediator's default stored-input cap with room for its escaping. Raise it with the
+    /// mediator's <c>MaxInputJsonBytes</c> on the scheduler.
+    /// </summary>
+    public long MaxRequestBodyBytes { get; set; } = DefaultMaxRequestBodyBytes;
+
+    /// <summary>The default of <see cref="MaxRequestBodyBytes"/>, 8 MiB.</summary>
+    public const long DefaultMaxRequestBodyBytes = 8 * 1024 * 1024;
+
+    /// <summary>
     /// Whether <see cref="UseInMemoryNonceStore"/> was called.
     /// </summary>
     public bool InMemoryNonceStore { get; private set; }
@@ -91,6 +103,13 @@ public sealed class TraxJobRunnerOptions
                 nameof(MaxClockSkew),
                 MaxClockSkew,
                 "MaxClockSkew must be positive."
+            );
+
+        if (MaxRequestBodyBytes <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxRequestBodyBytes),
+                MaxRequestBodyBytes,
+                "MaxRequestBodyBytes must be positive."
             );
     }
 }

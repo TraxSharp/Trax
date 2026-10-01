@@ -30,9 +30,11 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         _train = Scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
         _config = Scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
 
-        // Prevent other pipeline junctions from interfering with test data
+        // Prevent the stale-pending reaper from interfering with test data. The default job timeout
+        // is kept below every stale timeout the tests set, so a run is reaped at exactly the stale
+        // timeout: a longer DefaultJobTimeout would extend the reaper's threshold to match it.
         _config.StalePendingTimeout = TimeSpan.FromHours(24);
-        _config.DefaultJobTimeout = TimeSpan.FromHours(24);
+        _config.DefaultJobTimeout = TimeSpan.FromSeconds(1);
     }
 
     [TearDown]

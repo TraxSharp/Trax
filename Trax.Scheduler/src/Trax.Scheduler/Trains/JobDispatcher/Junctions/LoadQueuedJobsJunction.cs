@@ -23,6 +23,13 @@ namespace Trax.Scheduler.Trains.JobDispatcher.Junctions;
 ///
 /// <see cref="SchedulerConfiguration.MaxQueuedJobsPerCycle"/> controls the per-group batch limit.
 /// <see cref="ApplyCapacityLimitsJunction"/> handles the actual global and per-group dispatch caps.
+///
+/// An entry whose manifest is disabled is not loaded, so disabling a manifest pauses the work it
+/// already has queued as well as its schedule. The entry stays <c>Queued</c> and is dispatched once
+/// the manifest is re-enabled. An entry someone asked for by name (<see cref="WorkQueue.IsExplicitTrigger"/>:
+/// a trigger, a group trigger or a dead-letter requeue) is the exception, and runs whether or not the
+/// manifest is enabled. Both loads decide this in the query, before the per-group limit is applied,
+/// so held entries never take a group's share of a cycle.
 /// </remarks>
 internal class LoadQueuedJobsJunction(
     IDataContext dataContext,
@@ -70,6 +77,7 @@ internal class LoadQueuedJobsJunction(
             // cannot crowd out work that is actually ready.
             .Where(q => q.ConfirmedAt != null)
             .Where(q => q.ManifestId == null || q.Manifest!.ManifestGroup!.IsEnabled)
+            .Where(q => q.ManifestId == null || q.Manifest!.IsEnabled || q.IsExplicitTrigger)
             .Where(q => q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
             // Subjects with a run still in flight are not candidates. The claim refuses them
             // anyway; dropping them here keeps a blocked subject from crowding the batch.

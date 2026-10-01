@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Scheduler.Tests.ArrayLogger</AssemblyName>
-    <Description>Test helper for Trax.Scheduler: an in-memory ILoggerProvider that captures every log entry in lists so tests can assert on what a train or the scheduler logged. Reference it from test projects only.</Description>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

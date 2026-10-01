@@ -9,10 +9,13 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Services.ManifestPruning;
+using Trax.Scheduler.Services.Operations;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Services.TraxScheduler;
@@ -20,15 +23,69 @@ namespace Trax.Scheduler.Services.TraxScheduler;
 /// <summary>
 /// Implementation of <see cref="ITraxScheduler"/> that provides type-safe manifest scheduling.
 /// </summary>
+/// <param name="dataContextFactory">Creates the data context each operation uses.</param>
+/// <param name="trainRegistry">Validates that a scheduled train is registered.</param>
+/// <param name="trainDiscovery">
+/// Lets scheduling check that the train itself is registered, not only a train taking its input
+/// type: a scheduled run runs the train it names. Null checks the input type only.
+/// </param>
+/// <param name="cancellationRegistry">Cancels runs in this process.</param>
+/// <param name="logger">The scheduler's logger.</param>
+/// <param name="configuration">
+/// The scheduler configuration, whose <c>DefaultMaxRetries</c> and <c>DefaultMisfirePolicy</c> a
+/// manifest takes when its options state neither. Null keeps the built-in defaults.
+/// </param>
+/// <param name="changeSignal">Optional; always resolved via DI in a host.</param>
+/// <remarks>
+/// This is the constructor dependency injection uses: it takes every other constructor's
+/// parameters and more, so the container always picks it.
+/// </remarks>
 public class TraxScheduler(
     IDataContextProviderFactory dataContextFactory,
     ITrainRegistry trainRegistry,
+    ITrainDiscoveryService? trainDiscovery,
     ICancellationRegistry cancellationRegistry,
     ILogger<TraxScheduler> logger,
-    // Optional so direct construction in tests stays simple; always resolved via DI in a host.
+    SchedulerConfiguration? configuration,
     ITraxChangeSignal? changeSignal = null
 ) : ITraxScheduler
 {
+    /// <summary>
+    /// The constructor as it shipped before the discovery service and configuration parameters,
+    /// kept so code built against it still binds. A scheduler built this way checks only the
+    /// input type when scheduling, and applies the built-in defaults rather than the configured
+    /// <c>DefaultMaxRetries</c> and <c>DefaultMisfirePolicy</c>.
+    /// </summary>
+    public TraxScheduler(
+        IDataContextProviderFactory dataContextFactory,
+        ITrainRegistry trainRegistry,
+        ICancellationRegistry cancellationRegistry,
+        ILogger<TraxScheduler> logger,
+        ITraxChangeSignal? changeSignal = null
+    )
+        : this(
+            dataContextFactory,
+            trainRegistry,
+            trainDiscovery: null,
+            cancellationRegistry,
+            logger,
+            configuration: null,
+            changeSignal
+        ) { }
+
+    /// <summary>
+    /// Records this application as the manifest's owner, so only this application's startup prune
+    /// ever considers it. Leaves the owner alone when the application has no name.
+    /// </summary>
+    private void StampOwner(Manifest manifest)
+    {
+        if (configuration?.Owner is { } owner)
+            manifest.Owner = owner;
+    }
+
+    private void ValidateTrain(Type trainType, Type inputType) =>
+        trainRegistry.ValidateTrainRegistration(trainDiscovery, trainType, inputType);
+
     /// <inheritdoc />
     public async Task<Manifest> ScheduleAsync<TTrain, TInput, TOutput>(
         string externalId,
@@ -40,7 +97,7 @@ public class TraxScheduler(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        trainRegistry.ValidateTrainRegistration<TInput>();
+        ValidateTrain(typeof(TTrain), typeof(TInput));
 
         var resolved = ResolveOptions(options);
 
@@ -52,11 +109,11 @@ public class TraxScheduler(
             schedule,
             resolved.ManifestOptions,
             groupId: resolved.GroupId ?? externalId,
-            groupPriority: resolved.GroupPriority,
-            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-            groupIsEnabled: resolved.GroupEnabled,
+            group: resolved.Group,
             ct: ct
         );
+
+        StampOwner(manifest);
 
         await context.SaveChanges(ct);
 
@@ -81,7 +138,7 @@ public class TraxScheduler(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        trainRegistry.ValidateTrainRegistration<TInput>();
+        ValidateTrain(typeof(TTrain), typeof(TInput));
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -105,7 +162,7 @@ public class TraxScheduler(
             foreach (var source in sourceList)
             {
                 var (externalId, input) = map(source);
-                var itemOptions = CreateItemOptions(resolved.ManifestOptions);
+                var itemOptions = resolved.ManifestOptions.Copy();
                 configureEach?.Invoke(source, itemOptions);
 
                 var manifest = await context.UpsertManifestAsync<TTrain, TInput, TOutput>(
@@ -114,11 +171,11 @@ public class TraxScheduler(
                     schedule,
                     itemOptions,
                     groupId: effectiveGroupId,
-                    groupPriority: resolved.GroupPriority,
-                    groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-                    groupIsEnabled: resolved.GroupEnabled,
+                    group: resolved.Group,
                     ct: ct
                 );
+
+                StampOwner(manifest);
                 results.Add(manifest);
             }
 
@@ -134,7 +191,12 @@ public class TraxScheduler(
             if (resolved.PrunePrefix is not null)
             {
                 var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+                await PruneSafeAsync(
+                    resolved.PrunePrefix,
+                    resolved.BatchName is null ? null : effectiveGroupId,
+                    keepIds,
+                    ct
+                );
             }
 
             return results;
@@ -161,7 +223,7 @@ public class TraxScheduler(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        trainRegistry.ValidateTrainRegistration<TInput>();
+        ValidateTrain(typeof(TTrain), typeof(TInput));
 
         var resolved = ResolveOptions(options);
 
@@ -183,11 +245,11 @@ public class TraxScheduler(
             parentManifest.Id,
             resolved.ManifestOptions,
             groupId: resolved.GroupId ?? externalId,
-            groupPriority: resolved.GroupPriority,
-            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-            groupIsEnabled: resolved.GroupEnabled,
+            group: resolved.Group,
             ct: ct
         );
+
+        StampOwner(manifest);
 
         await context.SaveChanges(ct);
 
@@ -218,7 +280,7 @@ public class TraxScheduler(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        trainRegistry.ValidateTrainRegistration<TInput>();
+        ValidateTrain(typeof(TTrain), typeof(TInput));
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -256,7 +318,7 @@ public class TraxScheduler(
                             + "Ensure parent manifests are scheduled before their dependents."
                     );
 
-                var itemOptions = CreateItemOptions(resolved.ManifestOptions);
+                var itemOptions = resolved.ManifestOptions.Copy();
                 configureEach?.Invoke(source, itemOptions);
 
                 var manifest = await context.UpsertDependentManifestAsync<TTrain, TInput, TOutput>(
@@ -265,11 +327,11 @@ public class TraxScheduler(
                     parentManifest.Id,
                     itemOptions,
                     groupId: effectiveGroupId,
-                    groupPriority: resolved.GroupPriority,
-                    groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-                    groupIsEnabled: resolved.GroupEnabled,
+                    group: resolved.Group,
                     ct: ct
                 );
+
+                StampOwner(manifest);
                 results.Add(manifest);
             }
 
@@ -285,7 +347,12 @@ public class TraxScheduler(
             if (resolved.PrunePrefix is not null)
             {
                 var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+                await PruneSafeAsync(
+                    resolved.PrunePrefix,
+                    resolved.BatchName is null ? null : effectiveGroupId,
+                    keepIds,
+                    ct
+                );
             }
 
             return results;
@@ -334,25 +401,9 @@ public class TraxScheduler(
 
         var manifest = await GetManifestByExternalIdAsync(context, externalId, ct);
 
-        var entry = WorkQueue.Create(
-            new CreateWorkQueue
-            {
-                TrainName = manifest.Name,
-                Input = manifest.Properties,
-                InputTypeName = manifest.PropertyTypeName,
-                ManifestId = manifest.Id,
-                Priority = manifest.Priority,
-            }
-        );
-        context.WorkQueues.Add(entry);
-        await context.SaveChanges(ct);
+        var outcome = await TriggerManifestAsync(context, manifest, runAt: DateTime.UtcNow, ct);
         changeSignal?.Notify(ChangeDomain.WorkQueue);
-
-        logger.LogInformation(
-            "Queued manifest {ExternalId} for execution (WorkQueueId: {WorkQueueId})",
-            externalId,
-            entry.Id
-        );
+        LogTrigger(externalId, outcome);
     }
 
     /// <inheritdoc />
@@ -366,6 +417,71 @@ public class TraxScheduler(
 
         var manifest = await GetManifestByExternalIdAsync(context, externalId, ct);
 
+        var outcome = await TriggerManifestAsync(context, manifest, DateTime.UtcNow + delay, ct);
+        changeSignal?.Notify(ChangeDomain.WorkQueue);
+        LogTrigger(externalId, outcome);
+    }
+
+    private void LogTrigger(string externalId, TriggerOutcome outcome)
+    {
+        if (outcome.Created)
+            logger.LogInformation(
+                "Queued manifest {ExternalId} for execution at {ScheduledAt} (WorkQueueId: {WorkQueueId})",
+                externalId,
+                outcome.ScheduledAt,
+                outcome.WorkQueueId
+            );
+        else if (outcome.MovedForward)
+            logger.LogInformation(
+                "Manifest {ExternalId} already had a queued entry (WorkQueueId: {WorkQueueId}) due later; the trigger moved it forward to {ScheduledAt} and queued nothing more",
+                externalId,
+                outcome.WorkQueueId,
+                outcome.ScheduledAt
+            );
+        else
+            logger.LogInformation(
+                "Manifest {ExternalId} already has a queued entry (WorkQueueId: {WorkQueueId}) due at {ScheduledAt}; the trigger released it and queued nothing more",
+                externalId,
+                outcome.WorkQueueId,
+                outcome.ScheduledAt
+            );
+    }
+
+    /// <summary>
+    /// What a trigger did: queued a new entry, or found the manifest's queued one and, when that
+    /// entry was due later than the trigger asked, moved it forward. <see cref="ScheduledAt"/> is
+    /// when the entry is now due; null means immediately.
+    /// </summary>
+    private readonly record struct TriggerOutcome(
+        long WorkQueueId,
+        bool Created,
+        bool MovedForward,
+        DateTime? ScheduledAt
+    );
+
+    /// <summary>
+    /// Queues one entry for <paramref name="manifest"/>, due at <paramref name="runAt"/> and
+    /// marked as asked for by name (<see cref="WorkQueue.IsExplicitTrigger"/>) so it runs even
+    /// while the manifest is disabled. The database holds at most one queued entry per manifest
+    /// (<c>ix_work_queue_unique_queued_manifest</c>), so when one is already there nothing more is
+    /// queued and that entry becomes the triggered run instead: it is marked the same way, and an
+    /// entry due later than <paramref name="runAt"/> (a retry waiting out its backoff, say) is
+    /// brought forward to it. The check and the insert are two statements, so an entry the
+    /// ManifestManager or another trigger queues between them is recognised by the insert's
+    /// failure and treated the same way; any other failed save is thrown.
+    /// </summary>
+    private static async Task<TriggerOutcome> TriggerManifestAsync(
+        IDataContext context,
+        Manifest manifest,
+        DateTime runAt,
+        CancellationToken ct
+    )
+    {
+        if (await ReleaseQueuedEntryAsync(context, manifest.Id, runAt, ct) is { } queued)
+            return queued;
+
+        // An immediate trigger stores no time, as it always has; a delayed one stores its time.
+        DateTime? scheduledAt = runAt > DateTime.UtcNow ? runAt : null;
         var entry = WorkQueue.Create(
             new CreateWorkQueue
             {
@@ -374,19 +490,80 @@ public class TraxScheduler(
                 InputTypeName = manifest.PropertyTypeName,
                 ManifestId = manifest.Id,
                 Priority = manifest.Priority,
-                ScheduledAt = DateTime.UtcNow + delay,
+                ScheduledAt = scheduledAt,
+                ExplicitTrigger = true,
             }
         );
         context.WorkQueues.Add(entry);
-        await context.SaveChanges(ct);
-        changeSignal?.Notify(ChangeDomain.WorkQueue);
 
-        logger.LogInformation(
-            "Queued delayed manifest {ExternalId} for execution at {ScheduledAt} (WorkQueueId: {WorkQueueId})",
-            externalId,
-            entry.ScheduledAt,
-            entry.Id
+        try
+        {
+            await context.SaveChanges(ct);
+            return new TriggerOutcome(entry.Id, Created: true, MovedForward: false, scheduledAt);
+        }
+        catch (DbUpdateException)
+        {
+            // Untracked either way, so a later save on this context does not retry it.
+            context.Reset();
+
+            if (await ReleaseQueuedEntryAsync(context, manifest.Id, runAt, ct) is { } raced)
+                return raced;
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Makes the manifest's queued entry, if it has one, the triggered run: marks it as asked for
+    /// by name and, when it is due later than <paramref name="runAt"/>, brings it forward to that
+    /// time. Null when the manifest has no queued entry.
+    /// </summary>
+    /// <remarks>
+    /// The update is conditional on the entry still being queued, so an entry the dispatcher claims
+    /// in the meantime is left as it is: it is already running, which is what the trigger asked
+    /// for.
+    /// </remarks>
+    private static async Task<TriggerOutcome?> ReleaseQueuedEntryAsync(
+        IDataContext context,
+        long manifestId,
+        DateTime runAt,
+        CancellationToken ct
+    )
+    {
+        var queued = await context
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.ManifestId == manifestId && w.Status == WorkQueueStatus.Queued)
+            .Select(w => new { w.Id, w.ScheduledAt })
+            .FirstOrDefaultAsync(ct);
+
+        if (queued is null)
+            return null;
+
+        var moveForward = queued.ScheduledAt > runAt;
+        var dueAt = moveForward ? runAt : queued.ScheduledAt;
+
+        var entry = context.WorkQueues.Where(w =>
+            w.Id == queued.Id && w.Status == WorkQueueStatus.Queued
         );
+        if (context.SupportsSetUpdates())
+            await entry.ExecuteUpdateAsync(
+                s =>
+                    s.SetProperty(w => w.IsExplicitTrigger, true)
+                        .SetProperty(w => w.ScheduledAt, dueAt),
+                ct
+            );
+        else
+            await context.UpdateEachAsync(
+                entry,
+                w =>
+                {
+                    w.IsExplicitTrigger = true;
+                    w.ScheduledAt = dueAt;
+                },
+                ct
+            );
+
+        return new TriggerOutcome(queued.Id, Created: false, moveForward, dueAt);
     }
 
     /// <inheritdoc />
@@ -414,7 +591,7 @@ public class TraxScheduler(
         where TTrain : IServiceTrain<TInput, TOutput>
         where TInput : IManifestProperties
     {
-        trainRegistry.ValidateTrainRegistration<TInput>();
+        ValidateTrain(typeof(TTrain), typeof(TInput));
 
         var resolved = ResolveOptions(options);
 
@@ -426,11 +603,11 @@ public class TraxScheduler(
             DateTime.UtcNow + delay,
             resolved.ManifestOptions,
             groupId: resolved.GroupId ?? externalId,
-            groupPriority: resolved.GroupPriority,
-            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-            groupIsEnabled: resolved.GroupEnabled,
+            group: resolved.Group,
             ct: ct
         );
+
+        StampOwner(manifest);
 
         await context.SaveChanges(ct);
 
@@ -462,31 +639,25 @@ public class TraxScheduler(
         if (manifests.Count == 0)
             return 0;
 
+        // One save per manifest, so a manifest that already has a queued entry is skipped rather
+        // than failing the whole group on the unique index.
+        var now = DateTime.UtcNow;
+        var queued = 0;
         foreach (var manifest in manifests)
-        {
-            var entry = WorkQueue.Create(
-                new CreateWorkQueue
-                {
-                    TrainName = manifest.Name,
-                    Input = manifest.Properties,
-                    InputTypeName = manifest.PropertyTypeName,
-                    ManifestId = manifest.Id,
-                    Priority = manifest.Priority,
-                }
-            );
-            context.WorkQueues.Add(entry);
-        }
+            if ((await TriggerManifestAsync(context, manifest, runAt: now, ct)).Created)
+                queued++;
 
-        await context.SaveChanges(ct);
-        changeSignal?.Notify(ChangeDomain.WorkQueue);
+        if (queued > 0)
+            changeSignal?.Notify(ChangeDomain.WorkQueue);
 
         logger.LogInformation(
-            "Queued {Count} manifests in group {GroupId} for execution",
-            manifests.Count,
-            groupId
+            "Queued {Count} manifests in group {GroupId} for execution; {Skipped} already queued",
+            queued,
+            groupId,
+            manifests.Count - queued
         );
 
-        return manifests.Count;
+        return queued;
     }
 
     /// <inheritdoc />
@@ -551,7 +722,7 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        trainRegistry.ValidateTrainRegistration(inputType);
+        ValidateTrain(trainType, inputType);
 
         var resolved = ResolveOptions(options);
 
@@ -564,11 +735,11 @@ public class TraxScheduler(
             schedule,
             resolved.ManifestOptions,
             groupId: resolved.GroupId ?? externalId,
-            groupPriority: resolved.GroupPriority,
-            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-            groupIsEnabled: resolved.GroupEnabled,
+            group: resolved.Group,
             ct: ct
         );
+
+        StampOwner(manifest);
 
         await context.SaveChanges(ct);
 
@@ -591,7 +762,7 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        trainRegistry.ValidateTrainRegistration(inputType);
+        ValidateTrain(trainType, inputType);
 
         var resolved = ResolveOptions(options);
 
@@ -604,11 +775,11 @@ public class TraxScheduler(
             DateTime.UtcNow + delay,
             resolved.ManifestOptions,
             groupId: resolved.GroupId ?? externalId,
-            groupPriority: resolved.GroupPriority,
-            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-            groupIsEnabled: resolved.GroupEnabled,
+            group: resolved.Group,
             ct: ct
         );
+
+        StampOwner(manifest);
 
         await context.SaveChanges(ct);
 
@@ -632,7 +803,7 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        trainRegistry.ValidateTrainRegistration(inputType);
+        ValidateTrain(trainType, inputType);
 
         var resolved = ResolveOptions(options);
 
@@ -655,11 +826,11 @@ public class TraxScheduler(
             parentManifest.Id,
             resolved.ManifestOptions,
             groupId: resolved.GroupId ?? externalId,
-            groupPriority: resolved.GroupPriority,
-            groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-            groupIsEnabled: resolved.GroupEnabled,
+            group: resolved.Group,
             ct: ct
         );
+
+        StampOwner(manifest);
 
         await context.SaveChanges(ct);
 
@@ -684,7 +855,7 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        trainRegistry.ValidateTrainRegistration(inputType);
+        ValidateTrain(trainType, inputType);
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -708,7 +879,7 @@ public class TraxScheduler(
             foreach (var source in sourceList)
             {
                 var (externalId, input) = map(source);
-                var itemOptions = CreateItemOptions(resolved.ManifestOptions);
+                var itemOptions = resolved.ManifestOptions.Copy();
                 configureEach?.Invoke(source, itemOptions);
 
                 var manifest = await context.UpsertManifestAsync(
@@ -718,11 +889,11 @@ public class TraxScheduler(
                     schedule,
                     itemOptions,
                     groupId: effectiveGroupId,
-                    groupPriority: resolved.GroupPriority,
-                    groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-                    groupIsEnabled: resolved.GroupEnabled,
+                    group: resolved.Group,
                     ct: ct
                 );
+
+                StampOwner(manifest);
                 results.Add(manifest);
             }
 
@@ -738,7 +909,12 @@ public class TraxScheduler(
             if (resolved.PrunePrefix is not null)
             {
                 var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+                await PruneSafeAsync(
+                    resolved.PrunePrefix,
+                    resolved.BatchName is null ? null : effectiveGroupId,
+                    keepIds,
+                    ct
+                );
             }
 
             return results;
@@ -765,7 +941,7 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        trainRegistry.ValidateTrainRegistration(inputType);
+        ValidateTrain(trainType, inputType);
 
         var resolved = ResolveOptions(options);
         var sourceList = sources.ToList();
@@ -803,7 +979,7 @@ public class TraxScheduler(
                             + "Ensure parent manifests are scheduled before their dependents."
                     );
 
-                var itemOptions = CreateItemOptions(resolved.ManifestOptions);
+                var itemOptions = resolved.ManifestOptions.Copy();
                 configureEach?.Invoke(source, itemOptions);
 
                 var manifest = await context.UpsertDependentManifestAsync(
@@ -813,11 +989,11 @@ public class TraxScheduler(
                     parentManifest.Id,
                     itemOptions,
                     groupId: effectiveGroupId,
-                    groupPriority: resolved.GroupPriority,
-                    groupMaxActiveJobs: resolved.GroupMaxActiveJobs,
-                    groupIsEnabled: resolved.GroupEnabled,
+                    group: resolved.Group,
                     ct: ct
                 );
+
+                StampOwner(manifest);
                 results.Add(manifest);
             }
 
@@ -833,7 +1009,12 @@ public class TraxScheduler(
             if (resolved.PrunePrefix is not null)
             {
                 var keepIds = results.Select(m => m.ExternalId).ToHashSet();
-                await PruneSafeAsync(resolved.PrunePrefix, keepIds, ct);
+                await PruneSafeAsync(
+                    resolved.PrunePrefix,
+                    resolved.BatchName is null ? null : effectiveGroupId,
+                    keepIds,
+                    ct
+                );
             }
 
             return results;
@@ -973,7 +1154,10 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        return await RequeueDeadLetterBatch(
+        if (OperationsService.BatchRefusal(deadLetterIds) is { } refused)
+            return new BatchDeadLetterResult(0, refused);
+
+        var counts = await RequeueDeadLetterBatch(
             context =>
                 context.DeadLetters.Where(d =>
                     deadLetterIds.Contains(d.Id)
@@ -981,6 +1165,8 @@ public class TraxScheduler(
                 ),
             ct
         );
+
+        return counts.ToResult();
     }
 
     /// <inheritdoc />
@@ -990,6 +1176,9 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
+        if (OperationsService.BatchRefusal(deadLetterIds) is { } refused)
+            return new BatchDeadLetterResult(0, refused);
+
         await using var context = CreateContext();
 
         var acknowledged = await AcknowledgeAwaitingAsync(
@@ -1014,11 +1203,75 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        return await RequeueDeadLetterBatch(
-            context =>
-                context.DeadLetters.Where(d => d.Status == DeadLetterStatus.AwaitingIntervention),
-            ct
-        );
+        // A page at a time, by manifest rather than by dead letter, so every dead letter for one
+        // manifest is in the same page and still folds into one entry. The cursor moves past a
+        // page's manifests whether or not they were requeued, so one already queued is skipped
+        // once rather than read again on every page.
+        var total = RequeueCounts.None;
+        var after = long.MinValue;
+
+        while (true)
+        {
+            List<long> manifestIds;
+            await using (var context = CreateContext())
+                manifestIds = await context
+                    .DeadLetters.Where(d =>
+                        d.Status == DeadLetterStatus.AwaitingIntervention && d.ManifestId > after
+                    )
+                    .Select(d => d.ManifestId)
+                    .Distinct()
+                    .OrderBy(id => id)
+                    .Take(RequeueAllPageSize)
+                    .ToListAsync(ct);
+
+            if (manifestIds.Count == 0)
+                break;
+
+            total += await RequeueDeadLetterBatch(
+                context =>
+                    context.DeadLetters.Where(d =>
+                        manifestIds.Contains(d.ManifestId)
+                        && d.Status == DeadLetterStatus.AwaitingIntervention
+                    ),
+                ct
+            );
+
+            after = manifestIds[^1];
+        }
+
+        return total.ToResult();
+    }
+
+    /// <summary>
+    /// How many manifests <see cref="RequeueAllDeadLettersAsync"/> requeues per page. Test seam;
+    /// one page is one batch, so it matches the operations surface's batch limit.
+    /// </summary>
+    internal int RequeueAllPageSize { get; set; } = OperationsService.MaxBatchSize;
+
+    /// <summary>What a dead-letter requeue did, summed across the pages of a requeue-all.</summary>
+    private readonly record struct RequeueCounts(int Resolved, int Entries, int Folded, int Skipped)
+    {
+        public static RequeueCounts None => default;
+
+        public static RequeueCounts operator +(RequeueCounts a, RequeueCounts b) =>
+            new(
+                a.Resolved + b.Resolved,
+                a.Entries + b.Entries,
+                a.Folded + b.Folded,
+                a.Skipped + b.Skipped
+            );
+
+        public BatchDeadLetterResult ToResult()
+        {
+            var message = $"{Resolved} dead letter(s) requeued";
+            if (Folded > 0)
+                message +=
+                    $"; {Folded} folded into another dead letter's entry for the same manifest";
+            if (Skipped > 0)
+                message += $"; {Skipped} skipped because their manifest already has a queued entry";
+
+            return new BatchDeadLetterResult(Resolved, message + ".");
+        }
     }
 
     /// <inheritdoc />
@@ -1092,7 +1345,7 @@ public class TraxScheduler(
     /// has a queued entry is skipped and stays awaiting intervention. Dead letters that share a
     /// manifest are folded into one entry: a requeue runs the manifest's own properties, so each
     /// would queue the same work. The newest one carries the entry's <c>DeadLetterId</c>, and every
-    /// one of them is resolved with a note naming the entry. The result's message counts both.
+    /// one of them is resolved with a note naming the entry. The counts returned include both.
     /// </summary>
     /// <remarks>
     /// The "already queued?" check and the insert are separate statements, so a concurrent
@@ -1102,7 +1355,7 @@ public class TraxScheduler(
     /// rolled back and rerun from a fresh read, which skips that manifest and no longer sees dead
     /// letters another requeue resolved. Any other failure is rethrown.
     /// </remarks>
-    private async Task<BatchDeadLetterResult> RequeueDeadLetterBatch(
+    private async Task<RequeueCounts> RequeueDeadLetterBatch(
         Func<IDataContext, IQueryable<Effect.Models.DeadLetter.DeadLetter>> select,
         CancellationToken ct
     )
@@ -1145,7 +1398,7 @@ public class TraxScheduler(
         );
     }
 
-    private async Task<BatchDeadLetterResult> RequeueDeadLetterBatchOnce(
+    private async Task<RequeueCounts> RequeueDeadLetterBatchOnce(
         IDataContext context,
         List<Effect.Models.DeadLetter.DeadLetter> deadLetters,
         bool firstAttempt,
@@ -1214,13 +1467,7 @@ public class TraxScheduler(
             skipped
         );
 
-        var message = $"{resolved} dead letter(s) requeued";
-        if (folded > 0)
-            message += $"; {folded} folded into another dead letter's entry for the same manifest";
-        if (skipped > 0)
-            message += $"; {skipped} skipped because their manifest already has a queued entry";
-
-        return new BatchDeadLetterResult(resolved, message + ".");
+        return new RequeueCounts(resolved, batches.Count, folded, skipped);
     }
 
     private static WorkQueue CreateWorkQueueFromDeadLetter(
@@ -1237,6 +1484,8 @@ public class TraxScheduler(
                 ManifestId = manifest.Id,
                 Priority = manifest.Priority,
                 DeadLetterId = deadLetter.Id,
+                // An operator asked for this run by name, so it runs while the manifest is disabled.
+                ExplicitTrigger = true,
             }
         );
     }
@@ -1247,34 +1496,39 @@ public class TraxScheduler(
         dataContextFactory.Create() as IDataContext
         ?? throw new InvalidOperationException("Failed to create data context");
 
-    private static ResolvedOptions ResolveOptions(Action<ScheduleOptions>? options)
+    private ResolvedOptions ResolveOptions(Action<ScheduleOptions>? options)
     {
         var opts = new ScheduleOptions();
         options?.Invoke(opts);
 
         var manifestOptions = opts.ToManifestOptions();
 
+        // The scheduler-wide defaults, for a manifest whose options state neither. Resolved here,
+        // before a batch copies the options per item, so configureEach reads the resolved value.
+        manifestOptions._defaultMaxRetries = configuration?.DefaultMaxRetries;
+        manifestOptions.MisfirePolicy ??= configuration?.DefaultMisfirePolicy;
+
+        // A group of the manifest's own (no group name) or a named batch's own group has no other
+        // members to disagree with, so the manifest's stated priority is the group's too.
+        var ownsGroup =
+            opts._groupId is null
+            || (opts._batchName is not null && opts._groupId == opts._batchName);
+        var group = opts._groupOptions;
+
         return new ResolvedOptions(
             ManifestOptions: manifestOptions,
             GroupId: opts._groupId,
-            GroupPriority: opts._groupOptions?._priority ?? manifestOptions.Priority,
-            GroupMaxActiveJobs: opts._groupOptions?._maxActiveJobs,
-            GroupEnabled: opts._groupOptions?._isEnabled ?? true,
-            PrunePrefix: opts._prunePrefix
+            Group: new ManifestGroupSeed(
+                Priority: group?._priority ?? (ownsGroup ? opts._priority : null),
+                MaxActiveJobsStated: group?._maxActiveJobsStated ?? false,
+                MaxActiveJobs: group?._maxActiveJobs,
+                IsEnabled: group?._isEnabled,
+                PriorityIfNew: manifestOptions.Priority
+            ),
+            PrunePrefix: opts._prunePrefix,
+            BatchName: opts._batchName
         );
     }
-
-    private static ManifestOptions CreateItemOptions(ManifestOptions baseOptions) =>
-        new()
-        {
-            Priority = baseOptions.Priority,
-            IsEnabled = baseOptions.IsEnabled,
-            MaxRetries = baseOptions.MaxRetries,
-            Timeout = baseOptions.Timeout,
-            IsDormant = baseOptions.IsDormant,
-            Exclusions = baseOptions.Exclusions,
-            Variance = baseOptions.Variance,
-        };
 
     private static async Task<Manifest> GetManifestByExternalIdAsync(
         IDataContext context,
@@ -1286,6 +1540,7 @@ public class TraxScheduler(
 
     private async Task PruneSafeAsync(
         string prunePrefix,
+        string? batchGroup,
         System.Collections.Generic.HashSet<string> keepExternalIds,
         CancellationToken ct
     )
@@ -1293,7 +1548,13 @@ public class TraxScheduler(
         try
         {
             await using var pruneContext = CreateContext();
-            await PruneStaleManifestsAsync(pruneContext, prunePrefix, keepExternalIds, ct);
+            await PruneStaleManifestsAsync(
+                pruneContext,
+                prunePrefix,
+                batchGroup,
+                keepExternalIds,
+                ct
+            );
         }
         catch (Exception ex)
         {
@@ -1305,9 +1566,16 @@ public class TraxScheduler(
         }
     }
 
+    /// <summary>
+    /// Deletes the manifests whose external ID starts with <paramref name="prunePrefix"/> and that
+    /// this batch no longer declares. A named batch passes its group in
+    /// <paramref name="batchGroup"/> and prunes only manifests of that group, so a batch named
+    /// <c>sync</c> never prunes the manifests of one named <c>sync-users</c>.
+    /// </summary>
     private async Task PruneStaleManifestsAsync(
         IDataContext context,
         string prunePrefix,
+        string? batchGroup,
         System.Collections.Generic.HashSet<string> keepExternalIds,
         CancellationToken ct
     )
@@ -1315,8 +1583,11 @@ public class TraxScheduler(
         // Server compute: load prefixed manifest IDs, filter stale ones in C#.
         // Avoids a NOT IN(...) clause with many string parameters that can timeout
         // on low-resource Postgres instances during query planning.
-        var prefixedManifests = await context
-            .Manifests.Where(m => m.ExternalId.StartsWith(prunePrefix))
+        var prefixed = context.Manifests.Where(m => m.ExternalId.StartsWith(prunePrefix));
+        if (batchGroup is not null)
+            prefixed = prefixed.Where(m => m.ManifestGroup.Name == batchGroup);
+
+        var prefixedManifests = await prefixed
             .Select(m => new { m.Id, m.ExternalId })
             .ToListAsync(ct);
 
@@ -1328,40 +1599,21 @@ public class TraxScheduler(
         if (staleManifestIds.Count == 0)
             return;
 
-        // Database compute: delete by integer PK — small IN(...) clause per query.
-        await context
-            .WorkQueues.Where(w =>
-                w.ManifestId.HasValue && staleManifestIds.Contains(w.ManifestId.Value)
-            )
-            .ExecuteDeleteAsync(ct);
-
-        await context
-            .DeadLetters.Where(d => staleManifestIds.Contains(d.ManifestId))
-            .ExecuteDeleteAsync(ct);
-
-        await context
-            .Metadatas.Where(m =>
-                m.ManifestId.HasValue && staleManifestIds.Contains(m.ManifestId.Value)
-            )
-            .ExecuteDeleteAsync(ct);
-
-        var pruned = await context
-            .Manifests.Where(m => staleManifestIds.Contains(m.Id))
-            .ExecuteDeleteAsync(ct);
+        var (pruned, kept) = await ManifestPruner.PruneAsync(context, staleManifestIds, logger, ct);
 
         logger.LogInformation(
-            "Pruned {Count} stale manifests with prefix '{Prefix}'",
+            "Pruned {Count} stale manifests with prefix '{Prefix}' ({Kept} kept until their runs finish)",
             pruned,
-            prunePrefix
+            prunePrefix,
+            kept
         );
     }
 
     private record ResolvedOptions(
         ManifestOptions ManifestOptions,
         string? GroupId,
-        int GroupPriority,
-        int? GroupMaxActiveJobs,
-        bool GroupEnabled,
-        string? PrunePrefix
+        ManifestGroupSeed Group,
+        string? PrunePrefix,
+        string? BatchName
     );
 }

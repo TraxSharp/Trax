@@ -8,10 +8,15 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// schedules based on cron expressions. Supports both standard 5-field
 /// (minute granularity) and 6-field (second granularity) cron formats.
 /// For complex schedules, use <see cref="Expression"/> with a raw cron string.
+///
+/// Every time is in UTC: <c>Cron.Daily(hour: 3)</c> runs at 03:00 UTC. Each method builds its
+/// schedule through <see cref="Schedule.FromCron"/>, so a value out of range (an hour of 25, a
+/// minute of 60) throws <see cref="FormatException"/>. A new cron schedule first runs at its
+/// first occurrence after it is scheduled.
 /// </remarks>
 /// <example>
 /// <code>
-/// // Schedule a job to run daily at 3am
+/// // Schedule a job to run daily at 03:00 UTC
 /// await scheduler.ScheduleAsync&lt;IMyTrain, MyInput, Unit&gt;(
 ///     "my-job",
 ///     new MyInput(),
@@ -62,7 +67,7 @@ public static class Cron
             : Schedule.FromCron($"{second} {minute} * * * *");
 
     /// <summary>
-    /// Creates a schedule that runs daily at the specified time.
+    /// Creates a schedule that runs daily at the specified UTC time.
     /// </summary>
     /// <param name="hour">The hour of the day to run (0-23). Defaults to 0.</param>
     /// <param name="minute">The minute of the hour to run (0-59). Defaults to 0.</param>
@@ -75,7 +80,7 @@ public static class Cron
             : Schedule.FromCron($"{second} {minute} {hour} * * *");
 
     /// <summary>
-    /// Creates a schedule that runs weekly on the specified day and time.
+    /// Creates a schedule that runs weekly on the specified day and UTC time.
     /// </summary>
     /// <param name="day">The day of the week to run</param>
     /// <param name="hour">The hour of the day to run (0-23). Defaults to 0.</param>
@@ -89,7 +94,7 @@ public static class Cron
             : Schedule.FromCron($"{second} {minute} {hour} * * {(int)day}");
 
     /// <summary>
-    /// Creates a schedule that runs monthly on the specified day and time.
+    /// Creates a schedule that runs monthly on the specified day and UTC time.
     /// </summary>
     /// <param name="day">The day of the month to run (1-31). Defaults to 1.</param>
     /// <param name="hour">The hour of the day to run (0-23). Defaults to 0.</param>
@@ -105,8 +110,9 @@ public static class Cron
     /// <summary>
     /// Creates a schedule from a custom cron expression.
     /// </summary>
-    /// <param name="cronExpression">A 5-field or 6-field cron expression</param>
+    /// <param name="cronExpression">A 5-field or 6-field cron expression, evaluated in UTC</param>
     /// <returns>A Schedule configured with the specified cron expression</returns>
+    /// <exception cref="FormatException">The expression is not a valid cron expression.</exception>
     /// <remarks>
     /// Supports both formats:
     /// - 5-field: minute hour day-of-month month day-of-week
@@ -115,10 +121,10 @@ public static class Cron
     /// The format is auto-detected by counting fields.
     ///
     /// Examples:
-    /// - "0 3 * * *" - Daily at 3am (5-field)
+    /// - "0 3 * * *" - Daily at 03:00 UTC (5-field)
     /// - "0 */6 * * *" - Every 6 hours (5-field)
     /// - "*/15 * * * * *" - Every 15 seconds (6-field)
-    /// - "30 0 3 * * *" - Daily at 3:00:30am (6-field)
+    /// - "30 0 3 * * *" - Daily at 03:00:30 UTC (6-field)
     /// </remarks>
     public static Schedule Expression(string cronExpression) => Schedule.FromCron(cronExpression);
 }

@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.SchedulerStartupService;
 
@@ -12,10 +13,11 @@ public class SchedulerStartupServiceTests
 {
     #region Helpers
 
-    private static SchedulerStartupService CreateService()
+    private static SchedulerStartupService CreateService(ISqlDialect? dialect = null)
     {
         var services = new ServiceCollection();
         services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Trace));
+        services.AddSingleton(dialect ?? new TimeoutIsTransientDialect());
 
         var sp = services.BuildServiceProvider();
         var logger = sp.GetRequiredService<ILogger<SchedulerStartupService>>();
@@ -24,105 +26,74 @@ public class SchedulerStartupServiceTests
         return new SchedulerStartupService(sp, config, logger);
     }
 
+    /// <summary>
+    /// A dialect that calls a failure transient when a <see cref="TimeoutException"/> is anywhere
+    /// in its chain, as both shipped dialects do. The real classifications are pinned against
+    /// each provider's own dialect in the Postgres and Sqlite integration suites.
+    /// </summary>
+    private sealed class TimeoutIsTransientDialect : ISqlDialect
+    {
+        public List<Exception> Asked { get; } = [];
+
+        public bool IsTransient(Exception exception)
+        {
+            Asked.Add(exception);
+            for (Exception? e = exception; e is not null; e = e.InnerException)
+                if (e is TimeoutException)
+                    return true;
+            return false;
+        }
+
+        public FormattableString TryAcquireLeaderLock(string lockName) =>
+            throw new NotSupportedException();
+
+        public string ClaimWorkQueueEntry() => throw new NotSupportedException();
+
+        public string DequeueBackgroundJobs() => throw new NotSupportedException();
+
+        public string LoadGroupFairQueuedJobs() => throw new NotSupportedException();
+    }
+
     #endregion
 
     #region IsTransient detection
 
     [Test]
-    public void IsTransient_TimeoutException_ReturnsTrue()
+    public void IsTransient_AsksTheProvidersDialect()
     {
-        var ex = new TimeoutException("timed out");
-        SchedulerStartupService.IsTransient(ex).Should().BeTrue();
+        var dialect = new TimeoutIsTransientDialect();
+        var service = CreateService(dialect);
+        var failure = new InvalidOperationException("wrapping", new TimeoutException());
+
+        service.IsTransient(failure).Should().BeTrue();
+        dialect.Asked.Should().ContainSingle().Which.Should().BeSameAs(failure);
     }
 
     [Test]
-    public void IsTransient_NpgsqlException_ReturnsTrue()
+    public void IsTransient_ANonTransientFailureTheDialectRejects_ReturnsFalse()
     {
-        var ex = new NpgsqlException("connection failed");
-        SchedulerStartupService.IsTransient(ex).Should().BeTrue();
+        CreateService().IsTransient(new ArgumentException("bad argument")).Should().BeFalse();
     }
 
     [Test]
-    public void IsTransient_InvalidOperationWrappingNpgsqlException_ReturnsTrue()
+    public void IsTransient_AnyExceptionFromTheNpgsqlNamespace_IsNotTransientByNameAlone()
     {
-        var inner = new NpgsqlException("connection failed");
-        var ex = new InvalidOperationException("transient failure", inner);
-        SchedulerStartupService.IsTransient(ex).Should().BeTrue();
+        // A Postgres error the dialect does not call transient (a constraint violation, a syntax
+        // error) fails the same way on every try, whatever namespace its type lives in.
+        CreateService().IsTransient(new NpgsqlException("syntax error")).Should().BeFalse();
     }
 
     [Test]
-    public void IsTransient_InvalidOperationWrappingTimeout_ReturnsTrue()
+    public void IsTransient_WithNoDialectRegistered_ReturnsFalse()
     {
-        var inner = new TimeoutException("read timeout");
-        var ex = new InvalidOperationException("transient failure", inner);
-        SchedulerStartupService.IsTransient(ex).Should().BeTrue();
-    }
-
-    [Test]
-    public void IsTransient_DeepNestedTransient_ReturnsTrue()
-    {
-        // InvalidOperationException -> InvalidOperationException -> TimeoutException
-        var timeout = new TimeoutException("deep timeout");
-        var mid = new InvalidOperationException("mid layer", timeout);
-        var outer = new InvalidOperationException("outer layer", mid);
-        SchedulerStartupService.IsTransient(outer).Should().BeTrue();
-    }
-
-    [Test]
-    public void IsTransient_ExactProductionStackTrace_ReturnsTrue()
-    {
-        // Reproduce: InvalidOperationException -> NpgsqlException -> TimeoutException
-        var timeout = new TimeoutException("Timeout during reading attempt");
-        var npgsql = new NpgsqlException("Exception while reading from stream", timeout);
-        var outer = new InvalidOperationException(
-            "An exception has been raised that is likely due to a transient failure.",
-            npgsql
+        var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        var service = new SchedulerStartupService(
+            services,
+            new SchedulerConfiguration { RecoverStuckJobsOnStartup = false },
+            services.GetRequiredService<ILogger<SchedulerStartupService>>()
         );
-        SchedulerStartupService.IsTransient(outer).Should().BeTrue();
-    }
 
-    [Test]
-    public void IsTransient_ArgumentException_ReturnsFalse()
-    {
-        var ex = new ArgumentException("bad argument");
-        SchedulerStartupService.IsTransient(ex).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsTransient_InvalidOperationWithNonTransientInner_ReturnsFalse()
-    {
-        var inner = new ArgumentException("not transient");
-        var ex = new InvalidOperationException("wrapping", inner);
-        SchedulerStartupService.IsTransient(ex).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsTransient_InvalidOperationWithNoInner_ReturnsFalse()
-    {
-        var ex = new InvalidOperationException("standalone");
-        SchedulerStartupService.IsTransient(ex).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsTransient_NullReferenceException_ReturnsFalse()
-    {
-        var ex = new NullReferenceException("oops");
-        SchedulerStartupService.IsTransient(ex).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsTransient_IOException_ReturnsFalse()
-    {
-        var ex = new IOException("disk error");
-        SchedulerStartupService.IsTransient(ex).Should().BeFalse();
-    }
-
-    [Test]
-    public void IsTransient_InvalidOperationWrappingIOException_ReturnsFalse()
-    {
-        var inner = new IOException("disk error");
-        var ex = new InvalidOperationException("wrapping", inner);
-        SchedulerStartupService.IsTransient(ex).Should().BeFalse();
+        service.IsTransient(new TimeoutException()).Should().BeFalse();
     }
 
     #endregion
@@ -172,28 +143,6 @@ public class SchedulerStartupServiceTests
         );
 
         callCount.Should().Be(3);
-    }
-
-    [Test]
-    public async Task SeedWithRetryAsync_NpgsqlExceptionThenSuccess_RetriesAndSucceeds()
-    {
-        var callCount = 0;
-        var service = CreateService();
-
-        await service.SeedWithRetryAsync(
-            _ =>
-            {
-                callCount++;
-                if (callCount == 1)
-                    throw new NpgsqlException("connection reset");
-                return Task.CompletedTask;
-            },
-            "npgsql-retry",
-            CancellationToken.None,
-            baseDelay: TimeSpan.Zero
-        );
-
-        callCount.Should().Be(2);
     }
 
     [Test]
@@ -323,28 +272,6 @@ public class SchedulerStartupServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("transient");
         callCount.Should().Be(5, "should exhaust all 5 retry attempts");
-    }
-
-    [Test]
-    public async Task SeedWithRetryAsync_AllRetriesExhausted_ThrowsNpgsqlOnFinalAttempt()
-    {
-        var callCount = 0;
-        var service = CreateService();
-
-        var act = () =>
-            service.SeedWithRetryAsync(
-                _ =>
-                {
-                    callCount++;
-                    throw new NpgsqlException("connection refused");
-                },
-                "npgsql-exhaust",
-                CancellationToken.None,
-                baseDelay: TimeSpan.Zero
-            );
-
-        await act.Should().ThrowAsync<NpgsqlException>();
-        callCount.Should().Be(5);
     }
 
     #endregion

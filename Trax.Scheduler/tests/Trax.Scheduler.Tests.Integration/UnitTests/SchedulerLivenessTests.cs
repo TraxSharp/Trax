@@ -39,6 +39,9 @@ public class SchedulerLivenessTests
         return check.CheckHealthAsync(context, CancellationToken.None);
     }
 
+    /// <summary>A host whose JobDispatcher runs (it has a database provider).</summary>
+    private static SchedulerConfiguration DispatchingHost() => new() { HasDatabaseProvider = true };
+
     #region Monitor
 
     [Test]
@@ -72,7 +75,7 @@ public class SchedulerLivenessTests
     {
         var time = new TestTimeProvider(Start);
         var monitor = new SchedulerLivenessMonitor(time);
-        var config = new SchedulerConfiguration(); // default threshold floor is 30s
+        var config = DispatchingHost(); // default threshold floor is 30s
         var check = new SchedulerLivenessHealthCheck(monitor, config, time);
 
         // No cycle yet, but only a few seconds since startup -> still within the grace window.
@@ -87,7 +90,7 @@ public class SchedulerLivenessTests
     {
         var time = new TestTimeProvider(Start);
         var monitor = new SchedulerLivenessMonitor(time);
-        var config = new SchedulerConfiguration();
+        var config = DispatchingHost();
         var check = new SchedulerLivenessHealthCheck(monitor, config, time);
 
         // The scheduler has been up well past the threshold without ever dispatching.
@@ -102,7 +105,7 @@ public class SchedulerLivenessTests
     {
         var time = new TestTimeProvider(Start);
         var monitor = new SchedulerLivenessMonitor(time);
-        var config = new SchedulerConfiguration();
+        var config = DispatchingHost();
         var check = new SchedulerLivenessHealthCheck(monitor, config, time);
 
         monitor.RecordDispatchCycle();
@@ -117,7 +120,7 @@ public class SchedulerLivenessTests
     {
         var time = new TestTimeProvider(Start);
         var monitor = new SchedulerLivenessMonitor(time);
-        var config = new SchedulerConfiguration();
+        var config = DispatchingHost();
         var check = new SchedulerLivenessHealthCheck(monitor, config, time);
 
         monitor.RecordDispatchCycle();
@@ -134,6 +137,7 @@ public class SchedulerLivenessTests
         var monitor = new SchedulerLivenessMonitor(time);
         var config = new SchedulerConfiguration
         {
+            HasDatabaseProvider = true,
             SchedulerLivenessThreshold = TimeSpan.FromMinutes(5),
         };
         var check = new SchedulerLivenessHealthCheck(monitor, config, time)
@@ -157,6 +161,7 @@ public class SchedulerLivenessTests
         var monitor = new SchedulerLivenessMonitor(time);
         var config = new SchedulerConfiguration
         {
+            HasDatabaseProvider = true,
             SchedulerLivenessThreshold = TimeSpan.FromSeconds(100),
         };
         var check = new SchedulerLivenessHealthCheck(monitor, config, time);
@@ -173,7 +178,7 @@ public class SchedulerLivenessTests
     {
         var time = new TestTimeProvider(Start);
         var monitor = new SchedulerLivenessMonitor(time);
-        var config = new SchedulerConfiguration();
+        var config = DispatchingHost();
         var check = new SchedulerLivenessHealthCheck(monitor, config, time);
 
         monitor.RecordDispatchCycle();
@@ -181,6 +186,94 @@ public class SchedulerLivenessTests
 
         var result = await Check(check, failureStatus: HealthStatus.Degraded);
         result.Status.Should().Be(HealthStatus.Degraded);
+    }
+
+    [Test]
+    public async Task HealthCheck_DispatcherPausedAtRuntime_ReportsHealthyPaused()
+    {
+        var time = new TestTimeProvider(Start);
+        var monitor = new SchedulerLivenessMonitor(time);
+        var config = DispatchingHost();
+        var check = new SchedulerLivenessHealthCheck(monitor, config, time);
+
+        monitor.RecordDispatchCycle();
+        config.JobDispatcherEnabled = false;
+        time.Advance(TimeSpan.FromMinutes(10));
+
+        var result = await Check(check);
+        result.Status.Should().Be(HealthStatus.Healthy, "an operator paused dispatch on purpose");
+        result.Description.Should().Contain("paused");
+    }
+
+    [Test]
+    public async Task HealthCheck_HostWithoutAJobDispatcher_ReportsHealthy()
+    {
+        var time = new TestTimeProvider(Start);
+        var monitor = new SchedulerLivenessMonitor(time);
+        var config = new SchedulerConfiguration(); // InMemory: no JobDispatcher is registered
+        var check = new SchedulerLivenessHealthCheck(monitor, config, time);
+
+        time.Advance(TimeSpan.FromMinutes(10));
+
+        var result = await Check(check);
+        result
+            .Status.Should()
+            .Be(HealthStatus.Healthy, "nothing on this host is meant to dispatch");
+    }
+
+    [Test]
+    public async Task HealthCheck_SlowCycleStillRunning_WithinThreshold_ReportsHealthy()
+    {
+        var time = new TestTimeProvider(Start);
+        var monitor = new SchedulerLivenessMonitor(time);
+        var config = DispatchingHost();
+        var check = new SchedulerLivenessHealthCheck(monitor, config, time);
+
+        monitor.RecordDispatchCycle();
+        time.Advance(TimeSpan.FromSeconds(20));
+        monitor.BeginDispatchCycle();
+        time.Advance(TimeSpan.FromSeconds(20));
+
+        var result = await Check(check);
+        result
+            .Status.Should()
+            .Be(HealthStatus.Healthy, "the last completion is 40s old but a cycle began 20s ago");
+    }
+
+    [Test]
+    public async Task HealthCheck_CycleRunningPastThreshold_ReportsUnhealthy()
+    {
+        var time = new TestTimeProvider(Start);
+        var monitor = new SchedulerLivenessMonitor(time);
+        var config = DispatchingHost();
+        var check = new SchedulerLivenessHealthCheck(monitor, config, time);
+
+        monitor.RecordDispatchCycle();
+        monitor.BeginDispatchCycle();
+        time.Advance(TimeSpan.FromSeconds(31));
+
+        var result = await Check(check);
+        result.Status.Should().Be(HealthStatus.Unhealthy, "the cycle has hung past the threshold");
+    }
+
+    [Test]
+    public async Task HealthCheck_FailingCycles_StayUnhealthy_WhileTheNextOneRuns()
+    {
+        var time = new TestTimeProvider(Start);
+        var monitor = new SchedulerLivenessMonitor(time);
+        var config = DispatchingHost();
+        var check = new SchedulerLivenessHealthCheck(monitor, config, time);
+
+        monitor.RecordDispatchCycle();
+        time.Advance(TimeSpan.FromSeconds(31));
+        monitor.BeginDispatchCycle();
+        monitor.RecordDispatchCycleFailed();
+        monitor.BeginDispatchCycle();
+
+        var result = await Check(check);
+        result
+            .Status.Should()
+            .Be(HealthStatus.Unhealthy, "a cycle that follows a failed one proves nothing yet");
     }
 
     #endregion

@@ -27,7 +27,7 @@ public class TrainRegistryExtensionsTests
 
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*MyInput*not registered*AddEffectTrainBus*");
+            .WithMessage("*IServiceTrain<MyInput, TOut>*ScanAssemblies*");
     }
 
     [Test]

@@ -3,8 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.ManifestPruning;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Scheduler.Services.SchedulerStartupService;
@@ -32,6 +34,11 @@ internal class SchedulerStartupService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        configuration.Owner ??= ResolveOwner(serviceProvider);
+
+        if (configuration.UnreachableRetriesWarning() is { } warning)
+            logger.LogWarning("{Warning}", warning);
+
         // RecoverStuckJobs only makes sense with a real database — in-memory data is
         // lost on restart, so there are no stuck jobs to recover.
         if (configuration.RecoverStuckJobsOnStartup && configuration.HasDatabaseProvider)
@@ -41,6 +48,20 @@ internal class SchedulerStartupService(
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// The name this application's manifests carry as their owner: the host environment's
+    /// <c>ApplicationName</c>, or the entry assembly's name when no host environment is
+    /// registered. Null when neither gives a name, in which case the startup prune deletes nothing.
+    /// </summary>
+    internal static string? ResolveOwner(IServiceProvider services)
+    {
+        var name =
+            services.GetService<IHostEnvironment>()?.ApplicationName
+            ?? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
 
     /// <summary>
     /// Fails every <c>InProgress</c> run in the shared database whose <c>StartTime</c> precedes
@@ -151,11 +172,22 @@ internal class SchedulerStartupService(
                     .PendingManifests.SelectMany(p => p.ExpectedExternalIds)
                     .ToHashSet();
 
-                await PruneOrphanedManifestsAsync(
-                    dataContext,
-                    expectedExternalIds,
-                    cancellationToken
-                );
+                // Pruning is housekeeping: a failure is logged and the host still starts.
+                try
+                {
+                    await PruneOrphanedManifestsAsync(
+                        dataContext,
+                        expectedExternalIds,
+                        cancellationToken
+                    );
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(
+                        ex,
+                        "Pruning orphaned manifests failed; the host starts anyway and the prune runs again at the next start"
+                    );
+                }
             }
 
             // Clean up orphaned ManifestGroups (groups with no manifests remaining)
@@ -221,27 +253,56 @@ internal class SchedulerStartupService(
         }
     }
 
-    internal static bool IsTransient(Exception ex) =>
-        ex is TimeoutException
-        || ex.GetType().FullName?.StartsWith("Npgsql.") == true
-        || (
-            ex is InvalidOperationException
-            && ex.InnerException is not null
-            && IsTransient(ex.InnerException)
-        );
+    /// <summary>
+    /// Whether a seeding failure is worth retrying, as the provider's SQL dialect classifies it:
+    /// a lost or refused connection, a timeout, a deadlock or serialization failure, or (Sqlite) a
+    /// busy or locked database. Any other failure, a constraint violation included, is thrown at
+    /// once. A host with no dialect (InMemory) retries nothing, since it has no database to wait
+    /// for.
+    /// </summary>
+    internal bool IsTransient(Exception ex) =>
+        serviceProvider.GetService<ISqlDialect>()?.IsTransient(ex) ?? false;
 
     /// <summary>
     /// Maximum number of orphaned manifests to delete per batch. Keeps the SQL IN(...)
     /// clause small enough to avoid command timeouts on large prune operations.
     /// </summary>
-    internal const int PruneBatchSize = 500;
+    internal const int PruneBatchSize = ManifestPruner.BatchSize;
 
+    /// <summary>
+    /// Deletes this application's manifests that its configuration no longer declares.
+    /// </summary>
+    /// <remarks>
+    /// A host that declares no manifests prunes nothing: an API or worker host that calls
+    /// <c>AddScheduler</c> only to reach the scheduler services has no basis for calling another
+    /// host's manifests orphaned. Only manifests whose <c>Owner</c> is this application's name are
+    /// candidates, so a manifest another application declares against the same database, or one
+    /// with no owner at all (written before owners were recorded and not declared since), is never
+    /// deleted here; when this application's name cannot be found, nothing is. A manifest with a
+    /// pending or running run is kept until the run finishes (see <see cref="ManifestPruner"/>).
+    /// </remarks>
     private async Task PruneOrphanedManifestsAsync(
         IDataContext dataContext,
         HashSet<string> expectedExternalIds,
         CancellationToken cancellationToken
     )
     {
+        if (expectedExternalIds.Count == 0)
+        {
+            logger.LogInformation(
+                "Skipping orphaned manifest pruning: this host declares no manifests, so it has no basis to call any manifest orphaned"
+            );
+            return;
+        }
+
+        if (configuration.Owner is not { } owner)
+        {
+            logger.LogWarning(
+                "Skipping orphaned manifest pruning: this host has no application name, so it cannot tell its own manifests from another application's"
+            );
+            return;
+        }
+
         // --- Server compute: load lightweight ID pairs, compute orphan set in C# ---
         //
         // Why not filter in the database?
@@ -255,7 +316,8 @@ internal class SchedulerStartupService(
         // where it's a trivial O(n) HashSet lookup. The database only sees simple queries
         // with small IN(...) clauses during the batched deletes.
         var allManifests = await dataContext
-            .Manifests.Select(m => new { m.Id, m.ExternalId })
+            .Manifests.Where(m => m.Owner == owner)
+            .Select(m => new { m.Id, m.ExternalId })
             .ToListAsync(cancellationToken);
 
         var orphanedManifestIds = allManifests
@@ -270,65 +332,23 @@ internal class SchedulerStartupService(
         }
 
         logger.LogInformation(
-            "Found {OrphanCount} orphaned manifest(s) to prune (of {TotalCount} total)",
+            "Found {OrphanCount} orphaned manifest(s) to prune (of {TotalCount} owned by {Owner})",
             orphanedManifestIds.Count,
-            allManifests.Count
+            allManifests.Count,
+            owner
         );
 
-        // --- Database compute: delete orphans in batches by integer PK ---
-        //
-        // Each batch generates WHERE id IN (1, 2, ..., 500) — 500 integer PKs is a
-        // trivial query plan for Postgres regardless of instance size.
-        var totalPruned = 0;
-
-        foreach (var batch in orphanedManifestIds.Chunk(PruneBatchSize))
-        {
-            var batchIds = batch.ToList();
-
-            // Clear self-referencing FK (DependsOnManifestId) for any manifest pointing to
-            // an orphan in this batch. Handles both orphan→orphan and kept→orphan references.
-            await dataContext
-                .Manifests.Where(m =>
-                    m.DependsOnManifestId.HasValue && batchIds.Contains(m.DependsOnManifestId.Value)
-                )
-                .ExecuteUpdateAsync(
-                    s => s.SetProperty(m => m.DependsOnManifestId, (long?)null),
-                    cancellationToken
-                );
-
-            // Delete in FK-dependency order: WorkQueues → DeadLetters → Metadata → Manifests
-            await dataContext
-                .WorkQueues.Where(w =>
-                    w.ManifestId.HasValue && batchIds.Contains(w.ManifestId.Value)
-                )
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await dataContext
-                .DeadLetters.Where(d => batchIds.Contains(d.ManifestId))
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await dataContext
-                .Metadatas.Where(m =>
-                    m.ManifestId.HasValue && batchIds.Contains(m.ManifestId.Value)
-                )
-                .ExecuteDeleteAsync(cancellationToken);
-
-            var pruned = await dataContext
-                .Manifests.Where(m => batchIds.Contains(m.Id))
-                .ExecuteDeleteAsync(cancellationToken);
-
-            totalPruned += pruned;
-
-            logger.LogInformation(
-                "Pruned batch of {BatchCount} orphaned manifest(s) ({TotalCount} total so far)",
-                pruned,
-                totalPruned
-            );
-        }
+        var (pruned, kept) = await ManifestPruner.PruneAsync(
+            dataContext,
+            orphanedManifestIds,
+            logger,
+            cancellationToken
+        );
 
         logger.LogInformation(
-            "Finished pruning {Count} orphaned manifest(s) from the database",
-            totalPruned
+            "Finished pruning {Count} orphaned manifest(s) from the database ({Kept} kept until their runs finish)",
+            pruned,
+            kept
         );
     }
 }

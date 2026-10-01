@@ -6,6 +6,7 @@ using Npgsql;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
+using Trax.Core.Exceptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -343,18 +344,138 @@ public class OperationsServiceEnqueueTests
     }
 
     [Test]
+    public async Task A_missing_authorization_service_is_thrown_rather_than_reported_as_a_refusal()
+    {
+        var missing = new TrainAuthorizationNotConfiguredException(
+            typeof(IProbeTrain).FullName!,
+            "Train 'IProbeTrain' declares [TraxAuthorize] but no ITrainAuthorizationService is registered."
+        );
+        EnqueueThrows(missing);
+
+        OperationResult? result = null;
+        var act = async () =>
+            result = await Queue(
+                new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+            );
+
+        (
+            await act.Should()
+                .ThrowAsync<TrainAuthorizationNotConfiguredException>(
+                    "a host with no enforcer is misconfigured; that is not an answer about the input "
+                        + "(see docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md)"
+                )
+        )
+            .Which.Should()
+            .BeSameAs(missing);
+        result.Should().BeNull();
+        _logger
+            .Errors.Should()
+            .ContainSingle("the misconfiguration is logged where an operator can see it")
+            .Which.Should()
+            .BeSameAs(missing);
+    }
+
+    [Test]
+    public async Task A_missing_authorization_service_is_thrown_by_a_service_built_without_a_logger()
+    {
+        EnqueueThrows(
+            new TrainAuthorizationNotConfiguredException(
+                typeof(IProbeTrain).FullName!,
+                "Train 'IProbeTrain' declares [TraxAuthorize] but no ITrainAuthorizationService is registered."
+            )
+        );
+        var service = new OperationsService(
+            _discovery,
+            Substitute.For<IDataContextProviderFactory>(),
+            new SchedulerConfiguration(),
+            _execution
+        );
+
+        var act = async () =>
+            await service.QueueTrainAsync(
+                new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}"),
+                CancellationToken.None
+            );
+
+        await act.Should()
+            .ThrowAsync<TrainAuthorizationNotConfiguredException>(
+                "with nowhere to log it, the misconfiguration still reaches the caller"
+            );
+    }
+
+    [Test]
     public async Task A_hook_refusal_is_still_reported_as_a_refusal()
     {
-        EnqueueThrows(new InvalidOperationException("Customer 1 is on hold."));
+        EnqueueThrows(new TrainException("Customer 1 is on hold."));
 
         var result = await Queue(
             new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
         );
 
         result.Success.Should().BeFalse();
-        result.Message.Should().Be("The enqueue was refused: Customer 1 is on hold.");
+        result
+            .Message.Should()
+            .Be(
+                "The enqueue was refused: Customer 1 is on hold.",
+                "a plain TrainException's message is the train author's, written for the caller"
+            );
         _logger.Errors.Should().BeEmpty("a refusal is an answer, not a server fault");
     }
+
+    [Test]
+    public async Task A_hook_refusal_of_any_other_type_is_reported_with_a_fixed_message()
+    {
+        var thrown = new InvalidOperationException("secret-host:6379 did not answer");
+        EnqueueThrows(thrown);
+
+        var result = await Queue(
+            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+        );
+
+        result.Success.Should().BeFalse("it is still a refusal, not a server fault");
+        result
+            .Message.Should()
+            .Be(
+                "The enqueue was refused.",
+                "only a plain TrainException's message reaches the caller (see docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md)"
+            );
+        result.Message.Should().NotContain("secret-host");
+        _logger
+            .Warnings.Should()
+            .ContainSingle("the refusal's real exception is logged for an operator")
+            .Which.Should()
+            .BeSameAs(thrown);
+    }
+
+    [Test]
+    public async Task A_refusal_from_a_type_derived_from_train_exception_is_reported_with_a_fixed_message()
+    {
+        EnqueueThrows(new DerivedTrainException("secret-host:6379 did not answer"));
+
+        var result = await Queue(
+            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+        );
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("The enqueue was refused.");
+    }
+
+    [Test]
+    public async Task A_hook_that_runs_past_its_limit_is_reported_with_the_mediators_message()
+    {
+        EnqueueThrows(
+            new QueueHookTimeoutException(typeof(IProbeTrain).FullName!, TimeSpan.FromSeconds(5))
+        );
+
+        var result = await Queue(
+            new QueueTrainInput(typeof(IProbeTrain).FullName!, "{\"customerId\":1}")
+        );
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().StartWith("The enqueue was refused: ").And.Contain("OnQueue");
+    }
+
+    private sealed class DerivedTrainException(string message) : TrainException(message);
 
     [Test]
     public async Task A_cancelled_deferred_entry_is_still_reported_as_a_refusal()
@@ -373,6 +494,8 @@ public class OperationsServiceEnqueueTests
     {
         public List<Exception> Errors { get; } = [];
 
+        public List<Exception> Warnings { get; } = [];
+
         public IDisposable? BeginScope<TState>(TState state)
             where TState : notnull => null;
 
@@ -388,6 +511,8 @@ public class OperationsServiceEnqueueTests
         {
             if (logLevel >= LogLevel.Error && exception is not null)
                 Errors.Add(exception);
+            else if (logLevel == LogLevel.Warning && exception is not null)
+                Warnings.Add(exception);
         }
     }
 }

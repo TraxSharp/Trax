@@ -7,7 +7,8 @@ namespace Trax.Scheduler.Services.CancellationRegistry;
 public interface ICancellationRegistry
 {
     /// <summary>
-    /// Registers a CancellationTokenSource for the given metadata ID.
+    /// Registers a CancellationTokenSource for the given metadata ID. If the ID is already
+    /// registered, the existing registration is kept and this one is ignored.
     /// </summary>
     void Register(long metadataId, CancellationTokenSource cts);
 
@@ -16,6 +17,17 @@ public interface ICancellationRegistry
     /// Does NOT dispose the CTS — the caller owns its lifetime.
     /// </summary>
     void Unregister(long metadataId);
+
+    /// <summary>
+    /// Removes the registration for the given metadata ID only if it is <paramref name="cts"/>,
+    /// so a caller cannot remove a registration another caller made.
+    /// Does NOT dispose the CTS — the caller owns its lifetime.
+    /// </summary>
+    void Unregister(long metadataId, CancellationTokenSource cts)
+    {
+        // Implementations written before this overload existed remove by id alone.
+        Unregister(metadataId);
+    }
 
     /// <summary>
     /// Attempts to cancel the train with the given metadata ID.

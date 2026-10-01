@@ -2,16 +2,18 @@ using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
 /// <summary>
-/// Executes the target train using the TrainBus with the resolved input, then records the
+/// Executes the train the job's metadata row names, by name through the TrainBus, with the resolved input, then records the
 /// success on its manifest.
 /// </summary>
 /// <remarks>
@@ -34,9 +36,18 @@ internal class RunScheduledTrainJunction(
     {
         var (metadata, resolvedInput) = input;
 
+        // A row that is no longer Pending belongs to the delivery that started it, or was
+        // cancelled before it started. This delivery records nothing more and completes, so its
+        // transport acknowledges it rather than retrying.
+        if (metadata.TrainState != TrainState.Pending)
+        {
+            LogOwnedElsewhere(metadata);
+            return Unit.Default;
+        }
+
         // Initialize the dormant dependent context so user train junctions
         // can activate dormant dependents of this parent manifest.
-        // Uses AsyncLocal to flow across the DI scope boundary created by TrainBus.RunAsync.
+        // Uses AsyncLocal to flow across the DI scope boundary created by TrainBus.RunByNameAsync.
         if (metadata.ManifestId.HasValue)
             dormantDependentContext.Initialize(metadata.ManifestId.Value);
 
@@ -48,13 +59,26 @@ internal class RunScheduledTrainJunction(
                 metadata.Id
             );
 
-            await trainBus.RunAsync(resolvedInput.Value, CancellationToken, metadata);
+            // By name: the train the row names runs, even when another train takes the same input type.
+            await trainBus.RunByNameAsync(
+                resolvedInput.TrainName,
+                resolvedInput.Value,
+                CancellationToken,
+                metadata
+            );
 
             logger.LogDebug(
                 "Successfully executed train {TrainName} for Metadata {MetadataId}",
                 metadata.Name,
                 metadata.Id
             );
+        }
+        catch (TrainAlreadyStartedException started) when (started.MetadataId == metadata.Id)
+        {
+            // Another delivery claimed the row between the load and the start; the store decided
+            // it, and the train's body has not run here. Same outcome as the check above.
+            LogOwnedElsewhere(metadata);
+            return Unit.Default;
         }
         finally
         {
@@ -65,13 +89,22 @@ internal class RunScheduledTrainJunction(
 
         // The scheduled work is done. From here on this is bookkeeping for it, not work a
         // cancellation can still usefully stop (effect/0005 applies the same rule to the outcome).
-        RecordManifestSuccess(metadata);
+        await RecordManifestSuccessAsync(metadata);
         await dataContext.SaveChanges(CancellationToken.None);
 
         return Unit.Default;
     }
 
-    private void RecordManifestSuccess(Metadata metadata)
+    private void LogOwnedElsewhere(Metadata metadata) =>
+        logger.LogInformation(
+            "Metadata {MetadataId} ({TrainName}) is {TrainState}, not Pending; this delivery did "
+                + "not run it",
+            metadata.Id,
+            metadata.Name,
+            metadata.TrainState
+        );
+
+    private async Task RecordManifestSuccessAsync(Metadata metadata)
     {
         if (metadata.Manifest is null)
         {
@@ -82,7 +115,13 @@ internal class RunScheduledTrainJunction(
             return;
         }
 
-        metadata.Manifest.LastSuccessfulRun = DateTime.UtcNow;
+        // By the database's clock: a dependent compares this with when its own run was
+        // dispatched, which another machine stamped (see DatabaseClock).
+        var manifestId = metadata.Manifest.Id;
+        metadata.Manifest.LastSuccessfulRun = await DatabaseClock.UtcNowAsync(
+            dataContext.Manifests.Where(m => m.Id == manifestId),
+            CancellationToken.None
+        );
         metadata.Manifest.NextScheduledRun = SchedulingHelpers.ComputeNextScheduledRun(
             metadata.Manifest
         );

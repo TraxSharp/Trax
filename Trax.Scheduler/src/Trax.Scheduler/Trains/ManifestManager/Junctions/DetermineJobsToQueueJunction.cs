@@ -62,7 +62,15 @@ internal class DetermineJobsToQueueJunction(
                 continue;
 
             // Check if this manifest is due for execution
-            if (SchedulingHelpers.ShouldRunNow(view.Manifest, now, config, logger))
+            if (
+                SchedulingHelpers.ShouldRunNow(
+                    view.Manifest,
+                    now,
+                    config,
+                    logger,
+                    view.LastCancelledRun
+                )
+            )
             {
                 logger.LogDebug(
                     "Manifest {ManifestId} (name: {ManifestName}) is due for execution",
@@ -123,12 +131,24 @@ internal class DetermineJobsToQueueJunction(
                     continue;
                 }
 
-                // Queue if parent's LastSuccessfulRun is newer than dependent's LastSuccessfulRun
+                // Queue if the parent succeeded after the dependent's latest run started. That is
+                // when its latest successful run started, not when it finished, so a parent
+                // success that landed while the dependent was running earns it another run (with
+                // no run on record, history pruned, its own LastSuccessfulRun stands in); or when
+                // its latest cancelled run started, when later, because a cancelled run consumed
+                // the parent success it was started for but not one that landed while it ran.
+                var successBaseline =
+                    dependent.LatestSuccessfulRunStart ?? dependent.Manifest.LastSuccessfulRun;
+                var dependentBaseline =
+                    dependent.LatestCancelledRunStart is { } cancelled
+                    && (successBaseline == null || cancelled > successBaseline)
+                        ? cancelled
+                        : successBaseline;
                 if (
                     parent.Manifest.LastSuccessfulRun != null
                     && (
-                        dependent.Manifest.LastSuccessfulRun == null
-                        || parent.Manifest.LastSuccessfulRun > dependent.Manifest.LastSuccessfulRun
+                        dependentBaseline == null
+                        || parent.Manifest.LastSuccessfulRun > dependentBaseline
                     )
                 )
                 {

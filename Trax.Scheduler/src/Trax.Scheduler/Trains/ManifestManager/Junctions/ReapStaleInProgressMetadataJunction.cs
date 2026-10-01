@@ -1,9 +1,11 @@
+using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
@@ -17,42 +19,72 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// will mark the metadata as Failed so it doesn't stay orphaned and block the
 /// DormantDependentContext concurrency guard or count against MaxActiveJobs capacity.
 ///
-/// This junction runs after ReapStalePendingMetadataJunction and before ReapFailedJobsJunction
-/// so that newly-failed metadata is visible to the reaper in the same ManifestManager cycle
-/// (enabling dead-lettering if retries are exhausted).
+/// A run is reaped at the later of <see cref="SchedulerConfiguration.StaleInProgressTimeout"/> and
+/// its own timeout plus the grace the defaults leave between the job timeout and the stale
+/// timeout (<c>StaleInProgressTimeout - DefaultJobTimeout</c>, never negative). Its own timeout is
+/// resolved as CancelTimedOutJobsJunction resolves it (see <see cref="RunTimeouts"/>): the
+/// manifest timeout of the run at the root of its ParentId chain, or
+/// <see cref="SchedulerConfiguration.DefaultJobTimeout"/> when a scheduler dispatched that root, so
+/// a nested run is kept as long as the scheduled run it belongs to and a
+/// <see cref="SchedulerConfiguration.DefaultJobTimeout"/> longer than the stale timeout is honoured. A run still inside its own
+/// timeout is therefore never reaped while it runs, and one that overran it is first cancelled by
+/// CancelTimedOutJobsJunction and only then, once cancellation has had the same time to land,
+/// failed here.
+///
+/// This junction runs after ReapStalePendingMetadataJunction and before LoadManifestsJunction
+/// so that newly-failed metadata is counted in the same ManifestManager cycle (enabling
+/// dead-lettering if retries are exhausted).
 /// </remarks>
 internal class ReapStaleInProgressMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ILogger<ReapStaleInProgressMetadataJunction> logger
-) : EffectJunction<List<ManifestDispatchView>, List<ManifestDispatchView>>
+) : EffectJunction<Unit, Unit>
 {
-    public override async Task<List<ManifestDispatchView>> Run(List<ManifestDispatchView> views)
+    public override async Task<Unit> Run(Unit input)
     {
-        var cutoff = DateTime.UtcNow - config.StaleInProgressTimeout;
+        var now = DateTime.UtcNow;
+        var cutoff = now - config.StaleInProgressTimeout;
 
-        var staleMetadata = await dataContext
+        // Candidates are past the global stale timeout; a run whose manifest allows it longer
+        // is kept until its own threshold.
+        var candidates = await dataContext
             .Metadatas.Where(m =>
                 m.TrainState == TrainState.InProgress
                 && m.StartTime < cutoff
                 && !config.ExcludedTrainTypeNames.Contains(m.Name)
             )
-            .Select(m => new
-            {
+            .Select(m => new TimedRun(
                 m.Id,
+                m.ParentId,
                 m.Name,
                 m.StartTime,
                 m.ManifestId,
-            })
+                m.Manifest != null ? m.Manifest.TimeoutSeconds : null
+            ))
             .AsNoTracking()
             .ToListAsync(CancellationToken);
+
+        var bounds =
+            candidates.Count == 0
+                ? []
+                : await RunTimeouts.ResolveAsync(
+                    dataContext,
+                    config,
+                    candidates,
+                    CancellationToken
+                );
+
+        var staleMetadata = candidates
+            .Where(m => now - m.StartTime > StaleThreshold(bounds[m.Id].Timeout))
+            .ToList();
 
         if (staleMetadata.Count == 0)
         {
             logger.LogDebug(
                 "ReapStaleInProgressMetadataJunction: no stale in-progress metadata found"
             );
-            return views;
+            return Unit.Default;
         }
 
         var staleIds = new List<long>(staleMetadata.Count);
@@ -69,8 +101,6 @@ internal class ReapStaleInProgressMetadataJunction(
                 md.StartTime
             );
         }
-
-        var now = DateTime.UtcNow;
 
         await dataContext
             .Metadatas.Where(m => staleIds.Contains(m.Id) && m.TrainState == TrainState.InProgress)
@@ -95,6 +125,26 @@ internal class ReapStaleInProgressMetadataJunction(
             staleIds.Count
         );
 
-        return views;
+        return Unit.Default;
+    }
+
+    /// <summary>
+    /// How long a run may stay InProgress before it is failed: the stale in-progress timeout, or
+    /// the run's own timeout plus the grace between the default job timeout and the stale timeout
+    /// when that is longer.
+    /// </summary>
+    private TimeSpan StaleThreshold(TimeSpan? effectiveTimeout)
+    {
+        if (effectiveTimeout is not { } timeout)
+            return config.StaleInProgressTimeout;
+
+        var grace = config.StaleInProgressTimeout - config.DefaultJobTimeout;
+        if (grace < TimeSpan.Zero)
+            grace = TimeSpan.Zero;
+
+        var ownThreshold = timeout + grace;
+        return ownThreshold > config.StaleInProgressTimeout
+            ? ownThreshold
+            : config.StaleInProgressTimeout;
     }
 }

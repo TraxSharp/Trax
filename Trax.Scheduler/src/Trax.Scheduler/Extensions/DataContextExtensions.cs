@@ -6,6 +6,7 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Scheduling;
 using Schedule = Trax.Scheduler.Services.Scheduling.Schedule;
 
 namespace Trax.Scheduler.Extensions;
@@ -13,18 +14,22 @@ namespace Trax.Scheduler.Extensions;
 /// <summary>
 /// Extension methods for <see cref="IDataContext"/> used by the scheduler.
 /// </summary>
+/// <remarks>
+/// Seeding runs at every host start. The schedule, input, train and the options code always owns
+/// are written each time; the manifest's enabled flag and the group's settings, which operators
+/// change at runtime, are written only when the options state them.
+/// </remarks>
 internal static class DataContextExtensions
 {
     /// <summary>
-    /// Ensures a ManifestGroup exists with the given name, creating one if necessary.
+    /// Ensures a ManifestGroup exists with the given name, creating one if necessary. An existing
+    /// group's settings change only where <paramref name="group"/> states them.
     /// </summary>
     /// <returns>The ManifestGroup ID.</returns>
     public static async Task<long> EnsureManifestGroupAsync(
         this IDataContext context,
         string groupName,
-        int priority,
-        int? maxActiveJobs = null,
-        bool isEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
     {
@@ -35,26 +40,40 @@ internal static class DataContextExtensions
 
         if (existing != null)
         {
-            existing.Priority = priority;
-            existing.MaxActiveJobs = maxActiveJobs;
-            existing.IsEnabled = isEnabled;
-            existing.UpdatedAt = DateTime.UtcNow;
+            var changed = false;
+            if (group.Priority is { } priority && existing.Priority != priority)
+            {
+                existing.Priority = priority;
+                changed = true;
+            }
+            if (group.MaxActiveJobsStated && existing.MaxActiveJobs != group.MaxActiveJobs)
+            {
+                existing.MaxActiveJobs = group.MaxActiveJobs;
+                changed = true;
+            }
+            if (group.IsEnabled is { } enabled && existing.IsEnabled != enabled)
+            {
+                existing.IsEnabled = enabled;
+                changed = true;
+            }
+            if (changed)
+                existing.UpdatedAt = DateTime.UtcNow;
             return existing.Id;
         }
 
-        var group = new ManifestGroup
+        var created = new ManifestGroup
         {
             Name = groupName,
-            Priority = priority,
-            MaxActiveJobs = maxActiveJobs,
-            IsEnabled = isEnabled,
+            Priority = group.Priority ?? group.PriorityIfNew,
+            MaxActiveJobs = group.MaxActiveJobsStated ? group.MaxActiveJobs : null,
+            IsEnabled = group.IsEnabled ?? true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
-        context.ManifestGroups.Add(group);
+        context.ManifestGroups.Add(created);
         await context.SaveChanges(ct);
 
-        return group.Id;
+        return created.Id;
     }
 
     /// <summary>
@@ -67,9 +86,7 @@ internal static class DataContextExtensions
         Schedule schedule,
         ManifestOptions options,
         string groupId,
-        int groupPriority,
-        int? groupMaxActiveJobs = null,
-        bool groupIsEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -81,9 +98,7 @@ internal static class DataContextExtensions
             schedule,
             options,
             groupId,
-            groupPriority,
-            groupMaxActiveJobs,
-            groupIsEnabled,
+            group,
             ct
         );
 
@@ -98,19 +113,11 @@ internal static class DataContextExtensions
         Schedule schedule,
         ManifestOptions options,
         string groupId,
-        int groupPriority,
-        int? groupMaxActiveJobs = null,
-        bool groupIsEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(
-            groupId,
-            groupPriority,
-            groupMaxActiveJobs,
-            groupIsEnabled,
-            ct
-        );
+        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
 
         var existing = await context.Manifests.FirstOrDefaultAsync(
             m => m.ExternalId == externalId,
@@ -122,17 +129,15 @@ internal static class DataContextExtensions
             // Update only scheduling-related fields, preserve runtime state
             existing.Name = trainType.FullName!;
             existing.SetProperties(input);
-            existing.IsEnabled = options.IsEnabled;
-            existing.MaxRetries = options.MaxRetries;
-            existing.TimeoutSeconds = options.Timeout.HasValue
-                ? (int)options.Timeout.Value.TotalSeconds
-                : null;
+            if (options._isEnabled is { } isEnabled)
+                existing.IsEnabled = isEnabled;
+            ApplyStatedSettings(existing, options);
             existing.ManifestGroupId = manifestGroupId;
-            existing.Priority = options.Priority;
             ApplySchedule(existing, schedule);
             ApplyVariance(existing, schedule, options);
             ApplyMisfireOptions(existing, options);
             ApplyExclusions(existing, options);
+            ApplyFailureWindow(existing, options);
 
             return existing;
         }
@@ -155,6 +160,7 @@ internal static class DataContextExtensions
         ApplyVariance(manifest, schedule, options);
         ApplyMisfireOptions(manifest, options);
         ApplyExclusions(manifest, options);
+        ApplyFailureWindow(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -171,9 +177,7 @@ internal static class DataContextExtensions
         long dependsOnManifestId,
         ManifestOptions options,
         string groupId,
-        int groupPriority,
-        int? groupMaxActiveJobs = null,
-        bool groupIsEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -185,9 +189,7 @@ internal static class DataContextExtensions
             dependsOnManifestId,
             options,
             groupId,
-            groupPriority,
-            groupMaxActiveJobs,
-            groupIsEnabled,
+            group,
             ct
         );
 
@@ -202,19 +204,11 @@ internal static class DataContextExtensions
         long dependsOnManifestId,
         ManifestOptions options,
         string groupId,
-        int groupPriority,
-        int? groupMaxActiveJobs = null,
-        bool groupIsEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(
-            groupId,
-            groupPriority,
-            groupMaxActiveJobs,
-            groupIsEnabled,
-            ct
-        );
+        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
 
         var existing = await context.Manifests.FirstOrDefaultAsync(
             m => m.ExternalId == externalId,
@@ -229,19 +223,17 @@ internal static class DataContextExtensions
         {
             existing.Name = trainType.FullName!;
             existing.SetProperties(input);
-            existing.IsEnabled = options.IsEnabled;
-            existing.MaxRetries = options.MaxRetries;
-            existing.TimeoutSeconds = options.Timeout.HasValue
-                ? (int)options.Timeout.Value.TotalSeconds
-                : null;
+            if (options._isEnabled is { } isEnabled)
+                existing.IsEnabled = isEnabled;
+            ApplyStatedSettings(existing, options);
             existing.ManifestGroupId = manifestGroupId;
-            existing.Priority = options.Priority;
             existing.ScheduleType = scheduleType;
             existing.DependsOnManifestId = dependsOnManifestId;
             existing.CronExpression = null;
             existing.IntervalSeconds = null;
             ApplyMisfireOptions(existing, options);
             ApplyExclusions(existing, options);
+            ApplyFailureWindow(existing, options);
 
             return existing;
         }
@@ -263,6 +255,7 @@ internal static class DataContextExtensions
         manifest.SetProperties(input);
         ApplyMisfireOptions(manifest, options);
         ApplyExclusions(manifest, options);
+        ApplyFailureWindow(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -279,9 +272,7 @@ internal static class DataContextExtensions
         DateTime scheduledAt,
         ManifestOptions options,
         string groupId,
-        int groupPriority,
-        int? groupMaxActiveJobs = null,
-        bool groupIsEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
         where TTrain : IServiceTrain<TInput, TOutput>
@@ -293,9 +284,7 @@ internal static class DataContextExtensions
             scheduledAt,
             options,
             groupId,
-            groupPriority,
-            groupMaxActiveJobs,
-            groupIsEnabled,
+            group,
             ct
         );
 
@@ -310,19 +299,11 @@ internal static class DataContextExtensions
         DateTime scheduledAt,
         ManifestOptions options,
         string groupId,
-        int groupPriority,
-        int? groupMaxActiveJobs = null,
-        bool groupIsEnabled = true,
+        ManifestGroupSeed group,
         CancellationToken ct = default
     )
     {
-        var manifestGroupId = await context.EnsureManifestGroupAsync(
-            groupId,
-            groupPriority,
-            groupMaxActiveJobs,
-            groupIsEnabled,
-            ct
-        );
+        var manifestGroupId = await context.EnsureManifestGroupAsync(groupId, group, ct);
 
         var existing = await context.Manifests.FirstOrDefaultAsync(
             m => m.ExternalId == externalId,
@@ -333,19 +314,17 @@ internal static class DataContextExtensions
         {
             existing.Name = trainType.FullName!;
             existing.SetProperties(input);
-            existing.IsEnabled = options.IsEnabled;
-            existing.MaxRetries = options.MaxRetries;
-            existing.TimeoutSeconds = options.Timeout.HasValue
-                ? (int)options.Timeout.Value.TotalSeconds
-                : null;
+            if (options._isEnabled is { } isEnabled)
+                existing.IsEnabled = isEnabled;
+            ApplyStatedSettings(existing, options);
             existing.ManifestGroupId = manifestGroupId;
-            existing.Priority = options.Priority;
             existing.ScheduleType = ScheduleType.Once;
             existing.ScheduledAt = scheduledAt;
             existing.CronExpression = null;
             existing.IntervalSeconds = null;
             ApplyMisfireOptions(existing, options);
             ApplyExclusions(existing, options);
+            ApplyFailureWindow(existing, options);
 
             return existing;
         }
@@ -367,6 +346,7 @@ internal static class DataContextExtensions
         manifest.SetProperties(input);
         ApplyMisfireOptions(manifest, options);
         ApplyExclusions(manifest, options);
+        ApplyFailureWindow(manifest, options);
 
         context.Manifests.Add(manifest);
 
@@ -374,10 +354,33 @@ internal static class DataContextExtensions
     }
 
     /// <summary>
+    /// Writes the retries, timeout and priority to an existing manifest, each only when the code
+    /// states it. An operator can change any of them at runtime, and an unstated one keeps
+    /// whatever the database holds (scheduler/0011).
+    /// </summary>
+    private static void ApplyStatedSettings(Manifest existing, ManifestOptions options)
+    {
+        if (options._maxRetries is { } maxRetries)
+            existing.MaxRetries = maxRetries;
+        if (options._timeoutStated)
+            existing.TimeoutSeconds = options.Timeout.HasValue
+                ? (int)options.Timeout.Value.TotalSeconds
+                : null;
+        if (options._priority is { } priority)
+            existing.Priority = priority;
+    }
+
+    /// <summary>
     /// Applies schedule configuration to a manifest.
     /// </summary>
     private static void ApplySchedule(Manifest manifest, Schedule schedule)
     {
+        var unchangedCron =
+            manifest.ScheduleType == ScheduleType.Cron
+            && schedule.Type == ScheduleType.Cron
+            && manifest.CronExpression == schedule.CronExpression;
+        var firstOccurrence = manifest.NextScheduledRun;
+
         manifest.ScheduleType = schedule.Type;
         manifest.CronExpression = schedule.CronExpression;
         manifest.IntervalSeconds = schedule.Interval.HasValue
@@ -387,6 +390,17 @@ internal static class DataContextExtensions
         // Clear pre-computed next run on schedule change so it gets recomputed
         // after the next successful execution.
         manifest.NextScheduledRun = null;
+
+        // A cron that has never succeeded first runs at its first occurrence after it was
+        // scheduled, not on the next poll. Re-stating the same cron keeps the occurrence already
+        // recorded, so a restart does not push a pending first run back.
+        if (schedule.Type == ScheduleType.Cron && manifest.LastSuccessfulRun is null)
+            manifest.NextScheduledRun =
+                unchangedCron && firstOccurrence is not null
+                    ? firstOccurrence
+                    : CronParser
+                        .Parse(schedule.CronExpression!)
+                        .GetNextOccurrence(DateTime.UtcNow, TimeZoneInfo.Utc);
     }
 
     /// <summary>
@@ -442,6 +456,16 @@ internal static class DataContextExtensions
     }
 
     /// <summary>
+    /// Writes the manifest's own failure window when the options state one. Unstated, a new
+    /// manifest keeps null (the scheduler's window) and an existing one keeps the window it has.
+    /// </summary>
+    private static void ApplyFailureWindow(Manifest manifest, ManifestOptions options)
+    {
+        if (options.FailureWindow is { } window)
+            manifest.FailureWindowSeconds = (int)window.TotalSeconds;
+    }
+
+    /// <summary>
     /// Applies exclusion window configuration to a manifest from the options.
     /// </summary>
     private static void ApplyExclusions(Manifest manifest, ManifestOptions options)
@@ -449,3 +473,20 @@ internal static class DataContextExtensions
         manifest.SetExclusions(options.Exclusions);
     }
 }
+
+/// <summary>
+/// The group settings one seeding call states. A null field (or an unstated limit) leaves an
+/// existing group's value alone.
+/// </summary>
+/// <param name="Priority">The group priority the options state, or null.</param>
+/// <param name="MaxActiveJobsStated">Whether the options state the limit; its value may be null (no limit).</param>
+/// <param name="MaxActiveJobs">The stated limit, when <paramref name="MaxActiveJobsStated"/>.</param>
+/// <param name="IsEnabled">The enabled flag the options state, or null.</param>
+/// <param name="PriorityIfNew">The priority a new group takes when none is stated.</param>
+internal readonly record struct ManifestGroupSeed(
+    int? Priority = null,
+    bool MaxActiveJobsStated = false,
+    int? MaxActiveJobs = null,
+    bool? IsEnabled = null,
+    int PriorityIfNew = 0
+);

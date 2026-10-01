@@ -9,4 +9,8 @@ namespace Trax.Scheduler.Trains.JobRunner;
 /// a concrete type for Memory routing when passing train input through the JobRunner chain.
 /// </remarks>
 /// <param name="Value">The train input object</param>
-internal record ResolvedTrainInput(object Value);
+/// <param name="TrainName">
+/// The service type full name of the train the job's metadata row names, which is the train that
+/// runs.
+/// </param>
+internal record ResolvedTrainInput(object Value, string TrainName);

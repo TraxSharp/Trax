@@ -1,5 +1,7 @@
 using Amazon.Lambda;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Lambda.Configuration;
@@ -23,6 +25,9 @@ public static class LambdaSchedulerExtensions
     ///
     /// Trains can also be marked with <c>[TraxRemote]</c> to opt into remote execution without
     /// explicit <c>ForTrain&lt;T&gt;()</c> routing. Builder routing takes precedence over the attribute.
+    /// A scheduler with a <c>[TraxRemote]</c> train and no remote submitter at all (this,
+    /// <c>UseRemoteWorkers</c>, <c>UseSqsWorkers</c> or <c>UseLambdaWorkers</c>) refuses to build,
+    /// rather than run the train locally.
     ///
     /// Jobs are sent as <see cref="Trax.Scheduler.Services.Lambda.LambdaEnvelope"/> payloads using
     /// <c>InvocationType.Event</c> (fire-and-forget). The Lambda function receives the payload
@@ -54,24 +59,43 @@ public static class LambdaSchedulerExtensions
         var submitterRouting = new SubmitterRouting();
         routing?.Invoke(submitterRouting);
 
+        // Each call keeps its own options and its own client, so a second call for another
+        // function neither takes over the first one's trains nor shares its settings.
+        var clientKey = $"Trax.LambdaWorkers.{Guid.NewGuid():N}";
+
         builder.AddRoutedSubmitter(
             new RoutedSubmitterRegistration(
                 submitterRouting,
                 typeof(LambdaJobSubmitter),
                 services =>
                 {
-                    services.AddSingleton(options);
+                    services.AddKeyedSingleton<IAmazonLambda>(
+                        clientKey,
+                        (_, _) =>
+                        {
+                            var config = new AmazonLambdaConfig();
+                            options.ConfigureLambdaClient?.Invoke(config);
+                            return new AmazonLambdaClient(config);
+                        }
+                    );
 
-                    services.AddSingleton<IAmazonLambda>(_ =>
-                    {
-                        var config = new AmazonLambdaConfig();
-                        options.ConfigureLambdaClient?.Invoke(config);
-                        return new AmazonLambdaClient(config);
-                    });
-
-                    services.AddScoped<LambdaJobSubmitter>();
+                    // The first call's options and submitter stay resolvable by type, as they
+                    // were before routing was per registration.
+                    services.TryAddSingleton(options);
+                    services.TryAddSingleton<IAmazonLambda>(sp =>
+                        sp.GetRequiredKeyedService<IAmazonLambda>(clientKey)
+                    );
+                    services.TryAddScoped<LambdaJobSubmitter>();
                 }
             )
+            {
+                CreateSubmitter = services => new LambdaJobSubmitter(
+                    services.GetRequiredKeyedService<IAmazonLambda>(clientKey),
+                    options,
+                    services.GetRequiredService<ILogger<LambdaJobSubmitter>>()
+                ),
+                Description = $"UseLambdaWorkers({options.FunctionName})",
+            }
         );
 
         return builder;

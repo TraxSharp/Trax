@@ -1,6 +1,7 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NUnit.Framework;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
@@ -164,6 +165,7 @@ public class SchedulerBuilderBuildCoverageTests
         // submitter PLUS a train carrying the attribute.
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddScoped<IRemoteCoverageTrain, RemoteCoverageTrain>();
 
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UseInMemory())
@@ -179,6 +181,8 @@ public class SchedulerBuilderBuildCoverageTests
                 )
         );
 
+        // The builder has read the registration; the container cannot hold an abstract class.
+        services.RemoveAll<IRemoteCoverageTrain>();
         using var sp = services.BuildServiceProvider();
         var routing = sp.GetRequiredService<JobSubmitterRoutingConfiguration>();
 
@@ -236,8 +240,16 @@ public class SchedulerBuilderBuildCoverageTests
 /// <summary>
 /// Train carrying [TraxRemote] so the scheduler builder's attribute-discovery loop has a hit.
 /// </summary>
+/// <remarks>
+/// Abstract so the assembly scan the other tests run does not register it: a <c>[TraxRemote]</c>
+/// train with no routed submitter fails the scheduler's build, and most of those tests configure
+/// none. A test that wants it registers it itself; discovery reads only its registration, and
+/// nothing here resolves it.
+/// </remarks>
 [TraxRemote]
-internal class RemoteCoverageTrain : ServiceTrain<RemoteCoverageInput, Unit>, IRemoteCoverageTrain
+internal abstract class RemoteCoverageTrain
+    : ServiceTrain<RemoteCoverageInput, Unit>,
+        IRemoteCoverageTrain
 {
     protected override async Task<Either<Exception, Unit>> Junctions() => Resolve();
 }

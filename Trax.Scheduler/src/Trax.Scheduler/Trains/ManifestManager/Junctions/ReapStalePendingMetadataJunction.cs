@@ -1,3 +1,4 @@
+using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
@@ -17,16 +18,22 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// this junction will mark the metadata as Failed so it doesn't stay orphaned in Pending state
 /// forever and count against MaxActiveJobs capacity.
 ///
-/// This junction runs before ReapFailedJobsJunction so that newly-failed metadata is visible to
-/// the reaper in the same ManifestManager cycle (enabling dead-lettering if retries are exhausted).
+/// A run whose job still has a row in <c>trax.background_job</c> is not reaped: it was delivered
+/// to the local worker pool and is waiting for a free worker, or is being run by one. Failing it
+/// would record a failure that did not happen, and the worker that reaches it would then find it
+/// no longer Pending and not run it. A job whose worker died is recovered by the worker pool
+/// itself, after <see cref="LocalWorkerOptions.VisibilityTimeout"/>.
+///
+/// This junction runs before LoadManifestsJunction so that newly-failed metadata is counted in
+/// the same ManifestManager cycle (enabling dead-lettering if retries are exhausted).
 /// </remarks>
 internal class ReapStalePendingMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ILogger<ReapStalePendingMetadataJunction> logger
-) : EffectJunction<List<ManifestDispatchView>, List<ManifestDispatchView>>
+) : EffectJunction<Unit, Unit>
 {
-    public override async Task<List<ManifestDispatchView>> Run(List<ManifestDispatchView> views)
+    public override async Task<Unit> Run(Unit input)
     {
         var cutoff = DateTime.UtcNow - config.StalePendingTimeout;
 
@@ -35,6 +42,7 @@ internal class ReapStalePendingMetadataJunction(
                 m.TrainState == TrainState.Pending
                 && m.StartTime < cutoff
                 && !config.ExcludedTrainTypeNames.Contains(m.Name)
+                && !dataContext.BackgroundJobs.Any(j => j.MetadataId == m.Id)
             )
             .Select(m => new
             {
@@ -49,7 +57,7 @@ internal class ReapStalePendingMetadataJunction(
         if (staleMetadata.Count == 0)
         {
             logger.LogDebug("ReapStalePendingMetadataJunction: no stale pending metadata found");
-            return views;
+            return Unit.Default;
         }
 
         var staleIds = new List<long>(staleMetadata.Count);
@@ -70,7 +78,11 @@ internal class ReapStalePendingMetadataJunction(
         var now = DateTime.UtcNow;
 
         await dataContext
-            .Metadatas.Where(m => staleIds.Contains(m.Id) && m.TrainState == TrainState.Pending)
+            .Metadatas.Where(m =>
+                staleIds.Contains(m.Id)
+                && m.TrainState == TrainState.Pending
+                && !dataContext.BackgroundJobs.Any(j => j.MetadataId == m.Id)
+            )
             .ExecuteUpdateAsync(
                 s =>
                     s.SetProperty(m => m.TrainState, TrainState.Failed)
@@ -92,6 +104,6 @@ internal class ReapStalePendingMetadataJunction(
             staleIds.Count
         );
 
-        return views;
+        return Unit.Default;
     }
 }

@@ -1,5 +1,6 @@
 using Amazon.SQS;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Sqs.Configuration;
@@ -22,6 +23,9 @@ public static class SqsSchedulerExtensions
     ///
     /// Trains can also be marked with <c>[TraxRemote]</c> to opt into remote execution without
     /// explicit <c>ForTrain&lt;T&gt;()</c> routing. Builder routing takes precedence over the attribute.
+    /// A scheduler with a <c>[TraxRemote]</c> train and no remote submitter at all (this,
+    /// <c>UseRemoteWorkers</c>, <c>UseSqsWorkers</c> or <c>UseLambdaWorkers</c>) refuses to build,
+    /// rather than run the train locally.
     ///
     /// Jobs are sent as JSON messages containing a <see cref="RemoteJobRequest"/> payload.
     /// The consumer runs <c>JobRunnerTrain</c> to execute the train.
@@ -50,24 +54,42 @@ public static class SqsSchedulerExtensions
         var submitterRouting = new SubmitterRouting();
         routing?.Invoke(submitterRouting);
 
+        // Each call keeps its own options and its own client, so a second call for another
+        // queue neither takes over the first one's trains nor shares its settings.
+        var clientKey = $"Trax.SqsWorkers.{Guid.NewGuid():N}";
+
         builder.AddRoutedSubmitter(
             new RoutedSubmitterRegistration(
                 submitterRouting,
                 typeof(SqsJobSubmitter),
                 services =>
                 {
-                    services.AddSingleton(options);
+                    services.AddKeyedSingleton<IAmazonSQS>(
+                        clientKey,
+                        (_, _) =>
+                        {
+                            var config = new AmazonSQSConfig();
+                            options.ConfigureSqsClient?.Invoke(config);
+                            return new AmazonSQSClient(config);
+                        }
+                    );
 
-                    services.AddSingleton<IAmazonSQS>(_ =>
-                    {
-                        var config = new AmazonSQSConfig();
-                        options.ConfigureSqsClient?.Invoke(config);
-                        return new AmazonSQSClient(config);
-                    });
-
-                    services.AddScoped<SqsJobSubmitter>();
+                    // The first call's options and submitter stay resolvable by type, as they
+                    // were before routing was per registration.
+                    services.TryAddSingleton(options);
+                    services.TryAddSingleton<IAmazonSQS>(sp =>
+                        sp.GetRequiredKeyedService<IAmazonSQS>(clientKey)
+                    );
+                    services.TryAddScoped<SqsJobSubmitter>();
                 }
             )
+            {
+                CreateSubmitter = services => new SqsJobSubmitter(
+                    services.GetRequiredKeyedService<IAmazonSQS>(clientKey),
+                    options
+                ),
+                Description = $"UseSqsWorkers({options.QueueUrl})",
+            }
         );
 
         return builder;

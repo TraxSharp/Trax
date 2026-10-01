@@ -31,7 +31,7 @@ public class UseRemoteWorkersBuilderTests
     #region Service Registration Tests
 
     [Test]
-    public void UseRemoteWorkers_RegistersRemoteWorkerOptions()
+    public void UseRemoteWorkers_RoutesTheTrainToItsOwnClient()
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
@@ -41,14 +41,14 @@ public class UseRemoteWorkersBuilderTests
             )
         );
 
-        // Assert
-        var options = provider.GetService<RemoteWorkerOptions>();
-        options.Should().NotBeNull();
-        options!.BaseUrl.Should().Be("https://test.example.com/trax/execute");
+        // Assert — the registration's own client carries its base address
+        FirstClient(provider)
+            .BaseAddress.Should()
+            .Be(new Uri("https://test.example.com/trax/execute"));
     }
 
     [Test]
-    public void UseRemoteWorkers_RegistersHttpJobSubmitter()
+    public void UseRemoteWorkers_RoutesTheTrainToAnHttpJobSubmitter()
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
@@ -58,10 +58,12 @@ public class UseRemoteWorkersBuilderTests
             )
         );
 
-        // Assert — HttpJobSubmitter is registered as a concrete type for routing
+        // Assert — the routed train resolves to the registration's HttpJobSubmitter
         using var scope = provider.CreateScope();
-        var submitter = scope.ServiceProvider.GetService<HttpJobSubmitter>();
-        submitter.Should().NotBeNull();
+        var submitter = scope
+            .ServiceProvider.GetRequiredService<JobSubmitterRoutingConfiguration>()
+            .ResolveSubmitter(scope.ServiceProvider, typeof(ITestRemoteTrain).FullName!);
+        submitter.Should().BeOfType<HttpJobSubmitter>();
     }
 
     [Test]
@@ -80,39 +82,27 @@ public class UseRemoteWorkersBuilderTests
         );
 
         // Assert
-        var options = provider.GetRequiredService<RemoteWorkerOptions>();
-        options.Timeout.Should().Be(TimeSpan.FromMinutes(5));
+        FirstClient(provider).Timeout.Should().Be(TimeSpan.FromMinutes(5));
     }
 
     [Test]
-    public void UseRemoteWorkers_ConfigureHttpClientCallbackIsStored()
+    public void UseRemoteWorkers_ConfigureHttpClientCallbackConfiguresItsClient()
     {
-        // Arrange
-        var headerAdded = false;
-
-        // Act
+        // Arrange & Act
         using var provider = BuildProvider(s =>
             s.UseRemoteWorkers(
                 o =>
                 {
                     o.BaseUrl = "https://test.example.com/trax/execute";
                     o.ConfigureHttpClient = client =>
-                    {
                         client.DefaultRequestHeaders.Add("X-Custom", "test");
-                        headerAdded = true;
-                    };
                 },
                 routing => routing.ForTrain<ITestRemoteTrain>()
             )
         );
 
-        // Assert — the callback is stored in options
-        var options = provider.GetRequiredService<RemoteWorkerOptions>();
-        options.ConfigureHttpClient.Should().NotBeNull();
-
-        // Invoke the callback to verify it works
-        options.ConfigureHttpClient!(new HttpClient());
-        headerAdded.Should().BeTrue();
+        // Assert — the callback ran on the registration's client
+        FirstClient(provider).DefaultRequestHeaders.GetValues("X-Custom").Should().Equal("test");
     }
 
     #endregion
@@ -161,7 +151,7 @@ public class UseRemoteWorkersBuilderTests
     #region Optional Routing Tests
 
     [Test]
-    public void UseRemoteWorkers_WithoutRouting_RegistersRemoteWorkerOptions()
+    public void UseRemoteWorkers_WithoutRouting_RegistersItsClient()
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
@@ -169,24 +159,27 @@ public class UseRemoteWorkersBuilderTests
         );
 
         // Assert
-        var options = provider.GetService<RemoteWorkerOptions>();
-        options.Should().NotBeNull();
-        options!.BaseUrl.Should().Be("https://test.example.com/trax/execute");
+        FirstClient(provider)
+            .BaseAddress.Should()
+            .Be(new Uri("https://test.example.com/trax/execute"));
     }
 
     [Test]
-    public void UseRemoteWorkers_WithoutRouting_RegistersHttpJobSubmitter()
+    public void UseRemoteWorkers_WithoutRouting_RoutesNoTrain()
     {
         // Arrange & Act
         using var provider = BuildProvider(s =>
             s.UseRemoteWorkers(o => o.BaseUrl = "https://test.example.com/trax/execute")
         );
 
-        // Assert
-        using var scope = provider.CreateScope();
-        var submitter = scope.ServiceProvider.GetService<HttpJobSubmitter>();
-        submitter.Should().NotBeNull();
+        // Assert — only [TraxRemote] trains would reach it, and ITestRemoteTrain is not one
+        var routing = provider.GetRequiredService<JobSubmitterRoutingConfiguration>();
+        routing.GetRegistration(typeof(ITestRemoteTrain).FullName!).Should().BeNull();
     }
+
+    /// <summary>The HTTP client of the first <c>UseRemoteWorkers</c> registration.</summary>
+    private static HttpClient FirstClient(ServiceProvider provider) =>
+        provider.GetRequiredService<IHttpClientFactory>().CreateClient("Trax.RemoteWorkers.0");
 
     #endregion
 }

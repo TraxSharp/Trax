@@ -5,9 +5,10 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -18,7 +19,6 @@ using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
-using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
@@ -187,15 +187,24 @@ public class OperationsService : IOperationsService
             );
             throw;
         }
+        catch (TrainAuthorizationNotConfiguredException ex)
+        {
+            // The train declares [TraxAuthorize] and the host registered no enforcer. The host is
+            // misconfigured; that is not an answer about this enqueue, so it is logged and thrown
+            // like an infrastructure failure, never reported as a refusal. See scheduler/0004.
+            _logger?.LogError(
+                ex,
+                "Queueing {TrainName} failed: the host has no ITrainAuthorizationService",
+                registration.ServiceType.FullName
+            );
+            throw;
+        }
         catch (Exception ex)
             when (ex is not UnauthorizedAccessException and not OperationCanceledException)
         {
             // A refusal: the train's OnQueue hook or QueueSubjectKey threw, the subject key could
-            // not be used, or a deferred entry was cancelled before it was confirmed. The message
-            // is the train author's or the mediator's, written for the caller. The mediator's
-            // missing-enforcer InvalidOperationException also lands here, because nothing tells
-            // it apart from a subject key refusal but its text.
-            return new OperationResult(false, Message: $"The enqueue was refused: {ex.Message}");
+            // not be used, or a deferred entry was cancelled before it was confirmed.
+            return Refused("The enqueue was refused", ex, registration.ServiceType.FullName!);
         }
 
         _changeSignal?.Notify(ChangeDomain.WorkQueue);
@@ -235,17 +244,27 @@ public class OperationsService : IOperationsService
 
         var trainName = registration.ServiceType.FullName!;
 
-        // Authorize before the input is read, as the mediator does for a queue, so a caller who
-        // may not run the train learns nothing about its input from a parse error. An
-        // UnauthorizedAccessException, and the missing-enforcer InvalidOperationException, are
-        // not caught: neither is an answer about this run.
-        await AuthorizeRunAsync(services, registration, ct);
-
+        // The mediator's step: authorization before the input is read, so a caller who may not run
+        // the train learns nothing about its input from a parse error, then the input read exactly
+        // as a queue reads it. An UnauthorizedAccessException, and the missing-enforcer
+        // TrainAuthorizationNotConfiguredException, are not caught: neither is an answer about
+        // this run.
         object runInput;
+        TrainRegistration prepared;
 
         try
         {
-            runInput = ReadRunInput(services, registration, input.InputJson);
+            var preparation = await _trainExecution.PrepareAsync(trainName, input.InputJson, ct);
+            prepared = preparation.Registration;
+            runInput = preparation.Input;
+            CheckStoredInputSize(services, prepared, runInput);
+        }
+        catch (TrainNotFoundException)
+        {
+            return new OperationResult(
+                false,
+                Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
+            );
         }
         catch (JsonException ex)
         {
@@ -258,6 +277,19 @@ public class OperationsService : IOperationsService
             // the same promise for the typed exception.
             return new OperationResult(false, Message: ex.Message);
         }
+
+        // A subject-keyed train serializes its work through the queue (docs/0019), which a run
+        // started now bypasses, so only a trusted caller may bypass it (docs/0037).
+        if (
+            prepared.HasQueueSubjectKey
+            && services.GetService<ITrustedExecutionScope>() is not { IsTrusted: true }
+        )
+            return new OperationResult(
+                false,
+                Message: $"{trainName} declares QueueSubjectKey, so its work for one subject runs "
+                    + "one at a time through the work queue, and it is run now only inside a "
+                    + "trusted scope. Queue it instead."
+            );
 
         // The row the run reports on. Input stays null here, as the job dispatcher leaves it:
         // the run's own effects record the input when the train starts.
@@ -273,26 +305,62 @@ public class OperationsService : IOperationsService
         using (var db = await _dataContextFactory.CreateDbContextAsync(ct))
         {
             await db.Track(metadata);
+
+            // The per-record checks a queue applies (docs/0037): the train's OnQueue hook runs
+            // on this input, under the run's ExternalId, before the row is saved, and its writes
+            // on the enqueue context are saved with it. A refusal writes nothing.
+            var refusal = await RunQueueHookAsync(services, prepared, runInput, metadata, db, ct);
+            if (refusal is not null)
+                return refusal;
+
             await db.SaveChanges(ct);
         }
 
+        // The row exists now, so the run is the server's to see through: the submit is not tied
+        // to the caller's request. A client that navigates away would otherwise abort the submit,
+        // and a runner that takes the request's cancellation would cancel the run with it. The
+        // submitter's own timeouts bound the call.
         try
         {
-            await ResolveSubmitter(services, trainName).EnqueueAsync(metadata.Id, runInput, ct);
+            await ResolveSubmitter(services, trainName)
+                .EnqueueAsync(metadata.Id, runInput, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            // No job exists to move the row out of Pending, so fail it now with the submitter's
-            // exception, as the job dispatcher does when a dispatch fails, rather than leave it
-            // for the stale-pending reaper to fail later for the wrong reason. The failure is the
-            // server's, not a refusal, so it is thrown (scheduler/0004).
+            // A submitter that throws may still have delivered the job: a runner that ran it and
+            // answered with an error, or is still running it when the call times out, has moved
+            // the row out of Pending and owns its outcome. Only a row still Pending is a job no
+            // runner started; it is failed now with the submitter's exception, as the job
+            // dispatcher does when a dispatch fails, and the failure is the server's, not a
+            // refusal, so it is thrown (scheduler/0004).
+            var failed = await FailUnsubmittedRunAsync(metadata.Id, ex);
+
+            if (failed == 0)
+            {
+                _logger?.LogWarning(
+                    ex,
+                    "The submitter reported a failure for a run of {TrainName} (metadata "
+                        + "{MetadataId}), but a runner has already started it; the run records "
+                        + "its own outcome",
+                    trainName,
+                    metadata.Id
+                );
+
+                return new OperationResult(
+                    true,
+                    Id: metadata.Id,
+                    Count: 1,
+                    Message: $"Run {metadata.Id} of {trainName} submitted; its outcome is pending "
+                        + "on the run."
+                );
+            }
+
             _logger?.LogError(
                 ex,
                 "Submitting a run of {TrainName} (metadata {MetadataId}) failed",
                 trainName,
                 metadata.Id
             );
-            await FailUnsubmittedRunAsync(metadata.Id, ex);
             throw;
         }
 
@@ -305,148 +373,98 @@ public class OperationsService : IOperationsService
     }
 
     /// <summary>
-    /// The mediator's authorization rule for an enqueue, applied to a run: an enforcer, when one
-    /// is registered, decides (and honours a trusted scope itself); otherwise a trusted scope
-    /// passes, and a <c>[TraxAuthorize]</c> train fails closed unless the host opted out
-    /// (mediator/0001). A copy, because the published mediator keeps its check private.
+    /// Runs the train's <c>OnQueue</c> hook for a run and answers as <see cref="QueueTrainAsync"/>
+    /// answers for the same exception: null when the hook accepted, a refusal result when it
+    /// refused, and a thrown exception for an infrastructure failure, an authorization failure or
+    /// a cancellation (scheduler/0004).
     /// </summary>
-    private static async Task AuthorizeRunAsync(
+    private async Task<OperationResult?> RunQueueHookAsync(
         IServiceProvider services,
         TrainRegistration registration,
+        object runInput,
+        Metadata metadata,
+        IDataContext db,
         CancellationToken ct
     )
     {
-        var authorization = services.GetService<ITrainAuthorizationService>();
+        if (!RunQueueHook.Declared(registration))
+            return null;
 
-        if (authorization is not null)
+        try
         {
-            await authorization.AuthorizeAsync(registration, ct);
-            return;
-        }
-
-        if (services.GetService<ITrustedExecutionScope>() is { IsTrusted: true })
-            return;
-
-        var allowMissing =
-            services.GetService<MediatorConfiguration>()?.AllowMissingAuthorizationService ?? false;
-
-        if (registration.HasAuthorizeAttribute && !allowMissing)
-            throw new InvalidOperationException(
-                $"Train '{registration.ServiceTypeName}' declares [TraxAuthorize] but no "
-                    + "ITrainAuthorizationService is registered. Call AddTraxApi() (or register "
-                    + "a custom ITrainAuthorizationService) before building the host. If this "
-                    + "process intentionally runs no authorized submissions, opt out with "
-                    + "AddMediator(m => m.AllowMissingAuthorizationService())."
+            await RunQueueHook.InvokeAsync(
+                services,
+                registration,
+                runInput,
+                metadata.ExternalId,
+                db,
+                ct
             );
+            return null;
+        }
+        catch (Exception ex)
+            when (ex is not UnauthorizedAccessException and not OperationCanceledException
+                && IsInfrastructureFailure(ex)
+            )
+        {
+            _logger?.LogError(
+                ex,
+                "Running {TrainName} failed on infrastructure in its OnQueue hook, not on a refusal",
+                metadata.Name
+            );
+            throw;
+        }
+        catch (Exception ex)
+            when (ex is not UnauthorizedAccessException and not OperationCanceledException)
+        {
+            return Refused("The run was refused", ex, metadata.Name);
+        }
     }
 
     /// <summary>
-    /// Reads a run's input the way the mediator reads a queued one: the input size cap, property
-    /// names matched whatever their case and a property given twice refused (docs/0023), a blank
-    /// input standing for an empty object that the input type must be buildable from, and a JSON
-    /// <c>null</c> refused. A copy, for the same reason as <see cref="AuthorizeRunAsync"/>;
-    /// keeping it identical is what makes a run and a queue of the same JSON agree.
+    /// Refuses an input whose stored form, the JSON a submitter writes for the worker, is larger
+    /// than <see cref="TrainInputReader.StoredInputGrowthFactor"/> times
+    /// <c>MaxInputJsonBytes</c>: the cap the mediator holds a queued input's stored form to. The
+    /// caller's JSON was capped when it was read; the stored form writes every member and is
+    /// indented, so it is measured too, before anything is written or submitted.
     /// </summary>
-    private static object ReadRunInput(
+    /// <exception cref="TrainInputValidationException">The stored form is over its cap.</exception>
+    private static void CheckStoredInputSize(
         IServiceProvider services,
         TrainRegistration registration,
-        string? inputJson
+        object runInput
     )
     {
-        var missing = string.IsNullOrWhiteSpace(inputJson);
-        var json = missing ? "{}" : inputJson!;
-
         var maxBytes =
             services.GetService<MediatorConfiguration>()?.MaxInputJsonBytes
             ?? new MediatorConfiguration().MaxInputJsonBytes;
-        var byteCount = System.Text.Encoding.UTF8.GetByteCount(json);
-        if (byteCount > maxBytes)
+        var storedCap = (int)
+            Math.Min((long)maxBytes * TrainInputReader.StoredInputGrowthFactor, int.MaxValue);
+
+        var stored = JsonSerializer.Serialize(
+            runInput,
+            registration.InputType,
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(stored);
+
+        if (byteCount > storedCap)
             throw new TrainInputValidationException(
                 registration.ServiceTypeName,
                 byteCount,
-                maxBytes
-            );
-
-        var options = RunInputOptions();
-        object? read;
-
-        if (missing)
-        {
-            try
-            {
-                read = JsonSerializer.Deserialize(json, registration.InputType, options.Missing);
-            }
-            catch (JsonException refused)
-            {
-                throw new JsonException(
-                    $"No input was given, and {registration.InputTypeName} cannot be built "
-                        + $"without one: {refused.Message}",
-                    refused
-                );
-            }
-        }
-        else
-        {
-            read = JsonSerializer.Deserialize(json, registration.InputType, options.Given);
-        }
-
-        return read
-            ?? throw new JsonException(
-                $"InputJson deserialized to null. Expected an instance of {registration.InputTypeName}."
+                storedCap
             );
     }
-
-    private static CallerInputOptions? _runInputOptions;
-
-    /// <summary>
-    /// The system options with property names matched whatever their case and a property given
-    /// twice, in any casing, refused (docs/0023); the missing-input reading also respects
-    /// required constructor parameters. Rebuilt only if the system options object itself is
-    /// replaced, as the mediator's copy is.
-    /// </summary>
-    private static CallerInputOptions RunInputOptions()
-    {
-        var source = TraxEffectConfiguration.StaticSystemJsonSerializerOptions;
-        var cached = _runInputOptions;
-
-        if (cached is not null && ReferenceEquals(cached.Source, source))
-            return cached;
-
-        var given = new JsonSerializerOptions(source)
-        {
-            PropertyNameCaseInsensitive = true,
-            AllowDuplicateProperties = false,
-        };
-        var missing = new JsonSerializerOptions(given)
-        {
-            RespectRequiredConstructorParameters = true,
-        };
-
-        var built = new CallerInputOptions(source, given, missing);
-        _runInputOptions = built;
-        return built;
-    }
-
-    private sealed record CallerInputOptions(
-        JsonSerializerOptions Source,
-        JsonSerializerOptions Given,
-        JsonSerializerOptions Missing
-    );
 
     /// <summary>
     /// The submitter the job dispatcher would use for this train: its builder or
     /// <c>[TraxRemote]</c> route when it has one, otherwise the default <see cref="IJobSubmitter"/>.
     /// </summary>
-    private static IJobSubmitter ResolveSubmitter(IServiceProvider services, string trainName)
-    {
-        var routed = services
+    private static IJobSubmitter ResolveSubmitter(IServiceProvider services, string trainName) =>
+        services
             .GetService<JobSubmitterRoutingConfiguration>()
-            ?.GetSubmitterType(trainName);
-
-        return routed is not null
-            ? (IJobSubmitter)services.GetRequiredService(routed)
-            : services.GetRequiredService<IJobSubmitter>();
-    }
+            ?.ResolveSubmitter(services, trainName)
+        ?? services.GetRequiredService<IJobSubmitter>();
 
     /// <summary>
     /// Fails a run whose job was never submitted. Bookkeeping for a run that already failed, so
@@ -454,19 +472,60 @@ public class OperationsService : IOperationsService
     /// ways to get here. A failure to write it is logged and dropped, so the caller still sees
     /// why the submit failed; the stale-pending reaper fails the row later.
     /// </summary>
-    private async Task FailUnsubmittedRunAsync(long metadataId, Exception submitFailure)
+    /// <remarks>
+    /// A submitter that throws may still have delivered the job: a remote runner that ran it and
+    /// answered with an error, or that is still running it when the HTTP call times out, owns the
+    /// row and moves it out of <c>Pending</c>. So the row is failed by a write that matches it
+    /// only while it is still <c>Pending</c>. Reading it first and saving afterwards could land
+    /// after the runner's claim and record <c>Failed</c> over a run that is in progress.
+    /// </remarks>
+    /// <returns>
+    /// The rows failed: 1 when the run was still <c>Pending</c>, 0 when a runner already owns it,
+    /// and <see langword="null"/> when the write itself failed.
+    /// </returns>
+    private async Task<int?> FailUnsubmittedRunAsync(long metadataId, Exception submitFailure)
     {
         try
         {
             using var db = await _dataContextFactory.CreateDbContextAsync(CancellationToken.None);
-            var metadata = await db.Metadatas.FirstOrDefaultAsync(m => m.Id == metadataId);
-            if (metadata is null || metadata.TrainState != TrainState.Pending)
-                return;
+            var pending = db.Metadatas.Where(m =>
+                m.Id == metadataId && m.TrainState == TrainState.Pending
+            );
 
-            metadata.TrainState = TrainState.Failed;
-            metadata.EndTime = DateTime.UtcNow;
-            metadata.AddException(submitFailure);
-            await db.SaveChanges(CancellationToken.None);
+            var failure = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = nameof(OperationsService),
+                    ExternalId = string.Empty,
+                    Input = null,
+                }
+            );
+            failure.AddException(submitFailure);
+            var endTime = DateTime.UtcNow;
+
+            if (db.SupportsSetUpdates())
+                return await pending.ExecuteUpdateAsync(
+                    u =>
+                        u.SetProperty(m => m.TrainState, TrainState.Failed)
+                            .SetProperty(m => m.EndTime, endTime)
+                            .SetProperty(m => m.FailureException, failure.FailureException)
+                            .SetProperty(m => m.FailureReason, failure.FailureReason)
+                            .SetProperty(m => m.FailureJunction, failure.FailureJunction)
+                            .SetProperty(m => m.StackTrace, failure.StackTrace)
+                            .SetProperty(m => m.FailureClass, failure.FailureClass),
+                    CancellationToken.None
+                );
+
+            return await db.UpdateEachAsync(
+                pending,
+                m =>
+                {
+                    m.TrainState = TrainState.Failed;
+                    m.EndTime = endTime;
+                    m.AddException(submitFailure);
+                },
+                CancellationToken.None
+            );
         }
         catch (Exception ex)
         {
@@ -475,6 +534,7 @@ public class OperationsService : IOperationsService
                 "Could not mark unsubmitted run {MetadataId} failed; the stale-pending reaper will",
                 metadataId
             );
+            return null;
         }
     }
 
@@ -820,19 +880,50 @@ public class OperationsService : IOperationsService
     /// The failed result for a batch that cannot be run as given: no ids, or more than
     /// <see cref="MaxBatchSize"/>. Null when the list is usable.
     /// </summary>
-    private static OperationResult? RefuseBatch(IReadOnlyCollection<long> ids)
+    private static OperationResult? RefuseBatch(IReadOnlyCollection<long> ids) =>
+        BatchRefusal(ids) is { } message
+            ? new OperationResult(false, Count: 0, Message: message)
+            : null;
+
+    /// <summary>
+    /// Why a batch of ids cannot be run as given (none, or more than <see cref="MaxBatchSize"/>),
+    /// or null when it can. Shared with the scheduler's dead-letter batch actions, so every batch
+    /// an operator can send is bounded the same way.
+    /// </summary>
+    internal static string? BatchRefusal(IReadOnlyCollection<long>? ids)
     {
         if (ids is null || ids.Count == 0)
-            return new OperationResult(false, Count: 0, Message: "No ids were given.");
+            return "No ids were given.";
 
         if (ids.Count > MaxBatchSize)
-            return new OperationResult(
-                false,
-                Count: 0,
-                Message: $"At most {MaxBatchSize} ids can be given at once; {ids.Count} were."
-            );
+            return $"At most {MaxBatchSize} ids can be given at once; {ids.Count} were.";
 
         return null;
+    }
+
+    /// <summary>
+    /// The failed result for a refusal. Only a message written for the caller is shown: a plain
+    /// <see cref="TrainException"/>'s, which the train author wrote (the rule central
+    /// <c>docs/0028</c> applies to a remote run), and the mediator's own refusals, a deferred entry
+    /// cancelled before it was confirmed and a hook that ran past <c>MaxQueueHookDuration</c>.
+    /// Any other exception is still a refusal, so it is a failed result, but with a fixed message;
+    /// its own is logged for an operator. See scheduler/0004.
+    /// </summary>
+    private OperationResult Refused(string refusal, Exception ex, string trainName)
+    {
+        if (
+            ex.GetType() == typeof(TrainException)
+            || ex is QueuedWorkCancelledException or QueueHookTimeoutException
+        )
+            return new OperationResult(false, Message: $"{refusal}: {ex.Message}");
+
+        _logger?.LogWarning(
+            ex,
+            "{TrainName} was refused with an exception whose message is not shown to the caller",
+            trainName
+        );
+
+        return new OperationResult(false, Message: $"{refusal}.");
     }
 
     /// <summary>
@@ -1424,7 +1515,10 @@ public class OperationsService : IOperationsService
             LocalWorkerCount: _localWorkerOptions?.WorkerCount,
             MetadataCleanupInterval: cfg.MetadataCleanup?.CleanupInterval,
             MetadataCleanupRetention: cfg.MetadataCleanup?.RetentionPeriod
-        );
+        )
+        {
+            FailureCountWindow = cfg.FailureCountWindow,
+        };
     }
 
     /// <inheritdoc />
@@ -1440,150 +1534,139 @@ public class OperationsService : IOperationsService
                 Message: $"Scheduler config not updated: {refusal}"
             );
 
-        var cfg = _schedulerConfiguration;
-        var changed = 0;
+        var target = new SchedulerSettingsTarget(_schedulerConfiguration, _localWorkerOptions);
 
-        // Apply each patch field to the in-memory singleton. `changed` is incremented
-        // only when the value actually differs, so `updated_at` is bumped accurately
-        // and a no-op patch returns Count: 0 with no DB write.
-        if (input.ManifestManagerEnabled is { } v1 && cfg.ManifestManagerEnabled != v1)
-        {
-            cfg.ManifestManagerEnabled = v1;
-            changed++;
-        }
-        if (input.JobDispatcherEnabled is { } v2 && cfg.JobDispatcherEnabled != v2)
-        {
-            cfg.JobDispatcherEnabled = v2;
-            changed++;
-        }
-        if (
-            input.ManifestManagerPollingInterval is { } v3
-            && cfg.ManifestManagerPollingInterval != v3
-        )
-        {
-            cfg.ManifestManagerPollingInterval = v3;
-            changed++;
-        }
-        if (input.JobDispatcherPollingInterval is { } v4 && cfg.JobDispatcherPollingInterval != v4)
-        {
-            cfg.JobDispatcherPollingInterval = v4;
-            changed++;
-        }
-
-        if (input.ClearMaxActiveJobs)
-        {
-            if (cfg.MaxActiveJobs is not null)
-            {
-                cfg.MaxActiveJobs = null;
-                changed++;
-            }
-        }
-        else if (input.MaxActiveJobs is { } maxJobs && cfg.MaxActiveJobs != maxJobs)
-        {
-            cfg.MaxActiveJobs = maxJobs;
-            changed++;
-        }
-
-        if (input.DefaultMaxRetries is { } v5 && cfg.DefaultMaxRetries != v5)
-        {
-            cfg.DefaultMaxRetries = v5;
-            changed++;
-        }
-        if (input.DefaultRetryDelay is { } v6 && cfg.DefaultRetryDelay != v6)
-        {
-            cfg.DefaultRetryDelay = v6;
-            changed++;
-        }
-        if (input.RetryBackoffMultiplier is { } v7 && cfg.RetryBackoffMultiplier != v7)
-        {
-            cfg.RetryBackoffMultiplier = v7;
-            changed++;
-        }
-        if (input.MaxRetryDelay is { } v8 && cfg.MaxRetryDelay != v8)
-        {
-            cfg.MaxRetryDelay = v8;
-            changed++;
-        }
-        if (input.DefaultJobTimeout is { } v9 && cfg.DefaultJobTimeout != v9)
-        {
-            cfg.DefaultJobTimeout = v9;
-            changed++;
-        }
-        if (input.StalePendingTimeout is { } v10 && cfg.StalePendingTimeout != v10)
-        {
-            cfg.StalePendingTimeout = v10;
-            changed++;
-        }
-        if (input.RecoverStuckJobsOnStartup is { } v11 && cfg.RecoverStuckJobsOnStartup != v11)
-        {
-            cfg.RecoverStuckJobsOnStartup = v11;
-            changed++;
-        }
-        if (input.DeadLetterRetentionPeriod is { } v12 && cfg.DeadLetterRetentionPeriod != v12)
-        {
-            cfg.DeadLetterRetentionPeriod = v12;
-            changed++;
-        }
-        if (input.AutoPurgeDeadLetters is { } v13 && cfg.AutoPurgeDeadLetters != v13)
-        {
-            cfg.AutoPurgeDeadLetters = v13;
-            changed++;
-        }
-
-        if (_localWorkerOptions is not null)
-        {
-            if (input.ClearLocalWorkerCount)
-            {
-                // LocalWorkerOptions.WorkerCount is non-nullable; "clear" resets to processor count.
-                var def = Environment.ProcessorCount;
-                if (_localWorkerOptions.WorkerCount != def)
-                {
-                    _localWorkerOptions.WorkerCount = def;
-                    changed++;
-                }
-            }
-            else if (input.LocalWorkerCount is { } wc && _localWorkerOptions.WorkerCount != wc)
-            {
-                _localWorkerOptions.WorkerCount = wc;
-                changed++;
-            }
-        }
-
-        if (cfg.MetadataCleanup is not null)
-        {
-            if (
-                input.MetadataCleanupInterval is { } v14
-                && cfg.MetadataCleanup.CleanupInterval != v14
+        // The settings the patch sets. One this host does not have (local workers, metadata
+        // cleanup) is left alone, as it always was.
+        var patch = SchedulerSettings
+            .All.Where(s => s.AppliesTo(target))
+            .Select(s =>
+                s.TryReadPatch(input, out var value) ? (Setting: s, Value: value) : default
             )
-            {
-                cfg.MetadataCleanup.CleanupInterval = v14;
-                changed++;
-            }
-            if (
-                input.MetadataCleanupRetention is { } v15
-                && cfg.MetadataCleanup.RetentionPeriod != v15
-            )
-            {
-                cfg.MetadataCleanup.RetentionPeriod = v15;
-                changed++;
-            }
+            .Where(p => p.Setting is not null)
+            .ToList();
+
+        if (patch.Count == 0)
+            return new OperationResult(
+                true,
+                Id: SchedulerConfig.SingletonId,
+                Count: 0,
+                Message: "Scheduler config: no changes."
+            );
+
+        int changes;
+        try
+        {
+            changes = await SaveSchedulerConfigPatchAsync(patch, target, ct);
         }
+        catch (DbUpdateException ex)
+            when (_services?.GetService<ISqlDialect>() is { } dialect
+                && dialect.IsUniqueViolation(ex)
+            )
+        {
+            // Another host made the first save between this one's read and its insert. Its row
+            // now exists, so read it and apply the patch to it, as any later save does.
+            changes = await SaveSchedulerConfigPatchAsync(patch, target, ct);
+        }
+
+        // This host applies the patch at once; every scheduler host, this one included, also
+        // picks the saved row up on its next settings refresh.
+        foreach (var (setting, value) in patch)
+            if (!Equals(setting.ReadLive(target), value))
+                setting.WriteLive(target, value);
 
         // No-op patches skip the DB write entirely so `updated_at` only moves on real changes.
-        if (changed > 0)
-        {
-            await PersistAsync(ct);
+        if (changes > 0)
             _changeSignal?.Notify(ChangeDomain.SchedulerConfig);
-        }
 
         return new OperationResult(
             true,
             Id: SchedulerConfig.SingletonId,
-            Count: changed,
-            Message: changed == 0
+            Count: changes,
+            Message: changes == 0
                 ? "Scheduler config: no changes."
-                : $"Scheduler config: {changed} field(s) updated."
+                : $"Scheduler config: {changes} field(s) updated."
         );
+    }
+
+    /// <summary>
+    /// Reads the stored row, names in it each setting of <paramref name="patch"/> that changes
+    /// what the scheduler runs with, and saves it, creating the row on the first save. Returns
+    /// how many settings changed; none writes nothing.
+    /// </summary>
+    private async Task<int> SaveSchedulerConfigPatchAsync(
+        IReadOnlyList<(ISchedulerSetting Setting, object? Value)> patch,
+        SchedulerSettingsTarget target,
+        CancellationToken ct
+    )
+    {
+        // Read the stored row and name only the settings the patch sets in its overrides; every
+        // other setting keeps the value each scheduler host configures in code. A save used to
+        // write every field of the saving host's configuration, so a save from an API-only host
+        // (whose configuration is the empty one AddTraxJobRunner registers) replaced the
+        // scheduler's settings with defaults.
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var row = await db.SchedulerConfigs.FindAsync(
+            new object[] { SchedulerConfig.SingletonId },
+            ct
+        );
+
+        var changes = patch
+            .Where(p => IsSchedulerConfigChange(row, p.Setting, p.Value, target))
+            .ToList();
+
+        if (changes.Count == 0)
+            return 0;
+
+        if (row is null)
+        {
+            // We use DbSet.Add directly (rather than db.Track) because Track infers
+            // Added/Modified from `Id > 0`, which would misclassify the singleton row
+            // (Id is fixed at 1) as an update on first persist.
+            row = new SchedulerConfig { Id = SchedulerConfig.SingletonId, Overrides = "{}" };
+
+            // Only the overrides decide what applies. The columns are also kept for a host
+            // still on a version that reads them, and a scheduler host fills them with the
+            // values it runs with, as a save always did.
+            if (_schedulerConfiguration.IsSchedulerHost)
+                foreach (var setting in SchedulerSettings.All.Where(s => s.AppliesTo(target)))
+                {
+                    setting.WriteRow(row, setting.ReadLive(target));
+                    row.RemoveOverride(setting.Name);
+                }
+
+            db.SchedulerConfigs.Add(row);
+        }
+        else
+            SchedulerSettings.UpgradeLegacyRow(row);
+
+        foreach (var (setting, value) in changes)
+            setting.WriteRow(row, value);
+        row.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChanges(ct);
+
+        return changes.Count;
+    }
+
+    /// <summary>
+    /// Whether saving <paramref name="value"/> changes what the scheduler runs with. A setting the
+    /// row names changes when the value differs from the stored one. A setting it does not name
+    /// runs with each scheduler's code value: a scheduler host knows it, and the save changes
+    /// something only when the value differs from it. Any other host does not know it, so naming
+    /// the setting is always a change there.
+    /// </summary>
+    private bool IsSchedulerConfigChange(
+        SchedulerConfig? row,
+        ISchedulerSetting setting,
+        object? value,
+        SchedulerSettingsTarget target
+    )
+    {
+        if (row is not null && setting.TryReadRow(row, out var stored))
+            return !Equals(stored, value);
+
+        return !_schedulerConfiguration.IsSchedulerHost || !Equals(setting.ReadLive(target), value);
     }
 
     /// <summary>
@@ -1638,6 +1721,10 @@ public class OperationsService : IOperationsService
                 input.DefaultMaxRetries,
                 nameof(input.DefaultMaxRetries)
             ),
+            SchedulerConfigLimits.PositiveDuration(
+                input.FailureCountWindow,
+                nameof(input.FailureCountWindow)
+            ),
             SchedulerConfigLimits.NonNegativeDuration(
                 input.DefaultRetryDelay,
                 nameof(input.DefaultRetryDelay)
@@ -1681,56 +1768,5 @@ public class OperationsService : IOperationsService
             .ToList();
 
         return problems.Count == 0 ? null : string.Join(" ", problems);
-    }
-
-    private async Task PersistAsync(CancellationToken ct)
-    {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
-        var row = await db.SchedulerConfigs.FindAsync(
-            new object[] { SchedulerConfig.SingletonId },
-            ct
-        );
-        var cfg = _schedulerConfiguration;
-
-        // Snapshot the current in-memory state into the row (it's already been
-        // mutated by the caller). Insert if missing, update otherwise.
-        // We use DbSet.Add directly (rather than db.Track) because Track infers
-        // Added/Modified from `Id > 0`, which would misclassify the singleton row
-        // (Id is fixed at 1) as an update on first persist.
-        if (row is null)
-        {
-            row = new SchedulerConfig { Id = SchedulerConfig.SingletonId };
-            CopyInto(row, cfg);
-            row.UpdatedAt = DateTime.UtcNow;
-            db.SchedulerConfigs.Add(row);
-        }
-        else
-        {
-            CopyInto(row, cfg);
-            row.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await db.SaveChanges(ct);
-    }
-
-    private void CopyInto(SchedulerConfig row, SchedulerConfiguration cfg)
-    {
-        row.ManifestManagerEnabled = cfg.ManifestManagerEnabled;
-        row.JobDispatcherEnabled = cfg.JobDispatcherEnabled;
-        row.ManifestManagerPollingInterval = cfg.ManifestManagerPollingInterval;
-        row.JobDispatcherPollingInterval = cfg.JobDispatcherPollingInterval;
-        row.MaxActiveJobs = cfg.MaxActiveJobs;
-        row.DefaultMaxRetries = cfg.DefaultMaxRetries;
-        row.DefaultRetryDelay = cfg.DefaultRetryDelay;
-        row.RetryBackoffMultiplier = cfg.RetryBackoffMultiplier;
-        row.MaxRetryDelay = cfg.MaxRetryDelay;
-        row.DefaultJobTimeout = cfg.DefaultJobTimeout;
-        row.StalePendingTimeout = cfg.StalePendingTimeout;
-        row.RecoverStuckJobsOnStartup = cfg.RecoverStuckJobsOnStartup;
-        row.DeadLetterRetentionPeriod = cfg.DeadLetterRetentionPeriod;
-        row.AutoPurgeDeadLetters = cfg.AutoPurgeDeadLetters;
-        row.LocalWorkerCount = _localWorkerOptions?.WorkerCount;
-        row.MetadataCleanupInterval = cfg.MetadataCleanup?.CleanupInterval;
-        row.MetadataCleanupRetention = cfg.MetadataCleanup?.RetentionPeriod;
     }
 }

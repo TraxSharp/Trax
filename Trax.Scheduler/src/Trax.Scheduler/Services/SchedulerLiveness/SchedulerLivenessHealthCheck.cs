@@ -5,7 +5,7 @@ namespace Trax.Scheduler.Services.SchedulerLiveness;
 
 /// <summary>
 /// Reports unhealthy when the JobDispatcher has not completed a polling cycle within the
-/// configured threshold. Unlike a process/port probe, this catches a scheduler that is up
+/// configured threshold, and healthy ("paused") when it is disabled or does not run on this host. Unlike a process/port probe, this catches a scheduler that is up
 /// but dispatching nothing (the failure mode a TCP or 200-OK check stays green through).
 /// </summary>
 internal sealed class SchedulerLivenessHealthCheck(
@@ -27,9 +27,26 @@ internal sealed class SchedulerLivenessHealthCheck(
             ?? configuration.SchedulerLivenessThreshold
             ?? DefaultThreshold(configuration);
 
+        // A host without a JobDispatcher (InMemory registers none) and a dispatcher an operator
+        // paused are not failures: nothing is meant to dispatch, and restarting the pod would
+        // not change that.
+        if (!configuration.HasDatabaseProvider)
+            return Task.FromResult(
+                HealthCheckResult.Healthy("No JobDispatcher runs on this host.")
+            );
+        if (!configuration.JobDispatcherEnabled)
+            return Task.FromResult(HealthCheckResult.Healthy("JobDispatcher is paused."));
+
         // Before the first cycle completes, measure from startup so a cold start is healthy
-        // within the grace window but a never-dispatching scheduler still trips.
+        // within the grace window but a never-dispatching scheduler still trips. A cycle still
+        // running counts from when it began, so a slow dispatch is not mistaken for a wedged one
+        // until it has itself run past the threshold.
         var reference = monitor.LastDispatchCompletedAt ?? monitor.StartedAt;
+        if (
+            monitor is SchedulerLivenessMonitor { RunningCycleStartedAt: { } running }
+            && running > reference
+        )
+            reference = running;
         var age = timeProvider.GetUtcNow() - reference;
 
         var data = new Dictionary<string, object>

@@ -7,6 +7,7 @@ using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 
@@ -63,7 +64,7 @@ internal class DeleteExpiredMetadataJunction(
 
         foreach (var (retention, names) in MetadataRetentionPlan.GroupByRetention(plan))
         {
-            var cutoffTime = now - retention;
+            var cutoffTime = TimeCutoff.Before(now, retention);
 
             logger.LogDebug(
                 "Deleting metadata older than {CutoffTime} (retention {Retention}) for train types [{Whitelist}]",

@@ -40,6 +40,7 @@ namespace Trax.Scheduler.Configuration
     {
         public ManifestOptions() { }
         public System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> Exclusions { get; set; }
+        public System.TimeSpan? FailureWindow { get; set; }
         public bool IsDormant { get; set; }
         public bool IsEnabled { get; set; }
         public int MaxRetries { get; set; }
@@ -83,6 +84,8 @@ namespace Trax.Scheduler.Configuration
     public class RoutedSubmitterRegistration : System.IEquatable<Trax.Scheduler.Configuration.RoutedSubmitterRegistration>
     {
         public RoutedSubmitterRegistration(Trax.Scheduler.Configuration.SubmitterRouting Routing, System.Type SubmitterType, System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> Register) { }
+        public System.Func<System.IServiceProvider, Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>? CreateSubmitter { get; init; }
+        public string? Description { get; init; }
         public System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> Register { get; init; }
         public Trax.Scheduler.Configuration.SubmitterRouting Routing { get; init; }
         public System.Type SubmitterType { get; init; }
@@ -93,6 +96,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.ScheduleOptions Dormant() { }
         public Trax.Scheduler.Configuration.ScheduleOptions Enabled(bool enabled) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Exclude(Trax.Effect.Models.Manifest.Exclusion exclusion) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions FailureWindow(System.TimeSpan window) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Group(System.Action<Trax.Scheduler.Configuration.ManifestGroupOptions> configure) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Group(string groupId, System.Action<Trax.Scheduler.Configuration.ManifestGroupOptions>? configure = null) { }
         public Trax.Scheduler.Configuration.ScheduleOptions MaxRetries(int retries) { }
@@ -115,6 +119,7 @@ namespace Trax.Scheduler.Configuration
         public System.TimeSpan DefaultMisfireThreshold { get; }
         public System.TimeSpan DefaultRetryDelay { get; set; }
         public int DependentPriorityBoost { get; }
+        public System.TimeSpan FailureCountWindow { get; }
         public bool JobDispatcherEnabled { get; }
         public System.TimeSpan JobDispatcherPollingInterval { get; set; }
         public bool ManifestManagerEnabled { get; set; }
@@ -141,7 +146,9 @@ namespace Trax.Scheduler.Configuration
         public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder AddMetadataCleanup(System.Action<Trax.Scheduler.Configuration.MetadataCleanupConfiguration>? configure = null) { }
         public void AddRoutedSubmitter(Trax.Scheduler.Configuration.RoutedSubmitterRegistration registration) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder AutoPurgeDeadLetters(bool purge = true) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ConfigureLocalWorkers(System.Action<Trax.Scheduler.Configuration.LocalWorkerOptions> configure) { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DeadLetterRetentionPeriod(System.TimeSpan retention) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultJobTimeout(System.TimeSpan timeout) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultMaxRetries(int maxRetries) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DefaultMisfirePolicy(Trax.Effect.Enums.MisfirePolicy policy) { }
@@ -150,6 +157,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder DependentPriorityBoost(int boost) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder ExcludeFromMaxActiveJobs<TTrain>()
             where TTrain :  class { }
+        public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder FailureCountWindow(System.TimeSpan window) { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder Include<TTrain>(string externalId, Trax.Effect.Models.Manifest.IManifestProperties input, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
             where TTrain :  class { }
         public Trax.Scheduler.Configuration.SchedulerConfigurationBuilder Include<TTrain, TInput, TOutput>(string externalId, TInput input, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null)
@@ -252,10 +260,12 @@ namespace Trax.Scheduler.Configuration
     }
     public sealed class TraxJobRunnerOptions
     {
+        public const long DefaultMaxRequestBodyBytes = 8388608;
         public TraxJobRunnerOptions() { }
         public string? AuthorizationPolicy { get; set; }
         public bool InMemoryNonceStore { get; }
         public System.TimeSpan MaxClockSkew { get; set; }
+        public long MaxRequestBodyBytes { get; set; }
         public byte[]? SigningKey { get; set; }
         public bool UnsignedRequestsAllowed { get; }
         public Trax.Scheduler.Configuration.TraxJobRunnerOptions AllowUnsignedRequests() { }
@@ -270,6 +280,17 @@ namespace Trax.Scheduler.Extensions
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxJobRunner(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Scheduler.Configuration.TraxJobRunnerOptions> configure) { }
         public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxJobRunner(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/execute") { }
         public static Microsoft.AspNetCore.Builder.RouteHandlerBuilder UseTraxRunEndpoint(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder endpoints, string route = "/trax/run") { }
+    }
+    public static class SchedulerBuilderOrderExtensions
+    {
+        [System.Obsolete("Call AddMediator(...) before AddScheduler(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder) { }
+        [System.Obsolete("Call AddMediator(...) before AddScheduler(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder) { }
+        [System.Obsolete("Call AddMediator(...) before AddScheduler(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, System.Func<Trax.Scheduler.Configuration.SchedulerConfigurationBuilder, Trax.Scheduler.Configuration.SchedulerConfigurationBuilder> configure) { }
+        [System.Obsolete("Call AddMediator(...) before AddScheduler(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddScheduler(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, System.Func<Trax.Scheduler.Configuration.SchedulerConfigurationBuilder, Trax.Scheduler.Configuration.SchedulerConfigurationBuilder> configure) { }
     }
     public static class SchedulerExtensions
     {
@@ -292,6 +313,7 @@ namespace Trax.Scheduler.Services.CancellationRegistry
         void Register(long metadataId, System.Threading.CancellationTokenSource cts);
         bool TryCancel(long metadataId);
         void Unregister(long metadataId);
+        void Unregister(long metadataId, System.Threading.CancellationTokenSource cts);
     }
 }
 namespace Trax.Scheduler.Services.DormantDependentContext
@@ -562,6 +584,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.TimeSpan DefaultJobTimeout { get; init; }
         public int DefaultMaxRetries { get; init; }
         public System.TimeSpan DefaultRetryDelay { get; init; }
+        public System.TimeSpan FailureCountWindow { get; init; }
         public bool JobDispatcherEnabled { get; init; }
         public System.TimeSpan JobDispatcherPollingInterval { get; init; }
         public int? LocalWorkerCount { get; init; }
@@ -644,6 +667,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.TimeSpan? DefaultJobTimeout { get; init; }
         public int? DefaultMaxRetries { get; init; }
         public System.TimeSpan? DefaultRetryDelay { get; init; }
+        public System.TimeSpan? FailureCountWindow { get; init; }
         public bool? JobDispatcherEnabled { get; init; }
         public System.TimeSpan? JobDispatcherPollingInterval { get; init; }
         public int? LocalWorkerCount { get; init; }
@@ -700,7 +724,14 @@ namespace Trax.Scheduler.Services.RequestSigning
     public sealed class RunnerRequestVerifier
     {
         public RunnerRequestVerifier(Trax.Scheduler.Configuration.TraxJobRunnerOptions options, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerifier> logger, Trax.Scheduler.Services.RequestSigning.INonceStore? nonces = null, System.TimeProvider? time = null) { }
+        public bool RequiresSignature { get; }
+        public Trax.Scheduler.Services.RequestSigning.RunnerRequestVerdict CheckHeader(string? signature, bool requireFresh) { }
         public void EnsurePosture(string entryPoint) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Body",
+                "RefusedStatusCode"})]
+        public System.Threading.Tasks.Task<System.ValueTuple<System.ReadOnlyMemory<byte>, int?>> ReadVerifiedBodyAsync(Microsoft.AspNetCore.Http.HttpRequest request, Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose) { }
+        public void ReportRefusal(string entryPoint, string reason) { }
         public System.Threading.Tasks.ValueTask<Trax.Scheduler.Services.RequestSigning.RunnerRequestVerdict> VerifyAsync(Trax.Scheduler.Services.RequestSigning.RunnerRequestPurpose purpose, System.ReadOnlyMemory<byte> body, string? signature, bool requireFresh, System.Threading.CancellationToken cancellationToken = default) { }
     }
 }
@@ -840,6 +871,7 @@ namespace Trax.Scheduler.Services.TraxScheduler
     public class TraxScheduler : Trax.Scheduler.Services.TraxScheduler.ITraxScheduler
     {
         public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null) { }
+        public TraxScheduler(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Services.TrainRegistry.ITrainRegistry trainRegistry, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService? trainDiscovery, Trax.Scheduler.Services.CancellationRegistry.ICancellationRegistry cancellationRegistry, Microsoft.Extensions.Logging.ILogger<Trax.Scheduler.Services.TraxScheduler.TraxScheduler> logger, Trax.Scheduler.Configuration.SchedulerConfiguration? configuration, Trax.Effect.Services.ChangeSignal.ITraxChangeSignal? changeSignal = null) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(string note, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> AcknowledgeDeadLetterAsync(long deadLetterId, string note, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> AcknowledgeDeadLettersAsync(long[] deadLetterIds, string note, System.Threading.CancellationToken ct = default) { }

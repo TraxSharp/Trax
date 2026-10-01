@@ -1,4 +1,5 @@
 using LanguageExt;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
@@ -48,17 +49,24 @@ internal class CreateWorkQueueEntriesJunction(
 
         foreach (var view in views)
         {
+            Trax.Effect.Models.WorkQueue.WorkQueue? entry = null;
+
             try
             {
-                var basePriority = view.ManifestGroup.Priority;
+                // The manifest's own priority, as a trigger or a dead-letter requeue uses. The
+                // dispatcher already orders by the group's priority before the entry's.
+                var basePriority = view.Manifest.Priority;
                 var effectivePriority =
                     view.Manifest.ScheduleType == ScheduleType.Dependent
                         ? basePriority + schedulerConfiguration.DependentPriorityBoost
                         : basePriority;
 
-                // Apply retry delay with exponential backoff when the manifest has prior failures
+                // A retry, the run after a failed one, waits out an exponential backoff over the
+                // failures in the window. The run after a success or a cancel is an ordinary
+                // occurrence and goes on time; its window's failures still count toward the dead
+                // letter.
                 DateTime? scheduledAt = null;
-                if (view.FailedCount > 0)
+                if (view.LatestFinishedRunFailed && view.FailedCount > 0)
                 {
                     var delaySeconds =
                         schedulerConfiguration.DefaultRetryDelay.TotalSeconds
@@ -79,7 +87,7 @@ internal class CreateWorkQueueEntriesJunction(
                     );
                 }
 
-                var entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
+                entry = Trax.Effect.Models.WorkQueue.WorkQueue.Create(
                     new CreateWorkQueue
                     {
                         TrainName = view.Manifest.Name,
@@ -105,6 +113,14 @@ internal class CreateWorkQueueEntriesJunction(
             }
             catch (Exception ex)
             {
+                // The failed entry is still tracked as Added, so every later save in this cycle,
+                // the reapers' and the dead-letter writes included, would retry it and fail the
+                // same way. EF Core rolled the leader transaction back to the savepoint it takes
+                // before each save, so detaching the entry is all that is left to undo. A unique
+                // violation here is a manifest that a trigger queued after the cycle loaded it.
+                if (entry is not null && dataContext is DbContext db)
+                    db.Entry(entry).State = EntityState.Detached;
+
                 logger.LogError(
                     ex,
                     "Error creating work queue entry for manifest {ManifestId} (name: {ManifestName})",

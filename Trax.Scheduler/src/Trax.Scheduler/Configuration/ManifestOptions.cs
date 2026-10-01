@@ -33,19 +33,48 @@ public class ManifestOptions
     /// </summary>
     /// <remarks>
     /// When false, the ManifestManager will skip this manifest during polling.
-    /// This allows pausing jobs without deleting them. Defaults to true.
+    /// This allows pausing jobs without deleting them. Defaults to true. Written to an existing
+    /// manifest only when set: left unset, a re-seed keeps the manifest's current state, including
+    /// a runtime disable.
     /// </remarks>
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled
+    {
+        get => _isEnabled ?? true;
+        set => _isEnabled = value;
+    }
+
+    internal bool? _isEnabled;
 
     /// <summary>
-    /// Gets or sets the maximum retry attempts before dead-lettering.
+    /// Gets or sets how many times a failed run is retried before the manifest is dead-lettered.
     /// </summary>
     /// <remarks>
-    /// Each retry creates a new Metadata record. After this many failed attempts,
-    /// the job is moved to the dead letter queue for manual intervention.
-    /// Defaults to 3.
+    /// The count is of retries after the first run: each retry creates a new Metadata record, and
+    /// the failure after the last retry moves the manifest to the dead letter queue for manual
+    /// intervention. 0 runs once and dead-letters on the first failure. Left unset, the manifest
+    /// takes the scheduler's <c>DefaultMaxRetries</c> (3, four attempts, unless configured);
+    /// inside a <c>configureEach</c> callback it already reads the batch's value. Failures count
+    /// within <see cref="SchedulerConfiguration.FailureCountWindow"/> and after the manifest's
+    /// latest resolved dead letter, or within <see cref="FailureWindow"/> when it is set. Written
+    /// to an existing manifest only when set: left unset, a re-seed keeps the manifest's current
+    /// value, including one an operator changed at runtime.
     /// </remarks>
-    public int MaxRetries { get; set; } = 3;
+    /// <exception cref="ArgumentOutOfRangeException">The value set is negative.</exception>
+    public int MaxRetries
+    {
+        get => _maxRetries ?? _defaultMaxRetries ?? 3;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            _maxRetries = value;
+        }
+    }
+
+    /// <summary>The retries the code states, or null when it states none.</summary>
+    internal int? _maxRetries;
+
+    /// <summary>The scheduler's <c>DefaultMaxRetries</c>, which a new manifest takes when none is stated.</summary>
+    internal int? _defaultMaxRetries;
 
     /// <summary>
     /// Gets or sets the timeout for job execution.
@@ -53,9 +82,22 @@ public class ManifestOptions
     /// <remarks>
     /// If a job is in "InProgress" state for longer than this duration,
     /// it may be considered stuck and subject to recovery logic.
-    /// Null uses the global default from SchedulerConfiguration.
+    /// Null uses the global default from SchedulerConfiguration. Written to an existing manifest
+    /// only when set (setting null states "use the global default"): left unset, a re-seed keeps
+    /// the manifest's current value.
     /// </remarks>
-    public TimeSpan? Timeout { get; set; }
+    public TimeSpan? Timeout
+    {
+        get => _timeout;
+        set
+        {
+            _timeout = value;
+            _timeoutStated = true;
+        }
+    }
+
+    internal TimeSpan? _timeout;
+    internal bool _timeoutStated;
 
     /// <summary>
     /// Gets or sets the default dispatch priority for this manifest's work queue entries.
@@ -64,8 +106,16 @@ public class ManifestOptions
     /// Range: 0 (lowest) to 31 (highest). Higher-priority entries are dispatched first
     /// by the JobDispatcher. For dependent manifests, a configurable boost is applied
     /// on top of this value (see <see cref="SchedulerConfiguration.DependentPriorityBoost"/>).
+    /// A new manifest takes 0 when none is set. Written to an existing manifest only when set:
+    /// left unset, a re-seed keeps the manifest's current value.
     /// </remarks>
-    public int Priority { get; set; }
+    public int Priority
+    {
+        get => _priority ?? 0;
+        set => _priority = value;
+    }
+
+    internal int? _priority;
 
     /// <summary>
     /// Gets or sets whether this dependent manifest is dormant.
@@ -80,7 +130,7 @@ public class ManifestOptions
 
     /// <summary>
     /// Gets or sets the per-manifest misfire policy override.
-    /// Null means use the global default from SchedulerConfiguration.
+    /// Null means use the global default, <c>SchedulerConfiguration.DefaultMisfirePolicy</c>.
     /// </summary>
     public MisfirePolicy? MisfirePolicy { get; set; }
 
@@ -109,4 +159,63 @@ public class ManifestOptions
     /// Interval schedule types. Null means no variance (deterministic scheduling).
     /// </remarks>
     public TimeSpan? Variance { get; set; }
+
+    /// <summary>
+    /// Gets or sets how far back this manifest's failed runs count toward its retry backoff and
+    /// its dead letter. Null means the scheduler's
+    /// <see cref="SchedulerConfiguration.FailureCountWindow"/> applies.
+    /// </summary>
+    /// <remarks>
+    /// A failure that started before the window no longer delays the next run or counts toward
+    /// <see cref="MaxRetries"/>. Stored in whole seconds. Written to an existing manifest only
+    /// when set: left null, a re-seed keeps the window the manifest already has.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value set is not between one second and ten years.
+    /// </exception>
+    public TimeSpan? FailureWindow
+    {
+        get => _failureWindow;
+        set
+        {
+            if (value is { } window)
+                ThrowIfFailureWindowOutOfRange(window);
+            _failureWindow = value;
+        }
+    }
+
+    private TimeSpan? _failureWindow;
+
+    internal static void ThrowIfFailureWindowOutOfRange(TimeSpan window)
+    {
+        if (
+            Services.Operations.SchedulerConfigLimits.PositiveDuration(
+                window,
+                nameof(FailureWindow)
+            ) is
+            { } problem
+        )
+            throw new ArgumentOutOfRangeException(nameof(window), window, problem);
+    }
+
+    /// <summary>
+    /// A copy of these options with its own exclusion list, so a change to one item's options
+    /// in a batch cannot reach another's. Copies every field, stated or not.
+    /// </summary>
+    internal ManifestOptions Copy() =>
+        new()
+        {
+            _isEnabled = _isEnabled,
+            _maxRetries = _maxRetries,
+            _defaultMaxRetries = _defaultMaxRetries,
+            _timeout = _timeout,
+            _timeoutStated = _timeoutStated,
+            _priority = _priority,
+            IsDormant = IsDormant,
+            MisfirePolicy = MisfirePolicy,
+            MisfireThreshold = MisfireThreshold,
+            Exclusions = [.. Exclusions],
+            Variance = Variance,
+            FailureWindow = FailureWindow,
+        };
 }

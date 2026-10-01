@@ -115,6 +115,40 @@ public class RunnerRefusesSchedulerTrainsTests : TestSetup
             );
     }
 
+    [TestCase(nameof(IMetadataCleanupTrain))]
+    [TestCase(nameof(MetadataCleanupTrain))]
+    public async Task Run_PendingRowNamingASchedulerTrainByAShortName_IsRefusedAndTheRowStaysPending(
+        string name
+    )
+    {
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = name,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = new MetadataCleanupRequest(),
+            }
+        );
+        metadata.TrainState = TrainState.Pending;
+        await DataContext.Track(metadata);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var act = async () =>
+            await JobRunner.Run(new RunJobRequest(metadata.Id, new MetadataCleanupRequest()));
+
+        await act.Should()
+            .ThrowAsync<TrainException>()
+            .WithMessage(
+                $"*names '{typeof(IMetadataCleanupTrain).FullName}', one of the scheduler's own*",
+                "a short name resolves to the train it names, which is then refused"
+            );
+        DataContext.Reset();
+        (await DataContext.Metadatas.AsNoTracking().FirstAsync(x => x.Id == metadata.Id))
+            .TrainState.Should()
+            .Be(TrainState.Pending);
+    }
+
     [Test]
     public async Task Run_PendingRowOfTheManifestManager_IsRefusedAndTheRowStaysPending()
     {

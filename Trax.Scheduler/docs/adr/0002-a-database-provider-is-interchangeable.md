@@ -24,7 +24,8 @@ manifest manager dispatches jobs inline and needs no dispatcher behind it.
 
 ## Status
 
-**Accepted.**
+**Accepted.** Since 2026-09-30 the last provider name the scheduler carried in a string, the
+seed-retry classifier's `"Npgsql."`, is gone: the dialect classifies transient failures.
 
 ## Why this is written down
 
@@ -48,15 +49,15 @@ express through `ISqlDialect` is a gap in the dialect, and widening it is the fi
 real cost: a Postgres-only index hint or an `ON CONFLICT` form has to be expressed through
 the dialect or not at all.
 
-**One provider name survives in the scheduler, and the dialect could not hold it today.**
-`SchedulerStartupService.IsTransient` decides whether a seeding failure is worth retrying by
-matching the exception type's `FullName` against `"Npgsql."`. It inspects no connection and
-no connection string. Provider names appear elsewhere in `src/` on types the branch selects
-between, such as `PostgresJobSubmitter` and `InMemoryManifestManagerTrain`; this is the only
-place a provider is named in a *string*. `ISqlDialect` now classifies one exception,
-`IsUniqueViolation`, which the runner nonce store ([0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md))
-needed to tell a key conflict from any other failed save on both providers, so the dialect could
-hold this check too; it has not been moved.
+**Classifying a database failure is the dialect's job too.** `SchedulerStartupService`
+retries a failed seed only when `ISqlDialect.IsTransient` says the failure may succeed on
+another try: a lost or refused connection, a timeout, a deadlock or serialization failure, or
+Sqlite's busy and locked errors. It used to match the exception type's `FullName` against
+`"Npgsql."`, which named a provider in a string, retried nothing on Sqlite, and retried every
+Postgres error, a constraint violation or a syntax error included. A host with no dialect
+(InMemory) retries nothing. Provider names still appear in `src/` on types the provider branch
+selects between, such as `PostgresJobSubmitter` and `InMemoryManifestManagerTrain`, but no
+longer in a string.
 
 ## Exemplars
 
@@ -77,6 +78,10 @@ Not covered:
   genuinely uncovered space is a relational-only registration that none of those names.
 
 ## Changelog
+
+- **2026-09-30**: `SchedulerStartupService.IsTransient` asks `ISqlDialect.IsTransient`
+  (Trax.Effect 1.57.4) instead of matching `"Npgsql."`; the consequence that recorded the string
+  is replaced. Pinned by `SeedRetryClassificationTests` and `SqliteSeedRetryClassificationTests`.
 
 - **2026-09-28**: `ISqlDialect` classifies exceptions now (`IsUniqueViolation`), so the
   `"Npgsql."` string is no longer blocked on the interface returning only SQL.

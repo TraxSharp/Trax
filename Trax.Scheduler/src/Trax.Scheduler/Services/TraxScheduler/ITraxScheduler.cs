@@ -171,7 +171,12 @@ public interface ITraxScheduler
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
     /// This creates a new execution independent of the regular schedule.
-    /// The job's normal schedule continues unaffected.
+    /// The job's normal schedule continues unaffected. The run is one someone asked for by name,
+    /// so it runs even while the manifest is disabled (a disabled manifest group still holds it).
+    /// A manifest holds at most one queued work queue entry, so when it already has one, nothing
+    /// more is queued and that entry becomes the triggered run: it is marked as asked for by name,
+    /// which releases it if the manifest is disabled, and an entry due later (a retry waiting out
+    /// its backoff, or a delayed trigger) is brought forward to now. The log says which happened.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no manifest with the specified ExternalId exists.
@@ -188,7 +193,11 @@ public interface ITraxScheduler
     /// <remarks>
     /// Creates a WorkQueue entry with <c>ScheduledAt = DateTime.UtcNow + delay</c>.
     /// The JobDispatcher will skip the entry until <c>ScheduledAt &lt;= now</c>.
-    /// The manifest's normal schedule continues unaffected.
+    /// The manifest's normal schedule continues unaffected. Like the immediate trigger, the run
+    /// is one someone asked for by name and runs even while the manifest is disabled. When the
+    /// manifest already has a queued entry, nothing more is queued and that entry is marked as
+    /// asked for by name; if it is due later than <c>DateTime.UtcNow + delay</c> it is brought
+    /// forward to that time, and if it is due sooner it keeps its own time.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no manifest with the specified ExternalId exists.
@@ -244,10 +253,17 @@ public interface ITraxScheduler
     /// </summary>
     /// <param name="groupId">The ID of the manifest group to trigger.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The number of manifests that were queued.</returns>
+    /// <returns>
+    /// The number of manifests that were queued. A manifest that already has a queued entry is
+    /// skipped, not counted, and does not stop the others being queued; the skipped count is
+    /// logged.
+    /// </returns>
     /// <remarks>
     /// Only enabled manifests with non-dependent schedule types (None, Cron, Interval, OnDemand)
-    /// are queued. Dependent and DormantDependent manifests are skipped because they rely on
+    /// are queued, each entry marked as asked for by name the way <see cref="TriggerAsync(string, CancellationToken)"/>
+    /// marks one, so disabling a manifest after the group trigger does not hold its run. A member
+    /// that already has a queued entry is not counted, but that entry is marked the same way and
+    /// brought forward to now if it was due later. Dependent and DormantDependent manifests are skipped because they rely on
     /// parent completion and may lack standalone inputs.
     /// </remarks>
     Task<int> TriggerGroupAsync(long groupId, CancellationToken ct = default);
@@ -262,7 +278,8 @@ public interface ITraxScheduler
     /// Sets <c>CancellationRequested = true</c> on all Pending and InProgress metadata for the
     /// manifest (cross-server, picked up at next junction boundary via CancellationCheckProvider)
     /// and also attempts same-server instant cancellation via <see cref="ICancellationRegistry"/>.
-    /// The same rule <c>IOperationsService.CancelExecutionsAsync</c> applies to a list of runs.
+    /// A Pending run is recorded <see cref="TrainState.Cancelled"/> without running when the job
+    /// runner picks it up, on any host. The same rule <c>IOperationsService.CancelExecutionsAsync</c> applies to a list of runs.
     /// Cancelled trains transition to <see cref="TrainState.Cancelled"/> and are not retried.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
@@ -280,7 +297,8 @@ public interface ITraxScheduler
     /// Sets <c>CancellationRequested = true</c> on all Pending and InProgress metadata for
     /// manifests in the group and attempts same-server instant cancellation via
     /// <see cref="ICancellationRegistry"/>, the rule <c>IOperationsService.CancelExecutionsAsync</c>
-    /// applies to a list of runs.
+    /// applies to a list of runs. A Pending run is recorded <see cref="TrainState.Cancelled"/>
+    /// without running when the job runner picks it up, on any host.
     /// </remarks>
     Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default);
 
@@ -326,7 +344,8 @@ public interface ITraxScheduler
     /// At most one work queue entry is created per manifest. A dead letter whose manifest already
     /// has a queued entry is skipped and left awaiting intervention; dead letters that share a
     /// manifest are folded into one entry and all resolved, since a requeue runs the manifest's
-    /// own properties.
+    /// own properties. An empty list, or one longer than <c>OperationsService.MaxBatchSize</c>
+    /// (1000) ids, is refused: the result counts nothing and its message says why.
     /// </remarks>
     Task<BatchDeadLetterResult> RequeueDeadLettersAsync(
         long[] deadLetterIds,
@@ -340,6 +359,10 @@ public interface ITraxScheduler
     /// <param name="note">A note explaining the acknowledgement.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of dead letters successfully acknowledged.</returns>
+    /// <remarks>
+    /// An empty list, or one longer than <c>OperationsService.MaxBatchSize</c> (1000) ids, is
+    /// refused: the result counts nothing and its message says why.
+    /// </remarks>
     Task<BatchDeadLetterResult> AcknowledgeDeadLettersAsync(
         long[] deadLetterIds,
         string note,
@@ -351,7 +374,11 @@ public interface ITraxScheduler
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of dead letters resolved, and a message that also counts the folded and skipped ones.</returns>
-    /// <remarks>Creates at most one entry per manifest, as <see cref="RequeueDeadLettersAsync"/> does.</remarks>
+    /// <remarks>
+    /// Creates at most one entry per manifest, as <see cref="RequeueDeadLettersAsync"/> does. The
+    /// dead letters are read and requeued a page of manifests at a time, so a large backlog is
+    /// never loaded at once; every dead letter for one manifest is in the same page.
+    /// </remarks>
     Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(CancellationToken ct = default);
 
     /// <summary>

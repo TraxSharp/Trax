@@ -51,6 +51,8 @@ public partial class SchedulerConfigurationBuilder
         options?.Invoke(resolved);
         _externalIdToGroupId[externalId] = resolved._groupId ?? externalId;
 
+        DeclareGroup(externalId, resolved);
+
         _configuration.PendingManifests.Add(
             new PendingManifest
             {
@@ -96,6 +98,8 @@ public partial class SchedulerConfigurationBuilder
         var resolved = new ScheduleOptions();
         options?.Invoke(resolved);
         _externalIdToGroupId[externalId] = resolved._groupId ?? externalId;
+
+        DeclareGroup(externalId, resolved);
 
         _configuration.PendingManifests.Add(
             new PendingManifest
@@ -154,6 +158,8 @@ public partial class SchedulerConfigurationBuilder
         options?.Invoke(resolved);
         _externalIdToGroupId[externalId] = resolved._groupId ?? externalId;
         _dependencyEdges.Add((parentExternalId, externalId));
+
+        DeclareGroup(externalId, resolved);
 
         _configuration.PendingManifests.Add(
             new PendingManifest
@@ -218,6 +224,8 @@ public partial class SchedulerConfigurationBuilder
         options?.Invoke(resolved);
         _externalIdToGroupId[externalId] = resolved._groupId ?? externalId;
         _dependencyEdges.Add((parentExternalId, externalId));
+
+        DeclareGroup(externalId, resolved);
 
         _configuration.PendingManifests.Add(
             new PendingManifest

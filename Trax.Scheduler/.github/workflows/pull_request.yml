@@ -58,7 +58,7 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore -warnaserror
       - name: Pack (package validation)
-        # Package validation runs on pack, not build. Packing here compares the five packages with
+        # Package validation runs on pack, not build. Packing here compares the four packages with
         # the baseline release before a merge, instead of at release time, after semantic-release
         # has already tagged the version.
         run: dotnet pack --configuration Release --no-build --output "$RUNNER_TEMP/nupkg"

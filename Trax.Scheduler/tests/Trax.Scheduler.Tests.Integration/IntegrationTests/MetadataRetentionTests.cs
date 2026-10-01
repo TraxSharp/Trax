@@ -108,6 +108,24 @@ public class MetadataRetentionTests : TestSetup
         (await Exists(slow)).Should().BeTrue();
     }
 
+    [Test]
+    public async Task Run_PerTrainRetentionOfTheMaximumTimeSpan_KeepsThatTrainAndSweepsTheRest()
+    {
+        // now - TimeSpan.MaxValue is before DateTime.MinValue. It threw, every cycle, before the
+        // default group (which holds the scheduler's own trains) was swept.
+        var cleanup = NewCleanup();
+        cleanup.AddTrainType(FastTrain);
+        cleanup.AddTrainType(SlowTrain, TimeSpan.MaxValue);
+
+        var fast = await Seed(FastTrain, DateTime.UtcNow.AddHours(-1));
+        var slow = await Seed(SlowTrain, DateTime.UtcNow.AddDays(-3650));
+
+        await BuildJunction(cleanup).Run(new MetadataCleanupRequest());
+
+        (await Exists(fast)).Should().BeFalse("the default group is still swept");
+        (await Exists(slow)).Should().BeTrue("nothing is older than the earliest cutoff");
+    }
+
     #endregion
 
     #region The runtime override (Decision 1)

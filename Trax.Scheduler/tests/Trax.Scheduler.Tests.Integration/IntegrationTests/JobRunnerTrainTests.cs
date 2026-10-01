@@ -42,60 +42,8 @@ public class JobRunnerTrainTests : TestSetup
 
     #endregion
 
-    #region Run - Invalid State Tests
-
-    [Test]
-    public async Task Run_WhenStateIsCompleted_ThrowsTrainException()
-    {
-        // Arrange
-        var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Completed);
-        var input = manifest.GetProperties<SchedulerTestInput>();
-
-        // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
-
-        // Assert
-        await act.Should()
-            .ThrowAsync<TrainException>()
-            .WithMessage("*Cannot execute a job with state Completed*");
-    }
-
-    [Test]
-    public async Task Run_WhenStateIsFailed_ThrowsTrainException()
-    {
-        // Arrange
-        var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, TrainState.Failed);
-        var input = manifest.GetProperties<SchedulerTestInput>();
-
-        // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
-
-        // Assert
-        await act.Should()
-            .ThrowAsync<TrainException>()
-            .WithMessage("*Cannot execute a job with state Failed*");
-    }
-
-    [Test]
-    public async Task Run_WhenStateIsInProgress_ThrowsTrainException()
-    {
-        // Arrange
-        var manifest = await CreateAndSaveManifest();
-        var metadata = await CreateAndSaveMetadata(manifest, TrainState.InProgress);
-        var input = manifest.GetProperties<SchedulerTestInput>();
-
-        // Act
-        var act = async () => await JobRunner.Run(new RunJobRequest(metadata.Id, input));
-
-        // Assert
-        await act.Should()
-            .ThrowAsync<TrainException>()
-            .WithMessage("*Cannot execute a job with state InProgress*");
-    }
-
-    #endregion
+    // A row that is not Pending is covered by DuplicateDeliveryTests: the delivery completes
+    // without running the train and records nothing.
 
     #region Run - Null Manifest Tests
 
@@ -328,6 +276,53 @@ public class JobRunnerTrainTests : TestSetup
         await act.Should().NotThrowAsync();
     }
 
+    [Test]
+    public async Task Run_WhenRowNamesTheInterfaceButTheInputIsAnotherTrains_IsRefusedAndTheRowStaysPending()
+    {
+        var manifest = await CreateAndSaveManifest();
+        var metadata = await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Pending,
+            name: typeof(ISchedulerTestTrain).FullName!
+        );
+
+        var act = async () =>
+            await JobRunner.Run(
+                new RunJobRequest(
+                    metadata.Id,
+                    new FailingSchedulerTestInput { FailureMessage = "should not run" }
+                )
+            );
+
+        await act.Should()
+            .ThrowAsync<TrainException>()
+            .WithMessage("*not a registered train taking the input given*");
+        DataContext.Reset();
+        (await DataContext.Metadatas.AsNoTracking().FirstAsync(x => x.Id == metadata.Id))
+            .TrainState.Should()
+            .Be(TrainState.Pending, "the canonical name does not excuse another train's input");
+    }
+
+    [Test]
+    public async Task Run_WhenRowNamesTheTrainByItsInterfaceShortName_Runs()
+    {
+        var manifest = await CreateAndSaveManifest();
+        var metadata = await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Pending,
+            name: nameof(ISchedulerTestTrain)
+        );
+
+        await JobRunner.Run(
+            new RunJobRequest(metadata.Id, manifest.GetProperties<SchedulerTestInput>())
+        );
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.AsNoTracking().FirstAsync(x => x.Id == metadata.Id))
+            .TrainState.Should()
+            .Be(TrainState.Completed, "the interface's short name is the wire's fallback name");
+    }
+
     #endregion
 
     #region Helper Methods
@@ -358,12 +353,16 @@ public class JobRunnerTrainTests : TestSetup
         return manifest;
     }
 
-    private async Task<Metadata> CreateAndSaveMetadata(Manifest manifest, TrainState state)
+    private async Task<Metadata> CreateAndSaveMetadata(
+        Manifest manifest,
+        TrainState state,
+        string? name = null
+    )
     {
         var metadata = Metadata.Create(
             new CreateMetadata
             {
-                Name = typeof(SchedulerTestTrain).FullName!,
+                Name = name ?? typeof(SchedulerTestTrain).FullName!,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = manifest.GetProperties<SchedulerTestInput>(),
                 ManifestId = manifest.Id,

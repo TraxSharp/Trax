@@ -20,18 +20,22 @@ if your work contradicts one, say so rather than silently overriding it.
 | `INonceStore`, `UseInMemoryNonceStore()`, or the `runner_nonce` table | [0009](./docs/adr/0009-a-runner-shares-its-accepted-nonces-through-the-database.md), a signing runner shares accepted nonces through the database unless the host opts into memory; central `docs/0009` for why the table ships in Trax.Effect, and `docs/0036` for why its model does too and the store reaches it through `IDataContext` rather than SQL |
 | SQL, or anything provider-shaped | [0002](./docs/adr/0002-a-database-provider-is-interchangeable.md), the difference belongs behind `ISqlDialect` |
 | `OperationsService`, or anywhere that builds a work queue row | central `docs/0017`, a caller's enqueue goes through the mediator; only the allow-listed system and admin paths build their own |
-| a dashboard or API action, or `OperationsService.RunTrainAsync` | central `docs/0022`, the dashboard and the GraphQL API call one operations-service method per action; neither surface carries its own copy of the logic |
+| a dashboard or API action, or `OperationsService.RunTrainAsync` | central `docs/0022`, the dashboard and the GraphQL API call one operations-service method per action; neither surface carries its own copy of the logic; and central `docs/0037`, a run applies the per-record checks a queue applies (`OnQueue`, and a subject-keyed train only inside a trusted scope) |
 | what `OperationsService.QueueTrainAsync` returns when the enqueue fails | [0004](./docs/adr/0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), a refusal is a failed result; a database or network failure is logged and thrown, never returned with its message |
+| `UpdateSchedulerConfigAsync`, `SchedulerSettings`, or how a saved setting reaches a scheduler | [0010](./docs/adr/0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md), a save names only what it sets in the row's `overrides`, every other setting keeps its code value, and every running scheduler re-reads the row |
 | an `ExecuteUpdate` or `ExecuteDelete` in `OperationsService`, `ExecutionCancellation` or a `TraxScheduler` operation | [0007](./docs/adr/0007-the-operations-surface-runs-on-inmemory.md), check `SupportsSetUpdates()` and fall back to per-row on InMemory |
 | the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
 | `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
 | a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |
 | the JobRunner chain, or anything done after a scheduled train returns | [0005](./docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), the manifest update stays in the junction that ran the train, on an uncancellable token |
 | `RemoteRunResponse.FailureClass`, or how either executor reads it | central `docs/0020`, the worker's class is carried, and [0001](./docs/adr/0001-remote-execution-is-a-json-wire-contract.md) for its encoding on the wire |
+| `MaxRetries`, `FailureCountWindow`, `FailedCount` in `LoadManifestsJunction`, the retry backoff, how `SchedulingHelpers` decides a manifest is due after a cancelled run, or when a dependent runs again after its parent succeeds | [0014](./docs/adr/0014-a-manifests-retries-count-recent-failures-and-a-cancelled-run-consumes-its-occurrence.md), retries count recent failures after the first run, and a cancelled run consumes its occurrence |
+| `PruneOrphanedManifests`, `Manifest.Owner`, or the startup prune in `SchedulerStartupService` | [0015](./docs/adr/0015-a-startup-prune-deletes-only-its-own-applications-manifests.md), the prune deletes only manifests its own application declared, and keeps unowned ones |
+| `[TraxRemote]` routing, or a scheduler build with no routed submitter | [0016](./docs/adr/0016-a-traxremote-train-with-nowhere-to-go-fails-the-build.md), a marked train with nowhere to go fails the build |
 | `RemoteRunResponse.PublicMessage`, `RemoteRunException`, or what a remote failure shows a client | central `docs/0028`, the runner offers only a plain `TrainException`'s message, and every remote failure is rebuilt as a `RemoteRunException` carrying it |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty-six name `scheduler`. Besides the workspace-wide conventions and
+index lists them by repo. Twenty-seven name `scheduler`. Besides the workspace-wide conventions and
 `0016` to `0020` and `0022` (routed above), `0007` (the canonical train name is the
 interface FullName) is the one this repo touches most, since it is the string stored in
 `work_queue.train_name` and the one a remote run puts on the wire. The wire is lenient about
@@ -59,11 +63,13 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Scheduler.Tests.Meta/` holds fourteen convention guards. Thirteen are the
+`tests/Trax.Scheduler.Tests.Meta/` holds fifteen convention guards. Thirteen are the
 workspace-wide conventions shared with the other repos. The fourteenth,
 `WorkQueueCreationSitesTests`, also runs in Trax.Api and Trax.Dashboard with a different
 allow-list in each; here it permits only the ManifestManager's enqueue, dormant dependents, and
-`TraxScheduler`'s manifest trigger and dead-letter requeue (`docs/0017`). The guards this repo's own ADRs name live with the suites they
+`TraxScheduler`'s manifest trigger and dead-letter requeue (`docs/0017`). The fifteenth,
+`TestProjectsAreNotPackedTests`, keeps every project under `tests/` unpackable, since the helper
+library `Trax.Scheduler.Tests.ArrayLogger` once reached nuget.org. The guards this repo's own ADRs name live with the suites they
 belong to rather than in `Tests.Meta`: `RemoteRunContractTests`, `HttpRunExecutorTests` and
 `LambdaRunExecutorTests` for the wire contract, `ProviderConsistencyTests` and
 `SqliteSchedulerBuilderTests` for the provider swap.

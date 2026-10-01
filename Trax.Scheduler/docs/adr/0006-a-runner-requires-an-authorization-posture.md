@@ -35,6 +35,32 @@ only a policy refuses to start there rather than falling back to accepting every
 without mapping a runner (the GameServer API sample does). It registers no posture, so mapping an
 endpoint afterwards fails at startup with a message naming the three choices.
 
+**`TraxLambdaFunction`'s local routes take their own posture.** `RunLocalAsync` serves the
+function over HTTP for development, on whatever address the host listens on. A signing key
+applies there as everywhere. `AllowUnsignedRequests()` is a posture for the Lambda invocation
+entry point, which only callers the function's IAM policy admits can reach, so over HTTP it is
+honoured only for a caller on the loopback address; a request from any other address is refused
+with 401. The smaller of the two ways considered: the other was a separate opt-in for unsigned
+local routes, which adds an option whose only safe value is off. A developer who calls the local
+routes from another machine or a container gives the function a signing key.
+
+**`ITraxRequestHandler` verifies nothing.** It is the step behind the entry points, and runs what
+it is handed in a trusted scope. It stays public, because the separately shipped
+Trax.Runner.Lambda and Trax.Scheduler.Sqs call it and a test swaps it for a fake, but it is hidden
+from IntelliSense and its documentation says a caller must have verified the request first. The
+alternative, a verification result only the verifier can create and the handler requires, changes
+the signature every entry point and every fake implements, for a type no host calls directly.
+
+## Reading an HTTP request
+
+The two ASP.NET endpoints and the local Lambda routes read a request the same way, through
+`RunnerRequestVerifier.ReadVerifiedBodyAsync`. With a signing key, the `Trax-Signature` header is
+checked first: missing, malformed or, for a request that must be fresh, stale is a 401 before any
+of the body is read. The body is then read up to `TraxJobRunnerOptions.MaxRequestBodyBytes`
+(default 8 MiB; 413 past it, whether or not the request declared its length), verified, and only
+then parsed. A refused request is logged as a warning at most once a minute, with the number
+refused since the last one, and at Debug otherwise.
+
 ## The signature
 
 `v1,t=<unix seconds>,n=<128-bit hex nonce>,s=<base64 HMAC-SHA256>`, keyed with a secret of at least
@@ -61,8 +87,10 @@ before it.
 
 A queued job's request names its input type. The runner looks that name up among the input types
 of its registered trains and refuses anything else; it never loads a type by the name it was sent.
-`LoadMetadataJunction` then refuses a row whose train is not the train registered for the input,
-before anything touches the row, so the row stays `Pending`. On the scheduler side, a remote run's
+`LoadMetadataJunction` then resolves the registered train the row names and refuses the row when
+there is none, or when that train does not take the input, before anything touches the row, so the
+row stays `Pending`. The train the row names is the one that runs (`ITrainBus.RunByNameAsync`),
+since two trains may take the same input type. On the scheduler side, a remote run's
 output is read into the output type the caller expects, not a type the response names. When that
 type is an interface or abstract, and so cannot be read into, the response's type name picks an
 implementation of the expected type: only a concrete type already loaded in the scheduler's process
@@ -73,13 +101,13 @@ Registered does not include the scheduler's own trains (`AdminTrains`: the Manif
 JobDispatcher, the JobRunner and the two cleanup trains). They are registered on any host that
 also runs the scheduler, but the scheduler starts them itself, in its own process, and never sends
 one to a runner. The run path refuses a train name that is, or could resolve to, one of them, and
-`LoadMetadataJunction` refuses a job whose input belongs to one, leaving the row `Pending`. A host
+`LoadMetadataJunction` refuses a job whose row names one, leaving the row `Pending`. A host
 train that shares a scheduler train's short name still runs by that name.
 
 The scheduler's own stored names follow the same rule. The dispatcher resolves a work queue row's
 input type, and `LocalWorkerService` a background job's, among the registered trains' input types
 rather than by loading the name, so no path that turns a name back into a train input loads a type
-by it. `TypeResolver` is no longer called by Trax.
+by it. The `TypeResolver` that loaded one is deleted.
 
 ## What a runner sends back
 
@@ -126,7 +154,10 @@ request as stale.
   stale, replayed), the posture check and its startup warning, and the HTTP senders signing each
   attempt.
 - `JobRunnerEndpointTests` maps the endpoints with no runner, with no posture, with a policy and
-  with a key, and checks the refusals and that no message or stack trace is returned.
+  with a key, and checks the refusals and that no message or stack trace is returned. It also
+  pins the reading order: a missing, malformed or stale signature is a 401 with a body stream
+  that throws if read, a body over `MaxRequestBodyBytes` is a 413 with or without a declared
+  length, and repeated refusals are one warning.
 - `JobRunnerTrainTests` runs a `Pending` row with another train's input and asserts the refusal
   leaves the row `Pending`.
 - `RunnerRefusesSchedulerTrainsTests` sends each scheduler train's full and short name to the run
@@ -141,13 +172,24 @@ request as stale.
   same cases end to end.
 - `SqsJobRunnerHandlerTests` and `TraxLambdaFunctionTests` cover the same posture on the SQS and
   Lambda paths, including a redelivered `Execute` running again and a repeated `Run` refused.
+  `TraxLambdaFunctionTests` also pins the local routes: unsigned from another address refused,
+  from loopback served, a signed request served from anywhere, the header checked before the body
+  and the size limit.
 - [Remote Execution](/docs/scheduler/remote-execution) is the rule this produces.
 
-Not covered: sharing nonces across runner instances is
+Not covered: nothing checks that a host does not call `ITraxRequestHandler` from an entry point
+of its own. Sharing nonces across runner instances is
 [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md)'s, and its guards are named there.
 
 ## Changelog
 
+- **2026-09-30**: The HTTP entry points check the signature header before reading the body, hold
+  the body to `MaxRequestBodyBytes`, and log refusals as one warning a minute. The local Lambda
+  routes honour an unsigned posture only for loopback callers. `ITraxRequestHandler` is hidden
+  and documented as verifying nothing.
+- **2026-09-30**: The unused `TypeResolver` is deleted.
+- **2026-09-30**: The job path resolves and runs the train the row names, not the train registered
+  for the input type.
 - **2026-09-27**: The per-process nonce memory is replaced by a shared store, recorded in
   [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md).
 - **2026-09-27**: A runner refuses the scheduler's own trains on the run path and the job path.

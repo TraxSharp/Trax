@@ -1,7 +1,11 @@
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
+using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
@@ -29,6 +33,8 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 [TestFixture]
 public class OrphanManifestPruningTests : TestSetup
 {
+    private const string Owner = "orphan-pruning-tests";
+
     #region Orphan Pruning Tests
 
     [Test]
@@ -231,10 +237,12 @@ public class OrphanManifestPruningTests : TestSetup
     }
 
     [Test]
-    public async Task StartAsync_WithNoPendingManifestsAndPruningEnabled_DeletesAllManifests()
+    public async Task StartAsync_WithNoPendingManifestsAndPruningEnabled_LeavesExistingManifests()
     {
-        // Arrange: Manifests exist in DB but no PendingManifests configured (all schedules removed)
-        await CreateAndSaveManifestWithExternalId("leftover-manifest");
+        // Arrange: Manifests exist in DB but this host declares no schedules (an API or worker
+        // host that calls AddScheduler only to reach the scheduler services).
+        var leftover = await CreateAndSaveManifestWithExternalId("leftover-manifest");
+        await CreateAndSaveMetadata(leftover, TrainState.Completed);
 
         var configuration = new SchedulerConfiguration
         {
@@ -242,7 +250,6 @@ public class OrphanManifestPruningTests : TestSetup
             RecoverStuckJobsOnStartup = false,
             HasDatabaseProvider = true,
         };
-        // PendingManifests is empty → expectedExternalIds is empty → all manifests are orphans
 
         var startupService = CreateStartupService(configuration);
 
@@ -251,11 +258,46 @@ public class OrphanManifestPruningTests : TestSetup
 
         // Assert
         DataContext.Reset();
-        var remaining = await DataContext.Manifests.ToListAsync();
-
+        var remaining = await DataContext.Manifests.Select(m => m.ExternalId).ToListAsync();
         remaining
             .Should()
-            .BeEmpty("all manifests should be pruned when no schedules are configured");
+            .Contain(
+                "leftover-manifest",
+                "a host that declares no schedules has no basis to call any manifest orphaned"
+            );
+        (await DataContext.Metadatas.AnyAsync(m => m.ManifestId == leftover.Id)).Should().BeTrue();
+    }
+
+    [TestCase(TrainState.InProgress)]
+    [TestCase(TrainState.Pending)]
+    public async Task StartAsync_WithAnOrphanWhoseRunIsActive_KeepsTheOrphanAndItsRun(
+        TrainState state
+    )
+    {
+        // Arrange: the orphan has a run that has not finished
+        await CreateAndSaveManifestWithExternalId("keep-me");
+        var orphan = await CreateAndSaveManifestWithExternalId("orphan-running");
+        var run = await CreateAndSaveMetadata(orphan, state);
+        var finishedOrphan = await CreateAndSaveManifestWithExternalId("orphan-finished");
+        await CreateAndSaveMetadata(finishedOrphan, TrainState.Completed);
+
+        var configuration = CreateConfiguration(expectedExternalIds: ["keep-me"]);
+        var startupService = CreateStartupService(configuration);
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        DataContext.Reset();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == run.Id))
+            .Should()
+            .BeTrue("a prune never deletes a run that has not finished");
+        (await DataContext.Manifests.AnyAsync(m => m.Id == orphan.Id))
+            .Should()
+            .BeTrue("the manifest is kept until its run finishes, and pruned at a later start");
+        (await DataContext.Manifests.AnyAsync(m => m.Id == finishedOrphan.Id))
+            .Should()
+            .BeFalse("an orphan with only finished runs is still pruned");
     }
 
     [Test]
@@ -446,6 +488,123 @@ public class OrphanManifestPruningTests : TestSetup
         orphanMetadata.Should().Be(0);
     }
 
+    [Test]
+    public async Task StartAsync_WhenEveryOrphanHasAnActiveRun_DeletesNothingAndReportsThemKept()
+    {
+        // Arrange: the only orphan's run is still pending, so its whole batch is kept
+        await CreateAndSaveManifestWithExternalId("keep-me");
+        var orphan = await CreateAndSaveManifestWithExternalId("orphan-pending");
+        var run = await CreateAndSaveMetadata(orphan, TrainState.Pending);
+
+        var logger = new CapturingLogger();
+        var startupService = new SchedulerStartupService(
+            Scope.ServiceProvider,
+            CreateConfiguration(expectedExternalIds: ["keep-me"]),
+            logger
+        );
+
+        // Act
+        await startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        DataContext.Reset();
+        (await DataContext.Manifests.AnyAsync(m => m.Id == orphan.Id)).Should().BeTrue();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == run.Id)).Should().BeTrue();
+        logger
+            .Messages.Should()
+            .Contain(
+                "Finished pruning 0 orphaned manifest(s) from the database (1 kept until their runs finish)"
+            );
+    }
+
+    [Test]
+    public async Task StartAsync_WhenPruningFails_LogsTheFailureAndStillCleansUpEmptyGroups()
+    {
+        // Arrange: an orphan to prune, and a group with no manifests left
+        await CreateAndSaveManifestWithExternalId("keep-me");
+        var orphan = await CreateAndSaveManifestWithExternalId("orphan-unreachable");
+        var emptyGroup = await TestSetup.CreateAndSaveManifestGroup(
+            DataContext,
+            name: $"empty-{Guid.NewGuid():N}"
+        );
+
+        // The prune's read of the orphans' runs fails, as a dropped connection would.
+        var options = new DbContextOptionsBuilder<PostgresContext>(
+            Scope.ServiceProvider.GetRequiredService<DbContextOptions<PostgresContext>>()
+        )
+            .AddInterceptors(new FailingMetadataReadInterceptor())
+            .Options;
+        await using var failingContext = new PostgresContext(options);
+        var services = new ServiceCollection()
+            .AddSingleton(Scope.ServiceProvider.GetRequiredService<ITraxScheduler>())
+            .AddSingleton<IDataContext>(failingContext)
+            .BuildServiceProvider();
+
+        var logger = new CapturingLogger();
+        var startupService = new SchedulerStartupService(
+            services,
+            CreateConfiguration(expectedExternalIds: ["keep-me"]),
+            logger
+        );
+
+        // Act
+        var act = () => startupService.StartAsync(CancellationToken.None);
+
+        // Assert
+        await act.Should().NotThrowAsync("pruning is housekeeping and does not stop the host");
+        logger
+            .Errors.Should()
+            .ContainSingle()
+            .Which.Should()
+            .StartWith("Pruning orphaned manifests failed");
+        DataContext.Reset();
+        (await DataContext.Manifests.AnyAsync(m => m.Id == orphan.Id))
+            .Should()
+            .BeTrue("the failed prune deleted nothing, and the next start prunes again");
+        (await DataContext.ManifestGroups.AnyAsync(g => g.Id == emptyGroup.Id))
+            .Should()
+            .BeFalse("the orphaned-group cleanup after the prune still runs");
+    }
+
+    private sealed class FailingMetadataReadInterceptor : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default
+        ) =>
+            command.CommandText.Contains("trax.metadata", StringComparison.Ordinal)
+                ? throw new NpgsqlException("The connection was lost.")
+                : ValueTask.FromResult(result);
+    }
+
+    private sealed class CapturingLogger : ILogger<SchedulerStartupService>
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<(
+            LogLevel Level,
+            string Message
+        )> _entries = new();
+
+        public IReadOnlyList<string> Messages => _entries.Select(e => e.Message).ToList();
+
+        public IReadOnlyList<string> Errors =>
+            _entries.Where(e => e.Level >= LogLevel.Error).Select(e => e.Message).ToList();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        ) => _entries.Enqueue((logLevel, formatter(state, exception)));
+    }
+
     #endregion
 
     #region Helper Methods
@@ -468,6 +627,7 @@ public class OrphanManifestPruningTests : TestSetup
             PruneOrphanedManifests = pruneOrphanedManifests,
             RecoverStuckJobsOnStartup = false,
             HasDatabaseProvider = true,
+            Owner = Owner,
         };
 
         // Add a no-op PendingManifest that carries the ExpectedExternalIds
@@ -491,7 +651,8 @@ public class OrphanManifestPruningTests : TestSetup
 
     private async Task<Manifest> CreateAndSaveManifestWithExternalId(
         string externalId,
-        long? groupId = null
+        long? groupId = null,
+        string? owner = Owner
     )
     {
         if (groupId is null)
@@ -517,6 +678,7 @@ public class OrphanManifestPruningTests : TestSetup
 
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = groupId.Value;
+        manifest.Owner = owner;
 
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);
@@ -546,6 +708,7 @@ public class OrphanManifestPruningTests : TestSetup
 
         manifest.ExternalId = externalId;
         manifest.ManifestGroupId = group.Id;
+        manifest.Owner = Owner;
 
         await DataContext.Track(manifest);
         await DataContext.SaveChanges(CancellationToken.None);

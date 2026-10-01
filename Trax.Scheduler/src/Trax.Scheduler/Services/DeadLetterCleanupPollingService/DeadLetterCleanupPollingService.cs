@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.DeadLetterCleanup;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.DeadLetterCleanupPollingService;
 
@@ -23,12 +24,15 @@ internal class DeadLetterCleanupPollingService(
             configuration.DeadLetterRetentionPeriod
         );
 
-        using var timer = new PeriodicTimer(configuration.DeadLetterCleanupInterval);
-
         // Run immediately on startup
         await RunCleanup(stoppingToken);
 
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (
+            await PollingDelay.WaitAsync(
+                () => configuration.DeadLetterCleanupInterval,
+                stoppingToken
+            )
+        )
         {
             await RunCleanup(stoppingToken);
         }

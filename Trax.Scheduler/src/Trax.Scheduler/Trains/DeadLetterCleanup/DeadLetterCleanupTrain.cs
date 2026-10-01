@@ -16,7 +16,7 @@ internal class DeadLetterCleanupTrain
     /// A single junction that deletes, in batches, dead letters already resolved (Acknowledged or
     /// Retried) whose <c>ResolvedAt</c> is older than
     /// <see cref="Configuration.SchedulerConfiguration.DeadLetterRetentionPeriod"/>. Dead letters
-    /// awaiting intervention are never deleted.
+    /// awaiting intervention are never deleted, nor one whose requeued entry is still queued.
     /// </summary>
     protected override Task<Either<Exception, Unit>> Junctions() =>
         Chain<DeleteResolvedDeadLettersJunction>().Resolve();

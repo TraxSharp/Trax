@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
@@ -16,10 +17,15 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// then JobDispatcher claims them using FOR UPDATE SKIP LOCKED. InMemory doesn't support
 /// the SQL-based claiming, so this junction creates Metadata and dispatches inline via
 /// <see cref="InMemoryJobSubmitter"/>.
+///
+/// A manifest's stored input type name only selects among the input types of the registered
+/// trains; it is never loaded by name. A manifest whose input resolves to none of them is logged
+/// and not started, so no run is recorded for it.
 /// </remarks>
 internal class InMemoryDispatchJobsJunction(
     IDataContext dataContext,
     IJobSubmitter jobSubmitter,
+    ITrainRegistry trainRegistry,
     ILogger<InMemoryDispatchJobsJunction> logger
 ) : EffectJunction<List<ManifestDispatchView>, Unit>
 {
@@ -31,6 +37,12 @@ internal class InMemoryDispatchJobsJunction(
         {
             try
             {
+                // Resolved before the run is recorded, so a manifest whose input cannot be
+                // resolved leaves no Pending row behind.
+                var input = view.Manifest is { Properties: not null, PropertyTypeName: not null }
+                    ? view.Manifest.GetPropertiesUntyped(trainRegistry.InputTypeToTrain.Keys)
+                    : null;
+
                 var metadata = Trax.Effect.Models.Metadata.Metadata.Create(
                     new CreateMetadata
                     {
@@ -51,17 +63,9 @@ internal class InMemoryDispatchJobsJunction(
                     view.Manifest.Name
                 );
 
-                // Deserialize manifest properties and dispatch inline
-                string jobId;
-                if (view.Manifest is { Properties: not null, PropertyTypeName: not null })
-                {
-                    var input = view.Manifest.GetPropertiesUntyped();
-                    jobId = await jobSubmitter.EnqueueAsync(metadata.Id, input, CancellationToken);
-                }
-                else
-                {
-                    jobId = await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
-                }
+                var jobId = input is not null
+                    ? await jobSubmitter.EnqueueAsync(metadata.Id, input, CancellationToken)
+                    : await jobSubmitter.EnqueueAsync(metadata.Id, CancellationToken);
 
                 logger.LogDebug(
                     "Dispatched manifest {ManifestId} as job {JobId} (Metadata: {MetadataId})",

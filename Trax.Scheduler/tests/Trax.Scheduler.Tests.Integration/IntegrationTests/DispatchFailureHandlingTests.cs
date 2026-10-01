@@ -25,6 +25,7 @@ using Trax.Scheduler.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.ManifestManager;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -314,6 +315,118 @@ public class DispatchFailureHandlingTests
             );
     }
 
+    #region Failed Deliveries And Retries
+
+    [Test]
+    public async Task Three_failed_dispatch_cycles_do_not_dead_letter_the_manifest_while_attempts_remain()
+    {
+        // Arrange - MaxRetries 3, MaxDispatchAttempts 5 (default)
+        var manifest = await CreateAndSaveManifest();
+        var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+        // Act - three cycles in which the submitter cannot reach its runner
+        for (var i = 0; i < 3; i++)
+        {
+            await RunDispatcherCycle();
+            await ElapseDispatchBackoff();
+            await RunManifestManagerCycle();
+        }
+
+        // Assert - the job has not failed, only three deliveries of it have
+        _dataContext.Reset();
+        var deadLetters = await _dataContext
+            .DeadLetters.AsNoTracking()
+            .CountAsync(d => d.ManifestId == manifest.Id);
+        deadLetters.Should().Be(0, "dispatch attempts remain, so the job has not failed yet");
+
+        var queued = await _dataContext.WorkQueues.AsNoTracking().FirstAsync(q => q.Id == entry.Id);
+        queued.Status.Should().Be(WorkQueueStatus.Queued);
+        queued.DispatchAttempts.Should().Be(3);
+
+        var attempts = await _dataContext
+            .Metadatas.AsNoTracking()
+            .Where(m => m.ManifestId == manifest.Id)
+            .ToListAsync();
+        attempts.Should().HaveCount(3);
+        attempts
+            .Should()
+            .AllSatisfy(m =>
+            {
+                m.TrainState.Should().Be(TrainState.Failed, "each attempt is still recorded");
+                m.FailureException.Should().Be(DispatchFailure.Requeued);
+                m.FailureReason.Should().Contain("Simulated enqueue failure");
+            });
+    }
+
+    [Test]
+    public async Task A_requeued_entry_waits_out_a_backoff_before_its_next_dispatch()
+    {
+        var manifest = await CreateAndSaveManifest();
+        var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+        await RunDispatcherCycle();
+        await RunDispatcherCycle();
+
+        _dataContext.Reset();
+        var queued = await _dataContext.WorkQueues.AsNoTracking().FirstAsync(q => q.Id == entry.Id);
+        queued.DispatchAttempts.Should().Be(1, "the second cycle came before the backoff ended");
+        queued.ScheduledAt.Should().BeAfter(DateTime.UtcNow);
+        queued
+            .ScheduledAt.Should()
+            .BeCloseTo(DateTime.UtcNow + DispatchFailure.FirstBackoff, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task The_attempt_that_exhausts_dispatch_attempts_counts_as_a_failure()
+    {
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        config.MaxDispatchAttempts = 2;
+
+        try
+        {
+            var manifest = await CreateAndSaveManifest();
+            await CreateAndSaveWorkQueueEntry(manifest);
+
+            await RunDispatcherCycle();
+            await ElapseDispatchBackoff();
+            await RunDispatcherCycle();
+
+            _dataContext.Reset();
+            var attempts = await _dataContext
+                .Metadatas.AsNoTracking()
+                .Where(m => m.ManifestId == manifest.Id)
+                .OrderBy(m => m.Id)
+                .ToListAsync();
+
+            attempts.Should().HaveCount(2);
+            attempts[0].FailureException.Should().Be(DispatchFailure.Requeued);
+            attempts[1]
+                .FailureException.Should()
+                .Be(nameof(HttpRequestException), "the last attempt is the job's failure");
+        }
+        finally
+        {
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
+    private async Task RunDispatcherCycle()
+    {
+        using var trainScope = _serviceProvider.CreateScope();
+        var train = trainScope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
+        await train.Run(Unit.Default);
+    }
+
+    private async Task RunManifestManagerCycle()
+    {
+        using var trainScope = _serviceProvider.CreateScope();
+        var train = trainScope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+        await train.Run(Unit.Default);
+    }
+
+    #endregion
+
     #region Requeue Behavior
 
     [Test]
@@ -331,6 +444,7 @@ public class DispatchFailureHandlingTests
             await train.Run(Unit.Default);
             if (train is IDisposable d)
                 d.Dispose();
+            await ElapseDispatchBackoff();
         }
 
         // Assert — dispatch_attempts should be 2 after two failed attempts
@@ -358,6 +472,7 @@ public class DispatchFailureHandlingTests
             await train.Run(Unit.Default);
             if (train is IDisposable d)
                 d.Dispose();
+            await ElapseDispatchBackoff();
         }
 
         // Assert — should have 2 separate Failed metadata rows (one per attempt)
@@ -392,6 +507,7 @@ public class DispatchFailureHandlingTests
                 await train.Run(Unit.Default);
                 if (train is IDisposable d)
                     d.Dispose();
+                await ElapseDispatchBackoff();
             }
 
             // Assert — after exhausting attempts, entry stays Dispatched
@@ -479,6 +595,18 @@ public class DispatchFailureHandlingTests
         _dataContext.Reset();
 
         return manifest;
+    }
+
+    /// <summary>
+    /// Stands in for time passing: a requeued entry waits out its dispatch backoff before the
+    /// next cycle can pick it up.
+    /// </summary>
+    private async Task ElapseDispatchBackoff()
+    {
+        _dataContext.Reset();
+        await _dataContext
+            .WorkQueues.Where(q => q.ScheduledAt != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.ScheduledAt, (DateTime?)null));
     }
 
     private async Task<WorkQueue> CreateAndSaveWorkQueueEntry(Manifest manifest)

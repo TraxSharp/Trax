@@ -3,6 +3,7 @@ using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -213,7 +214,7 @@ public class OperationsServiceAuthorizationTests
         protected override Task OnQueue(
             Trax.Effect.Models.Metadata.Metadata metadata,
             CancellationToken ct
-        ) => throw new InvalidOperationException("the hook refused this mutation");
+        ) => throw new TrainException("the hook refused this mutation");
 
         protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
     }

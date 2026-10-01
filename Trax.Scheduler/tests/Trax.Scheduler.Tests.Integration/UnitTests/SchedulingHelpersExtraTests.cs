@@ -254,6 +254,42 @@ public class SchedulingHelpersExtraTests
             .BeTrue();
     }
 
+    [TestCase(
+        1,
+        10,
+        false,
+        TestName = "ShouldRunNow_IntervalWithACancelBeforeTheLastSuccess_CountsFromTheSuccess"
+    )]
+    [TestCase(
+        10,
+        6,
+        true,
+        TestName = "ShouldRunNow_IntervalWithACancelAfterTheLastSuccess_CountsFromTheCancel"
+    )]
+    public void ShouldRunNow_IntervalWithACancelledRun_CountsFromTheLaterOfTheTwo(
+        int successMinutesAgo,
+        int cancelMinutesAgo,
+        bool expected
+    )
+    {
+        var now = DateTime.UtcNow;
+        var m = NewManifest();
+        m.ScheduleType = ScheduleType.Interval;
+        m.IntervalSeconds = 300;
+        m.LastSuccessfulRun = now.AddMinutes(-successMinutesAgo);
+
+        SchedulingHelpers
+            .ShouldRunNow(
+                m,
+                now,
+                NewConfig(),
+                NullLogger.Instance,
+                lastCancelledRun: now.AddMinutes(-cancelMinutesAgo)
+            )
+            .Should()
+            .Be(expected, "a five-minute interval runs five minutes after the later of the two");
+    }
+
     #endregion
 
     #region ComputeNextScheduledRun (via reflection — internal)

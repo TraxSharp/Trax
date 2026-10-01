@@ -76,6 +76,47 @@ public class ScheduleOptionsTests
     }
 
     [Test]
+    public void FailureWindow_StoresValue()
+    {
+        var opts = new ScheduleOptions().FailureWindow(TimeSpan.FromHours(6));
+        opts.ToManifestOptions().FailureWindow.Should().Be(TimeSpan.FromHours(6));
+    }
+
+    [Test]
+    public void FailureWindow_Unstated_IsNull()
+    {
+        new ScheduleOptions().ToManifestOptions().FailureWindow.Should().BeNull();
+    }
+
+    [TestCase(0)]
+    [TestCase(-60)]
+    [TestCase(0.5)]
+    public void FailureWindow_BelowOneSecond_Throws(double seconds)
+    {
+        var act = () => new ScheduleOptions().FailureWindow(TimeSpan.FromSeconds(seconds));
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public void FailureWindow_BeyondTenYears_Throws()
+    {
+        var act = () => new ScheduleOptions().FailureWindow(TimeSpan.FromDays(3651));
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public void ManifestOptions_FailureWindow_RefusesZeroAndAcceptsNull()
+    {
+        var options = new ManifestOptions { FailureWindow = TimeSpan.FromMinutes(5) };
+
+        var act = () => options.FailureWindow = TimeSpan.Zero;
+        act.Should().Throw<ArgumentOutOfRangeException>();
+
+        options.FailureWindow = null;
+        options.FailureWindow.Should().BeNull();
+    }
+
+    [Test]
     public void Group_String_AppliesGroupId()
     {
         var opts = new ScheduleOptions().Group("g1");

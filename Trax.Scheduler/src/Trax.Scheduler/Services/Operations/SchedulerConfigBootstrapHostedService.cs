@@ -1,31 +1,55 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Utilities;
+using SchedulerConfigRow = Trax.Effect.Models.SchedulerConfig.SchedulerConfig;
 
 namespace Trax.Scheduler.Services.Operations;
 
 /// <summary>
-/// Reads the persisted <c>trax.scheduler_config</c> row at startup and applies it to
-/// the in-memory <see cref="SchedulerConfiguration"/> singleton (and
-/// <see cref="LocalWorkerOptions"/> / <c>MetadataCleanup</c> when registered) so
-/// settings survive restarts. Registered by <c>AddScheduler</c>; infrastructure not intended for
-/// direct use.
+/// Applies the persisted <c>trax.scheduler_config</c> row to the in-memory
+/// <see cref="SchedulerConfiguration"/> singleton (and <see cref="LocalWorkerOptions"/> /
+/// <c>MetadataCleanup</c> when registered): once at startup, so settings survive restarts, and
+/// then every <see cref="SchedulerConfiguration.SettingsRefreshInterval"/>, so a save made on any
+/// host, including an API-only one, reaches this scheduler within seconds without a restart.
+/// Registered by <c>AddScheduler</c>; infrastructure not intended for direct use.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Each setting the row names in its <c>overrides</c> replaces the value configured in code; every
+/// other setting keeps the configured value, so a later change in code applies to it. A row
+/// written before <c>overrides</c> existed sets every setting it has a column for. The configured
+/// values are captured when the service starts, so a row that is deleted at runtime, or stops
+/// naming a setting, returns it to them.
+/// </para>
+/// <para>
 /// A persisted value outside <see cref="SchedulerConfigLimits"/> is skipped and logged, and the
-/// rest of the row still applies. Failures are logged but never crash startup. If the table doesn't exist (e.g. an
-/// older deployment skipped the migration), or no row is present, the in-memory
-/// builder defaults remain in effect.
+/// configured value stands for it while the rest of the row still applies. Failures are logged
+/// but never crash startup or stop the refresh. If the table doesn't exist (e.g. an older
+/// deployment skipped the migration), or no row is present, the configured values remain in effect.
+/// </para>
 /// </remarks>
-internal class SchedulerConfigBootstrapHostedService : IHostedService
+internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposable
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<SchedulerConfigBootstrapHostedService> _logger;
 
+    private IReadOnlyDictionary<string, object?>? _configured;
+    private bool _rowApplied;
+    private DateTime _appliedUpdatedAt;
+    private bool _refreshFailing;
+    private CancellationTokenSource? _stopping;
+    private Task? _refreshLoop;
+    private int _completedRefreshes;
+
+    /// <summary>How many refreshes after startup have finished; lets tests wait for one.</summary>
+    internal int CompletedRefreshes => Volatile.Read(ref _completedRefreshes);
+
     /// <summary>Created by the host through DI.</summary>
-    /// <param name="services">Root provider; a scope is created from it for the one read at startup.</param>
+    /// <param name="services">Root provider; a scope is created from it for each read.</param>
     /// <param name="logger">Receives the applied, skipped and failed outcomes.</param>
     public SchedulerConfigBootstrapHostedService(
         IServiceProvider services,
@@ -37,135 +61,19 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService
     }
 
     /// <summary>
-    /// Reads the singleton <c>trax.scheduler_config</c> row once and copies its values onto
-    /// <see cref="SchedulerConfiguration"/>, the <see cref="LocalWorkerOptions"/> worker count and
-    /// the metadata cleanup interval and retention. Never throws: a missing row, a missing table or
-    /// a database error is logged and leaves the builder's values in place.
+    /// Captures the configured values, applies the persisted row once, then starts the refresh
+    /// that keeps applying it. Never throws: a missing row, a missing table or a database error is
+    /// logged and leaves the configured values in place. The refresh starts even when the first
+    /// read fails, so a row that becomes readable later (the database was briefly unreachable, or
+    /// the table was not migrated yet) is still applied without a restart.
     /// </summary>
-    /// <param name="cancellationToken">Cancels the database read.</param>
+    /// <param name="cancellationToken">Cancels the startup read.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        SchedulerConfiguration configuration;
         try
         {
-            using var scope = _services.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
-            var cfg = scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>();
-            var workerOpts = scope.ServiceProvider.GetService<LocalWorkerOptions>();
-
-            using var db = await factory.CreateDbContextAsync(cancellationToken);
-            var row =
-                await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
-                    db.SchedulerConfigs,
-                    r => r.Id == Effect.Models.SchedulerConfig.SchedulerConfig.SingletonId,
-                    cancellationToken
-                );
-
-            if (row is null)
-            {
-                _logger.LogInformation(
-                    "No persisted scheduler config found; using builder defaults."
-                );
-                return;
-            }
-
-            cfg.ManifestManagerEnabled = row.ManifestManagerEnabled;
-            cfg.JobDispatcherEnabled = row.JobDispatcherEnabled;
-            Apply(
-                row.ManifestManagerPollingInterval,
-                SchedulerConfigLimits.TimerInterval,
-                nameof(row.ManifestManagerPollingInterval),
-                v => cfg.ManifestManagerPollingInterval = v
-            );
-            Apply(
-                row.JobDispatcherPollingInterval,
-                SchedulerConfigLimits.TimerInterval,
-                nameof(row.JobDispatcherPollingInterval),
-                v => cfg.JobDispatcherPollingInterval = v
-            );
-            if (row.MaxActiveJobs is not { } maxActiveJobs)
-                cfg.MaxActiveJobs = null;
-            else
-                Apply(
-                    maxActiveJobs,
-                    SchedulerConfigLimits.AtLeastOne,
-                    nameof(row.MaxActiveJobs),
-                    v => cfg.MaxActiveJobs = v
-                );
-            Apply(
-                row.DefaultMaxRetries,
-                SchedulerConfigLimits.NotNegative,
-                nameof(row.DefaultMaxRetries),
-                v => cfg.DefaultMaxRetries = v
-            );
-            Apply(
-                row.DefaultRetryDelay,
-                SchedulerConfigLimits.NonNegativeDuration,
-                nameof(row.DefaultRetryDelay),
-                v => cfg.DefaultRetryDelay = v
-            );
-            Apply(
-                row.RetryBackoffMultiplier,
-                SchedulerConfigLimits.BackoffMultiplier,
-                nameof(row.RetryBackoffMultiplier),
-                v => cfg.RetryBackoffMultiplier = v
-            );
-            Apply(
-                row.MaxRetryDelay,
-                SchedulerConfigLimits.NonNegativeDuration,
-                nameof(row.MaxRetryDelay),
-                v => cfg.MaxRetryDelay = v
-            );
-            Apply(
-                row.DefaultJobTimeout,
-                SchedulerConfigLimits.PositiveDuration,
-                nameof(row.DefaultJobTimeout),
-                v => cfg.DefaultJobTimeout = v
-            );
-            Apply(
-                row.StalePendingTimeout,
-                SchedulerConfigLimits.PositiveDuration,
-                nameof(row.StalePendingTimeout),
-                v => cfg.StalePendingTimeout = v
-            );
-            cfg.RecoverStuckJobsOnStartup = row.RecoverStuckJobsOnStartup;
-            Apply(
-                row.DeadLetterRetentionPeriod,
-                SchedulerConfigLimits.NonNegativeDuration,
-                nameof(row.DeadLetterRetentionPeriod),
-                v => cfg.DeadLetterRetentionPeriod = v
-            );
-            cfg.AutoPurgeDeadLetters = row.AutoPurgeDeadLetters;
-
-            if (workerOpts is not null && row.LocalWorkerCount is { } wc)
-                Apply(
-                    wc,
-                    SchedulerConfigLimits.WorkerCount,
-                    nameof(row.LocalWorkerCount),
-                    v => workerOpts.WorkerCount = v
-                );
-
-            if (cfg.MetadataCleanup is { } cleanup)
-            {
-                if (row.MetadataCleanupInterval is { } interval)
-                    Apply(
-                        interval,
-                        SchedulerConfigLimits.TimerInterval,
-                        nameof(row.MetadataCleanupInterval),
-                        v => cleanup.CleanupInterval = v
-                    );
-                if (row.MetadataCleanupRetention is { } retention)
-                    Apply(
-                        retention,
-                        SchedulerConfigLimits.PositiveDuration,
-                        nameof(row.MetadataCleanupRetention),
-                        v => cleanup.RetentionPeriod = v
-                    );
-            }
-
-            _logger.LogInformation(
-                "Applied persisted scheduler config (last updated {UpdatedAt}).",
-                row.UpdatedAt
-            );
+            configuration = _services.GetRequiredService<SchedulerConfiguration>();
         }
         catch (Exception ex)
         {
@@ -173,34 +81,195 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService
                 ex,
                 "Failed to apply persisted scheduler config; using builder defaults."
             );
+            return;
+        }
+
+        try
+        {
+            await RefreshAsync(startup: true, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to apply persisted scheduler config; using builder defaults until it can be read."
+            );
+            // The refresh logs once per outage; this was the first failure of this one.
+            _refreshFailing = true;
+        }
+
+        if (configuration.SettingsRefreshInterval <= TimeSpan.Zero || _refreshLoop is not null)
+            return;
+
+        _stopping = new CancellationTokenSource();
+        _refreshLoop = RefreshLoopAsync(configuration, _stopping.Token);
+    }
+
+    /// <summary>Stops the refresh.</summary>
+    /// <param name="cancellationToken">Bounds the wait for the refresh to finish.</param>
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_stopping is null || _refreshLoop is null)
+            return;
+
+        await _stopping.CancelAsync();
+        await _refreshLoop.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Releases the refresh's cancellation source.</summary>
+    public void Dispose() => _stopping?.Dispose();
+
+    private async Task RefreshLoopAsync(
+        SchedulerConfiguration configuration,
+        CancellationToken stoppingToken
+    )
+    {
+        // Yield so StartAsync returns before the first wait.
+        await Task.Yield();
+
+        while (
+            await PollingDelay.WaitAsync(
+                () =>
+                    configuration.SettingsRefreshInterval > TimeSpan.Zero
+                        ? configuration.SettingsRefreshInterval
+                        : TimeSpan.FromSeconds(5),
+                stoppingToken
+            )
+        )
+        {
+            try
+            {
+                await RefreshAsync(startup: false, stoppingToken);
+                _refreshFailing = false;
+                Interlocked.Increment(ref _completedRefreshes);
+            }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                // Once per outage rather than once per check.
+                if (!_refreshFailing)
+                    _logger.LogWarning(
+                        ex,
+                        "Could not read the persisted scheduler config; the settings in effect stay until it can be read."
+                    );
+                _refreshFailing = true;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
         }
     }
 
     /// <summary>
-    /// Applies one persisted value, or skips it with a warning when it is outside the range the
-    /// scheduler can run with (<see cref="SchedulerConfigLimits"/>). A row written before the
-    /// operations service validated, or edited by hand, must not stop the host: a sub-millisecond
-    /// polling interval, for one, makes the poller's timer throw and faults the host at boot. The
-    /// builder's value stays in effect for a skipped field.
+    /// Reads the row and applies it when it changed since the last read: a new or updated row
+    /// applies its values, a deleted row returns every setting to the configured value.
     /// </summary>
-    private void Apply<T>(T value, Func<T?, string, string?> check, string name, Action<T> apply)
-        where T : struct
+    private async Task RefreshAsync(bool startup, CancellationToken cancellationToken)
     {
-        if (check(value, name) is { } problem)
+        using var scope = _services.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var target = new SchedulerSettingsTarget(
+            scope.ServiceProvider.GetRequiredService<SchedulerConfiguration>(),
+            scope.ServiceProvider.GetService<LocalWorkerOptions>()
+        );
+        _configured ??= SchedulerSettings.Capture(target);
+
+        using var db = await factory.CreateDbContextAsync(cancellationToken);
+        var row = await db
+            .SchedulerConfigs.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == SchedulerConfigRow.SingletonId, cancellationToken);
+
+        if (row is null)
         {
-            _logger.LogWarning(
-                "Skipped the persisted scheduler setting {Setting} ({Value}): {Problem} The configured value stays in effect.",
-                name,
-                value,
-                problem
-            );
+            if (startup)
+                _logger.LogInformation(
+                    "No persisted scheduler config found; using builder defaults."
+                );
+            else if (_rowApplied)
+            {
+                // Only a row that was applied and then deleted returns the settings to the
+                // configured values. With no row ever applied there is nothing to undo, and
+                // resetting here would revert every runtime change on each refresh.
+                Apply(null, target);
+                _logger.LogInformation(
+                    "The persisted scheduler config was removed; the configured settings apply again."
+                );
+            }
+            _rowApplied = false;
             return;
         }
 
-        apply(value);
+        if (_rowApplied && row.UpdatedAt == _appliedUpdatedAt)
+            return;
+
+        Apply(row, target);
+        _rowApplied = true;
+        _appliedUpdatedAt = row.UpdatedAt;
+
+        _logger.LogInformation(
+            "Applied persisted scheduler config (last updated {UpdatedAt}).",
+            row.UpdatedAt
+        );
     }
 
-    /// <summary>Does nothing; the service holds no resources after startup.</summary>
-    /// <param name="cancellationToken">Unused.</param>
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>
+    /// Sets each setting this host has to the row's value when the row sets one the scheduler can
+    /// run with, and to the configured value otherwise. A value outside
+    /// <see cref="SchedulerConfigLimits"/> (a row written before the operations service validated,
+    /// or edited by hand) is skipped with a warning: a sub-millisecond polling interval, for one,
+    /// must not stop the host.
+    /// </summary>
+    private void Apply(SchedulerConfigRow? row, SchedulerSettingsTarget target)
+    {
+        foreach (var setting in SchedulerSettings.All)
+        {
+            if (
+                !setting.AppliesTo(target) || !_configured!.TryGetValue(setting.Name, out var value)
+            )
+                continue;
+
+            var configured = value;
+            var fromRow = false;
+            if (row is not null && setting.TryReadRow(row, out var stored))
+            {
+                if (setting.Check(stored) is { } problem)
+                    _logger.LogWarning(
+                        "Skipped the persisted scheduler setting {Setting} ({Value}): {Problem} The configured value stays in effect.",
+                        setting.Name,
+                        stored,
+                        problem
+                    );
+                else
+                {
+                    value = stored;
+                    fromRow = true;
+                }
+            }
+
+            if (!Equals(setting.ReadLive(target), value))
+                setting.WriteLive(target, value);
+
+            if (!fromRow || Equals(value, configured))
+                continue;
+
+            // A saved value replacing a different one in code is what a save is for, but a
+            // deploy that changes that setting in code then has no effect, so say so.
+            var effective = setting.ReadLive(target);
+            if (Equals(effective, value))
+                _logger.LogWarning(
+                    "The saved scheduler setting {Setting} ({Saved}) replaces the value configured in code ({Configured}).",
+                    setting.Name,
+                    value,
+                    configured
+                );
+            else
+                _logger.LogWarning(
+                    "The saved scheduler setting {Setting} ({Saved}) is less cautious than the value configured in code ({Configured}), so the scheduler runs with {Effective}.",
+                    setting.Name,
+                    value,
+                    configured,
+                    effective
+                );
+        }
+    }
 }

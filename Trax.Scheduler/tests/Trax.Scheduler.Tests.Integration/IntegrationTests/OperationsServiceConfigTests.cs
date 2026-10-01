@@ -252,6 +252,38 @@ public class OperationsServiceConfigTests : TestSetup
     }
 
     [Test]
+    public async Task UpdateSchedulerConfig_SettingTheRowDoesNotName_ComparesWithTheLiveValue()
+    {
+        // A stored row exists, but it does not name FailureCountWindow.
+        (
+            await _operations.UpdateSchedulerConfigAsync(
+                new UpdateSchedulerConfigInput(MaxActiveJobs: 20),
+                CancellationToken.None
+            )
+        )
+            .Success.Should()
+            .BeTrue();
+        var window = _cfg.FailureCountWindow;
+
+        var unchanged = await _operations.UpdateSchedulerConfigAsync(
+            new UpdateSchedulerConfigInput { FailureCountWindow = window },
+            CancellationToken.None
+        );
+        var changed = await _operations.UpdateSchedulerConfigAsync(
+            new UpdateSchedulerConfigInput { FailureCountWindow = window + TimeSpan.FromHours(1) },
+            CancellationToken.None
+        );
+
+        unchanged.Count.Should().Be(0, "the value is the one this host already runs with");
+        changed.Count.Should().Be(1);
+        _cfg.FailureCountWindow.Should().Be(window + TimeSpan.FromHours(1));
+        DataContext.Reset();
+        (await DataContext.SchedulerConfigs.SingleAsync())
+            .MaxActiveJobs.Should()
+            .Be(20, "the stored row is left as it was");
+    }
+
+    [Test]
     public async Task BootstrapHostedService_LoadsPersistedRowAtStartup()
     {
         // Persist a row directly so we can verify the hosted service applies it.
@@ -409,6 +441,7 @@ public class OperationsServiceConfigTests : TestSetup
             "JobDispatcherPollingInterval"
         );
         yield return Case(new(MaxActiveJobs: 0), "MaxActiveJobs");
+        yield return Case(new() { FailureCountWindow = TimeSpan.Zero }, "FailureCountWindow");
         yield return Case(new(DefaultMaxRetries: -1), "DefaultMaxRetries");
         yield return Case(new(DefaultRetryDelay: TimeSpan.FromSeconds(-1)), "DefaultRetryDelay");
         yield return Case(new(RetryBackoffMultiplier: 0.5), "RetryBackoffMultiplier");

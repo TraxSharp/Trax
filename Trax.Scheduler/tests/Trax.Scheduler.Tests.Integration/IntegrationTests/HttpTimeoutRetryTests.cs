@@ -53,7 +53,7 @@ public class HttpTimeoutRetryTests
                 "http-timeout-retry",
                 new HttpTimeoutSchedulerTestInput(),
                 TimeSpan.Zero,
-                o => o.MaxRetries(2)
+                o => o.MaxRetries(1)
             )
         );
         await fx.MaterializePendingManifestsAsync();
@@ -62,7 +62,7 @@ public class HttpTimeoutRetryTests
         await fx.RunManifestManagerAsync();
         await fx.RunJobDispatcherAsync();
 
-        // The failure counts as one attempt of two, so the manifest is queued again.
+        // The failure is the first of two allowed attempts, so the manifest is queued again.
         await fx.RunManifestManagerAsync();
         var queuedAgain = await fx
             .DataContext.WorkQueues.AsNoTracking()
@@ -71,7 +71,14 @@ public class HttpTimeoutRetryTests
             );
         queuedAgain.Should().Be(1, "a timed-out run is a failure, and a failure is retried");
 
-        // The retry times out too, which reaches MaxRetries: the next cycle dead-letters it.
+        // The retry is queued behind the retry delay; stand in for that time passing.
+        await fx
+            .DataContext.WorkQueues.Where(w =>
+                w.Manifest!.ExternalId == "http-timeout-retry" && w.Status == WorkQueueStatus.Queued
+            )
+            .ExecuteUpdateAsync(u => u.SetProperty(w => w.ScheduledAt, (DateTime?)null));
+
+        // The retry times out too, which exceeds MaxRetries: the next cycle dead-letters it.
         await fx.RunJobDispatcherAsync();
         await fx.RunManifestManagerAsync();
 

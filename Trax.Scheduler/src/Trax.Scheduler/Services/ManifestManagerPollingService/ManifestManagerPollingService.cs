@@ -7,6 +7,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.ManifestManagerPollingService;
 
@@ -37,11 +38,15 @@ internal class ManifestManagerPollingService(
             configuration.ManifestManagerPollingInterval
         );
 
-        using var timer = new PeriodicTimer(configuration.ManifestManagerPollingInterval);
-
         await RunManifestManager(stoppingToken);
 
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        // The interval is read each cycle, so a runtime change applies to the next wait.
+        while (
+            await PollingDelay.WaitAsync(
+                () => configuration.ManifestManagerPollingInterval,
+                stoppingToken
+            )
+        )
         {
             await RunManifestManager(stoppingToken);
         }

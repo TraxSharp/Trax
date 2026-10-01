@@ -20,7 +20,9 @@ internal static class ExecutionCancellation
     /// </summary>
     /// <remarks>
     /// The flag is the durable request, observed at a run's next junction boundary on whatever
-    /// host runs it; a Pending run sees it when it starts. The update repeats the state test, so
+    /// host runs it. A Pending run sees it when the job runner picks it up, on any host and
+    /// whatever junction providers that host registers: the run is recorded Cancelled and its
+    /// train is not run. The update repeats the state test, so
     /// a run that finished between the read and the write is not flagged. Only the runs that
     /// were cancellable when read go to the registry, so a finished run's token is never touched.
     /// On a provider without set updates (InMemory) the same rows are loaded and saved instead.

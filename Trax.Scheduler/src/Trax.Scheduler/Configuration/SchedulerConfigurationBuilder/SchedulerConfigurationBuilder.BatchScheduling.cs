@@ -63,6 +63,8 @@ public partial class SchedulerConfigurationBuilder
             _externalIdToGroupId[extId] = resolved._groupId ?? extId;
         }
 
+        DeclareBatchGroup(firstId, resolved);
+
         _configuration.PendingManifests.Add(
             new PendingManifest
             {
@@ -96,7 +98,7 @@ public partial class SchedulerConfigurationBuilder
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
-    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
+    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>. The prune removes only manifests of this batch's group, so a batch named <c>sync</c> leaves one named <c>sync-users</c> alone.</param>
     /// <param name="sources">The collection of items to create manifests from</param>
     /// <param name="map">A function that transforms each source item into a <c>Suffix</c> and <c>Input</c> pair. The full external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="schedule">The schedule definition applied to all manifests</param>
@@ -137,8 +139,7 @@ public partial class SchedulerConfigurationBuilder
             schedule,
             opts =>
             {
-                opts.Group(name);
-                opts.PrunePrefix($"{name}-");
+                opts.NamedBatch(name);
                 options?.Invoke(opts);
             },
             configureEach
@@ -198,6 +199,8 @@ public partial class SchedulerConfigurationBuilder
             _dependencyEdges.Add((parentExtId, extId));
         }
 
+        DeclareBatchGroup(firstId, resolved);
+
         _configuration.PendingManifests.Add(
             new PendingManifest
             {
@@ -230,7 +233,7 @@ public partial class SchedulerConfigurationBuilder
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
-    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
+    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>. The prune removes only manifests of this batch's group, so a batch named <c>sync</c> leaves one named <c>sync-users</c> alone.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into a <c>Suffix</c> and <c>Input</c> pair. The full external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="dependsOn">A function that maps each source item to the external ID of its parent manifest</param>
@@ -269,8 +272,7 @@ public partial class SchedulerConfigurationBuilder
             dependsOn,
             opts =>
             {
-                opts.Group(name);
-                opts.PrunePrefix($"{name}-");
+                opts.NamedBatch(name);
                 options?.Invoke(opts);
             },
             configureEach
@@ -330,6 +332,8 @@ public partial class SchedulerConfigurationBuilder
             _dependencyEdges.Add((rootExternalId, extId));
         }
 
+        DeclareBatchGroup(firstId, resolved);
+
         _configuration.PendingManifests.Add(
             new PendingManifest
             {
@@ -363,7 +367,7 @@ public partial class SchedulerConfigurationBuilder
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
-    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
+    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>. The prune removes only manifests of this batch's group, so a batch named <c>sync</c> leaves one named <c>sync-users</c> alone.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into a <c>Suffix</c> and <c>Input</c> pair. The full external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="options">Optional callback to configure manifest and group options via <see cref="ScheduleOptions"/></param>
@@ -400,8 +404,7 @@ public partial class SchedulerConfigurationBuilder
             },
             opts =>
             {
-                opts.Group(name);
-                opts.PrunePrefix($"{name}-");
+                opts.NamedBatch(name);
                 options?.Invoke(opts);
             },
             configureEach
@@ -463,6 +466,8 @@ public partial class SchedulerConfigurationBuilder
             _dependencyEdges.Add((parentExtId, extId));
         }
 
+        DeclareBatchGroup(firstId, resolved);
+
         _configuration.PendingManifests.Add(
             new PendingManifest
             {
@@ -496,7 +501,7 @@ public partial class SchedulerConfigurationBuilder
     /// <typeparam name="TInput">The input type for the train (must implement IManifestProperties)</typeparam>
     /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
     /// <typeparam name="TSource">The type of elements in the source collection</typeparam>
-    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>.</param>
+    /// <param name="name">The batch name. Used as <c>groupId</c>, <c>prunePrefix</c> is <c>"{name}-"</c>, and each external ID is <c>"{name}-{suffix}"</c>. The prune removes only manifests of this batch's group, so a batch named <c>sync</c> leaves one named <c>sync-users</c> alone.</param>
     /// <param name="sources">The collection of source items to create dependent manifests from</param>
     /// <param name="map">A function that transforms each source item into a <c>Suffix</c> and <c>Input</c> pair. The full external ID is <c>"{name}-{suffix}"</c>.</param>
     /// <param name="dependsOn">A function that maps each source item to the external ID of its parent manifest</param>
@@ -533,8 +538,7 @@ public partial class SchedulerConfigurationBuilder
             dependsOn,
             opts =>
             {
-                opts.Group(name);
-                opts.PrunePrefix($"{name}-");
+                opts.NamedBatch(name);
                 options?.Invoke(opts);
             },
             configureEach

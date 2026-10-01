@@ -4,6 +4,7 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Mediator.Services.RunExecutor;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.RunExecutor;
 using Trax.Scheduler.Trains.JobRunner;
 
@@ -15,34 +16,47 @@ public partial class SchedulerConfigurationBuilder
     /// Sets the polling interval for both ManifestManager and JobDispatcher.
     /// For independent control, use <see cref="ManifestManagerPollingInterval"/> and <see cref="JobDispatcherPollingInterval"/>.
     /// </summary>
-    /// <param name="interval">The polling interval (default: 5 seconds)</param>
+    /// <param name="interval">
+    /// The polling interval (default: 5 seconds for the ManifestManager, 2 for the JobDispatcher).
+    /// Must be between one second and 30 days; the scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder PollingInterval(TimeSpan interval)
     {
         _configuration.ManifestManagerPollingInterval = interval;
         _configuration.JobDispatcherPollingInterval = interval;
+        _manifestManagerIntervalSetBy = nameof(PollingInterval);
+        _jobDispatcherIntervalSetBy = nameof(PollingInterval);
         return this;
     }
 
     /// <summary>
     /// Sets the interval at which ManifestManagerPollingService evaluates manifests and writes to the work queue.
     /// </summary>
-    /// <param name="interval">The polling interval (default: 5 seconds)</param>
+    /// <param name="interval">
+    /// The polling interval (default: 5 seconds). Must be between one second and 30 days; the
+    /// scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder ManifestManagerPollingInterval(TimeSpan interval)
     {
         _configuration.ManifestManagerPollingInterval = interval;
+        _manifestManagerIntervalSetBy = nameof(ManifestManagerPollingInterval);
         return this;
     }
 
     /// <summary>
     /// Sets the interval at which JobDispatcherPollingService reads the work queue and dispatches jobs.
     /// </summary>
-    /// <param name="interval">The polling interval (default: 2 seconds)</param>
+    /// <param name="interval">
+    /// The polling interval (default: 2 seconds). Must be between one second and 30 days; the
+    /// scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder JobDispatcherPollingInterval(TimeSpan interval)
     {
         _configuration.JobDispatcherPollingInterval = interval;
+        _jobDispatcherIntervalSetBy = nameof(JobDispatcherPollingInterval);
         return this;
     }
 
@@ -51,7 +65,8 @@ public partial class SchedulerConfigurationBuilder
     /// <c>AddTraxSchedulerLiveness()</c> health check reports unhealthy.
     /// </summary>
     /// <param name="threshold">
-    /// The staleness threshold (default: max(JobDispatcherPollingInterval * 10, 30s)).
+    /// The staleness threshold (default: max(JobDispatcherPollingInterval * 10, 30s)). Must be
+    /// between one second and ten years; the scheduler refuses to build otherwise.
     /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder SchedulerLivenessThreshold(TimeSpan threshold)
@@ -95,11 +110,15 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the maximum number of active jobs (Pending + InProgress) allowed across all manifests.
     /// </summary>
-    /// <param name="maxJobs">The maximum active jobs (default: 100, null = unlimited)</param>
+    /// <param name="maxJobs">
+    /// The maximum active jobs (default: 10, null = unlimited). Must be at least 1 when set; the
+    /// scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     /// <remarks>
-    /// When the total number of active jobs reaches this limit, no new jobs will be enqueued
-    /// until existing jobs complete.
+    /// When the total number of active jobs reaches this limit, the JobDispatcher dispatches no
+    /// new work queue entries until existing jobs complete. The limit is approximate: each
+    /// dispatching host counts active jobs on its own, so N hosts can reach N times the limit.
     /// </remarks>
     public SchedulerConfigurationBuilder MaxActiveJobs(int? maxJobs)
     {
@@ -175,7 +194,10 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the default number of retry attempts before a job is dead-lettered.
     /// </summary>
-    /// <param name="maxRetries">The maximum retry count (default: 3)</param>
+    /// <param name="maxRetries">
+    /// The maximum retry count (default: 3). Must not be negative; the scheduler refuses to build
+    /// otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder DefaultMaxRetries(int maxRetries)
     {
@@ -186,7 +208,10 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the default delay between retry attempts.
     /// </summary>
-    /// <param name="delay">The retry delay (default: 5 minutes)</param>
+    /// <param name="delay">
+    /// The retry delay (default: 5 minutes). Must be between zero and ten years; the scheduler
+    /// refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder DefaultRetryDelay(TimeSpan delay)
     {
@@ -197,7 +222,10 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the multiplier applied to retry delay on each subsequent retry.
     /// </summary>
-    /// <param name="multiplier">The backoff multiplier (default: 2.0)</param>
+    /// <param name="multiplier">
+    /// The backoff multiplier (default: 2.0). Must be a finite number of at least 1; the scheduler
+    /// refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder RetryBackoffMultiplier(double multiplier)
     {
@@ -208,7 +236,10 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the maximum retry delay to prevent unbounded backoff growth.
     /// </summary>
-    /// <param name="maxDelay">The maximum delay (default: 1 hour)</param>
+    /// <param name="maxDelay">
+    /// The maximum delay (default: 1 hour). Must be between zero and ten years; the scheduler
+    /// refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder MaxRetryDelay(TimeSpan maxDelay)
     {
@@ -217,9 +248,42 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
-    /// Sets the timeout after which a running job is considered stuck.
+    /// Sets how far back a manifest's failed runs are counted toward its retry backoff and its
+    /// dead letter.
     /// </summary>
-    /// <param name="timeout">The job timeout (default: 20 minutes)</param>
+    /// <remarks>
+    /// A failure older than the window no longer delays the next run or counts toward
+    /// <c>MaxRetries</c>. A manifest scheduled with its own <c>FailureWindow</c> uses that
+    /// instead. See <see cref="SchedulerConfiguration.FailureCountWindow"/>.
+    ///
+    /// The scheduler logs a warning when it starts if the retry backoff alone (the retry delay,
+    /// its multiplier and <see cref="MaxRetryDelay"/>) spaces <see cref="DefaultMaxRetries"/>
+    /// retries over the window or more: the count can then never be reached, and a manifest that
+    /// always fails is retried for ever instead of being dead-lettered.
+    /// </remarks>
+    /// <param name="window">The failure count window (default: 24 hours)</param>
+    /// <returns>The builder for method chaining</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="window"/> is not between one second and ten years.
+    /// </exception>
+    public SchedulerConfigurationBuilder FailureCountWindow(TimeSpan window)
+    {
+        if (SchedulerConfigLimits.PositiveDuration(window, nameof(window)) is { } problem)
+            throw new ArgumentOutOfRangeException(nameof(window), window, problem);
+
+        _configuration.FailureCountWindow = window;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the timeout after which a running job is cancelled, for a run a scheduler dispatched
+    /// whose manifest sets no Timeout of its own. A train nested inside a run shares that run's
+    /// timeout; a run a scheduler did not dispatch is not bounded by it.
+    /// </summary>
+    /// <param name="timeout">
+    /// The job timeout (default: 20 minutes). Must be between one second and ten years; the
+    /// scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder DefaultJobTimeout(TimeSpan timeout)
     {
@@ -228,9 +292,53 @@ public partial class SchedulerConfigurationBuilder
     }
 
     /// <summary>
+    /// Sets how long a resolved (retried or acknowledged) dead letter is kept before the automatic
+    /// purge deletes it. Dead letters awaiting intervention are never purged.
+    /// </summary>
+    /// <remarks>
+    /// A retention saved from the dashboard or the <c>updateScheduler</c> mutation can lengthen
+    /// this but not shorten it: when both state one, the longer applies, and the scheduler logs a
+    /// warning. Without this call a saved retention replaces the default.
+    /// </remarks>
+    /// <param name="retention">
+    /// The retention period (default: 30 days). Must be between zero and ten years; the scheduler
+    /// refuses to build otherwise.
+    /// </param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder DeadLetterRetentionPeriod(TimeSpan retention)
+    {
+        _configuration.DeadLetterRetentionPeriod = retention;
+        _configuration.ConfiguredDeadLetterRetentionPeriod = retention;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets whether resolved dead letters older than the retention period are deleted
+    /// automatically. The purge reads this on every run, so it can also be turned off or on at
+    /// runtime from the dashboard or the <c>updateScheduler</c> mutation.
+    /// </summary>
+    /// <remarks>
+    /// The purge deletes, so it runs only when both this and a saved setting allow it: a saved
+    /// <c>true</c> does not turn on a purge this call turned off, and the scheduler logs a warning
+    /// when it ignores one. A saved <c>false</c> does turn it off. Without this call a saved
+    /// setting replaces the default.
+    /// </remarks>
+    /// <param name="purge">True to purge resolved dead letters (default: true)</param>
+    /// <returns>The builder for method chaining</returns>
+    public SchedulerConfigurationBuilder AutoPurgeDeadLetters(bool purge = true)
+    {
+        _configuration.AutoPurgeDeadLetters = purge;
+        _configuration.ConfiguredAutoPurgeDeadLetters = purge;
+        return this;
+    }
+
+    /// <summary>
     /// Sets the timeout after which a Pending job that was never picked up is automatically failed.
     /// </summary>
-    /// <param name="timeout">The stale pending timeout (default: 20 minutes)</param>
+    /// <param name="timeout">
+    /// The stale pending timeout (default: 20 minutes). Must be between one second and ten years;
+    /// the scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder StalePendingTimeout(TimeSpan timeout)
     {
@@ -240,8 +348,13 @@ public partial class SchedulerConfigurationBuilder
 
     /// <summary>
     /// Sets the timeout after which an InProgress job that never completed is automatically failed.
+    /// A run whose own timeout is longer (its manifest's Timeout, or a longer
+    /// <see cref="DefaultJobTimeout"/>) is kept until that timeout has passed as well.
     /// </summary>
-    /// <param name="timeout">The stale in-progress timeout (default: 60 minutes)</param>
+    /// <param name="timeout">
+    /// The stale in-progress timeout (default: 60 minutes). Must be between one second and ten
+    /// years; the scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder StaleInProgressTimeout(TimeSpan timeout)
     {
@@ -253,7 +366,10 @@ public partial class SchedulerConfigurationBuilder
     /// Sets how long a work queue entry may stay unconfirmed, in the middle of a two-phase
     /// enqueue, before it is resolved.
     /// </summary>
-    /// <param name="timeout">The stale staged entry timeout (default: 10 minutes)</param>
+    /// <param name="timeout">
+    /// The stale staged entry timeout (default: 10 minutes). Must be between one second and ten
+    /// years; the scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder StaleStagedEntryTimeout(TimeSpan timeout)
     {
@@ -296,7 +412,10 @@ public partial class SchedulerConfigurationBuilder
     /// <summary>
     /// Sets the default misfire threshold — the grace period before misfire policies take effect.
     /// </summary>
-    /// <param name="threshold">The misfire threshold (default: 60 seconds)</param>
+    /// <param name="threshold">
+    /// The misfire threshold (default: 60 seconds). Must be between zero and ten years; the
+    /// scheduler refuses to build otherwise.
+    /// </param>
     /// <returns>The builder for method chaining</returns>
     public SchedulerConfigurationBuilder DefaultMisfireThreshold(TimeSpan threshold)
     {
@@ -369,6 +488,9 @@ public partial class SchedulerConfigurationBuilder
     ///
     /// Trains can also be marked with <c>[TraxRemote]</c> to opt into remote execution without
     /// explicit <c>ForTrain&lt;T&gt;()</c> routing. Builder routing takes precedence over the attribute.
+    /// A scheduler with a <c>[TraxRemote]</c> train and no remote submitter at all (this,
+    /// <c>UseRemoteWorkers</c>, <c>UseSqsWorkers</c> or <c>UseLambdaWorkers</c>) refuses to build,
+    /// rather than run the train locally.
     ///
     /// Jobs are POSTed as JSON to the configured <see cref="RemoteWorkerOptions.BaseUrl"/>.
     /// The remote endpoint runs <see cref="Trains.JobRunner.JobRunnerTrain"/> to execute the train.
@@ -379,6 +501,14 @@ public partial class SchedulerConfigurationBuilder
     /// authorization policy expects.
     ///
     /// Set up the remote side with <c>AddTraxJobRunner(runner => ...)</c> and <c>UseTraxJobRunner()</c>.
+    ///
+    /// Call it once per endpoint to route different trains to different runners. Each call keeps
+    /// its own options and its own HTTP client, so a train is sent only to the endpoint it is
+    /// routed to, signed with that endpoint's key and carrying only the headers its
+    /// <see cref="RemoteWorkerOptions.ConfigureHttpClient"/> added. A train routed by two calls
+    /// is refused when the scheduler is built. A <c>[TraxRemote]</c> train that no call routes
+    /// explicitly goes to the first routed registration (this one, <c>UseSqsWorkers</c> or
+    /// <c>UseLambdaWorkers</c>, whichever was added first).
     /// </remarks>
     /// <param name="configure">Action to configure the remote endpoint URL and HTTP client</param>
     /// <param name="routing">Action to specify which trains should be dispatched remotely</param>
@@ -399,22 +529,35 @@ public partial class SchedulerConfigurationBuilder
         var submitterRouting = new SubmitterRouting();
         routing?.Invoke(submitterRouting);
 
+        // Each call has its own named client, so its base address, timeout and headers, and its
+        // own options, including its signing key, stay with the endpoint they were given for.
+        var clientName = $"Trax.RemoteWorkers.{_routedSubmitterRegistrations.Count}";
+
         _routedSubmitterRegistrations.Add(
             new RoutedSubmitterRegistration(
                 submitterRouting,
                 typeof(Services.JobSubmitter.HttpJobSubmitter),
                 services =>
                 {
-                    services.AddSingleton(options);
-
-                    services.AddHttpClient<Services.JobSubmitter.HttpJobSubmitter>(client =>
-                    {
-                        client.BaseAddress = new Uri(options.BaseUrl);
-                        client.Timeout = options.Timeout;
-                        options.ConfigureHttpClient?.Invoke(client);
-                    });
+                    services.AddHttpClient(
+                        clientName,
+                        client =>
+                        {
+                            client.BaseAddress = new Uri(options.BaseUrl);
+                            client.Timeout = options.Timeout;
+                            options.ConfigureHttpClient?.Invoke(client);
+                        }
+                    );
                 }
             )
+            {
+                CreateSubmitter = services => new Services.JobSubmitter.HttpJobSubmitter(
+                    services.GetRequiredService<IHttpClientFactory>().CreateClient(clientName),
+                    options,
+                    services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.JobSubmitter.HttpJobSubmitter>>()
+                ),
+                Description = $"UseRemoteWorkers({options.BaseUrl})",
+            }
         );
         return this;
     }

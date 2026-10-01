@@ -169,6 +169,20 @@ internal class DormantDependentContext(
                     + "A dormant dependent can only be activated by its declared parent."
             );
 
+        // A disabled manifest, or one in a disabled group, stays stopped: its parent's success
+        // does not restart it, just as the ManifestManager does not queue it.
+        if (!manifest.IsEnabled || !manifest.ManifestGroup.IsEnabled)
+        {
+            logger.LogWarning(
+                "Skipping activation of dormant dependent '{ExternalId}' "
+                    + "(ManifestId: {ManifestId}) — {Disabled} is disabled",
+                externalId,
+                manifest.Id,
+                manifest.IsEnabled ? "its manifest group" : "the manifest"
+            );
+            return;
+        }
+
         // Concurrency guard: check for existing queued work
         var hasQueuedWork = await context.WorkQueues.AnyAsync(
             w => w.ManifestId == manifest.Id && w.Status == WorkQueueStatus.Queued,

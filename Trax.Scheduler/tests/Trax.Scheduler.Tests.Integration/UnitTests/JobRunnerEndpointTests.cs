@@ -31,14 +31,19 @@ public class JobRunnerEndpointTests
     private static IHost BuildHost(
         ITraxRequestHandler handler,
         Action<TraxJobRunnerOptions>? runner = null,
-        bool registerRunner = true
+        bool registerRunner = true,
+        ILoggerProvider? logs = null
     )
     {
         var hostBuilder = new HostBuilder().ConfigureWebHost(web =>
             web.UseTestServer()
                 .ConfigureServices(services =>
                 {
-                    services.AddLogging();
+                    services.AddLogging(logging =>
+                    {
+                        if (logs is not null)
+                            logging.AddProvider(logs);
+                    });
                     services.AddRouting();
                     services.AddAuthorization(o =>
                         o.AddPolicy("scheduler", p => p.RequireClaim("role", "scheduler"))
@@ -55,6 +60,15 @@ public class JobRunnerEndpointTests
                 })
                 .Configure(app =>
                 {
+                    // A request marked for it gets a body that fails the test if anything reads it.
+                    app.Use(
+                        (context, next) =>
+                        {
+                            if (context.Request.Headers.ContainsKey(UnreadableBodyHeader))
+                                context.Request.Body = new UnreadableStream();
+                            return next(context);
+                        }
+                    );
                     app.UseRouting();
                     app.UseAuthorization();
                     app.UseEndpoints(endpoints =>
@@ -382,6 +396,215 @@ public class JobRunnerEndpointTests
         );
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
+    }
+
+    #endregion
+
+    #region Reading the request
+
+    private const string UnreadableBodyHeader = "X-Test-Unreadable-Body";
+
+    /// <summary>A POST whose body stream throws when read, announcing a 10 MB body.</summary>
+    private static HttpRequestMessage PostWithUnreadableBody(string path, string? signature)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = new ByteArrayContent(new byte[16])
+            {
+                Headers = { ContentType = new("application/json") },
+            },
+        };
+        request.Headers.Add(UnreadableBodyHeader, "1");
+        if (signature is not null)
+            request.Headers.Add(RunnerRequestSignature.HeaderName, signature);
+        return request;
+    }
+
+    [TestCase("/trax/execute")]
+    [TestCase("/trax/run")]
+    public async Task SigningKey_UnsignedRequest_Is401WithoutTheBodyBeingRead(string path)
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        var client = host.GetTestServer().CreateClient();
+
+        var response = await client.SendAsync(PostWithUnreadableBody(path, signature: null));
+
+        response
+            .StatusCode.Should()
+            .Be(
+                System.Net.HttpStatusCode.Unauthorized,
+                "the signature header is checked before the body is read (see docs/adr/0006-a-runner-requires-an-authorization-posture.md)"
+            );
+        handler.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [TestCase("/trax/execute", "not-a-signature")]
+    [TestCase("/trax/run", "v1,t=1,n=zz,s=AAAA")]
+    public async Task SigningKey_MalformedSignature_Is401WithoutTheBodyBeingRead(
+        string path,
+        string signature
+    )
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        var client = host.GetTestServer().CreateClient();
+
+        var response = await client.SendAsync(PostWithUnreadableBody(path, signature));
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
+        handler.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task SigningKey_StaleSignature_Is401WithoutTheBodyBeingRead()
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        using var host = BuildHost(handler, o => o.SigningKey = Key);
+        var client = host.GetTestServer().CreateClient();
+        var stale = RunnerRequestSignature.Create(
+            Key,
+            RunnerRequestPurpose.Run,
+            new byte[16],
+            DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds(),
+            "00112233445566778899aabbccddeeff"
+        );
+
+        var response = await client.SendAsync(PostWithUnreadableBody("/trax/run", stale));
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.Unauthorized);
+    }
+
+    [TestCase("/trax/execute", true)]
+    [TestCase("/trax/run", true)]
+    [TestCase("/trax/execute", false)]
+    [TestCase("/trax/run", false)]
+    public async Task A_body_over_the_limit_is_413_without_running(string path, bool announced)
+    {
+        var handler = Substitute.For<ITraxRequestHandler>();
+        using var host = BuildHost(
+            handler,
+            o =>
+            {
+                o.AllowUnsignedRequests();
+                o.MaxRequestBodyBytes = 1024;
+            }
+        );
+        var client = host.GetTestServer().CreateClient();
+        var body = System.Text.Encoding.UTF8.GetBytes(
+            $"{{\"metadataId\":1,\"input\":\"{new string('x', 4096)}\"}}"
+        );
+        HttpContent content = announced
+            ? new ByteArrayContent(body)
+            : new StreamContent(new MemoryStream(body));
+        content.Headers.ContentType = new("application/json");
+        if (!announced)
+            content.Headers.ContentLength = null;
+
+        var response = await client.PostAsync(path, content);
+
+        response
+            .StatusCode.Should()
+            .Be(
+                System.Net.HttpStatusCode.RequestEntityTooLarge,
+                "each runner endpoint holds its body to MaxRequestBodyBytes"
+            );
+        handler.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Test]
+    public void The_request_body_limit_must_be_positive()
+    {
+        var act = () => new TraxJobRunnerOptions { MaxRequestBodyBytes = 0 }.Validate();
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public async Task Refusals_in_quick_succession_are_logged_as_one_warning()
+    {
+        var logs = new CapturingLoggerProvider();
+        using var host = BuildHost(
+            Substitute.For<ITraxRequestHandler>(),
+            o => o.SigningKey = Key,
+            logs: logs
+        );
+        var client = host.GetTestServer().CreateClient();
+
+        for (var i = 0; i < 5; i++)
+            await client.SendAsync(PostWithUnreadableBody("/trax/run", signature: null));
+
+        logs.Entries.Count(e => e.Level == LogLevel.Warning && e.Message.Contains("Refused"))
+            .Should()
+            .Be(1, "refusals are summarised rather than logged one warning each");
+    }
+
+    private sealed class UnreadableStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => 10 * 1024 * 1024;
+        public override long Position
+        {
+            get => 0;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() { }
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new InvalidOperationException("The request body was read.");
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default
+        ) => throw new InvalidOperationException("The request body was read.");
+
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException("The request body was read.");
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<(
+            LogLevel Level,
+            string Message
+        )> Entries { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new Logger(Entries);
+
+        public void Dispose() { }
+
+        private sealed class Logger(
+            System.Collections.Concurrent.ConcurrentQueue<(LogLevel, string)> entries
+        ) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter
+            ) => entries.Enqueue((logLevel, formatter(state, exception)));
+        }
     }
 
     #endregion

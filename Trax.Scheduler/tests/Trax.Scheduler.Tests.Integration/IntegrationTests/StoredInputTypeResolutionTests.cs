@@ -58,7 +58,7 @@ public class StoredInputTypeResolutionTests : TestSetup
     }
 
     [Test]
-    public async Task Dispatch_refuses_a_work_queue_row_whose_input_type_no_train_takes()
+    public async Task Dispatch_does_not_read_a_work_queue_row_whose_input_type_no_train_takes()
     {
         var entry = await SaveWorkQueueEntry(typeof(NotATrainInput).FullName!);
 
@@ -66,11 +66,12 @@ public class StoredInputTypeResolutionTests : TestSetup
 
         DataContext.Reset();
         var row = await DataContext.WorkQueues.FirstAsync(q => q.Id == entry.Id);
-        row.Status.Should().Be(WorkQueueStatus.Queued);
-        row.MetadataId.Should().BeNull();
-        (await DataContext.Metadatas.CountAsync(m => m.Name == typeof(SchedulerTestTrain).FullName))
-            .Should()
-            .Be(0);
+        row.Status.Should()
+            .Be(
+                WorkQueueStatus.Queued,
+                "the entry is left for a host that registers a train taking the type"
+            );
+        row.MetadataId.Should().BeNull("nothing ran");
         NotATrainInput
             .Constructed.Should()
             .Be(

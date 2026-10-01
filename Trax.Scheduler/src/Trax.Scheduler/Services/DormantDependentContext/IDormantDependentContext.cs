@@ -47,9 +47,10 @@ public interface IDormantDependentContext
     /// <param name="input">The runtime-determined input for the dependent train.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
-    /// If the target manifest already has a queued WorkQueue entry or an active execution
-    /// (Pending/InProgress Metadata), the activation is silently skipped to prevent
-    /// duplicate work. A warning is logged in this case.
+    /// If the target manifest is disabled, or its manifest group is, the activation is
+    /// skipped: a disabled manifest stays stopped until it is re-enabled. If it already has a
+    /// queued WorkQueue entry or an active execution (Pending/InProgress Metadata), the
+    /// activation is skipped to prevent duplicate work. A warning is logged in each case.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when:
@@ -86,7 +87,7 @@ public interface IDormantDependentContext
     /// <remarks>
     /// All activations are performed in a single database transaction. If any validation
     /// fails (wrong parent, not dormant, etc.), the entire batch is rolled back.
-    /// Concurrency-skipped entries (already queued/active) do not cause a rollback.
+    /// Skipped entries (disabled, already queued or active) do not cause a rollback.
     /// </remarks>
     Task ActivateManyAsync<TTrain, TInput, TOutput>(
         IEnumerable<(string ExternalId, TInput Input)> activations,

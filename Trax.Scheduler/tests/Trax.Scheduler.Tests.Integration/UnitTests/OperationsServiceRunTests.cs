@@ -10,6 +10,10 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Mediator.Configuration;
+using Trax.Mediator.Exceptions;
+using Trax.Mediator.Services.ConcurrencyLimiter;
+using Trax.Mediator.Services.RunExecutor;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -44,6 +48,7 @@ public class OperationsServiceRunTests
     private CapturingLogger _logger = null!;
     private OperationsService _service = null!;
     private ITrainAuthorizationService? _authorization;
+    private ITrainExecutionService _execution = null!;
 
     public record ProbeInput
     {
@@ -80,6 +85,8 @@ public class OperationsServiceRunTests
         services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
         services.AddSingleton(_submitter);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
+        var mediatorConfiguration = new MediatorConfiguration();
+        services.AddSingleton(mediatorConfiguration);
         if (_authorization is not null)
             services.AddSingleton(_authorization);
         configure?.Invoke(services);
@@ -94,11 +101,32 @@ public class OperationsServiceRunTests
                 Registration(typeof(IRoutedTrain), guarded: false),
             ]);
 
+        // The mediator's own execution service prepares the run, behind a substitute so a test
+        // can see the call or make it fail.
+        var mediator = new TrainExecutionService(
+            discovery,
+            Substitute.For<IRunExecutor>(),
+            Substitute.For<IConcurrencyLimiter>(),
+            _provider.GetRequiredService<IDataContextProviderFactory>(),
+            mediatorConfiguration,
+            _provider
+        );
+        _execution = Substitute.For<ITrainExecutionService>();
+        _execution
+            .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+                mediator.PrepareAsync(
+                    call.ArgAt<string>(0),
+                    call.ArgAt<string?>(1),
+                    call.ArgAt<CancellationToken>(2)
+                )
+            );
+
         _service = new OperationsService(
             discovery,
             _provider.GetRequiredService<IDataContextProviderFactory>(),
             new SchedulerConfiguration(),
-            Substitute.For<ITrainExecutionService>(),
+            _execution,
             _provider,
             logger: _logger
         );
@@ -219,13 +247,68 @@ public class OperationsServiceRunTests
     }
 
     [Test]
-    public async Task The_callers_token_reaches_the_submitter()
+    public async Task A_caller_that_goes_away_after_the_run_is_written_does_not_cancel_its_submit()
     {
         using var cts = new CancellationTokenSource();
+        var submitCancelled = true;
+        _submitter
+            .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                // The request is aborted while the job is being handed over.
+                cts.Cancel();
+                submitCancelled = call.ArgAt<CancellationToken>(2).IsCancellationRequested;
+                return Task.FromResult("job-1");
+            });
 
-        await Run(typeof(IProbeTrain), "{}", cts.Token);
+        var result = await Run(typeof(IProbeTrain), "{}", cts.Token);
 
-        await _submitter.Received(1).EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), cts.Token);
+        result.Success.Should().BeTrue(result.Message);
+        submitCancelled
+            .Should()
+            .BeFalse("once the row is written the run is the server's, not the request's");
+        (await Runs()).Should().ContainSingle().Which.TrainState.Should().Be(TrainState.Pending);
+    }
+
+    [Test]
+    public async Task A_caller_cancelled_before_the_run_is_written_submits_nothing()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = async () => await Run(typeof(IProbeTrain), "{}", cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _submitter.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_submit_that_fails_after_a_runner_started_the_run_is_a_success()
+    {
+        _submitter
+            .EnqueueAsync(Arg.Any<long>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
+            .Returns<Task<string>>(async call =>
+            {
+                // A remote runner claimed the run, then the call to it failed or timed out.
+                var id = call.ArgAt<long>(0);
+                using var context = (IDataContext)
+                    _provider.GetRequiredService<IDataContextProviderFactory>().Create();
+                var row = await context.Metadatas.FirstAsync(m => m.Id == id);
+                row.TrainState = TrainState.InProgress;
+                await context.SaveChanges(CancellationToken.None);
+                throw new TimeoutException("the runner did not answer in time");
+            });
+
+        var result = await Run(typeof(IProbeTrain), "{}");
+
+        result
+            .Success.Should()
+            .BeTrue("the run was submitted; retrying would start a second concurrent run");
+        result.Message.Should().Contain("pending");
+        var run = (await Runs()).Should().ContainSingle().Subject;
+        result.Id.Should().Be(run.Id);
+        run.TrainState.Should().Be(TrainState.InProgress, "the runner owns its outcome");
+        _logger.Errors.Should().BeEmpty();
     }
 
     [Test]
@@ -333,9 +416,39 @@ public class OperationsServiceRunTests
     {
         var act = async () => await Run(typeof(IGuardedTrain), "{}");
 
-        (await act.Should().ThrowAsync<InvalidOperationException>())
+        (await act.Should().ThrowAsync<TrainAuthorizationNotConfiguredException>())
             .Which.Message.Should()
             .Contain("ITrainAuthorizationService");
+        (await Runs()).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_run_is_prepared_by_the_mediator_so_its_refusals_are_the_mediators()
+    {
+        const string json = "{\"customerId\":1,\"CustomerId\":2}";
+
+        var result = await Run(typeof(IProbeTrain), json);
+
+        result.Success.Should().BeFalse("docs/0023: a property given twice is refused");
+        result.Message.Should().StartWith("Invalid InputJson");
+        await _execution
+            .Received(1)
+            .PrepareAsync(typeof(IProbeTrain).FullName!, json, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task A_train_the_mediator_cannot_find_is_an_unknown_train()
+    {
+        _execution
+            .PrepareAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<PreparedTrain>>(_ =>
+                throw new TrainNotFoundException(typeof(IProbeTrain).FullName!)
+            );
+
+        var result = await Run(typeof(IProbeTrain), "{}");
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("Unknown train");
         (await Runs()).Should().BeEmpty();
     }
 

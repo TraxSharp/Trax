@@ -35,6 +35,7 @@ public record Schedule
     /// <remarks>
     /// Only used when <see cref="Type"/> is <see cref="ScheduleType.Cron"/>.
     /// Supports both 5-field (minute granularity) and 6-field (second granularity) cron formats.
+    /// The expression is evaluated in UTC.
     /// </remarks>
     public string? CronExpression { get; internal init; }
 
@@ -52,29 +53,73 @@ public record Schedule
     /// <summary>
     /// Creates a schedule from a time interval.
     /// </summary>
-    /// <param name="interval">The interval between job executions</param>
+    /// <param name="interval">The interval between job executions, at least one second</param>
     /// <returns>A new Schedule configured for interval-based execution</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="interval"/> is shorter than one second.
+    /// </exception>
     /// <example>
     /// <code>
     /// var schedule = Schedule.FromInterval(TimeSpan.FromMinutes(5));
     /// </code>
     /// </example>
-    public static Schedule FromInterval(TimeSpan interval) =>
-        new() { Type = ScheduleType.Interval, Interval = interval };
+    public static Schedule FromInterval(TimeSpan interval)
+    {
+        // The manifest stores whole seconds, so anything shorter would be stored as zero.
+        if (interval < TimeSpan.FromSeconds(1))
+            throw new ArgumentOutOfRangeException(
+                nameof(interval),
+                interval,
+                "A schedule interval must be at least one second."
+            );
+
+        return new() { Type = ScheduleType.Interval, Interval = interval };
+    }
 
     /// <summary>
     /// Creates a schedule from a cron expression.
     /// </summary>
-    /// <param name="expression">A 5-field or 6-field cron expression</param>
+    /// <param name="expression">A 5-field or 6-field cron expression, evaluated in UTC</param>
     /// <returns>A new Schedule configured for cron-based execution</returns>
+    /// <remarks>
+    /// The expression is parsed here, so one that cannot fire (an hour of 25, a sixth field of
+    /// garbage) fails at the call that states it rather than being stored. So does a valid one
+    /// with no occurrence in the next ten years, such as
+    /// <c>0 0 30 2 *</c> (February 30th). A new cron schedule first runs at its first occurrence
+    /// after it is scheduled, not on the next poll.
+    /// </remarks>
+    /// <exception cref="FormatException">
+    /// <paramref name="expression"/> is not a valid 5-field or 6-field cron expression, or it
+    /// never fires within ten years from now.
+    /// </exception>
     /// <example>
     /// <code>
-    /// var schedule = Schedule.FromCron("0 3 * * *");       // Daily at 3am (5-field)
+    /// var schedule = Schedule.FromCron("0 3 * * *");       // Daily at 03:00 UTC (5-field)
     /// var schedule = Schedule.FromCron("*/15 * * * * *");  // Every 15 seconds (6-field)
     /// </code>
     /// </example>
-    public static Schedule FromCron(string expression) =>
-        new() { Type = ScheduleType.Cron, CronExpression = expression };
+    public static Schedule FromCron(string expression)
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        var parsed = CronParser.Parse(expression);
+
+        var now = DateTime.UtcNow;
+        var next = parsed.GetNextOccurrence(now, TimeZoneInfo.Utc);
+        if (next is null || next > now.AddYears(CronSearchWindowYears))
+            throw new FormatException(
+                $"Cron expression '{expression}' never fires: it has no occurrence in the next "
+                    + $"{CronSearchWindowYears} years. Check the day of the month against the months "
+                    + "it names (February has no 30th, April no 31st)."
+            );
+
+        return new() { Type = ScheduleType.Cron, CronExpression = expression };
+    }
+
+    /// <summary>
+    /// How far ahead <see cref="FromCron"/> looks for a cron expression's next occurrence before
+    /// refusing it as one that never fires.
+    /// </summary>
+    internal const int CronSearchWindowYears = 10;
 
     /// <summary>
     /// Returns a copy of this schedule with the specified variance (jitter).

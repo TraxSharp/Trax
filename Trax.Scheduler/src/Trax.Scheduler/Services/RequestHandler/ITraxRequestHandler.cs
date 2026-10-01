@@ -1,17 +1,29 @@
+using System.ComponentModel;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RunExecutor;
 
 namespace Trax.Scheduler.Services.RequestHandler;
 
 /// <summary>
-/// Hosting-agnostic handler for remote job execution and synchronous run requests.
+/// The runner's execution step, behind its entry points: it reads a request's input, resolves
+/// the registered train, and runs it. It checks no posture and verifies no signature.
 /// </summary>
 /// <remarks>
-/// This is the core logic shared by ASP.NET endpoints (<c>UseTraxJobRunner()</c>,
-/// <c>UseTraxRunEndpoint()</c>), SQS handlers, and Lambda base classes.
-/// It handles input deserialization, type resolution, train execution,
-/// and output serialization.
+/// <para>
+/// The entry points Trax ships (<c>UseTraxJobRunner()</c>, <c>UseTraxRunEndpoint()</c>,
+/// <c>SqsJobRunnerHandler</c>, <c>TraxLambdaFunction</c>) verify each request against the
+/// runner's posture before they call it, and it runs what it is given inside a trusted execution
+/// scope, so a train's <c>[TraxAuthorize]</c> requirements do not apply (scheduler/0006).
+/// </para>
+/// <para>
+/// Call it only from an entry point that has already verified the request: its
+/// <c>Trax-Signature</c> with <c>RunnerRequestVerifier.VerifyAsync</c>, or an authorization
+/// policy that admits only the scheduler. Code that hands it a request it has not verified lets
+/// whoever sent that request run any registered train. Hidden from IntelliSense for that reason;
+/// a host serves a runner through the entry points above.
+/// </para>
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public interface ITraxRequestHandler
 {
     /// <summary>

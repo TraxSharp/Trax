@@ -3,6 +3,9 @@ using Amazon.Lambda.SQSEvents;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.RequestHandler;
@@ -183,12 +186,52 @@ public class SqsJobRunnerHandlerTests
         handler.LastCancellationToken.Should().Be(token);
     }
 
+    [Test]
+    public async Task HandleBatchAsync_RecordWithNoBody_IsReportedWithoutRunningAnything()
+    {
+        var handler = new FakeRequestHandler();
+        var sut = CreateHandler(handler);
+
+        var response = await sut.HandleBatchAsync(
+            new SQSEvent { Records = [new SQSEvent.SQSMessage { MessageId = "m1", Body = null }] }
+        );
+
+        response.BatchItemFailures.Select(f => f.ItemIdentifier).Should().Equal(["m1"]);
+        handler.ExecuteCalls.Should().BeEmpty("a message with no body names no run");
+    }
+
+    [Test]
+    public async Task HandleBatchAsync_FailedRunWhoseStateCannotBeRead_IsDeliveredAgain()
+    {
+        var handler = new FakeRequestHandler
+        {
+            ExecuteException = new InvalidOperationException("nope"),
+        };
+        var factory = Substitute.For<IDataContextProviderFactory>();
+        factory
+            .CreateDbContextAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<IDataContext>>(_ => throw new InvalidOperationException("db down"));
+        var sut = CreateHandler(handler, configure: s => s.AddSingleton(factory));
+
+        var response = await sut.HandleBatchAsync(new SQSEvent { Records = [Message(1)] });
+
+        response
+            .BatchItemFailures.Select(f => f.ItemIdentifier)
+            .Should()
+            .Equal(
+                ["m1"],
+                "with the run's state unknown, delivering again is safer than dropping the message"
+            );
+    }
+
     private static SqsJobRunnerHandler CreateHandler(
         FakeRequestHandler handler,
-        Action<TraxJobRunnerOptions>? runner = null
+        Action<TraxJobRunnerOptions>? runner = null,
+        Action<IServiceCollection>? configure = null
     )
     {
         var services = new ServiceCollection();
+        configure?.Invoke(services);
         services.AddLogging();
         services.AddSingleton<ITraxRequestHandler>(handler);
         var options = new TraxJobRunnerOptions();

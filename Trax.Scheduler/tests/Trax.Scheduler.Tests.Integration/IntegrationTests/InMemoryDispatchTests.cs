@@ -1,7 +1,10 @@
 using FluentAssertions;
 using LanguageExt;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Effect.Models.Manifest;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Every = Trax.Scheduler.Services.Scheduling.Every;
@@ -95,5 +98,62 @@ public class InMemoryDispatchTests
             .ToListAsync();
         // Only the root manifest fires on first cycle; dependent fires after parent succeeds.
         metadatas.Should().HaveCountGreaterThan(0);
+    }
+
+    [Test]
+    public async Task ManifestManager_InMemory_ResolvesTheInputOnlyAmongRegisteredInputTypes()
+    {
+        var submitter = new InputRecordingSubmitter();
+        await using var fx = SchedulerE2EFixture.CreateInMemory(
+            s =>
+                s.Schedule<ISchedulerTestTrain>(
+                        "inmem-registered",
+                        new SchedulerTestInput { Value = "ok" },
+                        Every.Minutes(1)
+                    )
+                    .Schedule<ISchedulerTestTrain>(
+                        "inmem-unregistered",
+                        new SchedulerTestInput(),
+                        Every.Minutes(1)
+                    ),
+            services => services.AddScoped<IJobSubmitter>(_ => submitter)
+        );
+        await fx.MaterializePendingManifestsAsync();
+
+        // A stored type name that a loaded assembly defines, but that no registered train takes.
+        var tampered = await fx.DataContext.Manifests.FirstAsync(m =>
+            m.ExternalId == "inmem-unregistered"
+        );
+        tampered.PropertyTypeName = typeof(UnregisteredManifestInput).FullName;
+        await fx.DataContext.SaveChanges(CancellationToken.None);
+        fx.DataContext.Reset();
+
+        await fx.RunManifestManagerAsync();
+
+        submitter
+            .Inputs.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeOfType<SchedulerTestInput>()
+            .Which.Value.Should()
+            .Be("ok");
+        (await fx.DataContext.Metadatas.AsNoTracking().AnyAsync(m => m.ManifestId == tampered.Id))
+            .Should()
+            .BeFalse("a manifest whose input cannot be resolved is not started");
+    }
+
+    public sealed record UnregisteredManifestInput : IManifestProperties;
+
+    private sealed class InputRecordingSubmitter : IJobSubmitter
+    {
+        public List<object> Inputs { get; } = [];
+
+        public Task<string> EnqueueAsync(long metadataId) => Task.FromResult($"job-{metadataId}");
+
+        public Task<string> EnqueueAsync(long metadataId, object input)
+        {
+            Inputs.Add(input);
+            return Task.FromResult($"job-{metadataId}");
+        }
     }
 }

@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Every = Trax.Scheduler.Services.Scheduling.Every;
@@ -185,6 +186,37 @@ public class SchedulerDeadLetterTests
 
         var exists = await fx.DataContext.DeadLetters.AsNoTracking().AnyAsync(d => d.Id == dl.Id);
         exists.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task DeadLetterCleanup_RequeuedEntryStillQueued_KeepsTheDeadLetterAndItsRetry()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-queued-retry");
+        var dl = await SeedDeadLetterAsync(fx, "dl-queued-retry");
+
+        // The operator retries it, but the dispatcher is paused, so the retry waits in the queue
+        // past the retention period.
+        (await fx.Scheduler.RequeueDeadLetterAsync(dl.Id))
+            .Success.Should()
+            .BeTrue();
+        await fx
+            .DataContext.DeadLetters.Where(d => d.Id == dl.Id)
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(d => d.ResolvedAt, DateTime.UtcNow.AddDays(-90))
+            );
+
+        await fx.RunDeadLetterCleanupAsync();
+
+        (
+            await fx
+                .DataContext.WorkQueues.AsNoTracking()
+                .AnyAsync(w => w.DeadLetterId == dl.Id && w.Status == WorkQueueStatus.Queued)
+        )
+            .Should()
+            .BeTrue("the purge must not drop a retry that has not run yet");
+        (await fx.DataContext.DeadLetters.AsNoTracking().AnyAsync(d => d.Id == dl.Id))
+            .Should()
+            .BeTrue("it is purged once its retry has left the queue");
     }
 
     [Test]
@@ -371,6 +403,80 @@ public class SchedulerDeadLetterTests
         (await fx.DataContext.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == dl.Id))
             .Status.Should()
             .Be(DeadLetterStatus.Retried);
+    }
+
+    [Test]
+    public async Task RequeueDeadLettersAsync_MoreIdsThanOneBatchTakes_IsRefusedAndRequeuesNothing()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-cap-r");
+        var dl = await SeedDeadLetterAsync(fx, "dl-cap-r");
+        var ids = Enumerable
+            .Range(1, OperationsService.MaxBatchSize)
+            .Select(i => 900_000_000L + i)
+            .Append(dl.Id)
+            .ToArray();
+
+        var result = await fx.Scheduler.RequeueDeadLettersAsync(ids);
+
+        result.Count.Should().Be(0);
+        result.Message.Should().Contain($"At most {OperationsService.MaxBatchSize} ids");
+        (await fx.DataContext.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == dl.Id))
+            .Status.Should()
+            .Be(DeadLetterStatus.AwaitingIntervention);
+        (await QueuedFor(fx, "dl-cap-r")).Should().Be(0);
+    }
+
+    [Test]
+    public async Task AcknowledgeDeadLettersAsync_MoreIdsThanOneBatchTakes_IsRefusedAndAcknowledgesNothing()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-cap-a");
+        var dl = await SeedDeadLetterAsync(fx, "dl-cap-a");
+        var ids = Enumerable
+            .Range(1, OperationsService.MaxBatchSize)
+            .Select(i => 900_000_000L + i)
+            .Append(dl.Id)
+            .ToArray();
+
+        var result = await fx.Scheduler.AcknowledgeDeadLettersAsync(ids, "too many");
+
+        result.Count.Should().Be(0);
+        result.Message.Should().Contain($"At most {OperationsService.MaxBatchSize} ids");
+        (await fx.DataContext.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == dl.Id))
+            .Status.Should()
+            .Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    [Test]
+    public async Task RequeueAllDeadLettersAsync_AcrossSeveralPages_RequeuesEveryManifestAndFoldsWithinOne()
+    {
+        var externalIds = Enumerable.Range(1, 5).Select(i => $"dl-page-{i}").ToArray();
+        await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
+        {
+            foreach (var id in externalIds)
+                s.Schedule<ISchedulerTestTrain>(id, new SchedulerTestInput(), Every.Minutes(5));
+        });
+        await fx.MaterializePendingManifestsAsync();
+        foreach (var id in externalIds)
+            await SeedDeadLetterAsync(fx, id);
+        await SeedDeadLetterAsync(fx, "dl-page-3");
+        await SeedQueuedEntryAsync(fx, "dl-page-5");
+
+        // Two manifests a page, so five manifests take three pages.
+        ((Trax.Scheduler.Services.TraxScheduler.TraxScheduler)fx.Scheduler).RequeueAllPageSize = 2;
+
+        var result = await fx.Scheduler.RequeueAllDeadLettersAsync();
+
+        result.Count.Should().Be(5, "four manifests' dead letters, two of them for one manifest");
+        result.Message.Should().Contain("1 folded").And.Contain("1 skipped");
+        foreach (var id in externalIds)
+            (await QueuedFor(fx, id)).Should().Be(1, $"{id} has exactly one queued entry");
+        (
+            await fx
+                .DataContext.DeadLetters.AsNoTracking()
+                .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention)
+        )
+            .Should()
+            .Be(1, "only the dead letter whose manifest was already queued is left");
     }
 
     #endregion

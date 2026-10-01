@@ -1,3 +1,4 @@
+using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.Services.DataContext;
@@ -5,6 +6,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
@@ -12,73 +14,88 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// Cancels running jobs that have exceeded their configured timeout.
 /// </summary>
 /// <remarks>
-/// Queries InProgress metadata where the elapsed time since StartTime exceeds the manifest's
-/// TimeoutSeconds (or the global DefaultJobTimeout). For each timed-out job, sets
-/// CancellationRequested=true in the database and attempts same-server instant cancellation
-/// via ICancellationRegistry.
+/// Selects every InProgress run directly, not through the loaded manifests, so a run without a
+/// manifest (queued or run through the operations surface) and a run of a manifest disabled while
+/// it runs are both covered. A run's timeout comes from the run at the root of its ParentId chain
+/// (see <see cref="RunTimeouts"/>): the root manifest's TimeoutSeconds when it has one, and the
+/// global DefaultJobTimeout when a scheduler dispatched the root. A train nested inside a scheduled
+/// run therefore shares the scheduled run's timeout, and a run started on the train bus by a host
+/// sharing the database, which no scheduler dispatched, is not timed out here. The scheduler's own
+/// trains (<see cref="AdminTrains"/>) and the host's ExcludedTrainTypeNames are left alone: a
+/// JobRunner run lasts as long as the run it executes, which has its own timeout. For each
+/// timed-out run, sets
+/// CancellationRequested=true in the database and attempts same-server instant cancellation via
+/// ICancellationRegistry.
 ///
 /// Cancelled jobs transition to TrainState.Cancelled at the next junction boundary
-/// (via CancellationCheckProvider) or immediately (via CTS). Cancelled jobs are
-/// NOT retried and do NOT create dead letters.
+/// (via CancellationCheckProvider) or immediately (via CTS). A cancelled run is not retried and
+/// does not create a dead letter: it consumes the occurrence it ran for, so a scheduled manifest
+/// next runs at its next scheduled occurrence.
 ///
-/// This junction runs before ReapFailedJobsJunction in the ManifestManagerTrain chain.
+/// This junction runs first in the ManifestManagerTrain chain, before the manifests are loaded.
 /// </remarks>
 internal class CancelTimedOutJobsJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
     ICancellationRegistry cancellationRegistry,
     ILogger<CancelTimedOutJobsJunction> logger
-) : EffectJunction<List<ManifestDispatchView>, List<ManifestDispatchView>>
+) : EffectJunction<Unit, Unit>
 {
-    public override async Task<List<ManifestDispatchView>> Run(List<ManifestDispatchView> views)
+    public override async Task<Unit> Run(Unit input)
     {
-        var manifestIdsWithActiveJobs = views
-            .Where(v => v.HasActiveExecution)
-            .Select(v => v.Manifest.Id)
-            .ToList();
-
-        if (manifestIdsWithActiveJobs.Count == 0)
-        {
-            logger.LogDebug("CancelTimedOutJobsJunction: no active executions to check");
-            return views;
-        }
-
         var now = DateTime.UtcNow;
-        var defaultTimeoutSeconds = (int)config.DefaultJobTimeout.TotalSeconds;
+        var adminTrainNames = AdminTrains.FullNames.ToList();
 
         var inProgressMetadata = await dataContext
             .Metadatas.Where(m =>
-                m.ManifestId != null
-                && manifestIdsWithActiveJobs.Contains(m.ManifestId.Value)
-                && m.TrainState == TrainState.InProgress
+                m.TrainState == TrainState.InProgress
                 && !m.CancellationRequested
+                && !adminTrainNames.Contains(m.Name)
+                && !config.ExcludedTrainTypeNames.Contains(m.Name)
             )
-            .Select(m => new
-            {
+            .Select(m => new TimedRun(
                 m.Id,
+                m.ParentId,
+                m.Name,
                 m.StartTime,
                 m.ManifestId,
-                TimeoutSeconds = m.Manifest != null ? m.Manifest.TimeoutSeconds : null,
-            })
+                m.Manifest != null ? m.Manifest.TimeoutSeconds : null
+            ))
             .AsNoTracking()
             .ToListAsync(CancellationToken);
+
+        if (inProgressMetadata.Count == 0)
+        {
+            logger.LogDebug("CancelTimedOutJobsJunction: no in-progress runs to check");
+            return Unit.Default;
+        }
+
+        var bounds = await RunTimeouts.ResolveAsync(
+            dataContext,
+            config,
+            inProgressMetadata,
+            CancellationToken
+        );
 
         var metadataIdsToCancel = new List<long>();
 
         foreach (var md in inProgressMetadata)
         {
-            var timeoutSeconds = md.TimeoutSeconds ?? defaultTimeoutSeconds;
+            var bound = bounds[md.Id];
+            if (bound.Excluded || bound.Timeout is not { } timeout)
+                continue;
+
             var elapsed = now - md.StartTime;
 
-            if (elapsed > TimeSpan.FromSeconds(timeoutSeconds))
+            if (elapsed > timeout)
             {
                 metadataIdsToCancel.Add(md.Id);
                 logger.LogWarning(
-                    "Metadata {MetadataId} (Manifest {ManifestId}) timed out: elapsed {Elapsed} > timeout {Timeout}s",
+                    "Metadata {MetadataId} (Manifest {ManifestId}) timed out: elapsed {Elapsed} > timeout {Timeout}",
                     md.Id,
-                    md.ManifestId,
+                    bound.RootManifestId,
                     elapsed,
-                    timeoutSeconds
+                    timeout
                 );
             }
         }
@@ -86,7 +103,7 @@ internal class CancelTimedOutJobsJunction(
         if (metadataIdsToCancel.Count == 0)
         {
             logger.LogDebug("CancelTimedOutJobsJunction: no timed-out jobs found");
-            return views;
+            return Unit.Default;
         }
 
         await dataContext
@@ -111,6 +128,6 @@ internal class CancelTimedOutJobsJunction(
             metadataIdsToCancel.Count
         );
 
-        return views;
+        return Unit.Default;
     }
 }

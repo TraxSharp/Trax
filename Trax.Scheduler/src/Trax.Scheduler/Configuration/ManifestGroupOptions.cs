@@ -6,13 +6,17 @@ namespace Trax.Scheduler.Configuration;
 /// a <see cref="Trax.Effect.Models.ManifestGroup.ManifestGroup"/>.
 /// </summary>
 /// <remarks>
-/// Nullable internal fields distinguish "not set" (inherit defaults) from "explicitly set to a value".
-/// When a field is not set, the scheduler applies a sensible default:
+/// A group setting is written only when a member states it. Seeding a manifest again leaves every
+/// setting its options do not state as it is in the database, so a change an operator made at
+/// runtime survives a restart. Two members that state different values for one setting fail the
+/// build. When no member states a setting, a new group takes these values:
 /// <list type="bullet">
 ///   <item><c>MaxActiveJobs</c>: null (no per-group limit; only the global limit applies)</item>
-///   <item><c>Priority</c>: inherits from the manifest-level priority</item>
+///   <item><c>Priority</c>: the manifest's priority</item>
 ///   <item><c>IsEnabled</c>: true</item>
 /// </list>
+/// A manifest scheduled without a group name has a group of its own, and a batch without one has
+/// the batch's group; there the manifest's stated <c>Priority</c> is also the group's.
 /// </remarks>
 /// <example>
 /// <code>
@@ -29,6 +33,7 @@ namespace Trax.Scheduler.Configuration;
 public class ManifestGroupOptions
 {
     internal int? _maxActiveJobs;
+    internal bool _maxActiveJobsStated;
     internal int? _priority;
     internal bool? _isEnabled;
 
@@ -39,6 +44,7 @@ public class ManifestGroupOptions
     public ManifestGroupOptions MaxActiveJobs(int? max)
     {
         _maxActiveJobs = max;
+        _maxActiveJobsStated = true;
         return this;
     }
 

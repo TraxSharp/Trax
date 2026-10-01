@@ -7,9 +7,10 @@ namespace Trax.Scheduler.Services.Operations;
 /// them, so a bad value can neither be stored nor stop a host that finds one already stored.
 /// </summary>
 /// <remarks>
-/// The bounds come from what consumes each value. A polling or cleanup interval becomes a
-/// <see cref="PeriodicTimer"/>, which throws below 1 ms and above about 49.7 days; the floor is
-/// one second because polling the database faster than that is load, not responsiveness. A
+/// The bounds come from what consumes each value. A polling or cleanup interval is the wait
+/// between two cycles; the ceiling keeps it well inside what a timer accepts (about 49.7 days),
+/// and the floor is one second because polling the database faster than that is load, not
+/// responsiveness. A
 /// timeout or retention is subtracted from the current time, and the job timeout is read as whole
 /// seconds in an <see cref="int"/>, so ten years is the ceiling. Each local worker polls on its own
 /// connection, so more workers than a connection pool holds only queue for connections.
@@ -44,6 +45,21 @@ internal static class SchedulerConfigLimits
     internal static string? NonNegativeDuration(TimeSpan? value, string name) =>
         value is { } v && (v < TimeSpan.Zero || v > MaxDuration)
             ? $"{name} must be between {TimeSpan.Zero} and {MaxDuration}."
+            : null;
+
+    /// <summary>
+    /// A wait that may be shorter than a second but must be positive, such as a local worker's
+    /// idle poll: zero would poll the database without pause.
+    /// </summary>
+    internal static string? ShortInterval(TimeSpan? value, string name) =>
+        value is { } v && (v <= TimeSpan.Zero || v > MaxTimerInterval)
+            ? $"{name} must be greater than zero and at most {MaxTimerInterval}."
+            : null;
+
+    /// <summary>A grace period handed to a timer, where zero means none.</summary>
+    internal static string? TimerDelay(TimeSpan? value, string name) =>
+        value is { } v && (v < TimeSpan.Zero || v > MaxTimerInterval)
+            ? $"{name} must be between {TimeSpan.Zero} and {MaxTimerInterval}."
             : null;
 
     internal static string? AtLeastOne(int? value, string name) =>

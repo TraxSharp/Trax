@@ -5,7 +5,9 @@ namespace Trax.Scheduler.Services.Scheduling;
 /// </summary>
 /// <remarks>
 /// The Every class provides a readable, Hangfire-inspired API for defining
-/// recurring schedules based on time intervals.
+/// recurring schedules based on time intervals. The shortest interval is one second; a zero or
+/// negative count throws <see cref="ArgumentOutOfRangeException"/>. A new interval schedule
+/// runs on the first poll after it is scheduled, then once per interval after each success.
 /// </remarks>
 /// <example>
 /// <code>

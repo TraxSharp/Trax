@@ -154,6 +154,28 @@ public class ManifestManagerTrainTests : TestSetup
     }
 
     [Test]
+    public async Task Run_WhenMaxRetriesIsNegativeAndNothingHasFailed_DoesNotCreateDeadLetter()
+    {
+        // A negative retry count used to reach the stored row (from a builder default the build
+        // did not check), and zero failures exceeded it, so the manifest was dead-lettered before
+        // it had ever run.
+        var manifest = await CreateAndSaveManifest(
+            scheduleType: ScheduleType.Interval,
+            intervalSeconds: 60,
+            maxRetries: -1
+        );
+
+        await _train.Run(Unit.Default);
+
+        DataContext.Reset();
+        var deadLetters = await DataContext
+            .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
+            .ToListAsync();
+
+        deadLetters.Should().BeEmpty("a manifest with no counted failure is never dead-lettered");
+    }
+
+    [Test]
     public async Task Run_WhenManifestAlreadyHasAwaitingInterventionDeadLetter_DoesNotCreateDuplicateDeadLetter()
     {
         // Arrange - Create a manifest with an existing dead letter
@@ -1928,7 +1950,7 @@ public class ManifestManagerTrainTests : TestSetup
     [Test]
     public async Task Run_WhenDeadLetterRetriedAndNewFailuresExceedMaxRetries_CreatesNewDeadLetter()
     {
-        // Arrange - old failures, resolved dead letter, 2 new failures (= maxRetries=2)
+        // Arrange - old failures, resolved dead letter, 3 new failures (> maxRetries=2)
         var manifest = await CreateAndSaveManifest(
             scheduleType: ScheduleType.Interval,
             intervalSeconds: 1,
@@ -1954,11 +1976,16 @@ public class ManifestManagerTrainTests : TestSetup
             resolvedAt: resolutionTime
         );
 
-        // 2 new failures after resolution (meets maxRetries=2)
+        // 3 new failures after resolution (exceeds maxRetries=2)
         await CreateAndSaveMetadata(
             manifest,
             TrainState.Failed,
             startTime: resolutionTime.AddMinutes(5)
+        );
+        await CreateAndSaveMetadata(
+            manifest,
+            TrainState.Failed,
+            startTime: resolutionTime.AddMinutes(8)
         );
         await CreateAndSaveMetadata(
             manifest,
@@ -1969,7 +1996,7 @@ public class ManifestManagerTrainTests : TestSetup
         // Act
         await _train.Run(Unit.Default);
 
-        // Assert - 2 post-resolution failures >= maxRetries=2, new dead letter created
+        // Assert - 3 post-resolution failures > maxRetries=2, new dead letter created
         DataContext.Reset();
         var deadLetters = await DataContext
             .DeadLetters.Where(dl => dl.ManifestId == manifest.Id)
@@ -1977,7 +2004,7 @@ public class ManifestManagerTrainTests : TestSetup
         deadLetters
             .Count(dl => dl.Status == DeadLetterStatus.AwaitingIntervention)
             .Should()
-            .Be(1, "2 post-resolution failures should trigger a new dead letter");
+            .Be(1, "3 post-resolution failures should trigger a new dead letter");
     }
 
     [Test]

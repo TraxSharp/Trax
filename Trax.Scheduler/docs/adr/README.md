@@ -39,9 +39,9 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `platform` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), [0006](./0006-a-runner-requires-an-authorization-posture.md), [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md) |
+| `platform` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), [0006](./0006-a-runner-requires-an-authorization-posture.md), [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md), [0016](./0016-a-traxremote-train-with-nowhere-to-go-fails-the-build.md) |
 | `providers` | [0002](./0002-a-database-provider-is-interchangeable.md), [0007](./0007-the-operations-surface-runs-on-inmemory.md), [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md) |
-| `scheduling` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0002](./0002-a-database-provider-is-interchangeable.md), [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), [0005](./0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), [0006](./0006-a-runner-requires-an-authorization-posture.md), [0007](./0007-the-operations-surface-runs-on-inmemory.md), [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md) |
+| `scheduling` | [0001](./0001-remote-execution-is-a-json-wire-contract.md), [0002](./0002-a-database-provider-is-interchangeable.md), [0003](./0003-a-runtime-retention-override-replaces-only-the-default.md), [0004](./0004-an-enqueue-refusal-is-a-result-an-infrastructure-failure-is-thrown.md), [0005](./0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), [0006](./0006-a-runner-requires-an-authorization-posture.md), [0007](./0007-the-operations-surface-runs-on-inmemory.md), [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md), [0010](./0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md), [0011](./0011-a-re-seed-writes-only-the-settings-the-code-states.md), [0014](./0014-a-manifests-retries-count-recent-failures-and-a-cancelled-run-consumes-its-occurrence.md), [0015](./0015-a-startup-prune-deletes-only-its-own-applications-manifests.md), [0016](./0016-a-traxremote-train-with-nowhere-to-go-fails-the-build.md) |
 
 ## All of them
 
@@ -55,3 +55,8 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0006](./0006-a-runner-requires-an-authorization-posture.md) | A runner requires an authorization posture and runs only registered trains | scheduling, platform |
 | [0007](./0007-the-operations-surface-runs-on-inmemory.md) | The operations surface runs on the InMemory provider | scheduling, providers |
 | [0009](./0009-a-runner-shares-its-accepted-nonces-through-the-database.md) | A runner shares its accepted nonces through the database | scheduling, platform, providers |
+| [0010](./0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md) | A settings save writes only what it names, and every running scheduler applies it | scheduling |
+| [0011](./0011-a-re-seed-writes-only-the-settings-the-code-states.md) | A re-seed writes only the settings the code states | scheduling |
+| [0014](./0014-a-manifests-retries-count-recent-failures-and-a-cancelled-run-consumes-its-occurrence.md) | A manifest's retries count recent failures, and a cancelled run consumes its occurrence | scheduling |
+| [0015](./0015-a-startup-prune-deletes-only-its-own-applications-manifests.md) | A startup prune deletes only its own application's manifests | scheduling |
+| [0016](./0016-a-traxremote-train-with-nowhere-to-go-fails-the-build.md) | A `[TraxRemote]` train with nowhere to go fails the build | scheduling, platform |

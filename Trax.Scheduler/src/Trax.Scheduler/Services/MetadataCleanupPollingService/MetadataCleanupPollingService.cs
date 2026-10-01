@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.MetadataCleanup;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Services.MetadataCleanupPollingService;
 
@@ -34,12 +35,11 @@ internal class MetadataCleanupPollingService(
             string.Join(", ", DescribeWhitelist(cleanupConfig))
         );
 
-        using var timer = new PeriodicTimer(cleanupConfig.CleanupInterval);
-
-        // Run immediately on startup before waiting for the first tick
+        // Run immediately on startup before waiting for the first interval
         await RunCleanup(stoppingToken);
 
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        // The interval is read each cycle, so a runtime change applies to the next wait.
+        while (await PollingDelay.WaitAsync(() => cleanupConfig.CleanupInterval, stoppingToken))
         {
             await RunCleanup(stoppingToken);
         }
