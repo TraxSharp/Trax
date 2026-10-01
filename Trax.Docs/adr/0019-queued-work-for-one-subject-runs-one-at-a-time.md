@@ -69,14 +69,16 @@ startup recovery does not touch. Where the ManifestManager is disabled on every 
 runs at all. A synchronous run through the mediator does not
 consult the key, and neither does a dormant dependent a parent train activates: its entry is built
 by the scheduler with input the parent chose at runtime, and carries no subject. Nor does the
-dashboard's Run dialog: it hands its input straight to the job submitter and writes no work queue
-entry, so dispatch never sees the run, and it can overlap queued or in-flight work for the same
-subject. That bypass is deliberate. Queue is the dashboard's serialized path and sits beside Run,
+dashboard's Run dialog: it runs the train through `IOperationsService.RunTrainAsync`, which
+writes no work queue entry, so dispatch never sees the run, and it can overlap queued or in-flight
+work for the same subject. That bypass is deliberate. Queue is the dashboard's serialized path and sits beside Run,
 so making Run wait for a busy subject would only duplicate it, and refusing when the subject is
 busy would need the dialog to compute the key and check for in-flight work outside the claim's
 lock, which is the race this decision exists to close. The dialog says so instead, and points at
-Queue. Nothing published tells the dashboard whether a train overrides `QueueSubjectKey`, so it
-says so for every train. The API exposes
+Queue. It warns only for a train that overrides `QueueSubjectKey`, which train discovery reports
+as `TrainRegistration.HasQueueSubjectKey`: a train without one has nothing to bypass. The service
+runs a subject-keyed train now only for a trusted caller such as the dashboard, and tells any
+other caller to queue it. The API exposes
 the key as `subjectKey` on work queue reads.
 
 Every dispatcher must be upgraded before any train overrides `QueueSubjectKey`. A dispatcher from
@@ -101,8 +103,9 @@ paths), `SubjectKeyTests` in Trax.Mediator (where the key comes from, and the em
 limits), `SubjectKeyGoesThroughCreateTests` in Trax.Mediator (the key reaches `Create`),
 `WorkQueueCreateTests` and `SubjectKeyStorageTests` in Trax.Effect (the same limits on an entry
 built directly, and a key of 512 four-byte characters fitting the subject index), and
-`RunTrainDialogSubjectWarningTests` in Trax.Dashboard (the Run dialog warns that it bypasses the
-serialization and points at Queue).
+`RunTrainDialogSubjectWarningTests` in Trax.Dashboard (the Run dialog warns for a subject-keyed
+train that it bypasses the serialization and points at Queue, and shows no warning for an unkeyed
+one).
 
 Not covered: ordering with more than one dispatcher, and a reaper or the startup recovery
 releasing a subject whose run is still working, which is the documented limit rather than
@@ -111,6 +114,9 @@ overrides `LockSubject()`.
 
 ## Changelog
 
+- **2026-10-01**: The Run dialog runs through `IOperationsService.RunTrainAsync` rather than
+  handing its input to the job submitter, and warns only for a train that overrides
+  `QueueSubjectKey`, now that train discovery reports it.
 - **2026-09-30**: `WorkQueue.Create` refuses a key holding a NUL character, and the Postgres
   provider no longer rewrites a NUL in a key column.
 - **2026-09-27**: The enqueue passes the key through `WorkQueue.Create` and refuses an unpaired

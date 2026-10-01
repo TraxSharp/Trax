@@ -7,9 +7,9 @@ section: Packages
 
 # Dashboard
 
-Trax.Dashboard is the operations control room: a web UI for inspecting registered trains, browsing execution history, managing scheduled manifests, and monitoring the network. It mounts as a Blazor Server app at a route you choose, similar to how Hangfire's dashboard works at `/hangfire`.
+Trax.Dashboard is the operations control room: a web UI for inspecting registered trains, browsing execution history, managing scheduled manifests, and monitoring the network. It mounts as a Blazor Server app at `/trax`, similar to how Hangfire's dashboard works at `/hangfire`.
 
-The dashboard only requires `Trax.Effect`. As you add more Effect packages (Data, Scheduler, etc.), the dashboard gains access to more information. Start with train discovery, and add more as your setup grows.
+The dashboard needs the Trax Scheduler in the same host: `AddMediator()` and then `AddScheduler()` inside `AddTrax(...)`. Its pages queue, run and cancel trains and change settings through the Scheduler's `IOperationsService`, the same service the GraphQL `operations` fields call, so `UseTraxDashboard()` refuses to start without it.
 
 ## Quick Setup
 
@@ -61,6 +61,7 @@ builder.Services.AddTrax(trax => trax
         .UsePostgres(connectionString)
     )
     .AddMediator(typeof(Program).Assembly)
+    .AddScheduler()
 );
 builder.Services.AddTraxDashboard(o => o.RequireRoles("Admin"));
 
@@ -76,7 +77,18 @@ roles (`RequireRoles`), or call `AllowAnonymousDashboard()`, because the dashboa
 run and cancel trains and change scheduler settings. See
 [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) for what each does.
 
-`AddTraxDashboard()` requires `AddTrax()` to be called first. If it is missing, `AddTraxDashboard()` throws `InvalidOperationException` with a clear message directing you to add `AddTrax()`.
+The posture is not checked only when the page loads. An open dashboard keeps re-checking it
+against the host's `AuthenticationStateProvider`, when the provider reports a change and every
+minute, and checks every click or other message the browser sends against the latest verdict.
+Once the user no longer satisfies it, the dashboard closes the connection and the page reloads through the gated
+endpoint. The dashboard registers no `AuthenticationStateProvider` of its own, so it sees a
+revoked role or a sign-out only when the host's provider does. ASP.NET Core's default provider
+keeps the user the connection arrived with; register a revalidating provider (ASP.NET Identity's
+template does), or name a policy whose handlers read live state, to have a revocation take effect
+in an open dashboard. The in-dashboard check has no `HttpContext`, so a policy handler that reads
+it gets `null`.
+
+`AddTraxDashboard()` requires `AddTrax()` to be called first. If it is missing, `AddTraxDashboard()` throws `InvalidOperationException` with a clear message directing you to add `AddTrax()`. Call it once: a second call throws rather than replacing the first call's options, posture included. `UseTraxDashboard()` throws `InvalidOperationException` naming `AddScheduler()` when the Scheduler is not registered.
 
 Navigate to `/trax/trains` and you'll see every `IServiceTrain` registered in your application.
 
@@ -98,25 +110,43 @@ This is the same information the `TrainRegistry` uses internally, but surfaced i
 
 ### Data Pages
 
-When `Trax.Effect.Data` is registered, the dashboard exposes pages for browsing persisted data:
+The dashboard exposes pages for browsing what the data provider persists:
 
 | Page | Description |
 |------|-------------|
-| **Metadata** | Train execution history: start/end times, success/failure, inputs/outputs. Includes a "Current Junction" column for InProgress trains and per-row cancel buttons. |
+| **Metadata** | Train execution history: start/end times, success/failure, inputs/outputs. Includes a "Current Junction" column for InProgress trains, and a cancel button on every Pending or InProgress row. |
 | **Logs** | Application log entries captured during train execution |
-| **Manifests** | Scheduled job definitions (requires Scheduler) |
-| **Manifest Groups** | Manifest group settings and aggregate execution stats (requires Scheduler). Includes a "Cancel All Running" button. |
-| **Dead Letters** | Failed jobs that exhausted their retry budget (requires Scheduler) |
-| **Work Queue** | Entries waiting for dispatch (requires Scheduler). The **Subject** column shows the entry's [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) when the train sets one. The **Confirmed** column shows **Yes** for a confirmed entry, and a **Staged** badge on a queued entry that is not yet confirmed, which the dispatcher will not claim (an unconfirmed entry that is no longer queued, such as one the stale sweep cancelled, shows a dash). The subject key is computed by your train, so it may carry record identifiers. An entry's detail page shows **Waiting On** when the entry cannot be dispatched yet because of its subject: "Entry N, which is running for the same subject" when another entry's run holds the subject, or "Entry N, which is ahead of it for the same subject" when a queued sibling comes first, since dispatch offers only the first queued entry per subject each cycle. The sibling named is one dispatch would actually take first: it applies the same filters as dispatch, so a sibling whose `scheduledAt` has not arrived, or whose manifest group is disabled, is not named however high its priority. |
+| **Manifests** | Scheduled job definitions. An interval schedule reads as hours, minutes and seconds with nothing rounded, so 90 seconds is `Every 1m 30s`. |
+| **Manifest Groups** | Manifest group settings and aggregate execution stats. A group's detail page has a "Cancel All Running" button. |
+| **Dead Letters** | Failed jobs that exhausted their retry budget |
+| **Work Queue** | Entries waiting for dispatch. The **Subject** column shows the entry's [subject key](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) when the train sets one. The **Confirmed** column shows **Yes** for a confirmed entry, and a **Staged** badge on a queued entry that is not yet confirmed, which the dispatcher will not claim (an unconfirmed entry that is no longer queued, such as one the stale sweep cancelled, shows a dash). The subject key is computed by your train, so it may carry record identifiers. An entry's detail page shows **Waiting On** when the entry cannot be dispatched yet because of its subject: "Entry N, which is running for the same subject" when another entry's run holds the subject, or "Entry N, which is ahead of it for the same subject" when a queued sibling comes first, since dispatch offers only the first queued entry per subject each cycle. The sibling named is one dispatch would actually take first: it applies the same filters as dispatch, so a sibling whose `scheduledAt` has not arrived, or whose manifest group is disabled, is not named however high its priority. The detail page shows the entry's input with its [`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) members written as `{"_redacted": true}`, by the rule the API applies to the same read (see [Train inputs and the operations gate](/docs/sdk-reference/graphql-api/queries#train-inputs-and-the-operations-gate)): the stored input keeps the real values because the run starts from it, so the page reads it back as the input type of the train registered on this host and writes it masked. When no registered train takes that type, or the input does not read as it, the whole input is shown as `{"_redacted": true}`. |
 
 These pages are accessible from the **Data** section in the sidebar navigation.
+
+The list grids read only the columns they show, so paging through runs, work queue entries or manifests never loads an input, output, stack trace or properties document; the detail page loads those. The total under the pager is counted again when the filter changes, when the page shows it is too small, and otherwise at most every 30 seconds, so while the filter is unchanged it can lag the table by up to 30 seconds. A short last page gives the exact total.
+
+#### Batch actions
+
+The Metadata, Work Queue, Dead Letters, Manifests and Manifest Groups grids let you tick rows and act on them together. A selection holds the rows' ids, so rows ticked on one page stay selected after you move to another.
+
+| Page | Action | Calls |
+|------|--------|-------|
+| Metadata | **Cancel Selected** | `IOperationsService.CancelExecutionsAsync` |
+| Work Queue | **Cancel Selected** | `IOperationsService.CancelWorkQueueEntriesAsync` |
+| Manifests | **Enable Selected**, **Disable Selected** | `IOperationsService.SetManifestsEnabledAsync` |
+| Manifest Groups | **Enable Selected**, **Disable Selected** | `IOperationsService.SetManifestGroupsEnabledAsync` |
+| Manifest Groups | **Enable All**, **Disable All** | `IOperationsService.SetAllManifestGroupsEnabledAsync` |
+
+The API's batch mutations make the same calls (see [IOperationsService: Batch actions](/docs/sdk-reference/scheduler-api/i-operations-service#batch-actions)), so the dashboard and the API change the same rows. The page shows the service's message, and its count includes only the rows that were cancelled or changed: a run already finished, or a manifest already in the requested state, is not counted. A count of zero is shown as a warning. The service takes at most 1,000 ids at once; a larger selection, or an empty one, is refused with the service's message, and the selection is kept so you can narrow it and try again.
+
+**Trigger Selected** (Manifests and Manifest Groups) and **Cancel Running** (Manifest Groups) have no batch call yet, so the page calls the scheduler once per selected item. Each item is tried in turn and a failure does not stop the rest. The page reports what happened, such as "3 queued, 1 already queued, 1 failed" for manifests (a manifest that already had a queued entry gets nothing more queued; that entry runs as the trigger), or the manifests queued and runs cancelled across the groups. Each failure is listed by name, and the selection is cleared, so a retry does not send the items that succeeded again.
 
 #### Dead Letter Detail Page
 
 Clicking the visibility icon on a dead letter row opens a detail page with:
 
 - **Dead Letter Details**: Status badge, dead-lettered timestamp, retry count, reason, resolution info
-- **Manifest Details**: Linked manifest name, schedule, max retries, timeout, properties JSON
+- **Manifest Details**: Linked manifest name, schedule, max retries, timeout, and properties JSON, masked by the same rule as a work queue entry's input
 - **Most Recent Failure**: The latest failed execution's failure junction, exception, reason, stack trace, and input
 - **Failed Execution History**: A grid of the failed metadata runs for the manifest, read from the database a page at a time, each linking to the metadata detail page
 
@@ -128,6 +158,8 @@ Two action buttons appear when the dead letter is in `AwaitingIntervention` stat
 #### Metadata Detail Page
 
 Clicking a metadata row opens a detail page with train state, timing, input/output, and exception details.
+
+When a detail page (metadata, dead letter, work queue entry, manifest or manifest group) cannot load its row, because the database is unreachable for example, it says it could not load the row and why, rather than that the row does not exist, and keeps retrying on the polling interval until a load succeeds. A failed load never ends the operator's connection.
 
 **State Transition Timeline.** A visual horizontal stepper at the top of the detail page shows the train's state progression: Pending -> InProgress -> Completed/Failed/Cancelled. Each state is color-coded and displays the timestamp when that state was reached, along with the duration between transitions (wait time, execution time). Past states are filled, the current state pulses, and future states are dimmed.
 
@@ -141,7 +173,7 @@ When `AddJunctionProgress()` is registered and the train is `InProgress`, a **Ju
 - **Currently Running** - the name of the junction currently executing
 - **Junction Started** - when the junction began (HH:mm:ss)
 
-A **Cancel** button appears for InProgress trains. Clicking it sets `cancel_requested = true` in the database and attempts to cancel the train via `ICancellationRegistry` (instant for same-server). Cancelled trains transition to `TrainState.Cancelled`.
+A **Cancel** button appears for Pending and InProgress trains. It calls `IOperationsService.CancelExecutionsAsync`, the call behind the GraphQL `cancelExecution` mutation, which sets `cancel_requested = true` in the database and also cancels the run at once through `ICancellationRegistry` when it is running on this host. A Pending run is recorded `TrainState.Cancelled` and never runs; an InProgress run stops at its next junction boundary when the host uses the junction progress provider. Cancelling a run that is missing or has already finished fails with "Execution {id} is not cancellable (missing or already terminal).", as the mutation does.
 
 #### Run Train with Custom Inputs
 
@@ -149,11 +181,25 @@ The dashboard supports running any registered train with **custom inputs**, a ca
 
 - **From the Trains page**: Click the **Queue** button next to any train to open a dialog with a form builder (auto-generated from the input type's properties) or a raw JSON editor.
 - **From the Trains page**: Click the **Run** button beside **Queue** to open the same form builder and JSON editor, and run the train now instead of queueing it.
-- **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input.
+- **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input. It is refused, with the message the API's `requeueExecution` gives, when the run has no saved input (inputs are saved only with `SaveTrainParameters()`), when what was saved is a placeholder rather than the input (`_truncated` for one over `MaxParameterBytes`, `_unserializable` or `_disposed`), or when the saved input has `[TraxSensitive]` members masked. Each of those would read back as default values, and the train would run with values it never had.
 
-Both go through `ITrainExecutionService.QueueAsync`, the same path as the GraphQL `queueTrain` mutation, so the train's `OnQueue` hook fires, its subject key is stamped and the input size cap applies. They enqueue inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` requirements do **not** apply: the dashboard is the admin surface, gated as a whole by its host, and anyone who can reach it can queue any train. The scope also covers the train's `OnQueue` hook and `QueueSubjectKey`, and anything they run or enqueue through `ITrainExecutionService` (including work started with `Task.Run`), so those skip their own `[TraxAuthorize]` requirements too. Protect the dashboard route accordingly. **Run** is different: it writes the run's metadata row and submits the input directly to the job submitter, then opens the run's detail page. No work queue entry is written, so the run skips dispatch priority, group `MaxActiveJobs` and [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). The train's `OnQueue` hook does run, on the run's input before the run's row is written, and a hook that throws refuses the run. Use **Queue** when a run must wait its turn. Dead-letter **Re-queue** and manifest triggers re-run what a manifest fixed and are likewise governed by access to the dashboard itself. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+The queue dialog and **Re-queue** go through `IOperationsService.QueueTrainAsync`, which enqueues through `ITrainExecutionService.QueueAsync`, the same path as the GraphQL `queueTrain` mutation, so the train's `OnQueue` hook fires, its subject key is stamped and the input size cap applies. They enqueue inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` requirements do **not** apply: the dashboard is the admin surface, gated as a whole by its host, and anyone who can reach it can queue any train. The scope also covers the train's `OnQueue` hook and `QueueSubjectKey`, and anything they run or enqueue through `ITrainExecutionService` (including work started with `Task.Run`), so those skip their own `[TraxAuthorize]` requirements too. Protect the dashboard route accordingly. **Run** is different: it calls `IOperationsService.RunTrainAsync` inside the same trusted scope, the call behind the GraphQL [`runTrain`](/docs/sdk-reference/graphql-api/mutations#runtrain) mutation, then opens the run's detail page. The service reads the input, runs the train's `OnQueue` hook on it before the run's row is written (a hook that throws refuses the run), applies the input size cap, writes the run's row and submits it to the job submitter the train is routed to. No work queue entry is written, so the run skips dispatch priority, group `MaxActiveJobs` and [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). Use **Queue** when a run must wait its turn. Dead-letter **Re-queue** and manifest triggers re-run what a manifest fixed and are likewise governed by access to the dashboard itself. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
-The **Run** button opens the **Run** dialog (`RunTrainDialog`), which a host can also open itself through Radzen's `DialogService`, passing the `TrainRegistration` as `Registration`. It submits the input directly to the job submitter instead of queueing it, so no work queue entry is written and `QueueSubjectKey` does not apply; the train's `OnQueue` hook and the input size cap do. That makes it a documented bypass of [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing): a run started from it can execute concurrently with queued or in-flight work for the same subject. The dialog shows a warning saying so and pointing at **Queue**, which waits for the subject to be free. The dashboard cannot tell whether a train overrides `QueueSubjectKey`, so the warning appears for every train. `Trax.Docs/adr/0019` records why Run bypasses serialization rather than waiting or refusing.
+Because Run writes no work queue entry, `QueueSubjectKey` does not apply to it. That makes it a documented bypass of [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing): a run started from it can execute concurrently with queued or in-flight work for the same subject. `RunTrainAsync` runs a train that overrides `QueueSubjectKey` only for a trusted caller such as the dashboard, and refuses any other caller, telling it to queue the train instead. For such a train the **Run** dialog shows a warning saying so and pointing at **Queue**, which waits for the subject to be free. A train that does not override `QueueSubjectKey` has nothing to bypass, and its dialog shows no warning. `Trax.Docs/adr/0019` records why Run bypasses serialization rather than waiting or refusing.
+
+**How the input is read.** Both dialogs offer a **Form** tab, with one field per public property of the input type, and a **JSON** tab. JSON is passed to the service as typed, and the service reads it the way it reads JSON from any caller: property names in any case, and a property given twice, in the same or another casing, refused. The form reads each field the same way whatever culture or time zone the server runs in:
+
+| Field | Read as |
+|-------|---------|
+| Number | Invariant culture: `.` for the decimal point, no thousands separators. `1.5` is one and a half on every server. |
+| Date and time (`DateTime`, `DateTimeOffset`) | UTC when the text gives no offset, as every timestamp in the dashboard is. |
+| Enum | A drop-down of the enum's names. |
+| Other structured value | JSON for that type. |
+| Blank, for a nullable property | `null`. |
+| Blank, for a non-nullable `string` | An empty string. |
+| Blank, for any other non-nullable property | Refused: "A value is required." |
+
+A field whose text does not read as its type is refused by name, saying what was expected, and nothing is sent. The JSON tab takes up to 1,048,576 characters. The browser sends a long input to the server in small pieces, so pasting one does not trip the SignalR hub's 32 KB message limit or require raising it.
 
 #### Real-Time Metrics on Home Page
 
@@ -182,24 +228,42 @@ The **Effects** page (`/trax/settings/effects`) shows all registered effect and 
 - **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope). The GraphQL API does the same with [`operations.setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations#seteffectenabled)
 - **Configure** effects that expose runtime settings. Click the gear icon to open a dynamic form dialog
 
-Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](/docs/effect/effect-providers/parameter-effect) exposes `SaveInputs` and `SaveOutputs` toggles. The form edits the effect's live, process-wide configuration all or nothing: Save converts every field before applying any, so a field that does not convert leaves the configuration unchanged, and closing the dialog without saving writes nothing.
+**Save** applies only the toggles you changed since the page loaded, then reads every effect's state again. A toggle you left alone is not applied, so an effect another operator or the `setEffectEnabled` mutation turned off in the meantime stays off. **Discard Changes** drops your unsaved toggles and shows the effects' current state.
+
+Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form generated from the configuration type's public read-write properties. For example, the [Parameter Effect](/docs/effect/effect-providers/parameter-effect) exposes `SaveInputs` and `SaveOutputs` toggles. A boolean is a switch, an enum a drop-down, and a number, string, date, time, duration, `Guid` or `char` a text field read by the same rules as the Run and Queue forms. Any other property, such as a predicate delegate, is listed as set in code (or not set) and is never written, because its text form cannot be read back. A blank field is `null` for a property that accepts null and refused for one that does not, and a value must pass the property's own `ValidationAttribute`s.
+
+The form edits the effect's live, process-wide configuration all or nothing, and writes only the fields you changed, so a value saved from elsewhere while the dialog was open is not reverted. Save converts and validates every changed field before applying any; if a setter throws part way, the fields already written are put back. Closing the dialog without saving writes nothing. Nothing is persisted, so a restart restores the configured values.
 
 The Effects page was previously a section within Server Settings and has been moved to its own dedicated page under **Settings > Effects** in the sidebar.
 
+### Server Settings
+
+The **Server Settings** page (`/trax/settings/server`) edits the scheduler's runtime settings and the host's log levels. The scheduler settings are grouped as **Administrative Trains** (the ManifestManager and JobDispatcher switches), **Polling & Queue** (polling interval, `MaxActiveJobs`, and the local worker count when local workers are registered), **Retry Settings** (`DefaultMaxRetries`, **Failure Count Window**, retry delay, backoff multiplier and maximum delay), **Job Settings** (`DefaultJobTimeout`, `StalePendingTimeout`, startup recovery), **Dead Letter Settings**, and **Metadata Cleanup** when [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) is registered.
+
+**Save** sends only the fields you changed since the page loaded, through `IOperationsService.UpdateSchedulerConfigAsync`, the call behind the GraphQL [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation, so a save stores only those settings and does not put back a value another operator or the mutation changed in the meantime. The form then reloads the settings in force. A saved setting reaches every scheduler host and replaces the value the host configured in code (see [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler#remarks)).
+
+**Discard Changes** drops your unsaved edits and reloads the settings in force. There is no button that returns a setting to the value configured in code: once a setting is saved, the stored value is what every scheduler host runs with.
+
+Each duration is held to the range the service accepts for that setting (see [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges)). A duration outside it shows a message under the field and disables **Save** until it is corrected.
+
 ### Manifest Groups
 
-Every manifest belongs to a **ManifestGroup**, a first-class entity with per-group dispatch controls. The **Manifest Groups** page shows one row per group with its settings and aggregate stats: manifest count, total executions, completed, failed, in progress, and last run time, counted the same way as the API's `stats` query for manifest groups.
+Every manifest belongs to a **ManifestGroup**, a first-class entity with per-group dispatch controls. The **Manifest Groups** page shows one row per group with its settings and aggregate stats: manifest count, total executions, completed, failed, in progress, and last run time. The counts come from `IOperationsService.GetManifestGroupExecutionStatsAsync`, the call the API's `stats` query for manifest groups makes, so the two always agree; a manifest's detail page reads its counts from `GetManifestExecutionStatsAsync` the same way.
 
 Clicking a group opens a detail page with two sections:
 
-- **Group Settings**: configurable `MaxActiveJobs` (per-group concurrency limit), `Priority` (0-31 dispatch ordering), and `IsEnabled` (disable all manifests in the group). Changes take effect on the next polling cycle.
+- **Group Settings**: configurable `MaxActiveJobs` (per-group concurrency limit), `Priority` (0-31 dispatch ordering), and `IsEnabled` (disable all manifests in the group). Changes take effect on the next polling cycle. Unsaved edits are kept while the page polls, until you save or reset them. Save sends only the settings you changed, so it does not put back a value someone else changed since. Navigating to another group drops the edits, and every action on the page applies to the group in the address bar.
 - **Group Data**: lists every manifest in the group along with their recent executions.
 
 Per-group `MaxActiveJobs` prevents starvation: when a high-priority group hits its concurrency cap, lower-priority groups can still dispatch. This is configured from the dashboard, not from code.
 
 ### Persisted Operations (optional)
 
-When the host wires [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) into the Trax GraphQL builder, the dashboard exposes a **Persisted Operations** entry under **Data**. The page lists the rows in `trax.persisted_operation` a page at a time, filtered by tenant (all, the default, or a named one), status and id prefix, and supports Upload, Edit, Deactivate, and Restore. A row is addressed by its tenant and its id, so two rows may share an id: each opens its own detail page (`/trax/data/persisted-operations/{id}?tenant={key}`, no `tenant` for the default) and changes only itself. The pages read and write through the same resolvers as the GraphQL `operations.persistedOperations` fields, so they filter, page and refuse input exactly as the API does. The editor renders parse, schema-validation, and shape-diff errors inline. The sidebar entry is hidden when `UsePersistedOperations` was not called; direct navigation to the list or to an operation's detail page renders a "not enabled on this server" panel.
+When the host registers the persisted-operations service, the dashboard exposes a **Persisted Operations** entry under **Data**. Either registration does it: [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) on the Trax GraphQL builder, or `AddPersistedOperationStore(...)` on a host that serves no GraphQL. The page lists the rows in `trax.persisted_operation` a page at a time, filtered by tenant (all, the default, or a named one), status and id prefix, and supports Upload, Edit, Deactivate, and Restore. A row is addressed by its tenant and its id, so two rows may share an id: each opens its own detail page (`/trax/data/persisted-operations/{id}?tenant={key}`, no `tenant` for the default) and changes only itself. The pages read and write through `IPersistedOperationsService`, the service the GraphQL `operations.persistedOperations` fields call, so they filter, page and refuse input exactly as the API does, with the API's messages. The editor renders parse, schema-validation, and shape-diff errors inline, and takes a document of up to 1,048,576 characters. A database error while loading, deactivating or restoring is logged and shown on the page. Each write re-checks the dashboard's authorization posture before it runs.
+
+When the dashboard runs in a process of its own, register the store there with the broker's connection string, `AddPersistedOperationStore(databaseConnectionString, rabbitConnectionString)`, so a change made from the dashboard reaches the GraphQL nodes' caches. See [Persisted Operations](/docs/persisted-operations).
+
+The sidebar entry is hidden when neither registration was made; direct navigation to the list or to an operation's detail page renders a "not enabled on this server" panel.
 
 ## How Discovery Works
 
@@ -232,7 +296,7 @@ app.UseTraxDashboard();  // served at /trax
 
 The dashboard uses [Radzen Blazor](https://blazor.radzen.com/) v11 components with a sidebar navigation layout. A theme toggle in the header switches between light and dark mode, with the preference persisted in `localStorage`.
 
-When a page's refresh fails, the header shows **Last refresh failed** (the error as its tooltip) until a refresh succeeds; the rows on screen are then from the last refresh that worked. A grid that loads its rows page by page from the server clears them and shows the error when a load fails, rather than keeping the previous filter's or page's rows. A custom `IDashboardSettingsService` receives failures through `NotifyPollFailed` and exposes the latest as `LastPollError`; both have default implementations.
+When a page's refresh fails, the header shows **Last refresh failed** (the error as its tooltip) until a refresh succeeds; the rows on screen are then from the last refresh that worked. A grid that loads its rows page by page from the server clears them and shows the error when a load fails, rather than keeping the previous filter's or page's rows. A page's first load and the reload after navigating to another row are refreshes too: a failure is shown and retried on the next tick, and never ends the operator's connection. A custom `IDashboardSettingsService` receives failures through `NotifyPollFailed` and exposes the latest as `LastPollError`; both have default implementations.
 
 ### User Settings
 
@@ -264,6 +328,19 @@ app.UseTraxDashboard();  // After Build(), before Run()
 app.Run();
 ```
 
+### "UseTraxDashboard() requires the Trax Scheduler"
+
+The host registers no Scheduler. The dashboard's pages work through the Scheduler's
+`IOperationsService`, so add `AddScheduler()` after `AddMediator(...)` inside `AddTrax(...)`.
+Without it the pages would fail on their first request, so `UseTraxDashboard()` refuses to map
+them.
+
+### "AddTraxDashboard() has already been called on this host"
+
+Two calls to `AddTraxDashboard()` reached the same service collection, often one in a shared
+bootstrap and one in the host. Keep one, with every dashboard option in it: a second call would
+have replaced the first one's authorization posture.
+
 ### "UseTraxDashboard() needs to know who may use the dashboard"
 
 No authorization posture was chosen. Add one to the `AddTraxDashboard` options:
@@ -286,8 +363,9 @@ builder.Services.AddTrax(trax => trax
         .UsePostgres(connectionString)
     )
     .AddMediator(typeof(Program).Assembly)
+    .AddScheduler()
 );
-builder.Services.AddTraxDashboard();  // After AddTrax() and trains are registered
+builder.Services.AddTraxDashboard(o => o.RequireRoles("Admin"));  // After AddTrax() and trains are registered
 ```
 
 If `AddTrax()` is missing entirely, `AddTraxDashboard()` throws `InvalidOperationException`.
@@ -304,18 +382,18 @@ This is cosmetic and doesn't affect train execution. If it bothers you, it's a k
 
 ## Architecture
 
-The dashboard sits alongside other Effect packages in the dependency tree:
+The dashboard sits near the bottom of the dependency tree, below the Scheduler and the API's persisted-operations package:
 
 ```
-Trax.Effect
-    ├── Trax.Dashboard (UI)
-    ├── Trax.Mediator (TrainBus)
-    ├── Trax.Effect.Data (Persistence)
-    └── ...
+Trax.Effect ── Trax.Effect.Data
+    └── Trax.Mediator
+            └── Trax.Scheduler
+                    └── Trax.Api.GraphQL.PersistedOperations
+                            └── Trax.Dashboard (UI)
 ```
 
-It depends only on `Trax.Effect` with no transitive dependency on Data, Mediator, Scheduler, or any database provider. The dashboard discovers what's available in your DI container and adapts accordingly.
+It references `Trax.Effect`, `Trax.Effect.Data`, `Trax.Mediator`, `Trax.Scheduler` and `Trax.Api.GraphQL.PersistedOperations`, and no database provider: the host picks one. At runtime it needs the Scheduler registered (`UseTraxDashboard()` refuses to start without it), and it shows the persisted-operations pages only when the host registers that service.
 
 ## SDK Reference
 
-> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)
+> [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery)

@@ -17,7 +17,8 @@ the admin surface's gate as a whole rather than by each train's requirements.
 The dashboard is the admin surface. Its queue dialog and Re-queue button go through
 `QueueAsync` inside a trusted execution scope (`"dashboard"`), so `OnQueue`, the subject key and
 the input cap apply but per-train `[TraxAuthorize]` does not: the dashboard is gated as a whole
-by its host. Its Run dialog submits directly to the job submitter.
+by its host. Its Run dialog calls `IOperationsService.RunTrainAsync` inside the same scope, so
+`OnQueue` and the input cap apply to a run as well; it writes no work queue entry.
 
 ## Status
 
@@ -91,6 +92,8 @@ gate; that posture is api/0004's.
 
 ## Changelog
 
+- **2026-10-01**: The dashboard's Run dialog calls `IOperationsService.RunTrainAsync` inside the
+  trusted scope instead of submitting to the job submitter itself.
 - **2026-09-24**: `WorkQueue.Create` is now the only way to build a row, so the guards' text
   match no longer misses an object initializer.
 - **2026-09-23**: Recorded that the dashboard's trusted scope flows into the `OnQueue` hook and

@@ -103,7 +103,18 @@ hiding at declaration time. `NoIgnoreAttributeTests` rejects new `[Ignore]` attr
 One survives, on its exceptions list: a Trax.Samples E2E test waiting on an unreleased
 scheduler feature. Do not read it as precedent for a second.
 
-A suite meant to be run by hand carries `[Explicit]` on each concrete fixture, as the Trax.Api
-and Trax.Scheduler stress suites do: a normal `dotnet test` skips it and `--filter TestCategory=Stress` runs
+A suite meant to be run by hand carries `[Explicit]` on each concrete fixture, as the Trax.Api,
+Trax.Scheduler and Trax.Dashboard stress suites do: a normal `dotnet test` skips it and `--filter TestCategory=Stress` runs
 it. Put the attribute on the concrete class, because NUnit does not inherit `[Explicit]` or
 `[Ignore]` from a base class.
+
+Trax.Dashboard's suite, `tests/Trax.Dashboard.Tests.Stress`, seeds Postgres and checks that the
+list grids' queries stay within budget at scale. It reads the same `TRAX_TEST_PG_PORT` as the
+other Postgres suites, and `TRAX_STRESS_CONNECTION` replaces the connection string outright. The
+row counts default to a million runs, 500,000 work queue entries, 5,000 manifests and 200 runs
+carrying large inputs and outputs, and `TRAX_STRESS_METADATA`, `TRAX_STRESS_WORKQUEUE`,
+`TRAX_STRESS_MANIFEST` and `TRAX_STRESS_BLOB_ROWS` override each:
+
+```bash
+TRAX_TEST_PG_PORT=5433 dotnet test tests/Trax.Dashboard.Tests.Stress --filter TestCategory=Stress
+```

@@ -85,7 +85,7 @@ app.Run();
                └──────────────────────┘
 ```
 
-The API server doesn't need `AddScheduler()`. It only needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only.
+The API server doesn't need `AddScheduler()`. It only needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only. A host that also serves the [dashboard](/docs/dashboard) is the exception: the dashboard works through the Scheduler's `IOperationsService`, and `UseTraxDashboard()` refuses to start without `AddScheduler()`.
 
 However, if you want the API to also schedule manifests at startup (like the scheduler does), you can add `AddScheduler()` on the API machine as well. The polling services can be disabled with configuration if you only want startup seeding.
 

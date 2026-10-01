@@ -26,7 +26,9 @@ through, so the dashboard re-queues a truncated input with default values that t
 refuses. The Run dialog wrote its metadata row before submitting and left it Pending when the
 submit failed, read enum inputs one way on one tab and another on the other, and ignored the
 submitter a train is routed to. The API had no run at all. None of that is visible from
-either surface alone.
+either surface alone. (Both are closed now: the Run dialog goes through `RunTrainAsync` with
+the API's run, and the re-queue refuses the inputs the API refuses, with the API's messages,
+though it still reads the input itself rather than calling a shared method.)
 
 ## Considered options
 
@@ -57,20 +59,24 @@ same way.
 **Where each action stands.** The rule is met when the shared method exists and both surfaces
 call it. As of this ADR's last changelog entry:
 
-- *Met:* queue a train, cancel one work queue entry, edit a group's settings, edit the scheduler
-  settings, dead-letter re-queue and acknowledge, manifest and group trigger, the dashboard
-  metrics and the group dependency graphs.
-- *Shared method exists, surfaces not switched yet* (both wait on the Scheduler release that
-  carries it): run a train (`RunTrainAsync`); cancel a list of runs (`CancelExecutionsAsync`, the
-  rule `ITraxScheduler.CancelAsync` and `CancelGroupAsync` now share); cancel a list of work
-  queue entries; enable or disable a list of manifests, a list of groups, or every group; manifest
-  stats, group stats and paged logs.
+- *Met:* queue a train, run a train (`RunTrainAsync`), cancel one run or a list of runs
+  (`CancelExecutionsAsync`), cancel one work queue entry or a list of them, enable or disable a
+  list of manifests, a list of groups or every group, edit a group's settings, edit the scheduler
+  settings, dead-letter re-queue and acknowledge, manifest and group trigger, manifest stats and
+  group stats, the persisted-operations reads and writes (`IPersistedOperationsService`,
+  dashboard/0005), the dashboard metrics and the group dependency graphs. Re-queueing every dead
+  letter is shared too, but the dashboard awaits it inside the operator's circuit, which holds the
+  page for as long as the call runs (about 36 s over 500,000 dead letters in the API's stress
+  suite).
+- *Stopgap:* triggering a selection of manifests or groups, and cancelling the running work of a
+  selection of groups. The dashboard calls the shared single-item method once per item
+  (`ITraxScheduler.TriggerAsync`, `TriggerGroupAsync`, `CancelGroupAsync`) and reports each
+  item's outcome, until batch service methods and mutations exist.
+- *Shared method exists, surfaces not switched yet:* paged logs.
 - *No shared method yet:* re-queue an execution, editing a manifest (`updateManifest` writes the
-  row in the API), the executions, work queue and dead-letter list reads, and the persisted
-  operations reads. The group detail page's "Cancel All Running" also repeats `CancelGroupAsync`'s
-  query instead of calling it, which needs no release to fix.
+  row in the API), and the executions, work queue and dead-letter list reads.
 
-Anything in the last two groups is a defect against this decision, not an exception to it.
+Anything in the last three groups is a defect against this decision, not an exception to it.
 
 **`RunTrainAsync` takes the mediator's rules rather than copying them.** It once repeated the
 mediator's authorization check and input reading, because the mediator kept both private. The
@@ -95,6 +101,11 @@ field. Parity is held by review and by the audit list, not by a guard.
 
 ## Changelog
 
+- **2026-10-01**: The dashboard switched its run, run cancels, batch work queue cancel, batch
+  enable and disable, stats reads and persisted-operations pages to the shared methods. Batch
+  trigger and group cancel are recorded as a per-item stopgap. The dashboard's re-queue refuses
+  the saved inputs the API refuses. Removed the claim that the group
+  page's "Cancel All Running" repeats `CancelGroupAsync`'s query: it calls the method.
 - **2026-09-30**: `RunTrainAsync` applies the per-record checks a queue applies (0037).
 - **2026-09-30**: `RunTrainAsync` calls the mediator's `PrepareAsync` instead of copying its
   authorization check and input reading.

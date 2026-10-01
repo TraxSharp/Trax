@@ -62,7 +62,7 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | `IPersistedOperationsService` | Singleton (TryAdd) | The management surface the GraphQL fields and the dashboard call. |
 | `IOperationDocumentStorage` -> `DbPersistedOperationStorage` | Singleton | HotChocolate hot-path lookup. |
 | `IPersistedOperationValidator` -> `HotChocolateSchemaValidator` | Singleton (Replace) | Runs HotChocolate validation against the live schema before every upsert. Overrides the no-op default from `AddPersistedOperationStore`. |
-| `IPersistedOperationsCapability` | Singleton | Marker probed by the dashboard to gate the management UI. |
+| `IPersistedOperationsCapability` | Singleton | Marker meaning this process serves the management GraphQL fields. The dashboard gates its pages on `IPersistedOperationsService` instead, so they also appear on a host that registers only `AddPersistedOperationStore`. |
 | `AllowlistMatcher` | Singleton | Used by the enforcement middleware. |
 | `PersistedOperationPolicy` | Singleton | The enforcement decision, asked once per operation by the request middleware `UsePersistedOperations` adds after HotChocolate's document parser. |
 | `TimeProvider` | Singleton (TryAdd) | Default `TimeProvider.System`; override for tests. |

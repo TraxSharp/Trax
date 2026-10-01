@@ -827,7 +827,7 @@ The same suite times every operations mutation against those tables (each single
 
 ## config (nested under operations)
 
-The `operations.config` namespace returns the live scheduler runtime settings (the dashboard-editable subset of `SchedulerConfiguration`, `LocalWorkerOptions`, and `MetadataCleanupConfiguration`). The dashboard's ServerSettingsPage and this query both read from the same in-memory singleton, so they agree.
+The `operations.config` namespace returns the live scheduler runtime settings (the dashboard-editable subset of `SchedulerConfiguration`, `LocalWorkerOptions`, and `MetadataCleanupConfiguration`). The dashboard's Server Settings page and this query both read from the same in-memory singleton, so they agree. The page saves through the same operations call as `updateScheduler`, sending only the fields the operator changed, and reloads from this snapshot afterwards.
 
 Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table, only the ones a save names. Every running scheduler applies them to its in-memory singleton at startup and re-reads the row every few seconds, so they survive restarts and reach every scheduler host. A setting never saved keeps each host's configured value. See [config](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) for which fields a save stores.
 

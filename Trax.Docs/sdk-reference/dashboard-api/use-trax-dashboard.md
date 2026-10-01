@@ -25,6 +25,12 @@ of `AddTraxDashboard`:
 With none of them, `UseTraxDashboard` throws `InvalidOperationException` naming the three.
 `AllowAnonymousDashboard()` together with either of the others throws as a contradiction.
 
+**It refuses to start without the Scheduler.** The dashboard's pages queue, run, cancel and
+inspect work through `IOperationsService`, which only
+[AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) registers. When the built
+provider has no `IOperationsService`, `UseTraxDashboard` throws `InvalidOperationException`
+naming `AddScheduler()`, rather than mapping pages that fail on their first request.
+
 "Any authenticated user" is not a posture of its own. On a host with public sign-up it is the
 same as anonymous. If that is what you mean, register a policy that says so and name it:
 
@@ -102,11 +108,24 @@ login page.
 - Must be called **after** `builder.Build()` and **before** `app.Run()`.
 - The `routePrefix` is normalized: `"trax"`, `"/trax"`, and `"/trax/"` all resolve to `"/trax"`.
   It is written to `DashboardOptions.RoutePrefix`, which is read in exactly one place,
-  `DashboardSidebar`, to build the navigation links.
+  `DashboardSidebar`, to build the navigation links. This argument is the only way to set it.
 - The posture is checked on each page request and on the circuit hub's negotiate and
-  connect. Navigation inside an established circuit does not go back through the endpoint,
-  which is how every Blazor Server app behaves, so a sign-out takes effect on the next page
-  load.
+  connect. Navigation inside an established circuit does not go back through the endpoint, so
+  the dashboard also re-checks the posture inside the circuit, against the host's
+  `AuthenticationStateProvider`: when the dashboard's root component attaches the circuit,
+  whenever the provider reports a change, every minute, and before each persisted-operation
+  write. Before every inbound circuit message (a click, a change, an interop call) it reads the
+  latest verdict, and once the user is refused it closes the circuit and the page reloads through
+  the endpoint. A failure to evaluate the posture (no provider registered, a policy handler that
+  throws) is a refusal. With `AllowAnonymousDashboard()` there is nothing to re-check.
+- The in-circuit check has three limits. The dashboard registers no
+  `AuthenticationStateProvider`, so it sees a revoked role or a sign-out only when the host's
+  provider does; ASP.NET Core's default `ServerAuthenticationStateProvider` keeps the user the
+  connection arrived with, so a host that wants revocation inside an open dashboard registers a
+  revalidating provider or names a policy whose handlers read live state. There is no
+  `HttpContext`: a policy handler that reads it as the resource gets `null`, and the policy's
+  authentication schemes are not re-run. Only the posture is re-checked: conventions added to the
+  returned builder, such as `RequireHost`, apply at the endpoint only.
 - Authentication is still the host's. With no scheme that can challenge, a gated request fails
   rather than being served.
-- The dashboard requires a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)) to be configured for metadata and manifest pages to function.
+- The dashboard requires the Scheduler, which in turn requires a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)).

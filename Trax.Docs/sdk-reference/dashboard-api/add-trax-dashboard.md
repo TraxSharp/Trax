@@ -65,6 +65,7 @@ app.UseTraxDashboard();  // the dashboard is served at /trax
 
 - `ITrainDiscoveryService` (singleton, from Mediator): scans DI container for registered trains
 - `IDashboardSettingsService` (scoped): dashboard configuration access
+- A scoped per-circuit authorization check and a `CircuitHandler` that re-check the authorization posture inside an open dashboard (see [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard#remarks)). No `AuthenticationStateProvider` is registered: the check reads the host's.
 - Internal scoped services for browser local storage and the dark/light theme state. They are implementation details of the dashboard's own components and cannot be resolved by type from application code.
 - Radzen components (via `AddRadzenComponents()`)
 - Blazor Interactive Server components (via `AddRazorComponents().AddInteractiveServerComponents()`)
@@ -80,6 +81,15 @@ Call services.AddTrax(...) in your service configuration before calling AddTraxD
 ```
 
 This makes sure the effect system and its services are available before the dashboard attempts to use them.
+
+**Call it once.** A second call on the same service collection throws `InvalidOperationException`
+instead of registering a second `DashboardOptions`, because the last registration would win and a
+shared bootstrap could replace the host's posture with `AllowAnonymousDashboard()`. Put every
+dashboard option in one call.
+
+The Scheduler is also required, but it is checked later, by
+[UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard), against the built
+provider.
 
 ## Package
 

@@ -179,9 +179,11 @@ There are three surfaces, all backed by the same `IPersistedOperationStore` and 
 
 ### From the dashboard
 
-When `UsePersistedOperations(...)` is wired into the API host, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id prefix, and offers Upload / Edit / Deactivate / Restore actions against the row's own tenant. It goes through the same `IPersistedOperationsService` as the `operations.persistedOperations` fields, so an upload or deactivation the API refuses is refused with the same message. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
+When the host registers `IPersistedOperationsService`, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. `UsePersistedOperations(...)` registers it on a GraphQL host, and `AddPersistedOperationStore(...)` on a host that serves no GraphQL, such as a dashboard running in a process of its own. The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id prefix, and offers Upload / Edit / Deactivate / Restore actions against the row's own tenant. It goes through the same `IPersistedOperationsService` as the `operations.persistedOperations` fields, so an upload or deactivation the API refuses is refused with the same message. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
 
-If `UsePersistedOperations(...)` was not called, the sidebar entry is hidden and direct navigation to `/trax/data/persisted-operations`, or to an operation's detail page under it, renders a "not enabled on this server" panel. The dashboard probes the runtime via `IServiceProvider.GetService<IPersistedOperationsCapability>()`.
+A dashboard in its own process should register the store with the broker's connection string, `AddPersistedOperationStore(databaseConnectionString, rabbitConnectionString)`, so its writes are broadcast like any other uploader's.
+
+If neither registration was made, the sidebar entry is hidden and direct navigation to `/trax/data/persisted-operations`, or to an operation's detail page under it, renders a "not enabled on this server" panel. The dashboard asks the container for `IPersistedOperationsService`; it does not need `IPersistedOperationsCapability`, which only `UsePersistedOperations` registers.
 
 ### Via GraphQL mutations
 
@@ -295,7 +297,7 @@ The fingerprint considers these the same shape: whitespace, field reordering, ar
 | `IPersistedOperationsService` | DI | Management surface shared by the GraphQL fields and the dashboard |
 | `IPersistedOperationStore` | DI | Programmatic CRUD |
 | `IPersistedOperationValidator` | DI | Schema validation at upsert time (HotChocolate-backed when `UsePersistedOperations`, no-op for `AddPersistedOperationStore`) |
-| `IPersistedOperationsCapability` | DI | Marker registered by `UsePersistedOperations`; dashboard probes for it to gate the management UI |
+| `IPersistedOperationsCapability` | DI | Marker registered by `UsePersistedOperations`, meaning this process serves the management GraphQL fields. The dashboard does not read it: its pages appear whenever `IPersistedOperationsService` is registered |
 | `IOperationDocumentStorage` | HotChocolate hot path | Resolves id to document for the request executor |
 | `PersistedOperationsMiddleware` | ASP.NET pipeline | Enforces inline-query rejection / shadow logging / allowlist |
 | `IPersistedOperationBroadcaster` | DI | Multi-node cache invalidation (RabbitMQ with `UseRabbitMqInvalidation`, no-op with `SingleNode()`) |

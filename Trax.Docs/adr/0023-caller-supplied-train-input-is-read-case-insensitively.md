@@ -9,8 +9,9 @@ status: accepted
 
 JSON a caller supplies as a train's input is matched to the input type's properties without regard
 to case, and a property that appears twice, in the same or any other casing, is refused with a
-`JsonException` rather than resolved to one of its values. The API (through
-`ITrainExecutionService`) and the dashboard's Run dialog read the same JSON the same way.
+`JsonException` rather than resolved to one of its values. The API and the dashboard read the
+same JSON the same way, because both hand it to `ITrainExecutionService`: a queue through
+`QueueAsync`, a run through `IOperationsService.RunTrainAsync` and `PrepareAsync`.
 
 ## Status
 
@@ -50,10 +51,11 @@ property given twice, in the same or a different case, is refused by `QueueAsync
 A surface that reads caller input without queueing or running through the mediator gets these
 settings from `ITrainExecutionService.PrepareAsync` instead of repeating them.
 
-Not covered: the dashboard's Run dialog reads case-insensitively but does not refuse duplicates
-yet, and nothing checks that a new surface reading caller input uses the same settings.
+Not covered: nothing checks that a new surface reading caller input uses the same settings.
 
 ## Changelog
 
+- **2026-10-01**: The dashboard's Run dialog no longer reads the input itself: it passes its JSON
+  to `RunTrainAsync`, so it refuses a duplicate property as the API does.
 - **2026-09-27**: `PrepareAsync` is how another surface reads caller input the same way.
 - **2026-09-27**: Recorded.
