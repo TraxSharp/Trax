@@ -43,7 +43,7 @@ public abstract class TraxLambdaFunction
 | `ConfigureServices(IServiceCollection, IConfiguration)` | Yes | Register your Trax effects, mediator, data contexts, and application services. `IConfiguration` is loaded from `appsettings.json` (if present) and environment variables. Do **not** call `AddTraxJobRunner()` because the base class does this automatically. |
 | `ConfigureRunner(TraxJobRunnerOptions, IConfiguration)` | In practice | Set the runner's posture: `runner.SigningKey` (shared with `UseLambdaWorkers` / `UseLambdaRun`), or `runner.AllowUnsignedRequests()` for a function only the scheduler's IAM role can invoke. The default sets nothing, so every invocation is refused. |
 | `ConfigureLogging(ILoggingBuilder)` | No | Customize logging. Default: console logging at `Information` level. |
-| `TerminalWriteMargin` | No | How much of `ILambdaContext.RemainingTime` is held back so a run cancelled by the function timing out can still record its outcome. Default 5 seconds. Cancellation is derived from `RemainingTime` less this margin: cancelling at `RemainingTime` itself fires at the instant Lambda freezes or kills the environment, leaving the uncancellable terminal write nowhere to happen, so the row stayed `InProgress` holding its subject until `StaleInProgressTimeout` and the reaper then recorded `Failed` rather than `Cancelled`. Widen it for a data provider with a slower write path. With less time left than the margin, the handler receives an already-cancelled token, because starting work that cannot be recorded is worse than reporting it cancelled. |
+| `TerminalWriteMargin` | No | How much of `ILambdaContext.RemainingTime` is held back so a run cancelled by the function timing out can still record its outcome. Default 5 seconds. Cancellation is derived from `RemainingTime` less this margin: cancelling at `RemainingTime` itself fires at the instant Lambda freezes or kills the environment, leaving the uncancellable terminal write nowhere to happen, so the row stayed `InProgress` holding its subject until `StaleInProgressTimeout` and the reaper then recorded `Failed` rather than `Cancelled`. Widen it for a data provider with a slower write path. At most half of the time left is held back: the margin actually used is the smaller of `TerminalWriteMargin` and `RemainingTime / 2`, so a function whose timeout is at or below the margin (AWS's default is three seconds) still runs its jobs. The first time an instance has no more time left than the margin it logs a warning to raise the function's timeout. An `Execute` whose time runs out before its job starts does not start it: the run is recorded `Cancelled` (only while it is still `Pending`, written on `CancellationToken.None`) rather than left `Pending` for the stale-pending reaper to fail, which would count toward the manifest's retries. |
 | `BuildServiceProvider()` | No | Replace the entire DI graph. The default builds `IConfiguration`, registers logging, calls `ConfigureServices`, and finishes with `AddTraxJobRunner(runner => ConfigureRunner(runner, configuration))`. An override registers `AddTraxJobRunner(runner => ...)` itself. Override only when you need full control (test harnesses are the typical case). Production code should override `ConfigureServices`, not this. |
 
 ## Envelope Dispatching
@@ -130,12 +130,17 @@ public class Function : TraxLambdaFunction
 
 ## Local Development
 
-Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. This maps `POST /trax/execute` and `POST /trax/run` endpoints, which enforce the same posture (a signed request carries the `Trax-Signature` header and must be fresh; a refused one gets `401`), and which wrap incoming HTTP request bodies into `LambdaEnvelope` payloads and execute them through the same handler logic as the Lambda entry point.
+Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. This maps `POST /trax/execute` and `POST /trax/run` endpoints, which enforce their own posture, and which wrap incoming HTTP request bodies into `LambdaEnvelope` payloads and execute them through the same handler logic as the Lambda entry point.
 
 ```csharp
 // Program.cs
 await new Function().RunLocalAsync(args);
 ```
+
+| Runner posture | What the local routes accept |
+|----------------|------------------------------|
+| `SigningKey` | Requests with a valid, fresh `Trax-Signature` header, from any address. The header is checked before the body is read (`401`), and a body over `MaxRequestBodyBytes` gets `413` |
+| `AllowUnsignedRequests()` | Unsigned requests from this machine's loopback address only, whatever address the server listens on; any other caller gets `401`. Unsigned is a posture for the Lambda invocation entry point, which only the scheduler's IAM role can reach. Configure a `SigningKey` to serve the local routes to another machine, such as a scheduler in a container |
 
 This enables a smooth development workflow:
 - **Local dev:** Scheduler uses `UseRemoteWorkers()` + `UseRemoteRun()` to hit the local Kestrel server
@@ -150,7 +155,7 @@ Internally `RunLocalAsync` delegates the route mapping to an internal `Configure
 Two extension points exist specifically for tests:
 
 1. Override `BuildServiceProvider` to swap in a fake `ITraxRequestHandler` (or any other dependency) without exercising `AddTraxJobRunner` and the full effect/mediator stack.
-2. Call `ConfigureRoutes` from a `TestServer`-hosted pipeline to exercise the `/trax/execute` and `/trax/run` endpoints in-process. `ConfigureRoutes` is `internal`, made visible to the Trax test assemblies via `InternalsVisibleTo`.
+2. Call `ConfigureRoutes` from a `TestServer`-hosted pipeline to exercise the `/trax/execute` and `/trax/run` endpoints in-process. `ConfigureRoutes` is `internal`, made visible to the Trax test assemblies via `InternalsVisibleTo`. `TestServer` sets no remote address, so a test that exercises the routes unsigned sets `HttpContext.Connection.RemoteIpAddress` to a loopback address in a middleware first; without it the routes answer `401`.
 
 ```csharp
 // Unit test: stub the request handler.

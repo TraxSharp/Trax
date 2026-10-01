@@ -9,7 +9,7 @@ nav_order: 3
 
 ## Handling Dead Letters
 
-When a job's counted failures exceed `MaxRetries` (the retries allowed after the first run, so the default of 3 dead-letters on the fourth failure), it enters the dead letter queue with status `AwaitingIntervention`. Failures count only while they started within `FailureCountWindow` (default: 24 hours), so failures spread over weeks do not dead-letter a manifest. The ManifestManager will skip these manifests until they're resolved.
+When a job's counted failures exceed `MaxRetries` (the retries allowed after the first run, so the default of 3 dead-letters on the fourth failure), it enters the dead letter queue with status `AwaitingIntervention`. Failures count only while they started within the manifest's failure window (`FailureCountWindow`, default 24 hours, unless the manifest states its own `FailureWindow`), so failures spread over weeks do not dead-letter a manifest. The ManifestManager will skip these manifests until they're resolved.
 
 To resolve a dead letter, use the **Dashboard UI**, the **GraphQL API**, or the **ITraxScheduler** service directly.
 
@@ -123,6 +123,8 @@ var result = await scheduler.RequeueAllDeadLettersAsync();
 var result = await scheduler.AcknowledgeAllDeadLettersAsync("Mass acknowledge");
 ```
 
+The batch methods take 1 to `OperationsService.MaxBatchSize` (1000) ids, the limit every operations-surface batch has. An empty list or a longer one is refused: the result counts nothing and its message says why. `RequeueAllDeadLettersAsync` reads and requeues a page of manifests at a time and sums the counts, so a large backlog is never loaded at once; every dead letter of one manifest is in the same page, so they still fold into one entry.
+
 ### Failure Counter Reset
 
 Resolving a dead letter (either action) resets the manifest's failure counter. The ManifestManager only counts failures that occurred **after** the most recent resolution (and inside `FailureCountWindow`) when comparing against `MaxRetries`. This means a retried manifest starts fresh, it won't be immediately re-dead-lettered based on the same failures that triggered the original dead letter.
@@ -150,7 +152,7 @@ All dead letter operations filter by `status = 'awaiting_intervention'` at query
 
 ## Retry Delay & Backoff
 
-When a manifest has counted failures but hasn't exceeded `MaxRetries`, the scheduler applies an exponential backoff delay before retrying. `failureCount` is the number of failures inside `FailureCountWindow` since the latest resolved dead letter, so a failure older than the window no longer delays the next run:
+When a manifest's latest finished run failed and its counted failures have not exceeded `MaxRetries`, the scheduler delays the next run, the retry, by an exponential backoff. `failureCount` is the number of failures inside the manifest's failure window (its `FailureWindow`, or the scheduler's `FailureCountWindow`) since the latest resolved dead letter, so a failure older than the window no longer lengthens the delay:
 
 ```
 delay = min(DefaultRetryDelay * RetryBackoffMultiplier ^ (failureCount - 1), MaxRetryDelay)
@@ -165,6 +167,8 @@ With defaults (`DefaultRetryDelay: 5m`, `RetryBackoffMultiplier: 2.0`, `MaxRetry
 | 3 | 20 minutes |
 | 4 | 40 minutes |
 | 5+ | 1 hour (capped) |
+
+Only a retry waits. Once a run succeeds or is cancelled, the next occurrence runs on time, however many failures are still inside the window; those failures still set the length of the next retry's delay and still count toward the dead letter. A requeued dispatch attempt is not a finished run and does not count either way.
 
 The delay is implemented by setting `ScheduledAt` on the WorkQueue entry. The JobDispatcher skips entries where `ScheduledAt > now`, so the retry won't be dispatched until the delay has elapsed.
 
@@ -246,7 +250,7 @@ Cancelled trains are treated as terminal, they are eligible for cleanup but are 
 
 Resolved dead letters (Retried or Acknowledged) are automatically purged after the configured retention period. This is enabled by default.
 
-The `DeadLetterCleanupTrain` runs on its own polling interval (default: 1 hour) and deletes resolved dead letters where `ResolvedAt` is older than `DeadLetterRetentionPeriod` (default: 30 days). Dead letters in `AwaitingIntervention` status are never deleted.
+The `DeadLetterCleanupTrain` runs on its own polling interval (default: 1 hour) and deletes resolved dead letters where `ResolvedAt` is older than `DeadLetterRetentionPeriod` (default: 30 days). Dead letters in `AwaitingIntervention` status are never deleted. Nor is a retried dead letter whose requeued work queue entry is still `Queued` (a paused dispatcher, or a group at its limit): deleting the dead letter would delete that retry before it ran. It is purged on a later run, once the retry has left the queue.
 
 Configure via the scheduler builder:
 
@@ -261,6 +265,17 @@ Configure via the scheduler builder:
 ```
 
 Both settings can also be changed at runtime, from the dashboard's Server Settings page or the [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation. The purge reads them on every run, so turning auto-purge off keeps resolved dead letters from the next run on, without a restart, and the cleanup service stays registered so it can be turned back on the same way.
+
+Both settings delete data, so when the builder states them and a saved setting does too, they fail closed rather than letting the saved value win:
+
+| Code | Saved | Result |
+|------|-------|--------|
+| `AutoPurgeDeadLetters(false)` | `true` | No purge |
+| `AutoPurgeDeadLetters(true)` or unstated | `false` | No purge |
+| `DeadLetterRetentionPeriod(90 days)` | 7 days | 90 days |
+| `DeadLetterRetentionPeriod(7 days)` | 90 days | 90 days |
+
+When the builder does not state a setting, a saved value replaces the default as any other saved setting does. In every case where the saved value differs from the host's code value, the scheduler logs a warning naming the setting, both values and the one it runs with.
 
 ## Testing
 

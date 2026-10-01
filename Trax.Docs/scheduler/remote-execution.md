@@ -375,7 +375,7 @@ Two invocation modes:
 - **Simpler infrastructure**: fewer AWS resources to manage (no API Gateway, no Function URL configuration)
 - **Lower latency**: direct invocation avoids the API Gateway routing layer
 
-**Local development:** For local dev and testing, `RunLocalAsync()` starts a Kestrel server that exposes the same `/trax/execute` and `/trax/run` HTTP endpoints. Use `UseRemoteWorkers()` + `UseRemoteRun()` on the scheduler side during development, then switch to `UseLambdaWorkers()` + `UseLambdaRun()` for production deployment.
+**Local development:** For local dev and testing, `RunLocalAsync()` starts a Kestrel server that exposes the same `/trax/execute` and `/trax/run` HTTP endpoints. Without a `SigningKey` they serve only callers on the loopback address. Use `UseRemoteWorkers()` + `UseRemoteRun()` on the scheduler side during development, then switch to `UseLambdaWorkers()` + `UseLambdaRun()` for production deployment.
 
 **IAM permissions:** The scheduler process needs `lambda:InvokeFunction` on the target function ARN. The Lambda execution role needs its normal permissions (database access, etc.).
 
@@ -495,7 +495,7 @@ To send different trains to different runners, call `UseRemoteWorkers()` (or `Us
 )
 ```
 
-A train routed by two calls is refused when the scheduler is built. A `[TraxRemote]` train that no call routes explicitly goes to the first routed registration of any kind (the first `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()` call).
+A train routed by two calls is refused when the scheduler is built. A `[TraxRemote]` train that no call routes explicitly goes to the first routed registration of any kind (the first `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()` call). A scheduler with `[TraxRemote]` trains and none of the three fails when it is built, naming each such train: running a train marked remote on the scheduler host, often the one host it was kept off for isolation, is not a fallback. Add one of the three calls, or remove the attribute from a train that should run locally.
 
 ## Authorization Posture
 
@@ -505,7 +505,7 @@ A runner runs what it is sent as trusted infrastructure: the scheduler already a
 |---------|-----------|----------------------|
 | `runner.SigningKey = key` | every entry point | Verifies a `Trax-Signature` over the exact request body before reading it. The recommended posture. |
 | `runner.AuthorizationPolicy = "name"` | `UseTraxJobRunner`, `UseTraxRunEndpoint` | Applies the named ASP.NET policy. The policy must admit only the scheduler: a policy that admits end users lets them run any registered train, gated or not. |
-| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. For a runner only the scheduler can reach, such as a Lambda function behind IAM. |
+| `runner.AllowUnsignedRequests()` | every entry point | Accepts every request, and logs a warning naming the entry point at startup. For a runner only the scheduler can reach, such as a Lambda function behind IAM. `TraxLambdaFunction.RunLocalAsync`'s local routes honour it only for callers on the loopback address. |
 
 **Signed requests.** Generate 32 or more random bytes (`openssl rand -base64 32`), store them as a secret, and give the same key to both sides: `SigningKey` on `UseRemoteWorkers`, `UseRemoteRun`, `UseLambdaWorkers`, `UseLambdaRun` or `UseSqsWorkers`, and on `AddTraxJobRunner` (or `ConfigureRunner` in a `TraxLambdaFunction`).
 
@@ -531,7 +531,7 @@ The signature is an HMAC-SHA256 over the request's purpose (`execute` or `run`),
 | Lambda `Run` (synchronous) | signature, timestamp, nonce |
 | Lambda `Execute` (asynchronous) and SQS | signature only: both redeliver the same message, and the job's `Pending` metadata row stops a second run |
 
-A refused HTTP request gets `401` and never reaches the train. A refused Lambda invocation or SQS message throws, so Lambda's retry and dead-letter settings apply. The scheduler signs each retry afresh, so a retry is never refused as a replay.
+A refused HTTP request gets `401` and never reaches the train. The `Trax-Signature` header is checked before any of the body is read, and a body over `MaxRequestBodyBytes` (default 8 MiB) gets `413`. Refusals are logged as a warning at most once a minute, with a count, and at Debug otherwise. A refused Lambda invocation or SQS message throws, so Lambda's retry and dead-letter settings apply. The scheduler signs each retry afresh, so a retry is never refused as a replay.
 
 **Where nonces are kept.** A signing runner records each accepted nonce in the Trax database, in the `runner_nonce` table the standard migrations create, so every instance of a runner that shares the database accepts a request once between them. The table's primary key decides: a nonce already recorded, and not yet expired, is a repeat. Any other database failure while recording one is an error, never read as a repeat. Expired rows are taken over or removed as it goes. A runner that runs as a single instance can keep them in memory instead with `runner.UseInMemoryNonceStore()`, and a host can register its own `INonceStore` singleton to share them some other way. A signing runner whose host has no relational data provider (`UsePostgres` or `UseSqlite`) must pick one of those two, or it refuses to start.
 
@@ -666,7 +666,7 @@ Or at runtime via the Dashboard under **Server Settings > Job Settings > Stale P
 
 ### 4. Stale InProgress Reaper
 
-The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. A run whose manifest sets a longer `Timeout` is given its timeout plus the grace between `DefaultJobTimeout` and `StaleInProgressTimeout` instead, so a long job is never failed as stale while it is still inside its own timeout. This catches hard crashes where the worker dies without reaching `FinishServiceTrain`: Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
+The ManifestManager also runs a `ReapStaleInProgressMetadataJunction` on every polling cycle. Any Metadata that has been in `InProgress` state longer than `StaleInProgressTimeout` (default: 60 minutes) is automatically marked as `Failed`. A run whose own timeout is longer (the `Timeout` of the manifest at the root of its `ParentId` chain, or a longer `DefaultJobTimeout`) is given that timeout plus the grace between `DefaultJobTimeout` and `StaleInProgressTimeout` instead, so a long job is never failed as stale while it is still inside its own timeout. This catches hard crashes where the worker dies without reaching `FinishServiceTrain`: Lambda hard-kills, OOM events, or process crashes that bypass all .NET exception handling.
 
 ```csharp
 .AddScheduler(scheduler => scheduler

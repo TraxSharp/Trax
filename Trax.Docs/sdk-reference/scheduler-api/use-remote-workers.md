@@ -156,7 +156,7 @@ public class HeavyComputeTrain : ServiceTrain<HeavyInput, HeavyOutput>, IHeavyCo
 
 A train marked with `[TraxRemote]` that no call routes with `ForTrain<T>()` is dispatched to the **first** routed registration, of whatever kind: the first `UseRemoteWorkers()`, `UseSqsWorkers()` or `UseLambdaWorkers()` call in the builder. With `UseSqsWorkers()` alone, `[TraxRemote]` trains go to that queue; with two `UseRemoteWorkers()` calls, they go to the first endpoint. Builder `ForTrain<T>()` routing takes precedence over the attribute.
 
-Only when none of the three is configured is `[TraxRemote]` ignored, and the train runs locally.
+A scheduler with `[TraxRemote]` trains and none of the three fails when it is built, naming each such train: running a train marked remote on the scheduler host, often the one host it was kept off for isolation, is not a fallback. Add one of the three calls, or remove the attribute from a train that should run locally.
 
 ## Performance
 

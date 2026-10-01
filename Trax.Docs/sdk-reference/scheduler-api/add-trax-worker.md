@@ -29,12 +29,12 @@ public static IServiceCollection AddTraxWorker(
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
-| `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs |
-| `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery) |
-| `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown |
+| `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs. 1 to 256 |
+| `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs. Greater than zero, up to 30 days |
+| `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible before another worker can reclaim it (crash recovery). 1 second to 10 years |
+| `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown. 0 to 30 days |
 
-These are the same options used by [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers).
+These are the same options used by [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers), with the same ranges (`BatchSize` at least 1 too). `AddTraxWorker` throws `InvalidOperationException` listing every option outside its range.
 
 ## Examples
 

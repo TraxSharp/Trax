@@ -15,14 +15,16 @@ Has overloads for 1 through 7 services.
 ## Signatures
 
 ```csharp
-public Monad<TInput, TReturn> AddServices<T1>(T1 service)
-public Monad<TInput, TReturn> AddServices<T1, T2>(T1 service1, T2 service2)
-public Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3)
-public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4)
-public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5)
-public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6)
-public Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6, T7 s7)
+protected Monad<TInput, TReturn> AddServices<T1>(T1 service)
+protected Monad<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2)
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3)
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4)
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5)
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6)
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6, T7 s7)
 ```
+
+These are the train's own methods, which start a chain in `Junctions()`. Later in a chain, after a `Chain` or `ShortCircuit`, the call is `MonadTask<TInput, TReturn>`'s method of the same name, which takes the same arguments and returns `MonadTask<TInput, TReturn>`.
 
 ## Type Parameters
 
@@ -36,7 +38,7 @@ All services are **required** (non-null), and each has to exist when `Junctions(
 
 ## Returns
 
-`Monad<TInput, TReturn>`, the train instance, for fluent chaining.
+The chain, for fluent chaining: `Monad<TInput, TReturn>` from the train's method, `MonadTask<TInput, TReturn>` from a later link.
 
 ## Example
 

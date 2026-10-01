@@ -12,7 +12,7 @@ nav_order: 4
 
 It supports two execution paths:
 - **Queue**: creates a WorkQueue entry for asynchronous dispatch by the scheduler.
-- **Run**: executes the train synchronously via `ITrainBus` on the current machine.
+- **Run**: executes the train synchronously through the registered `IRunExecutor`: on the current machine via `ITrainBus` by default, or on a remote endpoint under [`UseRemoteRun`](/docs/sdk-reference/scheduler-api/use-remote-run) or [`UseLambdaRun`](/docs/sdk-reference/scheduler-api/use-lambda-run).
 
 A third method, `PrepareAsync`, does only the steps both paths start with (lookup, authorization, input reading), for a surface that submits the work some other way.
 
@@ -113,7 +113,7 @@ On the in-memory provider, beginning the transaction succeeds but returns one wh
 
 ## RunAsync
 
-Executes a train synchronously via `ITrainBus`. This is a blocking call that returns when the train completes. It creates no work queue entry, so it does not fire `OnQueue` and does not consult `QueueSubjectKey`: a synchronous run can overlap queued work for the same subject.
+Executes a train synchronously through the registered `IRunExecutor` (locally via `ITrainBus` unless a remote executor is configured). This is a blocking call that returns when the train completes. It creates no work queue entry, so it does not fire `OnQueue` and does not consult `QueueSubjectKey`: a synchronous run can overlap queued work for the same subject.
 
 ```csharp
 Task<RunTrainResult> RunAsync(
@@ -288,7 +288,7 @@ public class TrainController(
 
 ## Concurrency Limiting
 
-`RunAsync` supports per-train and global concurrency limits to prevent overloading remote backends. When a limit is reached, additional requests wait in-process until a slot opens. No requests are rejected.
+`RunAsync` supports per-train, per-principal and global concurrency limits to prevent overloading remote backends. When a limit is reached, additional requests wait in-process until a slot opens. No requests are rejected.
 
 See [Concurrency Limiting](/docs/sdk-reference/mediator-api/concurrency-limiting) for configuration details.
 

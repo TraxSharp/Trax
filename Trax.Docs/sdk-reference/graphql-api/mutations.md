@@ -211,7 +211,7 @@ The whole namespace sits behind the operations gate (`GateOperations`, `RequireA
 
 ### triggerManifest
 
-Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, that entry runs it and nothing more is queued; the mutation still succeeds.
+Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, nothing more is queued and that entry becomes the triggered run: it runs even if the manifest is disabled, and an entry due later (a retry waiting out its backoff) is brought forward to now. The mutation still succeeds.
 
 ```graphql
 mutation {
@@ -331,7 +331,7 @@ mutation {
 
 ### triggerGroup
 
-Triggers immediate execution of all enabled manifests in a group. A manifest that already has a queued work queue entry is skipped, and does not stop the others being queued.
+Triggers immediate execution of all enabled manifests in a group. A manifest that already has a queued work queue entry is not queued again and does not stop the others being queued; its entry is brought forward to now if it was due later. Every entry the trigger touches runs even if its manifest is disabled afterwards.
 
 ```graphql
 mutation {
@@ -411,8 +411,8 @@ An execution with no saved input is refused with `success: false` and a message 
 saved only when [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters)
 is on. So is one whose input was too large to save in full and was stored as the truncation
 placeholder (`{"_truncated": true, ...}`). Enqueue refusals (a throwing `OnQueue`, an unusable
-subject key, a deferred entry cancelled before confirmation) come back as `success: false` with
-`"The enqueue was refused: ..."`, and an infrastructure failure is a masked GraphQL error, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
+subject key, a deferred entry cancelled before confirmation) come back as `success: false`, with
+the message rule [`queueTrain`](#queuetrain) describes, and an infrastructure failure is a masked GraphQL error, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
 defaults rather than with what it ran with. This check runs before authorization, so it answers
 the same for every caller; a missing execution id also returns `success: false`.
 
@@ -469,7 +469,13 @@ mutation {
 
 The `operations.config` namespace patches scheduler runtime settings. A save writes only the fields it sets to the persisted `trax.scheduler_config` row, so it never rewrites a setting it did not name, and applies them to the host that received it at once. Every running scheduler host reads the row every few seconds and applies a new or changed one without a restart, so a save made on an API-only host, or on one of several scheduler hosts, reaches all of them. A scheduler applies a change from its next polling cycle, including a new polling or cleanup interval; `localWorkerCount` is the exception and applies when the worker pool next starts. The row also survives restarts: each scheduler applies it at startup over the settings configured in code.
 
-The row stores every setting, so the first save, which creates it, records the saving host's values for the settings it does not name. A host that does not run the scheduler (an API-only host built with `AddTraxJobRunner()`) cannot know those values, so there the first save is refused with a message saying so; make it on a host that calls `AddScheduler`. Once the row exists, a stored value takes precedence over the value in code until the row is changed or deleted, and deleting the row returns every running scheduler to its configured settings.
+The row records which settings a save named, in its `overrides`. A setting no save has named is not stored, so each scheduler keeps the value configured in code for it, and a later change in code applies to it. That is why any host can make a save, the first one included, whether or not it runs the scheduler: an API-only host built with `AddTraxJobRunner()` never has to supply values for settings it did not name. Two hosts making the first save at the same time both succeed; the one that loses the race applies its patch to the row the other created.
+
+Which fields a save stores depends on the host. A field whose setting the row already names is stored when it differs from the stored value. For a setting the row does not name, a scheduler host stores the field only when it differs from the value that host runs with, so a save from the dashboard on a scheduler host leaves unchanged fields out. A host that does not run the scheduler cannot know that value, so it stores every field the patch sets, and each field it sends becomes a saved value that replaces the code value on every scheduler. `count` counts the fields stored.
+
+A stored value takes precedence over the value in code until it is changed or the row is deleted, and deleting the row returns every running scheduler to its configured settings. Each scheduler logs a warning when a saved value replaces a different value configured in code, because a deploy that changes that setting in code then has no effect. The two dead-letter purge settings are the exception to "the saved value wins": when code states them too, the purge runs only if both `autoPurgeDeadLetters` values allow it, and the longer of the two `deadLetterRetentionPeriod` values applies (see [Dead Letter Auto-Purge](/docs/scheduler/dead-letters-and-cleanup#dead-letter-auto-purge)).
+
+A scheduler that cannot read the row when it starts (the database is briefly unreachable, or the table is not migrated yet) logs a warning, runs with its code values, and applies the row at its first successful read.
 
 #### updateScheduler
 
@@ -505,6 +511,7 @@ Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (
 | `maxActiveJobs` | `Int` | At least 1 |
 | `clearMaxActiveJobs` | `Boolean` | When `true`, sets `maxActiveJobs` to null |
 | `defaultMaxRetries` | `Int` | Zero or more |
+| `failureCountWindow` | `TimeSpan` | 1 second to ten years. How far back failed runs count toward retry backoff and `MaxRetries` |
 | `defaultRetryDelay` | `TimeSpan` | Zero to ten years |
 | `retryBackoffMultiplier` | `Float` | At least 1 |
 | `maxRetryDelay` | `TimeSpan` | Zero to ten years |
@@ -575,7 +582,7 @@ The entry is created through [`ITrainExecutionService.QueueAsync`](/docs/sdk-ref
 
 Four kinds of exception propagate out of the mutation rather than becoming `success: false`. Authorization (an `UnauthorizedAccessException`, which `TrainAuthorizationException` is) surfaces as the `TRAX_AUTHORIZATION` error above. Cancellation of the request ends it. An infrastructure failure, meaning a database, EF Core, network, I/O or timeout exception anywhere in the exception's chain (a `DbException` such as `NpgsqlException`, `DbUpdateException`, `TimeoutException`, `SocketException`, `HttpRequestException` or `IOException`), is logged on the server and arrives as a GraphQL error with HotChocolate's masked `"Unexpected Execution Error"` message, so nothing about the server reaches the caller. That includes a data-layer exception caused by the train's own `OnQueue` hook; a hook that means to refuse throws its own exception. The mediator's `TrainAuthorizationNotConfiguredException`, for a `[TraxAuthorize]` train on a host with no `ITrainAuthorizationService` registered, is a host misconfiguration, so it is logged and masked the same way.
 
-Every other exception from the enqueue is a refusal and becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the generic `"The train input failed validation."` (neither the cap nor the input's size is echoed), and anything else as `"The enqueue was refused: "` followed by the exception's message. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key, one that is only whitespace, or one longer than 512 Unicode characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). `Trax.Scheduler/docs/adr/0004` records the split.
+Every other exception from the enqueue is a refusal and becomes `success: false`: invalid JSON as `"Invalid InputJson: "` followed by the parser's message, an oversized input as the generic `"The train input failed validation."` (neither the cap nor the input's size is echoed), and anything else as a refusal. That last group covers the train's `OnQueue` hook throwing, `QueueSubjectKey` throwing or returning an empty key, one that is only whitespace, or one longer than 512 Unicode characters, and a deferred entry being cancelled before it was confirmed (in which case the hook's side-effect may already have landed). A refusal's message is `"The enqueue was refused: "` followed by the exception's message only when that message was written for the caller: a plain `TrainException` (not a type derived from it), whose message is the train author's, or the mediator's `QueuedWorkCancelledException` and `QueueHookTimeoutException`. For any other exception it is the fixed `"The enqueue was refused."`, and the exception is logged at Warning on the server. A hook that refuses with a reason the caller should read throws `TrainException`. `Trax.Scheduler/docs/adr/0004` records the split.
 
 ```graphql
 mutation {
@@ -650,7 +657,7 @@ mutation {
 
 ### deadLetters (nested namespace)
 
-The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for full details and examples.
+The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). The batch variants take 1 to 1000 ids; an empty or longer list returns `success: false` and changes nothing. See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for full details and examples.
 
 ---
 

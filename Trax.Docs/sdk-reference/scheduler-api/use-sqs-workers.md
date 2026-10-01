@@ -33,7 +33,7 @@ Defined in `Trax.Scheduler.Sqs.Extensions.SqsSchedulerExtensions`.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<SqsWorkerOptions>` | Yes | Callback to set the SQS queue URL and client options |
-| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this SQS queue. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. |
+| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this SQS queue. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. With none of the three, a `[TraxRemote]` train fails the scheduler's build. |
 
 ## Returns
 

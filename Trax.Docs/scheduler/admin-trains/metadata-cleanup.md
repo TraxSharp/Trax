@@ -108,7 +108,7 @@ Trains sharing a cutoff are swept together, so the cleanup runs its batched dele
 
 The work queue rows owned by a metadata row follow it, so they inherit whatever cutoff that train has.
 
-> **The runtime override applies to the default only.** The retention is also editable without a restart, through the dashboard's Server Settings page and the `updateSchedulerConfig` mutation. That edit replaces `RetentionPeriod`, so it moves every train that is on the default and leaves a retention passed to `AddTrainType` exactly where it was. A per-train value is usually there because of what the row holds rather than as an operational preference, and an edit to a field labelled "Retention Period" should not quietly shorten it. Shortening one is a code change.
+> **The runtime override applies to the default only.** The retention is also editable without a restart, through the dashboard's Server Settings page and the `updateScheduler` mutation. That edit replaces `RetentionPeriod`, so it moves every train that is on the default and leaves a retention passed to `AddTrainType` exactly where it was. A per-train value is usually there because of what the row holds rather than as an operational preference, and an edit to a field labelled "Retention Period" should not quietly shorten it. Shortening one is a code change.
 
 ### What cannot take its own retention
 

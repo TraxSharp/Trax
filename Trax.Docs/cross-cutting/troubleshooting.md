@@ -154,7 +154,7 @@ If you're using `ShortCircuit`, remember that throwing an exception means "conti
 ## Scheduled jobs don't execute (no errors)
 
 Possible causes:
-- The manifest's `IsEnabled` is `false`. Check via `ITraxScheduler` or the database. A disabled manifest's already-queued entries also wait, `Queued`, until it is re-enabled. A restart does not re-enable a manifest or group that was disabled at runtime unless the code states `.Enabled(true)` (see [What a Restart Rewrites](/docs/scheduler/scheduling-options#what-a-restart-rewrites))
+- The manifest's `IsEnabled` is `false`. Check via `ITraxScheduler` or the database. A disabled manifest's already-queued scheduled entries also wait, `Queued`, until it is re-enabled; only a trigger or a dead-letter requeue runs it while disabled. A restart does not re-enable a manifest or group that was disabled at runtime unless the code states `.Enabled(true)` (see [What a Restart Rewrites](/docs/scheduler/scheduling-options#what-a-restart-rewrites))
 - A new cron schedule has not reached its first occurrence yet. It first runs at its first occurrence after it was scheduled, not on the next poll, and cron times are UTC: `Cron.Daily(hour: 3)` is 03:00 UTC. The manifest's `NextScheduledRun` shows when that is
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
 - The train's input type doesn't implement `IManifestProperties`
@@ -175,6 +175,10 @@ Two schedules that share a group each state the same group setting (`MaxActiveJo
 One batch's prune prefix starts another batch's, so the first would delete the second's manifests at every start. A name-based `ScheduleMany(name, ...)` prunes only within its own group, so this is raised only when the groups do not keep the two apart: an explicit `PrunePrefix`, or two name-based batches moved into one group.
 
 **Fix:** rename one batch so neither name plus `-` starts the other, or keep the batches in separate groups.
+
+The same message, ending "which includes '...', scheduled on its own", means a single `Schedule` falls inside a batch's prune: its external ID starts with the batch's prefix and, for a name-based batch, it is in the batch's group (`Schedule("sync-extra", ..., o => o.Group("sync"))` beside `ScheduleMany("sync", ...)`, or a plain `Schedule("sync-extra")` beside a batch with `PrunePrefix("sync-")`). Each start the batch would delete it with its history and its own schedule would create it again.
+
+**Fix:** give the single schedule an external ID outside the prefix, put it in a different group (name-based batches only), or make it one of the batch's items.
 
 ## "Ambiguous reference" between Cron types
 

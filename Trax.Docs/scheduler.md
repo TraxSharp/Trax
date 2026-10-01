@@ -59,7 +59,7 @@ Like a lost shipment in a postal system, when a job fails more times than `MaxRe
 │                        Dead Letter                               │
 ├─────────────────────────────────────────────────────────────────┤
 │ Status: AwaitingIntervention                                    │
-│ Reason: Max retries exceeded (3 failures >= 3 max retries)      │
+│ Reason: Max retries exceeded: (4) failures > (3) max retries    │
 │ DeadLetteredAt: 2026-02-10 10:15:00                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -156,9 +156,9 @@ When no group is set, it defaults to the manifest's `externalId`. See [Schedulin
 
 The **SchedulerStartupService** is an `IHostedService` that runs once on startup. It seeds any manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ScheduleOnce()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`, recovers stuck jobs, and cleans up orphaned manifest groups. It completes before the polling services start.
 
-The **ManifestManagerPollingService** and **JobDispatcherPollingService** are independent `BackgroundService` instances, each with their own configurable polling interval (default: 5 seconds). They communicate via the work queue: ManifestManager writes entries, JobDispatcher reads them. Running independently means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Both services are safe to run across multiple server instances. See [Multi-Server Concurrency](scheduler/concurrency.md).
+The **ManifestManagerPollingService** and **JobDispatcherPollingService** are independent `BackgroundService` instances, each with their own configurable polling interval (defaults: 5 seconds for the ManifestManager, 2 seconds for the JobDispatcher). They communicate via the work queue: ManifestManager writes entries, JobDispatcher reads them. Running independently means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Both services are safe to run across multiple server instances. See [Multi-Server Concurrency](scheduler/concurrency.md).
 
-The **ManifestManagerTrain** loads enabled manifests, dead-letters any that have exceeded their retry limit, determines which are due for execution (including [dependent manifests](scheduler/dependent-trains.md) whose parent has a newer `LastSuccessfulRun`), and writes them to the work queue. It doesn't enqueue anything directly; it just records intent. In multi-server deployments, a PostgreSQL advisory lock guarantees only one server runs the ManifestManager per cycle.
+The **ManifestManagerTrain** loads enabled manifests, dead-letters any that have exceeded their retry limit, determines which are due for execution (including [dependent manifests](scheduler/dependent-trains.md) whose parent succeeded after the dependent's latest run started), and writes them to the work queue. It doesn't enqueue anything directly; it just records intent. In multi-server deployments, a PostgreSQL advisory lock guarantees only one server runs the ManifestManager per cycle.
 
 The **JobDispatcherTrain** reads from the work queue, enforces both global and per-group `MaxActiveJobs` limits, creates `Metadata` records, and enqueues to the job submitter. This is the single gateway to execution. Everything goes through the work queue first (manifest schedules, `TriggerAsync` calls, dashboard re-runs), so capacity enforcement happens in one place. Each entry is dispatched within its own transaction using `FOR UPDATE SKIP LOCKED`, allowing multiple servers to dispatch concurrently without duplicate execution.
 

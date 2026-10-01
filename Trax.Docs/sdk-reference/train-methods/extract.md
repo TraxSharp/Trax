@@ -17,7 +17,7 @@ Pulls a nested property or field out of a Memory object into its own Memory slot
 Retrieves `TIn` from Memory, then extracts a `TOut` property/field from it.
 
 ```csharp
-public Monad<TInput, TReturn> Extract<TIn, TOut>()
+protected Monad<TInput, TReturn> Extract<TIn, TOut>()
 ```
 
 ### Extract\<TIn, TOut\>(TIn input)
@@ -25,8 +25,10 @@ public Monad<TInput, TReturn> Extract<TIn, TOut>()
 Extracts a `TOut` property/field from the provided `TIn` object.
 
 ```csharp
-public Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input)
+protected Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input)
 ```
+
+These are the train's own methods, which start a chain in `Junctions()`. Later in a chain, after a `Chain` or `ShortCircuit`, the call is `MonadTask<TInput, TReturn>`'s method of the same name, which takes the same arguments and returns `MonadTask<TInput, TReturn>`.
 
 ## Type Parameters
 
@@ -43,7 +45,7 @@ public Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input)
 
 ## Returns
 
-`Monad<TInput, TReturn>`, the train instance, for fluent chaining.
+The chain, for fluent chaining: `Monad<TInput, TReturn>` from the train's method, `MonadTask<TInput, TReturn>` from a later link.
 
 ## Example
 

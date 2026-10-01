@@ -15,7 +15,7 @@ Schedules trains that run only after a parent manifest completes successfully. T
 
 At runtime, `ScheduleDependentAsync` and `ScheduleManyDependentAsync` take an explicit parent external ID.
 
-Dependent manifests are evaluated during polling. When a parent's `LastSuccessfulRun` is newer than the dependent's own `LastSuccessfulRun`, the dependent is queued for execution.
+Dependent manifests are evaluated during polling. When a parent's `LastSuccessfulRun` is later than the start of the dependent's latest run (successful or cancelled), both read from the database's clock, the dependent is queued for execution, so a parent success that lands while the dependent runs earns it another run. Several such successes collapse into one re-run. See [Dependent Trains](/docs/scheduler/dependent-trains).
 
 ## Signatures
 
@@ -320,6 +320,8 @@ A scoped service for activating dormant dependent manifests at runtime. Injected
 
 The context is automatically initialized by the `JobRunner` before the user's train runs. Only dormant dependents declared as children of the currently executing parent manifest can be activated.
 
+Outside a scheduled run (the train invoked through `ITrainBus`, a GraphQL mutation or a test) the context has no parent manifest. `ActivateAsync` and `ActivateManyAsync` then log a warning and return without activating anything or throwing, so the same train can run both ways.
+
 ### ActivateAsync
 
 ```csharp
@@ -339,7 +341,7 @@ Task ActivateAsync<TTrain, TInput, TOutput>(
 | `ct` | `CancellationToken` | No | Cancellation token |
 
 **Exceptions:**
-- `InvalidOperationException` if the context is not initialized, the manifest is not found, the manifest is not `DormantDependent`, or the manifest does not depend on the current parent
+- `InvalidOperationException` if the manifest is not found, the manifest is not `DormantDependent`, or the manifest does not depend on the current parent
 
 **Disabled:** If the target manifest is disabled, or its manifest group is, the activation is skipped with a warning log.
 

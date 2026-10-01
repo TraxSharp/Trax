@@ -18,10 +18,14 @@ Dependent trains solve this. A manifest with `ScheduleType.Dependent` doesn't ru
 Each polling cycle, the `ManifestManagerTrain` evaluates dependent manifests separately from time-based ones. The logic is simple:
 
 1. Find the parent manifest (via `DependsOnManifestId`)
-2. If the parent's `LastSuccessfulRun` is later than the moment the dependent's latest successful run **started**, queue the dependent
-3. If the parent has never succeeded, or the dependent's latest successful run started after the parent's last success, skip it
+2. If the parent's `LastSuccessfulRun` is later than the moment the dependent's latest run **started** (successful or cancelled), queue the dependent
+3. If the parent has never succeeded, or the dependent's latest run started after the parent's last success, skip it
 
-A dependent runs **at least once after each parent success**. Comparing against when the dependent's run started, rather than when it finished, is what makes that hold: a parent success that lands while the dependent is running was not seen by that run, so the dependent is queued once more when it finishes. When the dependent has no successful run on record (its history was pruned), its own `LastSuccessfulRun` stands in. A dependent run that was cancelled (timed out, or cancelled by an operator) consumed the parent success it was started for: when it ended later than that baseline, the dependent waits for the parent's next success.
+A dependent runs **at least once after its parent's latest success**. Comparing against when the dependent's run started, rather than when it finished, is what makes that hold: a parent success that lands while the dependent is running was not seen by that run, so the dependent is queued once more when it finishes. Several parent successes that land during one dependent run collapse into that single re-run, which reads the parent's latest output, the output the earlier successes produced too. A dependent run is not queued per parent success.
+
+A dependent run that was cancelled (timed out, or cancelled by an operator) counts from its start like a successful one: it consumed the parent success it was started for, but not one that landed while it ran, so that one still earns a run.
+
+Both times come from the database's clock, not from the machines involved. The parent's `LastSuccessfulRun` is stamped by the database when the worker records the success, and the dependent's run is dated by its work queue entry's `DispatchedAt`, which the database stamps when the dispatcher claims it. A worker and a dispatcher whose clocks disagree therefore cannot make a finished dependent look older than its parent's success and queue it again after every run. A dependent run with no dispatched entry (run directly, or dispatched by the in-memory provider) falls back to its own start time, and with no run on record at all (its history was pruned) the dependent's own `LastSuccessfulRun` stands in.
 
 That's it. No event bus, no callbacks. The existing polling loop picks up the change on its next cycle.
 
@@ -254,8 +258,10 @@ Each link in the chain is independent. The scheduler doesn't have a concept of "
 | Scenario | Result |
 |----------|--------|
 | Parent succeeds, dependent never ran | Dependent queued |
-| Parent succeeds, dependent's latest successful run started after that | Dependent skipped |
+| Parent succeeds, dependent's latest run started after that | Dependent skipped |
 | Parent succeeds while the dependent is running | Dependent queued again once that run finishes |
+| Parent succeeds three times during one dependent run | Dependent queued once, and reads the parent's latest output |
+| Parent succeeds during a dependent run that is then cancelled | Dependent queued again |
 | Parent never succeeded | Dependent skipped |
 | Parent disabled | Dependent skipped (parent not in loaded set) |
 | Dependent has a dead letter | Dependent skipped until resolved |

@@ -14,14 +14,13 @@ Concurrency limits apply only to **RUN** executions (via `ITrainExecutionService
 
 ## Configuration
 
-Limits are resolved in priority order:
+There are three kinds of limit, and each applies on its own:
 
-1. **Builder override**: `ConcurrentRunLimit<TTrain>(int)` on the mediator builder
-2. **Attribute**: `[TraxConcurrencyLimit(int)]` on the train class
-3. **Global default**: `GlobalConcurrentRunLimit(int)` on the mediator builder
-4. **Per-principal default**: `PerPrincipalMaxConcurrentRun(int)` on the mediator builder
+1. **Per-train**: `ConcurrentRunLimit<TTrain>(int)` on the mediator builder, or `[TraxConcurrencyLimit(int)]` on the train class. When both are set the builder override wins.
+2. **Per-principal**: `PerPrincipalMaxConcurrentRun(int)` on the mediator builder, one budget per caller.
+3. **Global**: `GlobalConcurrentRunLimit(int)` on the mediator builder, one budget across all trains.
 
-When multiple limits are configured, a request must acquire all applicable permits. Acquisition order is deterministic (per-train → per-principal → global) so cross-lock deadlocks are impossible.
+None is a fallback for another: a train with no per-train limit is still held by the global and per-principal ones, and a run must acquire a permit from every limit that applies to it. Acquisition order is deterministic (per-train → per-principal → global) so cross-lock deadlocks are impossible.
 
 ### Per-Principal Limiting
 
@@ -37,7 +36,7 @@ services.AddTrax(trax => trax
         .PerPrincipalMaxConcurrentRun(10)));
 ```
 
-Requires `IHttpContextAccessor` in DI (registered automatically by `AddTraxApi`). Hosts without a request pipeline (scheduler-only workers) can configure the cap but it will have no effect.
+The cap needs a principal provider that knows the caller. The mediator registers one that returns no principal, so on its own the cap limits nothing. `AddTraxApi` (which `AddTraxGraphQL` calls) replaces it with one that reads the `trax:principal-id` claim of the current request's authenticated user; call it after `AddTrax`, or the mediator's registration wins. A host without it, such as a scheduler-only worker, can configure the cap but it has no effect, unless it replaces that registration with its own `ICurrentPrincipalProvider`.
 
 ### Attribute
 

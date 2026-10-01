@@ -33,7 +33,7 @@ Defined in `Trax.Scheduler.Lambda.Extensions.LambdaSchedulerExtensions`.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `configure` | `Action<LambdaWorkerOptions>` | Yes | Callback to set the Lambda function name and client options |
-| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this Lambda function. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. |
+| `routing` | `Action<SubmitterRouting>?` | No | Callback to specify which trains should be dispatched to this Lambda function. When omitted, no train is routed here explicitly; `[TraxRemote]`-attributed trains are, if this is the first `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` call. With none of the three, a `[TraxRemote]` train fails the scheduler's build. |
 
 ## Returns
 
@@ -191,6 +191,7 @@ The scheduler process needs:
 ## Limitations
 
 - **Payload size limit:** Lambda invocation payloads are limited to 256 KB. If your serialized train input exceeds this, store the data externally and pass a reference.
+- **Function timeout:** `TraxLambdaFunction` cancels a job before the function's own timeout, holding back `TerminalWriteMargin` (5 seconds) or half the time left, whichever is smaller, so the run can record its outcome. Give the function a timeout comfortably longer than your longest job plus that margin; at or below the margin (AWS's default three seconds) jobs still run, with a warning logged once per instance, and a job out of time before it starts is recorded `Cancelled`. See [TraxLambdaFunction](/docs/sdk-reference/scheduler-api/trax-lambda-function).
 - **Cancellation reaches the function through the database:** Dashboard "Cancel" sets the run's cancel flag, which the train sees at its next junction boundary when the function registers `CancellationCheckProvider` (via `AddJunctionProgress()`). A junction already running is not interrupted. See [Remote Execution](/docs/scheduler/remote-execution#limitations).
 
 ## See Also

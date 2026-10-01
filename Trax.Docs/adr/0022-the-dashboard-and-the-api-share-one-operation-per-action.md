@@ -75,7 +75,9 @@ Anything in the last two groups is a defect against this decision, not an except
 **`RunTrainAsync` takes the mediator's rules rather than copying them.** It once repeated the
 mediator's authorization check and input reading, because the mediator kept both private. The
 mediator now exposes them as `ITrainExecutionService.PrepareAsync`, which the run path calls, so
-a run and a queue of the same train and JSON cannot drift apart.
+a run and a queue of the same train and JSON cannot drift apart. It also applies the per-record
+checks a queue applies, the train's `OnQueue` hook and its subject key
+([0037](./0037-run-now-applies-the-same-per-record-checks-as-queueing.md)).
 
 **`IOperationsService` grows.** A member added to it is a break for anyone implementing the
 interface themselves, so a new member has a default implementation that throws
@@ -93,6 +95,7 @@ field. Parity is held by review and by the audit list, not by a guard.
 
 ## Changelog
 
+- **2026-09-30**: `RunTrainAsync` applies the per-record checks a queue applies (0037).
 - **2026-09-30**: `RunTrainAsync` calls the mediator's `PrepareAsync` instead of copying its
   authorization check and input reading.
 - **2026-09-27**: Listed which actions comply, which have a shared method the surfaces do not

@@ -817,7 +817,7 @@ The same suite times every operations mutation against those tables (each single
 
 The `operations.config` namespace returns the live scheduler runtime settings (the dashboard-editable subset of `SchedulerConfiguration`, `LocalWorkerOptions`, and `MetadataCleanupConfiguration`). The dashboard's ServerSettingsPage and this query both read from the same in-memory singleton, so they agree.
 
-Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table and re-applied to the in-memory singleton when the scheduler starts. Settings survive restarts.
+Persistence: settings written via `operations.config.updateScheduler` (or the dashboard) are stored in the singleton-row `trax.scheduler_config` table, only the ones a save names. Every running scheduler applies them to its in-memory singleton at startup and re-reads the row every few seconds, so they survive restarts and reach every scheduler host. A setting never saved keeps each host's configured value. See [config](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) for which fields a save stores.
 
 ### scheduler
 
@@ -832,6 +832,7 @@ query {
         jobDispatcherPollingInterval
         maxActiveJobs
         defaultMaxRetries
+        failureCountWindow
         defaultRetryDelay
         retryBackoffMultiplier
         maxRetryDelay
@@ -883,6 +884,7 @@ the API process, not the scheduler or worker processes.
 | `jobDispatcherPollingInterval` | `TimeSpan!` | How often the job dispatcher polls |
 | `maxActiveJobs` | `Int` | Global concurrency cap. Null means no cap |
 | `defaultMaxRetries` | `Int!` | Default retry budget for new manifests |
+| `failureCountWindow` | `TimeSpan!` | How far back failed runs count toward retry backoff and `MaxRetries` |
 | `defaultRetryDelay` | `TimeSpan!` | First-retry delay |
 | `retryBackoffMultiplier` | `Float!` | Exponential backoff factor |
 | `maxRetryDelay` | `TimeSpan!` | Upper bound on backoff |

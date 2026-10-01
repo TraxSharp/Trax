@@ -42,13 +42,15 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 | Method | What it does | `Id` on success |
 |--------|--------------|-----------------|
 | `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. | the work queue entry |
-| `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. When the submit throws, the exception is thrown to the caller and the run is recorded `Failed`, but only while it is still `Pending`: a runner that already started it (and then answered with an error, or outlasted the HTTP timeout) keeps its own record. | the run's metadata row |
+| `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Applies the per-record checks a queue applies (below), writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. Once the run's row is written the submit no longer takes `ct`, so a caller that goes away does not abort the submit or cancel the run; the submitter's own timeouts bound it. When the submit throws and the run is still `Pending`, no runner started it: the run is recorded `Failed` and the exception is thrown to the caller. When a runner already started it (a remote runner that answered with the train's error, a call that timed out while the run went on, or an in-process submitter that ran a failing train), the run owns its outcome: the call succeeds with the run's id and the message `Run {id} of {train} submitted; its outcome is pending on the run.`, and the run's row records how it ended. | the run's metadata row |
 
 Both look the train up by its interface `FullName` and hand the input to the mediator: `QueueTrainAsync` through `ITrainExecutionService.QueueAsync`, `RunTrainAsync` through `ITrainExecutionService.PrepareAsync`, which authorizes the caller and reads the input without writing anything. Either way `InputJson` is read by `TrainInputReader`: property names matched whatever their case (`customerId`, `CustomerId` and `CUSTOMERID` all fill the same property), a property given twice in any casing refused as invalid input rather than resolved to its last value, JSON reference metadata (`$id`, `$ref`, `$values`) not honoured, so the input is exactly the tree the caller wrote, the mediator's input size cap, and a blank input read as `{}`, which the input type must be buildable from.
 
 The form a queued input is stored in, and the form a run's submitter writes for its worker, is indented and writes every member, so it is larger than the caller's JSON. Both are held to `TrainInputReader.StoredInputGrowthFactor` (4) times `MaxInputJsonBytes`, measured before anything is written or submitted.
 
-A run is a deliberate bypass of the work queue. It skips dispatch priority, group `MaxActiveJobs`, and the subject lock, so it can run while another run for the same subject is in progress (see [QueueSubjectKey](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing)). Use `QueueTrainAsync` when that matters.
+A run applies the per-record checks a queue applies. When the train overrides `OnQueue`, the hook runs on the run's input before the run's row is saved, as it runs for an enqueue: on an instance in a scope of its own, with `TrainInput` reading the input, with the `metadata.ExternalId` the run executes under, with writes on [`IEnqueueContextAccessor.Current`](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) saved together with the run's row, and within `MaxQueueHookDuration`. A hook that throws refuses the run and nothing is written.
+
+A run is otherwise a deliberate bypass of the work queue. It skips dispatch priority, group `MaxActiveJobs`, and the subject lock. A train that overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) serializes its work per subject through the queue, so it is run now only inside a trusted scope, such as the dashboard's; any other caller gets a failed result telling it to queue the train instead. Use `QueueTrainAsync` when a run must wait its turn.
 
 ## Failures
 
@@ -59,12 +61,14 @@ Both methods return a failed `OperationResult` with a `Message` for an answer th
 | Blank `TrainName`, unknown train | failed result | failed result |
 | Invalid or `null` `InputJson`, a property given twice, or JSON reference metadata | failed result (`Invalid InputJson: ...`) | failed result, same message; no run is written |
 | `InputJson` over `MaxInputJsonBytes`, or a stored form over its cap | failed result, a generic message | failed result, same message; no run is written |
-| The train's `OnQueue` or `QueueSubjectKey` refused | failed result (`The enqueue was refused: ...`) | not applicable: a run has neither |
+| The train's `OnQueue` or `QueueSubjectKey` refused | failed result: `The enqueue was refused: {message}` for a plain `TrainException`, `QueuedWorkCancelledException` or `QueueHookTimeoutException`, otherwise the fixed `The enqueue was refused.` with the exception logged at Warning | the `OnQueue` hook refused: failed result under the same rule, as `The run was refused: {message}` or `The run was refused.`; no run is written |
+| A train that overrides `QueueSubjectKey`, outside a trusted scope | not applicable | failed result telling the caller to queue it instead; no run is written |
 | The caller may not run the train | throws `UnauthorizedAccessException` | throws `UnauthorizedAccessException`, before the input is read |
 | `[TraxAuthorize]` train, no enforcer, not trusted | logged and thrown (`TrainAuthorizationNotConfiguredException`) | throws `TrainAuthorizationNotConfiguredException` |
-| Database or network failure | logged and thrown | logged and thrown |
-| The job submitter failed | not applicable | the run is marked `Failed` with the submitter's exception, then it is logged and thrown |
-| `ct` cancelled | throws `OperationCanceledException` | throws `OperationCanceledException`; a run cancelled before its submit completed is marked `Failed` |
+| Database or network failure, including one inside the `OnQueue` hook | logged and thrown | logged and thrown |
+| The job submitter failed before a runner started the run | not applicable | the run is marked `Failed` with the submitter's exception, then it is logged and thrown |
+| The job submitter threw after a runner started the run | not applicable | success, with the run's id; the message says its outcome is pending on the run, and the run's row records it |
+| `ct` cancelled | throws `OperationCanceledException` | throws `OperationCanceledException` before the run's row is written; after that `ct` is not passed to the submit, so it does not cancel the run |
 
 A thrown failure reaches Trax.Api's error filter, which masks any type it does not know as `Unexpected Execution Error`, so a connection string's host and port never reach a GraphQL client.
 
@@ -74,7 +78,7 @@ The actions a list page applies to its selected rows. Each takes up to `Operatio
 
 | Method | What changes | Change signal |
 |--------|--------------|---------------|
-| `CancelExecutionsAsync(ids, ct)` | Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped. A run observes the flag at its next junction boundary, when the host uses the junction progress provider. | `Execution`, when at least one run was flagged |
+| `CancelExecutionsAsync(ids, ct)` | Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped. A `Pending` run is recorded `Cancelled` and never run when the job runner picks it up, whatever junction providers the host registers. An `InProgress` run observes the flag at its next junction boundary, when the host uses the junction progress provider. | `Execution`, when at least one run was flagged |
 | `CancelWorkQueueEntriesAsync(ids, ct)` | Entries still `Queued` become `Cancelled`, in one statement, so an entry the dispatcher claims meanwhile keeps its status | `WorkQueue` |
 | `SetManifestsEnabledAsync(ids, enabled, ct)` | Manifests whose `IsEnabled` differs | `Manifest` |
 | `SetManifestGroupsEnabledAsync(ids, enabled, ct)` | Groups whose `IsEnabled` differs, with `UpdatedAt` bumped | `ManifestGroup` |

@@ -32,11 +32,11 @@ public SchedulerConfigurationBuilder ConfigureLocalWorkers(
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
-| `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs |
+| `WorkerCount` | `int` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs. 1 to 256 |
+| `PollingInterval` | `TimeSpan` | 1 second | How often idle workers poll for new jobs. Greater than zero, up to 30 days |
 | `VisibilityTimeout` | `TimeSpan` | 30 minutes | How long a claimed job stays invisible after its worker last refreshed its claim before another worker can reclaim it (crash recovery). A running job's claim is refreshed every third of this, so a long job is not reclaimed while it runs |
-| `BatchSize` | `int` | `1` | Number of jobs each worker claims per poll cycle |
-| `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown |
+| `BatchSize` | `int` | `1` | Number of jobs each worker claims per poll cycle. At least 1. Every job in the batch keeps its claim until the worker runs it, however long the jobs ahead of it take |
+| `ShutdownTimeout` | `TimeSpan` | 30 seconds | Grace period for in-flight jobs during shutdown. 0 to 30 days |
 
 ## Examples
 
@@ -111,7 +111,8 @@ In this example, `IHeavyComputeTrain` is dispatched to the remote HTTP endpoint,
 - No additional NuGet packages required. This is included in `Trax.Scheduler`.
 - Jobs are queued to the `trax.background_job` table and dequeued atomically using PostgreSQL's `FOR UPDATE SKIP LOCKED`.
 - Workers delete job rows after execution (both success and failure), including a job that finishes during shutdown: the delete does not take the host's stopping token. Trax.Core's Metadata and DeadLetter tables handle the audit trail.
-- While a job runs, its worker refreshes the job's `fetched_at` every third of `VisibilityTimeout`. If a worker crashes mid-execution, the refreshes stop, the timestamp becomes stale, and the job is reclaimed after `VisibilityTimeout`.
+- `AddScheduler` refuses options outside their ranges when it is built (see [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges)); `VisibilityTimeout` must be between one second and ten years.
+- While a worker holds jobs, it refreshes the `fetched_at` of every job it has claimed and not yet finished, the running one and any waiting behind it in a batch, every third of `VisibilityTimeout`. If a worker crashes mid-execution, the refreshes stop, the timestamp becomes stale, and the job is reclaimed after `VisibilityTimeout`.
 - A job waiting in `trax.background_job` for a free worker is not failed by the stale-pending reaper, however long it waits.
 - When `UseRemoteWorkers()` or `UseSqsWorkers()` is also configured, local workers still run. Only the trains explicitly routed via `ForTrain<T>()` or `[TraxRemote]` are dispatched remotely.
 

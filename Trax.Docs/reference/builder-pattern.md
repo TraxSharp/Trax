@@ -82,7 +82,7 @@ Named `{Subsystem}Configuration` and registered as a singleton, though where and
 the builder, which is what stops a consumer mutating resolved configuration at run time.
 `SchedulerConfiguration` mostly follows it. Runtime changes go through the validated
 `operations.config` path that the dashboard's server settings page also uses, and the scheduler
-re-applies the `trax.scheduler_config` row that path writes to the singleton at startup. A few
+re-applies the `trax.scheduler_config` row that path writes to the singleton at startup and every few seconds while it runs. A few
 setters that existing hosts and tests assign directly (the polling intervals, `MaxActiveJobs`,
 `DefaultMaxRetries`, `DefaultRetryDelay`, `DefaultJobTimeout`, `ManifestManagerEnabled`) stay public but are hidden from
 IntelliSense.
