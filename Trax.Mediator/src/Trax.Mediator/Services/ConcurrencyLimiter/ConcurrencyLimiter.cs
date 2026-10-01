@@ -62,11 +62,15 @@ public class ConcurrencyLimiter : IConcurrencyLimiter
             await perTrainSemaphore.WaitAsync(ct);
 
         // Rented after the per-train wait, so a run queued behind the per-train limit does not
-        // keep its principal's entry alive while it waits there.
-        var perPrincipalSlot = RentPerPrincipalSlot();
+        // keep its principal's entry alive while it waits there. Inside the try, because renting
+        // asks the principal provider, and a provider that throws must not keep the per-train
+        // slot for the life of the process.
+        PrincipalSlot? perPrincipalSlot = null;
 
         try
         {
+            perPrincipalSlot = RentPerPrincipalSlot();
+
             if (perPrincipalSlot is not null)
                 await perPrincipalSlot.Semaphore.WaitAsync(ct);
         }

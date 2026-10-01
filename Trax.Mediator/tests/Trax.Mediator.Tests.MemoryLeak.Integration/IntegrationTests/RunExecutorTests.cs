@@ -1,12 +1,17 @@
 using System.Text.Json;
 using FluentAssertions;
 using LanguageExt;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.RunExecutor;
@@ -255,6 +260,159 @@ public class RunExecutorTests
 
     #endregion
 
+    #region LocalRunExecutor — Records Left Behind
+
+    private static IServiceProvider BuildWithBus(ITrainBus bus)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects.UseInMemory())
+                .AddMediator(assemblies: [typeof(RunExecutorTests).Assembly])
+        );
+        services.AddScoped(_ => bus);
+
+        return services.BuildServiceProvider();
+    }
+
+    private static async Task<List<Metadata>> RecordsNamed(IServiceProvider provider, string name)
+    {
+        var factory = provider.GetRequiredService<IDataContextProviderFactory>();
+        using var context = await factory.CreateDbContextAsync(CancellationToken.None);
+
+        return await context.Metadatas.AsNoTracking().Where(m => m.Name == name).ToListAsync();
+    }
+
+    [Test]
+    public async Task LocalRunExecutor_WithAReplacedBusThatCannotBuildTheTrain_LeavesNoPendingRecord()
+    {
+        var bus = Substitute.For<ITrainBus>();
+        bus.RunByNameAsync<RunExecOutput>(
+                Arg.Any<string>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Metadata?>()
+            )
+            .Returns<Task<RunExecOutput>>(_ =>
+                throw new InvalidOperationException("Unable to resolve service for type 'IClock'")
+            );
+        var trainName = typeof(IRunExecTrain).FullName!;
+
+        await using var provider = (ServiceProvider)BuildWithBus(bus);
+        using var scope = provider.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
+
+        var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        var records = await RecordsNamed(provider, trainName);
+        records
+            .Should()
+            .ContainSingle()
+            .Which.TrainState.Should()
+            .Be(
+                TrainState.Failed,
+                "nothing will ever move a Pending record whose train was never built"
+            );
+        records[0].FailureReason.Should().Contain("Unable to resolve service");
+        records[0].EndTime.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task LocalRunExecutor_WithAReplacedBusCancelledBeforeTheTrainStarts_RecordsCancelled()
+    {
+        var bus = Substitute.For<ITrainBus>();
+        bus.RunByNameAsync<RunExecOutput>(
+                Arg.Any<string>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<Metadata?>()
+            )
+            .Returns<Task<RunExecOutput>>(_ => throw new OperationCanceledException());
+        var trainName = typeof(IRunExecTrain).FullName!;
+
+        await using var provider = (ServiceProvider)BuildWithBus(bus);
+        using var scope = provider.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
+
+        var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        (await RecordsNamed(provider, trainName))
+            .Should()
+            .ContainSingle()
+            .Which.TrainState.Should()
+            .Be(TrainState.Cancelled);
+    }
+
+    [Test]
+    public async Task LocalRunExecutor_WithABusThatDoesNotRunByName_RefusesBeforeWritingARecord()
+    {
+        var trainName = typeof(IRunExecTrain).FullName!;
+
+        await using var provider = (ServiceProvider)BuildWithBus(new InputOnlyBus());
+        using var scope = provider.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
+
+        var act = () => executor.ExecuteAsync(trainName, new RunExecInput(), typeof(RunExecOutput));
+
+        await act.Should()
+            .ThrowAsync<NotSupportedException>()
+            .WithMessage($"*{nameof(InputOnlyBus)} does not implement RunByNameAsync*");
+        (await RecordsNamed(provider, trainName))
+            .Should()
+            .BeEmpty("the bus could never have run the train, so there is no run to record");
+    }
+
+    [Test]
+    public async Task LocalRunExecutor_WhenTheTrainItselfFails_KeepsTheTrainsOwnRecord()
+    {
+        var trainName = typeof(IFailingRunTrain).FullName!;
+        using var scope = _serviceProvider.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<IRunExecutor>();
+
+        var act = () => executor.ExecuteAsync(trainName, new FailingRunInput(), typeof(Unit));
+
+        await act.Should().ThrowAsync<Exception>();
+
+        var record = (await RecordsNamed(_serviceProvider, trainName))
+            .Should()
+            .ContainSingle()
+            .Which;
+        record.TrainState.Should().Be(TrainState.Failed);
+        record
+            .FailureReason.Should()
+            .Contain(FailingRunTrain.Reason, "the train's own failure is what the record keeps");
+    }
+
+    /// <summary>A bus written before by-name runs existed: it keeps the interface's default body.</summary>
+    private sealed class InputOnlyBus : ITrainBus
+    {
+        public Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null) =>
+            throw new NotImplementedException();
+
+        public Task<TOut> RunAsync<TOut>(
+            object trainInput,
+            CancellationToken cancellationToken,
+            Metadata? metadata = null
+        ) => throw new NotImplementedException();
+
+        public Task RunAsync(object trainInput, Metadata? metadata = null) =>
+            throw new NotImplementedException();
+
+        public Task RunAsync(
+            object trainInput,
+            CancellationToken cancellationToken,
+            Metadata? metadata = null
+        ) => throw new NotImplementedException();
+
+        public object InitializeTrain(object trainInput) => throw new NotImplementedException();
+    }
+
+    #endregion
+
     #region Test Trains
 
     public record RunExecInput
@@ -274,6 +432,18 @@ public class RunExecutorTests
     }
 
     public record SlowRunInput;
+
+    public record FailingRunInput;
+
+    public interface IFailingRunTrain : IServiceTrain<FailingRunInput, Unit>;
+
+    public class FailingRunTrain : ServiceTrain<FailingRunInput, Unit>, IFailingRunTrain
+    {
+        public const string Reason = "the train failed on its own";
+
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(new InvalidOperationException(Reason));
+    }
 
     public interface IRunExecTrain : IServiceTrain<RunExecInput, RunExecOutput>;
 

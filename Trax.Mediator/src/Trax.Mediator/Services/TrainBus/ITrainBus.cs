@@ -55,8 +55,9 @@ public interface ITrainBus
     /// dashboard's ad-hoc run create, and anything else is refused with a TrainException. It
     /// does not make the new run a child of another; passing a running train's metadata throws.
     ///
-    /// If no train is found that can handle the specified input type, a TrainException
-    /// will be thrown.
+    /// If no registered train takes the input's type, a
+    /// <see cref="Exceptions.NoTrainForInputException"/> is thrown. Its message describes how the
+    /// host is built and is for the host's log, not for a caller.
     /// </remarks>
     public Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null);
 

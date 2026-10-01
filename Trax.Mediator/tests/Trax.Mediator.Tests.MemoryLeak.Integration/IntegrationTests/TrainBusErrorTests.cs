@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
 
@@ -49,14 +50,14 @@ public class TrainBusErrorTests
     }
 
     [Test]
-    public void InitializeTrain_UnregisteredType_ThrowsTrainException()
+    public void InitializeTrain_UnregisteredType_ThrowsNoTrainForInputException()
     {
         // Arrange
         var trainBus = _serviceProvider.GetRequiredService<ITrainBus>();
 
         // Act & Assert — pass an input type that has no registered train
         var act = () => trainBus.InitializeTrain("not a registered input type");
-        act.Should().Throw<TrainException>();
+        act.Should().Throw<NoTrainForInputException>();
     }
 
     [Test]

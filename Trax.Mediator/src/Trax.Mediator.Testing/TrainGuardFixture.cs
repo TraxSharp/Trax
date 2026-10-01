@@ -24,7 +24,10 @@ namespace Trax.Mediator.Testing;
 [TestFixture]
 public abstract class TrainGuardFixture
 {
-    /// <summary>The assemblies whose <c>ServiceTrain&lt;,&gt;</c> types are checked.</summary>
+    /// <summary>
+    /// The assemblies whose trains are checked: concrete classes deriving
+    /// <c>ServiceTrain&lt;,&gt;</c> or implementing <c>IServiceTrain&lt;,&gt;</c>.
+    /// </summary>
     protected abstract IReadOnlyList<Assembly> TrainAssemblies { get; }
 
     [Test]

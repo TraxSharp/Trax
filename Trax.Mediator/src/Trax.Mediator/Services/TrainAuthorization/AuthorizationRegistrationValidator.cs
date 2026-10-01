@@ -25,7 +25,10 @@ namespace Trax.Mediator.Services.TrainAuthorization;
 /// <remarks>
 /// Checks in <see cref="StartingAsync"/>, which the host finishes for every hosted service before
 /// it calls any <c>StartAsync</c>, so a refusal stops the host before a worker starts, even under
-/// <c>HostOptions.ServicesStartConcurrently</c>.
+/// <c>HostOptions.ServicesStartConcurrently</c>. Something that starts hosted services itself and
+/// calls only <c>StartAsync</c>, such as a custom <c>IHost</c> or a test harness, gets the same
+/// checks from <see cref="StartAsync"/>, so the gate does not open because a lifecycle step was
+/// skipped.
 /// </remarks>
 internal sealed class AuthorizationRegistrationValidator(
     ITrainDiscoveryService discoveryService,
@@ -33,8 +36,12 @@ internal sealed class AuthorizationRegistrationValidator(
     IServiceProvider serviceProvider
 ) : IHostedLifecycleService
 {
+    private bool _checked;
+
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
+        _checked = true;
+
         var registrations = discoveryService.DiscoverTrains();
 
         ValidateAttributeShapes(registrations);
@@ -113,7 +120,8 @@ internal sealed class AuthorizationRegistrationValidator(
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StartAsync(CancellationToken cancellationToken) =>
+        _checked ? Task.CompletedTask : StartingAsync(cancellationToken);
 
     public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 

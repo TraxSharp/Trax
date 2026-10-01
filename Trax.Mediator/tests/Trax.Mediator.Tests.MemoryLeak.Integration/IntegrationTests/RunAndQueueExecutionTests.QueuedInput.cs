@@ -118,6 +118,32 @@ public partial class RunAndQueueExecutionTests
     }
 
     [Test]
+    public async Task QueueAsync_InputFarPastTheStoredCap_IsRefusedWithoutWritingItAllOut()
+    {
+        // 80,000 empty objects: under the caller cap as sent, and some 20 MB once each is written
+        // indented with all eight members. As a string that is twice as much again.
+        var elements = string.Join(",", Enumerable.Repeat("{}", 80_000));
+        var inputJson = """{"items":[""" + elements + "]}";
+        Encoding.UTF8.GetByteCount(inputJson).Should().BeLessThan(262_144);
+
+        using var scope = _serviceProvider.CreateScope();
+        var execution = scope.ServiceProvider.GetRequiredService<ITrainExecutionService>();
+
+        var before = GC.GetTotalAllocatedBytes(precise: true);
+        var act = () => execution.QueueAsync(typeof(IWideTrain).FullName!, inputJson);
+        await act.Should().ThrowAsync<TrainInputValidationException>();
+        var allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+
+        allocated
+            .Should()
+            .BeLessThan(
+                32L * 1024 * 1024,
+                "the stored form is refused once it passes the 1 MiB cap, so the refusal must "
+                    + "not cost the tens of megabytes writing it all out would"
+            );
+    }
+
+    [Test]
     public async Task QueueAsync_OrdinaryInput_IsStoredAsBefore()
     {
         using var scope = _serviceProvider.CreateScope();

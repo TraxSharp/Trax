@@ -4,6 +4,7 @@ using Trax.Core.Exceptions;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fixtures;
@@ -164,7 +165,7 @@ public class TrainBusMetadataTests
 
         Action act = () => trainBus.InitializeTrain(new UnregisteredInput());
 
-        act.Should().Throw<TrainException>().WithMessage("*Could not find train*");
+        act.Should().Throw<NoTrainForInputException>().WithMessage("*Could not find train*");
     }
 
     [Test]
@@ -174,7 +175,7 @@ public class TrainBusMetadataTests
 
         Func<Task> act = () => trainBus.RunAsync<object>(new UnregisteredInput());
 
-        await act.Should().ThrowAsync<TrainException>();
+        await act.Should().ThrowAsync<NoTrainForInputException>();
     }
 
     private class UnregisteredInput { }

@@ -42,6 +42,11 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     /// those of the train its service type resolves. Not synchronized: two threads making the first
     /// call at once both scan, and either result is kept.
     /// </remarks>
+    /// <exception cref="TrainException">
+    /// Two different classes are registered under one class service type, such as a shared base
+    /// class. Both would be listed under the same name while the container resolves only the last,
+    /// so the train a name describes would not be the one that runs.
+    /// </exception>
     public IReadOnlyList<TrainRegistration> DiscoverTrains()
     {
         if (_cachedRegistrations != null)
@@ -79,6 +84,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
                     new RegisteredClass(index, serviceType, implementation, descriptor.Lifetime)
                 );
         }
+
+        RefuseSharedClassServiceTypes(classes);
 
         var registrations = new List<(int Index, TrainRegistration Registration)>();
         var pairedInterfaces = new HashSet<Type>();
@@ -142,6 +149,38 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             .AsReadOnly();
 
         return _cachedRegistrations;
+    }
+
+    /// <summary>
+    /// Refuses two different classes registered under one class service type. A train is found
+    /// and authorized by its service type's name, and the container resolves the last
+    /// registration of a type, so with two of them the attributes read for one train would gate
+    /// a run of the other.
+    /// </summary>
+    private static void RefuseSharedClassServiceTypes(IReadOnlyList<RegisteredClass> classes)
+    {
+        var shared = classes
+            .GroupBy(c => c.ServiceType)
+            .Where(g => g.Select(c => c.Implementation).Distinct().Count() > 1)
+            .ToList();
+
+        if (shared.Count == 0)
+            return;
+
+        throw new TrainException(
+            string.Join(
+                " ",
+                shared.Select(g =>
+                    $"{g.Count()} trains are registered under {g.Key.FullName}: "
+                    + string.Join(", ", g.Select(c => c.Implementation.FullName))
+                    + "."
+                )
+            )
+                + " A train is found by the name of the type it is registered under, and the "
+                + "container runs only the last registration, so the train that name describes "
+                + "would not be the train that runs. Register each train under its own interface "
+                + "or class."
+        );
     }
 
     private sealed record RegisteredClass(

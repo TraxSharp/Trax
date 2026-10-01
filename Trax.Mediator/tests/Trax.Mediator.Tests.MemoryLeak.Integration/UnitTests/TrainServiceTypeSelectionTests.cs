@@ -169,6 +169,20 @@ public class TrainServiceTypeSelectionTests
     }
 
     [Test]
+    public void Discovery_OneTrainRegisteredTwiceUnderOneBaseClass_IsListedOnce()
+    {
+        var services = new ServiceCollection();
+        services.AddTransient<AuditedTrainBase<MarkedInput, Unit>, MarkedTrain>();
+        services.AddTransient<AuditedTrainBase<MarkedInput, Unit>, MarkedTrain>();
+
+        var registrations = new TrainDiscoveryService(services).DiscoverTrains();
+
+        registrations
+            .Should()
+            .ContainSingle("the same class twice resolves to the same train either way");
+    }
+
+    [Test]
     public void Discovery_FactoryInterfaceThatARegisteredClassImplements_IsNotListedAgain()
     {
         // LayeredTrain is listed under its own entry. Its own interface is ILayeredTrain, so the
@@ -201,6 +215,13 @@ public class TrainServiceTypeSelectionTests
     public interface IMarkedTrain : IServiceTrain<MarkedInput, Unit>;
 
     public class MarkedTrain : AuditedTrainBase<MarkedInput, Unit>, IMarkedTrain
+    {
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(Unit.Default);
+    }
+
+    /// <summary>A second train on <see cref="MarkedInput"/> with the same base class.</summary>
+    public class SecondMarkedTrain : AuditedTrainBase<MarkedInput, Unit>
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);

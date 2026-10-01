@@ -18,6 +18,14 @@ public class PerPrincipalConcurrencyTests
         public string? GetCurrentPrincipalId() => CurrentId;
     }
 
+    private sealed class ThrowingPrincipal : ICurrentPrincipalProvider
+    {
+        public bool Throw { get; set; } = true;
+
+        public string? GetCurrentPrincipalId() =>
+            Throw ? throw new InvalidOperationException("no principal outside a request") : null;
+    }
+
     private sealed class StubDiscovery : ITrainDiscoveryService
     {
         public IReadOnlyList<TrainRegistration> DiscoverTrains() =>
@@ -41,6 +49,31 @@ public class PerPrincipalConcurrencyTests
         permits.Should().HaveCount(20);
         foreach (var p in permits)
             p.Dispose();
+    }
+
+    [Test]
+    public async Task AThrowingPrincipalProvider_HandsBackThePerTrainSlot()
+    {
+        var train = typeof(IFakeTrain).FullName!;
+        var config = new MediatorConfiguration { PerPrincipalMaxConcurrentRun = 1 };
+        config.ConcurrencyOverrides[train] = 1;
+        var principal = new ThrowingPrincipal();
+        var limiter = new ConcurrencyLimiter(config, new StubDiscovery(), principal);
+
+        var failing = () => limiter.AcquireAsync(train, CancellationToken.None);
+        await failing.Should().ThrowAsync<InvalidOperationException>();
+
+        principal.Throw = false;
+        var next = () =>
+            limiter.AcquireAsync(train, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        (
+            await next.Should()
+                .NotThrowAsync(
+                    "the failed acquire took the train's only slot, and a slot it never returns "
+                        + "blocks that train for the life of the process"
+                )
+        ).Subject.Dispose();
     }
 
     [Test]

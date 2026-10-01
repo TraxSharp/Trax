@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Services.TrainRegistry;
@@ -20,10 +21,31 @@ public partial class RunAndQueueExecutionTests
 
         var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
 
-        var thrown = (await act.Should().ThrowAsync<TrainException>()).Which;
+        var thrown = (await act.Should().ThrowAsync<NoTrainForInputException>()).Which;
         thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName!);
         thrown.Message.Should().Contain(typeof(RunAndQueueExecutionTests).Assembly.GetName().Name);
         thrown.Message.Should().Contain("ScanAssemblies(");
+        thrown.InputType.Should().Be(typeof(InputWithNoTrain));
+        thrown
+            .ScannedAssemblies.Should()
+            .Contain(typeof(RunAndQueueExecutionTests).Assembly.GetName().Name!);
+    }
+
+    [Test]
+    public async Task TrainBus_InputWithNoTrain_IsNotATrainException()
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var bus = scope.ServiceProvider.GetRequiredService<ITrainBus>();
+
+        var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
+
+        var thrown = (await act.Should().ThrowAsync<Exception>()).Which;
+        thrown
+            .Should()
+            .NotBeAssignableTo<TrainException>(
+                "a surface passes a TrainException's message through as a train author's words, "
+                    + "and this message names the host's assemblies"
+            );
     }
 
     [Test]
@@ -42,8 +64,9 @@ public partial class RunAndQueueExecutionTests
 
         var act = async () => await bus.RunAsync<Unit>(new InputWithNoTrain());
 
-        var thrown = (await act.Should().ThrowAsync<TrainException>()).Which;
+        var thrown = (await act.Should().ThrowAsync<NoTrainForInputException>()).Which;
         thrown.Message.Should().Contain(typeof(InputWithNoTrain).FullName!);
+        thrown.ScannedAssemblies.Should().BeEmpty();
         thrown
             .Message.Should()
             .NotContain(

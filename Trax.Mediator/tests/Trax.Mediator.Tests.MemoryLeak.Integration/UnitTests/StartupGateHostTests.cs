@@ -179,6 +179,69 @@ public class StartupGateHostTests
     }
 
     [Test]
+    public async Task AHostWithATrainWhoseDependencyNeedsAnUnregisteredService_RefusesToStartNamingThePath()
+    {
+        var worker = new MarkerWorker();
+        using var host = BuildHost(
+            concurrent: false,
+            worker,
+            services =>
+            {
+                services.AddScoped<
+                    TrainChainStartupValidatorTests.IProbeRepository,
+                    TrainChainStartupValidatorTests.ProbeRepository
+                >();
+                services.AddScopedTraxRoute<
+                    TrainChainStartupValidatorTests.INeedsNestedUnregisteredTrain,
+                    TrainChainStartupValidatorTests.NeedsNestedUnregisteredTrain
+                >();
+            }
+        );
+
+        var start = async () => await host.StartAsync();
+
+        (await start.Should().ThrowAsync<Exception>())
+            .Which.ToString()
+            .Should()
+            .Contain(nameof(TrainChainStartupValidatorTests.INeedsNestedUnregisteredTrain))
+            .And.Contain(nameof(TrainChainStartupValidatorTests.IUnregisteredProbeService))
+            .And.Contain(
+                nameof(TrainChainStartupValidatorTests.IProbeRepository),
+                "the reader has to know which registered dependency leads to the missing type"
+            );
+        worker.Started.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task AHarnessThatCallsOnlyStartAsync_IsRefusedAGatedTrainWithNoEnforcer()
+    {
+        var worker = new MarkerWorker();
+        using var host = BuildHost(
+            concurrent: false,
+            worker,
+            services =>
+                services.AddScopedTraxRoute<
+                    AuthorizationRegistrationValidatorTests.ITestAuthedTrain,
+                    AuthorizationRegistrationValidatorTests.TestAuthedTrain
+                >(),
+            skipChainVerification: true
+        );
+
+        // What a custom IHost or a test harness does: start each hosted service directly, with no
+        // StartingAsync before it.
+        var start = async () =>
+        {
+            foreach (var service in host.Services.GetServices<IHostedService>())
+                await service.StartAsync(CancellationToken.None);
+        };
+
+        await start
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .Where(ex => ex.Message.Contains("no ITrainAuthorizationService is registered"));
+    }
+
+    [Test]
     public async Task AHostWhoseTrainsAllPass_Starts()
     {
         var worker = new MarkerWorker();

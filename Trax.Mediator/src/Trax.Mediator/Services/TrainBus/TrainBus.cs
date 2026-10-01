@@ -10,6 +10,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainRegistry;
 using ScanningTrainRegistry = Trax.Mediator.Services.TrainRegistry.TrainRegistry;
 
@@ -168,7 +169,7 @@ internal partial class TrainBus(
         var foundTrain = registry.InputTypeToTrain.TryGetValue(inputType, out var correctTrain);
 
         if (foundTrain == false || correctTrain == null)
-            throw new TrainException(NoTrainForInputMessage(inputType, registry));
+            throw new NoTrainForInputException(inputType, ScannedAssemblies(registry));
 
         var trainService = provider.GetRequiredService(correctTrain);
         provider.InjectProperties(trainService);
@@ -176,24 +177,11 @@ internal partial class TrainBus(
         return trainService;
     }
 
-    /// <summary>
-    /// What the host is told when no registered train takes an input: the input type, where the
-    /// registry looked, and the two ways to fix it. This is a configuration error in the host,
-    /// unlike <c>TrainNotFoundException</c>, whose message is generic on purpose.
-    /// </summary>
-    private static string NoTrainForInputMessage(Type inputType, ITrainRegistry registry)
-    {
-        var scanned = registry is ScanningTrainRegistry scanning
-            ? "Scanned assemblies: ["
-                + string.Join(", ", scanning.ScannedAssemblies.Select(a => a.GetName().Name))
-                + "]. "
-            : "";
-
-        return $"Could not find train with input type ({inputType.FullName}): no "
-            + $"IServiceTrain<{inputType.Name}, TOut> is registered for it. {scanned}Add a train "
-            + "that takes this input type, or add the assembly that holds its train to "
-            + "ScanAssemblies(...).";
-    }
+    /// <summary>The assemblies a scanning registry looked in, for the host's error message.</summary>
+    private static IReadOnlyList<string> ScannedAssemblies(ITrainRegistry registry) =>
+        registry is ScanningTrainRegistry scanning
+            ? scanning.ScannedAssemblies.Select(a => a.GetName().Name ?? a.FullName ?? "").ToList()
+            : [];
 
     /// <summary>
     /// Instance helper that delegates to the static method with this bus's registry.
@@ -216,10 +204,10 @@ internal partial class TrainBus(
     /// </param>
     /// <returns>A task that resolves to the train's output</returns>
     /// <exception cref="TrainException">
-    /// Thrown when the input is null, no train is found for the input type, the metadata passed
-    /// is not <c>Pending</c>, the Run method cannot be found on the train, or the Run method
-    /// invocation fails.
+    /// Thrown when the input is null, the metadata passed is not <c>Pending</c>, the Run method
+    /// cannot be found on the train, or the Run method invocation fails.
     /// </exception>
+    /// <exception cref="NoTrainForInputException">No registered train takes the input's type.</exception>
     public async Task<TOut> RunAsync<TOut>(object trainInput, Metadata? metadata = null)
     {
         await using var scope = scopeFactory.CreateAsyncScope();

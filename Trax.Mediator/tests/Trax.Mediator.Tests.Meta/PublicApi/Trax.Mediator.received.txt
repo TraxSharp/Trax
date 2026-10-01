@@ -40,6 +40,12 @@ namespace Trax.Mediator.Exceptions
         public System.Collections.Generic.IReadOnlyList<string> CandidateFullNames { get; }
         public string RequestedName { get; }
     }
+    public class NoTrainForInputException : System.InvalidOperationException
+    {
+        public NoTrainForInputException(System.Type inputType, System.Collections.Generic.IReadOnlyList<string> scannedAssemblies) { }
+        public System.Type InputType { get; }
+        public System.Collections.Generic.IReadOnlyList<string> ScannedAssemblies { get; }
+    }
     public class QueueHookTimeoutException : System.InvalidOperationException
     {
         public QueueHookTimeoutException(string trainName, System.TimeSpan limit) { }

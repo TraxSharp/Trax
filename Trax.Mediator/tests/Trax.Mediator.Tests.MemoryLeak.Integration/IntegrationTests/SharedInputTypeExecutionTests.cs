@@ -95,6 +95,41 @@ public class SharedInputTypeExecutionTests
     }
 
     [Test]
+    public void Discovery_TwoTrainsRegisteredUnderOneBaseClass_IsRefusedNamingBoth()
+    {
+        var services = new ServiceCollection();
+        services.AddTransient<
+            UnitTests.TrainServiceTypeSelectionTests.AuditedTrainBase<
+                UnitTests.TrainServiceTypeSelectionTests.MarkedInput,
+                Unit
+            >,
+            UnitTests.TrainServiceTypeSelectionTests.MarkedTrain
+        >();
+        services.AddTransient<
+            UnitTests.TrainServiceTypeSelectionTests.AuditedTrainBase<
+                UnitTests.TrainServiceTypeSelectionTests.MarkedInput,
+                Unit
+            >,
+            UnitTests.TrainServiceTypeSelectionTests.SecondMarkedTrain
+        >();
+
+        var discover = () => new TrainDiscoveryService(services).DiscoverTrains();
+
+        discover
+            .Should()
+            .Throw<Trax.Core.Exceptions.TrainException>(
+                "both would be listed under one name while the container runs only the last, so "
+                    + $"the train a name describes would not be the train that runs ({Adr})"
+            )
+            .Which.Message.Should()
+            .Contain("2 trains are registered under")
+            .And.Contain(typeof(UnitTests.TrainServiceTypeSelectionTests.MarkedTrain).FullName!)
+            .And.Contain(
+                typeof(UnitTests.TrainServiceTypeSelectionTests.SecondMarkedTrain).FullName!
+            );
+    }
+
+    [Test]
     public async Task LocalRunExecutor_RunsTheTrainItIsNamed()
     {
         using var scope = _serviceProvider.CreateScope();

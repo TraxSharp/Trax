@@ -83,9 +83,15 @@ public static class TrainInputReader
     /// Writes a read input in the form a work queue entry stores, refusing it when that form is
     /// larger than <see cref="StoredInputGrowthFactor"/> times <paramref name="maxInputJsonBytes"/>.
     /// </summary>
+    /// <remarks>
+    /// The bytes are counted as they are written and writing stops the moment the cap is crossed,
+    /// so an input whose stored form would be far over the cap is refused without that form ever
+    /// being built. How much larger the stored form is than the caller's JSON depends on the input
+    /// type: an empty object of a type with many members is written with every one of them.
+    /// </remarks>
     /// <exception cref="TrainInputValidationException">
-    /// The stored form is over its cap; <c>MaxBytes</c> is that cap and <c>ObservedBytes</c> the
-    /// stored form's size.
+    /// The stored form is over its cap; <c>MaxBytes</c> is that cap and <c>ObservedBytes</c> how
+    /// much had been written when writing stopped, which is more than the cap.
     /// </exception>
     internal static string WriteForStorage(
         object input,
@@ -93,24 +99,90 @@ public static class TrainInputReader
         int maxInputJsonBytes
     )
     {
-        var serialized = JsonSerializer.Serialize(
-            input,
-            registration.InputType,
-            TraxJsonSerializationOptions.ManifestProperties
-        );
-
         var storedCap = (int)
             Math.Min((long)maxInputJsonBytes * StoredInputGrowthFactor, int.MaxValue);
-        var byteCount = Encoding.UTF8.GetByteCount(serialized);
 
-        if (byteCount > storedCap)
+        using var buffer = new MemoryStream();
+
+        try
+        {
+            using var ceiling = new ByteCeilingStream(buffer, storedCap);
+            JsonSerializer.Serialize(
+                ceiling,
+                input,
+                registration.InputType,
+                TraxJsonSerializationOptions.ManifestProperties
+            );
+        }
+        catch (StoredInputTooLargeException tooLarge)
+        {
             throw new TrainInputValidationException(
                 registration.ServiceTypeName,
-                byteCount,
+                tooLarge.Written,
                 storedCap
             );
+        }
 
-        return serialized;
+        return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+    }
+
+    private sealed class StoredInputTooLargeException(int written) : Exception
+    {
+        public int Written { get; } = written;
+    }
+
+    /// <summary>
+    /// A write-only stream that forwards to an inner stream until more than
+    /// <paramref name="maxBytes"/> have been written, then throws instead of writing. The
+    /// serializer flushes to its stream as it goes, so the throw ends serialization early.
+    /// </summary>
+    private sealed class ByteCeilingStream(Stream inner, int maxBytes) : Stream
+    {
+        private long _written;
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            _written += buffer.Length;
+
+            if (_written > maxBytes)
+                throw new StoredInputTooLargeException((int)Math.Min(_written, int.MaxValue));
+
+            inner.Write(buffer);
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            Write(buffer.AsSpan(offset, count));
+
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Write(buffer.Span);
+            return ValueTask.CompletedTask;
+        }
+
+        public override bool CanWrite => true;
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+
+        public override void Flush() => inner.Flush();
+
+        public override long Length => _written;
+
+        public override long Position
+        {
+            get => _written;
+            set => throw new NotSupportedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
     }
 
     private static object Deserialize(

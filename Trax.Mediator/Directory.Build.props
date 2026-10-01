@@ -47,7 +47,7 @@
        Central ADR 0033 records why. -->
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator' Or '$(MSBuildProjectName)' == 'Trax.Mediator.Testing'">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.23.1</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.23.2</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Deterministic/reproducible builds. CI source-path normalization

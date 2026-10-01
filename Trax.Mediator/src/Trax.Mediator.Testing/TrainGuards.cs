@@ -13,44 +13,63 @@ public static class TrainGuards
     private const string ServiceTrainInterfaceName = "IServiceTrain`2";
 
     /// <summary>
-    /// Every concrete <c>ServiceTrain&lt;TIn, TOut&gt;</c> in the given assemblies must implement a
-    /// companion <c>I{Name}</c> interface deriving <c>IServiceTrain&lt;TIn, TOut&gt;</c> (the interface
-    /// FullName is the canonical train identity throughout Trax).
+    /// Every concrete train in the given assemblies must have its own train interface: exactly one
+    /// most-derived non-generic interface deriving <c>IServiceTrain&lt;TIn, TOut&gt;</c>. That
+    /// interface's FullName is the train's canonical identity throughout Trax, and it is the rule
+    /// the registry applies when it scans, so a train this guard passes registers under its own
+    /// name and one it flags does not.
     /// </summary>
+    /// <remarks>
+    /// A train is a concrete class that derives from <c>ServiceTrain&lt;,&gt;</c> or implements
+    /// <c>IServiceTrain&lt;,&gt;</c> directly. The interface is conventionally named
+    /// <c>I{Name}</c>, but any name is accepted, as it is at runtime. A train with no such
+    /// interface is registered only under the shared <c>IServiceTrain&lt;TIn, TOut&gt;</c>, and
+    /// one with two that neither extends is refused when scanned.
+    /// </remarks>
     public static GuardResult EveryTrainHasInterface(IEnumerable<Assembly> assemblies)
     {
         ArgumentNullException.ThrowIfNull(assemblies);
         var offenders = new List<string>();
         var inspected = 0;
 
-        foreach (var train in assemblies.SelectMany(GetLoadableTypes).Where(IsConcreteServiceTrain))
+        foreach (var train in assemblies.SelectMany(GetLoadableTypes).Where(IsConcreteTrain))
         {
             inspected++;
-            var expected = "I" + train.Name;
-            var marker = train
-                .GetInterfaces()
-                .FirstOrDefault(i =>
-                    i.Name == expected
-                    && i.GetInterfaces().Any(b => b.Name == ServiceTrainInterfaceName)
-                );
 
-            if (marker is null)
+            var candidates = train
+                .GetInterfaces()
+                .Where(i => !i.IsGenericType && i.GetInterfaces().Any(IsServiceTrainInterface))
+                .ToList();
+
+            var mostDerived = candidates
+                .Where(c => !candidates.Any(other => other != c && c.IsAssignableFrom(other)))
+                .ToList();
+
+            if (mostDerived.Count == 0)
                 offenders.Add(
-                    $"{train.FullName} (expected interface {expected} : IServiceTrain<,>)"
+                    $"{train.FullName} (no interface deriving IServiceTrain<,>; expected one such "
+                        + $"as I{train.Name})"
+                );
+            else if (mostDerived.Count > 1)
+                offenders.Add(
+                    $"{train.FullName} (implements {mostDerived.Count} train interfaces, none "
+                        + "extending the others: "
+                        + string.Join(", ", mostDerived.Select(i => i.FullName))
+                        + ")"
                 );
         }
 
         var message =
-            "Every train needs a companion I{Name} interface deriving IServiceTrain<TIn, TOut>. "
-            + "Offenders:\n  "
+            "Every train needs exactly one interface of its own deriving IServiceTrain<TIn, TOut>, "
+            + "conventionally I{Name}. Offenders:\n  "
             + string.Join("\n  ", offenders);
 
         return new GuardResult(offenders, inspected, message);
     }
 
-    private static bool IsConcreteServiceTrain(Type type)
+    private static bool IsConcreteTrain(Type type)
     {
-        if (type is not { IsAbstract: false, IsClass: true })
+        if (type is not { IsAbstract: false, IsClass: true } || type.ContainsGenericParameters)
             return false;
 
         for (var t = type.BaseType; t is not null; t = t.BaseType)
@@ -59,8 +78,11 @@ public static class TrainGuards
                 return true;
         }
 
-        return false;
+        return type.GetInterfaces().Any(IsServiceTrainInterface);
     }
+
+    private static bool IsServiceTrainInterface(Type type) =>
+        type.IsGenericType && type.Name == ServiceTrainInterfaceName;
 
     private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
     {
