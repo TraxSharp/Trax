@@ -179,7 +179,7 @@ Cancelled trains are excluded from the success rate calculation. Cancellation is
 
 The **Effects** page (`/trax/settings/effects`) shows all registered effect and junction effect provider factories. From this page you can:
 
-- **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope)
+- **Enable/disable** toggleable effects at runtime (changes apply to the next train execution scope). The GraphQL API does the same with [`operations.setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations#seteffectenabled)
 - **Configure** effects that expose runtime settings. Click the gear icon to open a dynamic form dialog
 
 Configurable effects (those whose factory implements `IConfigurableEffectProviderFactory<TConfiguration>`) show a settings button in the grid. Clicking it opens a form auto-generated from the configuration type's properties. For example, the [Parameter Effect](/docs/effect/effect-providers/parameter-effect) exposes `SaveInputs` and `SaveOutputs` toggles. The form edits the effect's live, process-wide configuration all or nothing: Save converts every field before applying any, so a field that does not convert leaves the configuration unchanged, and closing the dialog without saving writes nothing.

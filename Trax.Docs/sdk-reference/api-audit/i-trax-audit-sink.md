@@ -24,7 +24,8 @@ public interface ITraxAuditSink
 
 - Called from the background writer thread, never from the request thread.
 - Batch size ranges from 1 to `TraxAuditOptions.BatchSize`.
-- Exceptions are retried up to `MaxRetries` times with exponential backoff. After that the batch is dropped and logged.
+- Exceptions are retried up to `MaxRetries` times with exponential backoff. After that the batch is dropped, logged, and counted in `trax.audit.dropped`.
+- `ct` is not cancelled when shutdown begins: the writer keeps writing accepted entries until the host's shutdown timeout, and `ct` fires then. Observe it, so a write that cannot finish gives up promptly; whatever was unwritten is counted as dropped either way.
 - Writer swallows all failures. A crashed sink must not crash GraphQL requests.
 
 ## Example

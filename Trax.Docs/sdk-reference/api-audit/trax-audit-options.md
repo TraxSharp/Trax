@@ -20,11 +20,12 @@ Tunables for the audit pipeline, passed through `AddAudit<TSink>(opts => ...)`.
 | `SkipIntrospection` | `true` | Drop introspection operations: the executed operation's top-level selections are all `__schema`, `__type` or `__typename`. |
 | `SkipSubscriptions` | `true` | Drop subscription operations. They don't fit a request/response audit model. |
 | `DefaultPrincipalId` | `"<anonymous>"` | Used when the request has no `trax:principal-id` claim. |
-| `MaxRetries` | `3` | Attempts a failing sink gets before the batch is dropped. |
+| `MaxRetries` | `3` | Retries a failing sink gets before the batch is dropped. Each dropped entry increments `trax.audit.dropped`. |
 | `RetryBackoff` | `100ms` | Initial backoff between sink retries. Doubles on each attempt. |
 
 ## Tuning Guidance
 
 - **High-traffic hosts**: raise `ChannelCapacity`, keep `BatchSize` modest (50-100), aim for a `FlushInterval` that matches your sink's latency.
 - **Expensive sinks** (Postgres, S3): larger batches amortize I/O. Raise `BatchSize` to 200+ and extend `FlushInterval` accordingly.
-- **Regulated workloads**: set `MaxRetries` high enough that transient sink outages don't cause drops. Monitor `trax.audit.dropped` and page on non-zero.
+- **Regulated workloads**: set `MaxRetries` high enough that transient sink outages don't cause drops. Monitor `trax.audit.dropped` and page on non-zero. It counts every lost entry: refused by a full channel, refused by the sink after every retry, or unwritten when shutdown ran out of time.
+- **Shutdown**: the writer drains every accepted entry on graceful shutdown, within `HostOptions.ShutdownTimeout` (30 seconds by default). Raise that timeout if your sink needs longer to write a full channel.

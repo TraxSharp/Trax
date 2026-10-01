@@ -14,9 +14,9 @@ them unchanged.
 
 ## Status
 
-**Accepted.** Trax.Mediator carries its half (discovery keeps the declared roles). Trax.Api
-still upper-cases both sides until its half ships, which it can only do after the Mediator
-release, so until then matching stays case-insensitive.
+**Accepted.** Trax.Mediator carries its half (discovery keeps the declared roles), and Trax.Api
+carries the comparison: `TrainAuthorizationService` and the lifecycle subscription filter both
+check `IsInRole`.
 
 ## Considered options
 
@@ -42,11 +42,14 @@ casing rather than upper-cased.
 ## Exemplars
 
 **Enforced elsewhere:** `TrainDiscoveryAuthorizationTests` in Trax.Mediator (roles kept as
-declared, and lookalikes kept distinct).
+declared, and lookalikes kept distinct); in Trax.Api, `TrainAuthorizationServiceTests` (a role
+differing only in case, or only under case mapping such as `ſuperuser` against `SUPERUSER`, is
+refused) and `SubscriptionAuthorizationTests` (a broadcast train is not streamed to a role
+differing only in case).
 
-Not covered: the Api's comparison, until its half ships with a test that a role differing only
-in case, or only under case mapping, is refused.
+Not covered: `@authorize` on a query model is HotChocolate's comparison, not Trax's.
 
 ## Changelog
 
+- **2026-09-30**: The Api half shipped; the comparison is `IsInRole` in both Api checks.
 - **2026-09-27**: Recorded, with the Mediator half.

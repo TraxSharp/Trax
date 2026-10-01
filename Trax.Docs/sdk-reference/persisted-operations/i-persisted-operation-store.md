@@ -9,7 +9,9 @@ grand_parent: SDK Reference
 
 Programmatic CRUD for `trax.persisted_operation`. The HTTP request path does NOT use this interface; HotChocolate calls `IOperationDocumentStorage.TryReadAsync` instead. Use this interface from CI manifest uploaders, admin tooling, custom dashboards, and tests.
 
-Registered as a singleton when [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) is called.
+Registered as a singleton when [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) is called. For the surface the GraphQL fields and the dashboard share, which returns refusals as payload errors instead of throwing, use [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service).
+
+A host without a GraphQL server registers it with `AddPersistedOperationStore(databaseConnectionString)`. A change written that way is not broadcast, so GraphQL nodes keep what they cached until they restart. When the nodes use `UseRabbitMqInvalidation`, register the store with the broker too, `AddPersistedOperationStore(databaseConnectionString, rabbitConnectionString)`, and every change it makes reaches them.
 
 ## Interface
 
@@ -46,6 +48,7 @@ public interface IPersistedOperationStore
 - `GetAsync` returns null for missing or deactivated rows.
 - `ListAsync` returns active and deactivated rows for the tenant.
 - `UpsertAsync` runs the document through [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) (HotChocolate-backed when `UsePersistedOperations` is wired in), extracts the GraphQL operation name from the document's operation definition, computes the response-shape fingerprint, writes both the live row and a history row in a single transaction, invalidates the local cache, and publishes a broadcast event when the broadcaster is configured.
+- A document with no operation, or more than one, throws `PersistedOperationInputException` (`INVALID_INPUT`).
 - Validation throws one of the structured [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) subclasses. No row is written and no broadcast fires when validation rejects the document.
 - `DeactivateAsync` and `RestoreAsync` throw `InvalidOperationException` when the id does not exist.
 - All mutations append a row to `trax.persisted_operation_history`.

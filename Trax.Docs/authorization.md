@@ -13,7 +13,7 @@ Trax supports three levels of authorization for the API layer:
 
 - **Endpoint-level**: gate all Trax endpoints behind a single policy using the `configure` callback on `UseTraxGraphQL`. This is standard ASP.NET Core endpoint authorization.
 - **Per-train**: restrict individual trains using the `[TraxAuthorize]` attribute on the train class. When a request comes in to run or queue a train, Trax checks the attribute against the current HTTP user before executing anything.
-- **Per-model**: restrict `[TraxQueryModel]`-exposed entities using the same `[TraxAuthorize]` attribute on the entity class. The directive is enforced at GraphQL type level, so the gate also applies when the entity is reached transitively through a navigation property on an ungated parent.
+- **Per-model**: restrict `[TraxQueryModel]`-exposed entities using the same `[TraxAuthorize]` attribute on the entity class. The directive is enforced at GraphQL type level, so the gate also applies when the entity is reached through a navigation property on an ungated parent, whether the request selects it or filters or sorts through it.
 
 A surface exposed via GraphQL can also be explicitly opened to anonymous access with `[TraxAllowAnonymous]`. See [Anonymous Access via TraxAllowAnonymous](#anonymous-access-via-traxallowanonymous) below.
 
@@ -45,7 +45,9 @@ A field added this way must declare its own posture when the parent gives it not
 | Carries `[TraxAuthorize]` | No. It inherits the parent's gate. |
 | Carries `[TraxAllowAnonymous]` | **Yes.** It inherits nothing. |
 | A schema root type (`RootQuery`, `RootMutation`, `LifecycleSubscriptions`) | **Yes.** There is no parent to inherit from. |
-| Neither marker | No. The type reaches the schema only inside another surface's output, and that surface's posture governs. |
+| A namespace Trax reaches from the root through an ungated field (`DiscoverQueries`, `DispatchMutations`, and the per-namespace types under them) | **Yes.** It is as reachable as the root. |
+| A type under the `operations` namespace | No. It takes the posture declared for the namespace: `GateOperations(...)`, `RequireAuthorization()` or `AllowAnonymousOperations()`. |
+| Neither marker | No. The type reaches the schema only inside a train's output, whose posture governs, or as a query model's navigation target, which must declare its own posture (see [Entities a Query Model Reaches](#entities-a-query-model-reaches)). |
 
 `[TraxAuthorize]` and `[TraxAllowAnonymous]` both apply to a method, so a resolver declares its posture directly and Trax emits the matching `@authorize` directive for it. The combinator semantics are the same as on a train or an entity: policies AND, roles union and OR.
 
@@ -59,11 +61,11 @@ public sealed class ArticleExtensions
 }
 ```
 
-On the extension **class**, `[TraxAuthorize]` applies to every field that extension contributes. It does not touch the type being extended, so gating an extension of a `[TraxAllowAnonymous]` entity does not re-gate the entity.
+On the extension **class**, `[TraxAuthorize]` applies to every field that extension contributes, including a field HotChocolate builds from a property of the class, which cannot carry the attribute itself. It does not touch the type being extended, so gating an extension of a `[TraxAllowAnonymous]` entity does not re-gate the entity.
 
 A subscription is the same construct: `[ExtendObjectType("LifecycleSubscriptions")]` adds a field to a root type, so every `[Subscribe]` field has to declare.
 
-The check walks the merged schema at host start, so it sees a type extension however it was registered, including one added from a `ConfigureSchema` callback. A field built from a lambda in such a callback has no member to carry an attribute and is skipped; it is gated by the code that builds it.
+The check walks the merged schema at host start, so it sees a type extension however it was registered: through `AddTypeExtension(s)`, from a type module added with `AddTypeModule<T>()`, or from a `ConfigureSchema` callback. A field built from a lambda in such a callback has no member to carry an attribute and is skipped; it is gated by the code that builds it.
 
 ### Do Not Use HotChocolate's [Authorize] or [AllowAnonymous]
 
@@ -137,11 +139,11 @@ The attribute supports two properties:
 | Property | Type | Description |
 |----------|------|-------------|
 | `Policy` | `string?` | Name of an ASP.NET Core authorization policy to evaluate |
-| `Roles` | `string?` | Comma-separated list of roles. The user must have at least one. Role comparison is case-insensitive. |
+| `Roles` | `string?` | Comma-separated list of roles. The user must have at least one. Role comparison is exact and case-sensitive. |
 
 The attribute works on classes, interfaces, and base classes. Trax unions the attributes it finds across the implementation type's interface chain and base chain, so `[TraxAuthorize("Admin")]` on an `IMyTrain` interface is honored even when the implementing class carries no attribute. Decorator-wrapped trains inherit their authorization requirements through the same mechanism.
 
-Role comparison is case-insensitive today: `[TraxAuthorize(Roles = "admin")]` matches a principal carrying `ClaimTypes.Role = "Admin"` and vice-versa, because `TrainAuthorizationService` upper-cases both sides. That is changing so train roles match exactly and case-sensitively, the way `@authorize` on a query model does (`Trax.Docs/adr/0026`). From Trax.Mediator 1.23.0 discovery keeps the roles as declared; a following Trax.Api release compares them ordinally. Declare roles in the casing your identity provider issues them.
+Role comparison is exact and case-sensitive, the way `@authorize` on a query model and ASP.NET Core's `RequireRole` compare roles (`ClaimsPrincipal.IsInRole`, ordinal against each identity's role claim type): `[TraxAuthorize(Roles = "Admin")]` does not match a principal carrying `ClaimTypes.Role = "admin"`. Train subscriptions compare the same way. Declare roles in the casing your identity provider issues them. Before this, `TrainAuthorizationService` upper-cased both sides, so `admin` matched `Admin`, and a culture case mapping could equate characters a reader sees as different (see `Trax.Docs/adr/0026`).
 
 ## How Policies and Roles Combine
 
@@ -173,6 +175,7 @@ Decorate any `[TraxQueryModel]` entity with `[TraxAuthorize]` to gate the auto-g
 
 - **Direct entry**: a top-level `discover.<namespace>.<modelField>` request runs the field-level directive before the resolver. Connection-shaped scalars like `totalCount` and `pageInfo` are blocked too; an unauthorized caller cannot enumerate the cardinality of a gated entity.
 - **Transitive navigation**: a request that reaches the entity through a navigation property on an ungated parent (`discover.publicOwners.nodes[].privateBooks`) triggers the type-level directive when each child node is materialized. The parent's data is still selected from the database, but the unauthorized response substitutes an error for the gated branch and never returns the row payload to the client.
+- **Filtering and sorting through a navigation**: a `where` or `order` on an ungated parent that passes through a navigation to the entity (`publicOwners(where: { privateBooks: { some: { title: { eq: "..." } } } })`) is authorized against the entity's directives before the query runs, exactly as selecting it would be. A caller who may read the entity filters and sorts through it as usual; anyone else gets `TRAX_AUTHORIZATION` for the whole field. HotChocolate's `@authorize` cannot sit on an input field, so Trax evaluates the target type's own directives through HotChocolate's authorization handler.
 
 ```csharp
 using System.ComponentModel.DataAnnotations.Schema;
@@ -290,7 +293,38 @@ public class MatchRecord
 }
 ```
 
-An anonymous query for `discover.public.announcements { title }` succeeds. The same query selecting `relatedMatch { matchId }` fires the gated child's directive and returns `TRAX_AUTHORIZATION`. The anonymous parent does not propagate openness to its gated children.
+An anonymous query for `discover.public.announcements { title }` succeeds. The same query selecting `relatedMatch { matchId }` fires the gated child's directive and returns `TRAX_AUTHORIZATION`, and so does `announcements(where: { relatedMatch: { matchId: { eq: "..." } } })` or an `order` by `relatedMatch.matchId`. The anonymous parent does not propagate openness to its gated children.
+
+### Entities a Query Model Reaches
+
+HotChocolate builds an object type, a filter input and a sort input for every navigation a query model exposes, including a navigation to an entity that is not a `[TraxQueryModel]`. That entity is part of the schema, so it states its posture the same way a model does: `[TraxAuthorize]` or `[TraxAllowAnonymous]` on its own class.
+
+```csharp
+[TraxQueryModel(Namespace = "public")]
+[TraxAllowAnonymous]
+public class Post
+{
+    public long Id { get; set; }
+    public string Title { get; set; } = "";
+    public Account? Author { get; set; }   // not a query model
+}
+
+[TraxAuthorize(Roles = "Admin")]           // required: Post reaches it
+public class Account
+{
+    public long Id { get; set; }
+    public string Email { get; set; } = "";
+}
+```
+
+On an endpoint not gated as a whole with `RequireAuthorization()`, the host refuses to start when an entity a query model reaches declares neither marker, behind a gated model too. The message names the entity and every schema coordinate that reaches it:
+
+```
+Entity 'MyApp.Account' is not a [TraxQueryModel], but a query model reaches it through
+'Post.author', 'PostFilterInput.author', 'PostSortInput.author', ...
+```
+
+There are three ways to answer: a marker on the entity class, leaving the navigation out of the model's exposed field set (`BindFields = Explicit` or `ExposeAs`, which narrow the filter and sort inputs too), or gating the whole endpoint. A `[TraxAuthorize]` on the entity gates its object type wherever it appears, and its filter and sort inputs as described above. A class EF Core maps as owned is part of the entity that holds it and needs no marker of its own. The decision is recorded in `Trax.Api/docs/adr/0025`.
 
 ### Mutual Exclusion with [TraxAuthorize]
 
@@ -327,7 +361,7 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
 4. When `ITrainExecutionService.QueueAsync()` or `RunAsync()` runs, it invokes the registered `ITrainAuthorizationService` before reading the input JSON. Every caller-built enqueue goes through `QueueAsync`, including the operations surface and the dashboard (which enqueues inside a trusted scope); see [The Operations Surface](#the-operations-surface).
 5. The default implementation (`TrainAuthorizationService` from `Trax.Api`) is fail-closed. It grabs the current user from `IHttpContextAccessor` and evaluates each requirement:
    - **Policy**: calls `IAuthorizationService.AuthorizeAsync(user, policyName)`.
-   - **Roles**: compares the upper-invariant `ClaimTypes.Role` claims against the normalized required set.
+   - **Roles**: passes when `user.IsInRole(role)` holds for at least one required role: an exact, case-sensitive match against the caller's role claims.
 6. If any check fails, `TrainAuthorizationException` is thrown. Its public `Message` is always the generic string `"Not authorized."`; the train name, failing policy, and required roles live only on the exception's `TrainName` and `Reason` properties for server-side logging.
 7. GraphQL surfaces the error with code `TRAX_AUTHORIZATION` and the same generic message. The train name, policy name, and role names never cross the wire.
 

@@ -122,6 +122,10 @@ When `Name` is null (the default), the field name is derived from the train's se
 
 When `Name` is set, it's used directly: `[TraxMutation(Name = "BanUser")]` produces `banUser`.
 
+Two exposed trains cannot share a name. `AddTraxGraphQL` refuses the host when two trains would produce the same field in the same place (both under `dispatch`, or both under `discover { players }`), or when two mutation trains would produce the same response type (`{Name}Response`, whose name is schema-wide even when the fields sit in different namespaces). The error names both trains' interfaces. Set `Name` on one of them: `Billing.ICreateOrderTrain` and `Shop.ICreateOrderTrain` both derive `CreateOrder`, so give them `Name = "BillingCreateOrder"` and `Name = "ShopCreateOrder"`. Two query trains with the same name in different namespaces are allowed, because neither has a response type.
+
+Whatever its GraphQL name, a field runs its train by the interface's FullName, the canonical train name, so two trains whose interfaces share a short name each run their own train.
+
 ## Namespaces
 
 Use the `Namespace` property to group related trains under a sub-namespace in the GraphQL schema. This keeps the schema organized as the number of trains grows.

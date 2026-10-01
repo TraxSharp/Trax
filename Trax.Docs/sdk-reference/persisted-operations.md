@@ -15,6 +15,7 @@ Pages:
 - [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations)
 - [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement)
 - [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder)
+- [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service)
 - [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store)
 - [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator)
 - [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions)

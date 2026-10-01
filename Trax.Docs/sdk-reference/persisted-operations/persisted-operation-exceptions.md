@@ -16,6 +16,7 @@ All subclasses expose a stable `Code` string that matches the `code` field on th
 | `PersistedOperationParseException` | `PARSE_FAILED` | Document failed `Utf8GraphQLParser.Parse`. |
 | `PersistedOperationValidationException` | `SCHEMA_VALIDATION_FAILED` | Document parsed but failed HotChocolate validation. |
 | `ShapeDiffViolationException` | `SHAPE_DIFF_VIOLATION` | Edit changes the response shape of an existing id. |
+| `PersistedOperationInputException` | `INVALID_INPUT` | Document holds no operation, or more than one. A persisted document holds exactly one. |
 
 ## PersistedOperationParseException
 
@@ -51,3 +52,11 @@ All subclasses expose a stable `Code` string that matches the `code` field on th
 | `NewFingerprint` | `string` | Fingerprint computed from the proposed new document. |
 
 Pass `UpsertOptions { BypassShapeDiff = true }` (or `bypassShapeDiff: true` on the [GraphQL mutation](/docs/sdk-reference/persisted-operations/management-mutations)) when the change is verified safe for shipped clients.
+
+## PersistedOperationInputException
+
+| Property | Type | Notes |
+|---|---|---|
+| `Code` | `string` | Always `"INVALID_INPUT"`. |
+
+Thrown after validation, for every validator including the no-op one `AddPersistedOperationStore` registers.

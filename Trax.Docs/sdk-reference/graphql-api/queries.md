@@ -132,6 +132,7 @@ Returns every train registered in the DI container, including a runtime-generate
 query {
   operations {
     trains {
+      fullName
       serviceTypeName
       implementationTypeName
       inputTypeName
@@ -154,7 +155,8 @@ query {
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `serviceTypeName` | `String!` | Friendly name of the service interface (e.g. `IServiceTrain<OrderInput, OrderResult>`) |
+| `fullName` | `String!` | The train's canonical name, its service interface's FullName (e.g. `MyApp.Trains.IProcessOrderTrain`). This is the name every field that takes a train accepts: [`queueTrain`](/docs/sdk-reference/graphql-api/mutations#queuetrain) and [`runTrain`](/docs/sdk-reference/graphql-api/mutations#runtrain), [`trainStats`](#trainstats), and the `trainName` filters on [`executions`](#executions) and `workQueues` |
+| `serviceTypeName` | `String!` | Friendly name of the service interface (e.g. `IServiceTrain<OrderInput, OrderResult>`), for display. No field that takes a train accepts it; use `fullName` |
 | `implementationTypeName` | `String!` | Friendly name of the concrete class |
 | `inputTypeName` | `String!` | Friendly name of the input type |
 | `outputTypeName` | `String!` | Friendly name of the output type |
@@ -272,7 +274,7 @@ query {
 
 Lists the observational effects registered in the API process, with their enabled and toggleable state and, for an effect whose factory exposes runtime settings, those settings. Backs the dashboard's effects list.
 
-Read-only by design. The effect registry is an in-memory, per-process singleton with no persistence or cross-process broadcast, so this reflects the API host only, not the scheduler/worker processes where effects actually run, and there is no toggle mutation. Changing effect state at runtime across a distributed deployment would need a shared store plus a change-broadcast, which is not built.
+The effect registry is an in-memory, per-process singleton with no persistence or cross-process broadcast, so this reflects the API host only, not the scheduler/worker processes where effects actually run. [`setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations#seteffectenabled) toggles an effect in this same process. Changing effect state across a distributed deployment would need a shared store plus a change broadcast, which is not built.
 
 ```graphql
 query {
@@ -441,7 +443,7 @@ query {
 | Field | Type | Description |
 |-------|------|-------------|
 | `propertyTypeName` | `String` | Fully qualified type name of the train input |
-| `properties` | `String` | The train input as stored JSON. Can hold credentials; see [Train inputs and the operations gate](#train-inputs-and-the-operations-gate) |
+| `properties` | `String` | The train input as stored JSON, with each `[TraxSensitive]` member masked. Can hold credentials; see [Train inputs and the operations gate](#train-inputs-and-the-operations-gate) |
 | `misfirePolicy` | `MisfirePolicy!` | What the manifest manager does with a missed run |
 | `misfireThresholdSeconds` | `Int` | How late a run can be before it counts as missed |
 | `scheduledAt` | `DateTime` | The one-off run time, for a `Once` manifest |
@@ -452,7 +454,7 @@ query {
 
 ### manifestStats
 
-Execution roll-up for a single manifest: run counts by state plus the most recent run and most recent successful run. Backs the summary cards on the dashboard's manifest detail page. Served index-only by `ix_metadata_manifest_state`, so it stays fast on a manifest with a long history.
+Execution roll-up for a single manifest: run counts by state plus the most recent run and most recent successful run. Backs the summary cards on the dashboard's manifest detail page, through the same `IOperationsService.GetManifestExecutionStatsAsync` call. A manifest with no runs, or an id with no manifest, gets zeros and nulls. Served index-only by `ix_metadata_manifest_state`, so it stays fast on a manifest with a long history.
 
 ```graphql
 query {
@@ -585,7 +587,7 @@ query {
 | `hideAdminTrains` | `Boolean` | `false` | When `true`, excludes the framework's internal scheduler trains (matches `AdminTrains.FullNames` against `metadata.Name`, which stores the interface FullName). The dashboard sets this from its "Hide admin trains" toggle |
 | `failureClass` | `FailureClass` | `null` | Only executions recorded with this [failure class](/docs/core/trains-and-junctions#classifying-failures): `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. Every run that did not fail records `UNCLASSIFIED`, so `failureClass: UNCLASSIFIED` on its own also matches every completed, pending, in-progress and cancelled run; combine it with `trainState: FAILED` for unclassified failures only |
 
-When any filter or `afterId` is supplied the count is exact (`isEstimatedCount: false`); the unfiltered first page uses the fast `pg_class.reltuples` estimator. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. `failureClass` is served by `ix_metadata_failure_class` on `(failure_class, id DESC)` (Postgres). It covers every row rather than only classified ones: the class arrives as a query parameter, and a generic plan cannot prove a parameter satisfies a partial index's predicate, so a partial index would go unused. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
+When any filter is supplied the count is exact (`isEstimatedCount: false`); an unfiltered list may use the database's row estimate, on every page alike (see [Estimated counts](#estimated-counts)). `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. `failureClass` is served by `ix_metadata_failure_class` on `(failure_class, id DESC)` (Postgres). It covers every row rather than only classified ones: the class arrives as a query parameter, and a generic plan cannot prove a parameter satisfies a partial index's predicate, so a partial index would go unused. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
@@ -737,6 +739,14 @@ decides who reads them. There is no separate field-level gate: a caller who can 
 input can read a manifest's properties too. The reasoning is recorded in Trax.Api's ADR
 `api/0005`.
 
+A member marked [`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) is masked in all
+three, written as `{"_redacted": true}`. An execution's `input` is recorded that way. A manifest's
+`properties` and a work queue entry's `input` are stored with the real value, because a run starts
+from them, so the read masks them: it reads the stored JSON back as the input type of the train
+registered on this host and writes it with the mask. When the host has no registered train whose
+input type the copy names, or the JSON does not read as that type, nothing shows the copy holds no
+sensitive member, so the whole value reads as `{"_redacted": true}`.
+
 ---
 
 ## PagedResult
@@ -746,7 +756,7 @@ All paginated queries return the same wrapper type:
 | Field | Type | Description |
 |-------|------|-------------|
 | `items` | `[T!]!` | The page of results |
-| `totalCount` | `Int!` | Total number of records matching the query |
+| `totalCount` | `Int!` | Total number of records matching the query's filters, the same on every page: neither `skip` nor `afterId` changes it |
 | `skip` | `Int!` | The `skip` value that was applied, after a negative value was read as `0` |
 | `take` | `Int!` | The `take` value that was applied, after clamping to 1 through 500 |
 | `isEstimatedCount` | `Boolean!` | `true` when `totalCount` is a fast estimate rather than an exact count. See [Pagination](#estimated-counts) |
@@ -798,9 +808,11 @@ When `afterId` is provided, `skip` is ignored.
 
 ### Estimated counts
 
-For unfiltered queries on large tables (>10,000 rows), `totalCount` uses PostgreSQL's `pg_class.reltuples` statistic instead of an exact `COUNT(*)`. This is O(1) rather than O(n), and the difference matters when the metadata table has millions of rows.
+`totalCount` is the size of the whole list the filters select, whichever page you are on: the cursor and `skip` never change it. This is the convention HotChocolate's own connections and GitHub's API follow.
 
-When the estimate is used, `isEstimatedCount` is `true`. The estimate is updated by PostgreSQL's autovacuum/autoanalyze and is typically accurate within a few percent. For filtered queries or small tables, an exact count is always used and `isEstimatedCount` is `false`.
+For an unfiltered list of a large table (10,000 rows or more), `totalCount` is the database's own row estimate instead of an exact `COUNT(*)`, which would scan every row on every page. The provider supplies it through `ISqlDialect.EstimateRowCount`: on PostgreSQL it is `pg_class.reltuples`, which `ANALYZE`, `VACUUM` and autovacuum keep current and which is typically within a few percent. When the estimate is used, `isEstimatedCount` is `true`, on the first page and every later one.
+
+The count is exact, and `isEstimatedCount` is `false`, whenever a filter is supplied, when the table is smaller than that, when PostgreSQL has never analyzed the table, and on providers that keep no estimate (SQLite, and the in-memory provider).
 
 ### Performance at scale
 
@@ -811,7 +823,7 @@ The operations queries are stress-tested against millions of rows (`Trax.Api.Tes
 
 Build list views on keyset cursors: read the first page with `take`, then pass each response's `nextCursor` as the next request's `afterId`. Reserve `skip` for shallow, bounded jumps. Filtered reads (`status`, `trainName`, `metadataId`, `minimumLevel`, `category`) and their exact counts also stay under ~100ms at the same scale, so filter controls stay responsive.
 
-The same suite times every operations mutation against those tables (each single-row or scoped write, including the manifest and group cancels that filter the metadata table, finishes in under ~50ms), the point reads behind the detail pages, the persisted-operations list, lookups and writes over a 100,000-operation catalog, and subscription fan-out to 1,000 subscribers. `onDataChanged` coalesces a storm of 200,000 change signals into one event per changed domain per subscriber, delivered to all of them in under half a second. `onTrainStateChanged` delivers each event to every subscriber when the rate is moderate, but at 1,000 subscribers and a sustained 80 or more state changes a second, a few subscribers miss some events: a live feed can lag behind the grid until its next refetch. `requeueAllDeadLetters` and `acknowledgeAllDeadLetters` are timed over a bounded set of awaiting dead letters rather than the full table for now.
+The same suite times every operations mutation against those tables (each single-row or scoped write, including the manifest and group cancels that filter the metadata table, finishes in under ~50ms), the point reads behind the detail pages, the persisted-operations list, lookups and writes over a 100,000-operation catalog, and subscription fan-out to 1,000 subscribers. `onDataChanged` coalesces a storm of 200,000 change signals into one event per changed domain per subscriber, delivered to all of them in under half a second. `onTrainStateChanged` delivers each event to every subscriber when the rate is moderate, but at 1,000 subscribers and a sustained 80 or more state changes a second, a few subscribers miss some events: a live feed can lag behind the grid until its next refetch. `requeueAllDeadLetters` and `acknowledgeAllDeadLetters` are timed over every dead letter the seed leaves awaiting intervention, 500,000 of them: acknowledging all takes about 7.5 s and requeueing all, which also writes one work queue entry per manifest, about 36 s, so treat them as rare operator actions. The batch cancels and enable/disable mutations on a full 1,000-id selection, and `runTrain`, each finish in under 20 ms.
 
 ## config (nested under operations)
 
@@ -1161,7 +1173,7 @@ query {
 
 ### stats
 
-Execution roll-up for a set of manifest groups in a single round-trip: manifest count, executions by state, and last run per group. Backs the per-group stat columns on the dashboard's manifest groups list, which calls it with just the ids of the visible page. Every requested id gets a row (zeros when the group has no manifests or executions), returned in the order requested so the caller can zip it to its rows. The metadata side is served by `ix_metadata_manifest_state` and the manifest side by `ix_manifest_manifest_group_id`.
+Execution roll-up for a set of manifest groups in a single round-trip: manifest count, executions by state, and last run per group. Backs the per-group stat columns on the dashboard's manifest groups list, which calls it with just the ids of the visible page, through the same `IOperationsService.GetManifestGroupExecutionStatsAsync` call. Every requested id gets a row (zeros when the group has no manifests or executions), returned in the order requested so the caller can zip it to its rows. The metadata side is served by `ix_metadata_manifest_state` and the manifest side by `ix_manifest_manifest_group_id`.
 
 ```graphql
 query {
@@ -1183,7 +1195,7 @@ query {
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `groupIds` | `[Long!]!` | Yes | The group ids to roll up. Duplicates are collapsed; an empty list returns an empty result |
+| `groupIds` | `[Long!]!` | Yes | The group ids to roll up, at most 1000 distinct ones. Duplicates are collapsed; an empty list returns an empty result. More than 1000 distinct ids fails the field with a GraphQL error coded `TRAX_TOO_MANY_IDS` |
 
 **Returns**: `[ManifestGroupStats!]!`
 
@@ -1376,7 +1388,7 @@ query {
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `input` | `String` | The train input as stored JSON. Can hold credentials; see [Train inputs and the operations gate](#train-inputs-and-the-operations-gate) |
+| `input` | `String` | The train input as stored JSON, with each `[TraxSensitive]` member masked. Can hold credentials; see [Train inputs and the operations gate](#train-inputs-and-the-operations-gate) |
 | `subjectHeldBy` | `Long` | For a queued entry with a subject: the dispatched entry for the same subject whose run is still pending or in progress. Dispatch skips the subject until that run finishes |
 | `subjectQueuedBehind` | `Long` | For a queued entry with a subject that nothing holds: the queued entry for the same subject that dispatch offers first (confirmed, due, in an enabled group, then higher priority, then older). Dispatch offers one entry per subject each cycle |
 

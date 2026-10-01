@@ -24,7 +24,7 @@ Data-change signals (`onDataChanged`) are unrelated to `[TraxBroadcast]` and fir
 Each subscription carries the authorization of the data it streams, decided for each subscriber when it subscribes:
 
 - **Operations view.** When the operations surface is exposed, a subscriber that satisfies the operations authorization receives every train, with the same detail `operations.executions` shows. That is the `GateOperations(...)` gate, or no further check when the host chose `AllowAnonymousOperations()` or gated the whole endpoint with `RequireAuthorization(...)`.
-- **Broadcast view.** Any other subscriber receives only `[TraxBroadcast]` trains whose own posture admits them: `[TraxAllowAnonymous]` admits everyone, and `[TraxAuthorize]` an authenticated caller meeting its policies and roles. For these subscribers `failureReason` is shown only when the train failed with a `TrainException` (whose message is written for clients); otherwise it reads `Unexpected Execution Error`. `hostName` and `hostEnvironment` are withheld.
+- **Broadcast view.** Any other subscriber receives only `[TraxBroadcast]` trains whose own posture admits them: `[TraxAllowAnonymous]` admits everyone, and `[TraxAuthorize]` an authenticated caller meeting its policies and roles. For these subscribers `failureReason` is shown only when the train failed with a `TrainException` (whose message is written for clients); otherwise it reads `Unexpected Execution Error`. This holds for a train that ran on another node and reached this one over [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster): the message carries the exception type, so the reason is shown or masked exactly as for a local run. A message from a publisher older than Trax.Effect 1.57.4 has no exception type, and its reason is masked. `hostName` and `hostEnvironment` are withheld.
 - A subscriber who could receive nothing is refused with `TRAX_AUTHORIZATION` when it subscribes.
 - `onDataChanged` needs the operations authorization when the operations surface is exposed, and an authenticated caller when it is not.
 
@@ -55,6 +55,7 @@ type TrainLifecycleEvent {
   failureReason: String
   hostName: String
   hostEnvironment: String
+  sequence: Long!
   output: Any
 }
 ```
@@ -70,6 +71,21 @@ type TrainLifecycleEvent {
 | `failureReason` | The failure message (only present on failed trains; masked outside the operations view unless the train raised a `TrainException`) |
 | `hostName` / `hostEnvironment` | The host that ran the train (operations view only) |
 | `output` | The train's output as JSON |
+| `sequence` | This event's position in the subscription: 1 for the first event, one more for each after it, and a skipped number after events were lost. See [Lost events](#lost-events) |
+
+## Lost events
+
+The lifecycle subscriptions are a live feed, not a log. HotChocolate keeps a bounded buffer for each subscriber (64 events), and when a subscriber falls behind, for example a slow socket while many trains change state at once, the oldest buffered events are dropped. The newest event always arrives.
+
+Every lifecycle event carries `sequence`, numbered per subscription. It counts up by one, and after a loss it skips one number, whatever was lost:
+
+```text
+sequence: 1, 2, 3, 5, 6   # something was lost between 3 and 5
+```
+
+A client that sees a number other than the previous one plus one has missed state changes, and should refetch what it shows (for an admin view, `operations.executions`; otherwise its own queries) and carry on reading the feed. The skip is always one number, so a subscriber outside the operations view does not learn how much activity there was in trains it cannot see. A loss of an event the subscriber would not have received is reported too, since the subscription cannot tell whose event was dropped; the refetch then changes nothing.
+
+Events a host sends through HotChocolate's `ITopicEventSender` itself, rather than through Trax's hooks, are not numbered and never cause a skip. Numbers are per API node. `Trax.Api/docs/adr/0032` records the decision.
 
 ## Examples
 

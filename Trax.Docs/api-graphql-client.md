@@ -26,7 +26,7 @@ services
     .WithStrictness(ResponseStrictness.ThrowOnDrift)
     .UseFileSchema("schema.graphql");
 
-// Optional: validate every IGraphQLClientRequest type in your assembly at startup.
+// Optional: validate the request types in your assembly against the schema.
 await app.Services.ValidateGraphQLClientAssembliesAsync(typeof(Program).Assembly);
 ```
 
@@ -56,6 +56,10 @@ public sealed class GetPlayerRequest : IGraphQLClientRequest<PlayerProfile>
 ```
 
 Use for one-off queries, anything with fragments / unions, queries copy-pasted from a Playground session.
+
+A request's document holds exactly one operation. Its fragments can come before or after it, since
+definition order means nothing in GraphQL. A document with two operations is refused when it is
+validated: the client sends no operation name, so the server could not tell which one to run.
 
 ### Mode E: `.graphql` resource file
 
@@ -93,6 +97,22 @@ public sealed class GetPlayerRequest : TypedRequest<TypedPlayer>
 ```
 
 The POCO declares the shape; `TypedQueryGenerator` walks the properties at startup and emits the query. Refactor a property, the query updates with it. Ships in `Trax.Api.GraphQL.Client.Typed`.
+
+How a property becomes a selection:
+
+| On the property | Selected as |
+|---|---|
+| nothing | the camel-cased property name: `Level` selects `level` |
+| `[JsonPropertyName("rank")]` | that name |
+| `[GraphQLField("name")]` | the schema field, aliased to the property's response key when they differ: `DisplayName` selects `displayName: name`, so the response deserializes without a matching `[JsonPropertyName]` |
+| `[JsonIgnore]` (`Condition = Always`) | nothing: the property is never read |
+| `[JsonIgnore(Condition = WhenWritingNull)]`, `WhenWritingDefault`, `Never` | the property as usual: those conditions affect writing only, and the response still fills it |
+
+A property whose type is another POCO gets its own sub-selection. A result type that leads back
+to itself, directly (`Category.Parent` is a `Category`) or through other types, is refused with
+an `InvalidOperationException` naming the loop, because a GraphQL selection must be finite. Give
+the nested level its own type that stops where the query should, or mark the property
+`[JsonIgnore]`. The same type under two sibling properties (`Home` and `Away`) is fine.
 
 | `[GraphQLOperation]` property | Purpose |
 |---|---|
@@ -136,9 +156,15 @@ The default extractor walks the same path before deserializing, so consumers sta
 
 | Provider | When to use |
 |---|---|
-| `IntrospectingSchemaProvider` (default) | The live endpoint is reachable at boot and lets this client introspect. Cheapest setup, weakest guarantee (drift between intro and check). A Trax server allows introspection only in Development unless its host passes `AllowIntrospection` a predicate that admits this client, so against a production Trax server pick one of the other two. |
+| `IntrospectingSchemaProvider` (default) | The live endpoint is reachable and lets this client introspect. Cheapest setup, weakest guarantee (drift between intro and check). A Trax server allows introspection only in Development unless its host passes `AllowIntrospection` a predicate that admits this client, so against a production Trax server pick one of the other two. |
 | `FileSchemaProvider` | CI, air-gapped builds, or you want startup validation against a checked-in SDL snapshot. Use a periodic introspection job to keep the snapshot fresh and alert on drift separately. |
 | `AssemblySchemaProvider` | In-ecosystem only. Builds the server's `ISchema` in-process from its DLL. Strongest query-string guarantee with zero network and zero file drift. Ships in `Trax.Api.GraphQL.Client.Trax`. |
+
+Every provider loads the schema on first use and shares it after that. A load that fails (the
+server was down, the file was missing) is not kept: the next validation loads again, so one bad
+moment at boot does not leave the client unable to validate until the process restarts. A
+caller's cancellation token stops that caller waiting; a load other callers are waiting on
+carries on.
 
 ```csharp
 // Pick a schema provider on the builder. Default is introspection; calling Use*Schema
@@ -176,13 +202,37 @@ for one server fails schema validation if you run it through the other server's 
 
 Without keying, a second `AddTraxGraphQLClient` call overrides the first (last registration
 wins) and both clients validate against a single schema. Keying keeps them isolated. Every
-builder method works the same on a keyed registration (`UseFileSchema`, `UseAssemblySchema`,
-`WithStrictness`, `ConfigureHttpClient`, `UseStartupValidation`), and the validation helper has
-a keyed overload:
+builder method works on a keyed registration (`UseFileSchema`, `UseAssemblySchema`,
+`WithStrictness`, `ConfigureHttpClient`, `UseStartupValidation`).
+
+To validate up front, mark each request with the key of the client it belongs to:
 
 ```csharp
+[GraphQLClient("serverB")]
+public sealed class GetInvoiceRequest : IGraphQLClientRequest<Invoice> { /* ... */ }
+
+[GraphQLClient("serverC")]
+public sealed class GetShipmentRequest : IGraphQLClientRequest<Shipment> { /* ... */ }
+```
+
+Validation for a keyed client checks only the requests marked with its key, and validation for
+the unkeyed client checks only the requests with no mark, so requests for every server can share
+one assembly. The key is compared by value, so an enum key works as well as a string. The mark
+only steers validation: which server a request goes to is still decided by the executor you
+resolve.
+
+```csharp
+services.AddKeyedTraxGraphQLClient("serverB", serverBUri).UseStartupValidation(typeof(Program).Assembly);
+services.AddKeyedTraxGraphQLClient("serverC", serverCUri).UseStartupValidation(typeof(Program).Assembly);
+
+// Or without the .Trax package:
 await app.Services.ValidateGraphQLClientAssembliesAsync("serverB", typeof(Program).Assembly);
 ```
+
+A validation that finds no request for its client refuses to start, naming the key. That is a
+request someone forgot to mark, and passing after checking nothing would hide it. A request
+marked with a key no client is registered under is validated by nobody, so check the spelling of
+the key.
 
 The single-server `AddTraxGraphQLClient` is unchanged. Use it when you talk to one server.
 
@@ -217,7 +267,7 @@ Available methods (extension methods on `TraxGraphQLClientBuilder`):
 | Method | What it does |
 |---|---|
 | `.UseAssemblySchema(configureDelegate)` | Builds the server's HotChocolate schema in-process from the same delegate the server uses. Zero network, zero file drift. |
-| `.UseStartupValidation(assemblies)` | Registers a hosted service that validates every `IGenericGraphQLClientRequest` at boot. Schema drift becomes a startup failure, not a runtime 400. |
+| `.UseStartupValidation(assemblies)` | Registers a hosted service that validates this client's request types at boot: those marked `[GraphQLClient(key)]` with its key, or the unmarked ones for the unkeyed client. Schema drift becomes a startup failure, not a runtime 400, and finding no request for the client fails too. |
 
 External consumers install only `Trax.Api.GraphQL.Client` and never see these methods.
 

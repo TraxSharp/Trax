@@ -50,9 +50,13 @@ The `version` field on the row is operator-controlled metadata, set via `UpsertO
 
 The convention is built-time stable, not content-derived. Apollo's automatic-persisted-queries (APQ) hash the document text and produce a different id whenever the text changes, defeating the hot-fix property; persisted operations do the opposite.
 
+### An id runs only the document the store holds for it
+
+A request names an id, a document, or both. With the id alone, the server runs the stored document, or refuses with `HC0020` when the id is unknown or deactivated. With the document alone, the server treats it as inline and enforcement decides. With both, the server refuses the request with `PERSISTED_OPERATION_ID_MISMATCH` (HTTP 400) unless the id is the document's own hash, under the executor's hash algorithm. That is the same check APQ makes before it trusts a client-supplied hash, so a client sending an id with the document it hashes from keeps working. HotChocolate hashes with MD5 hex by default; for Apollo-style SHA-256 ids, call `AddSha256DocumentHashProvider()` on the schema.
+
 ## Setup
 
-The minimum configuration enforces persisted-only requests, hits the database on every request (no cache), and uses no broadcaster:
+The minimum configuration enforces persisted-only requests on a host that runs one node:
 
 ```csharp
 builder.Services.AddTraxGraphQL(graphql => graphql
@@ -60,6 +64,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts => opts
         .UseDatabase(builder.Configuration.GetConnectionString("Trax")!)
         .RequirePersisted(true)
+        .SingleNode()
     )
 );
 
@@ -85,30 +90,43 @@ var result = await executor.ExecuteAsync(
 
 No Trax transport sets it, so a remote caller cannot.
 
-### With cache (single node)
+### One node or many
+
+Persisted operations refuse to start until you say how a change reaches every node. Each node caches the documents it serves, and HotChocolate's caches never expire, so an upload, deactivation or restore made on one node reaches another only if it is broadcast.
+
+| Deployment | Call |
+|---|---|
+| One process serves the endpoint and writes the store | `SingleNode()` |
+| More than one node, or the store is written from another process | `UseRabbitMqInvalidation(rabbitConnectionString)` |
+
+Calling neither, or both, fails at startup with a message naming the fix. An existing single-node host adds `.SingleNode()` to its `UsePersistedOperations(...)` call; the samples and templates need the same one line.
+
+`SingleNode()` is a claim nothing can check at runtime. A second node, or a CI uploader writing the store from its own process, makes it false: a change made there does not reach this node until it restarts.
 
 ```csharp
 .UsePersistedOperations(opts => opts
     .UseDatabase(connectionString)
     .RequirePersisted(true)
-    .WithInMemoryCache()
-)
-```
-
-The cache is a pure optimization. The default behavior (DB hit per request) is correct for the vast majority of deployments; opt in only when measurements show the lookup is hot.
-
-### With cache + multi-node invalidation
-
-```csharp
-.UsePersistedOperations(opts => opts
-    .UseDatabase(connectionString)
-    .RequirePersisted(true)
-    .WithInMemoryCache()
     .UseRabbitMqInvalidation(rabbitConnectionString)
 )
 ```
 
-The RabbitMQ broadcaster publishes a `PersistedOperationChangedMessage` on every upsert, deactivate, and restore. Each node binds an exclusive auto-delete queue to a fanout exchange (`trax.persisted_operations.invalidation`) and clears its local cache entry on receipt.
+The RabbitMQ broadcaster publishes a `PersistedOperationChangedMessage` on every upsert, deactivate, and restore. Each node binds an exclusive auto-delete queue to a fanout exchange (`trax.persisted_operations.invalidation`) and, on receipt, empties HotChocolate's caches and its Trax cache entry. When a node loses its broker connection it empties every cache, and empties them again when the connection recovers, because a change broadcast in between never reached it.
+
+An uploader that writes the store from its own process broadcasts too when you register the store with the broker's connection string: `AddPersistedOperationStore(databaseConnectionString, rabbitConnectionString)`.
+
+### With the Trax lookup cache
+
+```csharp
+.UsePersistedOperations(opts => opts
+    .UseDatabase(connectionString)
+    .RequirePersisted(true)
+    .SingleNode()
+    .WithInMemoryCache()
+)
+```
+
+There are two cache layers. HotChocolate always caches the parsed document and the compiled operation for each id it serves, so even without this the database is read only the first time a node serves an id and after a change empties those caches. `WithInMemoryCache()` adds a second layer under them that caches the store's lookups, with a TTL (15 minutes by default) that bounds that layer only. Turn it on only when measurements show the lookup is hot. It is independent of `UseRabbitMqInvalidation`, which reaches both layers.
 
 ### HotChocolate cache invalidation
 
@@ -117,7 +135,7 @@ Upsert, deactivate, and restore each clear HotChocolate's request-pipeline cache
 - `IDocumentCache` (keyed by persisted-operation id) holds the parsed `DocumentNode`.
 - `IPreparedOperationCache` (keyed by `{schema}-{executorVersion}-{documentId}+{operationName}`) holds the compiled operation.
 
-Without this, a re-uploaded document text would be visible from `IPersistedOperationStore.GetAsync` but the request executor would keep serving the previously compiled operation until the process restarted. Cross-node invalidation via `UseRabbitMqInvalidation(...)` triggers the same HotChocolate cache clear on every receiver.
+Without this, a re-uploaded document text would be visible from `IPersistedOperationStore.GetAsync` but the request executor would keep serving the previously compiled operation until the process restarted. Cross-node invalidation via `UseRabbitMqInvalidation(...)` triggers the same HotChocolate cache clear on every receiver. A document sent inline is cached only under its own hash, never under an id the request names.
 
 HotChocolate treats a persisted-operation id as immutable, so neither of its caches exposes per-id removal (and from version 16, no way to clear them at all). Enabling persisted operations therefore substitutes two cache implementations that can be emptied, with the same contracts and bounds as HotChocolate's own. Each invalidation empties them; persisted-operation edits are operator-driven and rare, so the cache-warm cost on the next handful of requests is acceptable. A host that does not use persisted operations keeps HotChocolate's caches untouched.
 
@@ -130,6 +148,7 @@ A consumer flipping enforcement on for the first time will reject every shipped 
     .UseDatabase(connectionString)
     .RequirePersisted(false)            // do not reject
     .LogNonPersistedRequests(true)      // log everything that would be rejected
+    .SingleNode()
 )
 ```
 
@@ -156,11 +175,11 @@ Introspection requests bypass enforcement automatically. A request is introspect
 
 ## Managing operations
 
-There are three surfaces, all backed by the same `IPersistedOperationStore` and the same shape-diff and schema-validation guardrails.
+There are three surfaces, all backed by the same `IPersistedOperationStore` and the same shape-diff and schema-validation guardrails. The dashboard and the GraphQL fields both go through `IPersistedOperationsService`, so they accept and refuse the same things with the same codes.
 
 ### From the dashboard
 
-When `UsePersistedOperations(...)` is wired into the API host, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id prefix, and offers Upload / Edit / Deactivate / Restore actions against the row's own tenant. It calls the same resolvers as the `operations.persistedOperations` fields, so an upload or deactivation the API refuses is refused with the same message. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
+When `UsePersistedOperations(...)` is wired into the API host, the Trax dashboard exposes a **Persisted Operations** entry under **Data**. The page lists `trax.persisted_operation` a page at a time, filters by tenant, status and id prefix, and offers Upload / Edit / Deactivate / Restore actions against the row's own tenant. It goes through the same `IPersistedOperationsService` as the `operations.persistedOperations` fields, so an upload or deactivation the API refuses is refused with the same message. The editor renders parse, schema-validation, and shape-diff errors inline so the operator never has to read a stack trace.
 
 If `UsePersistedOperations(...)` was not called, the sidebar entry is hidden and direct navigation to `/trax/data/persisted-operations`, or to an operation's detail page under it, renders a "not enabled on this server" panel. The dashboard probes the runtime via `IServiceProvider.GetService<IPersistedOperationsCapability>()`.
 
@@ -185,7 +204,7 @@ Mutations never throw to the client. Failures come back as a payload `errors[]` 
 | `SCHEMA_VALIDATION_FAILED` | Document references a field, type, or variable the server schema does not have. The error carries one entry per failure with `message` and (when available) `locations`. |
 | `SHAPE_DIFF_VIOLATION` | The edit would change the response shape of an existing id. The error carries `oldFingerprint` and `newFingerprint`. Pass `bypassShapeDiff: true` when the change is verified safe. |
 | `NOT_FOUND` | Deactivate or restore against an unknown id. |
-| `INVALID_INPUT` | `id` or required fields were empty. |
+| `INVALID_INPUT` | `id` or required fields were empty, or the document holds more than one operation. A persisted document holds exactly one. |
 
 Example upload:
 
@@ -213,7 +232,20 @@ The carve-out is not an authorization boundary. Enforcement is a request-shaping
 
 ### Programmatically
 
-`IPersistedOperationStore` is the in-process admin surface, registered automatically when the package is configured. Useful for tests, custom tooling, or one-off scripts:
+`IPersistedOperationsService` is the in-process management surface, registered by both `UsePersistedOperations` and `AddPersistedOperationStore`. It takes the same inputs and returns the same payloads as the GraphQL fields, and never throws for a refused change:
+
+```csharp
+var service = serviceProvider.GetRequiredService<IPersistedOperationsService>();
+var result = await service.UploadAsync(
+    new UploadPersistedOperationInput("userProfile_v1", "query UserProfile($id: Int!) { user(id: $id) { id name email } }"),
+    cancellationToken
+);
+if (!result.Success)
+    foreach (var error in result.Errors)
+        Console.WriteLine($"{error.Code}: {error.Message}");
+```
+
+`IPersistedOperationStore` is the lower-level store underneath it, which throws the structured exceptions below. Useful for tests or one-off scripts:
 
 ```csharp
 var store = serviceProvider.GetRequiredService<IPersistedOperationStore>();
@@ -231,15 +263,16 @@ Every upsert / deactivate / restore writes a row to `trax.persisted_operation_hi
 
 Every upsert runs the candidate document through HotChocolate's standard validation rules against the live schema before any row is written. The same rules HotChocolate runs at request time, so anything that passes here will execute at runtime (modulo runtime data shape).
 
-`IPersistedOperationStore.UpsertAsync` throws one of three structured exceptions on failure:
+`IPersistedOperationStore.UpsertAsync` throws one of four structured exceptions on failure:
 
 | Exception | When |
 |---|---|
 | `PersistedOperationParseException` | Syntax error. Carries `Line`, `Column`, `OriginalMessage`. |
 | `PersistedOperationValidationException` | Schema mismatch (unknown field, wrong variable type, etc.). Carries `IReadOnlyList<ValidationFailure>`. |
 | `ShapeDiffViolationException` | Edit changes the response shape of an existing id. Carries `OldFingerprint`, `NewFingerprint`. |
+| `PersistedOperationInputException` | The document holds no operation, or more than one. Code `INVALID_INPUT`. |
 
-All three inherit `PersistedOperationException`. The GraphQL mutations and the dashboard editor project them into structured error payloads with the codes documented above.
+All four inherit `PersistedOperationException`. The GraphQL mutations and the dashboard editor project them into structured error payloads with the codes documented above.
 
 Hosts using `AddPersistedOperationStore(...)` (admin tooling without a HotChocolate schema in process) get a no-op validator instead. The shape-diff guardrail still runs. `AddPersistedOperationStore` is complete on its own: the store resolves from a container with nothing else from this package, and with no request executor there is no HotChocolate cache to empty after a write.
 
@@ -259,13 +292,14 @@ The fingerprint considers these the same shape: whitespace, field reordering, ar
 |---|---|---|
 | `trax.persisted_operation` | Postgres `trax` | Live id -> document mapping |
 | `trax.persisted_operation_history` | Postgres `trax` | Append-only audit of every change |
+| `IPersistedOperationsService` | DI | Management surface shared by the GraphQL fields and the dashboard |
 | `IPersistedOperationStore` | DI | Programmatic CRUD |
 | `IPersistedOperationValidator` | DI | Schema validation at upsert time (HotChocolate-backed when `UsePersistedOperations`, no-op for `AddPersistedOperationStore`) |
 | `IPersistedOperationsCapability` | DI | Marker registered by `UsePersistedOperations`; dashboard probes for it to gate the management UI |
 | `IOperationDocumentStorage` | HotChocolate hot path | Resolves id to document for the request executor |
 | `PersistedOperationsMiddleware` | ASP.NET pipeline | Enforces inline-query rejection / shadow logging / allowlist |
-| `IPersistedOperationBroadcaster` | DI | Multi-node cache invalidation (no-op default) |
+| `IPersistedOperationBroadcaster` | DI | Multi-node cache invalidation (RabbitMQ with `UseRabbitMqInvalidation`, no-op with `SingleNode()`) |
 
 ## SDK Reference
 
-> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) | [PersistedOperationExceptions](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) | [PersistedOperationsDbContext](/docs/sdk-reference/persisted-operations/persisted-operations-db-context) | [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)
+> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) | [PersistedOperationExceptions](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) | [PersistedOperationsDbContext](/docs/sdk-reference/persisted-operations/persisted-operations-db-context) | [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)

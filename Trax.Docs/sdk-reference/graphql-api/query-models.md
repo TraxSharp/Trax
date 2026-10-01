@@ -93,10 +93,10 @@ public class TraxQueryModelAttribute : Attribute
 | `DeprecationReason` | `string?` | `null` | Marks the generated field as deprecated in the schema. |
 | `Namespace` | `string?` | `null` | Groups this field under a sub-namespace. When set, the field appears under `discover { namespace { field } }` instead of directly under `discover`. |
 | `Paging` | `bool` | `true` | Enables cursor-based pagination (Relay Connection spec). When true, the field returns a Connection type with `nodes`, `edges`, `pageInfo`, and `totalCount`. |
-| `Filtering` | `bool` | `true` | Enables filtering via a `where` argument. HotChocolate generates filter input types for all entity properties. |
+| `Filtering` | `bool` | `true` | Enables filtering via a `where` argument. The filter input offers the fields the entity's GraphQL type exposes (see `BindFields` and `ExposeAs`). |
 | `Sorting` | `bool` | `true` | Enables sorting via an `order` argument. HotChocolate generates sort input types for all entity properties. |
 | `Projection` | `bool` | `true` | Enables field projection. Only the columns requested by the GraphQL client are selected from the database. |
-| `BindFields` | `FieldBindingBehavior` | `Implicit` | Controls how fields are bound on the generated GraphQL ObjectType. When `Explicit`, only properties with `[Column]` are exposed; `[NotMapped]`, methods, and non-column members are excluded. |
+| `BindFields` | `FieldBindingBehavior` | `Implicit` | Controls how fields are bound on the generated GraphQL ObjectType and on its filter and sort inputs. When `Explicit`, only properties with `[Column]` are exposed; `[NotMapped]`, methods, and non-column members are excluded. |
 | `ExposeAs` | `Type?` | `null` | Restricts the GraphQL surface to the property set declared by the supplied interface. The entity must implement the interface implicitly. Filter and sort input types are constrained to the same set unless a custom override is supplied. Mutually exclusive with `BindFields = Explicit`. |
 
 ## Feature Configuration
@@ -205,7 +205,7 @@ public class Player
 }
 ```
 
-With `BindFields = FieldBindingBehavior.Explicit`, only `Id` and `DisplayName` appear in the GraphQL schema. The `Alias` property and `AddToDbContext` method are excluded.
+With `BindFields = FieldBindingBehavior.Explicit`, only `Id` and `DisplayName` appear in the GraphQL schema, on the object type and in the `where` and `order` inputs alike. The `Alias` property and `AddToDbContext` method are excluded. The same narrowed inputs are used wherever another model filters or sorts through a navigation to `Player`.
 
 | Value | Behavior |
 |-------|----------|
@@ -249,7 +249,8 @@ The generated schema contains only the four interface fields. `reviews` does not
 | **Object type fields** | The intersection of the entity's public properties and the interface's property names. |
 | **Filter input type** | Restricted to the same property set. Filtering on hidden properties produces a schema-validation error. |
 | **Sort input type** | Restricted to the same property set. |
-| **Custom filter/sort overrides** | When `AddFilterType<T>` or `AddSortType<T>` is registered, the override wins and `ExposeAs` is not consulted for that input type. |
+| **Navigations from other models** | Another model's filter or sort input reaches the entity through the same restricted input, so a hidden property cannot be filtered on through a navigation either. |
+| **Custom filter/sort overrides** | When `AddFilterType<T>` or `AddSortType<T>` is registered, the override wins and `ExposeAs` is not consulted for that input type. The override is also what a navigation from another model reaches. |
 | **Interface inheritance** | The full inherited interface graph is walked. Properties declared on parent interfaces are exposed. |
 | **Field metadata** | Description, deprecation, and other attributes are read from the **entity** property (interface declarations cannot carry attributes that influence the schema). |
 
@@ -276,7 +277,8 @@ A `[TraxQueryModel]` entity is exposed via GraphQL, so it must declare its autho
 Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The directive attaches at GraphQL type level *and* at the entry field, so the gate enforces uniformly:
 
 - the top-level field under `discover` (including Connection-shaped scalars like `totalCount` and `pageInfo`),
-- any other field elsewhere in the schema whose return type is this entity (e.g. a navigation property on an ungated parent).
+- any other field elsewhere in the schema whose return type is this entity (e.g. a navigation property on an ungated parent),
+- a `where` or `order` on another model that filters or sorts through a navigation to this entity.
 
 ```csharp
 [TraxQueryModel(Namespace = "library")]
@@ -287,6 +289,8 @@ public class Article { ... }
 Combinator semantics, role normalization, and inheritance behavior match the per-train `[TraxAuthorize]` surface. Policy names referenced by a `[TraxQueryModel]` entity must be registered with `services.AddAuthorization(...)`; a `QueryModelAuthorizationValidator` hosted service throws at host start if any policy is missing.
 
 The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated reads. It is mutually exclusive with `[TraxAuthorize]` and does not cascade through navigation properties to gated children. See [Authorization guide - Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous).
+
+An entity a query model reaches through a navigation, that is not itself a `[TraxQueryModel]`, declares its posture the same way, with `[TraxAuthorize]` or `[TraxAllowAnonymous]` on its class; the host refuses to start naming the navigation when it does not, unless the endpoint is gated with `RequireAuthorization()`. A class EF Core maps as owned is part of its owner and needs no marker. See [Authorization guide - Entities a Query Model Reaches](/docs/authorization#entities-a-query-model-reaches).
 
 See the [Authorization guide - Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (no field-level gating, no row-level filtering).
 
@@ -306,7 +310,7 @@ public class Person { ... }
 
 ## Custom Filter and Sort Types
 
-By default, HotChocolate generates `FilterInputType<TEntity>` and `SortInputType<TEntity>` based on all public properties of the entity. When you need to hide properties, rename filter fields, or customize the generated input types, register custom overrides via the builder:
+By default, Trax generates the filter and sort inputs from the entity's exposed field set: every public property, or the narrower set `BindFields = Explicit` or `ExposeAs` declares. When you need to hide properties, rename filter fields, or customize the generated input types, register custom overrides via the builder:
 
 ```csharp
 builder.Services.AddTraxGraphQL(graphql => graphql

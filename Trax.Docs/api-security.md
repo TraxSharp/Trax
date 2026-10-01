@@ -177,7 +177,7 @@ This replaces Trax's interceptor and is independent of auth-registration order. 
 
 ## Per-Train Authorization
 
-`TraxPrincipalExtensions.ToClaimsPrincipal` populates both `trax:principal-id` (the resolver's id qualified by the scheme, `{scheme}:{id}`, so two issuers' subjects never collide; see [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids)) and `ClaimTypes.Name`, so the existing `[TraxAuthorize]` machinery from [Authorization](/docs/authorization) works unchanged. Policies and roles behave exactly as ASP.NET Core documents them. Role comparison is case-insensitive.
+`TraxPrincipalExtensions.ToClaimsPrincipal` populates both `trax:principal-id` (the resolver's id qualified by the scheme, `{scheme}:{id}`, so two issuers' subjects never collide; see [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids)) and `ClaimTypes.Name`, so the existing `[TraxAuthorize]` machinery from [Authorization](/docs/authorization) works unchanged. Policies and roles behave exactly as ASP.NET Core documents them. Role comparison is exact and case-sensitive, as `IsInRole` makes it.
 
 ### Error Messages are Generic
 
@@ -216,7 +216,7 @@ services.AddTraxGraphQL(graphql => graphql
 | `MaxFieldCost` | 1000 | HotChocolate cost-analyzer ceiling. Prevents expensive field combinations. |
 | `DefaultResolverCost` | 10 | Base cost applied to each resolver in the cost analyzer. |
 | Introspection | On in Development, off elsewhere | Prevents anonymous schema enumeration in production. Decided per request on every transport (HTTP POST, GET, multipart, WebSocket). A predicate passed to `AllowIntrospection` replaces the default in every environment, Development included, and receives the request's `HttpContext`, so it can check the caller. The schema download (`?sdl`, `/schema`, `/schema.graphql`) and the GraphQL IDE follow the same answer and return 404 when it is no; an allowed download is sent `Cache-Control: private`. |
-| `MaxOperationsPerRequest` | 50 | Caps aliased + batched top-level selections per request, counting selections inside fragment spreads and inline fragments as if written in place (selections sharing a response name count once). Rejects with `TRAX_TOO_MANY_OPERATIONS`. |
+| `MaxOperationsPerRequest` | 50 | Caps the operations one request invokes: root fields, and the fields under each namespace (`dispatch`, `discover`, `operations`, nested namespaces such as `operations { deadLetters }`, and a train's declared `Namespace`). The namespace field itself is not counted, so `dispatch { a: refund(...) b: refund(...) }` counts two. Aliases and batched operations count, selections inside fragment spreads and inline fragments count as if written in place, and selections sharing a response path count once. Rejects with `TRAX_TOO_MANY_OPERATIONS` during validation, before any resolver runs. |
 | `MaxOperationsPerConnection` | 100 | Caps the operations one WebSocket connection runs at once. An operation started past it gets `TRAX_SOCKET_OPERATION_LIMIT` and takes no place; the connection stays open, and a place frees when one of its operations completes. It is per connection, so it does not bound how many connections a client opens. |
 | `operations` namespace | Off (queries and mutations) | The predefined `operations.*` queries (manifests, executions, dead letters, health, hosts, config) and mutations (trigger, cancel, requeue) are not exposed unless the consumer opts in via `ExposeOperationQueries()` / `ExposeOperationMutations()`. The mutation surface drives `ITraxScheduler` directly, so leaving it open lets any caller disrupt scheduled work, and the read surface discloses internal hostnames and per-instance execution counts. Exposing either without a gate fails at startup: answer with `GateOperations(policy, roles)` to gate the namespace alone, `RequireAuthorization()` to gate the whole endpoint, or `AllowAnonymousOperations()` to acknowledge a deliberately public control plane. The gate is the only check on manifest triggers and dead-letter requeues; `queueTrain` and `requeueExecution` also apply the train's `[TraxAuthorize]` requirements (see [The Operations Surface](/docs/authorization#the-operations-surface)). Train inputs (an execution's `input`, a manifest's `properties`, a work queue entry's `input`) and effect settings, any of which can hold credentials, answer to the same gate and are served one row at a time by the detail reads, never by a list (see [Train inputs and the operations gate](/docs/sdk-reference/graphql-api/queries#train-inputs-and-the-operations-gate)). |
 | HTTP GET | Off | GraphQL runs over POST only. A cross-site top-level navigation carries a `SameSite=Lax` cookie, so a GET-executable query could run a `[TraxQuery]` train as the signed-in user. `AllowGetRequests()` opts in; an opted-in GET still needs the `GraphQL-preflight` header and runs queries only. See [Serving GraphQL over GET](#serving-graphql-over-get). |
@@ -241,13 +241,13 @@ Endpoint-level `RequireAuthorization` blanket-gates the route, including the GET
 services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 ```
 
-This installs a HotChocolate `IHttpRequestInterceptor` that runs only when the request is an actual GraphQL operation. The IDE's HTML shell, the schema download and CORS preflights are not affected by it; the IDE and the schema download follow `AllowIntrospection` instead, so outside Development they are served only when your predicate allows the request. POST queries and mutations are checked against the policy and rejected with a GraphQL error:
+The policy is checked in HotChocolate's request pipeline, so it applies only when the request is an actual GraphQL operation. The IDE's HTML shell, the schema download and CORS preflights are not affected by it; the IDE and the schema download follow `AllowIntrospection` instead, so outside Development they are served only when your predicate allows the request. POST queries and mutations are checked against the policy and rejected with a GraphQL error, with status 400:
 
 ```json
 { "errors": [{ "message": "Not authorized.", "extensions": { "code": "TRAX_AUTHORIZATION" } }] }
 ```
 
-The error renders inline in the IDE result pane and matches the shape of per-train `[TraxAuthorize]` failures.
+The error renders inline in the IDE result pane and matches the shape of per-train `[TraxAuthorize]` failures. The refusal happens inside execution, so the [audit pipeline](#audit-pipeline) records it as an unsuccessful entry.
 
 The default policy is the combined `TraxAuthClaimTypes.TraxAuthPolicy`, which every `AddTrax*Auth` extension contributes its scheme to. When multiple schemes are registered (API key + JWT, etc.), any one of them is sufficient. To require a specific scheme:
 
@@ -283,7 +283,7 @@ Input is read without JSON reference handling: `$id`, `$ref` and `$values` are n
 
 ## Audit Pipeline
 
-`Trax.Api.GraphQL.Audit` is a HotChocolate `ExecutionDiagnosticEventListener` that captures each request, serializes it into a `TraxAuditEntry`, and enqueues to a bounded channel. A background writer drains the channel in batches and hands them to your `ITraxAuditSink`. The request thread never blocks on the sink.
+`Trax.Api.GraphQL.Audit` is a HotChocolate `ExecutionDiagnosticEventListener` that captures each request, serializes it into a `TraxAuditEntry`, and enqueues to a bounded channel. A background writer drains the channel in batches and hands them to your `ITraxAuditSink`. The request thread never blocks on the sink. A request the endpoint policy refuses is captured too, as an unsuccessful entry with the caller's principal, or `<anonymous>` when it had no credential.
 
 Wiring:
 
@@ -307,14 +307,60 @@ services.AddTraxGraphQL(graphql =>
 | `SkipIntrospection` | true | Drop introspection operations (every top-level selection is `__schema`, `__type` or `__typename`) from the log. |
 | `SkipSubscriptions` | true | Subscriptions don't fit the request/response model. |
 | `DefaultPrincipalId` | `<anonymous>` | Used when the request has no Trax principal. |
-| `MaxRetries` | 3 | Sink retry attempts before dropping a batch. |
+| `MaxRetries` | 3 | Sink retry attempts before dropping a batch. Dropped entries increment `trax.audit.dropped`. |
 | `RetryBackoff` | 100ms | Initial backoff, doubles on each retry. |
 
-Scrub sensitive variables via `ITraxAuditRedactor`:
+### What an Entry Records
+
+An audit store is kept for a long time and read by more people than the API, so an entry records what was called and by whom, not the values the caller sent:
+
+- **The document has its literals replaced.** Every string becomes `""` and every number `0`, wherever it appears: inline arguments, nested input objects, list items, directive arguments and variable defaults. Field names, aliases, input field names, booleans, enum values and `null` are kept. `login(input: { user: "bob", password: "hunter2" })` is recorded as `login(input: { user: "", password: "" })`. This is the same transform Apollo uses for its operation signatures, except that input objects and lists keep their shape.
+- **Variables are not recorded** unless you register an `ITraxAuditRedactor` that returns them. The default, `DefaultAuditRedactor`, returns `null`.
+
+To record variables, register a redactor and keep only what is safe. It receives the variables as a `JsonObject`, with input objects as nested objects and lists as arrays, so it can remove a field at any depth:
 
 ```csharp
-services.AddSingleton<ITraxAuditRedactor, MyRedactor>();
+public sealed class SensitiveFieldRedactor : ITraxAuditRedactor
+{
+    private static readonly HashSet<string> Sensitive = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "password", "token", "apiKey", "secret",
+    };
+
+    public JsonObject? Redact(JsonObject? variables)
+    {
+        Strip(variables);
+        return variables;
+    }
+
+    private static void Strip(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var key in obj.Select(p => p.Key).Where(Sensitive.Contains).ToList())
+                    obj.Remove(key);
+                foreach (var (_, child) in obj)
+                    Strip(child);
+                break;
+            case JsonArray array:
+                foreach (var child in array)
+                    Strip(child);
+                break;
+        }
+    }
+}
+
+services.AddSingleton<ITraxAuditRedactor, SensitiveFieldRedactor>();
 ```
+
+A removal list fails open for a field you did not think of. Where that matters, keep a list of fields to record instead. `ErrorText` is not redacted: a resolver that puts an input value in its error message puts it in the audit.
+
+### Drops and Shutdown
+
+Every entry the listener offers is either handed to the sink or counted in `trax.audit.dropped` (and `TraxAuditChannel.TotalDropped`). An entry is dropped when the channel is full, when the sink refuses its batch after `MaxRetries` retries, or when shutdown runs out of time.
+
+On graceful shutdown the writer stops accepting entries and writes every entry it already accepted. It has until the host's shutdown timeout (`HostOptions.ShutdownTimeout`, 30 seconds by default); the cancellation token the sink receives fires only then. What is still unwritten at that point, including a batch a sink is stuck on, is counted as dropped, and the host finishes stopping.
 
 ## Operational Hygiene
 
@@ -326,7 +372,7 @@ Trax does none of these for you:
 - **Rate limiting:** use ASP.NET Core's rate-limit middleware keyed on `trax:principal-id`.
 - **Introspection:** off outside Development by default. If you open it with `AllowIntrospection`, make the predicate check the caller rather than returning `true`.
 - **Audit dashboards:** alert on non-zero `trax.audit.dropped`. A dropped entry is an invisible operation.
-- **Redaction:** implement `ITraxAuditRedactor` for every payload that could contain tokens, PII, or secrets.
+- **Redaction:** variables are not recorded by default. If you register an `ITraxAuditRedactor` to record them, remove every field that could carry a token, PII, or a secret, at any depth.
 
 ## SDK Reference
 

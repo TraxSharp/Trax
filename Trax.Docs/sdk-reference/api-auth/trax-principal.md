@@ -50,6 +50,13 @@ claims (`TryGetTraxPrincipal`, the injected `TraxPrincipal`, `TraxCaller.Princip
 `{scheme}:{id}`. Project a resolver's output once: projecting a read-back principal again
 qualifies it twice.
 
+A claim type can appear more than once in a `ClaimsPrincipal`: an `IClaimsTransformation` that adds
+one claim per permission, or a policy naming several schemes, whose evaluator merges each scheme's
+identity into one principal. Reading it back keeps the first value of each type, the one
+`ClaimsPrincipal.FindFirst` returns, so a merged principal reads as its first identity. The `Claims`
+bag holds one value per type; read `claimsPrincipal.FindAll(type)` for every value of a multi-valued
+claim.
+
 ## TraxPrincipalId
 
 ```csharp

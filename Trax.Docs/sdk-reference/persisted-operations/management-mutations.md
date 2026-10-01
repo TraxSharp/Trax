@@ -7,7 +7,7 @@ grand_parent: SDK Reference
 
 # Management mutations and queries
 
-[UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under the `operations.persistedOperations` namespace. This matches the layout for every other Trax management feature (`operations.manifestGroups`, `operations.deadLetters`, etc.). The same fields back the Trax dashboard's persisted-operations pages and the sample client's manifest uploader.
+[UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under the `operations.persistedOperations` namespace. This matches the layout for every other Trax management feature (`operations.manifestGroups`, `operations.deadLetters`, etc.). Every field calls [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), the same service the Trax dashboard's persisted-operations pages call, so both accept and refuse the same things.
 
 These fields always bypass `PersistedOperationsMiddleware` enforcement. Persisting them by id would be a chicken-and-egg, and they are already protected by whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
 
@@ -15,7 +15,7 @@ These fields always bypass `PersistedOperationsMiddleware` enforcement. Persisti
 
 ### `uploadPersistedOperation`
 
-Insert or update an operation. Runs schema validation, then the shape-diff guardrail.
+Insert or update an operation. Runs schema validation, requires exactly one operation in the document, then runs the shape-diff guardrail.
 
 | Input field | Type | Required | Notes |
 |---|---|---|---|
@@ -75,7 +75,7 @@ All mutations return errors via the payload `errors[]` array; mutations never th
 
 | Field | Type | Notes |
 |---|---|---|
-| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT`. |
+| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation). |
 | `message` | `String!` | Human-readable message. |
 | `locations` | `[Location!]` | 1-based line / column. Present on parse errors and most schema-validation errors. |
 | `path` | `[String!]` | Response path. Present on some schema-validation errors. |

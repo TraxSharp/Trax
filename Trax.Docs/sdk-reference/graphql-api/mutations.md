@@ -307,7 +307,7 @@ mutation {
 
 ### cancelManifest
 
-Requests cancellation of all running executions for a manifest. Sets `CancellationRequested` on active metadata records so the next cancellation-token check aborts execution.
+Requests cancellation of every pending and running execution of a manifest. Sets `CancellationRequested` on each, which the run observes at its next junction boundary on any host; a run on the host that received the mutation is also cancelled at once.
 
 ```graphql
 mutation {
@@ -355,7 +355,7 @@ mutation {
 
 ### cancelGroup
 
-Requests cancellation of all running executions across all manifests in a group.
+Requests cancellation of every pending and running execution across all manifests in a group, by the same rule as [`cancelManifest`](#cancelmanifest).
 
 ```graphql
 mutation {
@@ -380,8 +380,10 @@ mutation {
 ### cancelExecution
 
 Requests cancellation of a single execution by metadata id. Sets the durable
-`cancel_requested` flag on the row (only when it is still `PENDING` or `IN_PROGRESS`); an
-in-process runner observes it and transitions the train to `CANCELLED`.
+`cancel_requested` flag on the row when it is still `PENDING` or `IN_PROGRESS`; the process
+running the train observes it at its next junction boundary and records the run as `CANCELLED`,
+and a run on the host that received the mutation is cancelled at once. It goes through the same
+`IOperationsService.CancelExecutionsAsync` call as the dashboard's Cancel button.
 
 ```graphql
 mutation {
@@ -395,7 +397,48 @@ mutation {
 |-----------|------|----------|-------------|
 | `id` | `Long!` | Yes | The execution's metadata id |
 
-**Returns**: `OperationResponse`. `count` is `1` when flagged, `0` when the execution is missing or already terminal.
+**Returns**: `OperationResponse`. `count` is `1` when the execution was flagged. An execution that is missing or already terminal returns `success: false` with `count` `0`.
+
+---
+
+### cancelExecutions
+
+Requests cancellation of many executions at once, as [`cancelExecution`](#cancelexecution) does for one. Every id still `PENDING` or `IN_PROGRESS` is flagged in one statement; terminal and unknown ids are skipped. Backs the dashboard's bulk cancel.
+
+```graphql
+mutation {
+  operations {
+    cancelExecutions(ids: [100, 101, 102]) { success count message }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 execution metadata ids |
+
+**Returns**: `OperationResponse`. `count` is the number flagged, zero included. An empty list, or more than 1000 ids, returns `success: false` and flags nothing.
+
+---
+
+### setManifestsEnabled
+
+Enables or disables many manifests at once. Only manifests whose flag differs are written. Backs the dashboard's bulk enable and disable.
+
+```graphql
+mutation {
+  operations {
+    setManifestsEnabled(ids: [3, 4, 5], enabled: false) { success count message }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 manifest database ids |
+| `enabled` | `Boolean!` | Yes | The flag to set |
+
+**Returns**: `OperationResponse`. `count` is the number of manifests changed, zero included. An empty list, or more than 1000 ids, returns `success: false` and changes nothing.
 
 ---
 
@@ -410,7 +453,10 @@ than `success: false`.
 An execution with no saved input is refused with `success: false` and a message saying inputs are
 saved only when [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters)
 is on. So is one whose input was too large to save in full and was stored as the truncation
-placeholder (`{"_truncated": true, ...}`). Enqueue refusals (a throwing `OnQueue`, an unusable
+placeholder (`{"_truncated": true, ...}`), and one whose recorded input has a
+[`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) member masked as
+`{"_redacted": true}`: re-queueing it would run the train with the mask in place of the value.
+Enqueue refusals (a throwing `OnQueue`, an unusable
 subject key, a deferred entry cancelled before confirmation) come back as `success: false`, with
 the message rule [`queueTrain`](#queuetrain) describes, and an infrastructure failure is a masked GraphQL error, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
 defaults rather than with what it ran with. This check runs before authorization, so it answers
@@ -462,6 +508,34 @@ mutation {
 | `intervalSeconds` | `Int` | Interval |
 
 **Returns**: `OperationResponse` (`success: false` when the manifest id does not exist).
+
+---
+
+### setEffectEnabled
+
+Turns an observational effect on or off in the API process, through the effect registry, the same calls the dashboard's [Effects page](/docs/dashboard#effects-page) makes. The change is in memory: it does not reach the scheduler or worker processes where trains usually run, and a restart restores the configured state.
+
+```graphql
+mutation {
+  operations {
+    setEffectEnabled(
+      fullName: "Trax.Effect.Provider.Json.Services.JsonEffectFactory.JsonEffectProviderFactory"
+      enabled: false
+    ) {
+      success
+      count
+      message
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `fullName` | `String!` | Yes | The effect factory's full type name, as [`operations.effects`](/docs/sdk-reference/graphql-api/queries#effects) reports it in `fullName`. Matched exactly. |
+| `enabled` | `Boolean!` | Yes | `true` to turn the effect on, `false` to turn it off |
+
+**Returns**: `OperationResponse`. `success` is false, and nothing changes, when no effect has that name or the effect was registered as not toggleable. On success `count` is 1.
 
 ---
 
@@ -531,7 +605,7 @@ Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (
 
 ### manifestGroups (nested namespace)
 
-The `operations.manifestGroups` namespace patches mutable fields on a manifest group. The dashboard's group settings panel calls the same underlying service, so a save from either surface produces an identical write.
+The `operations.manifestGroups` namespace patches mutable fields on a manifest group and enables or disables groups in bulk. The dashboard calls the same underlying service, so a save from either surface produces an identical write.
 
 #### updateManifestGroup
 
@@ -565,6 +639,47 @@ mutation {
 | `isEnabled` | `Boolean` | `null` | Whether the group is active. `null` = no change |
 
 **Returns**: `OperationResponse`. On success, `count` is the number of fields actually changed (zero if every supplied value already matched the persisted row). On failure (the group is not found, or a value is out of range), `success` is `false`, `message` explains, and no field is written.
+
+#### setManifestGroupsEnabled
+
+Enables or disables the listed groups. Only groups whose flag differs are written, with `updatedAt` bumped.
+
+```graphql
+mutation {
+  operations {
+    manifestGroups {
+      setManifestGroupsEnabled(ids: [1, 2], enabled: false) { success count message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 manifest group ids |
+| `enabled` | `Boolean!` | Yes | The flag to set |
+
+**Returns**: `OperationResponse`. `count` is the number of groups changed, zero included. An empty list, or more than 1000 ids, returns `success: false` and changes nothing: an empty list never means "every group".
+
+#### setAllManifestGroupsEnabled
+
+Enables or disables every manifest group. It is a field of its own so that "all" is something a caller asks for by name.
+
+```graphql
+mutation {
+  operations {
+    manifestGroups {
+      setAllManifestGroupsEnabled(enabled: true) { success count message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `enabled` | `Boolean!` | Yes | The flag to set |
+
+**Returns**: `OperationResponse`. `count` is the number of groups changed, zero included.
 
 ---
 
@@ -604,12 +719,48 @@ mutation {
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `trainName` | `String!` | Yes | N/A | Train interface FullName (matches the `serviceTypeName` returned by `operations.trains`) |
+| `trainName` | `String!` | Yes | N/A | Train interface FullName, the `fullName` that [`operations.trains`](/docs/sdk-reference/graphql-api/queries#trains) returns (not its `serviceTypeName`, which is a display name) |
 | `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. `null` or blank is read as `{}`, so a train whose input needs no values can be queued without one; an input type that needs values (a positional record whose parameters have no defaults, or a `required` member) is refused. The JSON literal `null` is refused |
 | `priority` | `Int` | No | `0` | Dispatch priority 0-31. Values outside that range are clamped |
 | `scheduledAt` | `DateTime` | No | `null` | Earliest UTC time the entry should be picked up. Null means dispatch immediately |
 
-**Returns**: `OperationResponse`. On success, `count` is `1` and `message` includes the new entry's ID.
+**Returns**: `OperationResponse`. On success, `count` is `1` and `id` is the new work queue entry's id, which `message` also names.
+
+#### runTrain
+
+Runs a train now, through the same `IOperationsService.RunTrainAsync` call as the dashboard's Run dialog. The run's `PENDING` execution row is written and handed straight to the job submitter the train is routed to (its `[TraxRemote]` or builder route, otherwise the host's default), so it skips the work queue: dispatch ordering, group limits and the subject lock do not apply. Use [`queueTrain`](#queuetrain) when they should.
+
+What the caller sees follows the operations payload convention:
+
+- **Refused**: `success: false` with a `message`, and no execution row is written. An unknown `trainName`, invalid JSON (`"Invalid InputJson: "` and the parser's message), an oversized input (the generic `"The train input failed validation."`), or a refusal the train itself makes.
+- **Not allowed**: the train's `[TraxAuthorize]` requirements apply on top of the operations gate and are checked before `inputJson` is read. A caller who may not run the train gets a GraphQL error with code `TRAX_AUTHORIZATION` and message `"Not authorized."`, even when the input is malformed.
+- **Server failure**: when the submitter fails, the execution row is marked `FAILED` with that exception and the caller gets HotChocolate's masked `"Unexpected Execution Error"`. A database failure writing the row is reported the same way.
+
+```graphql
+mutation {
+  operations {
+    workQueue {
+      runTrain(input: {
+        trainName: "Trax.Samples.GameServer.Trains.Combat.IResolveCombatTrain"
+        inputJson: "{\"attackerId\":\"player-1\",\"defenderId\":\"player-2\"}"
+      }) {
+        success
+        id
+        message
+      }
+    }
+  }
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `trainName` | `String!` | Yes | N/A | Train interface FullName, as for [`queueTrain`](#queuetrain) |
+| `inputJson` | `String` | No | `null` | JSON payload that deserializes to the train's input type. Property names match whatever their case and a property given twice is refused. `null` or blank is read as `{}` |
+
+**Returns**: `OperationResponse`. On success, `id` is the execution's metadata id (pass it to `operations.execution` or `executionDetail`), not a work queue id, and `count` is `1`.
+
+A host that exposes the operations mutations must register an `IJobSubmitter`, or it refuses to start; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql).
 
 #### cancelWorkQueueEntry
 
@@ -633,9 +784,10 @@ mutation {
 
 #### cancelWorkQueueEntries
 
-Cancels many queued entries in one round-trip (a single set-based `UPDATE`). Only entries
-still `QUEUED` are affected; already-dispatched or already-cancelled ids in the list are
-silently skipped. Backs the dashboard's bulk-cancel selection.
+Cancels many queued entries in one round-trip (a single set-based `UPDATE` through the same
+`IOperationsService.CancelWorkQueueEntriesAsync` call as the dashboard). Only entries still
+`QUEUED` are affected; already-dispatched or already-cancelled ids in the list are skipped.
+Backs the dashboard's bulk-cancel selection.
 
 ```graphql
 mutation {
@@ -649,9 +801,9 @@ mutation {
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `ids` | `[Long!]!` | Yes | Work queue entry ids to cancel |
+| `ids` | `[Long!]!` | Yes | 1 to 1000 work queue entry ids to cancel |
 
-**Returns**: `OperationResponse`. `count` is the number actually cancelled.
+**Returns**: `OperationResponse`. `count` is the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns `success: false` (`"No ids were given."` for an empty one) and cancels nothing.
 
 ---
 
@@ -668,5 +820,6 @@ Shared response type for operations mutations.
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | `Boolean!` | Whether the operation succeeded |
-| `count` | `Int` | Number of affected records (only populated by `cancelManifest`, `triggerGroup`, `cancelGroup`) |
+| `count` | `Int` | Number of affected records, for a mutation that acts on a set or patches fields; `null` otherwise |
+| `id` | `Long` | The one row the operation acted on, when there is one: the work queue entry `queueTrain` and `requeueExecution` created, the execution `runTrain` started, the group `updateManifestGroup` patched. `null` otherwise |
 | `message` | `String` | Human-readable status message |

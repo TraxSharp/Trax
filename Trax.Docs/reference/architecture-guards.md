@@ -54,7 +54,7 @@ public sealed class MyTrainGuards : TrainGuardFixture
 }
 ```
 
-That is the whole test project. `dotnet test` discovers the inherited `[Test]` methods through your subclasses. Subclass only the fixtures for concerns you have; type-list members (`DomainContexts`, `MigrationContexts`, `Edges`, `TrainAssemblies`) default to empty, so a guard you do not configure passes vacuously. The `[TestFixture]` attribute on each subclass is required for the runner to discover the inherited tests.
+That is the whole test project. `dotnet test` discovers the inherited `[Test]` methods through your subclasses. Subclass only the fixtures for concerns you have; type-list members (`DomainContexts`, `MigrationContexts`, `Edges`, `TrainAssemblies`) default to empty, so a guard you do not configure passes vacuously. The source-scanning guards are the exception: `CrossSchemaGuardFixture` fails when its scan roots hold no cross-schema `[ExtendObjectType]` resolver, or no `[Parent]` resolver, naming the roots it scanned, because a scan pointed at the wrong folder would otherwise pass on nothing. A repo that really has none overrides `ExpectsCrossSchemaResolvers` or `ExpectsParentResolvers` to return `false`. The `[TestFixture]` attribute on each subclass is required for the runner to discover the inherited tests.
 
 `ArchitectureGuardOptions` carries the per-repo configuration: scan roots, allowlists, and the expected versions. Allowlist entries are repo-relative paths; the source guards walk up from the test assembly to the nearest `*.slnx` to find the repo root.
 

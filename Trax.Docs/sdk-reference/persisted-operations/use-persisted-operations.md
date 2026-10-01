@@ -20,18 +20,19 @@ public static TraxGraphQLBuilder UsePersistedOperations(
 
 ## Usage
 
-Minimal (DB hit per request, no cache, no broadcaster):
+One node:
 
 ```csharp
 services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts => opts
         .UseDatabase(connectionString)
         .RequirePersisted(true)
+        .SingleNode()
     )
 );
 ```
 
-With cache + multi-node invalidation:
+More than one node, with the optional Trax lookup cache:
 
 ```csharp
 services.AddTraxGraphQL(graphql => graphql
@@ -44,6 +45,8 @@ services.AddTraxGraphQL(graphql => graphql
 );
 ```
 
+One of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required; see [One node or many](/docs/persisted-operations#one-node-or-many).
+
 See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) for every method.
 
 ## What gets registered
@@ -53,9 +56,10 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | `PersistedOperationsOptions` | Singleton | Resolved configuration. |
 | `IDbContextFactory<PersistedOperationsDbContext>` | Singleton (factory) | EF Core context factory. Postgres-backed. |
 | `IPersistedOperationCache` -> `NoOp` or `InMemory` | Singleton | Cache layer. No-op unless `WithInMemoryCache()` was called. |
-| `IPersistedOperationBroadcaster` -> `NoOp` or `RabbitMq` | Singleton | Multi-node invalidation. No-op unless `UseRabbitMqInvalidation()` was called. |
-| `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and clears local cache on broadcast. |
+| `IPersistedOperationBroadcaster` -> `NoOp` or `RabbitMq` | Singleton | Multi-node invalidation. RabbitMQ with `UseRabbitMqInvalidation()`, no-op with `SingleNode()`. |
+| `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and empties HotChocolate's caches and the Trax cache on broadcast, on losing the broker connection, and on recovering it. |
 | `IPersistedOperationStore` -> `DbPersistedOperationStorage` | Singleton | Programmatic CRUD. |
+| `IPersistedOperationsService` | Singleton (TryAdd) | The management surface the GraphQL fields and the dashboard call. |
 | `IOperationDocumentStorage` -> `DbPersistedOperationStorage` | Singleton | HotChocolate hot-path lookup. |
 | `IPersistedOperationValidator` -> `HotChocolateSchemaValidator` | Singleton (Replace) | Runs HotChocolate validation against the live schema before every upsert. Overrides the no-op default from `AddPersistedOperationStore`. |
 | `IPersistedOperationsCapability` | Singleton | Marker probed by the dashboard to gate the management UI. |
@@ -75,6 +79,7 @@ Persisted operations and a GraphQL-exposed scheduler console are separable. `Exp
 .UsePersistedOperations(po => po
     .UseDatabase(connectionString)
     .RequirePersisted(true)
+    .SingleNode()
     .ExposeOperationsNamespace(false)
 )
 ```
@@ -89,6 +94,7 @@ Configuration errors throw `InvalidOperationException` at startup. Each message 
 |---|---|
 | `UseDatabase` not called | Throws: "UseDatabase(connectionString) is required." |
 | `RequirePersisted(false)` and `LogNonPersistedRequests(false)` | Throws: configuration does nothing. |
-| `UseRabbitMqInvalidation` without `WithInMemoryCache` | Throws: broadcasts have nothing to invalidate. |
+| Neither `SingleNode()` nor `UseRabbitMqInvalidation(...)` | Throws: names both, since HotChocolate's caches do not expire and a change reaches another node only by broadcast. |
+| Both `SingleNode()` and `UseRabbitMqInvalidation(...)` | Throws: the two contradict each other. |
 | `WithInMemoryCache` called twice | Throws. |
 | `AllowOperations` contains an empty entry | Throws. |

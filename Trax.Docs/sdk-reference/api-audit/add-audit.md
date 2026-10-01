@@ -40,9 +40,9 @@ services.AddTraxGraphQL(graphql =>
 |---|---|---|
 | `TraxAuditChannel` | Singleton | Bounded channel between listener and writer. |
 | `TraxGraphQLAuditListener` | Singleton | HotChocolate `ExecutionDiagnosticEventListener`. |
-| `TraxAuditWriter` | Hosted service (singleton) | Drains channel, batches, calls sink with retry. |
+| `TraxAuditWriter` | Hosted service (singleton) | Drains channel, batches, calls sink with retry; on shutdown writes every accepted entry within the host's shutdown timeout. |
 | `ITraxAuditSink` -> `TSink` | Scoped | Consumer-provided destination. |
-| `ITraxAuditRedactor` -> `DefaultAuditRedactor` | Singleton (TryAdd) | Override with your own. |
+| `ITraxAuditRedactor` -> `DefaultAuditRedactor` | Singleton (TryAdd) | Records no variables. Register your own to record them. |
 | `IHttpContextAccessor` | Singleton | Listener reads `HttpContext.User`. |
 | Disclaimer hosted service | Singleton (idempotent) | One-shot startup NO-WARRANTY log. |
 
