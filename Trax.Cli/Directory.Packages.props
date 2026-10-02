@@ -1,6 +1,11 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Let a central PackageVersion apply to a package that also arrives
+         transitively, so one version wins across the graph. It does NOT mean a
+         PackageVersion can stand alone: one with no PackageReference anywhere is
+         invisible to Dependabot and freezes. See the Tests.Meta pin guard. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <!-- Optional local override for Trax.* package versions during cross-repo dev.
@@ -10,24 +15,24 @@
   <!-- Trax cross-repo packages. CI uses the exact pin; trax-local.props overrides to the locally-packed
        1.99.99 during cross-repo dev. -->
   <ItemGroup>
-    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.57.2" />
+    <PackageVersion Include="Trax.Effect.StateMachine.Persistence" Version="1.57.4" />
   </ItemGroup>
 
   <!-- Third-party packages (exact pins). -->
   <ItemGroup>
-    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
-    <PackageVersion Include="FluentAssertions" Version="8.10.0" />
+    <PackageVersion Include="FluentAssertions" Version="8.11.0" />
     <PackageVersion Include="GraphQL-Parser" Version="9.5.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
-    <PackageVersion Include="Microsoft.OpenApi.Readers" Version="1.6.29" />
-    <PackageVersion Include="NUnit" Version="4.6.1" />
-    <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
-    <PackageVersion Include="NUnit3TestAdapter" Version="6.2.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.OpenApi.Readers" Version="1.6.31" />
+    <PackageVersion Include="NUnit" Version="5.0.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="PublicApiGenerator" Version="11.5.4" />
-    <PackageVersion Include="Scriban" Version="7.2.5" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.9" />
+    <PackageVersion Include="Scriban" Version="7.5.0" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.12" />
   </ItemGroup>
 
   <!--

@@ -104,7 +104,17 @@ internal sealed partial class MachineGenerator
                 "Nothing to generate: pass at least one of --ir-out, --twin-out, --corpus-out."
             );
 
-        var id = o.Machine.Name;
+        string id;
+        try
+        {
+            id = o.Machine.Name;
+        }
+        catch (ArgumentException ex)
+        {
+            // The engine refuses a malformed Id(...) when the machine is built, which reading the name
+            // triggers. Report it as the same refusal as the check below rather than a stack trace.
+            throw new InvalidOperationException(ex.Message, ex);
+        }
         // The id names every file below; refuse it before anything is written (cli/0005).
         if (!IsMachineId(id))
             throw new InvalidOperationException(
