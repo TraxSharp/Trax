@@ -1,7 +1,7 @@
 namespace Trax.Mediator.Exceptions;
 
 /// <summary>
-/// Thrown by <see cref="Services.TrainExecution.TrainExecutionService.QueueAsync"/> when a train
+/// Thrown by <see cref="Services.TrainExecution.TrainExecutionService.QueueAsync(string, string?, Services.TrainExecution.QueueTrainOptions, CancellationToken)"/> when a train
 /// that defers promotion had its staged entry cancelled while its <c>OnQueue</c> hook ran.
 /// </summary>
 /// <remarks>

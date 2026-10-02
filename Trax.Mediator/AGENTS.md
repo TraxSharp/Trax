@@ -18,12 +18,14 @@ if your work contradicts one, say so rather than silently overriding it.
 | `[TraxAuthorize]`, or anything in `TrainAuthorization/` | [0001](./docs/adr/0001-authorization-is-fail-closed.md), the default is fail-closed and the opt-out is a named call |
 | `TrainExecutionService.QueueAsync` | central `docs/0017` (a caller's enqueue goes through the mediator), `docs/0018` (the deferred, staged enqueue) and `docs/0019` (the subject key it stamps); [0004](./docs/adr/0004-an-onqueue-hook-runs-under-a-time-limit.md) for the hook's time limit |
 | `TrainDiscoveryService`, `TrainBus`, `LocalRunExecutor`, or anything that runs a train by name | [0005](./docs/adr/0005-a-train-run-by-name-is-the-train-that-runs.md), a run by name resolves the named train, never the one registered for its input type |
+| `QueueTrainOptions.ReplayDecisionsOf`, or the `ITrainExecutionService` overload that carries it | central `docs/0041`, a requeued run replays the decisions of the run it repeats |
 | `TrainChainStartupValidator`, or `SkipChainVerification()` | central `docs/0016`, a chain is a declaration the host reads at startup |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Eighteen name `mediator`. Besides the workspace-wide conventions, the
+index lists them by repo. Twenty-seven name `mediator`. Besides the workspace-wide conventions, the
 ones most likely to reach a change here are `0016` to `0019` (routed above) and `0007`, the canonical train name being the interface FullName, which
-`InterfaceFullNameInvariantTests` in this repo enforces at the point of registration. In a
+`InterfaceFullNameInvariantTests` in this repo enforces at the point of registration, and `0040`/`0041`,
+which a train's decision steps and a requeue's replay link follow. In a
 workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
 on GitHub, because it crosses a repository boundary.
 

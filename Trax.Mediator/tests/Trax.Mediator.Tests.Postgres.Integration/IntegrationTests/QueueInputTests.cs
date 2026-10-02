@@ -8,6 +8,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
 
@@ -29,6 +30,62 @@ public class QueueInputTests : TestSetup
         var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
         using var context = await factory.CreateDbContextAsync(CancellationToken.None);
         return await context.WorkQueues.AsNoTracking().SingleAsync(w => w.Id == id);
+    }
+
+    [Test]
+    public async Task A_run_queued_to_replay_an_earlier_one_carries_the_earlier_runs_id()
+    {
+        // A requeue repeats a run, so it must take the tracks the original took. The entry
+        // carries the original's id to the run's metadata at dispatch, where decision replay
+        // reads it.
+        var result = await Execution.QueueAsync(
+            typeof(IOptionalInputTrain).FullName!,
+            null,
+            new QueueTrainOptions { Priority = 3, ReplayDecisionsOf = 4242 }
+        );
+
+        var entry = await EntryAsync(result.WorkQueueId);
+        entry.ReplayDecisionsOf.Should().Be(4242);
+        entry.Priority.Should().Be(3);
+    }
+
+    [Test]
+    public async Task An_implementation_that_predates_replay_refuses_rather_than_dropping_it()
+    {
+        ITrainExecutionService old = new PredatesReplay();
+
+        var act = async () =>
+            await old.QueueAsync("Any", null, new QueueTrainOptions { ReplayDecisionsOf = 1 });
+
+        // A host misconfiguration, typed so the operations service can report it as one rather
+        // than as a refusal, and named so the operator knows which registration to fix.
+        var thrown = await act.Should().ThrowAsync<DecisionReplayNotSupportedException>();
+        thrown.Which.ImplementationType.Should().Be(typeof(PredatesReplay));
+        thrown.Which.Message.Should().Contain(typeof(PredatesReplay).FullName!);
+    }
+
+    /// <summary>An implementation written before the options overload existed.</summary>
+    private sealed class PredatesReplay : ITrainExecutionService
+    {
+        public Task<QueueTrainResult> QueueAsync(
+            string trainName,
+            string? inputJson,
+            int priority = 0,
+            DateTime? scheduledAt = null,
+            CancellationToken ct = default
+        ) => Task.FromResult(new QueueTrainResult(1, "x"));
+
+        public Task<RunTrainResult> RunAsync(
+            string trainName,
+            string inputJson,
+            CancellationToken ct = default
+        ) => throw new NotSupportedException();
+
+        public Task<PreparedTrain> PrepareAsync(
+            string trainName,
+            string? inputJson,
+            CancellationToken ct = default
+        ) => throw new NotSupportedException();
     }
 
     [Test]

@@ -72,14 +72,32 @@ public class TrainExecutionService(
     private static readonly ConcurrentDictionary<Type, MethodInfo> EnterQueueHooksCache = new();
 
     /// <inheritdoc/>
-    public async Task<QueueTrainResult> QueueAsync(
+    public Task<QueueTrainResult> QueueAsync(
         string trainName,
         string? inputJson,
         int priority = 0,
         DateTime? scheduledAt = null,
         CancellationToken ct = default
+    ) =>
+        QueueAsync(
+            trainName,
+            inputJson,
+            new QueueTrainOptions { Priority = priority, ScheduledAt = scheduledAt },
+            ct
+        );
+
+    /// <inheritdoc/>
+    public async Task<QueueTrainResult> QueueAsync(
+        string trainName,
+        string? inputJson,
+        QueueTrainOptions options,
+        CancellationToken ct = default
     )
     {
+        ArgumentNullException.ThrowIfNull(options);
+        var priority = options.Priority;
+        var scheduledAt = options.ScheduledAt;
+
         var (registration, input) = await PrepareCoreAsync(trainName, inputJson, ct);
 
         registration.ServiceType.FullName.AssertLoaded();
@@ -129,6 +147,7 @@ public class TrainExecutionService(
                 ScheduledAt = ToUtc(scheduledAt),
                 DeferPromotion = deferPromotion,
                 SubjectKey = subjectKey,
+                ReplayDecisionsOf = options.ReplayDecisionsOf,
             }
         );
         entry.ExternalId = externalId;

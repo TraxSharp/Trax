@@ -1,7 +1,7 @@
 namespace Trax.Mediator.Exceptions;
 
 /// <summary>
-/// Thrown by <see cref="Services.TrainExecution.TrainExecutionService.QueueAsync"/> when a train's
+/// Thrown by <see cref="Services.TrainExecution.TrainExecutionService.QueueAsync(string, string?, Services.TrainExecution.QueueTrainOptions, CancellationToken)"/> when a train's
 /// <c>OnQueue</c> hook runs longer than <c>MaxQueueHookDuration</c>. The enqueue is rolled back:
 /// no entry is written, and nothing the hook wrote on the enqueue's context is kept.
 /// </summary>

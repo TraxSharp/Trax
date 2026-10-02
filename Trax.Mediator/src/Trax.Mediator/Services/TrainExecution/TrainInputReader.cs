@@ -47,7 +47,8 @@ public static class TrainInputReader
     /// The rules: the size cap is checked before anything is parsed; property names match
     /// whatever their case, and a property given twice (in any casing) is refused
     /// (Trax.Docs/adr/0023); JSON reference metadata (<c>$id</c>, <c>$ref</c>, <c>$values</c>)
-    /// is not honoured, so an input is exactly the tree the caller wrote; and a JSON
+    /// is not honoured, so an input is exactly the tree the caller wrote (a saved input, which
+    /// carries it, goes through <see cref="ResolveSavedInput"/> first); and a JSON
     /// <c>null</c> is refused. Call it after authorization, so a caller who may not use the
     /// train learns nothing about its input from a parse error.
     /// </remarks>
@@ -77,6 +78,63 @@ public static class TrainInputReader
             );
 
         return Deserialize(json, registration, missing);
+    }
+
+    /// <summary>
+    /// Turns a run's saved input (the <c>Input</c> column <c>SaveTrainParameters()</c> writes)
+    /// into JSON that <see cref="Read"/> reads as the input the run was given.
+    /// </summary>
+    /// <param name="savedInputJson">The saved input.</param>
+    /// <param name="registration">The train the input was saved for.</param>
+    /// <param name="maxInputJsonBytes">
+    /// The size cap, in UTF-8 bytes, that <see cref="Read"/> will hold the result to, normally
+    /// <c>MediatorConfiguration.MaxInputJsonBytes</c>.
+    /// </param>
+    /// <returns>
+    /// The input as a plain JSON tree, or <paramref name="savedInputJson"/> unchanged when it was
+    /// saved without reference metadata.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <c>SaveTrainParameters()</c> writes with <c>TraxJsonSerializationOptions.Default</c>, which
+    /// preserves references: every object carries an <c>$id</c>, a list is written as
+    /// <c>{"$id":"2","$values":[...]}</c>, and a second occurrence of the same object as
+    /// <c>{"$ref":"3"}</c>. <see cref="Read"/> does not honour that metadata in a caller's
+    /// input, so read directly a saved list is refused and a <c>$ref</c> reads back as an object
+    /// with every member at its default. Anything that reads a saved input back as a train's
+    /// input (a re-queue) passes it through here first.
+    /// </para>
+    /// <para>
+    /// Only a saved input whose root object starts with <c>$id</c>, the form a writer that
+    /// preserves references always gives it, is rewritten. Each <c>$id</c> is dropped, each
+    /// <c>$values</c> object is written as its array, and each <c>$ref</c> is written as a full
+    /// copy of the value it names, so the result is a tree: no two members of the input read from
+    /// it share an object. A <c>$ref</c> to a value that contains it has no such tree and is
+    /// refused. Writing stops the moment the result is larger than
+    /// <paramref name="maxInputJsonBytes"/>, so references that copy one value many times over
+    /// cannot make a small saved input a large one. Nothing here depends on the input type, so it
+    /// reveals nothing about it and may run before the caller is authorized.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="JsonException">
+    /// The saved input is not JSON, its reference metadata is malformed or names a value that is
+    /// not there, or a value refers to itself.
+    /// </exception>
+    /// <exception cref="TrainInputValidationException">
+    /// The plain form is larger than <paramref name="maxInputJsonBytes"/>.
+    /// </exception>
+    public static string ResolveSavedInput(
+        string savedInputJson,
+        TrainRegistration registration,
+        int maxInputJsonBytes
+    )
+    {
+        ArgumentNullException.ThrowIfNull(savedInputJson);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        return SavedInputReferences.Present(savedInputJson)
+            ? SavedInputReferences.Resolve(savedInputJson, registration, maxInputJsonBytes)
+            : savedInputJson;
     }
 
     /// <summary>

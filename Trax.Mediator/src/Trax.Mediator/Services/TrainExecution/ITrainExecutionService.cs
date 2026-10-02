@@ -36,11 +36,38 @@ public interface ITrainExecutionService
     );
 
     /// <summary>
+    /// Queues a train as <see cref="QueueAsync(string, string?, int, DateTime?, CancellationToken)"/>
+    /// does, with the options that overload has no parameter for.
+    /// </summary>
+    /// <param name="trainName">The fully qualified service type name of the train.</param>
+    /// <param name="inputJson">JSON-serialized input for the train, read as the other overload reads it.</param>
+    /// <param name="options">Priority, schedule, and the earlier run whose decisions the new run replays.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The created WorkQueue entry's ID and external ID.</returns>
+    /// <exception cref="Exceptions.DecisionReplayNotSupportedException">
+    /// <see cref="QueueTrainOptions.ReplayDecisionsOf"/> is set and this implementation does not
+    /// implement this overload, so it predates replaying decisions. The host is misconfigured
+    /// rather than the enqueue refused: the exception names the implementation, and the enqueue is
+    /// not made without the link, because the run would then ask its deciders afresh and could
+    /// take a different track from the run it repeats.
+    /// </exception>
+    /// <remarks>Throws whatever the other overload throws, for the same reasons.</remarks>
+    Task<QueueTrainResult> QueueAsync(
+        string trainName,
+        string? inputJson,
+        QueueTrainOptions options,
+        CancellationToken ct = default
+    ) =>
+        options.ReplayDecisionsOf is null
+            ? QueueAsync(trainName, inputJson, options.Priority, options.ScheduledAt, ct)
+            : throw new Exceptions.DecisionReplayNotSupportedException(GetType());
+
+    /// <summary>
     /// Runs a train directly via ITrainBus on this machine.
     /// This is a blocking call that awaits train completion.
     /// </summary>
     /// <param name="trainName">The fully qualified service type name of the train.</param>
-    /// <param name="inputJson">JSON-serialized input for the train. Blank is read the way <see cref="QueueAsync"/> reads a missing input.</param>
+    /// <param name="inputJson">JSON-serialized input for the train. Blank is read the way <see cref="QueueAsync(string, string?, int, DateTime?, CancellationToken)"/> reads a missing input.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The metadata ID of the completed execution.</returns>
     /// <exception cref="Exceptions.TrainNotFoundException">No registered train has that name.</exception>
@@ -57,13 +84,13 @@ public interface ITrainExecutionService
 
     /// <summary>
     /// Resolves a train by name, authorizes the current caller for it, and reads the caller's
-    /// input into the train's input type: the steps <see cref="QueueAsync"/> and
+    /// input into the train's input type: the steps <see cref="QueueAsync(string, string?, int, DateTime?, CancellationToken)"/> and
     /// <see cref="RunAsync"/> take before doing anything else, for a surface that submits the work
     /// some other way. Authorization runs before the input is read, so a caller who may not use the
     /// train learns nothing about its input from a parse error. Nothing is written.
     /// </summary>
     /// <param name="trainName">The fully qualified service type name of the train, or its friendly name when that is unique.</param>
-    /// <param name="inputJson">JSON input, read exactly as <see cref="QueueAsync"/> reads it: null or blank as an empty object, property names in any case, a repeated property refused, and the <c>MaxInputJsonBytes</c> cap applied.</param>
+    /// <param name="inputJson">JSON input, read exactly as <see cref="QueueAsync(string, string?, int, DateTime?, CancellationToken)"/> reads it: null or blank as an empty object, property names in any case, a repeated property refused, and the <c>MaxInputJsonBytes</c> cap applied.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The train and its input. Only this method can produce one.</returns>
     /// <exception cref="Exceptions.TrainNotFoundException">No registered train has that name.</exception>
@@ -84,7 +111,7 @@ public interface ITrainExecutionService
         );
 }
 
-/// <summary>The work queue entry <see cref="ITrainExecutionService.QueueAsync"/> created.</summary>
+/// <summary>The work queue entry <c>ITrainExecutionService.QueueAsync</c> created.</summary>
 /// <param name="WorkQueueId">The entry's database id.</param>
 /// <param name="ExternalId">
 /// The entry's external id, a 32-character hex GUID. The run the scheduler later dispatches
@@ -92,6 +119,27 @@ public interface ITrainExecutionService
 /// correlates the enqueue with its run.
 /// </param>
 public record QueueTrainResult(long WorkQueueId, string ExternalId);
+
+/// <summary>
+/// How a train is queued, beyond its name and input.
+/// </summary>
+public sealed record QueueTrainOptions
+{
+    /// <summary>Dispatch priority (0–31, higher runs first).</summary>
+    public int Priority { get; init; }
+
+    /// <summary>
+    /// Earliest time the entry may be dispatched, stored as UTC. Null dispatches as soon as a
+    /// worker is free.
+    /// </summary>
+    public DateTime? ScheduledAt { get; init; }
+
+    /// <summary>
+    /// The metadata id of an earlier run whose recorded decisions the new run replays, so it takes
+    /// the tracks that run took instead of asking its deciders again. Set when repeating a run.
+    /// </summary>
+    public long? ReplayDecisionsOf { get; init; }
+}
 
 /// <summary>A completed run from <see cref="ITrainExecutionService.RunAsync"/> or <c>IRunExecutor</c>.</summary>
 /// <param name="MetadataId">The id of the run's metadata record.</param>
