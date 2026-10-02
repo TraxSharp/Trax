@@ -30,4 +30,14 @@ public static class BuilderOrderExtensions
         LogLevel? minimumLogLevel = null,
         List<string>? blacklist = null
     ) => throw new InvalidOperationException(DataProviderFirst);
+
+    internal const string DataProviderBeforeDecisions =
+        "Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDecisionRecording().";
+
+    /// <summary>Not callable: <c>AddDecisionRecording</c> comes after a data provider.</summary>
+    [Obsolete(DataProviderBeforeDecisions, error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static TraxEffectBuilderWithData AddDecisionRecording(
+        this TraxEffectBuilder configurationBuilder
+    ) => throw new InvalidOperationException(DataProviderBeforeDecisions);
 }

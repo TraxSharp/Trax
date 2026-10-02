@@ -125,6 +125,12 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     public DbSet<Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
 
     /// <summary>
+    /// Gets or sets the DbSet for the decisions trains made at run time, recorded by
+    /// <c>AddDecisionRecording</c>.
+    /// </summary>
+    public DbSet<Effect.Models.RecordedDecision.RecordedDecision> RecordedDecisions { get; set; }
+
+    /// <summary>
     /// Gets or sets the DbSet for the state-machine drafts Trax.Effect.StateMachine.Persistence stores.
     /// </summary>
     public DbSet<Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
@@ -164,6 +170,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
             modelBuilder
         );
         Models.RunnerNonce.PersistentRunnerNonce.OnModelCreating(modelBuilder);
+        Models.RecordedDecision.PersistentRecordedDecision.OnModelCreating(modelBuilder);
         Models.SnapshotDraft.PersistentSnapshotDraft.OnModelCreating(modelBuilder);
         Models.EffectClaim.PersistentEffectClaim.OnModelCreating(modelBuilder);
     }

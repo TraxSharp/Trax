@@ -319,6 +319,39 @@ public class Metadata : IModel, IDisposable
     public long? ManifestId { get; set; }
 
     /// <summary>
+    /// The run whose recorded decisions this run replays, or null for a run that asks its
+    /// deciders afresh.
+    /// </summary>
+    /// <remarks>
+    /// Set when a run is requeued: the new run takes the tracks the original took instead of
+    /// asking again and possibly being answered differently. It follows the chain back, so a
+    /// question the named run never reached takes the answer of the run that one replayed. Not a
+    /// foreign key, because the original may be deleted first; a run whose chain names a run that
+    /// no longer exists, belongs to another train, or ran without recording its decisions
+    /// (<see cref="DecisionsRecorded"/>) fails before its first junction, classified permanent,
+    /// rather than asking afresh. A question no run in the chain reached is asked afresh.
+    /// </remarks>
+    [Column("replay_decisions_of")]
+    [JsonPropertyName("replay_decisions_of")]
+    [JsonInclude]
+    public long? ReplayDecisionsOf { get; set; }
+
+    /// <summary>
+    /// True when the run started on a host that records decisions (<c>AddDecisionRecording</c>),
+    /// so every decision it made is in <c>trax.decision</c>; false when what it decided, if
+    /// anything, was never recorded.
+    /// </summary>
+    /// <remarks>
+    /// Set by <c>ServiceTrain.Run</c> on the run's first write, before any junction, so a run
+    /// killed mid-way still carries it. A replay reads it to tell a run that reached no questions
+    /// from one whose answers it cannot know.
+    /// </remarks>
+    [Column("decisions_recorded")]
+    [JsonPropertyName("decisions_recorded")]
+    [JsonInclude]
+    public bool DecisionsRecorded { get; set; }
+
+    /// <summary>
     /// Gets the manifest that defines this train execution.
     /// </summary>
     /// <remarks>
@@ -395,6 +428,7 @@ public class Metadata : IModel, IDisposable
             StartTime = DateTime.UtcNow,
             ParentId = metadata.ParentId,
             ManifestId = metadata.ManifestId,
+            ReplayDecisionsOf = metadata.ReplayDecisionsOf,
             HostName = host?.HostName,
             HostEnvironment = host?.HostEnvironment,
             HostInstanceId = host?.HostInstanceId,

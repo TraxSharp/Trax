@@ -40,4 +40,7 @@ public class CreateMetadata
     /// a run started directly.
     /// </summary>
     public long? ManifestId { get; set; }
+
+    /// <summary>The run whose recorded decisions the new run replays, if any.</summary>
+    public long? ReplayDecisionsOf { get; set; }
 }

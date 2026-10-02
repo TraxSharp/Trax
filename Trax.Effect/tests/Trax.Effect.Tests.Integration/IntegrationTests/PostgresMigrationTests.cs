@@ -28,6 +28,9 @@ public class PostgresMigrationTests
         "ix_runner_nonce_expires_at",
         // 050: a consumer's lookup of its runs by external id.
         "ix_metadata_external_id",
+        // 054: the metadata cleanup keeps a run that a queued entry or another run replays.
+        "ix_work_queue_replay_decisions_of",
+        "ix_metadata_replay_decisions_of",
     ];
 
     private static string GetConnectionString()

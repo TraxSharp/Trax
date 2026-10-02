@@ -1,13 +1,12 @@
 name: Release NuGet Package
 
-# A merge to main verifies main (build-test) but does NOT release. Releases are cut
-# manually: run this workflow from the Actions tab when you want to publish whatever
-# has accumulated on main. semantic-release reads every commit since the last tag, so
-# one run cuts one version at the highest bump those commits call for.
+# Runs only when dispatched by hand from the Actions tab, to publish whatever has
+# accumulated on main. A merge to main runs nothing here: the pull request already built
+# and tested the change. build-test still runs first in every release, so nothing is
+# tagged or published from a main that does not build and pass. semantic-release reads
+# every commit since the last tag, so one run cuts one version at the highest bump those
+# commits call for.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -18,7 +17,6 @@ concurrency:
 permissions: {}
 
 env:
-  DOTNET_VERSION: '10.0.x'
   NODE_VERSION: '22'
 
 jobs:
@@ -86,14 +84,49 @@ jobs:
           global-json-file: global.json
       - name: Restore (locked)
         run: dotnet restore --locked-mode
+      - name: Every project is locked
+        run: .github/scripts/check-project-locks.sh Trax.Effect.slnx
+      - name: No deprecated packages
+        run: .github/scripts/check-deprecated-packages.sh Trax.Effect.slnx
       - name: Build
         run: dotnet build --configuration Release --no-restore -warnaserror
       - name: Test
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+      - name: Upload coverage results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage
+          path: TestResults/**/coverage.cobertura.xml
+          if-no-files-found: warn
+          retention-days: 1
+
+  # The Codecov token is kept out of the job that runs restore, build and tests, so
+  # nothing those leave running can read it. This job runs no project code.
+  coverage:
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        # Codecov maps the report's file paths onto the repository's tracked files.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download coverage results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/coverage
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
         with:
-          directory: ./TestResults
+          directory: ${{ runner.temp }}/coverage
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -103,9 +136,10 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     needs: build-test
-    # Only a manual dispatch releases. On a push to main this job is skipped, so the
-    # merge is verified without consuming a version number.
-    if: github.event_name == 'workflow_dispatch'
+    # Only a dispatch of main releases. The ref is checked here as well as in the
+    # environment's branch policy, so a dispatch from any other branch stops before it
+    # reaches the approval.
+    if: github.ref == 'refs/heads/main'
     # Gated on the same protected environment as publish, so a dispatch cannot cut a
     # tag, a GitHub release or a changelog entry before an approver signs off. Without
     # this, anyone with write access could burn a version number.
@@ -119,6 +153,7 @@ jobs:
     outputs:
       released: ${{ steps.version.outputs.released }}
       version: ${{ steps.version.outputs.version }}
+      digests: ${{ steps.digests.outputs.digests }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
@@ -164,6 +199,12 @@ jobs:
           # controlled, but this is the pattern to use for any ${{ }} value).
           PKG_VERSION: ${{ steps.version.outputs.version }}
         run: dotnet pack --configuration Release --no-restore --output nupkg -p:Version="$PKG_VERSION"
+      - name: Record package digests
+        # Handed to publish as a job output rather than inside the artifact, so publish
+        # can tell whether what it downloaded is what this job built.
+        id: digests
+        if: steps.version.outputs.released == 'true'
+        run: echo "digests=$(cd nupkg && sha256sum -- *.nupkg | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Upload package artifact
         if: steps.version.outputs.released == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -199,6 +240,17 @@ jobs:
         with:
           name: nupkg
           path: nupkg
+      - name: Verify the packages are the ones release built
+        env:
+          DIGESTS: ${{ needs.release.outputs.digests }}
+        run: |
+          echo "$DIGESTS" | base64 -d > "$RUNNER_TEMP/expected.sha256"
+          cd nupkg
+          if [ "$(printf '%s\n' *.nupkg | sort)" != "$(awk '{print $2}' "$RUNNER_TEMP/expected.sha256" | sort)" ]; then
+            echo "::error::The downloaded packages are not the set the release job built."
+            exit 1
+          fi
+          sha256sum --check --strict "$RUNNER_TEMP/expected.sha256"
       - name: Attest build provenance (SLSA)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
@@ -206,9 +258,8 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
-          # This job never checks out the repo (it only pushes the built nupkg), so there is no
-          # global.json to read. `dotnet nuget push` works with any recent SDK.
-          dotnet-version: '10.0.x'
+          # This job has no checkout, so it cannot read global.json. Keep the two in step.
+          dotnet-version: "10.0.301"
       # NuGet trusted publishing: exchange the GitHub OIDC token for a short-lived
       # (~1h, single-use) key. No stored NUGET_API_KEY. Requires a trusted-publishing
       # policy on nuget.org scoped to this repo + workflow file + the `release` environment.

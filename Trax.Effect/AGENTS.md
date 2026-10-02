@@ -28,6 +28,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `IEnqueueContextAccessor` | central `docs/0018`, the context flows with the async call and is null for a deferring train |
 | `DataLayerGuards.OwnerScopeCompleteness`, or a consumer's per-user row filters | [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md), a filter counts only if it reads the principal, and a per-user entity is a bare `[TraxAuthorize]` |
 | `TrainInput` in `QueueSubjectKey` or `OnQueue`, or `ServiceTrain.EnterQueueHooks` | central `docs/0021`, the enqueue hands the hooks their input for a scope and never sets `Metadata` |
+| `AddDecisionRecording`, the `trax.decision` table, `replay_decisions_of`, or the System One / Nimble decider | central `docs/0040` (a decider chooses a declared track) and `docs/0041` (a requeued run replays the decisions of the run it repeats); the table follows `docs/0009` and `docs/0036` |
 | `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
 | `[TraxSensitive]`, `TraxRedaction`, or anything that serializes a train's input or output for storage | [0010](./docs/adr/0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md), a marked member is masked where its copy is written, opt-in, never by name |
 | `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
@@ -38,7 +39,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty-one name `effect`: executable guards, exact version pinning, the
+index lists them by repo. Twenty-seven name `effect`: executable guards, exact version pinning, the
 dependency direction, the three test conventions (FluentAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,
@@ -46,8 +47,11 @@ test frameworks staying out of shipped libraries, exemplars declared by attribut
 its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
 a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
 queued work running one at a time (`0019`), failures being classified where they happen
-(`0020`), a queue hook reading its input through `TrainInput` (`0021`), and a feature table shipping with its
-model on `IDataContext` (`0036`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
+(`0020`), a queue hook reading its input through `TrainInput` (`0021`), a warning failing the CI build
+(`0032`), packages validating against their last release (`0033`), a feature table shipping with its
+model on `IDataContext` (`0036`), the ADR guard being released by tag (`0038`), docs merging after
+their code (`0039`), a decider choosing a declared track (`0040`), and a requeued run replaying the
+decisions it repeats (`0041`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
 does not resolve on GitHub, because it crosses a repository boundary.
 
 ## When your change makes a decision

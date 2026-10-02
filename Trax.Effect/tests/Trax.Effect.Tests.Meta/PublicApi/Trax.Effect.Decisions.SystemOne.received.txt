@@ -1,0 +1,61 @@
+namespace Trax.Effect.Decisions.SystemOne
+{
+    public sealed class DecisionServiceException : System.Exception
+    {
+        public DecisionServiceException(string message) { }
+    }
+    public sealed class NimbleOptions
+    {
+        public const int DefaultMaxConcurrentRequests = 4;
+        public const int DefaultMaxOptions = 26;
+        public const string DefaultModel = "bespokelabs/Bespoke-Nimble-9B";
+        public const int MaxQuestionsPerRequest = 64;
+        public NimbleOptions() { }
+        public string? ApiKey { get; set; }
+        public System.TimeSpan AttemptTimeout { get; set; }
+        public System.Uri? Endpoint { get; set; }
+        public int MaxAttempts { get; set; }
+        public int? MaxConcurrentRequests { get; set; }
+        public int MaxOptions { get; set; }
+        public System.TimeSpan MaxRetryDelay { get; set; }
+        public string Model { get; set; }
+        public System.TimeSpan RetryDelay { get; set; }
+    }
+    public sealed class SystemOneDecider : System.IDisposable, Trax.Core.Decisions.IDecider, Trax.Core.Decisions.IVetsQuestions
+    {
+        public SystemOneDecider(Trax.Effect.Decisions.SystemOne.SystemOneOptions options) { }
+        public SystemOneDecider(Trax.Effect.Decisions.SystemOne.SystemOneOptions options, System.Net.Http.HttpClient http) { }
+        public System.Threading.Tasks.Task<Trax.Core.Decisions.DecisionResult> Decide(Trax.Core.Decisions.DecisionRequest request, System.Threading.CancellationToken cancellationToken) { }
+        public void Dispose() { }
+        public System.Collections.Generic.IEnumerable<string> Problems(Trax.Core.Decisions.DeclaredQuestions declared) { }
+    }
+    public sealed class SystemOneOptions
+    {
+        public SystemOneOptions() { }
+        public bool AllowFloatingModel { get; set; }
+        public string? ApiKey { get; set; }
+        public System.TimeSpan AttemptTimeout { get; set; }
+        public System.Uri? Endpoint { get; set; }
+        public int MaxAttempts { get; set; }
+        public int? MaxConcurrentRequests { get; set; }
+        public int MaxOptions { get; set; }
+        public int MaxQuestions { get; set; }
+        public System.TimeSpan MaxRetryDelay { get; set; }
+        public string? Model { get; set; }
+        public System.TimeSpan RetryDelay { get; set; }
+    }
+}
+namespace Trax.Effect.Decisions.SystemOne.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder AddNimbleDecider<TBuilder>(this TBuilder configurationBuilder, System.Action<Trax.Effect.Decisions.SystemOne.NimbleOptions> configure)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+        public static TBuilder AddNimbleDecider<TBuilder>(this TBuilder configurationBuilder, string name, System.Action<Trax.Effect.Decisions.SystemOne.NimbleOptions> configure)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+        public static TBuilder AddSystemOneDecider<TBuilder>(this TBuilder configurationBuilder, System.Action<Trax.Effect.Decisions.SystemOne.SystemOneOptions> configure)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+        public static TBuilder AddSystemOneDecider<TBuilder>(this TBuilder configurationBuilder, string name, System.Action<Trax.Effect.Decisions.SystemOne.SystemOneOptions> configure)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}

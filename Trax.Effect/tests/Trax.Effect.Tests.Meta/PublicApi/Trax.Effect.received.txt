@@ -677,6 +677,7 @@ namespace Trax.Effect.Models.Metadata.DTOs
         public long? ManifestId { get; set; }
         public required string Name { get; set; }
         public long? ParentId { get; set; }
+        public long? ReplayDecisionsOf { get; set; }
     }
 }
 namespace Trax.Effect.Models.Metadata
@@ -690,6 +691,10 @@ namespace Trax.Effect.Models.Metadata
         public System.Collections.Generic.ICollection<Trax.Effect.Models.Metadata.Metadata> Children { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("currently_running_junction")]
         public string? CurrentlyRunningJunction { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("decisions_recorded")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("decisions_recorded")]
+        public bool DecisionsRecorded { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("end_time")]
         public System.DateTime? EndTime { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("executor")]
@@ -737,6 +742,10 @@ namespace Trax.Effect.Models.Metadata
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("parent_id")]
         public long? ParentId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_of")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("replay_decisions_of")]
+        public long? ReplayDecisionsOf { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_time")]
         public System.DateTime? ScheduledTime { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("stack_trace")]
@@ -807,6 +816,43 @@ namespace Trax.Effect.Models.PersistedOperationHistory
         public string ShapeFingerprint { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("tenant_key")]
         public string? TenantKey { get; set; }
+    }
+}
+namespace Trax.Effect.Models.RecordedDecision
+{
+    public class RecordedDecision
+    {
+        public RecordedDecision() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("answer")]
+        public string? Answer { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("decided_at")]
+        public System.DateTime DecidedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("decider")]
+        public string? Decider { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("fingerprint")]
+        public string Fingerprint { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("kind")]
+        public string Kind { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        public long MetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("model")]
+        public string? Model { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("occurrence")]
+        public int Occurrence { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("question")]
+        public string Question { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("question_key")]
+        public string QuestionKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("refused")]
+        public string? Refused { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("replayed")]
+        public bool Replayed { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("routes")]
+        public string? Routes { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("shadows")]
+        public string? Shadows { get; set; }
     }
 }
 namespace Trax.Effect.Models.RunnerNonce
@@ -917,6 +963,7 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public string? InputTypeName { get; set; }
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
+        public long? ReplayDecisionsOf { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
         public string? SubjectKey { get; set; }
         public required string TrainName { get; set; }
@@ -960,6 +1007,8 @@ namespace Trax.Effect.Models.WorkQueue
         public long? MetadataId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("priority")]
         public int Priority { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_of")]
+        public long? ReplayDecisionsOf { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
         public System.DateTime? ScheduledAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("status")]

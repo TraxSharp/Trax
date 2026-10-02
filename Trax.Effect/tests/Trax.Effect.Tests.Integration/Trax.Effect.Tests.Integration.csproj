@@ -46,5 +46,6 @@
     <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
   </ItemGroup>
 </Project>

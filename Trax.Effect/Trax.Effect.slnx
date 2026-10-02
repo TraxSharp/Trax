@@ -24,6 +24,9 @@
     <Project Path="src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
     <Project Path="src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
   </Folder>
+  <Folder Name="/src/decisions/">
+    <Project Path="src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Effect.Tests.ArrayLogger/Trax.Effect.Tests.ArrayLogger.csproj" />
     <Project Path="tests/Trax.Effect.Tests.Broadcaster/Trax.Effect.Tests.Broadcaster.csproj" />

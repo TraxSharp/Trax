@@ -66,6 +66,11 @@ internal static class ServiceTrainExtensions
         serviceTrain.Logger?.LogTrace("Initializing ({TrainName})", serviceTrain.TrainName);
         serviceTrain.Metadata = metadata;
 
+        // The run is identified by its row. A row the scheduler or mediator created before
+        // dispatch carries an id the train instance never saw, so without this the failure data
+        // and decisions the run records name a different run from the one it is.
+        serviceTrain.ExternalId = metadata.ExternalId;
+
         return await serviceTrain.StartServiceTrain(metadata, preCreated);
     }
 

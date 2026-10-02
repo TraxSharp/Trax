@@ -100,6 +100,27 @@ public class SqliteEveryTableIsModelledTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task Decision_is_mapped_column_for_column()
+    {
+        using var context = NewContext();
+        var migrated = await MigratedColumns(context);
+        var mapped = MappedColumns(context);
+
+        mapped
+            .Should()
+            .ContainKey(
+                "decision",
+                $"AddDecisionRecording reaches decision through IDataContext.RecordedDecisions. See {Adr}."
+            );
+        mapped["decision"]
+            .Should()
+            .BeEquivalentTo(
+                migrated["decision"],
+                $"the RecordedDecision model maps exactly the columns its migration creates. See {Adr}."
+            );
+    }
+
     [TestCase("snapshot_draft")]
     [TestCase("effect_claim")]
     public async Task State_machine_tables_are_mapped_column_for_column(string table)

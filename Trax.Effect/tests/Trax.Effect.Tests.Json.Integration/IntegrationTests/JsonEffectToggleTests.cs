@@ -44,6 +44,12 @@ public class JsonEffectToggleTests
         _serviceProvider = services.BuildServiceProvider();
     }
 
+    // The registry is shared by every test in the fixture, so each one starts from the
+    // default (enabled) instead of depending on the order the tests run in.
+    [SetUp]
+    public void EnableJsonEffect() =>
+        _serviceProvider.GetRequiredService<IEffectRegistry>().Enable<JsonEffectProviderFactory>();
+
     [OneTimeTearDown]
     public async Task RunAfterAnyTests()
     {
@@ -51,7 +57,6 @@ public class JsonEffectToggleTests
     }
 
     [Test]
-    [Order(1)]
     public async Task JsonEffect_EnabledByDefault_ProducesLogs()
     {
         // Arrange
@@ -73,7 +78,6 @@ public class JsonEffectToggleTests
     }
 
     [Test]
-    [Order(2)]
     public async Task JsonEffect_DisabledAtRuntime_ProducesNoJsonLogs()
     {
         // Arrange
@@ -99,11 +103,11 @@ public class JsonEffectToggleTests
     }
 
     [Test]
-    [Order(3)]
     public async Task JsonEffect_ReEnabledAtRuntime_ProducesLogsAgain()
     {
         // Arrange
         var registry = _serviceProvider.GetRequiredService<IEffectRegistry>();
+        registry.Disable<JsonEffectProviderFactory>();
         registry.Enable<JsonEffectProviderFactory>();
 
         var arrayProvider = _serviceProvider.GetRequiredService<IArrayLoggingProvider>();

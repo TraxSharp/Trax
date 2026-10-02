@@ -1,7 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Decisions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
+using Trax.Effect.Extensions;
+using Trax.Effect.Services.Decisions;
 
 namespace Trax.Effect.Data.Extensions;
 
@@ -81,6 +86,38 @@ public static class ServiceExtensions
         configurationBuilder
             .ServiceCollection.AddSingleton<IDataContextLoggingProviderConfiguration>(credentials)
             .AddSingleton<ILoggerProvider, DataContextLoggingProvider>();
+
+        return configurationBuilder;
+    }
+
+    /// <summary>
+    /// Records every decision a train makes (each question it asks a decider, the answer it acts
+    /// on, any shadow's answer, and the track it takes) in <c>trax.decision</c> against the run,
+    /// and makes a requeued run replay its original's decisions.
+    /// </summary>
+    /// <remarks>
+    /// Registers <see cref="DecisionJournal"/> as the <see cref="IDecisionObserver"/> and
+    /// <see cref="IDecisionReplay"/> that a train's <c>Decide</c>, <c>Switch</c>, <c>Gate</c> and
+    /// <c>Scale</c> steps find in the container. Each decision is written, through a data context
+    /// of its own, before the train acts on it, and a decision that cannot be written fails its
+    /// step, classified transient. Each run's row is marked <c>DecisionsRecorded</c>. A run queued
+    /// with <c>ReplayDecisionsOf</c> loads, when it starts, the answers of that run and, for
+    /// questions it never reached, of the runs it replayed in turn; it fails, classified
+    /// permanent, when a run in that chain does not exist, belongs to another train, or ran
+    /// without recording its decisions. Calling this more than once registers it once.
+    /// </remarks>
+    public static TraxEffectBuilderWithData AddDecisionRecording(
+        this TraxEffectBuilderWithData configurationBuilder
+    )
+    {
+        var services = configurationBuilder.ServiceCollection;
+
+        services.TryAddSingleton<DecisionJournal>();
+        services.TryAddSingleton<IDecisionObserver>(sp => sp.GetRequiredService<DecisionJournal>());
+        services.TryAddSingleton<IDecisionReplay>(sp => sp.GetRequiredService<DecisionJournal>());
+        services.TryAddSingleton<IDecisionRunRecorder>(sp =>
+            sp.GetRequiredService<DecisionJournal>()
+        );
 
         return configurationBuilder;
     }

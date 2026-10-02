@@ -33,4 +33,9 @@
     <InternalsVisibleTo Include="Trax.Effect.Data.InMemory" />
     <InternalsVisibleTo Include="Trax.Mediator" />
   </ItemGroup>
+
+  <!-- Decision recording binds each run's decisions to its row through ServiceTrain.Run. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Data" />
+  </ItemGroup>
 </Project>

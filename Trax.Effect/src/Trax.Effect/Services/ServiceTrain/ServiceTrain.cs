@@ -13,6 +13,7 @@ using Trax.Effect.Exceptions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.Decisions;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectRunner;
 using Trax.Effect.Services.LifecycleHookOutputPolicy;
@@ -361,6 +362,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // Setting it here also makes the typed input available to OnStarted, as it is to
         // OnCompleted and OnFailed.
         Metadata.SetInputObject(input);
+
+        // On the first write too, so a replay of this run can tell that its decisions were
+        // recorded even when it dies before it ends. See Trax.Docs/adr/0041.
+        Metadata.DecisionsRecorded =
+            ServiceProvider.GetService(typeof(IDecisionRunRecorder)) is not null;
         await EffectRunner.Update(Metadata);
 
         // Not the caller's token, for the same reason SaveOutcome does not take it. An
@@ -394,12 +400,23 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 );
             }
 
+            // Set in this frame, not in a helper, so the run's own async flow carries it and no
+            // other run's does. A run that names one to replay and cannot replay it fails here,
+            // before it asks anything.
+            DecisionRun.Current = await BeginDecisions();
+
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
             result = await RunEither(input);
         }
         catch (Exception e)
         {
             result = e;
+        }
+        finally
+        {
+            // The run decides nothing after its junctions, so its decision state goes now, on
+            // every path, rather than with whatever terminal write or hook comes next.
+            DecisionRun.Current = null;
         }
 
         if (result.IsLeft)
@@ -563,6 +580,32 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         unrecordedOutcome?.Drop(Metadata);
 
         return output;
+    }
+
+    /// <summary>
+    /// Prepares the recording of this run's decisions, when the host records them.
+    /// </summary>
+    /// <remarks>
+    /// A run queued to replay an earlier run's decisions cannot honour that on a host that records
+    /// none, so it fails, classified permanent, instead of asking afresh. See Trax.Docs/adr/0041.
+    /// </remarks>
+    private async Task<DecisionRun?> BeginDecisions()
+    {
+        Metadata.AssertLoaded();
+
+        if (
+            ServiceProvider?.GetService(typeof(IDecisionRunRecorder))
+            is IDecisionRunRecorder recorder
+        )
+            return await recorder.Begin(Metadata, GetType(), CancellationToken);
+
+        if (Metadata.ReplayDecisionsOf is not null)
+            throw DecisionRun.Unreplayable(
+                Metadata,
+                "this host does not record decisions (AddDecisionRecording), so it has none to replay"
+            );
+
+        return null;
     }
 
     /// <summary>

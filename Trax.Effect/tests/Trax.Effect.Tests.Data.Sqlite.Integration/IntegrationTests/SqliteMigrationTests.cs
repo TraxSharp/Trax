@@ -11,6 +11,7 @@ public class SqliteMigrationTests
     [
         "background_job",
         "dead_letter",
+        "decision",
         "log",
         "manifest",
         "manifest_group",
@@ -55,6 +56,8 @@ public class SqliteMigrationTests
         "ix_work_queue_subject_queued",
         "ix_background_job_unfetched",
         "ix_runner_nonce_expires_at",
+        "ix_work_queue_replay_decisions_of",
+        "ix_metadata_replay_decisions_of",
     ];
 
     private static string CreateTempDbPath() =>

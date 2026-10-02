@@ -14,13 +14,13 @@
   />
   <ItemGroup>
     <!-- Trax.* : exact CI pin, overridable by TraxLocalVersion -->
-    <PackageVersion Include="Trax.Core" Version="1.8.0" />
-    <PackageVersion Include="Trax.Core.Testing" Version="1.8.0" />
+    <PackageVersion Include="Trax.Core" Version="1.9.0" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.9.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- third-party : plain exact -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="dbup-core" Version="6.1.1" />
     <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
     <PackageVersion Include="dbup-postgresql" Version="7.0.1" />
@@ -48,7 +48,7 @@
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
-    <PackageVersion Include="NUnit" Version="4.6.1" />
+    <PackageVersion Include="NUnit" Version="5.0.0" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="PublicApiGenerator" Version="11.5.4" />

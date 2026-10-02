@@ -41,6 +41,9 @@ public class CreateWorkQueue
     /// </summary>
     public long? DeadLetterId { get; set; }
 
+    /// <summary>The run whose recorded decisions the queued run replays, if any.</summary>
+    public long? ReplayDecisionsOf { get; set; }
+
     /// <summary>
     /// Marks the entry as a run someone asked for by name (a trigger, a group trigger or a
     /// run-now), so it is dispatched even while its manifest is disabled. Defaults to false: a

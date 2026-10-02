@@ -36,6 +36,7 @@
     <ProjectReference Include="../../src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
   </ItemGroup>
 
   <ItemGroup>

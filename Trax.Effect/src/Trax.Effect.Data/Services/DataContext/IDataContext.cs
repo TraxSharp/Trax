@@ -138,6 +138,17 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
         ((DbContext)this).Set<Effect.Models.RunnerNonce.RunnerNonce>();
 
     /// <summary>
+    /// The decisions trains made at run time, recorded by <c>AddDecisionRecording</c> and read
+    /// back to replay a requeued run's decisions.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
+    /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.RecordedDecision.RecordedDecision> RecordedDecisions =>
+        ((DbContext)this).Set<Effect.Models.RecordedDecision.RecordedDecision>();
+
+    /// <summary>
     /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft, written by
     /// Trax.Effect.StateMachine.Persistence. Filter by <c>UserKey</c> when querying directly, because the draft
     /// id alone is not unique across users.

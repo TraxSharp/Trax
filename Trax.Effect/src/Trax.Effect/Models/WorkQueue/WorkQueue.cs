@@ -226,6 +226,13 @@ public class WorkQueue : IModel
     public long? DeadLetterId { get; set; }
 
     /// <summary>
+    /// The run whose recorded decisions the run this entry starts replays, carried to its metadata
+    /// when it is dispatched. Set by a requeue.
+    /// </summary>
+    [Column("replay_decisions_of")]
+    public long? ReplayDecisionsOf { get; set; }
+
+    /// <summary>
     /// The dead letter record that triggered this requeue, if applicable.
     /// </summary>
     public DeadLetter.DeadLetter? DeadLetter { get; set; }
@@ -256,6 +263,7 @@ public class WorkQueue : IModel
             Priority = Math.Clamp(dto.Priority, MinPriority, MaxPriority),
             ScheduledAt = dto.ScheduledAt,
             DeadLetterId = dto.DeadLetterId,
+            ReplayDecisionsOf = dto.ReplayDecisionsOf,
             IsExplicitTrigger = dto.ExplicitTrigger || dto.DeadLetterId is not null,
             Status = WorkQueueStatus.Queued,
             CreatedAt = DateTime.UtcNow,
