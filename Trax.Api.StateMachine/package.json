@@ -1,7 +1,7 @@
 {
   "name": "@trax/state-machine",
   "version": "0.0.0",
-  "description": "Portable, resumable snapshot state-machine engine \u2014 the TypeScript twin of Trax.Effect.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
+  "description": "Portable, resumable snapshot state-machine engine — the TypeScript twin of Trax.Effect.StateMachine. Represents a multi-step flow's state as language-neutral JSON so a client and a C# backend agree on it, with illegal (state, context) pairs unrepresentable and every operation total.",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",
@@ -42,7 +42,7 @@
     }
   },
   "dependencies": {
-    "valibot": "^0.42.1"
+    "valibot": "^1.5.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.1.0",
@@ -54,6 +54,6 @@
     "react-dom": "^19.0.0",
     "tsup": "^8.3.5",
     "typescript": "~5.9.2",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.11"
   }
 }
