@@ -4,7 +4,7 @@ import { getAllDocs, getDocBySlug, markdownPath } from "@/lib/docs";
 import { docsMdxOptions } from "@/lib/mdx-options";
 import { buildNavTree } from "@/lib/nav-tree";
 import DocsLayout from "@/components/docs/DocsLayout";
-import MarkdownLink from "@/components/docs/MarkdownLink";
+import PageLinks from "@/components/docs/PageLinks";
 import { mdxComponents } from "@/components/mdx/MdxComponents";
 
 export function generateMetadata(): Metadata {
@@ -31,10 +31,10 @@ export default function DocsHomePage() {
       {doc ? (
         <div className="docs-content">
           <div className="mb-6 flex justify-end">
-            <MarkdownLink slug="" />
+            <PageLinks doc={doc} />
           </div>
           <MDXRemote
-            source={doc.content}
+            source={doc.body}
             components={mdxComponents}
             options={docsMdxOptions}
           />

@@ -10,7 +10,7 @@ import PackageList from "@/components/landing/PackageList";
 
 export default function Home() {
   return (
-    <>
+    <main>
       <Hero />
       <StepShape />
       <FourWays />
@@ -20,6 +20,6 @@ export default function Home() {
       <WhereTraxStops />
       <QuickStart />
       <PackageList />
-    </>
+    </main>
   );
 }

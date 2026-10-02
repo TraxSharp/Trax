@@ -39,6 +39,8 @@ export const mdxComponents: MDXComponents = {
     href,
     ...props
   }: ComponentPropsWithoutRef<"a">) => {
+    // An anchor target from the docs' raw HTML (<a id="no-warranty"></a>).
+    if (!href) return <a {...props} />;
     if (isInternalLink(href)) {
       return (
         <Link

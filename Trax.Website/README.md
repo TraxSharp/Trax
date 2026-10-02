@@ -15,7 +15,7 @@ Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landi
 |---|---|
 | Next.js 16 (App Router) | Server-rendered site. It is not a static export: `next.config.ts` rewrites `/docs/<slug>.md` to the raw Markdown route. |
 | Tailwind CSS 4 | Styling, dark theme |
-| `next-mdx-remote`, `rehype-pretty-code` and Shiki | Render the docs Markdown with highlighted code |
+| `next-mdx-remote`, `rehype-pretty-code` and Shiki | Render the docs as CommonMark (not MDX) with highlighted code; raw HTML is limited to a few tags by `rehype-sanitize` |
 | Trax.Docs | The page content, synced in at dev and build time |
 
 ## Run it locally
@@ -27,12 +27,23 @@ npm ci
 npm run dev
 ```
 
-`npm run dev` and `npm run build` both run `scripts/sync-docs.sh` first. It copies every `.md` file from a sibling
-`../Trax.Docs` checkout into `.docs-cache/` (gitignored), skipping `README.md`, `adr/`, `.claude/`, `tools/`, `tests/`
-and `.github/`. With no sibling checkout it shallow-clones `main` from GitHub instead. To preview a docs change, clone
-Trax.Docs next to this repo, edit it there, and restart the dev server.
+`npm run dev`, `npm run build` and `npm test` all run `scripts/sync-docs.sh` first. It copies every `.md` file from a
+sibling `../Trax.Docs` checkout into `.docs-cache/` (gitignored), skipping `README.md`, `adr/`, `.claude/`, `tools/`,
+`tests/` and `.github/`. With no sibling checkout it shallow-clones `main` from GitHub instead. To preview a docs change,
+clone Trax.Docs next to this repo, edit it there, and restart the dev server.
 
-Before committing, run `npm run lint` and `npm run build`.
+The ADRs are not published, so the sync also writes `.docs-cache/adr-index.json`, the ADR file names in Trax.Docs and
+in each code repo (from a sibling checkout, else the GitHub API). A citation such as `Trax.Mediator/docs/adr/0004` in a
+page links to that file on GitHub, or to the repo's ADR index when the file is not known.
+
+The docs are rendered as CommonMark with GFM, not MDX: a `>` is a blockquote, and JSX and `{expressions}` are not
+available. Raw HTML is limited to a short allow-list (`<a id>` anchors and a few inline tags) and sanitized; any other
+tag renders as the text written. A page's `description:` front matter, when present, is its meta description and its
+line in `llms.txt`; without it the first prose paragraph is used.
+
+Before committing, run `npm run lint`, `npm test` and `npm run build`. `npm test` syncs the docs, renders Markdown
+through the site's pipeline and checks what reaches the HTML (`tests/render.test.ts`), and renders every published page
+(`tests/pages.test.ts`). It needs Node 22.18 or later.
 
 ## Project structure
 
@@ -50,15 +61,19 @@ src/
 │   ├── landing/                  # landing page sections
 │   ├── docs/                     # docs layout, sidebar, breadcrumb, table of contents
 │   ├── layout/                   # header, footer, mobile nav
-│   └── mdx/                      # MDX component overrides
+│   └── mdx/                      # element overrides for rendered docs
 └── lib/
     ├── docs.ts                   # reads .docs-cache, front matter, page summaries
     ├── nav-tree.ts               # sidebar tree
     ├── llms.ts                   # llms.txt and the full-text bundles
-    ├── mdx-options.ts            # remark and rehype plugins shared by docs pages
+    ├── mdx-options.ts            # docs rendering: CommonMark, raw HTML allow-list, sanitizer, ADR links, highlighting
     └── site.ts                   # site URL and description
 scripts/
-└── sync-docs.sh                  # copies Trax.Docs into .docs-cache
+├── sync-docs.sh                  # copies Trax.Docs into .docs-cache
+└── adr-index.mjs                 # lists the ADR files that citations link to
+tests/
+├── render.test.ts                # what the docs pipeline lets through to the HTML
+└── pages.test.ts                 # renders every published page through the pipeline
 ```
 
 ## License

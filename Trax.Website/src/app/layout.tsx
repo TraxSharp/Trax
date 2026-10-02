@@ -36,7 +36,8 @@ export default function RootLayout({
       >
         <div className="flex min-h-screen flex-col">
           <Header />
-          <main className="flex-1">{children}</main>
+          {/* Each page supplies its own <main>, so the docs sidebar can sit outside it. */}
+          <div className="flex-1">{children}</div>
           <Footer />
         </div>
       </body>

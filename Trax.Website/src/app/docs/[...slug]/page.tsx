@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import {
+  documentTitle,
   getAllDocs,
   getDocBySlug,
   generateStaticParams as genParams,
@@ -11,7 +12,7 @@ import { docsMdxOptions } from "@/lib/mdx-options";
 import { buildNavTree } from "@/lib/nav-tree";
 import DocsLayout from "@/components/docs/DocsLayout";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
-import MarkdownLink from "@/components/docs/MarkdownLink";
+import PageLinks from "@/components/docs/PageLinks";
 import { mdxComponents } from "@/components/mdx/MdxComponents";
 
 interface PageProps {
@@ -30,7 +31,7 @@ export async function generateMetadata({
   const doc = getDocBySlug(slugStr);
   if (!doc) return { title: "Not Found" };
   return {
-    title: doc.title,
+    title: documentTitle(doc),
     description: doc.description,
     alternates: {
       canonical: `/docs/${slugStr}`,
@@ -59,11 +60,11 @@ export default async function DocPage({ params }: PageProps) {
           parent={doc.parent}
           grandParent={doc.grandParent}
         />
-        <MarkdownLink slug={slugStr} />
+        <PageLinks doc={doc} />
       </div>
       <div className="docs-content">
         <MDXRemote
-          source={doc.content}
+          source={doc.body}
           components={mdxComponents}
           options={docsMdxOptions}
         />

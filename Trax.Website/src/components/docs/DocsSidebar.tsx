@@ -71,8 +71,8 @@ function NavLink({
 
 export default function DocsSidebar({ navTree }: { navTree: NavSection[] }) {
   return (
-    <aside className="w-64 flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary p-4">
-      <nav>
+    <aside className="order-1 w-64 flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary p-4">
+      <nav aria-label="Documentation">
         {navTree.map((section, i) => (
           <div
             key={section.label ?? `standalone-${i}`}
