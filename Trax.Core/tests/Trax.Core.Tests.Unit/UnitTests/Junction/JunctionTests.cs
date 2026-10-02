@@ -30,7 +30,7 @@ public class JunctionTests : TestSetup
         var junction = new TestExceptionJunction();
 
         // Act
-        Assert.ThrowsAsync<NotImplementedException>(async () => await junction.Run(input));
+        await Assert.ThrowsAsync<NotImplementedException>(async () => await junction.Run(input));
     }
 
     [Theory]

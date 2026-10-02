@@ -211,6 +211,15 @@ public partial class Monad<TInput, TReturn>
                     );
 
                 Recorder.Record(ChainStepKind.Seed, null, null, serviceType);
+
+                // Kept where the run would keep it, so a decider handed over here can vet the
+                // questions it will be asked. Nothing else reads Memory while a chain is read.
+                if (
+                    services[i] is { } given
+                    && serviceType.IsInterface
+                    && !given.GetType().IsValueType
+                )
+                    Memory[serviceType] = given;
             }
 
             return this;

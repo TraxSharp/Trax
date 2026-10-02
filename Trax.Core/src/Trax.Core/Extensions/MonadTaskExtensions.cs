@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using LanguageExt;
+using Trax.Core.Decisions;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 
@@ -196,6 +197,136 @@ public readonly struct MonadTask<TInput, TReturn>
     {
         var monad = await Source.ConfigureAwait(false);
         return await monad.ShortCircuit(instance).ConfigureAwait(false);
+    }
+
+    #endregion
+
+    #region Decisions
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Decide{TState}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Decide<TState>(
+        Func<Questions<TState>, Questions<TState>> questions
+    ) => new(DecideAsync<TState>(questions));
+
+    private async Task<Monad<TInput, TReturn>> DecideAsync<TState>(
+        Func<Questions<TState>, Questions<TState>> questions
+    )
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Decide<TState>(questions).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Switch{TTrack}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Switch<TTrack>(
+        Func<Tracks<TInput, TReturn, TTrack>, Tracks<TInput, TReturn, TTrack>> tracks
+    )
+        where TTrack : struct, Enum => new(SwitchAsync<TTrack>(tracks));
+
+    private async Task<Monad<TInput, TReturn>> SwitchAsync<TTrack>(
+        Func<Tracks<TInput, TReturn, TTrack>, Tracks<TInput, TReturn, TTrack>> tracks
+    )
+        where TTrack : struct, Enum
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Switch<TTrack>(tracks).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Switch{TState, TTrack}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Switch<TState, TTrack>(
+        Func<Tracks<TInput, TReturn, TTrack>, Tracks<TInput, TReturn, TTrack>> tracks,
+        string? asking = null
+    )
+        where TTrack : struct, Enum => new(SwitchAsync<TState, TTrack>(tracks, asking));
+
+    private async Task<Monad<TInput, TReturn>> SwitchAsync<TState, TTrack>(
+        Func<Tracks<TInput, TReturn, TTrack>, Tracks<TInput, TReturn, TTrack>> tracks,
+        string? asking = null
+    )
+        where TTrack : struct, Enum
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Switch<TState, TTrack>(tracks, asking).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Gate{TQuestion}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Gate<TQuestion>(
+        Func<GateTracks<TInput, TReturn>, GateTracks<TInput, TReturn>> gate
+    ) => new(GateAsync<TQuestion>(gate));
+
+    private async Task<Monad<TInput, TReturn>> GateAsync<TQuestion>(
+        Func<GateTracks<TInput, TReturn>, GateTracks<TInput, TReturn>> gate
+    )
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Gate<TQuestion>(gate).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Gate{TState, TQuestion}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Gate<TState, TQuestion>(
+        Func<GateTracks<TInput, TReturn>, GateTracks<TInput, TReturn>> gate,
+        string? asking = null
+    ) => new(GateAsync<TState, TQuestion>(gate, asking));
+
+    private async Task<Monad<TInput, TReturn>> GateAsync<TState, TQuestion>(
+        Func<GateTracks<TInput, TReturn>, GateTracks<TInput, TReturn>> gate,
+        string? asking = null
+    )
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Gate<TState, TQuestion>(gate, asking).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Scale{TLevel}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Scale<TLevel>(
+        Func<ScaleTracks<TInput, TReturn, TLevel>, ScaleTracks<TInput, TReturn, TLevel>> scale
+    )
+        where TLevel : struct, Enum => new(ScaleAsync<TLevel>(scale));
+
+    private async Task<Monad<TInput, TReturn>> ScaleAsync<TLevel>(
+        Func<ScaleTracks<TInput, TReturn, TLevel>, ScaleTracks<TInput, TReturn, TLevel>> scale
+    )
+        where TLevel : struct, Enum
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Scale<TLevel>(scale).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Scale{TState, TLevel}"/>.
+    /// </summary>
+    public MonadTask<TInput, TReturn> Scale<TState, TLevel>(
+        Func<ScaleTracks<TInput, TReturn, TLevel>, ScaleTracks<TInput, TReturn, TLevel>> scale,
+        string? asking = null
+    )
+        where TLevel : struct, Enum => new(ScaleAsync<TState, TLevel>(scale, asking));
+
+    private async Task<Monad<TInput, TReturn>> ScaleAsync<TState, TLevel>(
+        Func<ScaleTracks<TInput, TReturn, TLevel>, ScaleTracks<TInput, TReturn, TLevel>> scale,
+        string? asking = null
+    )
+        where TLevel : struct, Enum
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Scale<TState, TLevel>(scale, asking).ConfigureAwait(false);
     }
 
     #endregion

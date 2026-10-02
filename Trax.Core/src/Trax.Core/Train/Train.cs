@@ -151,7 +151,10 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     /// <remarks>
     /// Every chain call answers by recording its type arguments, so the result is the sequence
-    /// of types the train declares. Nothing touches the container and no junction executes.
+    /// of types the train declares. No junction is resolved or executes. The container is asked only
+    /// for each decider a decision step names, so one that vets questions
+    /// (<see cref="Trax.Core.Decisions.IVetsQuestions"/>) can refuse what it cannot answer; none is asked to
+    /// decide.
     ///
     /// <para><c>Junctions()</c> itself does run, which is why it has to be a pure declaration. A
     /// body that awaits before returning, or that returns a result instead of ending in
@@ -338,6 +341,60 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
         where TJunction : class => Root("ShortCircuit", true).ShortCircuit(instance);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Decide{TState}"/>
+    protected MonadTask<TInput, TReturn> Decide<TState>(
+        Func<Decisions.Questions<TState>, Decisions.Questions<TState>> questions
+    ) => Root("Decide", true).Decide<TState>(questions);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Switch{TTrack}"/>
+    protected MonadTask<TInput, TReturn> Switch<TTrack>(
+        Func<
+            Decisions.Tracks<TInput, TReturn, TTrack>,
+            Decisions.Tracks<TInput, TReturn, TTrack>
+        > tracks
+    )
+        where TTrack : struct, Enum => Root("Switch", true).Switch<TTrack>(tracks);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Switch{TState, TTrack}"/>
+    protected MonadTask<TInput, TReturn> Switch<TState, TTrack>(
+        Func<
+            Decisions.Tracks<TInput, TReturn, TTrack>,
+            Decisions.Tracks<TInput, TReturn, TTrack>
+        > tracks,
+        string? asking = null
+    )
+        where TTrack : struct, Enum => Root("Switch", true).Switch<TState, TTrack>(tracks, asking);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Gate{TQuestion}"/>
+    protected MonadTask<TInput, TReturn> Gate<TQuestion>(
+        Func<Decisions.GateTracks<TInput, TReturn>, Decisions.GateTracks<TInput, TReturn>> gate
+    ) => Root("Gate", true).Gate<TQuestion>(gate);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Gate{TState, TQuestion}"/>
+    protected MonadTask<TInput, TReturn> Gate<TState, TQuestion>(
+        Func<Decisions.GateTracks<TInput, TReturn>, Decisions.GateTracks<TInput, TReturn>> gate,
+        string? asking = null
+    ) => Root("Gate", true).Gate<TState, TQuestion>(gate, asking);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Scale{TLevel}"/>
+    protected MonadTask<TInput, TReturn> Scale<TLevel>(
+        Func<
+            Decisions.ScaleTracks<TInput, TReturn, TLevel>,
+            Decisions.ScaleTracks<TInput, TReturn, TLevel>
+        > scale
+    )
+        where TLevel : struct, Enum => Root("Scale", true).Scale<TLevel>(scale);
+
+    /// <inheritdoc cref="Monad{TInput, TReturn}.Scale{TState, TLevel}"/>
+    protected MonadTask<TInput, TReturn> Scale<TState, TLevel>(
+        Func<
+            Decisions.ScaleTracks<TInput, TReturn, TLevel>,
+            Decisions.ScaleTracks<TInput, TReturn, TLevel>
+        > scale,
+        string? asking = null
+    )
+        where TLevel : struct, Enum => Root("Scale", true).Scale<TState, TLevel>(scale, asking);
 
     /// <summary>
     /// Adds a service to the chain's Memory for interface-based junction resolution.

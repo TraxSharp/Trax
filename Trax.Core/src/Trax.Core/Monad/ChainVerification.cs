@@ -127,6 +127,54 @@ public static class ChainVerification
                 new ChainFault(0, ChainStepKind.Seed, null, $"the train's input {inputShape}")
             );
 
+        Replay(chain, memory, faults, output, availableElsewhere, checkConstructors, track: null);
+
+        foreach (var refusal in chain.RecordedRefusals)
+            faults.Add(
+                new ChainFault(
+                    refusal.StepIndex ?? steps.Count,
+                    refusal.Kind ?? ChainStepKind.Resolve,
+                    refusal.Junction,
+                    refusal.Reason
+                )
+                {
+                    IsRefusal = true,
+                }
+            );
+
+        return faults;
+    }
+
+    /// <summary>
+    /// Where a track being replayed sits in the train's chain: the outermost routing step's
+    /// position and kind, and the words that name the track in a fault.
+    /// </summary>
+    private readonly record struct TrackContext(int SwitchIndex, ChainStepKind Kind, string Prefix);
+
+    /// <summary>
+    /// Replays <paramref name="chain"/>'s steps over <paramref name="memory"/>, which it leaves
+    /// holding what the chain produced. A routing step replays each of its tracks from the Memory
+    /// at that step and keeps only what every track produced, because the chain after it runs
+    /// after whichever track was taken.
+    /// </summary>
+    private static void Replay(
+        ChainRecorder chain,
+        System.Collections.Generic.HashSet<Type> memory,
+        List<ChainFault> faults,
+        Type output,
+        Func<Type, bool>? availableElsewhere,
+        bool checkConstructors,
+        TrackContext? track
+    )
+    {
+        var steps = chain.Steps;
+
+        // A fault inside a track is reported at the routing step, saying which track and step.
+        ChainFault Fault(int i, ChainStepKind kind, Type? junction, string reason) =>
+            track is { } t
+                ? new ChainFault(t.SwitchIndex, t.Kind, junction, $"{t.Prefix}step {i}: {reason}")
+                : new ChainFault(i, kind, junction, reason);
+
         for (var i = 0; i < steps.Count; i++)
         {
             var step = steps[i];
@@ -143,7 +191,7 @@ public static class ChainVerification
                     // chain still has to produce the return type for the path where it does.
                     if (!Satisfied(memory, output, availableElsewhere))
                         faults.Add(
-                            new ChainFault(
+                            Fault(
                                 i,
                                 step.Kind,
                                 null,
@@ -166,7 +214,7 @@ public static class ChainVerification
                     // container.
                     if (step.In is { } source && !memory.Contains(source))
                         faults.Add(
-                            new ChainFault(
+                            Fault(
                                 i,
                                 step.Kind,
                                 null,
@@ -180,6 +228,16 @@ public static class ChainVerification
 
                     continue;
 
+                case ChainStepKind.Decide:
+                    ReplayDecide(i, step);
+                    continue;
+
+                case ChainStepKind.Switch:
+                case ChainStepKind.Gate:
+                case ChainStepKind.Scale:
+                    ReplayRouting(i, step);
+                    continue;
+
                 case ChainStepKind.IChain:
                     // IChain finds the junction itself in Memory or the container before it can
                     // ask the junction for its input.
@@ -188,7 +246,7 @@ public static class ChainVerification
                         && !Satisfied(memory, contract, availableElsewhere)
                     )
                         faults.Add(
-                            new ChainFault(
+                            Fault(
                                 i,
                                 step.Kind,
                                 step.Junction,
@@ -209,7 +267,7 @@ public static class ChainVerification
                 && !output.IsAssignableFrom(shortCircuitOut)
             )
                 faults.Add(
-                    new ChainFault(
+                    Fault(
                         i,
                         step.Kind,
                         step.Junction,
@@ -229,7 +287,7 @@ public static class ChainVerification
                     )
                 )
                     faults.Add(
-                        new ChainFault(
+                        Fault(
                             i,
                             step.Kind,
                             step.Junction,
@@ -248,7 +306,7 @@ public static class ChainVerification
 
             if (step.In is { } required && !Satisfied(memory, required, availableElsewhere))
                 faults.Add(
-                    new ChainFault(
+                    Fault(
                         i,
                         step.Kind,
                         step.Junction,
@@ -266,30 +324,104 @@ public static class ChainVerification
 
                 if (TooManyTupleElements(produced) is { } producedShape)
                     faults.Add(
-                        new ChainFault(
-                            i,
-                            step.Kind,
-                            step.Junction,
-                            $"produces a value that {producedShape}"
-                        )
+                        Fault(i, step.Kind, step.Junction, $"produces a value that {producedShape}")
                     );
             }
         }
 
-        foreach (var refusal in chain.RecordedRefusals)
-            faults.Add(
-                new ChainFault(
-                    refusal.StepIndex ?? steps.Count,
-                    refusal.Kind ?? ChainStepKind.Resolve,
-                    refusal.Junction,
-                    refusal.Reason
-                )
-                {
-                    IsRefusal = true,
-                }
-            );
+        void ReplayDecide(int i, ChainStep step)
+        {
+            // A Decide records a step per question, each from the same state and decider. What was
+            // missing at the step before is still missing, because a Decide adds only its
+            // decision, so it is reported once, at the first question.
+            var previous =
+                i > 0 && steps[i - 1].Kind == ChainStepKind.Decide
+                    ? steps[i - 1]
+                    : (ChainStep?)null;
 
-        return faults;
+            if (
+                step.In is { } state
+                && previous?.In != state
+                && !Satisfied(memory, state, availableElsewhere)
+            )
+                faults.Add(
+                    Fault(
+                        i,
+                        step.Kind,
+                        step.Junction,
+                        $"decides from '{Name(state)}' and nothing before it puts one in Memory. "
+                            + "Chain a junction that produces it first."
+                    )
+                );
+
+            foreach (
+                var decider in step.Junction is { } live && previous?.Junction != live
+                    ? chain.RequirementsAt(i).Prepend(live)
+                    : chain.RequirementsAt(i)
+            )
+                if (!Satisfied(memory, decider, availableElsewhere))
+                    faults.Add(
+                        Fault(
+                            i,
+                            step.Kind,
+                            decider,
+                            $"needs a decider '{Name(decider)}' and neither Memory nor the "
+                                + "container holds one. Register it, or hand one to AddServices."
+                        )
+                    );
+
+            if (step.Out is { } decision)
+                memory.Add(decision);
+        }
+
+        void ReplayRouting(int i, ChainStep step)
+        {
+            if (step.In is { } decision && !memory.Contains(decision))
+                faults.Add(
+                    Fault(
+                        i,
+                        step.Kind,
+                        step.Junction,
+                        $"routes on '{Name(decision)}' and nothing before it decides it. Ask it "
+                            + "with Decide first, or use the form that asks its own question."
+                    )
+                );
+
+            if (step.Out is { } choice)
+                memory.Add(choice);
+
+            System.Collections.Generic.HashSet<Type>? afterEveryTrack = null;
+
+            foreach (var declared in chain.TracksAt(i))
+            {
+                var trackMemory = new System.Collections.Generic.HashSet<Type>(memory);
+                var context = new TrackContext(
+                    track?.SwitchIndex ?? i,
+                    track?.Kind ?? step.Kind,
+                    $"{track?.Prefix}track '{declared.Name}', "
+                );
+
+                Replay(
+                    declared.Steps,
+                    trackMemory,
+                    faults,
+                    output,
+                    availableElsewhere,
+                    checkConstructors,
+                    context
+                );
+
+                if (afterEveryTrack is null)
+                    afterEveryTrack = trackMemory;
+                else
+                    afterEveryTrack.IntersectWith(trackMemory);
+            }
+
+            // Every track starts from this Memory and only adds to it, so what every track holds
+            // afterwards includes it.
+            if (afterEveryTrack is not null)
+                memory.UnionWith(afterEveryTrack);
+        }
     }
 
     /// <summary>

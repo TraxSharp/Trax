@@ -320,7 +320,7 @@ public class TrainTests : TestSetup
         // Act
         // Assert
 
-        Assert.ThrowsAsync<TrainException>(async () => await train.Run(Unit.Default));
+        await Assert.ThrowsAsync<TrainException>(async () => await train.Run(Unit.Default));
     }
 
     [Theory]

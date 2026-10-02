@@ -21,14 +21,18 @@ if your work contradicts one, say so rather than silently overriding it.
 | `Train.Junctions()`, `DeclaredChain()`, the chain recorder or `ChainVerification` | central `docs/0016`, a chain is a declaration, and the replay has to mirror how the runtime stores and finds values |
 | `Train.NewMonad()` or `ChainRecordedException`, or narrowing anything that shipped public | [0002](./docs/adr/0002-a-shipped-seam-stays-public-and-hidden.md), both stay public and hidden because the published Trax.Effect overrides `NewMonad()` |
 | `FailureClass`, or how a junction carries a failure's class in `TrainExceptionData` | central `docs/0020`, a failure is classified where it happens and the answer is carried |
+| `Decide`, `Switch`, `Gate` or `Scale`, `IDecider`, or how `ChainVerification` replays tracks | central `docs/0040`, a chain declares every track and a decider chooses one per run; the tracks are part of the declaration `docs/0016` describes |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Fifteen name `core`: executable guards, exact version pinning, the
+index lists them by repo. Twenty name `core`: executable guards, exact version pinning, the
 dependency direction, the three test conventions (FluentAssertions, no `[Ignore]`, no fixed
 delays), the documentation lints, the public API baseline, test frameworks staying out of shipped
 libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
-(`0016`), and failures being classified where they happen (`0020`). In a workspace checkout the
+(`0016`), failures being classified where they happen (`0020`), a warning failing the CI build
+(`0032`), packages validating against their last release (`0033`), the ADR guard being released by
+tag (`0038`), docs merging after their code (`0039`), and a chain declaring every track a decider
+chooses between (`0040`). In a workspace checkout the
 index is at `../Trax.Docs/adr/README.md`; that path does not resolve on GitHub, because it
 crosses a repository boundary.
 

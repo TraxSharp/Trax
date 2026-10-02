@@ -27,7 +27,7 @@ public class TrainTests
         var train = new NotImplementedTrain();
 
         // Act
-        Assert.ThrowsAsync<NotImplementedException>(async () =>
+        await Assert.ThrowsAsync<NotImplementedException>(async () =>
             await train.Run(LanguageExt.Unit.Default)
         );
     }
