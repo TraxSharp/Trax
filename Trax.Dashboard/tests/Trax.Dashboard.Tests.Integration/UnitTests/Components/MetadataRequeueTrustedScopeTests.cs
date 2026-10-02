@@ -17,6 +17,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Models.RecordedDecision;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.TrainAuthorization;
@@ -142,7 +143,14 @@ public class MetadataRequeueTrustedScopeTests
 
         await using var db = await _data.CreateDbContextAsync(default);
         var queued = await db.WorkQueues.AsNoTracking().ToListAsync();
-        queued.Should().ContainSingle().Which.TrainName.Should().Be(typeof(IGuardedTrain).FullName);
+        var entry = queued.Should().ContainSingle().Subject;
+        entry.TrainName.Should().Be(typeof(IGuardedTrain).FullName);
+        entry
+            .ReplayDecisionsOf.Should()
+            .Be(
+                metadataId,
+                "a re-queue of a run that recorded decisions replays them, as the API's does"
+            );
     }
 
     private async Task<long> SeedRunAsync()
@@ -159,6 +167,23 @@ public class MetadataRequeueTrustedScopeTests
 
         await using var db = await _data.CreateDbContextAsync(default);
         await db.Track(run);
+        await db.SaveChanges(default);
+
+        // The run recorded a decision, so its re-queue carries the replay link.
+        db.RecordedDecisions.Add(
+            new RecordedDecision
+            {
+                MetadataId = run.Id,
+                QuestionKey = "Route",
+                Occurrence = 0,
+                Fingerprint = new string('0', 64),
+                Kind = "choice",
+                Question = "{}",
+                Answer = "\"Express\"",
+                Routes = """[{"track": "Express", "fallback_reason": null}]""",
+                DecidedAt = DateTime.UtcNow,
+            }
+        );
         await db.SaveChanges(default);
         return run.Id;
     }

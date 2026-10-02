@@ -1,17 +1,13 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Utilities;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Metadata;
-using Trax.Effect.Utils;
-using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.Operations;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
@@ -33,9 +29,6 @@ public partial class MetadataDetailPage
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
-
-    [Inject]
-    private ITrainDiscoveryService TrainDiscovery { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -164,66 +157,23 @@ public partial class MetadataDetailPage
             return;
 
         _rerunError = null;
-
-        // Re-queueing reads the saved input back as the train's input. Nothing saved, a
-        // placeholder saved in its place, or masked [TraxSensitive] members would all read back
-        // as defaults, and the train would run with values it never had.
-        var refusal = RequeueInputCheck.RefusalFor(MetadataId, _metadata.Input);
-        if (refusal is not null || _metadata.Input is not { } savedInput)
-        {
-            _rerunError = refusal;
-            return;
-        }
-
         _rerunning = true;
 
         try
         {
-            var registration = TrainDiscovery
-                .DiscoverTrains()
-                .FirstOrDefault(r => r.ServiceType.FullName == _metadata.Name);
-
-            if (registration is null)
-            {
-                _rerunError =
-                    $"No train registration found for '{ShortName(_metadata.Name)}'. Is the train still registered?";
-                return;
-            }
-
-            // Parse the saved input to check it still fits the train before queueing it again.
-            var deserializedInput = JsonSerializer.Deserialize(
-                savedInput,
-                registration.InputType,
-                TraxJsonSerializationOptions.ManifestProperties
-            );
-
-            if (deserializedInput is null)
-            {
-                _rerunError = "Failed to deserialize the saved input.";
-                return;
-            }
-
-            // In the form the mediator reads, which is not necessarily the one the input was
-            // saved in.
-            var inputJson = JsonSerializer.Serialize(
-                deserializedInput,
-                registration.InputType,
-                TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-            );
-
-            // Through the operations service, which enqueues through the mediator, so the
-            // train's OnQueue hook, subject key and input cap apply to a re-queue as they do to
-            // any other enqueue. Writing the row here skipped them.
+            // Through the operations service's re-queue, the call the API's requeueExecution
+            // makes, so the two refuse the same runs with the same messages and enqueue the same
+            // way: the saved input is checked (nothing saved, a placeholder saved in its place, or
+            // masked [TraxSensitive] members would read back as defaults), then queued through the
+            // mediator, so the train's OnQueue hook, subject key and input cap apply. When the run
+            // recorded decisions, the new run replays them and takes the tracks this one took.
             OperationResult result;
             // The dashboard is the admin surface, gated as a whole by its host, so it enqueues as
             // trusted infrastructure rather than as a user a train's [TraxAuthorize] can check: a
             // Blazor circuit has no request to carry one. OnQueue, the subject key and the input
             // cap still apply. See docs/0017.
             using (TrustedScope.BeginTrusted("dashboard"))
-                result = await OperationsService.QueueTrainAsync(
-                    new QueueTrainInput(TrainName: _metadata.Name, InputJson: inputJson),
-                    DisposalToken
-                );
+                result = await OperationsService.RequeueExecutionAsync(_metadata.Id, DisposalToken);
 
             if (!result.Success || result.Id is not { } entryId)
             {
@@ -239,10 +189,6 @@ public partial class MetadataDetailPage
             );
 
             Navigation.NavigateTo($"trax/data/work-queue/{entryId}");
-        }
-        catch (JsonException je)
-        {
-            _rerunError = $"Invalid saved input JSON: {je.Message}";
         }
         catch (Exception ex)
         {

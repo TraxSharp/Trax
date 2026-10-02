@@ -132,8 +132,7 @@ jobs:
         if: steps.healed.outputs.skip == 'false'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: preview
+          global-json-file: global.json
 
       - name: Regenerate lockfiles
         if: steps.healed.outputs.skip == 'false'
@@ -224,8 +223,16 @@ jobs:
         # as untrusted: git apply is restricted to lockfile paths, and the
         # working tree is checked afterwards in case that restriction ever slips.
         run: |
-          if [ -s "$RUNNER_TEMP/lockfiles/lockfiles.patch" ]; then
-            git apply --include='*packages.lock.json' "$RUNNER_TEMP/lockfiles/lockfiles.patch"
+          patch="$RUNNER_TEMP/lockfiles/lockfiles.patch"
+          if [ -s "$patch" ]; then
+            # A lockfile is a regular file whose path stays put. Refuse any patch that
+            # changes a file mode or renames or copies a path, before applying it.
+            if grep -nE '^(old mode|new mode|deleted file mode|new file mode|similarity index|rename from|rename to|copy from|copy to) ' "$patch" \
+                | grep -vE ' mode 100644$'; then
+              echo "::error::The patch changes file modes or paths, which a lockfile regeneration never does."
+              exit 1
+            fi
+            git apply --include='*packages.lock.json' "$patch"
           fi
 
           unexpected=$(git status --porcelain | grep -vE '(packages\.lock\.json|\.csproj)$' || true)
@@ -240,23 +247,23 @@ jobs:
             exit 1
           fi
 
-      - name: Commit through the API, so the commit is signed
-        # `git push` is rejected here: the repository ruleset requires verified
-        # signatures, and a runner has no signing key. Commits created through
-        # createCommitOnBranch are signed by GitHub itself, so they land
-        # Verified without a key ever existing in CI.
+      - name: Build the commit
+        # Every path is read off disk below, so each must be a regular file inside
+        # the checkout. This step holds no token; only the API call after it does.
         #
-        # Nothing is committed locally -- the heal is still working-tree edits,
-        # read off disk below -- so expectedHeadOid is the tip we checked out.
-        # If Dependabot force-pushed in the meantime the mutation fails rather
-        # than clobbering it.
+        # Nothing is committed locally -- the heal is still working-tree edits --
+        # so expectedHeadOid is the tip we checked out. If Dependabot force-pushed
+        # in the meantime the mutation fails rather than clobbering it.
         #
         # git diff is taken against HEAD, not the index: `git checkout <base> --`
         # above stages its reverts, so an unstaged-only diff would miss them.
+        id: build
+        shell: bash
         run: |
           changed=$(git diff HEAD --name-only --diff-filter=d -- '*packages.lock.json' '*.csproj')
           if [ -z "$changed" ]; then
             echo "Nothing left to commit."
+            echo "commit=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -267,8 +274,23 @@ jobs:
             exit 1
           fi
 
+          not_regular=$(git diff HEAD --raw --diff-filter=d -- '*packages.lock.json' '*.csproj' \
+            | awk '$2 != "100644" { print $NF }')
+          if [ -n "$not_regular" ]; then
+            echo "::error::The heal would commit something other than a regular file:"
+            echo "$not_regular"
+            exit 1
+          fi
+
           echo "$changed" | while IFS= read -r f; do
-            jq -n --arg path "$f" --arg contents "$(base64 -w0 "$f")" \
+            if [ -L "$f" ] || [ ! -f "$f" ]; then
+              echo "::error::$f is not a regular file."
+              exit 1
+            fi
+            # Assigned first, so a failed read fails the step instead of
+            # committing an empty file.
+            contents=$(base64 -w0 -- "$f")
+            jq -n --arg path "$f" --arg contents "$contents" \
               '{path: $path, contents: $contents}'
           done | jq -s '{additions: ., deletions: []}' > "$RUNNER_TEMP/changes.json"
 
@@ -294,7 +316,19 @@ jobs:
              }' > "$RUNNER_TEMP/payload.json"
 
           echo "Committing $(echo "$changed" | wc -l | tr -d ' ') file(s) to $HEAD_REF"
+          echo "commit=true" >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
 
+      - name: Commit through the API, so the commit is signed
+        if: steps.build.outputs.commit == 'true'
+        # `git push` is rejected here: the repository ruleset requires verified
+        # signatures, and a runner has no signing key. Commits created through
+        # createCommitOnBranch are signed by GitHub itself, so they land
+        # Verified without a key ever existing in CI.
+        #
+        # The payload was built in the step above, which holds no token.
+        run: |
           if ! gh api graphql --input "$RUNNER_TEMP/payload.json" > "$RUNNER_TEMP/response.json"; then
             echo "::error::createCommitOnBranch failed:"
             cat "$RUNNER_TEMP/response.json" || true
@@ -313,5 +347,4 @@ jobs:
                  + " -> " + .data.createCommitOnBranch.commit.url' \
             "$RUNNER_TEMP/response.json"
         env:
-          HEAD_REF: ${{ github.head_ref }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
