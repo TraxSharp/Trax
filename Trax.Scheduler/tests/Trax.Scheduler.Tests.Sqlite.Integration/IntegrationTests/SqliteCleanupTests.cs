@@ -9,6 +9,8 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fixtures;
 using Trax.Scheduler.Trains.JobDispatcher;
@@ -259,6 +261,48 @@ public class SqliteCleanupTests : TestSetup
         survivingDeadLetter!
             .RetryMetadataId.Should()
             .BeNull("the retry reference should be nulled");
+    }
+
+    [Test]
+    public async Task MetadataCleanupTrain_KeepsARunAQueuedRequeueOrAnotherRunWillReplay()
+    {
+        // The replay links are plain columns, so the correlated checks must translate on this
+        // dialect too. A run's decisions cascade with it, and a replay of a deleted run fails.
+        var queuedSource = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+        var replayedSource = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+        var unlinked = await CreateExpiredMetadata(typeof(JobDispatcherTrain).FullName!);
+
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(JobDispatcherTrain).FullName!,
+                Input = null,
+                InputTypeName = null,
+                ReplayDecisionsOf = queuedSource.Id,
+            }
+        );
+        await DataContext.Track(entry);
+        var replayer = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(SchedulerTestTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+                ReplayDecisionsOf = replayedSource.Id,
+            }
+        );
+        replayer.TrainState = TrainState.Failed;
+        await DataContext.Track(replayer);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+
+        var train = Scope.ServiceProvider.GetRequiredService<IMetadataCleanupTrain>();
+        await train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        var remaining = await DataContext.Metadatas.Select(m => m.Id).ToListAsync();
+        remaining.Should().Contain([queuedSource.Id, replayedSource.Id]);
+        remaining.Should().NotContain(unlinked.Id, "an expired run nothing replays is deleted");
     }
 
     private async Task<Metadata> CreateExpiredMetadata(string name)

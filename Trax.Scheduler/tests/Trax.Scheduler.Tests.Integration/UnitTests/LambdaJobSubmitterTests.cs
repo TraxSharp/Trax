@@ -500,6 +500,21 @@ public class LambdaJobSubmitterTests
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 
+        public Task<DeleteResourcePolicyResponse> DeleteResourcePolicyAsync(
+            DeleteResourcePolicyRequest request,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
+
+        public Task<GetResourcePolicyResponse> GetResourcePolicyAsync(
+            GetResourcePolicyRequest request,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
+
+        public Task<PutResourcePolicyResponse> PutResourcePolicyAsync(
+            PutResourcePolicyRequest request,
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
+
         public Task<DeleteProvisionedConcurrencyConfigResponse> DeleteProvisionedConcurrencyConfigAsync(
             DeleteProvisionedConcurrencyConfigRequest request,
             CancellationToken cancellationToken = default

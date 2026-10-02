@@ -775,6 +775,21 @@ public class LambdaRunExecutorTests
             CancellationToken ct = default
         ) => throw new NotImplementedException();
 
+        public Task<DeleteResourcePolicyResponse> DeleteResourcePolicyAsync(
+            DeleteResourcePolicyRequest r,
+            CancellationToken ct = default
+        ) => throw new NotImplementedException();
+
+        public Task<GetResourcePolicyResponse> GetResourcePolicyAsync(
+            GetResourcePolicyRequest r,
+            CancellationToken ct = default
+        ) => throw new NotImplementedException();
+
+        public Task<PutResourcePolicyResponse> PutResourcePolicyAsync(
+            PutResourcePolicyRequest r,
+            CancellationToken ct = default
+        ) => throw new NotImplementedException();
+
         public Task<DeleteProvisionedConcurrencyConfigResponse> DeleteProvisionedConcurrencyConfigAsync(
             DeleteProvisionedConcurrencyConfigRequest r,
             CancellationToken ct = default

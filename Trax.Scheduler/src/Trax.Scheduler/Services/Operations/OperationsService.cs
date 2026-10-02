@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -140,6 +141,122 @@ public class OperationsService : IOperationsService
                 Message: $"Unknown train: {input.TrainName}. Use operations.getTrains to list registered trains."
             );
 
+        return await EnqueueAsync(
+            registration,
+            input.InputJson,
+            input.Priority,
+            input.ScheduledAt,
+            replayDecisionsOf: null,
+            ct
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct)
+    {
+        string trainName;
+        string savedInput;
+        bool hasDecisionsToReplay;
+
+        using (var db = await _dataContextFactory.CreateDbContextAsync(ct))
+        {
+            var source = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == metadataId)
+                .Select(m => new { m.Name, m.Input })
+                .FirstOrDefaultAsync(ct);
+
+            if (source is null)
+                return new OperationResult(false, Message: $"Execution {metadataId} not found.");
+
+            // Re-queueing reads the saved input back as the train's input. Nothing saved, a
+            // placeholder saved in its place, or masked [TraxSensitive] members would all read
+            // back as defaults, and the train would run with values it never had.
+            var refusal = RequeueInputCheck.RefusalFor(metadataId, source.Input);
+            if (refusal is not null || source.Input is not { } input)
+                return new OperationResult(false, Message: refusal);
+
+            trainName = source.Name;
+            savedInput = input;
+
+            // Only a run with decisions to replay is linked: one that recorded a decision, or one
+            // that was itself queued to replay another's. The second is a requeue of a requeue
+            // that recorded nothing, or only some of its questions, before it ended; the replay
+            // follows the link back to the answers it did not record. A run of a train that never
+            // decides, or on a host that does not record decisions, is re-queued exactly as an
+            // ordinary enqueue, through the overload every ITrainExecutionService has.
+            hasDecisionsToReplay = await db.HasDecisionsToReplay(metadataId, ct);
+        }
+
+        // The same lookup as QueueTrainAsync. The caller named a run, not a train, so the miss is
+        // reported as the run's train having gone rather than as an unknown name to look up.
+        var registration = _discoveryService
+            .DiscoverTrains()
+            .FirstOrDefault(r => r.ServiceType.FullName == trainName);
+
+        if (registration is null)
+            return new OperationResult(
+                false,
+                Message: RequeueInputCheck.TrainNoLongerRegistered(metadataId, trainName)
+            );
+
+        // The saved input carries the reference metadata SaveTrainParameters() writes ($id,
+        // $values, $ref), which the mediator does not honour in an input it is handed: a list
+        // would be refused and a repeated object read back at its defaults. Resolving it first
+        // hands over the plain tree the run was given. It does not depend on the input type, so
+        // doing it before the mediator authorizes the caller tells them nothing about the input.
+        string requeuedInput;
+
+        try
+        {
+            requeuedInput = TrainInputReader.ResolveSavedInput(
+                savedInput,
+                registration,
+                MaxInputJsonBytes()
+            );
+        }
+        catch (JsonException ex)
+        {
+            return new OperationResult(
+                false,
+                Message: $"Execution {metadataId}'s saved input cannot be read back as the input "
+                    + $"it ran with: {ex.Message}"
+            );
+        }
+        catch (TrainInputValidationException ex)
+        {
+            // Generic by design, as in EnqueueAsync.
+            return new OperationResult(false, Message: ex.Message);
+        }
+
+        // The replay link is set here and nowhere a caller can reach, and only to the run being
+        // re-queued, so the new run replays decisions of a run of the same train (docs/0041).
+        return await EnqueueAsync(
+            registration,
+            requeuedInput,
+            priority: 0,
+            scheduledAt: null,
+            replayDecisionsOf: hasDecisionsToReplay ? metadataId : null,
+            ct,
+            requeueOf: metadataId
+        );
+    }
+
+    /// <summary>
+    /// The enqueue <see cref="QueueTrainAsync"/> and <see cref="RequeueExecutionAsync"/> share,
+    /// for a train already found by name: through the mediator, with refusals and failures split
+    /// as scheduler/0004 says.
+    /// </summary>
+    private async Task<OperationResult> EnqueueAsync(
+        TrainRegistration registration,
+        string? inputJson,
+        int priority,
+        DateTime? scheduledAt,
+        long? replayDecisionsOf,
+        CancellationToken ct,
+        long? requeueOf = null
+    )
+    {
         // Enqueue through the mediator rather than writing the row here. That is what applies
         // the train's [TraxAuthorize] requirements, fires OnQueue, and stamps the subject key,
         // none of which a hand-built entry got. The input is handed over unparsed: the mediator
@@ -151,17 +268,38 @@ public class OperationsService : IOperationsService
 
         try
         {
-            queued = await _trainExecution.QueueAsync(
-                registration.ServiceType.FullName!,
-                input.InputJson,
-                input.Priority,
-                input.ScheduledAt,
-                ct
-            );
+            // Only a replay needs the options overload; every other enqueue goes through the
+            // overload every implementation has.
+            queued = replayDecisionsOf is null
+                ? await _trainExecution.QueueAsync(
+                    registration.ServiceType.FullName!,
+                    inputJson,
+                    priority,
+                    scheduledAt,
+                    ct
+                )
+                : await _trainExecution.QueueAsync(
+                    registration.ServiceType.FullName!,
+                    inputJson,
+                    new QueueTrainOptions
+                    {
+                        Priority = priority,
+                        ScheduledAt = scheduledAt,
+                        ReplayDecisionsOf = replayDecisionsOf,
+                    },
+                    ct
+                );
         }
         catch (JsonException ex)
         {
-            return new OperationResult(false, Message: $"Invalid InputJson: {ex.Message}");
+            // A re-queue's caller supplied no JSON: the input is the run's own, saved when the
+            // train took another shape, so the refusal names the run rather than an InputJson.
+            return new OperationResult(
+                false,
+                Message: requeueOf is { } run
+                    ? RequeueInputCheck.SavedInputNoLongerReads(run, registration, ex)
+                    : $"Invalid InputJson: {ex.Message}"
+            );
         }
         catch (TrainInputValidationException ex)
         {
@@ -196,6 +334,21 @@ public class OperationsService : IOperationsService
                 ex,
                 "Queueing {TrainName} failed: the host has no ITrainAuthorizationService",
                 registration.ServiceType.FullName
+            );
+            throw;
+        }
+        catch (DecisionReplayNotSupportedException ex)
+        {
+            // A re-queue that replays decisions reached an ITrainExecutionService (a custom one,
+            // or a decorator) that does not implement the overload carrying the link. The host is
+            // misconfigured, as with a missing enforcer, so it is logged and thrown rather than
+            // reported as a refusal. See scheduler/0004.
+            _logger?.LogError(
+                ex,
+                "Re-queueing {TrainName} failed: {Implementation} cannot queue a run that replays "
+                    + "decisions",
+                registration.ServiceType.FullName,
+                ex.ImplementationType.FullName
             );
             throw;
         }
@@ -435,9 +588,7 @@ public class OperationsService : IOperationsService
         object runInput
     )
     {
-        var maxBytes =
-            services.GetService<MediatorConfiguration>()?.MaxInputJsonBytes
-            ?? new MediatorConfiguration().MaxInputJsonBytes;
+        var maxBytes = MaxInputJsonBytes(services);
         var storedCap = (int)
             Math.Min((long)maxBytes * TrainInputReader.StoredInputGrowthFactor, int.MaxValue);
 
@@ -455,6 +606,16 @@ public class OperationsService : IOperationsService
                 storedCap
             );
     }
+
+    /// <summary>
+    /// The mediator's input size cap, or its default when the host registered no
+    /// <see cref="MediatorConfiguration"/> or this service was built without a provider.
+    /// </summary>
+    private int MaxInputJsonBytes() => MaxInputJsonBytes(_services);
+
+    private static int MaxInputJsonBytes(IServiceProvider? services) =>
+        services?.GetService<MediatorConfiguration>()?.MaxInputJsonBytes
+        ?? new MediatorConfiguration().MaxInputJsonBytes;
 
     /// <summary>
     /// The submitter the job dispatcher would use for this train: its builder or

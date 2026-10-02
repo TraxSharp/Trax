@@ -46,7 +46,10 @@ exception and a hook may wrap what it caught.
 **A host misconfiguration** is the mediator's `TrainAuthorizationNotConfiguredException`: the
 train declares `[TraxAuthorize]` and the host registered no `ITrainAuthorizationService`. It is
 thrown like an infrastructure failure. It is caught by its type, which the mediator gave it for
-this purpose, so no message text is matched.
+this purpose, so no message text is matched. The mediator's `DecisionReplayNotSupportedException`
+is the same kind of fault: a re-queue that replays the run's decisions (central 0041) reached a
+custom or decorating `ITrainExecutionService` that does not implement the overload carrying the
+replay link. It names that implementation, and it is logged and thrown the same way.
 
 A data-layer exception is a failure even when a hook's own write caused it, a unique
 violation included. A hook that means to refuse throws its own exception. Letting a
@@ -120,6 +123,9 @@ already does for every other resolver.
   still come back as refusals. It pins the allow-list too: a plain `TrainException` and a hook
   timeout show their message, while an `InvalidOperationException` and a type derived from
   `TrainException` come back with the fixed message and are logged.
+- `OperationsServiceRequeueTests` pins the replay misconfiguration: a re-queue of a run that
+  recorded decisions, through an `ITrainExecutionService` without the overload that carries the
+  link, throws and logs `DecisionReplayNotSupportedException` and queues nothing.
 - [Mutations: queueTrain](/docs/sdk-reference/graphql-api/mutations#queuetrain) is the rule this
   produces for GraphQL clients.
 
@@ -130,6 +136,8 @@ contract, and Trax.Api's error filter tests pin it.
 
 ## Changelog
 
+- **2026-10-01**: `DecisionReplayNotSupportedException` is a host misconfiguration too, logged and
+  thrown from `RequeueExecutionAsync` rather than reported as `"The enqueue was refused."`.
 - **2026-09-30**: A run's `OnQueue` refusal follows the enqueue's rule (central 0037).
 - **2026-09-30**: A refusal shows its exception's message only for a plain `TrainException`,
   `QueuedWorkCancelledException` and `QueueHookTimeoutException`; any other type is a refusal

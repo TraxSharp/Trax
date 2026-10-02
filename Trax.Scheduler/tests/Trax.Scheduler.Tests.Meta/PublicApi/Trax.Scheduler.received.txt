@@ -438,6 +438,7 @@ namespace Trax.Scheduler.Services.Operations
         Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig();
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RunTrainAsync(Trax.Scheduler.Services.Operations.RunTrainInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestGroupsEnabledAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool enabled, System.Threading.CancellationToken ct);
@@ -538,6 +539,7 @@ namespace Trax.Scheduler.Services.Operations
         public Trax.Scheduler.Services.Operations.SchedulerConfigSnapshot GetSchedulerConfig() { }
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RunTrainAsync(Trax.Scheduler.Services.Operations.RunTrainInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestGroupsEnabledAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool enabled, System.Threading.CancellationToken ct) { }

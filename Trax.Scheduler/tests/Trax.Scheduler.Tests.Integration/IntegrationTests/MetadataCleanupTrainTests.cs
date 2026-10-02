@@ -614,6 +614,120 @@ public class MetadataCleanupTrainTests : TestSetup
 
     #endregion
 
+    #region Replay Source Tests
+
+    // A run another run will replay keeps its decisions only while its row exists: they cascade
+    // with it, and a replay of a deleted run fails permanently (central docs/0041).
+
+    [Test]
+    public async Task Run_KeepsAnExpiredRunAQueuedRequeueWillReplay()
+    {
+        var source = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+        var requeue = await QueueReplayOf(source.Id);
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id))
+            .Should()
+            .BeTrue("the queued requeue replays its decisions when it runs");
+
+        // Once the entry is no longer waiting to run, nothing points at the run.
+        await DataContext
+            .WorkQueues.Where(q => q.Id == requeue.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Cancelled));
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id)).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Run_KeepsAnExpiredRunARetainedRunReplayed()
+    {
+        var source = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+        var replayer = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Failed,
+            startTime: DateTime.UtcNow
+        );
+        await LinkReplay(replayer.Id, source.Id);
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id))
+            .Should()
+            .BeTrue("a requeue of the retained run follows its link back to this one");
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == replayer.Id)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Run_DeletesAnExpiredReplaySourceOnceTheRunReplayingItIsDeleted()
+    {
+        var source = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-3)
+        );
+        var replayer = await CreateAndSaveMetadata(
+            name: typeof(ManifestManagerTrain).FullName!,
+            state: TrainState.Completed,
+            startTime: DateTime.UtcNow.AddHours(-2)
+        );
+        await LinkReplay(replayer.Id, source.Id);
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == replayer.Id))
+            .Should()
+            .BeFalse("the run that replayed is expired and nothing points at it");
+
+        await _train.Run(new MetadataCleanupRequest());
+
+        DataContext.Reset();
+        (await DataContext.Metadatas.AnyAsync(m => m.Id == source.Id))
+            .Should()
+            .BeFalse("with the run that replayed it gone, the source is expired like any other");
+    }
+
+    private async Task<WorkQueue> QueueReplayOf(long metadataId)
+    {
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(ManifestManagerTrain).FullName!,
+                Input = null,
+                InputTypeName = null,
+                ReplayDecisionsOf = metadataId,
+            }
+        );
+        await DataContext.Track(entry);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+        return entry;
+    }
+
+    private async Task LinkReplay(long replayerId, long sourceId)
+    {
+        await DataContext
+            .Metadatas.Where(m => m.Id == replayerId)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ReplayDecisionsOf, (long?)sourceId));
+        DataContext.Reset();
+    }
+
+    #endregion
+
     #region Edge Cases
 
     [Test]

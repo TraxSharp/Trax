@@ -235,6 +235,7 @@ internal class DispatchJobsJunction(
                 ExternalId = claimed.ExternalId,
                 Input = null,
                 ManifestId = claimed.ManifestId,
+                ReplayDecisionsOf = claimed.ReplayDecisionsOf,
             }
         );
 
@@ -365,6 +366,7 @@ internal class DispatchJobsJunction(
                 ExternalId = claimed.ExternalId,
                 Input = null,
                 ManifestId = claimed.ManifestId,
+                ReplayDecisionsOf = claimed.ReplayDecisionsOf,
             }
         );
         metadata.TrainState = TrainState.Failed;

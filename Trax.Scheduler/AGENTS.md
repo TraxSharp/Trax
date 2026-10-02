@@ -25,6 +25,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `UpdateSchedulerConfigAsync`, `SchedulerSettings`, or how a saved setting reaches a scheduler | [0010](./docs/adr/0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md), a save names only what it sets in the row's `overrides`, every other setting keeps its code value, and every running scheduler re-reads the row |
 | an `ExecuteUpdate` or `ExecuteDelete` in `OperationsService`, `ExecutionCancellation` or a `TraxScheduler` operation | [0007](./docs/adr/0007-the-operations-surface-runs-on-inmemory.md), check `SupportsSetUpdates()` and fall back to per-row on InMemory |
 | the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
+| `OperationsService.RequeueExecutionAsync`, the replay link a requeue sets, or carrying `replay_decisions_of` from the work queue to the run | central `docs/0041`, a requeued run replays the decisions of the run it repeats, and only that method sets the link; a dead-letter requeue and a manifest trigger do not |
 | `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
 | a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |
 | the JobRunner chain, or anything done after a scheduled train returns | [0005](./docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), the manifest update stays in the junction that ran the train, on an uncancellable token |
@@ -35,8 +36,8 @@ if your work contradicts one, say so rather than silently overriding it.
 | `RemoteRunResponse.PublicMessage`, `RemoteRunException`, or what a remote failure shows a client | central `docs/0028`, the runner offers only a plain `TrainException`'s message, and every remote failure is rebuilt as a `RemoteRunException` carrying it |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty-seven name `scheduler`. Besides the workspace-wide conventions and
-`0016` to `0020` and `0022` (routed above), `0007` (the canonical train name is the
+index lists them by repo. Thirty-one name `scheduler`. Besides the workspace-wide conventions and
+`0016` to `0020`, `0022` and `0041` (routed above), `0007` (the canonical train name is the
 interface FullName) is the one this repo touches most, since it is the string stored in
 `work_queue.train_name` and the one a remote run puts on the wire. The wire is lenient about
 it: the executing side falls back to the short type name when the FullName does not match. In

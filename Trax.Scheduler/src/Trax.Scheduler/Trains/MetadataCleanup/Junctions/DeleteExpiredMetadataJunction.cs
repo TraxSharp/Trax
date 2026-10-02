@@ -27,7 +27,9 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// default. Trains sharing a cutoff are swept together, so the batching below runs once per
 /// distinct retention rather than once in total.
 ///
-/// Only metadata in a terminal state (Completed, Failed, or Cancelled) is eligible for deletion.
+/// Only metadata in a terminal state (Completed, Failed, or Cancelled) is eligible for deletion,
+/// and not while a queued work queue entry or another run names it in <c>replay_decisions_of</c>
+/// (central <c>docs/0041</c>).
 /// A batch that fails (for example an unexpected foreign-key reference) is bisected to isolate the
 /// offending row, which is logged and skipped so one bad row can never abort the whole sweep.
 /// </remarks>
@@ -84,6 +86,18 @@ internal class DeleteExpiredMetadataJunction(
                         || m.TrainState == TrainState.Cancelled
                     )
                     .Where(m => !skippedIds.Contains(m.Id))
+                    // A run another run will replay is kept while anything still points at it: a
+                    // queued requeue that has not been dispatched, or a run that replayed it and
+                    // may itself be requeued, whose replay follows the link back. Deleting it
+                    // takes its decisions with it, and the replay then fails rather than asking
+                    // afresh. A linking run that expires is deleted first, and this one goes in a
+                    // later batch or sweep.
+                    .Where(m =>
+                        !dataContext.WorkQueues.Any(q =>
+                            q.ReplayDecisionsOf == m.Id && q.Status == WorkQueueStatus.Queued
+                        )
+                    )
+                    .Where(m => !dataContext.Metadatas.Any(r => r.ReplayDecisionsOf == m.Id))
                     .Select(m => m.Id);
 
                 var batchIds = batchSize.HasValue

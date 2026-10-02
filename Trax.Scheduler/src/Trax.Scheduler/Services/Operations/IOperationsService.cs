@@ -118,6 +118,62 @@ public interface IOperationsService
         );
 
     /// <summary>
+    /// Re-queues a run: queues a fresh run of the same train with the input the run recorded. The
+    /// GraphQL <c>requeueExecution</c> mutation and the dashboard's Re-queue button both call it,
+    /// so the two refuse the same runs with the same messages and enqueue the same way.
+    /// </summary>
+    /// <remarks>
+    /// The run is read by <paramref name="metadataId"/>, and is refused without queueing when its
+    /// saved input is not the input it ran with: nothing was saved (inputs are saved only when
+    /// <c>SaveTrainParameters()</c> is on), the parameter effect saved a <c>_truncated</c>,
+    /// <c>_unserializable</c> or <c>_disposed</c> placeholder in its place, or
+    /// <c>[TraxSensitive]</c> members were masked. Each of those would read back as defaults.
+    /// <para>
+    /// The saved input carries the reference metadata <c>SaveTrainParameters()</c> writes
+    /// (<c>$id</c>, <c>$values</c>, <c>$ref</c>). It is rewritten as the plain tree it stands for
+    /// by <c>TrainInputReader.ResolveSavedInput</c> before it is queued, so a list, and an object
+    /// the input held twice, come back as they were; a saved input whose metadata has no plain
+    /// form, or whose plain form is over the input cap, is refused.
+    /// </para>
+    /// <para>
+    /// The enqueue then goes through the same path as <see cref="QueueTrainAsync"/>, so the train's
+    /// authorization, its <c>OnQueue</c> hook, its subject key and the input cap apply, and a
+    /// refusal or failure is reported as it is there. The caller's trusted scope carries through:
+    /// the dashboard calls this inside its <c>"dashboard"</c> scope, the API does not.
+    /// </para>
+    /// <para>
+    /// When the run recorded decisions, or was itself queued to replay another run's, the new
+    /// entry names it as the run whose decisions it replays, so the new run takes the tracks the
+    /// original took (central <c>docs/0041</c>); a question the run never reached is answered from
+    /// the run it replayed in turn. A run with neither is re-queued exactly as an ordinary enqueue. The link is only ever set
+    /// here, to the run being re-queued, so it always points at a run of the same train.
+    /// </para>
+    /// </remarks>
+    /// <param name="metadataId">The id of the run (metadata row) to re-queue.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <c>OperationResult(true, Id: newEntryId, Count: 1, ...)</c> on success. A failed result,
+    /// with a message, when no run has the id (<c>"Execution {id} not found."</c>), its train is
+    /// no longer registered (<c>"Train {name} is no longer registered, ..."</c>), its saved input
+    /// cannot be re-queued or no longer reads as the train's input type (<c>"The saved input of
+    /// run {id} no longer reads as {type}: ..."</c>), or the enqueue is refused as
+    /// <see cref="QueueTrainAsync"/> describes.
+    /// </returns>
+    /// <exception cref="Trax.Mediator.Exceptions.DecisionReplayNotSupportedException">
+    /// The run recorded decisions and the registered <c>ITrainExecutionService</c> does not
+    /// implement the overload that carries the replay link. A host misconfiguration, so it is
+    /// logged and thrown rather than reported as a refusal (scheduler/0004).
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// The caller may not queue the train. It propagates, as from <see cref="QueueTrainAsync"/>.
+    /// </exception>
+    /// <exception cref="Trax.Mediator.Exceptions.TrainAuthorizationNotConfiguredException">
+    /// As from <see cref="QueueTrainAsync"/>.
+    /// </exception>
+    Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(RequeueExecutionAsync));
+
+    /// <summary>
     /// Transitions a queued work queue entry to <c>Cancelled</c>. Only entries currently
     /// in the <c>Queued</c> state are eligible. Entries that are already dispatched or
     /// already cancelled return a failure result without modifying the row.

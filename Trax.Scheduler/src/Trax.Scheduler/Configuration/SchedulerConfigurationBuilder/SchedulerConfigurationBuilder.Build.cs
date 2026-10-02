@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Services.DecisionRecording;
 using Trax.Scheduler.Services.DormantDependentContext;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -84,11 +85,20 @@ public partial class SchedulerConfigurationBuilder
         // Register internal scheduler trains (AddScopedTraxRoute for property injection).
         // InMemory uses a simplified train that skips PostgreSQL-specific steps
         // (CancelTimedOutJobs, ReapStalePending) and dispatches jobs inline.
+        //
+        // The job dispatcher claims work with provider-specific SQL, so it is registered only with
+        // a database provider, the only place JobDispatcherPollingService runs it. Registered
+        // without one, it is a train the mediator's startup check can never build, and the host is
+        // refused.
         if (_parentBuilder.HasDatabaseProvider)
         {
             _parentBuilder.ServiceCollection.AddScopedTraxRoute<
                 IManifestManagerTrain,
                 ManifestManagerTrain
+            >();
+            _parentBuilder.ServiceCollection.AddScopedTraxRoute<
+                IJobDispatcherTrain,
+                JobDispatcherTrain
             >();
         }
         else
@@ -98,10 +108,6 @@ public partial class SchedulerConfigurationBuilder
                 InMemoryManifestManagerTrain
             >();
         }
-        _parentBuilder.ServiceCollection.AddScopedTraxRoute<
-            IJobDispatcherTrain,
-            JobDispatcherTrain
-        >();
         _parentBuilder.ServiceCollection.AddScopedTraxRoute<
             IMetadataCleanupTrain,
             MetadataCleanupTrain
@@ -136,6 +142,10 @@ public partial class SchedulerConfigurationBuilder
             _parentBuilder.ServiceCollection.AddScopedTraxRoute<IJobRunnerTrain, JobRunnerTrain>();
             _parentBuilder.ServiceCollection.AddScoped<IJobSubmitter, InMemoryJobSubmitter>();
         }
+
+        // This host runs trains, so it refuses to start when the ones that ask a decider cannot
+        // replay a requeue's recorded decisions. Registered once however many paths ask.
+        DecisionRecordingStartupCheck.Register(_parentBuilder.ServiceCollection);
 
         // Register routed submitters (UseRemoteWorkers, UseSqsWorkers with ForTrain routing)
         RegisterRoutedSubmitters();

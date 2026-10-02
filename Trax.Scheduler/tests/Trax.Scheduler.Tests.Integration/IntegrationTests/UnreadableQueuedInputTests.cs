@@ -7,6 +7,8 @@ using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -165,7 +167,46 @@ public class UnreadableQueuedInputTests : TestSetup
         run.FailureReason.Should().Contain("could not be read");
     }
 
-    private async Task<WorkQueue> Queue(string? subject, string input, string inputTypeName)
+    [Test]
+    public async Task An_unreadable_requeue_carries_its_replay_link_onto_its_failed_run()
+    {
+        // The failed run stands for the requeue, so a requeue of it in turn must still lead back
+        // to the run whose decisions it was to replay.
+        var source = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = typeof(SchedulerTestTrain).FullName!,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        await DataContext.Track(source);
+        await DataContext.SaveChanges(CancellationToken.None);
+        DataContext.Reset();
+        var entry = await Queue(
+            subject: null,
+            """{"value": {"not": "a string"}}""",
+            typeof(SchedulerTestInput).FullName!,
+            replayDecisionsOf: source.Id
+        );
+
+        await RunDispatcher();
+
+        DataContext.Reset();
+        var row = await DataContext.WorkQueues.AsNoTracking().SingleAsync(q => q.Id == entry.Id);
+        var run = await DataContext
+            .Metadatas.AsNoTracking()
+            .SingleAsync(m => m.Id == row.MetadataId);
+        run.TrainState.Should().Be(TrainState.Failed);
+        run.ReplayDecisionsOf.Should().Be(source.Id);
+    }
+
+    private async Task<WorkQueue> Queue(
+        string? subject,
+        string input,
+        string inputTypeName,
+        long? replayDecisionsOf = null
+    )
     {
         var entry = WorkQueue.Create(
             new CreateWorkQueue
@@ -174,6 +215,7 @@ public class UnreadableQueuedInputTests : TestSetup
                 Input = input,
                 InputTypeName = inputTypeName,
                 SubjectKey = subject,
+                ReplayDecisionsOf = replayDecisionsOf,
             }
         );
         await DataContext.Track(entry);
