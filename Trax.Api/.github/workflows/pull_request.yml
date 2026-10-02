@@ -7,9 +7,6 @@ on:
 # Default to no permissions; the job widens only what it needs.
 permissions: {}
 
-env:
-  DOTNET_VERSION: '10.0.x'
-
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -18,7 +15,7 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16@sha256:081f1bc7bd5e143dbb6e487b710bbc27712cdcfaced4c071b8e47349aa1b4171
+        image: postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527
         env:
           POSTGRES_USER: trax
           POSTGRES_PASSWORD: trax123
@@ -72,6 +69,10 @@ jobs:
         run: dotnet csharpier check .
       - name: Restore (locked)
         run: dotnet restore --locked-mode
+      - name: Every project is locked
+        run: .github/scripts/check-project-locks.sh Trax.Api.slnx
+      - name: No deprecated packages
+        run: .github/scripts/check-deprecated-packages.sh Trax.Api.slnx
       - name: Build
         run: dotnet build --configuration Release --no-restore -warnaserror
       - name: Pack (package validation)
@@ -91,19 +92,50 @@ jobs:
           done
       - name: Test
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults --blame-hang-timeout 5m --blame-hang-dump-type none
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4  # v7.1.0
+      - name: Upload coverage results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          directory: ./TestResults
+          name: coverage
+          path: TestResults/**/coverage.cobertura.xml
+          if-no-files-found: warn
+          retention-days: 1
+
+  # The Codecov token is kept out of the job that runs restore, build and tests, so
+  # nothing those leave running can read it. This job runs no project code.
+  coverage:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        # Codecov maps the report's file paths onto the repository's tracked files.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download coverage results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          directory: ${{ runner.temp }}/coverage
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # ADRs for this repo live in docs/adr/ and are checked against this checkout alone. The
   # guard is published by Trax.Docs; nothing else needs to be cloned.
   #
-  # Pinned at ca1261920d0e on Trax.Docs main, which is where the guard now lives. Bump this only
-  # to adopt a guard change, and read what changed first: a newer guard can fail this repo
-  # on an ADR that was green before.
+  # Pinned at ed9d7a6e0325 (2026-09-28) on Trax.Docs main, which is where the guard now lives.
+  # Bump this only to adopt a guard change, and read what changed first: a newer guard can fail
+  # this repo on an ADR that was green before.
   adr-guard:
     runs-on: ubuntu-latest
     timeout-minutes: 5

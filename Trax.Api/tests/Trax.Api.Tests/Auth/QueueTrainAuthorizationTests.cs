@@ -11,10 +11,7 @@ using Trax.Api.Exceptions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Configuration.TraxBuilder;
-using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Effect.Models.Metadata;
-using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -86,31 +83,12 @@ public class QueueTrainAuthorizationTests
     [Test]
     public async Task A_requeue_refused_by_train_authorization_reaches_the_caller_as_TRAX_AUTHORIZATION()
     {
-        // requeueExecution reads the train and input off the saved run, then enqueues through
-        // the same operations service as queueTrain, so the refusal has to surface the same way.
-        var dataContextFactory = new InMemoryContextProviderFactory(
-            new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
-        );
-        long id;
-        await using (var db = await dataContextFactory.CreateDbContextAsync(default))
-        {
-            var meta = Metadata.Create(
-                new CreateMetadata
-                {
-                    Name = "Trax.X.IGuardedTrain",
-                    ExternalId = Guid.NewGuid().ToString("N"),
-                    Input = null,
-                }
-            );
-            meta.Input = "{\"v\": 1}";
-            await db.Track(meta);
-            await db.SaveChanges(default);
-            id = meta.Id;
-        }
-
+        // requeueExecution enqueues through the operations service's RequeueExecutionAsync, which
+        // the dashboard's Re-queue button calls too, so the refusal has to surface as queueTrain's.
+        const long id = 5;
         var operations = Substitute.For<IOperationsService>();
         operations
-            .QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>())
+            .RequeueExecutionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(
                 new TrainAuthorizationException(
                     "Trax.X.IGuardedTrain",
@@ -118,7 +96,7 @@ public class QueueTrainAuthorizationTests
                 )
             );
 
-        using var host = await StartHostAsync(operations, dataContextFactory);
+        using var host = await StartHostAsync(operations);
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,
@@ -146,12 +124,42 @@ public class QueueTrainAuthorizationTests
                 "GuardedTrainOperators",
                 "which requirement was missing is the server's to know, not the caller's"
             );
+        await operations.Received(1).RequeueExecutionAsync(id, Arg.Any<CancellationToken>());
+
+        await host.StopAsync();
+    }
+
+    [Test]
+    public async Task The_queueTrain_input_has_no_replay_link()
+    {
+        // Only requeueExecution sets which run's decisions a new run replays, and only to the run
+        // it re-queues. The queueTrain input must not accept one.
+        var operations = Substitute.For<IOperationsService>();
+        using var host = await StartHostAsync(operations);
+
+        var doc = await AdminOperationsAuthorizationTests.PostAsync(
+            host,
+            apiKey: null,
+            """
+            mutation {
+              operations {
+                workQueue {
+                  queueTrain(input: { trainName: "Trax.X.IGuardedTrain", replayDecisionsOf: 1 }) {
+                    success
+                  }
+                }
+              }
+            }
+            """
+        );
+
+        doc.RootElement.TryGetProperty("errors", out var errors)
+            .Should()
+            .BeTrue("the field is not part of the input type");
+        errors.GetRawText().Should().Contain("replayDecisionsOf");
         await operations
-            .Received(1)
-            .QueueTrainAsync(
-                Arg.Is<QueueTrainInput>(i => i!.TrainName == "Trax.X.IGuardedTrain"),
-                Arg.Any<CancellationToken>()
-            );
+            .DidNotReceive()
+            .QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>());
 
         await host.StopAsync();
     }

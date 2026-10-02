@@ -5,7 +5,6 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectRegistry;
-using Trax.Effect.Utils;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -201,61 +200,18 @@ public class OperationsMutations
 
     /// <summary>
     /// Re-queues an execution: queues a fresh run of the same train with the input the execution
-    /// recorded, mirroring the dashboard's Re-queue action. Fails without queueing when the
-    /// execution does not exist, recorded no input, recorded only a truncated placeholder, or
-    /// recorded an input with <c>[TraxSensitive]</c> members masked.
+    /// recorded, through <see cref="IOperationsService.RequeueExecutionAsync"/>, the same call the
+    /// dashboard's Re-queue button makes. Fails without queueing when the execution does not exist,
+    /// recorded no input, recorded a placeholder in place of its input (too large, unserializable
+    /// or disposed), or recorded an input with <c>[TraxSensitive]</c> members masked. When the
+    /// execution recorded decisions, the new run replays them, so it takes the tracks the
+    /// execution took.
     /// </summary>
     public async Task<OperationResponse> RequeueExecution(
         long id,
-        [Service] IDataContextProviderFactory dataContextFactory,
         [Service] IOperationsService operationsService,
         CancellationToken ct
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        var meta = await db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.Id == id)
-            .Select(m => new { m.Name, m.Input })
-            .FirstOrDefaultAsync(ct);
-
-        if (meta is null)
-            return new OperationResponse(false, Message: $"Execution {id} not found.");
-
-        // An enqueue reads no input as an empty object, so re-queueing a run whose input was
-        // never saved would re-run it with defaults rather than with what it ran with.
-        if (string.IsNullOrWhiteSpace(meta.Input))
-            return new OperationResponse(
-                false,
-                Message: $"Execution {id} has no saved input to re-queue it with. Inputs are "
-                    + "saved only when SaveTrainParameters() is on."
-            );
-
-        // An input over MaxParameterBytes is saved as a placeholder. Re-queueing it would run
-        // the train with defaults instead of with what it ran with.
-        if (IsTruncatedPlaceholder(meta.Input))
-            return new OperationResponse(
-                false,
-                Message: $"Execution {id}'s input was too large to save in full, so it cannot be "
-                    + "re-queued with what it ran with."
-            );
-
-        // A [TraxSensitive] member is recorded as {"_redacted": true}, not as its value, so the
-        // run cannot be re-queued with what it ran with.
-        if (TraxRedaction.ContainsRedaction(meta.Input))
-            return new OperationResponse(
-                false,
-                Message: $"Execution {id}'s input has values masked by [TraxSensitive], so it "
-                    + "cannot be re-queued with what it ran with."
-            );
-
-        var result = await operationsService.QueueTrainAsync(
-            new QueueTrainInput(meta.Name, meta.Input),
-            ct
-        );
-        return ToResponse(result);
-    }
+    ) => ToResponse(await operationsService.RequeueExecutionAsync(id, ct));
 
     /// <summary>
     /// Patches mutable settings on a single manifest (enabled, retries, priority, timeout,
@@ -344,19 +300,4 @@ public class OperationsMutations
 
     private static OperationResponse ToResponse(OperationResult result) =>
         new(result.Success, result.Count, result.Message) { Id = result.Id };
-
-    private static bool IsTruncatedPlaceholder(string input)
-    {
-        try
-        {
-            using var document = System.Text.Json.JsonDocument.Parse(input);
-            return document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
-                && document.RootElement.TryGetProperty("_truncated", out var truncated)
-                && truncated.ValueKind == System.Text.Json.JsonValueKind.True;
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            return false;
-        }
-    }
 }

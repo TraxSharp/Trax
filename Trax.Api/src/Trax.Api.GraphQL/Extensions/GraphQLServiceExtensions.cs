@@ -1,4 +1,5 @@
 using System.Reflection;
+using ChilliCream.Nitro.App;
 using HotChocolate.AspNetCore;
 using HotChocolate.Data;
 using HotChocolate.Execution;
@@ -673,6 +674,11 @@ public static class GraphQLServiceExtensions
             .Configure<IServiceProvider>(
                 (options, sp) =>
                 {
+                    // The IDE is served from the assets bundled in the ChilliCream.Nitro.App
+                    // package, so opening it makes no request beyond the host and the IDE a
+                    // host serves is the one it was built and tested with.
+                    options.Tool.ServeMode = ServeMode.Embedded;
+
                     if (
                         config.IntrospectionPredicate is null
                         && sp.GetService<IHostEnvironment>()?.IsDevelopment() != true

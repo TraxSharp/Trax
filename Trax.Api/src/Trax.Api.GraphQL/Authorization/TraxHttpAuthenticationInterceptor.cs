@@ -34,7 +34,7 @@ namespace Trax.Api.GraphQL.Authorization;
 /// <c>@authorize</c> refuses whatever it gates.
 /// </para>
 /// <para>
-/// HotChocolate calls this only for GraphQL execution requests, so the Banana Cake Pop tool page and
+/// HotChocolate calls this only for GraphQL execution requests, so the Nitro IDE page and
 /// WebSocket upgrades are unaffected. See
 /// <c>docs/adr/0010-a-scheme-policy-requires-its-scheme.md</c>.
 /// </para>

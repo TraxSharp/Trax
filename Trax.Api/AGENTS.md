@@ -26,18 +26,19 @@ if your work contradicts one, say so rather than silently overriding it.
 | how a socket validates a JWT | [0022](./docs/adr/0022-a-socket-authenticates-through-the-schemes-handler.md): through the scheme's own handler, never a copy of its validation |
 | the principal id, or anything keyed on it | [0023](./docs/adr/0023-a-principal-id-is-qualified-by-its-scheme.md): it is `{scheme}:{id}`, built only by `ToClaimsPrincipal` |
 | `queueTrain` or `requeueExecution` | central `docs/0017`, they enqueue through the mediator so per-train authorization applies; manifest triggers and dead-letter requeues are governed by the operations gate |
+| what `requeueExecution` replays | central `docs/0041`, the requeued run replays the decisions the execution recorded |
 | `failureClass` on executions, or the `executions(failureClass:)` filter | central `docs/0020`, a failure is classified where it happens |
 | `subjectKey` or `confirmedAt` on work queue reads | central `docs/0019` and `docs/0018` |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty name `api`: executable guards, exact version pinning, the
+index lists them by repo. Thirty-three name `api`. Among them: executable guards, exact version pinning, the
 dependency direction, the three test conventions, the canonical train name being the
 interface FullName, the documentation lints, feature-package tables shipping in the core
 provider migration set, the public API baseline, test frameworks staying out of shipped
 libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
-(`0016`), and the enqueue, staging, subject and failure-classification decisions (`0017` to
-`0020`). In a workspace checkout the index is at
+(`0016`), the enqueue, staging, subject and failure-classification decisions (`0017` to
+`0020`), the shared dashboard/API operations (`0022`), and a requeue replaying decisions (`0041`). In a workspace checkout the index is at
 `../Trax.Docs/adr/README.md`; that path does not resolve on GitHub, because it crosses a
 repository boundary.
 

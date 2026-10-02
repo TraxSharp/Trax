@@ -17,6 +17,8 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -92,18 +94,19 @@ public class SensitiveInputCopiesTests
             await db.SaveChanges(default);
             id = meta.Id;
         }
-        var operations = Substitute.For<IOperationsService>();
-
-        var response = await new OperationsMutations().RequeueExecution(
-            id,
+        var execution = Substitute.For<ITrainExecutionService>();
+        var operations = new OperationsService(
+            _discovery,
             _factory,
-            operations,
-            default
+            new SchedulerConfiguration(),
+            execution
         );
+
+        var response = await new OperationsMutations().RequeueExecution(id, operations, default);
 
         response.Success.Should().BeFalse();
         response.Message.Should().Contain("[TraxSensitive]");
-        await operations.DidNotReceiveWithAnyArgs().QueueTrainAsync(default!, default);
+        execution.ReceivedCalls().Should().BeEmpty("a masked input is refused before any enqueue");
     }
 
     [Test]

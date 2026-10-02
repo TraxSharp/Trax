@@ -346,7 +346,6 @@ public class AdminMutationStressTests : StressTestSetup
             {
                 var response = await new OperationsMutations().RequeueExecution(
                     executionId,
-                    Factory(sp),
                     Operations(sp),
                     ct
                 );

@@ -15,8 +15,8 @@
       },
       "GraphQL.Analyzers": {
         "type": "Transitive",
-        "resolved": "8.8.4",
-        "contentHash": "uzsOFK6wKUjefBhejWX6bzomjAM2tgqFWdjvTK26skYzGZPqA9r4Ra+AeOR3aARWlQetmB1T7nG5fIMfZfyLQw=="
+        "resolved": "8.8.5",
+        "contentHash": "2pmvrDAPbjNZfl7CB19cKpQ5y92A+tb1aPVZepz46KTx00/7nTojBTL9iJAOFVoKbq0I0sdZjj60aJLFKY/z8Q=="
       },
       "GraphQL.Client.Abstractions": {
         "type": "Transitive",
@@ -47,7 +47,7 @@
       "trax.api.graphql.client": {
         "type": "Project",
         "dependencies": {
-          "GraphQL": "[8.8.4, )",
+          "GraphQL": "[8.8.5, )",
           "GraphQL.Client": "[6.1.0, )",
           "GraphQL.Client.Serializer.SystemTextJson": "[6.1.0, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
@@ -56,12 +56,12 @@
       },
       "GraphQL": {
         "type": "CentralTransitive",
-        "requested": "[8.8.4, )",
-        "resolved": "8.8.4",
-        "contentHash": "Ey/3R5ydkfriUG6PXiZPdeGkyLADQ/wZMgDBtHto5ZvSv+PtzpOD8YX0WAFvW3SA7Ldvwzw5S3RVBSB97imANA==",
+        "requested": "[8.8.5, )",
+        "resolved": "8.8.5",
+        "contentHash": "0dnaIzuzyRkpUfCBOWRLOnbTWcTpvK0pvWjgDTYoU3k/bu4Us1jkid7MPBhcth8I+6rg8SxhXFwNEenx53xUJg==",
         "dependencies": {
           "GraphQL-Parser": "9.5.0",
-          "GraphQL.Analyzers": "8.8.4"
+          "GraphQL.Analyzers": "8.8.5"
         }
       },
       "GraphQL.Client": {
