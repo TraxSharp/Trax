@@ -75,8 +75,12 @@ public static class LifecycleGuards
     public static GuardResult Supersessions(IReadOnlyList<Adr> adrs)
     {
         var offenders = new List<string>();
+        // Two ADRs sharing a number is frontmatter/file-names' failure to report. Keying on the
+        // first keeps this check running, where a dictionary threw and the whole run printed a
+        // stack trace instead of the message saying which number was taken twice.
         var byNumber = adrs.Where(a => AdrCorpus.FileNamePattern.IsMatch(a.FileName))
-            .ToDictionary(a => a.Number, a => a, StringComparer.Ordinal);
+            .GroupBy(a => a.Number, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var inspected = 0;
 
         foreach (var adr in adrs)

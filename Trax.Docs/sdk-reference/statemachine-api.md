@@ -1,6 +1,7 @@
 ---
 layout: default
 title: State Machine API
+description: "Index of the State Machine API reference: registration, authoring, the declarative data model, IR format, effects, migrations, persistence and result codes."
 parent: SDK Reference
 nav_order: 11
 has_children: true
@@ -27,3 +28,4 @@ walkthroughs, see [Authoring a machine](/docs/statemachine/authoring) and
 | [Effects](/docs/sdk-reference/statemachine-api/effects) | `ISnapshotEffect`, the exactly-once side effect and its receipt |
 | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | `ISnapshotStore` and `ISnapshotPrincipal` |
 | [Result codes](/docs/sdk-reference/statemachine-api/result-codes) | The typed outcomes of advance and rehydrate |
+| [AddTraxStateMachineSelfCheck](/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check) | The startup self-check registered as an ASP.NET Core health check |

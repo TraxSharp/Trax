@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddTraxApiKeyAuth
+description: "Reference for AddTraxApiKeyAuth: static key sets and DI-scoped resolvers, ApiKeyBuilder methods, hashed key comparison, demo keys and protecting endpoints."
 parent: API Auth
 grand_parent: SDK Reference
 ---
@@ -37,16 +38,24 @@ Two paths, picked by shape of the credential source:
 Keys registered through the builder are salted and SHA-256 hashed at startup and compared with `CryptographicOperations.FixedTimeEquals` on every request. Cleartext comparison is not reachable from consumer code.
 
 ```csharp
-services.AddTraxApiKeyAuth(keys => keys
-    .Add("admin-key",  id: "admin",  "Admin", "Player")
-    .Add("player-key", id: "player", "Player"));
+if (builder.Environment.IsDevelopment())
+{
+    services.AddTraxApiKeyAuth(keys => keys
+        .Add("admin-key-do-not-use-in-production",  id: "admin",  "Admin", "Player")
+        .Add("player-key-do-not-use-in-production", id: "player", "Player"));
+}
 ```
+
+A key written into source is a demo key: give it the `do-not-use-in-production` marker and
+register it only in Development, as above (see [Demo keys start only in Development](/docs/sdk-reference/api-auth/add-trax-api-key-auth#demo-keys-start-only-in-development)).
+Real keys come from a secret store, through `AddHashed` or a resolver.
 
 When the principal needs a display name distinct from its id, or custom claims, use the factory overload of `Add`:
 
 ```csharp
 services.AddTraxApiKeyAuth(keys => keys
-    .Add("alice-key", () => new TraxPrincipal("alice", "Alice Liddell", ["User"])));
+    .Add("alice-key-do-not-use-in-production",
+        () => new TraxPrincipal("alice", "Alice Liddell", ["User"])));
 ```
 
 For production hosts that load salt and hash bytes from a secret manager (cleartext never enters the process), use `AddHashed`:

@@ -1,11 +1,16 @@
 ---
 layout: default
 title: Troubleshooting
+description: The error messages Trax raises at registration, startup and dispatch, quoted verbatim, each with its causes and fix, plus problems that raise no error.
 parent: Cross-Cutting
 nav_order: 4
 ---
 
 # Troubleshooting
+
+Each error entry is headed by the message Trax raises, quoted as it appears in the source, with
+the names it fills in shown as `X`, `Y` and `Z`. Search this page for a distinctive phrase from
+the message you have. Problems that raise no error are at the end.
 
 ## "Could not find train with input type (X)"
 
@@ -22,6 +27,10 @@ Could not find train with input type (MyApp.Orders.OrderInput): no IServiceTrain
 
 **Fix:** add the train's assembly to the scan.
 ```csharp
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(mediator => mediator
@@ -39,24 +48,37 @@ No train implements IServiceTrain<OrderInput, TOut>. Add the train's assembly to
 
 A scheduled run runs the train it names, so the scheduler also refuses a train that was not scanned when another train takes the same input type: `Train 'MyApp.Orders.IOrderTrain' is not registered, although another train takes OrderInput.`, followed by the same fix.
 
-## "AddTrax() must be called before AddTraxDashboard()" / "...before AddTraxGraphQL()"
+## "AddTraxDashboard() requires AddTrax() to be called first"
 
-`AddTraxDashboard()` and `AddTraxGraphQL()` require `AddTrax()` to be called first. They check for a `TraxMarker` singleton in the DI container at registration time.
+`AddTraxDashboard()` checks, when it is called, that `AddTrax()` has already registered Trax in
+the same `IServiceCollection`. The full message is "AddTraxDashboard() requires AddTrax() to be
+called first. Call services.AddTrax(trax => ...) before services.AddTraxDashboard()."
 
-**Cause:** `AddTrax()` was not called, or it was called after `AddTraxDashboard()` / `AddTraxGraphQL()`.
+**Cause:** `AddTrax()` was not called, or it was called after `AddTraxDashboard()`.
 
-**Fix:** Call `AddTrax()` before `AddTraxDashboard()` or `AddTraxGraphQL()`:
+**Fix:** Call `AddTrax()` first:
 ```csharp
 builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(typeof(Program).Assembly)
+    .AddScheduler()
 );
 
-builder.Services.AddTraxDashboard();   // After AddTrax()
-builder.Services.AddTraxGraphQL();     // After AddTrax()
+builder.Services.AddTraxDashboard(o => o.RequireRoles("Admin"));   // After AddTrax()
 ```
 
-## Compile error: "Call AddEffects(...) before AddMediator(...)"
+## "AddTraxGraphQL() requires AddTrax() to be called first"
+
+The same check in `AddTraxGraphQL()`, with the same fix: call
+`services.AddTrax(trax => ...)` before `services.AddTraxGraphQL(...)`.
+
+## "AddTraxDashboard() has already been called on this host"
+
+`AddTraxDashboard()` was called twice. A second call would replace the first one's authorization
+settings, so a shared bootstrap that allows anonymous access could silently undo a host's
+`RequireRoles(...)`. Call it once, with every dashboard option in that call.
+
+## "Call AddEffects(...) before AddMediator(...)."
 
 The step builder pattern enforces configuration ordering at compile time. `AddMediator()` is only available on `TraxBuilderWithEffects` (returned by `AddEffects()`), and `AddScheduler()` is only available on `TraxBuilderWithMediator` (returned by `AddMediator()`).
 
@@ -79,19 +101,40 @@ services.AddTrax(trax => trax
 );
 ```
 
-## "Unable to resolve service for type 'IJunction'"
+## "AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory())"
 
-A junction's dependency isn't registered in the DI container.
+The scheduler's background services keep manifests, Metadata and work queue entries in the
+database, so `AddScheduler()` refuses a host whose `AddEffects(...)` names no data provider.
 
-**Cause:** Your junction injects a service that wasn't added to `IServiceCollection`.
-
-**Fix:** Register the missing service:
+**Fix:** add one, from its own package (`Trax.Effect.Data.Postgres`, `.Sqlite` or `.InMemory`):
 ```csharp
-services.AddScoped<IUserRepository, UserRepository>();
-services.AddScoped<IEmailService, EmailService>();
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString)) // or UseSqlite(...) / UseInMemory()
+    .AddMediator(typeof(Program).Assembly)
+    .AddScheduler()
+);
 ```
 
-## "ITrain cannot be built: its constructor needs 'X', which is not registered"
+## "AddJunctionProgress() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory())"
+
+Junction progress writes the current junction to the run's Metadata row and reads cancellation
+requests from it, so it needs a data provider in the same `AddEffects(...)` call. Add one as above.
+
+## "AddStateMachines() requires a data provider"
+
+The state-machine snapshot store keeps drafts and effect claims in the database. Configure a data
+provider in `AddEffects(...)` before calling `AddStateMachines(...)`.
+
+## "N of M registered trains cannot run:"
+
+The host refused to start. The mediator's startup check builds every registered train and replays
+its chain before the host serves traffic, and found trains that would fail every run. Each
+indented line below the heading names one train and one problem, in the form
+`IMyTrain: step 2 (MyJunction) needs 'Customer' in Memory and nothing before it puts one there.`
+The entries that follow cover each kind of line. A train the check cannot build outside a request
+is not refused: it is logged as a warning, "The chain of X was not verified at startup".
+
+## "X cannot be built: its constructor needs 'Y', which is not registered"
 
 The host refused to start because a train's own constructor asks for a type that nothing registers
 in the container, so the train would fail every run. Register the type before building the host.
@@ -114,16 +157,17 @@ generic host the startup chain check finds this before the first run and refuses
 `step N (X) needs 'Z' as a constructor argument`. The run-time message above is what a host that
 skips the check (the Lambda runner, a bare `ServiceProvider`, `SkipChainVerification()`) sees.
 
-## "Junction 'X' has 2 public constructors"
+## "Junction 'X' (train 'Y') has 2 public constructors"
 
 Trax builds a junction through its single public constructor. A junction with more than one, or
 none, cannot be built, so the startup chain check refuses the host naming the junction and the
 count. Give it exactly one public constructor.
 
-## Junction runs but Memory doesn't have the expected type
+## "Junction 'X' (train 'Y') needs 'Z' as its input, but nothing earlier in the chain produced one"
 
-The chain couldn't find a type in Memory to pass to your junction. The run fails with
-`Junction 'X' (train 'Y') needs 'Z' as its input, but nothing earlier in the chain produced one`.
+The chain could not find a value of the junction's input type in Memory, and the container does
+not register one either. The startup check reports the same problem as
+`step N (X) needs 'Z' in Memory and nothing before it puts one there.`
 
 **Causes:**
 - A previous junction didn't return or add the expected type to Memory
@@ -138,6 +182,66 @@ Chain<ValidateJunction>()              // Takes CreateUserRequest, returns Unit
 ```
 
 The [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) catches these before the host serves traffic: it refuses to start and names the junction and the missing type. (The compile-time [Analyzer](/docs/core/analyzer) is deprecated and no longer reports CHAIN001.)
+
+## "Unable to resolve service for type 'X' while attempting to activate 'Y'"
+
+This message comes from the .NET DI container, not from Trax: something it is building, usually a
+train or a service the train depends on, asks for a type nothing registers. The startup check
+reports a train's unregistered dependency itself, as "X cannot be built" above, so this raw message
+reaches you only for a train the check did not verify: one it skipped with a "was not verified at
+startup" warning, or a host where the check does not run (the Lambda runner, a bare
+`ServiceProvider`, `SkipChainVerification()`).
+
+**Fix:** register the missing type before building the host:
+```csharp
+services.AddScoped<IUserRepository, UserRepository>();
+```
+
+## "Manifest group 'X' is given two different MaxActiveJobs values"
+
+Two schedules that share a group each state the same group setting (`MaxActiveJobs`, `Priority` or `Enabled`) with different values. Every start writes a stated group setting, so the value in force would depend on which manifest was seeded last, and `AddScheduler` refuses it. The message names both schedules.
+
+**Fix:** state the setting on one member of the group, or the same value on each. A member that says only `.Group("name")` leaves the group's settings alone.
+
+## "Batch 'X' prunes manifests whose external ID starts with ..."
+
+One batch's prune prefix starts another batch's, so the first would delete the second's manifests at every start. A name-based `ScheduleMany(name, ...)` prunes only within its own group, so this is raised only when the groups do not keep the two apart: an explicit `PrunePrefix`, or two name-based batches moved into one group.
+
+**Fix:** rename one batch so neither name plus `-` starts the other, or keep the batches in separate groups.
+
+The same message, ending "which includes '...', scheduled on its own", means a single `Schedule` falls inside a batch's prune: its external ID starts with the batch's prefix and, for a name-based batch, it is in the batch's group (`Schedule("sync-extra", ..., o => o.Group("sync"))` beside `ScheduleMany("sync", ...)`, or a plain `Schedule("sync-extra")` beside a batch with `PrunePrefix("sync-")`). Each start the batch would delete it with its history and its own schedule would create it again.
+
+**Fix:** give the single schedule an external ID outside the prefix, put it in a different group (name-based batches only), or make it one of the batch's items.
+
+## "Invalid cron expression: 'X'. Expected 5 or 6 space-separated fields."
+
+`Schedule.FromCron`, which every `Cron` helper goes through, parses the expression when the
+schedule is created and throws this `FormatException` for an expression with the wrong number of
+fields, such as a seven-field one. An expression with the right number of fields but a value out of
+range, such as `Cron.Daily(hour: 25)` or `Cron.Hourly(minute: 60)`, is refused by the Cronos parser
+with its own `CronFormatException`, which is also a `FormatException`. Fix the value at the call the
+stack trace names.
+
+## "Cron expression 'X' never fires: it has no occurrence in the next 10 years."
+
+The expression parses but names a date that does not exist, such as `0 0 30 2 *` (February 30th).
+Check the day of the month against the months it names.
+
+## "A schedule interval must be at least one second."
+
+`Schedule.FromInterval`, and so every `Every` helper, throws this `ArgumentOutOfRangeException`
+for an interval shorter than one second, including `Every.Seconds(0)`. The manifest stores whole
+seconds, so a shorter interval would be stored as zero.
+
+## "The type or namespace name 'IManifestProperties' could not be found"
+
+The compiler's CS0246. `IManifestProperties` lives in the `Trax.Effect` package, not in
+`Trax.Scheduler`, in the namespace `Trax.Effect.Models.Manifest`.
+
+**Fix:**
+```csharp
+using Trax.Effect.Models.Manifest;
+```
 
 ## Train completes but metadata shows "Failed"
 
@@ -160,50 +264,6 @@ Possible causes:
 - The train's input type doesn't implement `IManifestProperties`
 - Your train assembly isn't registered with `AddMediator()`. Make sure to pass the assembly containing your trains
 
-## `FormatException` or `ArgumentOutOfRangeException` from `Cron` or `Every`
-
-`Schedule.FromCron`, which every `Cron` helper goes through, parses the expression and throws `FormatException` when it cannot fire: `Cron.Daily(hour: 25)`, `Cron.Hourly(minute: 60)`, a seven-field expression. `Schedule.FromInterval`, and so every `Every` helper, throws `ArgumentOutOfRangeException` for an interval shorter than one second, including `Every.Seconds(0)`. Fix the value at the call the stack trace names; earlier versions accepted these and stored a schedule that never ran, or ran once.
-
-## "Manifest group 'X' is given two different MaxActiveJobs values"
-
-Two schedules that share a group each state the same group setting (`MaxActiveJobs`, `Priority` or `Enabled`) with different values. Every start writes a stated group setting, so the value in force would depend on which manifest was seeded last, and `AddScheduler` refuses it. The message names both schedules.
-
-**Fix:** state the setting on one member of the group, or the same value on each. A member that says only `.Group("name")` leaves the group's settings alone.
-
-## "Batch 'X' prunes manifests whose external ID starts with ..."
-
-One batch's prune prefix starts another batch's, so the first would delete the second's manifests at every start. A name-based `ScheduleMany(name, ...)` prunes only within its own group, so this is raised only when the groups do not keep the two apart: an explicit `PrunePrefix`, or two name-based batches moved into one group.
-
-**Fix:** rename one batch so neither name plus `-` starts the other, or keep the batches in separate groups.
-
-The same message, ending "which includes '...', scheduled on its own", means a single `Schedule` falls inside a batch's prune: its external ID starts with the batch's prefix and, for a name-based batch, it is in the batch's group (`Schedule("sync-extra", ..., o => o.Group("sync"))` beside `ScheduleMany("sync", ...)`, or a plain `Schedule("sync-extra")` beside a batch with `PrunePrefix("sync-")`). Each start the batch would delete it with its history and its own schedule would create it again.
-
-**Fix:** give the single schedule an external ID outside the prefix, put it in a different group (name-based batches only), or make it one of the batch's items.
-
-## "Ambiguous reference" between Cron types
-
-Both Trax.Core and Hangfire define a `Cron` class. If you're importing both namespaces, the compiler can't tell which one you mean.
-
-**Fix:** Use a namespace alias:
-```csharp
-using Cron = Trax.Scheduler.Services.Scheduling.Cron;
-```
-
-## "IManifestProperties" not found
-
-`IManifestProperties` lives in the `Trax.Effect` package, not in the Scheduler package. Namespace: `Trax.Effect.Models.Manifest`.
-
-**Fix:**
-```csharp
-using Trax.Effect.Models.Manifest;
-```
-
-## NuGet restore fails with NU1107 for Hangfire
-
-The Scheduler.Hangfire package requires `Hangfire.Core >= 1.8` and `Hangfire.PostgreSql >= 1.20`. If your project pins an older version, NuGet can't resolve the dependency.
-
-**Fix:** Update your Hangfire packages to match or exceed the minimum versions.
-
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)

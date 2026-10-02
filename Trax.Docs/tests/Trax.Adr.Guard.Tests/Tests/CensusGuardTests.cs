@@ -40,6 +40,12 @@ public class CensusGuardTests
         }
         """;
 
+    /// <summary>The plain guard, carrying the attribute that answers the sample ADR's claim.</summary>
+    private static readonly string ClaimedGuard = PlainGuard.Replace(
+        "[TestFixture]",
+        $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n[TestFixture]"
+    );
+
     private static string GuardOptingOut(string reason) =>
         $$"""
             namespace Some.Tests.Meta;
@@ -92,11 +98,31 @@ public class CensusGuardTests
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
-            PlainGuard,
+            ClaimedGuard,
             exemplars: "- `MigrationsIntegrityTests` pins the numbering."
         );
 
         Run(repo).Passed.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A claim is answered by the class naming the ADR back, as resolution reads it. A class
+    /// that only shares the claimed name is not credited by it.
+    /// </summary>
+    [Test]
+    public void Census_GuardNamedByAnAdrButNotClaimingItBack_IsNotCreditedByTheName()
+    {
+        using var repo = WithGuardSource(
+            "MigrationsIntegrityTests.cs",
+            PlainGuard,
+            exemplars: "- `MigrationsIntegrityTests` pins the numbering."
+        );
+
+        Run(repo)
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("is named by no ADR and does not opt out");
     }
 
     [Test]
@@ -138,7 +164,11 @@ public class CensusGuardTests
     {
         using var repo = WithGuardSource(
             "MigrationsIntegrityTests.cs",
-            GuardOptingOut("it pins a file naming convention nobody weighed an alternative for."),
+            GuardOptingOut("it pins a file naming convention nobody weighed an alternative for.")
+                .Replace(
+                    "[TestFixture]",
+                    $"[Property(\"adr\", \"docs/adr/{Sample.DefaultSpec.FileName}\")]\n[TestFixture]"
+                ),
             exemplars: "- `MigrationsIntegrityTests` pins the numbering."
         );
 
@@ -194,7 +224,7 @@ public class CensusGuardTests
             /// <summary>
             /// Migrations are numbered.
             ///
-            /// <para>Enforces <c>docs/adr/0001-schema-changes-are-hand-written-sql.md</c>.</para>
+            /// <para>Enforces <c>docs/adr/0001-tests-are-deterministic.md</c>.</para>
             /// </summary>
             public class MigrationsIntegrityTests { }
             """;
@@ -202,6 +232,62 @@ public class CensusGuardTests
         using var repo = WithGuardSource("MigrationsIntegrityTests.cs", source);
 
         Run(repo).Passed.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A local citation is checkable, so it is checked. One naming a file the corpus does not
+    /// hold (renumbered, renamed, or never written) credits the guard to a decision nobody
+    /// can read.
+    /// </summary>
+    [Test]
+    public void Census_GuardCitingALocalAdrThatDoesNotExist_IsUnclassified()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>
+            /// Migrations are numbered.
+            ///
+            /// <para>Enforces <c>docs/adr/0009-a-decision-nobody-wrote.md</c>.</para>
+            /// </summary>
+            public class MigrationsIntegrityTests { }
+            """;
+
+        using var repo = WithGuardSource("MigrationsIntegrityTests.cs", source);
+
+        Run(repo)
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("'MigrationsIntegrityTests' is named by no ADR");
+    }
+
+    /// <summary>
+    /// In the central corpus a <c>Trax.Docs/adr/</c> citation is local, so it is checked
+    /// there; only a consumer repo, which cannot see that corpus, takes it as written.
+    /// </summary>
+    [Test]
+    public void Census_CentralCitationOfAMissingAdr_IsUnclassifiedInTheCentralCorpus()
+    {
+        const string source = """
+            namespace Some.Tests.Meta;
+
+            /// <summary>Enforces <c>Trax.Docs/adr/0009-a-decision-nobody-wrote.md</c>.</summary>
+            public class CrossRepoPackageReferenceTests { }
+            """;
+
+        using var repo = TempAdrRepo.Valid(central: true);
+        repo.Write($"{CensusRoot}/CrossRepoPackageReferenceTests.cs", source);
+
+        CensusGuards
+            .EveryGuardIsClassified(
+                AdrCorpus.Discover(repo.Options()),
+                repo.Options(censusRoot: CensusRoot, requireReposKey: true)
+            )
+            .Offenders.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("is named by no ADR");
     }
 
     [Test]

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Registration Order
+description: Which Trax registration calls must come in a set order, the startup error each wrong order raises, and which orderings deliberately do not matter.
 parent: Reference
 nav_order: 8
 ---

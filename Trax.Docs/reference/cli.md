@@ -1,6 +1,7 @@
 ---
 layout: default
 title: CLI
+description: "The trax CLI, which scaffolds a hub project and a trains library from a GraphQL SDL file or OpenAPI spec: installation, options, mapping and output."
 parent: Reference
 nav_order: 5
 ---

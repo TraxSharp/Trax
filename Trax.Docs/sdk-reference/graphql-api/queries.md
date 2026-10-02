@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Queries
+description: "Reference for the Trax GraphQL queries: generated discover fields for TraxQuery trains and the opt-in operations queries for health, trains, manifests and more."
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 2
@@ -905,7 +906,7 @@ the API process, not the scheduler or worker processes.
 | `recoverStuckJobsOnStartup` | `Boolean!` | Whether stuck-job recovery runs on startup |
 | `deadLetterRetentionPeriod` | `TimeSpan!` | How long resolved dead letters are kept before purging |
 | `autoPurgeDeadLetters` | `Boolean!` | Whether the dead letter cleanup service runs |
-| `localWorkerCount` | `Int` | In-process worker thread count. Null when `UseLocalWorkers()` is not configured |
+| `localWorkerCount` | `Int` | In-process worker thread count. Null when the scheduler runs no local worker pool (no database provider, or a replaced job submitter). Local workers are on by default with a database provider; [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) tunes them |
 | `metadataCleanupInterval` | `TimeSpan` | Metadata cleanup poll interval. Null when cleanup is not configured |
 | `metadataCleanupRetention` | `TimeSpan` | How long completed metadata is kept. Null when cleanup is not configured |
 

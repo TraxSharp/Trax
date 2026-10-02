@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Testing
+description: How to unit test junctions and trains, run integration tests on the InMemory provider, test cancellation and Blazor components, and choose a test data provider.
 parent: Cross-Cutting
 nav_order: 3
 ---
@@ -259,4 +260,4 @@ Start the database with `docker compose up -d` from `Trax.Samples/` before runni
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

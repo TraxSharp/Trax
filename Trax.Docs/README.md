@@ -16,7 +16,7 @@ decision records for the rules that span more than one Trax repo.
 |---|---|
 | `*.md` and the section directories (`core/`, `effect/`, `mediator/`, `scheduler/`, `statemachine/`, `sdk-reference/`, `reference/`, ...) | The pages published at traxsharp.net/docs. A file at `effect/metadata.md` is served at `/docs/effect/metadata`. |
 | `adr/` | Architecture decision records that bind more than one repo, indexed in [`adr/README.md`](https://github.com/TraxSharp/Trax.Docs/blob/main/adr/README.md). Not published to the site. |
-| `tools/Trax.Adr.Guard` | The checker for ADR frontmatter, index tables and guard census. It runs on this corpus in CI and is shipped to the code repos as the `adr-guard` composite action in `.github/actions/adr-guard`. |
+| `tools/Trax.Adr.Guard` | The checker for ADR frontmatter, index tables and guard census. It runs on this corpus in CI and is shipped to the code repos as the `adr-guard` composite action in `.github/actions/adr-guard`. A guard release is a `vX.Y.Z` tag cut by hand with the **Release ADR Guard** workflow, which Dependabot in the code repos picks up ([ADR 0038](https://github.com/TraxSharp/Trax.Docs/blob/main/adr/0038-the-adr-guard-is-released-by-tag.md)). |
 | `tests/Trax.Docs.Tests` | Lint for the pages: internal links resolve, no em dashes, no Jekyll syntax, SDK reference blocks are well formed. |
 
 A push to `main` that touches anything outside `adr/`, `.claude/`, `tools/`, `tests/` and `.github/` triggers a deploy of [Trax.Website](https://github.com/TraxSharp/Trax.Website),

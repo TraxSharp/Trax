@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Multi-Server Concurrency
+description: "How the scheduler stays safe across servers sharing one Postgres database: advisory locks, row-level locking, per-subject serialization and a unique index."
 parent: Scheduling
 nav_order: 7
 ---

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Rules vocabulary
+description: "Reference for the Rules vocabulary: field selectors, guard predicates, combinators and reductions that author declarative state machine logic as data."
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 3
@@ -92,6 +93,9 @@ A reducer computes the destination context. Build one with these factories:
 
 The vocabulary covers the common guards and reducers on purpose: a small, fixed set keeps the exported IR a
 declarative contract rather than a serialized-logic DSL. Logic that does not fit (a formula reducer, a
-multi-field invariant) stays on the delegate overloads, `When(Func...)` and `Reduce(Func...)`. Those run
-identically, but an edge left on a delegate does not appear in the machine's IR, so a machine that needs a
-complete export keeps its custom cases to a minimum.
+multi-field invariant) has two homes. `Rule.Custom(name)` and `Reduction.Custom(name)` keep it in the IR by name,
+with a handler bound per runtime (`CustomGuard` / `CustomReducer` in C#). The delegate overloads,
+`When(Func...)` and `Reduce(Func...)`, run the same in C# but are lost to the export: the edge is exported
+with no guard or reducer, as an unconditional edge that keeps the context, so a generated twin disagrees with
+the server on it. Use the delegates only on a machine with no twin. See
+[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).

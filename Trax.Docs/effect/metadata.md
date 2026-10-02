@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Metadata
+description: "The Metadata record every train run produces: its TrainState lifecycle, failure fields, host tracking, nested trains and the execution flow that fills it."
 parent: Effect
 nav_order: 1
 ---
@@ -27,6 +28,8 @@ Every train execution produces a metadata record. It captures everything about t
 | `FailureClass` | `FailureClass` | `Unclassified` / `Transient` / `Conflict` / `Permanent`, from the registered [failure classifier](/docs/core/trains-and-junctions#classifying-failures). `Unclassified` when the run did not fail or nothing classified it |
 | `ParentId` | `long?` | The parent run's metadata id. Nothing in Trax sets it at present, so it is null for every run, including a train dispatched from a junction; see [Nested Trains](#nested-trains) |
 | `ManifestId` | `long?` | Links to manifest for scheduled trains |
+| `ReplayDecisionsOf` | `long?` | The run whose recorded [decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions) this run replays, following that run's own link back for questions it never reached. Set by a re-queue; null for a run that asks its deciders afresh. Not a foreign key: a run whose chain names a run that no longer exists, belongs to another train, or ran without recording its decisions fails before its first junction, `Permanent`, rather than asking afresh |
+| `DecisionsRecorded` | `bool` | True when the run started on a host that records decisions (`AddDecisionRecording`), set on its first write, so a replay can tell a run that reached no questions from one whose decisions were never recorded |
 | `ScheduledTime` | `DateTime?` | Scheduled execution time |
 | `CancellationRequested` | `bool` | Cross-server cancellation flag |
 | `JunctionStartedAt` | `DateTime?` | Current junction start timestamp (requires `AddJunctionProgress`) |

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddJunctionProgress
+description: Reference for AddJunctionProgress, the junction effects that record the running junction and check for cross-server cancellation before each junction.
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 7

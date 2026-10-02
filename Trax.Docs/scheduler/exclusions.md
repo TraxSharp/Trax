@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Exclusion Windows
+description: Exclusion windows that skip a manifest on days of the week, dates, date ranges or daily time windows, how they combine and interact with misfire policies.
 parent: Scheduling
 nav_order: 8
 ---

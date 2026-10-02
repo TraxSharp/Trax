@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Host Tracking
+description: How every Metadata row records the host a train ran on, from auto-detected Lambda, ECS, Kubernetes or server identity, with the builder API and queries.
 parent: Effect
 nav_order: 2
 ---
@@ -103,4 +104,4 @@ The metadata detail page shows an "Execution Host" card with hostname, environme
 
 ## SDK Reference
 
-> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
+> [Host Tracking](/docs/sdk-reference/configuration/host-tracking) | [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)

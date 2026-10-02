@@ -32,36 +32,80 @@ public static class GuardRunner
             ];
         }
 
-        var results = new List<GuardResult>
+        var checks = new List<(string Name, Func<GuardResult> Run)>
         {
-            GuardResult.Ok("corpus/discovery", adrs.Count, "Found ADRs to check."),
-            FrontmatterGuards.Parseable(adrs),
-            FrontmatterGuards.Authors(adrs),
-            FrontmatterGuards.Areas(adrs, options),
-            FrontmatterGuards.Repos(adrs, options),
-            FrontmatterGuards.Status(adrs),
-            FrontmatterGuards.NoDateKey(adrs),
-            FrontmatterGuards.FileNames(adrs),
-            LifecycleGuards.StatusSection(adrs),
-            LifecycleGuards.Supersessions(adrs),
-            LifecycleGuards.Changelog(adrs),
-            ExemplarGuards.SectionPresent(adrs),
-            ExemplarGuards.NamedGuardsResolve(adrs, options),
-            ExemplarGuards.NamedGuardsCiteBack(adrs, options),
-            IndexGuards.Exists(adrs, options),
-            IndexGuards.TagTable(adrs, options, IndexGuards.ByAreaHeading, "areas"),
-            IndexGuards.FullList(adrs, options),
-            HygieneGuards.NoEmDashes(adrs, options),
-            HygieneGuards.TitlePresent(adrs),
+            ("frontmatter/parseable", () => FrontmatterGuards.Parseable(adrs)),
+            ("frontmatter/authors", () => FrontmatterGuards.Authors(adrs)),
+            ("frontmatter/areas", () => FrontmatterGuards.Areas(adrs, options)),
+            ("frontmatter/repos", () => FrontmatterGuards.Repos(adrs, options)),
+            ("frontmatter/status", () => FrontmatterGuards.Status(adrs)),
+            ("frontmatter/keys", () => FrontmatterGuards.NoDateKey(adrs)),
+            ("frontmatter/file-names", () => FrontmatterGuards.FileNames(adrs)),
+            ("lifecycle/status-section", () => LifecycleGuards.StatusSection(adrs)),
+            ("lifecycle/supersessions", () => LifecycleGuards.Supersessions(adrs)),
+            ("lifecycle/changelog", () => LifecycleGuards.Changelog(adrs)),
+            ("exemplars/section", () => ExemplarGuards.SectionPresent(adrs)),
+            ("exemplars/guards-resolve", () => ExemplarGuards.NamedGuardsResolve(adrs, options)),
+            ("exemplars/guards-cite-back", () => ExemplarGuards.NamedGuardsCiteBack(adrs, options)),
+            ("index/exists", () => IndexGuards.Exists(adrs, options)),
+            (
+                "index/areas-table",
+                () => IndexGuards.TagTable(adrs, options, IndexGuards.ByAreaHeading, "areas")
+            ),
+            ("index/full-list", () => IndexGuards.FullList(adrs, options)),
+            ("hygiene/no-em-dashes", () => HygieneGuards.NoEmDashes(adrs, options)),
+            ("hygiene/title", () => HygieneGuards.TitlePresent(adrs)),
         };
 
         if (options.RequireReposKey)
-            results.Add(IndexGuards.TagTable(adrs, options, IndexGuards.ByRepoHeading, "repos"));
+            checks.Add(
+                (
+                    "index/repos-table",
+                    () => IndexGuards.TagTable(adrs, options, IndexGuards.ByRepoHeading, "repos")
+                )
+            );
 
         if (options.CensusRoot is not null)
-            results.Add(CensusGuards.EveryGuardIsClassified(adrs, options));
+            checks.Add(
+                ("census/classified", () => CensusGuards.EveryGuardIsClassified(adrs, options))
+            );
+
+        var results = new List<GuardResult>
+        {
+            GuardResult.Ok("corpus/discovery", adrs.Count, "Found ADRs to check."),
+        };
+        results.AddRange(checks.Select(c => Guarded(c.Name, c.Run)));
 
         return results;
+    }
+
+    /// <summary>
+    /// Runs one check, turning an exception into a failed result that names it.
+    ///
+    /// <para>
+    /// A check that threw used to take the whole run with it: the action printed a stack
+    /// trace and no report, so the other checks' findings, often including the one that says
+    /// what is actually wrong, were never shown. Failing the one check keeps the run closed
+    /// and keeps the rest of the report.
+    /// </para>
+    /// </summary>
+    public static GuardResult Guarded(string name, Func<GuardResult> check)
+    {
+        try
+        {
+            return check();
+        }
+        catch (Exception ex)
+        {
+            return new GuardResult(
+                name,
+                [$"the check threw {ex.GetType().Name}: {ex.Message}"],
+                0,
+                "The check could not finish on this corpus. That is a failure, not a pass; the "
+                    + "other checks' results are still reported, and one of them usually names "
+                    + "what the corpus got wrong."
+            );
+        }
     }
 
     /// <summary>Renders the run, returning the process exit code.</summary>

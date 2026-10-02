@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Database Migrations
+description: The Postgres and SQLite migrations that change something visible, such as columns, indexes or row behaviour, and what each one means for an upgrade.
 parent: Reference
 nav_order: 20
 ---
@@ -33,13 +34,19 @@ its own table with per-group dispatch controls. It:
 
 1. creates `trax.manifest_group` with `name`, `max_active_jobs`, `priority`, `is_enabled` and
    timestamp columns;
-2. seeds a `manifest_group` row for each distinct `group_id` on existing manifests;
+2. seeds a `manifest_group` row for each distinct `group_id` on existing manifests, and one per
+   ungrouped manifest, named after its `external_id`;
 3. adds a NOT NULL `manifest_group_id` foreign key to `trax.manifest`;
 4. drops the old `group_id` column.
 
-It is idempotent, and existing manifests keep their groups.
+Existing manifests keep their groups. It is not idempotent: it predates the
+[rule that every script can run again](/docs/reference/writing-migrations#every-postgres-script-can-run-again),
+and its `CREATE TABLE`, `ADD COLUMN` and `CREATE INDEX` carry no `IF NOT EXISTS`. The migrator
+journals it and never runs it twice, but if it stops partway (a killed process, a failed
+statement) the next start runs it again from the top and fails on the table it already created.
+Repair that by hand: finish or undo the partial change, then start again.
 
-`Manifest.GroupId` (`string?`) is replaced by `Manifest.ManifestGroupId` (`int`) and the
+`Manifest.GroupId` (`string?`) is replaced by `Manifest.ManifestGroupId` (`long`, since `018_bigint_ids.sql`) and the
 `Manifest.ManifestGroup` navigation. Code that read `GroupId` directly has to move to one of
 those; nothing else changes. A manifest scheduled without a group name still gets a group of
 its own, named after its `externalId`. Naming a group and setting its `MaxActiveJobs`, `Priority`

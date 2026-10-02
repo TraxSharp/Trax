@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Declarative data model
+description: "Reference for the data types behind declarative state machines: Rule, Reduction, SetStep and ValueSource, the context schema and the enums."
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 4

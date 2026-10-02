@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ManifestManager
+description: The ManifestManager train that cancels timed-out runs, reaps stale ones, and queues due manifests, with its advisory-lock and state-guard concurrency model.
 parent: Administrative Trains
 grand_parent: Scheduling
 nav_order: 1

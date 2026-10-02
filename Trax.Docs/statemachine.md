@@ -1,6 +1,7 @@
 ---
 layout: default
 title: State Machines
+description: "Trax.Effect.StateMachine overview: the snapshot and definition documents, the three guarantees, matching C# and TypeScript runtimes, and exactly-once effects."
 nav_order: 8
 has_children: true
 section: Packages
@@ -55,9 +56,11 @@ the declared name, so the value that is stored and served is canonical.
 
 The engine is implemented twice, once in C# (`Trax.Effect.StateMachine`) and once in TypeScript
 (`@trax/state-machine`). They are kept identical not by generating one from the other but by a shared set of
-language-neutral conformance fixtures that both engines drive and must agree on. Only the result codes
-(`no-transition`, `guard-failed`, `invalid-context`, `malformed`, `unknown-machine`, `version-mismatch`,
-`unknown-state`) are contract. Human-readable detail text is free to differ.
+language-neutral conformance fixtures that both engines drive and must agree on. Only the engine's result
+codes (`no-transition`, `guard-failed`, `invalid-context`, `internal-error`, `malformed`, `unknown-machine`,
+`version-mismatch`, `unknown-state`) are contract. Human-readable detail text is free to differ. The snapshot
+mutations add their own codes on top (`not-found`, `conflict`, `unauthenticated` and more); the
+[result codes](/docs/sdk-reference/statemachine-api/result-codes) page lists every code a client can receive.
 
 The machine is authored in C#, which is the source of truth, and exported to a neutral IR
 (`<machine>.ir.json`). Common guards and reducers are authored declaratively and travel in the IR as data;
@@ -65,10 +68,12 @@ a small interpreter on each side runs them, so they are single-sourced rather th
 A genuinely-custom guard or reducer is bound by name in the IR and hand-written per runtime (the escape
 hatch): in C# with `CustomGuard(name, fn)` / `CustomReducer(name, fn)` on the builder, in TypeScript with
 `customGuards` / `customReducers`. A C# machine that names a custom rule or reduction with no handler bound
-fails at `Build()`, rather than refusing that edge forever. The snapshot itself still carries only structure and data, never logic. A machine's structure and its
+fails at `Build()`, rather than refusing that edge forever. A guard or reducer written as a plain C# delegate
+(`When(Func...)`, `Reduce(Func...)`) is not bound at all: its edge reaches the IR with no guard or reducer, as
+an unconditional edge, and nothing warns (see
+[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). The snapshot itself still carries only structure and data, never logic. A machine's structure and its
 declarative logic are generated for the frontend from that IR, and a drift check fails the build if a
-committed generated file goes stale. (The one unmigrated sample, `checkout`, still uses a hand-authored
-`machine.json`; the IR replaces it everywhere else.)
+committed generated file goes stale.
 
 Structure agreement is not enough on its own: any custom (hand-written) guard or reducer exists once per
 language, and the interpreters that run the declarative rules must agree too, so behavior can still drift.
@@ -81,8 +86,7 @@ engines replay it and must reproduce every outcome byte-for-byte. Turnstile is 1
 of them rejections, which is exactly what a hand-written fixture set never covers exhaustively.
 
 The corpus is machine-managed; you never hand-write it. The `samples` and `seeds` are authored in C# with
-`.Differential(...)` and exported into the IR's `differential` block (the legacy `checkout` still keeps them
-in its `machine.json`). Regenerate deliberately, and the git diff of the golden is the review of what changed. Each side replays the committed file independently, so the C# suite needs no Node and the
+`.Differential(...)` and exported into the IR's `differential` block. Regenerate deliberately, and the git diff of the golden is the review of what changed. Each side replays the committed file independently, so the C# suite needs no Node and the
 TypeScript suite needs no .NET.
 
 The **canonical wire** is what makes a byte-for-byte comparison meaningful. The envelope (`machine`,
@@ -122,7 +126,12 @@ provides a generic exactly-once runner keyed on an intent that names the action,
 the intent before running the effect, so two concurrent sends deliver once and a crash-retry replays the
 recorded result. A lease with a fence token keeps it live: if a runner wins the claim and then dies, the
 lease expires and the next caller reclaims the key, and a revived stuck runner is fenced out of completing
-the new claimant's work. A scheduled sweeper releases abandoned claims as a backstop.
+the new claimant's work. Reclaim happens on demand, on the next attempt at that intent, so nothing runs in
+the background: an abandoned claim stays in `effect_claim` until someone tries again. `EffectClaimSweeper`
+releases every claim whose lease has expired, but Trax neither registers nor schedules it. If you want that
+backstop, run it yourself, for example from a scheduled train:
+`await new EffectClaimSweeper(claimStore).Sweep(DateTimeOffset.UtcNow)`, with the scoped `IEffectClaimStore`
+that `AddStateMachines` registers.
 
 A draft has no natural end. A user can abandon a half-filled form, and a completed one lingers as a committed
 snapshot. An optional TTL bounds that: set `DraftTtl` on `AddStateMachines`, and the next load of a draft

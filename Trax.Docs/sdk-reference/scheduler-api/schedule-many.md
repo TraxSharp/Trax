@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ScheduleMany / ScheduleManyAsync
+description: Reference for ScheduleMany and ScheduleManyAsync, which schedule many instances of a train in one transaction from ManifestItems, with prefix pruning.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 4

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Cancellation Tokens
+description: How a CancellationToken flows from Run through every junction, EF Core queries, the TrainBus and background services, and what TrainState.Cancelled means.
 parent: Cross-Cutting
 nav_order: 1
 ---
@@ -159,7 +160,7 @@ Cancellation is treated differently from regular exceptions:
 
 ### TrainState.Cancelled
 
-When an `OperationCanceledException` that the run was asked for ends it, `FinishServiceTrain` sets the train state to `Cancelled` instead of `Failed`. A run is asked to stop when its own token is cancelled, or when its persisted cancel flag is set (the dashboard's cancel button, or the scheduler's job timeout for a run on another host), which `CancellationCheckProvider` turns into a cancellation at the next junction boundary:
+When an `OperationCanceledException` that the run was asked for ends it, `FinishServiceTrain` sets the train state to `Cancelled` instead of `Failed`. A run is asked to stop when its own token is cancelled, or when its persisted cancel flag is set (the dashboard's cancel button, or the scheduler's job timeout for a run on another host), which `CancellationCheckProvider` turns into a cancellation at the next `EffectJunction` boundary (see [Cross-Server](/docs/cross-cutting/cancellation-tokens#cross-server-cancellationcheckprovider) for what that means for plain junctions):
 
 ```
 OperationCanceledException, requested     → TrainState.Cancelled
@@ -260,13 +261,18 @@ Configure the grace period:
 
 ## ServiceTrain Token Propagation
 
-`ServiceTrain` (the database-tracked train base class) propagates the token to all its internal operations:
+`ServiceTrain` (the database-tracked train base class) hands the token to the work it runs on the caller's
+behalf, and keeps it away from the writes that record the run:
 
-- `SaveChangesAsync(CancellationToken)`: transaction commits use the token
-- `BeginTransaction(CancellationToken)`: transaction starts use the token
-- Junction effect providers receive the token for their before/after hooks
+- Junctions get it as `this.CancellationToken`, as on any train
+- Junction effect providers receive it for their before/after hooks (these run only around an `EffectJunction`)
+- `OnStarted` receives it
 
-With one deliberate exception: **the write that records how the train ended does not use the caller's token.**
+**The writes that record the run do not use the caller's token.** The `SaveChanges` that records the run's
+start and the one that records its outcome both run on `CancellationToken.None`, as does the junction progress
+write.
+It begins no transaction of its own. A transaction in your junctions is yours, and so is the token you pass
+to it.
 
 If a train is cancelled mid-execution, `ServiceTrain.Run` captures the `OperationCanceledException` as the run's result instead of letting it escape. It then calls `FinishServiceTrain`, which sets `Cancelled` and `EndTime` on the metadata and clears the junction progress columns (`CurrentlyRunningJunction` and `JunctionStartedAt`), and saves that. Only after the outcome is saved do the `OnCancelled` hooks run and the exception get rethrown to the caller, so you get an audit trail even for cancelled trains. If saving the outcome itself throws, that error is logged and the `OperationCanceledException` still propagates.
 
@@ -276,7 +282,7 @@ The same applies on the success path. A train whose downstream call takes no tok
 
 ## Cancelling Running Trains
 
-Trax.Core supports two complementary cancellation paths: **same-server** (instant) and **cross-server** (between-junction).
+Trax.Core supports two complementary cancellation paths: **same-server** (instant) and **cross-server** (between `EffectJunction`s).
 
 ### Same-Server: ICancellationRegistry
 
@@ -292,14 +298,23 @@ Dashboard "Cancel" button
 
 ### Cross-Server: CancellationCheckProvider
 
-For multi-server deployments where the cancelling server may not be the one executing the train, the `CancellationCheckProvider` junction effect queries the `cancel_requested` column before each junction:
+For multi-server deployments where the cancelling server may not be the one executing the train, the `CancellationCheckProvider` junction effect queries the `cancel_requested` column before each `EffectJunction`:
 
 ```
 CancellationCheckProvider.BeforeJunctionExecution()
     → SELECT cancel_requested FROM metadata WHERE id = @id
     → if true: throw OperationCanceledException
-    → train terminates at next junction boundary
+    → train terminates at next EffectJunction boundary
 ```
+
+> **The database flag stops only junctions that inherit `EffectJunction<TIn, TOut>`.** It is a junction
+> effect, and junction effects run only around an `EffectJunction`. A plain `Junction<TIn, TOut>` never runs
+> them, so a train built from plain junctions never reads the flag: a cancel from the dashboard, `CancelAsync`
+> or a timeout that reaches it only through the database lets it run to completion. Same-server cancellation
+> still stops it, because the registry cancels the train's own token, and every junction, plain or not, checks
+> that token before it starts. If you need cross-server cancellation, make the junctions where a run should be
+> able to stop inherit `EffectJunction`. See
+> [EffectJunction vs Junction](/docs/core/trains-and-junctions#effectjunction-vs-junction).
 
 Enable both paths with a single call:
 
@@ -327,14 +342,16 @@ int cancelled = await scheduler.CancelGroupAsync(groupId);
 ```
 
 Both methods use dual-layer cancellation:
-1. **Database flag** (`CancellationRequested = true`): works cross-server. A run still `Pending` is recorded `Cancelled` and never run when the job runner picks it up, on any host; a running one picks the flag up through `CancellationCheckProvider` at the next junction boundary
-2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`): immediately fires the `CancellationTokenSource` if the job is running on the same server
+1. **Database flag** (`CancellationRequested = true`): works cross-server. A run still `Pending` is recorded `Cancelled` and never run when the job runner picks it up, on any host; a running one picks the flag up through `CancellationCheckProvider` at the next `EffectJunction` boundary, and a run made only of plain junctions does not pick it up at all
+2. **Same-server instant cancel** (`ICancellationRegistry.TryCancel()`): immediately fires the `CancellationTokenSource` if the job is running on the same server. This is the only layer that stops a train built from plain `Junction`s
 
 Cancelled trains transition to `TrainState.Cancelled`, are **not retried**, and **do not create dead letters**. A cancelled run of a scheduled manifest consumes the occurrence it ran for: the manifest next runs at its next scheduled occurrence, not on the next polling cycle.
 
 ## Automatic Timeout Cancellation
 
 The ManifestManager automatically cancels jobs that exceed their configured timeout. Each polling cycle, the `CancelTimedOutJobsJunction` checks every InProgress run and cancels any that has run longer than its timeout: the `TimeoutSeconds` of the manifest of the run at the root of its `ParentId` chain, so a nested train shares its scheduled run's timeout, or the global `DefaultJobTimeout` when that manifest sets none. `DefaultJobTimeout` applies only to runs a scheduler dispatched; a train run directly on the train bus is not timed out. Runs of a manifest disabled while they run are still timed out. See [Timeout Enforcement](/docs/scheduler/scheduling-options#timeout-enforcement).
+
+Timeout cancellation uses the same two layers as `CancelAsync`, so a run on another host is stopped only at an `EffectJunction` boundary, and a run of plain junctions on another host is not stopped by its timeout.
 
 This is distinct from dead-lettering. Timeout cancellation actively interrupts the running train rather than waiting for it to fail and then moving it to the dead letter queue. The job transitions to `TrainState.Cancelled` and is not retried: an hourly job that times out runs again at its next hourly occurrence, so a job that always exceeds its timeout runs once an hour rather than continuously.
 
@@ -442,15 +459,15 @@ public async Task Train_CancelDuringJunction_PropagatesCancellation()
 
 | Layer | How the token arrives | What it's used for |
 |-------|----------------------|-------------------|
-| **Train** | `Run(input, ct)` or `RunEither(input, ct)` | Stored on `Train.CancellationToken` property |
+| **Train** | `Run(input, ct)` (`RunEither` takes none) | Stored on `Train.CancellationToken` property |
 | **Junction** | Copied from train before `Run()` is called | Access via `this.CancellationToken` in `Run()` |
 | **TrainBus** | `RunAsync<TOut>(input, ct)` | Forwarded to `train.Run(input, ct)` |
-| **ServiceTrain** | Inherited from `Train` | Passed to `SaveChangesAsync`, `BeginTransaction` |
+| **ServiceTrain** | Inherited from `Train` | Passed to junction effects and `OnStarted`; never to the writes that record the run |
 | **Background Services** | `stoppingToken` from `ExecuteAsync` | Passed to `train.Run(input, stoppingToken)` |
 | **LocalWorkerService** | `shutdownCts.Token` (grace period) | Passed to `train.Run(input, shutdownCts.Token)` |
 | **Job Submitter** | `EnqueueAsync(id, ct)` | Passed to `SaveChangesAsync` / `train.Run()` |
 | **Dashboard** | Component disposal token | Passed to event handler async calls |
-| **CancellationCheckProvider** | DB `cancel_requested` flag | Throws `OperationCanceledException` before junction |
+| **CancellationCheckProvider** | DB `cancel_requested` flag | Throws `OperationCanceledException` before an `EffectJunction` (plain junctions are not checked) |
 | **ICancellationRegistry** | `CancellationTokenSource` lookup | `TryCancel()` fires CTS for same-server instant cancel |
 
 ## SDK Reference

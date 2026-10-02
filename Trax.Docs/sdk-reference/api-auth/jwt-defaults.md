@@ -1,6 +1,7 @@
 ---
 layout: default
 title: JwtDefaults
+description: Reference for JwtDefaults, the constants used by the Trax JWT bearer scheme, and how a named scheme derives its authorization policy name.
 parent: API Auth
 grand_parent: SDK Reference
 ---

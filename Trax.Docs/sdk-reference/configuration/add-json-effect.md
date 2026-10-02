@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddJson
+description: Reference for AddJson, the effect that logs a tracked model's JSON whenever it changes between saves, without storing anything in the database.
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 4
@@ -8,7 +9,7 @@ nav_order: 4
 
 # AddJson
 
-Adds JSON change detection for tracking model mutations during train execution. Serializes model state before and after each junction to detect changes.
+Adds JSON change detection for the models a train tracks (its `Metadata`, and anything else passed to `Track`). Each model is serialized when it is first tracked; each time the train saves its effects (when the run starts and when it finishes, and with [`AddJunctionProgress`](/docs/sdk-reference/configuration/add-junction-progress) also before and after each junction) every tracked model is serialized again, and one whose JSON changed is written to `ILogger` at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level). Nothing is stored in the database.
 
 ## Signature
 
@@ -43,8 +44,8 @@ services.AddTrax(trax => trax
 ## Remarks
 
 - This is a **toggleable** effect that can be enabled/disabled at runtime via the effect registry.
-- Useful for auditing and debugging to see exactly what data each junction modified.
-- Has a performance cost due to serialization on every junction execution. Consider disabling in performance-critical production environments.
+- Useful for debugging: it shows what a tracked model looked like each time it changed between saves. It cannot attribute a change to a junction.
+- Has a cost: every tracked model is serialized on every save, changed or not. Consider disabling it in performance-critical production environments.
 
 ## Package
 

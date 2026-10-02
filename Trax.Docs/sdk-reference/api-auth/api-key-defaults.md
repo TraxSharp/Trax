@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ApiKeyDefaults
+description: Reference for ApiKeyDefaults, the constants used by the Trax API-key authentication scheme, its scheme name, policy name and the default X-Api-Key header.
 parent: API Auth
 grand_parent: SDK Reference
 ---

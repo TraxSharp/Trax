@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ShortCircuit
+description: Reference for ShortCircuit, which runs a junction whose successful result becomes the train's return value at Resolve, while its failures are ignored.
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 4

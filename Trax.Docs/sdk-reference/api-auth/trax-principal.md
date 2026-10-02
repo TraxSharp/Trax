@@ -1,6 +1,7 @@
 ---
 layout: default
 title: TraxPrincipal
+description: "Reference for TraxPrincipal, the framework-agnostic identity record a resolver returns: its fields, the ClaimsPrincipal round trip and TraxPrincipalId."
 parent: API Auth
 grand_parent: SDK Reference
 ---
@@ -14,7 +15,7 @@ Framework-agnostic identity record produced by an [`ITraxPrincipalResolver`](/do
 ## Signature
 
 ```csharp
-public sealed record TraxPrincipal(
+public record TraxPrincipal(
     string Id,
     string DisplayName,
     IReadOnlyList<string> Roles,

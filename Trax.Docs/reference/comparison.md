@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Trax vs Alternatives
+description: How Trax compares with Quartz.NET and Hangfire on scheduling, composition, persistence, distribution, retries, dashboards, and when to choose each.
 parent: Reference
 nav_order: 1
 ---
@@ -52,14 +53,14 @@ The dependency system is unique to Trax. A manifest can declare that it depends 
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Database backends | PostgreSQL, InMemory | RAM, SQL Server, PostgreSQL, MySQL, Oracle, SQLite | SQL Server (core), Redis/PostgreSQL/MongoDB (community) |
+| Database backends | PostgreSQL, SQLite (single server), InMemory | RAM, SQL Server, PostgreSQL, MySQL, Oracle, SQLite | SQL Server (core), Redis/PostgreSQL/MongoDB (community) |
 | Execution history | Built-in, every run records input, output, timing, exceptions | Via plugins (`LoggingJobHistoryPlugin`) | Built-in, full state transition history |
 | Dead-lettering | Built-in, `dead_letters` table with `AwaitingIntervention` status | No | No (failed jobs stay in `FailedState`) |
 | Metadata per execution | Automatic: input JSON, output JSON, duration, stack trace | Manual: `JobDataMap` for custom data | Automatic: state data, exception details |
 
 Trax records more per execution than either alternative. Every train run automatically captures serialized input, output, execution time, and full exception details in a `Metadata` row. This comes from the effect system's `ServiceTrain` base class, not from the scheduler. Quartz requires opting in via history plugins, and while Hangfire tracks state transitions well, it doesn't serialize job inputs and outputs into queryable columns.
 
-Trax is PostgreSQL-only for production persistence. Quartz supports six database backends. Hangfire's core targets SQL Server with community packages for Redis and others.
+Trax persists to PostgreSQL or SQLite. SQLite suits a single-server deployment; coordinating several servers needs PostgreSQL. Quartz supports six database backends. Hangfire's core targets SQL Server with community packages for Redis and others.
 
 ### Distributed Execution
 
@@ -156,7 +157,7 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 **You want the lowest learning curve.** The Trax learning curve is incremental (trains and junctions at Core, metadata and DI at Effect, dispatch at Mediator, manifests at Scheduler), but reaching scheduled jobs means understanding the full stack. Hangfire requires understanding `BackgroundJob.Enqueue()`. For teams that need to onboard quickly or for projects where background work is a small part of the system, the layered abstraction cost isn't justified.
 
-**You need built-in access control on the dashboard.** Hangfire's dashboard includes middleware-based authorization out of the box. Trax's API layer provides per-train authorization via `[TraxAuthorize]` and endpoint-level auth via `UseTraxGraphQL(configure: endpoint => endpoint.RequireAuthorization())`, but the dashboard UI itself doesn't gate page access, so you'd add that via ASP.NET Core middleware. Hangfire has the edge on dashboard-specific access control.
+**You want dashboard access control without writing any.** Hangfire's dashboard includes authorization middleware out of the box. Trax's dashboard refuses to start until you choose a posture (`RequirePolicy`, `RequireRoles` or an explicit `AllowAnonymousDashboard()`), but the policy behind it is yours to register; Trax's API layer adds per-train authorization via `[TraxAuthorize]` and an endpoint gate via the GraphQL builder's `RequireAuthorization()`.
 
 **You only need a scheduler.** Trax.Scheduler is one layer in a stack that builds on Core, Effect, and Mediator. Each layer is independently useful (you can use Core alone for typed pipelines, or Core + Effect for execution logging without ever touching the scheduler), but you can't add the scheduler without the layers below it. Quartz.NET and Hangfire are self-contained: add the NuGet package, configure storage, schedule jobs.
 

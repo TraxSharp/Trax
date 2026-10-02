@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseBroadcaster
+description: Reference for UseBroadcaster, which carries train lifecycle events between processes over a transport such as RabbitMQ, so subscriptions see remote runs.
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 12
@@ -92,7 +93,7 @@ The `TrainLifecycleEventMessage` is a serializable record containing:
 | `FailureReason` | `string?` | Failure message (if applicable) |
 | `EventType` | `string` | See the event types below |
 | `Executor` | `string?` | Assembly name of the process that broadcast the event, for display |
-| `Output` | `string?` | The completed train's output as JSON, bounded and excluded by the same rules as the stored copy (see `SaveTrainParameters`); `null` when excluded or not a completion |
+| `Output` | `string?` | The completed train's output as JSON, with `[TraxSensitive]` members masked. With [`SaveTrainParameters`](/docs/sdk-reference/configuration/save-train-parameters) it follows the stored copy: `null` for an output excluded by `SaveOutputs = false`, `ExcludeOutput` or `ShouldSaveOutputs`, and bounded by `MaxParameterBytes`. Without it, every completed train's output is serialized for the hooks, up to 1 MiB. An output over its ceiling is replaced by a `{"_truncated": true, ...}` placeholder. `null` on any event but a completion's `Completed` and `StateChanged` |
 | `HostName` | `string?` | Machine name of the host that ran the train |
 | `HostEnvironment` | `string?` | Environment name of the host that ran the train |
 | `ChangeDomain` | `string?` | The changed domain on a `DataChanged` signal (`WorkQueue`, `DeadLetter`, `Manifest`, `ManifestGroup`, `SchedulerConfig`, `Execution`); `null` otherwise |
@@ -223,7 +224,7 @@ Train.Run()                            GraphQL Subscription Clients
                                                → WebSocket delivery
 ```
 
-The database remains the **single source of truth** for all train data. The broadcaster only carries lightweight lifecycle event notifications. All metadata, logs, manifests, and train state are always persisted to and queried from PostgreSQL.
+The database remains the **single source of truth** for all train data. The broadcaster carries lifecycle events, and a completion (`Completed`, and the `StateChanged` after it) carries the train's output (see `Output` above), so it reaches every consumer of the exchange and every SignalR and GraphQL subscriber the events are forwarded to. Keep an output you do not want broadcast out with `ExcludeOutput` or `[TraxSensitive]`. All metadata, logs, manifests, and train state are always persisted to and queried from PostgreSQL.
 
 ## Implementing a Custom Transport
 

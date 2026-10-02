@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Acknowledgments
+description: The third-party open-source packages Trax depends on, grouped by the Trax package that uses each one.
 parent: Reference
 nav_order: 5
 ---

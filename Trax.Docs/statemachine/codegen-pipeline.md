@@ -1,6 +1,7 @@
 ---
 layout: default
 title: The codegen pipeline
+description: The pipeline that generates a state machine's TypeScript twin from its C# definition through the IR, what proves they agree, and how to run it.
 parent: State Machines
 nav_order: 3
 ---
@@ -44,7 +45,7 @@ Two goldens, both committed, both replayed by each runtime independently:
 - The **migration golden** (`migration.json`) pins schema evolution: a set of stored older-version snapshots
   and the exact canonical wire each must become. A migration that drops or reorders a surviving field fails.
 
-Because both are byte-exact comparisons over the [canonical wire](/docs/statemachine#the-canonical-wire), a
+Because both are byte-exact comparisons over the [canonical wire](/docs/statemachine#two-runtimes-one-behavior), a
 divergence is a hard failure, not a judgement call.
 
 ## What you write vs what is generated
@@ -55,8 +56,10 @@ runnable typed machine, is generated from that file's IR. The only thing hand-wr
 that drives the machine.
 
 The payoff is proportional to how much of the machine fits the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules):
-an edge left on a delegate guard is invisible in the IR, so it cannot be generated and must be hand-written in
-each runtime. A machine that stays declarative generates its whole twin.
+an edge left on a delegate guard or reducer is exported with no guard or reducer, so the generated twin treats
+it as unconditional and keeps the context, and disagrees with the server on that edge without any warning.
+Logic the vocabulary cannot express goes in a custom rule or reduction, which the IR names and each runtime
+binds a handler for. A machine that stays declarative generates its whole twin.
 
 ## Running it
 

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseSqsWorkers
+description: Reference for UseSqsWorkers, which routes chosen trains' queued runs to an Amazon SQS queue for a Lambda or other consumer, including FIFO ordering.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 10

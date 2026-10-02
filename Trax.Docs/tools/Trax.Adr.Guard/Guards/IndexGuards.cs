@@ -77,7 +77,10 @@ public static class IndexGuards
         }
 
         // Index -> frontmatter.
-        var byFile = adrs.ToDictionary(a => a.FileName, a => a, StringComparer.Ordinal);
+        // The same file name twice (an ADR and its copy in a subfolder) is frontmatter/file-names'
+        // failure to report; the first one answers here rather than the check throwing.
+        var byFile = adrs.GroupBy(a => a.FileName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var (tag, files) in listed)
         {
             foreach (var file in files)
@@ -124,29 +127,43 @@ public static class IndexGuards
                 rule
             );
 
-        var rows = ParseFullRows(section, options.RequireReposKey);
+        var rows = ParseFullRows(section, options.RequireReposKey)
+            .GroupBy(r => r.File, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
         foreach (var adr in adrs)
         {
-            if (!rows.TryGetValue(adr.FileName, out var row))
+            if (!rows.TryGetValue(adr.FileName, out var listed))
             {
                 offenders.Add($"'## {FullListHeading}': {adr.FileName} has no row");
                 continue;
             }
 
-            if (
-                adr.Title is not null
-                && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
-            )
+            // Every row is checked, not the last one parsed. A second row for the same ADR is
+            // what a bad merge of two branches that each edited the row leaves behind, and a
+            // reader sees both; keeping only the last let the stale one say anything at all.
+            if (listed.Count > 1)
                 offenders.Add(
-                    $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
-                        + $"document's title is '{adr.Title}'"
+                    $"'## {FullListHeading}': {adr.FileName} is listed {listed.Count} times. "
+                        + "Each ADR has one row."
                 );
 
-            if (options.RequireReposKey)
-                CompareTags(offenders, adr, "repos", row.Repos);
+            foreach (var row in listed)
+            {
+                if (
+                    adr.Title is not null
+                    && !string.Equals(row.Title, adr.Title, StringComparison.Ordinal)
+                )
+                    offenders.Add(
+                        $"'## {FullListHeading}': the row for {adr.FileName} says '{row.Title}' but the "
+                            + $"document's title is '{adr.Title}'"
+                    );
 
-            CompareTags(offenders, adr, "areas", row.Areas);
+                if (options.RequireReposKey)
+                    CompareTags(offenders, adr, "repos", row.Repos);
+
+                CompareTags(offenders, adr, "areas", row.Areas);
+            }
         }
 
         var known = adrs.Select(a => a.FileName).ToHashSet(StringComparer.Ordinal);
@@ -188,16 +205,17 @@ public static class IndexGuards
         return rows;
     }
 
-    /// <summary>One row of the full table: the title and the tag columns, as written.</summary>
+    /// <summary>One row of the full table: the ADR it links, its title and the tag columns, as written.</summary>
     private sealed record FullRow(
+        string File,
         string Title,
         IReadOnlyList<string> Repos,
         IReadOnlyList<string> Areas
     );
 
-    private static Dictionary<string, FullRow> ParseFullRows(string section, bool withRepos)
+    private static List<FullRow> ParseFullRows(string section, bool withRepos)
     {
-        var rows = new Dictionary<string, FullRow>(StringComparer.Ordinal);
+        var rows = new List<FullRow>();
         var minimum = withRepos ? 4 : 3;
 
         foreach (var cells in Markdown.TableRows(section, minimum))
@@ -206,10 +224,13 @@ public static class IndexGuards
             if (!match.Success)
                 continue;
 
-            rows[match.Groups["file"].Value] = new FullRow(
-                cells[1].Trim(),
-                withRepos ? SplitTags(cells[2]) : [],
-                SplitTags(withRepos ? cells[3] : cells[2])
+            rows.Add(
+                new FullRow(
+                    match.Groups["file"].Value,
+                    cells[1].Trim(),
+                    withRepos ? SplitTags(cells[2]) : [],
+                    SplitTags(withRepos ? cells[3] : cells[2])
+                )
             );
         }
 

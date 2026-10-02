@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddTraxOidcAuth
+description: "Reference for AddTraxOidcAuth, the OpenID Connect code-flow scheme: configuration, claim mapping, OidcBuilder methods, session cookie and subscriptions."
 parent: API Auth
 grand_parent: SDK Reference
 ---

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Mutations
+description: "Reference for the Trax GraphQL mutations: dispatch mutations generated for TraxMutation trains, and opt-in operations mutations for manifests and dead letters."
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 3
@@ -446,16 +447,32 @@ mutation {
 
 Re-queues an execution: reads its train name + input from the metadata row and enqueues a
 fresh work queue entry for the dispatcher (the GraphQL counterpart of the dashboard's Re-queue
-button). It goes through the same path as [`queueTrain`](#queuetrain), so a caller who may not
+button). Both call [`IOperationsService.RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync),
+so they refuse the same runs with the same messages. The enqueue goes through the same path as
+[`queueTrain`](#queuetrain), so a caller who may not
 run the train gets a GraphQL error with code `TRAX_AUTHORIZATION` (`"Not authorized."`) rather
 than `success: false`.
+
+The new run replays the decisions the execution recorded with
+[`AddDecisionRecording`](/docs/sdk-reference/configuration/add-decision-recording), so it takes the
+[tracks](/docs/core/decisions) the execution took instead of asking its deciders again. The replay link is set only here, to
+the execution being re-queued, and only when it has decisions to replay (it recorded a decision,
+or was itself a replaying requeue, so re-queueing a re-queue replays too); any other execution is
+re-queued as an ordinary enqueue. `queueTrain` has no way to set it. See
+[Re-queued runs replay their decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions).
 
 An execution with no saved input is refused with `success: false` and a message saying inputs are
 saved only when [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters)
 is on. So is one whose input was too large to save in full and was stored as the truncation
-placeholder (`{"_truncated": true, ...}`), and one whose recorded input has a
+placeholder (`{"_truncated": true, ...}`), one stored as the `_unserializable` or `_disposed`
+placeholder because it could not be saved, and one whose recorded input has a
 [`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) member masked as
 `{"_redacted": true}`: re-queueing it would run the train with the mask in place of the value.
+An execution whose train is no longer registered is refused with
+`"Train {name} is no longer registered, so execution {id} cannot be re-queued."`, and one whose
+saved input no longer reads as the train's input type, because the type changed shape since, with
+`"The saved input of run {id} no longer reads as {InputType.FullName}: "` and the parser's message,
+never as an invalid `InputJson` the caller did not send.
 Enqueue refusals (a throwing `OnQueue`, an unusable
 subject key, a deferred entry cancelled before confirmation) come back as `success: false`, with
 the message rule [`queueTrain`](#queuetrain) describes, and an infrastructure failure is a masked GraphQL error, as for `queueTrain`. An enqueue reads a missing input as `{}`, so re-queueing it would re-run the train with
@@ -594,7 +611,7 @@ Every field defaults to `null` and means "no change". To clear `maxActiveJobs` (
 | `recoverStuckJobsOnStartup` | `Boolean` | |
 | `deadLetterRetentionPeriod` | `TimeSpan` | Zero to ten years |
 | `autoPurgeDeadLetters` | `Boolean` | |
-| `localWorkerCount` | `Int` | 1 to 256. Ignored when `UseLocalWorkers()` is not configured. Applies when the worker pool next starts |
+| `localWorkerCount` | `Int` | 1 to 256. Ignored when this process runs no local worker pool (see [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers)). Applies when the worker pool next starts |
 | `clearLocalWorkerCount` | `Boolean` | Resets `localWorkerCount` to `Environment.ProcessorCount` |
 | `metadataCleanupInterval` | `TimeSpan` | 1 second to 30 days. Ignored when metadata cleanup is not configured |
 | `metadataCleanupRetention` | `TimeSpan` | 1 second to ten years. Ignored when metadata cleanup is not configured |

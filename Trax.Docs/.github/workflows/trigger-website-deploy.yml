@@ -31,4 +31,5 @@ jobs:
       - name: Trigger Vercel deploy
         env:
           DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
-        run: curl -s -X POST "$DEPLOY_HOOK"
+        # -f fails the job on an HTTP error, so a refused deploy does not pass as green.
+        run: curl -fsS -X POST "$DEPLOY_HOOK"

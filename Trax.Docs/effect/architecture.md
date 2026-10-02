@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Architecture
+description: "How Trax.Effect works inside: the ServiceTrain lifecycle, EffectRunner, canonical train naming, the effect provider interfaces and the DataContext data layer."
 parent: Effect
 nav_order: 3
 ---
@@ -19,8 +20,11 @@ The foundation layer providing Railway Oriented Programming patterns: chaining j
 // Base train class: chains steps and propagates errors
 public abstract class Train<TIn, TOut>
 {
-    public Task<TOut> Run(TIn input);
+    // Throws the exception that stopped the chain
+    public virtual Task<TOut> Run(TIn input, CancellationToken cancellationToken = default);
 
+    // Returns it as Left instead
+    public Task<Either<Exception, TOut>> RunEither(TIn input);
 }
 
 // Junction interface for individual operations

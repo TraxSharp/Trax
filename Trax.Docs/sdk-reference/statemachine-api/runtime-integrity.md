@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Runtime integrity
+description: "The runtime checks that catch drift between the C# state machine and its TypeScript twin: schema-hash handshake, divergence detection and startup self-check."
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 10
@@ -72,27 +73,28 @@ missed, or a bug.
 ## Startup self-check
 
 The same committed [differential corpus](/docs/statemachine#two-runtimes-one-behavior) the CI test replays can
-be replayed by the running server at startup, proving the deployed C# engine still reproduces the machine's
-behaviour.
+be replayed by the running server, proving the deployed C# engine still reproduces the machine's behaviour.
 
 | Member | Returns | Meaning |
 | --- | --- | --- |
 | `IMachine.Corpus` | `string?` | the machine's committed golden corpus, or null if it ships none |
 | `IMachine.SelfCheck()` | `IReadOnlyList<string>` | replays `Corpus` through the machine's own engine; one diff per case it fails to reproduce (empty == agreement, and empty when there is no corpus) |
 | `SnapshotSelfCheck.Run(machines)` | `IReadOnlyList<string>` | runs every machine's self-check and aggregates the diffs, machine-prefixed |
+| `IHealthChecksBuilder.AddTraxStateMachineSelfCheck(string name = "state-machines")` | `IHealthChecksBuilder` | registers `SnapshotSelfCheck.Run` over every discovered machine as an ASP.NET Core health check |
 
-`SnapshotSelfCheck.Run` is dependency-free (the engine does not pull in health-check or hosting abstractions);
-a host injects the discovered machines and wires the result into a health check or an `IHostedService`:
+Register it as a health check with `AddTraxStateMachineSelfCheck`, which `Trax.Effect.StateMachine.Persistence`
+ships. It resolves every `IMachine` that `AddStateMachines` discovered, so it needs no configuration and picks
+up a new machine on its own:
 
 ```csharp
-services.AddHealthChecks().AddCheck("state-machines", () =>
-{
-    var diffs = SnapshotSelfCheck.Run(machines);
-    return diffs.Count == 0
-        ? HealthCheckResult.Healthy()
-        : HealthCheckResult.Unhealthy(string.Join("\n", diffs));
-});
+builder.Services.AddHealthChecks().AddTraxStateMachineSelfCheck();   // check name defaults to "state-machines"
 ```
+
+The check is Healthy when every machine reproduces its corpus, and Unhealthy with every diff in its
+description otherwise. It replays each corpus in full on every call and does not observe the health-check
+cancellation token, so poll it at a modest interval. Nothing runs it until you register it, and registering
+it does not gate startup: map it to an endpoint and poll it, or call `SnapshotSelfCheck.Run(machines)` from
+your own startup code if a drifted engine should stop the host from starting.
 
 A machine ships its corpus by overriding `Corpus` (e.g. from an embedded resource); a machine that ships none
 is skipped, not failed.

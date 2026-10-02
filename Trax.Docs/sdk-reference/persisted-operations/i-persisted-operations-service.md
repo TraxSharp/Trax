@@ -1,6 +1,7 @@
 ---
 layout: default
 title: IPersistedOperationsService
+description: Reference for IPersistedOperationsService, the management surface shared by the GraphQL fields and the dashboard, returning refusals as payload errors.
 parent: Persisted Operations
 grand_parent: SDK Reference
 ---

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: API Security
+description: "Securing a Trax GraphQL host: API-key, JWT bearer and OIDC authentication, subscription auth, per-train authorization, audit logging and generic error messages."
 nav_order: 10
 section: Guides
 ---
@@ -28,10 +29,17 @@ Multiple schemes can coexist in a single host. Every `AddTrax*Auth` call contrib
 Static key set (the common case):
 
 ```csharp
-services.AddTraxApiKeyAuth(keys => keys
-    .Add("admin-key",  id: "admin",  "Admin", "Player")
-    .Add("player-key", id: "player", "Player"));
+using Trax.Api.Auth.ApiKey;
+
+if (builder.Environment.IsDevelopment())
+{
+    services.AddTraxApiKeyAuth(keys => keys
+        .Add("admin-key-do-not-use-in-production",  id: "admin",  "Admin", "Player")
+        .Add("player-key-do-not-use-in-production", id: "player", "Player"));
+}
 ```
+
+Cleartext keys in source are demo keys. A key containing `do-not-use-in-production` makes the host refuse to start outside Development, so a copied demo key cannot go live by accident; production keys come from a secret manager (below).
 
 Keys registered through the builder are salted and SHA-256 hashed at startup, then compared with `CryptographicOperations.FixedTimeEquals` on every request. The resolver iterates every entry without short-circuiting, so lookup cost is independent of which (if any) entry matches. Cleartext comparison is not reachable from consumer code.
 
@@ -125,7 +133,7 @@ services.AddTraxGraphQL(...);      // reads what is registered above it
 const ws = new WebSocket("wss://host/trax/graphql", "graphql-transport-ws");
 ws.onopen = () => ws.send(JSON.stringify({
     type: "connection_init",
-    payload: { authToken: "admin-key" }  // or "apiKey"
+    payload: { authToken: "admin-key-do-not-use-in-production" }  // or "apiKey"
 }));
 ```
 

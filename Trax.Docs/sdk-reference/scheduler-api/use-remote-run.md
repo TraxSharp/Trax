@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseRemoteRun
+description: Reference for UseRemoteRun, which sends synchronous run requests to a remote HTTP runner, with signing keys, timeouts and the remote side's setup.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 9.1

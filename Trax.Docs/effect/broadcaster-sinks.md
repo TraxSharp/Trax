@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Broadcaster Sinks
+description: The train event broadcaster's transports and sinks, data-change signals, pairing RabbitMQ with a sink, and SignalR vs GraphQL subscriptions.
 parent: Effect
 nav_order: 6
 ---
@@ -44,6 +45,10 @@ This is the canonical multi-process layout: workers and the UI host share a Rabb
 **Worker (Program.cs):**
 
 ```csharp
+using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
         effects

@@ -90,7 +90,9 @@ named class does not exist, it exists but claims no ADR back, or more than one c
 same ADR. `NamedGuardsCiteBack` still requires the ADR in a failure message, and skips the
 attribute line when looking, so tagging a class cannot satisfy the half a reader actually sees.
 It reads the class that claims the ADR back, the one resolution found, not another class of the
-same name.
+same name. The citation must reach an assertion, as an argument or through a value it reads, and
+the claimed class must declare a test that is not `[Explicit]`, `[Ignore]` or skipped. The census
+credits a claim to the class carrying the attribute, not to every class of that name.
 
 Not covered: nothing checks that a tagged class enforces the decision it names. Resolution
 proves a class answers to the ADR, not that its assertions have anything to do with it, and
@@ -98,6 +100,10 @@ the two miscredited classes named under Consequences were both unambiguous and w
 
 ## Changelog
 
+- **2026-10-01**: A claimed class must run, and its citation must reach an assertion. An
+  `[Explicit]` fixture with no tests, citing the ADR only in a constant nothing read, passed
+  both checks. The census now credits a claim through the attribute too, so a second class
+  sharing a claimed name is no longer counted as classified.
 - **2026-09-28**: A class may claim several ADRs. The scan kept only the last attribute above a
   class, so a second claim silently cancelled the first; and cite-back now reads the claiming
   class rather than the first class of that name.

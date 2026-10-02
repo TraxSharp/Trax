@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Persisted Operations
+description: "Index of the Trax.Api.GraphQL.PersistedOperations reference: registration, enforcement, the builder, the store, the service and management fields."
 parent: SDK Reference
 nav_order: 9
 has_children: true
@@ -21,5 +22,4 @@ Pages:
 - [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions)
 - [Management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations)
 - [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation)
-- [PersistedOperationsDbContext](/docs/sdk-reference/persisted-operations/persisted-operations-db-context)
 - [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)

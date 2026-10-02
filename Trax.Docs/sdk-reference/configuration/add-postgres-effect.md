@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UsePostgres
+description: "Reference for UsePostgres, the PostgreSQL data provider: signatures, connection pool tuning, automatic migrations and the services it registers."
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 1

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Enqueue and Outcome Changes
+description: "Upgrade notes for the release that changed enqueueing and outcome recording: QueueAsync, mediator-routed enqueues, WorkQueue.Create and rolling deploys."
 parent: Reference
 nav_order: 18
 ---

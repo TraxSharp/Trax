@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Dependent Scheduling
+description: Reference for ThenInclude, Include, IncludeMany, ThenIncludeMany, ScheduleDependentAsync and ScheduleManyDependentAsync, which schedule dependent manifests.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 5

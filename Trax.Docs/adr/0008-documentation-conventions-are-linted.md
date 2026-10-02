@@ -8,8 +8,10 @@ status: accepted
 # Documentation conventions are enforced by lint, not by review
 
 The conventions governing `Trax.Docs` (no em-dashes, internal links that resolve, an SDK
-reference block on every concept page with code, no leftover Jekyll syntax) are checked by
-tests in CI rather than left to a reviewer.
+reference block on every concept page with code, no leftover Jekyll syntax, C# examples marked
+to compile that do compile against the published packages, a description in every page's front
+matter) are checked by tests in CI rather
+than left to a reviewer.
 
 ## Status
 
@@ -34,8 +36,8 @@ generated prose.
 reviews their own work, which catches style and never catches a broken cross-reference.
 
 **An off-the-shelf markdown linter** (markdownlint, Vale). Rejected because the rules that
-matter here are not generic: "every `/docs/x` resolves to `x.md` or `x/index.md` in this
-repo" and "a concept page with code blocks carries an `## SDK Reference` block listing the
+matter here are not generic: "every `/docs/x#y` resolves to `x.md` in this repo and to a
+heading on it whose github-slugger id is `y`" and "a concept page with code blocks carries an `## SDK Reference` block listing the
 methods it used" are specific to how this site is built and rendered. A general linter
 would need custom rules anyway, and would add a Node toolchain to a .NET repo.
 
@@ -52,17 +54,34 @@ these lints the moment they touch a page.
 ## Exemplars
 
 - `InternalLinksResolveTests` fails on a `/docs/` link with no target, which is the one that
-  would otherwise ship a 404.
+  would otherwise ship a 404, on an anchor with no heading, and on a relative link, which the
+  site resolves against the page URL.
 - `SdkReferenceBlockTests` requires the reference block on concept pages with code, and owns
   the exempt-folder list.
 - `NoEmDashesTests` and `NoJekyllSyntaxTests` pin the house style and the migration away
   from Jekyll link syntax.
+- `CompiledSnippetsTests` compiles every fence marked `csharp compile` against the published
+  Trax packages pinned in `tests/Trax.Docs.Snippets.Tests`, warnings included, and names the
+  page and line of each diagnostic. `DocsPackageVersionsTests` holds a Trax version written on a
+  page to the pin the snippets compiled against, and refuses a floating `1.*`.
+- `PackagesPageTests` holds `reference/packages.md` to the list of published packages the test
+  owns, in both directions.
+- `PageDescriptionTests` requires a one-sentence `description` in every published page's front
+  matter, no longer than the 160 characters at which the site truncates it.
 
-Not covered: nothing checks that a page is *correct*, only that it is well formed. A code
-example that no longer compiles, or a described parameter that was renamed, passes every
-one of these.
+Not covered: compiling is opt in, and most fences are not marked. An unmarked example that no
+longer compiles, a described parameter that was renamed, or a compiled example whose prose says
+something the code does not do, passes every one of these. A compiled snippet proves the API
+exists in the pinned release, not that the example behaves as the page says.
 
 ## Changelog
 
+- **2026-10-01**: Added the page description guard. The site's meta description and `llms.txt`
+  fell back to each page's first paragraph, which is often a notice or a lead-in to a code block.
+- **2026-10-01**: The link guard now rejects relative links and checks anchors, and no longer
+  accepts `x/index.md` for `/docs/x`, which the site never served there.
+- **2026-10-01**: Added the compiled-snippet and package-version guards. "Nothing checks that
+  an example compiles" was the gap that let the getting-started page ship code that failed on
+  its first line; marked fences now close it, and the gap that remains is the unmarked ones.
 - **2026-09-11**: Recorded. The census asked which decision these four guards enforced, and
   there was no answer.

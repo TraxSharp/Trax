@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Parameter Effect
+description: SaveTrainParameters, the effect that stores train inputs and outputs as JSON on Metadata, with size bounds, field masking and runtime configuration.
 parent: Effect Providers
 grand_parent: Effect
 nav_order: 3
@@ -17,6 +18,10 @@ dotnet add package Trax.Effect.Provider.Parameter
 ```
 
 ```csharp
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Provider.Parameter.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .UsePostgres(connectionString)

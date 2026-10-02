@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Concurrency Limiting
+description: How to cap concurrent direct train runs per train, per principal and globally, so remote backends like Lambda are not throttled, configured on the mediator.
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 5
@@ -90,7 +91,7 @@ services.AddTrax(trax => trax
 
 ## Interaction with HTTP retry
 
-Concurrency limiting and [HTTP retry](/docs/scheduler/remote-execution#http-retry) are complementary:
+Concurrency limiting and [HTTP retry](/docs/scheduler/remote-execution#1-retry-with-exponential-backoff) are complementary:
 
 - **Concurrency limiting** prevents oversubscription proactively, so fewer requests hit the backend simultaneously
 - **HTTP retry** handles transient failures reactively, catching 429/502/503 that slip through

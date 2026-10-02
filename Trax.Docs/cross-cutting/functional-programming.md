@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Functional Programming
+description: "The functional programming ideas Trax.Core borrows from LanguageExt: Either for train results, Unit, effects, and the null assertion helpers."
 parent: Cross-Cutting
 nav_order: 5
 ---
@@ -27,10 +28,12 @@ protected override Task<Either<Exception, User>> Junctions() =>
 
 Under the hood, the chain handles the wrapping. If a junction throws, the chain catches it and returns `Left(exception)`. If everything succeeds, you get `Right(result)`. Inside `Junctions()` this is invisible to you: you name junctions, and the `Either` is what the chain hands back to the caller.
 
-To inspect the result:
+`Run` unwraps it for you: it returns the `User` on the right track and throws the exception on the left. To
+inspect the `Either` yourself, call `RunEither`, which is on the train class (not on the route interface) and
+takes no cancellation token:
 
 ```csharp
-var result = await train.Run(input);
+var result = await train.RunEither(input);
 
 result.Match(
     Left: exception => Console.WriteLine($"Failed: {exception.Message}"),
@@ -70,7 +73,7 @@ public class ValidateEmailJunction : Junction<CreateUserRequest, Unit>
 
 In functional programming, an *effect* is a side effect, anything that reaches outside the function boundary. Database writes, HTTP calls, logging, file I/O: these are all effects. A pure function takes input and returns output without touching the outside world. Obviously, a train that does nothing observable isn't very useful, so the question becomes: how do you manage side effects without scattering them through every junction?
 
-In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. On both tracks, effect providers run `SaveChanges` and metadata (state, timing, errors) is always persisted. If the train reaches the right track (success), output is recorded alongside the metadata. If any junction switches the train to the left track (failure), the exception and failure details are recorded, but user-tracked models added via custom effect providers are not committed.
+In Trax, effects are operations that happen as the train passes through its route. Junctions don't write directly to a database or logger. Instead, the train tracks models (like `Metadata`) during the journey, and **effect providers** handle the actual work at the end. On both tracks, effect providers run `SaveChanges` and metadata (state, timing, errors) is always persisted. If the train reaches the right track (success), output is recorded alongside the metadata. If any junction switches the train to the left track (failure), the exception and failure details are recorded, and every provider's `SaveChanges` still runs, so whatever the train tracked before failing is committed with them. The failure track does not roll anything back.
 
 This gives you two things:
 

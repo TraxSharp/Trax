@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Authorization
+description: "How Trax gates its GraphQL API: endpoint policies, TraxAuthorize on trains and query models, TraxAllowAnonymous, combinator semantics and startup validation."
 nav_order: 9
 section: Guides
 ---
@@ -52,6 +53,10 @@ A field added this way must declare its own posture when the parent gives it not
 `[TraxAuthorize]` and `[TraxAllowAnonymous]` both apply to a method, so a resolver declares its posture directly and Trax emits the matching `@authorize` directive for it. The combinator semantics are the same as on a train or an entity: policies AND, roles union and OR.
 
 ```csharp
+using HotChocolate;
+using HotChocolate.Types;
+using Trax.Effect.Attributes;
+
 [ExtendObjectType(typeof(Article))]     // Article is [TraxAllowAnonymous]
 public sealed class ArticleExtensions
 {
@@ -221,7 +226,7 @@ Trax handles this automatically. When any registered `[TraxQueryModel]` entity c
 2. Otherwise, walks every registered authentication scheme and attempts `AuthenticateAsync` against each. The first successful scheme wins; the resulting principal is assigned to `HttpContext.User` for the duration of the request.
 3. If no scheme matches the request's credentials, the principal stays anonymous - gated queries will then reject with `TRAX_AUTHORIZATION`.
 
-The interceptor runs only for GraphQL HTTP execution requests, so the Banana Cake Pop tool page and WebSocket subscription upgrades are not affected. Subscriptions authenticate separately, through `TraxCompositeSocketInterceptor` and the per-scheme strategies it delegates to (`TraxApiKeySocketInterceptor`, `TraxJwtSocketInterceptor`, `TraxJwtDispatcherSocketInterceptor`).
+The interceptor runs only for GraphQL HTTP execution requests, so the Nitro IDE page and WebSocket subscription upgrades are not affected. Subscriptions authenticate separately, through `TraxCompositeSocketInterceptor` and the per-scheme strategies it delegates to (`TraxApiKeySocketInterceptor`, `TraxJwtSocketInterceptor`, `TraxJwtDispatcherSocketInterceptor`).
 
 No consumer configuration is required.
 
@@ -357,7 +362,7 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
 
 1. `ITrainDiscoveryService` reads `[TraxAuthorize]` and `[TraxAllowAnonymous]` attributes across the implementation, its base chain, and every implemented interface. Roles are kept as declared (before Trax.Mediator 1.23.0 they were upper-cased); roles and policies are deduplicated. The requirements (and a `HasAllowAnonymousAttribute` flag) are stored on each `TrainRegistration`.
 2. `AddTraxGraphQL` enforces the [Required Exposure Posture](#required-exposure-posture) for every exposed train, and `TraxGraphQLBuilder.Build()` does the same for every `[TraxQueryModel]` entity. Both share one rule: a surface with neither marker (on an open endpoint), both markers, or `[TraxAllowAnonymous]` under `RequireAuthorization()` fails startup with a message naming the offending types.
-3. At host start, `AuthorizationRegistrationValidator` runs as a hosted service. It throws if any train carries `[TraxAuthorize]` but no `ITrainAuthorizationService` is registered (this can be opted out of per below), and it throws on malformed attribute shapes (empty policy strings, whitespace-only roles) so typos are caught before traffic arrives.
+3. At host start, the mediator's internal `AuthorizationRegistrationValidator` runs as a hosted service. It throws if any train carries `[TraxAuthorize]` but no `ITrainAuthorizationService` is registered (this can be opted out of per below), and it throws on malformed attribute shapes (empty policy strings, whitespace-only roles) so typos are caught before traffic arrives.
 4. When `ITrainExecutionService.QueueAsync()` or `RunAsync()` runs, it invokes the registered `ITrainAuthorizationService` before reading the input JSON. Every caller-built enqueue goes through `QueueAsync`, including the operations surface and the dashboard (which enqueues inside a trusted scope); see [The Operations Surface](#the-operations-surface).
 5. The default implementation (`TrainAuthorizationService` from `Trax.Api`) is fail-closed. It grabs the current user from `IHttpContextAccessor` and evaluates each requirement:
    - **Policy**: calls `IAuthorizationService.AuthorizeAsync(user, policyName)`.
@@ -407,9 +412,8 @@ Trains without `[TraxAuthorize]` return empty arrays for both fields.
 Per-train auth and endpoint-level auth are complementary. A typical setup might look like:
 
 ```csharp
-// All Trax endpoints require authentication
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization());
+// Every operation on the endpoint requires an authenticated caller
+builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 
 // Individual trains require specific policies
 [TraxAuthorize("Admin")]
@@ -417,7 +421,9 @@ app.UseTraxGraphQL(configure: endpoint => endpoint
 public class AdminOnlyTrain : ServiceTrain<AdminInput, Unit>, IAdminOnlyTrain { ... }
 ```
 
-The endpoint-level check runs first (before the request reaches the handler). The per-train check runs inside the handler, after the train is resolved by name.
+The endpoint-level check runs first. The per-train check runs inside the handler, after the train is resolved by name.
+
+Gate the endpoint through the builder's `RequireAuthorization()`, not only through an ASP.NET convention on the mapped route (`app.UseTraxGraphQL(configure: endpoint => endpoint.RequireAuthorization())`). The builder's gate is the one Trax can see: the startup checks for exposed surfaces (the `operations` namespace, `[TraxAllowAnonymous]` contradictions) count it, and they do not count a route convention. A route convention still works as an additional layer, enforced by ASP.NET before HotChocolate runs.
 
 ## The Scheduler and Remote Workers Are Trusted
 
@@ -426,7 +432,7 @@ Authorization is enforced once, at API submission time. When a train is queued o
 Later execution paths are trusted:
 
 - The scheduler dequeues from `work_queue` and calls `ITrainBus.RunAsync()` directly. It never reaches `ITrainAuthorizationService`.
-- Remote workers pull queued work over HTTP and execute it via `ITrainExecutionService.RunAsync()`. Because there is no `HttpContext` on the worker side, the authorization check treats the caller as trusted infrastructure and skips.
+- Remote workers receive work over HTTP. A queued job runs through the job runner and `ITrainBus`, like the scheduler's own. A remote run (`UseRemoteRun`) goes through `ITrainExecutionService.RunAsync()` inside a trusted execution scope (`ITrustedExecutionScope.BeginTrusted("scheduler.remote-run")`), so the authorization check skips. A missing `HttpContext` on its own is not trust: outside a trusted scope, the default `TrainAuthorizationService` refuses a `[TraxAuthorize]` train with "No request context and no trusted execution scope." (see [Fail-Closed Behavior](#fail-closed-behavior)). A custom `ITrainAuthorizationService` should make the same distinction, keying on `ITrustedExecutionScope.IsTrusted` rather than on whether a request is present.
 
 This means you can safely decorate a train with `[TraxAuthorize("Admin")]` and still schedule it via `AddScheduler()`, run it from a remote worker, or both. The authorization gate is the API boundary.
 
@@ -450,7 +456,7 @@ A caller-built enqueue is authorized **before** its input JSON is read, so a cal
 
 Triggering a manifest re-runs work whose train and input were fixed when the manifest was defined, so it is treated as operating the scheduler rather than as submitting new work. That puts the whole trigger and dead-letter surface behind a single admin gate. Protect it accordingly: an operator who passes the gate can trigger any manifest. The admin area is expected to gain its own user-provided authorization (for example Microsoft Entra) later.
 
-The dashboard is the admin surface, gated as a whole by the host that serves it. A Blazor Server circuit has no HTTP request behind a click, so the enforcer, which reads the user from the request, could not check a user there anyway. Protect the dashboard route the way you would protect any admin UI. The mediator's runtime fail-closed check for a `[TraxAuthorize]` train with no `ITrainAuthorizationService` registered honours a trusted scope too, but that only matters where hosted services do not run, such as the Lambda runner or a bare `ServiceProvider`. In a hosted app, `AuthorizationRegistrationValidator` refuses to start a host that has `[TraxAuthorize]` trains and no `ITrainAuthorizationService`, trusted scope or not, so a dashboard-only or scheduler-only host must register an enforcer or call [`AllowMissingAuthorizationService()`](#opting-out-for-scheduler-only-hosts).
+The dashboard is the admin surface, gated as a whole by the host that serves it. A Blazor Server circuit has no HTTP request behind a click, so the enforcer, which reads the user from the request, could not check a user there anyway. Protect the dashboard route the way you would protect any admin UI. The mediator's runtime fail-closed check for a `[TraxAuthorize]` train with no `ITrainAuthorizationService` registered honours a trusted scope too, but that only matters where hosted services do not run, such as the Lambda runner or a bare `ServiceProvider`. In a hosted app, the mediator's startup check refuses to start a host that has `[TraxAuthorize]` trains and no `ITrainAuthorizationService`, trusted scope or not, so a dashboard-only or scheduler-only host must register an enforcer or call [`AllowMissingAuthorizationService()`](#opting-out-for-scheduler-only-hosts).
 
 ## Custom Authorization Logic
 
@@ -468,7 +474,9 @@ public class CustomTrainAuthorizationService : ITrainAuthorizationService
     }
 }
 
-// Register before AddTraxGraphQL (which calls AddTraxApi internally)
+// Register after AddTraxGraphQL: it calls AddTraxApi, which adds the default enforcer,
+// and the container resolves the last registration
+builder.Services.AddTraxGraphQL();
 builder.Services.AddScoped<ITrainAuthorizationService, CustomTrainAuthorizationService>();
 ```
 
@@ -476,4 +484,4 @@ The interface is defined in `Trax.Mediator`, so your implementation doesn't need
 
 ## SDK Reference
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)
+> [TraxAuthorize](/docs/sdk-reference/attributes/trax-authorize) | [TraxAllowAnonymous](/docs/sdk-reference/attributes/trax-allow-anonymous) | [ITrustedExecutionScope](/docs/sdk-reference/mediator-api/i-trusted-execution-scope) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)

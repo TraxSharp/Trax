@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Qualified Principal Ids
+description: Why the trax:principal-id claim is now qualified by authentication scheme, what reads it, and how to migrate ids already stored with the bare form.
 parent: Reference
 nav_order: 19
 ---

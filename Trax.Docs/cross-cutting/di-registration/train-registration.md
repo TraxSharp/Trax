@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Train Registration
+description: "The AddTraxRoute registration methods: signatures, generic and non-generic overloads, Inject property injection, CanonicalName assignment and when to use them."
 parent: DI Registration
 grand_parent: Cross-Cutting
 nav_order: 1
@@ -91,7 +92,7 @@ Without `AddTraxRoute`, these properties would remain `null` after DI resolution
 
 ## Remarks
 
-- If your trains are discovered via [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus), you don't need to register them manually. The bus handles registration automatically.
+- If your trains are discovered via [AddMediator](/docs/sdk-reference/configuration/add-mediator), you don't need to register them manually. The bus handles registration automatically.
 - These methods are primarily useful for trains registered outside of assembly scanning, or when you need explicit control over the DI lifetime.
 - **A train instance is one run at a time.** It carries the state of the run in progress: its metadata row, its effect runner and that runner's data context. Each call to `Run` records its own metadata row, so a scoped instance run twice in one scope records two runs, the second with a new `ExternalId` unless you set one. Do not share an instance between concurrent callers.
 - **`AddSingletonTraxRoute` refuses a service train** with an `InvalidOperationException` at registration, because one instance for the whole process would be shared by every run in it. Register trains scoped or transient. The singleton overloads remain for junctions and other routes that carry no per-run state.
@@ -99,4 +100,4 @@ Without `AddTraxRoute`, these properties would remain `null` after DI resolution
 
 ## SDK Reference
 
-> [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
+> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration) | [Inject](/docs/sdk-reference/attributes/inject)

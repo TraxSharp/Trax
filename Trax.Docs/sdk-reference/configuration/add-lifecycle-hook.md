@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddLifecycleHook
+description: "Reference for AddLifecycleHook and ITrainLifecycleHook: reacting to train start, completion, failure and cancellation, error handling, and per-train hooks."
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 11
@@ -48,6 +49,7 @@ public interface ITrainLifecycleHook
     Task OnCompleted(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
     Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct) => Task.CompletedTask;
     Task OnCancelled(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
+    Task OnStateChanged(Metadata metadata, CancellationToken ct) => Task.CompletedTask;
 }
 ```
 
@@ -59,6 +61,7 @@ All methods have default implementations that return `Task.CompletedTask`. Overr
 | `OnCompleted` | After a successful run, after output is persisted |
 | `OnFailed` | After a failed run, after failure is persisted. Includes an `OperationCanceledException` nothing asked for, such as an `HttpClient` timeout |
 | `OnCancelled` | After a requested cancellation (the run's token was cancelled or its cancel flag was set), after cancellation is persisted |
+| `OnStateChanged` | After each of the four above, on every hook, once that event has run on every hook. A hook that implements both `OnStateChanged` and a specific event sees each transition twice |
 
 ### Accessing Train Input and Output
 
@@ -72,6 +75,7 @@ The input is set before junctions execute; the output is set only after a succes
 | `OnCompleted` | Yes | Yes |
 | `OnFailed` | Yes | No (train failed before producing output) |
 | `OnCancelled` | Yes | No (train was cancelled) |
+| `OnStateChanged` | Yes | Only after a completion |
 
 When unavailable, both return `default` (`null` for reference types, zero for value types).
 

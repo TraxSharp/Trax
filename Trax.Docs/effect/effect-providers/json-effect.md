@@ -1,6 +1,7 @@
 ---
 layout: default
 title: JSON Effect
+description: The AddJson effect, a development tool that logs tracked model changes on SaveChanges by comparing JSON snapshots, without persisting anything.
 parent: Effect Providers
 grand_parent: Effect
 nav_order: 2
@@ -19,6 +20,9 @@ dotnet add package Trax.Effect.Provider.Json
 ```
 
 ```csharp
+using Trax.Effect.Extensions;
+using Trax.Effect.Provider.Json.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .AddJson()
@@ -44,7 +48,7 @@ This gives you a log of what changed during train execution without needing a da
 - **Debugging**: When a train produces unexpected results, the JSON logs show exactly what each model looked like at `SaveChanges` time.
 - **Lightweight setups**: Pair it with `UseInMemory()` for a no-infrastructure development environment.
 
-In production, you'll typically replace this with (or supplement it by) the [Data Persistence](data-persistence.md) provider.
+In production, you'll typically replace this with (or supplement it by) the [Data Persistence](/docs/effect/effect-providers/data-persistence) provider.
 
 ## SDK Reference
 

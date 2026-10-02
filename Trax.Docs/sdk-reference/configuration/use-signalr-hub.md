@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseSignalRHub
+description: "Reference for UseSignalRHub, the broadcaster sink that pushes train lifecycle events to SignalR clients: options, projections, delivery and error handling."
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 13

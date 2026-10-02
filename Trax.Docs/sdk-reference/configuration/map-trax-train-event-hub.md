@@ -1,6 +1,7 @@
 ---
 layout: default
 title: MapTraxTrainEventHub
+description: Reference for MapTraxTrainEventHub, which maps the Trax SignalR hub behind a required authorization posture, with connection lifetime, send timeout and clients.
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 14

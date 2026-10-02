@@ -1,6 +1,7 @@
 ---
 layout: default
 title: TrainDiscovery
+description: Reference for ITrainDiscoveryService and TrainRegistration, which list every registered service train for the dashboard and the API.
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 3
@@ -99,7 +100,7 @@ public class TrainRegistration
 
 1. Iterates every `ServiceDescriptor` in `IServiceCollection`.
 2. For each descriptor, checks whether the service type (or any of its interfaces) is a closed generic of `IServiceTrain<,>`.
-3. Pairs each train's two registrations. `AddScopedTraxRoute` registers both `TImplementation` and `TService`, and the pair becomes one registration with the interface as `ServiceType` and the class as `ImplementationType`. The interface is the train's own (the one deriving from `IServiceTrain<,>`, as [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus#how-discovery-works) selects it), and the two are paired only when resolving the interface yields that class: the interface's descriptor names the class, or no other registered class implements the interface. A class registered with no interface of its own is listed under the class, and two different classes registered under the same class service type are refused (see **Throws** above).
+3. Pairs each train's two registrations. `AddScopedTraxRoute` registers both `TImplementation` and `TService`, and the pair becomes one registration with the interface as `ServiceType` and the class as `ImplementationType`. The interface is the train's own (the one deriving from `IServiceTrain<,>`, as [AddMediator](/docs/sdk-reference/configuration/add-mediator#how-discovery-works) selects it), and the two are paired only when resolving the interface yields that class: the interface's descriptor names the class, or no other registered class implements the interface. A class registered with no interface of its own is listed under the class, and two different classes registered under the same class service type are refused (see **Throws** above).
 4. Extracts `InputType` and `OutputType` from the generic arguments of `ServiceType`.
 5. Lists every train, including trains that share an input type. Pairing is per train, never per input type, so a registration's requirements and attributes are always read from the class its `ServiceType` resolves to.
 6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`, and sets `HasAuthorizeAttribute`. Reads `[TraxAllowAnonymous]` (across the base chain and interfaces) into `HasAllowAnonymousAttribute`. Discovery is permissive; the mutual-exclusion and exposure-posture checks run at host startup.

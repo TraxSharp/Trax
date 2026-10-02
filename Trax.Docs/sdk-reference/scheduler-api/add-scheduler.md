@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddScheduler
+description: "Reference for AddScheduler and SchedulerConfigurationBuilder: execution backends, global options and their value ranges, and startup schedules."
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 1
@@ -154,6 +155,7 @@ The polling services never wait less than one second between cycles, whatever in
 - `AddScheduler` requires a data provider (`UsePostgres()` or `UseInMemory()`). If no data provider is configured, `AddScheduler` throws `InvalidOperationException` at build time with a helpful error message showing the required configuration.
 - Internal scheduler trains (`ManifestManager`, `InMemoryManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`, `DeadLetterCleanup`) are automatically excluded from `MaxActiveJobs`.
 - With `UseInMemory()`, `JobDispatcherPollingService` and `MetadataCleanupPollingService` are not registered. The `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that dispatches jobs inline through the in-memory job submitter.
+- The host refuses to start, with an `InvalidOperationException` naming the trains whose chains ask a decider, when it does not register `AddDecisionRecording()`. Such a host could not replay a requeue's recorded decisions, so a requeue that landed on it would fail, `Permanent`; Trax refuses at startup rather than leave that to be found by the first requeue. The check runs before any worker claims work. See [A host that does not record](/docs/effect/decisions#a-host-that-does-not-record).
 - Manifests declared via `Schedule`/`ScheduleMany` are not created immediately. They are seeded on application startup by the `SchedulerStartupService`.
 - Manifests declared via `Schedule`/`ThenInclude`/`Include` get a ManifestGroup based on their `groupId` parameter (defaults to externalId). Per-group dispatch controls (MaxActiveJobs, Priority, IsEnabled) are configured from the dashboard.
 - At build time, the scheduler validates that ManifestGroup dependencies form a DAG (no circular dependencies). If a cycle is detected, `AddScheduler` throws `InvalidOperationException` with the groups involved. See [Dependent Trains: Cycle Detection](/docs/scheduler/dependent-trains#cycle-detection).

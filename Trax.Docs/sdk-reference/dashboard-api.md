@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Dashboard API
+description: "Index of the Trax.Dashboard reference: the Blazor Server UI as a Razor Class Library, its registration and options, and configurable effect settings."
 parent: SDK Reference
 nav_order: 5
 has_children: true
@@ -32,3 +33,4 @@ app.UseTraxDashboard();
 | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | Registers dashboard services (Blazor, Radzen, train discovery) |
 | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | Maps the dashboard Blazor components, gated by the authorization posture |
 | [DashboardOptions](/docs/sdk-reference/dashboard-api/dashboard-options) | Configuration options for the authorization posture, route prefix, title, and environment |
+| [IDashboardSettingsService](/docs/sdk-reference/dashboard-api/i-dashboard-settings-service) | Per-browser preferences and refresh state, and how to replace where they are stored |

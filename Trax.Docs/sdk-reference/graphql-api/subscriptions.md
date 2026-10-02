@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Subscriptions
+description: "Reference for Trax GraphQL subscriptions: train lifecycle events, the onDataChanged signal, payloads, WebSocket connection, allowed origins and authentication."
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 5
@@ -200,7 +201,7 @@ Subscriptions use the GraphQL over WebSocket protocol. Connect to the same endpo
 ws://localhost:5000/trax/graphql
 ```
 
-In Banana Cake Pop (the built-in GraphQL IDE), subscriptions work out of the box. Just write a subscription query and execute it.
+In Nitro (the built-in GraphQL IDE, served in Development), subscriptions work out of the box. Just write a subscription query and execute it.
 
 For programmatic clients, use any GraphQL client that supports the `graphql-ws` protocol (e.g., Apollo Client, urql, Strawberry Shake).
 

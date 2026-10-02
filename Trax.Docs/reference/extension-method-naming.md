@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Extension Method Naming
+description: The Add and Use prefixes for Trax extension methods, the rule that each name contains Trax, and the ExtensionMethodNamingTests that check it.
 parent: Reference
 nav_order: 10
 ---

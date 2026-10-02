@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Management mutations and queries
+description: Reference for the operations.persistedOperations GraphQL fields that upload, deactivate, restore, list and show history of persisted operations.
 parent: Persisted Operations
 grand_parent: SDK Reference
 ---
@@ -9,7 +10,7 @@ grand_parent: SDK Reference
 
 [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) registers six fields on the schema for browsing and editing persisted operations, all under the `operations.persistedOperations` namespace. This matches the layout for every other Trax management feature (`operations.manifestGroups`, `operations.deadLetters`, etc.). Every field calls [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service), the same service the Trax dashboard's persisted-operations pages call, so both accept and refuse the same things.
 
-These fields always bypass `PersistedOperationsMiddleware` enforcement. Persisting them by id would be a chicken-and-egg, and they are already protected by whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
+These fields always bypass persisted-operation enforcement (`PersistedOperationEnforcementMiddleware`, in the HotChocolate execution pipeline), because persisting them by id would be a chicken-and-egg. They are protected by the operations namespace's authorization posture: `GateOperations(...)`, the builder's `RequireAuthorization()`, or an explicit `AllowAnonymousOperations()`. A host that exposes the namespace with none of the three refuses to start.
 
 ## Mutations
 
@@ -59,7 +60,7 @@ Paginated list, newest-updated first.
 | `tenantKey` | `String` | Tenant scope. |
 | `idStartsWith` | `String` | Prefix filter on the id. |
 
-Defaults: `take` capped to 200 (50 default), `skip` floored at 0.
+Defaults: `take` is 50 when not given, zero or negative, or over 200 (a `take` of 500 returns 50 rows, not 200); `skip` is floored at 0.
 
 ### `persistedOperation(id, tenantKey)`
 

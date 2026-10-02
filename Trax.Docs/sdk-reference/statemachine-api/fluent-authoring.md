@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Machine authoring
+description: "Reference for the state machine authoring builders: IMachineBuilder, IStateBuilder, ITransitionBuilder and IDifferentialBuilder, IR export and result codes."
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 2
@@ -94,9 +95,19 @@ authored with them cannot be exported to the IR that drives cross-language codeg
 reducers as data. They compile to the identical engine delegates, so behaviour is unchanged, and they also
 record the `DeclarativeModel` that `IrExporter` turns into the machine's `.ir.json`.
 
-The two styles coexist on one builder, so you can migrate a machine edge by edge. But only a fully declarative
-machine exports a complete IR: any edge left on a delegate guard or reducer is invisible in the export. Author
-the data form with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and see
+The two styles coexist on one builder, so you can migrate a machine edge by edge, but the export cannot see a
+delegate. Once a machine makes any declarative call, the export includes every edge, and an edge whose guard
+or reducer is a delegate is exported with no `guard` or no `reduce`: an unconditional edge that keeps the
+context. Nothing refuses or warns. A generated twin then accepts that trigger for any input and leaves the
+context as it was, while the server runs the delegate, so the client predicts transitions the server refuses
+and contexts the server does not produce. The C# replay of the differential corpus notices only if a sample or
+probe happens to exercise the delegate. A `Holds` validator is not exported either.
+
+> **On a machine with a generated twin, keep every guard and reducer declarative.** For logic the vocabulary
+> cannot express, use `Rule.Custom(name)` or `Reduction.Custom(name)` with `CustomGuard` / `CustomReducer`:
+> the IR then names the rule, and each runtime binds its own handler, rather than the edge silently losing it.
+
+Author the data form with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and see
 [Declarative authoring](/docs/statemachine/declarative-authoring) for a machine built end to end.
 
 ## Exporting the IR
@@ -112,8 +123,9 @@ string ir = new CheckoutMachine().ExportIr();   // canonical single-line JSON
 
 The result is the same canonical JSON the [`trax machine` CLI](/docs/reference/cli#state-machines-trax-machine)
 writes to `<machine>.ir.json`; the CLI calls `ExportIr()` directly. It requires a declaratively-authored
-machine (`Context`/`When(Rule)`/`Reduce(Reduction)`); a machine with a delegate guard or reducer throws, since
-those closures carry no exportable data. In practice you rarely call `ExportIr()` by hand: `trax machine
+machine (`Context`/`When(Rule)`/`Reduce(Reduction)`): it throws `InvalidOperationException` only for a machine
+that made no declarative call at all. A machine that mixes the styles exports without complaint, with each
+delegate edge exported as unconditional (see [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). In practice you rarely call `ExportIr()` by hand: `trax machine
 generate` exports the IR and regenerates every downstream artifact in one command.
 
 ## Result codes

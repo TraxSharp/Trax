@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Remote Execution
+description: Running scheduled trains off the scheduler host on remote HTTP workers, SQS, Lambda or standalone pollers, with authorization, host tracking and failures.
 parent: Scheduling
 nav_order: 9
 ---

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseSqlite
+description: Reference for UseSqlite, the SQLite data provider with automatic migrations and WAL mode, what it registers, and how SQLite compares with Postgres.
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 2

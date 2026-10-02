@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Junction Logger
+description: The AddJunctionLogger effect that records JunctionMetadata before and after each junction, the serializeJunctionData option and its EffectJunction requirement.
 parent: Effect Providers
 grand_parent: Effect
 nav_order: 4
@@ -17,6 +18,9 @@ dotnet add package Trax.Effect.JunctionProvider.Logging
 ```
 
 ```csharp
+using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
         .AddJunctionLogger(serializeJunctionData: true)

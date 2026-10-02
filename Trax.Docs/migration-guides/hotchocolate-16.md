@@ -1,6 +1,7 @@
 ---
 layout: default
 title: HotChocolate 16 Migration
+description: "What a host must change when Trax.Api.GraphQL moves to HotChocolate 16: package versions, renamed types, schema services, scalar renames and projection."
 parent: Reference
 nav_order: 16
 ---

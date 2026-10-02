@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Analyzer
+description: The deprecated TrainChainAnalyzer in Trax.Core.Analyzers, its CHAIN001 and CHAIN002 diagnostics, and why startup chain verification has replaced it.
 parent: Core
 nav_order: 4
 ---

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddMediator
+description: "Reference for AddMediator: the builder and shorthand overloads, TraxMediatorBuilder, assembly scanning, train lifetimes and what it registers."
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 7

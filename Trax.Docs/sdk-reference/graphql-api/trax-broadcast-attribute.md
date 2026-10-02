@@ -1,6 +1,7 @@
 ---
 layout: default
 title: TraxBroadcast Attribute
+description: Reference for the TraxBroadcast attribute, which opts a train into GraphQL lifecycle subscription events, locally and through UseBroadcaster.
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 6

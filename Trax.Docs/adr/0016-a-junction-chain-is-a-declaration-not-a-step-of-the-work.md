@@ -14,7 +14,8 @@ startup, from types alone, before any of the work it describes has run.
 
 ## Status
 
-**Accepted.**
+**Accepted.** [0040](./0040-a-chain-declares-every-track-and-a-decider-chooses-one.md) adds the
+one way a chain may branch: by declaring every track, so the check still reads one shape.
 
 ## Why this is written down
 
@@ -215,6 +216,8 @@ Trax the Cli is pinned to; nothing checks a project an older Cli scaffolded agai
 release, or that Trax.Cli ships its template before Trax.Core ships a removal.
 
 ## Changelog
+- **2026-10-01**: Pointed at 0040, which lets a chain branch by declaring every track and leaving
+  only the choice between them to the run.
 - **2026-09-30**: Recorded that the host's startup check hands `Verify` the container, so a
   junction's missing constructor argument refuses the host; that a train which can never be built
   (no public constructor, or an unregistered type reached through a registered dependency) is

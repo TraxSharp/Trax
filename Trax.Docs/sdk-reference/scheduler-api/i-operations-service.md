@@ -1,6 +1,7 @@
 ---
 layout: default
 title: IOperationsService
+description: "Reference for IOperationsService, the operations the dashboard and the GraphQL operations namespace share: queueing, running, batch actions and read models."
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 14
@@ -19,6 +20,7 @@ public interface IOperationsService
 {
     Task<OperationResult> QueueTrainAsync(QueueTrainInput input, CancellationToken ct);
     Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct);
+    Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
     Task<OperationResult> CancelExecutionsAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntriesAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> SetManifestsEnabledAsync(IReadOnlyCollection<long> ids, bool enabled, CancellationToken ct);
@@ -41,7 +43,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 
 | Method | What it does | `Id` on success |
 |--------|--------------|-----------------|
-| `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. | the work queue entry |
+| `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. The queued run asks its deciders afresh; only [`RequeueExecutionAsync`](#requeueexecutionasync) queues a run that replays an earlier one's decisions. | the work queue entry |
 | `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Applies the per-record checks a queue applies (below), writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. Once the run's row is written the submit no longer takes `ct`, so a caller that goes away does not abort the submit or cancel the run; the submitter's own timeouts bound it. When the submit throws and the run is still `Pending`, no runner started it: the run is recorded `Failed` and the exception is thrown to the caller. When a runner already started it (a remote runner that answered with the train's error, a call that timed out while the run went on, or an in-process submitter that ran a failing train), the run owns its outcome: the call succeeds with the run's id and the message `Run {id} of {train} submitted; its outcome is pending on the run.`, and the run's row records how it ended. | the run's metadata row |
 
 Both look the train up by its interface `FullName` and hand the input to the mediator: `QueueTrainAsync` through `ITrainExecutionService.QueueAsync`, `RunTrainAsync` through `ITrainExecutionService.PrepareAsync`, which authorizes the caller and reads the input without writing anything. Either way `InputJson` is read by `TrainInputReader`: property names matched whatever their case (`customerId`, `CustomerId` and `CUSTOMERID` all fill the same property), a property given twice in any casing refused as invalid input rather than resolved to its last value, JSON reference metadata (`$id`, `$ref`, `$values`) not honoured, so the input is exactly the tree the caller wrote, the mediator's input size cap, and a blank input read as `{}`, which the input type must be buildable from.
@@ -51,6 +53,54 @@ The form a queued input is stored in, and the form a run's submitter writes for 
 A run applies the per-record checks a queue applies. When the train overrides `OnQueue`, the hook runs on the run's input before the run's row is saved, as it runs for an enqueue: on an instance in a scope of its own, with `TrainInput` reading the input, with the `metadata.ExternalId` the run executes under, with writes on [`IEnqueueContextAccessor.Current`](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) saved together with the run's row, and within `MaxQueueHookDuration`. A hook that throws refuses the run and nothing is written.
 
 A run is otherwise a deliberate bypass of the work queue. It skips dispatch priority, group `MaxActiveJobs`, and the subject lock. A train that overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing) serializes its work per subject through the queue, so it is run now only inside a trusted scope, such as the dashboard's; any other caller gets a failed result telling it to queue the train instead. Use `QueueTrainAsync` when a run must wait its turn.
+
+### RequeueExecutionAsync
+
+```csharp
+Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
+```
+
+Re-queues a run: queues a fresh run of the same train with the input the run recorded. The GraphQL
+[`requeueExecution`](/docs/sdk-reference/graphql-api/mutations#requeueexecution) mutation and the
+dashboard's **Re-queue** button both call it, so the two refuse the same runs with the same
+messages and enqueue the same way. The dashboard calls it inside its `"dashboard"` trusted scope;
+the API does not.
+
+It reads the run by `metadataId` and refuses, with a failed result and nothing queued, when the
+run does not exist (`Execution {id} not found.`), when its train is no longer registered
+(`Train {name} is no longer registered, so execution {id} cannot be re-queued.`), or when its
+saved input is not the input it ran with:
+nothing was saved (inputs are saved only when `SaveTrainParameters()` is on), the parameter effect
+saved a `_truncated`, `_unserializable` or `_disposed` placeholder in its place, or
+`[TraxSensitive]` members were masked. Each of those would read back as default values.
+
+The saved input is written with reference metadata (`$id`, `$values`, `$ref`) that the mediator
+does not honour in an input it is handed, so it is first resolved with
+[`TrainInputReader.ResolveSavedInput`](/docs/sdk-reference/mediator-api/train-execution#resolvesavedinput)
+into the plain tree the run was given: lists come back as lists, and an object that appeared twice
+comes back in full both times. A saved input whose metadata has no plain form is refused
+(`Execution {id}'s saved input cannot be read back as the input it ran with: ...`), and one whose
+plain form is over the input cap gets the generic size message. The enqueue then goes through the
+same path as `QueueTrainAsync`, so the train's authorization, its `OnQueue` hook, its subject key
+and the input cap apply, and a refusal or failure is reported as it is there, with one difference:
+the caller supplied no JSON, so an input that no longer reads as the train's input type (the type
+changed shape after the run) is refused as
+`The saved input of run {id} no longer reads as {InputType.FullName}: ...`, not as
+`Invalid InputJson`. Like an enqueue's parse error, that is given only once the caller is
+authorized. On success `Id` is the new work queue entry.
+
+When the run has decisions to replay (it recorded a decision, or was itself queued to replay
+another run), the new entry names it in `ReplayDecisionsOf`, so the new run
+[replays those decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions) and takes
+the tracks the original took. A requeue of a requeue therefore replays too, following the chain
+back to the answers the first run recorded. A run with nothing to replay is re-queued as an
+ordinary enqueue. It asks
+[`HasDecisionsToReplay`](/docs/sdk-reference/configuration/add-decision-recording#hasdecisionstoreplay).
+This method is the only place the link is set, always to the run being re-queued. When the run has decisions to replay and the registered `ITrainExecutionService` does
+not implement the
+[`QueueAsync` overload that takes `QueueTrainOptions`](/docs/sdk-reference/mediator-api/train-execution),
+the mediator's `DecisionReplayNotSupportedException` is logged and thrown as a host
+misconfiguration rather than reported as `The enqueue was refused.`
 
 ## Failures
 
@@ -103,7 +153,7 @@ An exact count of a large, unfiltered log table is a full scan, and the schedule
 
 ## Authorization
 
-Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` through `QueueAsync` and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
+Neither method decides authorization itself: both leave it to the mediator, `QueueTrainAsync` and `RequeueExecutionAsync` through `QueueAsync`, and `RunTrainAsync` through `PrepareAsync`. An `ITrainAuthorizationService` decides when one is registered (Trax.Api registers one). Without one, a call inside a trusted scope passes, and a `[TraxAuthorize]` train is refused unless the host called `AllowMissingAuthorizationService()`. The dashboard calls both inside the `"dashboard"` trusted scope, because it is gated as a whole by its host (see [Authorization: The Operations Surface](/docs/authorization#the-operations-surface)).
 
 ## Implementing it yourself
 

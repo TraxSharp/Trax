@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Mediator
+description: Trax.Mediator and the TrainBus, which dispatches a train by its input type instead of direct injection, with setup, nested trains and scope isolation.
 nav_order: 5
 has_children: true
 section: Packages
@@ -19,6 +20,8 @@ dotnet add package Trax.Mediator
 Without the mediator, controllers inject each train directly:
 
 ```csharp
+using Microsoft.AspNetCore.Mvc;
+
 public class UsersController(ICreateUserTrain createUserTrain) : ControllerBase
 {
     [HttpPost]
@@ -106,4 +109,4 @@ When you need recurring background jobs, add [Trax.Scheduler](/docs/scheduler).
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)

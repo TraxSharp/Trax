@@ -1,6 +1,7 @@
 ---
 layout: default
 title: PersistedOperationsBuilder
+description: "Reference for PersistedOperationsBuilder: single-node or RabbitMQ invalidation, cache options, the allowlist and the validation rules it applies at startup."
 parent: Persisted Operations
 grand_parent: SDK Reference
 ---
@@ -13,7 +14,7 @@ Fluent configuration surface passed to [UsePersistedOperations](/docs/sdk-refere
 
 | Method | Default | Purpose |
 |---|---|---|
-| `UseDatabase(string connectionString)` | required | Postgres connection string for the persisted-operation tables. Throws if missing. |
+| `UseDatabase(string connectionString)` | required | A connection string the builder requires (it throws if missing) but does not use: the store reads and writes `trax.persisted_operation` through the Trax Effect data provider (`UsePostgres`), on that provider's database. |
 | `RequirePersisted(bool require = true)` | `true` | Reject inline-query requests. Set false for shadow mode. |
 | `LogNonPersistedRequests(bool log = true)` | `false` | Log every inline-query request at Information. Use during phased rollout. |
 | `AllowOperations(params string[] names)` | empty | Operation names that bypass enforcement. Case-sensitive. Matched against the caller-supplied `operationName`, not the document: a convenience for trusted networks, not a security control. |

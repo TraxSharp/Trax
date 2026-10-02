@@ -169,6 +169,17 @@ The back-citation goes in the class docstring **and** in the assertion failure m
 the more valuable half, because it puts the authority in front of the person who just
 tripped the guard.
 
+The guard checks the message half. The ADR's file name must reach an assertion: as one of its
+arguments, or through a value it reads, such as a `private const string Adr = "docs/adr/..."`
+that the `because` concatenates or interpolates. A constant no assertion reads does not count,
+and neither do the attribute, a comment or the docstring.
+
+The claimed class must also run. It needs at least one `[Test]`, `[TestCase]`,
+`[TestCaseSource]`, `[Theory]` or `[Fact]` method that is not marked `[Explicit]`, `[Ignore]`
+or `Skip`, and the class itself must not be `[Explicit]` or `[Ignore]`. A suite CI never
+executes holds nothing up, so cite it as a file (`SubscriptionStressTests.cs`) rather than
+claim it.
+
 Resolution only proves the class still **exists**, which a rename breaks loudly and a
 rewrite does not. Someone gutting a guard's assertions sees nothing telling them an ADR
 depends on it, and the ADR goes on claiming enforcement that has quietly stopped. The
@@ -255,6 +266,12 @@ under the census root must be **named by an ADR**, or opt out in its own docstri
 /// alternative for, and no reader would ask why it is like this.</para>
 /// </summary>
 ```
+
+Being named means the class answers the claim: it carries the claiming ADR's
+`[Property("adr", ...)]`. Another class that only shares the name is not credited by it. A
+docstring citation also credits a guard, but a local one (`docs/adr/0003-x.md`) must name an
+ADR the corpus holds. A `Trax.Docs/adr/...` citation is taken as written in a code repo, which
+cannot see the central corpus, and is checked like a local one in Trax.Docs itself.
 
 A new guard is **unclassified until you choose**, and the build says so. Opting out is a
 normal answer. The reason is held to the same bar as `**Unenforced:**`: specific, and not a

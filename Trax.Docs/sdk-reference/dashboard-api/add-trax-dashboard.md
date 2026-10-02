@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddTraxDashboard
+description: "Reference for AddTraxDashboard: the WebApplicationBuilder and IServiceCollection overloads, static web assets, what it registers and its prerequisites."
 parent: Dashboard API
 grand_parent: SDK Reference
 nav_order: 1
@@ -8,7 +9,7 @@ nav_order: 1
 
 # AddTraxDashboard
 
-Registers Trax.Core Dashboard services including Blazor/Radzen components, train discovery, theme state, and local storage.
+Registers the Trax Dashboard services: Blazor and Radzen components, the dashboard settings, theme state and local storage, and the in-circuit authorization check. It needs `AddTrax(...)` with `AddMediator()` and `AddScheduler()` in the same host.
 
 ## Signatures
 
@@ -63,7 +64,6 @@ app.UseTraxDashboard();  // the dashboard is served at /trax
 
 ## What It Registers
 
-- `ITrainDiscoveryService` (singleton, from Mediator): scans DI container for registered trains
 - `IDashboardSettingsService` (scoped): dashboard configuration access
 - A scoped per-circuit authorization check and a `CircuitHandler` that re-check the authorization posture inside an open dashboard (see [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard#remarks)). No `AuthenticationStateProvider` is registered: the check reads the host's.
 - Internal scoped services for browser local storage and the dark/light theme state. They are implementation details of the dashboard's own components and cannot be resolved by type from application code.
@@ -76,8 +76,7 @@ app.UseTraxDashboard();  // the dashboard is served at /trax
 `AddTraxDashboard` performs a runtime check that `AddTrax()` was called first. If the `TraxMarker` singleton is not found in the DI container, `AddTraxDashboard` throws `InvalidOperationException`:
 
 ```
-InvalidOperationException: AddTrax() must be called before AddTraxDashboard().
-Call services.AddTrax(...) in your service configuration before calling AddTraxDashboard().
+InvalidOperationException: AddTraxDashboard() requires AddTrax() to be called first. Call services.AddTrax(trax => ...) before services.AddTraxDashboard().
 ```
 
 This makes sure the effect system and its services are available before the dashboard attempts to use them.
@@ -87,7 +86,7 @@ instead of registering a second `DashboardOptions`, because the last registratio
 shared bootstrap could replace the host's posture with `AllowAnonymousDashboard()`. Put every
 dashboard option in one call.
 
-The Scheduler is also required, but it is checked later, by
+It registers no train discovery of its own: `ITrainDiscoveryService` comes from `AddMediator()`, which `AddScheduler()` needs anyway. The Scheduler is also required, but it is checked later, by
 [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard), against the built
 provider.
 

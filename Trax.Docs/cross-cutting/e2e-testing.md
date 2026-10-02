@@ -1,6 +1,7 @@
 ---
 layout: default
 title: E2E Testing
+description: "End-to-end testing a Trax host with WebApplicationFactory: test database, scheduler settings, fixtures, work queue entries, polling for state and API tests."
 parent: Cross-Cutting
 nav_order: 4
 ---
@@ -232,4 +233,4 @@ All E2E tests share one database. Add `[assembly: NonParallelizable]` to prevent
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion)

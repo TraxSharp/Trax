@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Trains & Junctions
+description: "Writing junctions and trains: cancellation tokens, EffectJunction vs Junction, dependency injection, folder layout, startup chain checks and lifecycle hooks."
 parent: Core
 nav_order: 1
 ---
@@ -46,15 +47,16 @@ Junctions use constructor injection for dependencies. When a junction throws, th
 
 Every junction has a `CancellationToken` property that is set automatically by the train before `Run()` is called. Use it to pass cancellation to async operations:
 
-```csharp
+```csharp compile
 public class FetchUserJunction(IHttpClientFactory httpFactory) : Junction<UserId, UserProfile>
 {
     public override async Task<UserProfile> Run(UserId input)
     {
-        var client = httpFactory.CreateClient();
+        var client = httpFactory.CreateClient("users");
         var response = await client.GetAsync($"/users/{input.Value}", CancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<UserProfile>(CancellationToken);
+        return await response.Content.ReadFromJsonAsync<UserProfile>(CancellationToken)
+            ?? throw new InvalidOperationException($"User {input.Value} has no profile.");
     }
 }
 ```
@@ -605,4 +607,4 @@ Serialization is enforced in the claim, not just in candidate selection, because
 
 ## SDK Reference
 
-> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) | [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [Resolve](/docs/sdk-reference/train-methods/resolve) | [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | [IEnqueueContextAccessor](/docs/sdk-reference/mediator-api/i-enqueue-context-accessor) | [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution) | [ServiceTrain](/docs/sdk-reference/trains-and-junctions/service-train) | [Junction](/docs/sdk-reference/trains-and-junctions/junction) | [EffectJunction](/docs/sdk-reference/trains-and-junctions/effect-junction) | [TrainException](/docs/sdk-reference/trains-and-junctions/train-exception)

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Removal of RunInternal and Activate
+description: Migrating trains that overrode RunInternal or called Activate to a Junctions() declaration, including the Memory rules the startup check enforces.
 parent: Reference
 nav_order: 17
 ---

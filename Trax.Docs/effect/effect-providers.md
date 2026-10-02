@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Effect Providers
+description: "The effect providers that run around a train: database persistence, JSON, parameters, junction logger, junction progress, lifecycle hooks, and combining them."
 parent: Effect
 nav_order: 2
 has_children: true
@@ -15,6 +16,10 @@ Effect providers handle side effects as a train runs: database writes, logging, 
 **Use when:** You need to query train history, audit execution, or debug production issues.
 
 ```csharp
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+
 // Production
 services.AddTrax(trax => trax
     .AddEffects(effects => effects
@@ -168,4 +173,4 @@ services.AddTrax(trax => trax
 
 ## SDK Reference
 
-> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
+> [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)

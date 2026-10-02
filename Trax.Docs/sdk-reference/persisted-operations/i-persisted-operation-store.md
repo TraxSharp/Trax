@@ -1,6 +1,7 @@
 ---
 layout: default
 title: IPersistedOperationStore
+description: Reference for IPersistedOperationStore, programmatic CRUD over the trax.persisted_operation table for CI uploaders, admin tooling and tests.
 parent: Persisted Operations
 grand_parent: SDK Reference
 ---

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Builder Pattern
+description: "The conventions shared by TraxEffectBuilder, TraxMediatorBuilder, SchedulerConfigurationBuilder and TraxGraphQLBuilder: entry point, Build(), state markers."
 parent: Reference
 nav_order: 9
 ---
@@ -148,4 +149,4 @@ order in memory and asserts the one error it produces, and compiles each right o
 
 ## SDK Reference
 
-> [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddServiceTrainBus](/docs/sdk-reference/mediator-api/add-service-train-bus)
+> [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration)

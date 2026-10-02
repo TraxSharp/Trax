@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Samples & Deployment
+description: The pattern the Trax samples follow, trains in a library wrapped by thin executables, the data layer pattern, and six deployment models compared.
 nav_order: 10
 section: Guides
 ---
@@ -55,10 +56,10 @@ The library references `Trax.Effect`, `Trax.Mediator`, and `Trax.Scheduler` (or 
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
-    <PackageReference Include="Trax.Scheduler" Version="1.*" />
+    <PackageReference Include="Trax.Effect" Version="1.57.4" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.57.4" />
+    <PackageReference Include="Trax.Mediator" Version="1.23.3" />
+    <PackageReference Include="Trax.Scheduler" Version="1.34.2" />
   </ItemGroup>
 </Project>
 ```
@@ -77,13 +78,17 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
     <ProjectReference Include="..\MyApp\MyApp.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.*" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.*" />
-    <PackageReference Include="Trax.Dashboard" Version="1.*" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.57.4" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.57.4" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.57.4" />
+    <PackageReference Include="Trax.Dashboard" Version="1.16.0" />
   </ItemGroup>
 </Project>
 ```
+
+The versions are the releases these docs are checked against. Pin exact versions, ideally once for
+the solution in `Directory.Packages.props`: a floating `Version="1.*"` restores whatever was
+published last, and a Trax minor release can change an API your trains call.
 
 The key line in `Program.cs` is the assembly scan - it points at the library so the train bus discovers all your trains:
 
@@ -201,10 +206,10 @@ Trax.Samples.EnergyHub.Hub/     ← executable (API + scheduler + dashboard, no 
 Trax.Samples.EnergyHub.Worker/  ← executable (worker only, no API)
 ```
 
-The hub process manages scheduling and serves the API, but does **not** execute trains locally. Instead, it uses `OverrideSubmitter<PostgresJobSubmitter>()` to write jobs to the `background_job` table via PostgresJobSubmitter, bypassing the default local workers. Separate worker processes poll that table and execute trains.
+The hub process manages scheduling and serves the API. To keep it from executing trains, register `PostgresJobSubmitter` through `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())`: jobs are written to the `background_job` table and no local workers start. Without the override, a scheduler on Postgres starts local workers and the hub runs trains too. Separate worker processes poll that table and execute trains.
 
 The split:
-- **Hub:** `AddScheduler()` + `OverrideSubmitter<PostgresJobSubmitter>()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
+- **Hub:** `AddScheduler(s => s.OverrideSubmitter(...))` + `AddTraxGraphQL()` + `AddTraxDashboard()`
 - **Worker:** `AddTraxWorker()` - polls `background_job` with `FOR UPDATE SKIP LOCKED`
 
 Workers scale horizontally - run as many as you need. The hub stays lightweight.
@@ -482,4 +487,4 @@ The `loans` query lives in the `lending` schema; the nested `book` is resolved f
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddJson](/docs/sdk-reference/configuration/add-json-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | [AddTraxWorker](/docs/sdk-reference/scheduler-api/add-trax-worker) | [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [UseTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | [TraxQueryModel](/docs/sdk-reference/graphql-api/query-models)

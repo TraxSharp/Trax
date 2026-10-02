@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Health & Liveness
+description: The scheduler liveness health check that reports unhealthy when the JobDispatcher stops completing polling cycles, how to wire it into a probe, and its options.
 parent: Scheduling
 nav_order: 10
 ---

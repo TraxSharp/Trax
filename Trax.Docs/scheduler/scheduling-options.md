@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Scheduling Options
+description: "Scheduling options in depth: ScheduleMany, manifest groups and their dispatch controls, pruning, disabling jobs, manifest options and schedule types."
 parent: Scheduling
 nav_order: 2
 ---
@@ -136,7 +137,7 @@ scheduler.Schedule<IMyTrain>(
             .Enabled(true)));
 ```
 
-**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](admin-trains/job-dispatcher.md) skips it and moves on to the next group, so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups. Both limits are counted by each dispatching host on its own, so with N hosts dispatching the total can reach N times either one (see [Capacity Limit Approximation](/docs/scheduler/concurrency#capacity-limit-approximation)).
+**MaxActiveJobs** limits concurrent active jobs within a single group. When a group hits its cap, the [JobDispatcher](/docs/scheduler/admin-trains/job-dispatcher) skips it and moves on to the next group, so other groups can still dispatch normally. This prevents a single high-throughput group from monopolizing all capacity. The global `MaxActiveJobs` (configured in code) still applies as an overall ceiling across all groups. Both limits are counted by each dispatching host on its own, so with N hosts dispatching the total can reach N times either one (see [Capacity Limit Approximation](/docs/scheduler/concurrency#capacity-limit-approximation)).
 
 **Priority** determines the order in which groups are considered during dispatch. The JobDispatcher processes groups from highest priority (31) to lowest (0). If a high-priority group continually re-queues work, it is dispatched first, but because `MaxActiveJobs` caps how many jobs it can have active at once, lower-priority groups still get their fair share of capacity. This solves the starvation problem: priority controls *ordering*, while `MaxActiveJobs` controls *capacity*.
 
@@ -165,7 +166,7 @@ So a manifest or group disabled from the dashboard as a kill switch stays disabl
 
 `ITraxScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. Work a disabled job had already queued waits as well, a retry waiting out its backoff included, and is dispatched once the job is re-enabled; a run someone asked for by name (`TriggerAsync`, `TriggerGroupAsync`, a dead-letter requeue) runs either way. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
 
-`TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](delayed-jobs.md) for usage patterns.
+`TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs) for usage patterns.
 
 ### Disabling a job
 
@@ -205,7 +206,7 @@ scheduler
         options: o => o.Dormant());
 ```
 
-See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full details on registration and runtime activation.
+See [Dormant Dependents](/docs/scheduler/dependent-trains#dormant-dependents) for full details on registration and runtime activation.
 
 ## Schedule Types
 
@@ -218,7 +219,7 @@ See [Dormant Dependents](dependent-trains.md#dormant-dependents) for full detail
 | `Once` | Fire-once delayed job, auto-disables on success | `ScheduleOnceAsync` or `.ScheduleOnce()` at startup |
 | `None` | Manual trigger only | Use `scheduler.TriggerAsync(externalId)` |
 
-See [Dependent Trains](dependent-trains.md) for details on chaining trains, and [Delayed / One-Off Jobs](delayed-jobs.md) for one-off scheduling.
+See [Dependent Trains](/docs/scheduler/dependent-trains) for details on chaining trains, and [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs) for one-off scheduling.
 
 ## Exclusion Windows
 
@@ -239,7 +240,7 @@ Multiple exclusions can be combined, if ANY matches, the manifest is skipped. Ex
 
 Four built-in exclusion types: `DaysOfWeek`, `Dates`, `DateRange`, `TimeWindow` (supports midnight crossover).
 
-See [Exclusion Windows](exclusions.md) for full details, examples, and misfire interaction.
+See [Exclusion Windows](/docs/scheduler/exclusions) for full details, examples, and misfire interaction.
 
 ## Schedule Variance
 

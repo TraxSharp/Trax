@@ -1,6 +1,7 @@
 ---
 layout: default
 title: JobDispatcher
+description: The JobDispatcher train that moves queued work queue entries to the job submitter, enforcing global and per-group MaxActiveJobs and handling dispatch failures.
 parent: Administrative Trains
 grand_parent: Scheduling
 nav_order: 2

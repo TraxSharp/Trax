@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/tests/">
     <Project Path="tests/Trax.Adr.Guard.Tests/Trax.Adr.Guard.Tests.csproj" />
+    <Project Path="tests/Trax.Docs.Snippets.Tests/Trax.Docs.Snippets.Tests.csproj" />
     <Project Path="tests/Trax.Docs.Tests/Trax.Docs.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

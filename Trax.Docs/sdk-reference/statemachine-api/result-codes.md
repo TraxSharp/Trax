@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Result codes
+description: Every result code a state machine advance, rehydrate or snapshot mutation can return, what each means and how a client should react.
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 9
@@ -10,17 +11,19 @@ nav_order: 9
 
 Every advance and rehydrate returns a result, never an exception. On the unhappy path the result carries a
 code. Only the code is contract; the detail text is free to differ across runtimes and is for humans, not
-branching.
+branching. The table lists every code the engine and the snapshot mutations return. A client should still
+treat a code it does not recognise as a refusal, so that a code added later does not break it.
 
 | Code | Returned by | Meaning |
 | --- | --- | --- |
 | `no-transition` | advance | no edge matches the `(state, trigger)` pair |
 | `guard-failed` | advance | an edge matched but its guard rejected the trigger; the detail is the `Because(...)` message |
 | `invalid-context` | advance, rehydrate | the resulting (advance) or stored (rehydrate) context failed the target state's rule |
-| `malformed` | rehydrate, advance (persisted) | the snapshot JSON could not be parsed, or its context holds a value no store can keep: a number outside the range of a double (`1e400`) or a NUL character in a string or key. On a persisted advance, the result held such a value and nothing was written |
+| `malformed` | rehydrate, advance (persisted) | the snapshot JSON could not be parsed, or its context holds a value no store can keep: a number outside the range of a double (`1e400`) or a NUL character in a string or key. On a persisted advance, the trigger input is not valid JSON, or the result held such a value; nothing was written |
 | `unknown-state` | rehydrate | the snapshot names a state the definition does not have. Only the exact declared name is a state: `"1"`, `" Unlocked"` and `"Locked, Unlocked"` are unknown, and an unknown trigger token is `no-transition` |
 | `version-mismatch` | rehydrate | the snapshot version is newer than the definition, or a [migration](/docs/sdk-reference/statemachine-api/migrations) is missing |
-| `unknown-machine` | rehydrate | no registered machine has that name |
+| `unknown-machine` | rehydrate, save, advance, load, send | no registered machine has that name |
+| `unauthenticated` | save, advance, load, send | the request carries no user: `ISnapshotPrincipal.CurrentUserKey` is null. Checked before anything else, so nothing was read or written |
 | `not-found` | advance, load, send | no draft with that id exists for this user and machine, or it expired and was deleted; start a new one |
 | `schema-mismatch` | save, advance, load, send | the client's machine [schema hash](/docs/sdk-reference/statemachine-api/runtime-integrity) differs from the server's; the client is out of date and should reload |
 | `client-divergence` | advance | the client's computed result differs from the server's authoritative result ([divergence detection](/docs/sdk-reference/statemachine-api/runtime-integrity)); nothing was written, reload |

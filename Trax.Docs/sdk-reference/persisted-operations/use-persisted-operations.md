@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UsePersistedOperations
+description: Reference for UsePersistedOperations, which wires persisted-operation storage, caching, cross-node invalidation, the allowlist and shadow-mode logging.
 parent: Persisted Operations
 grand_parent: SDK Reference
 ---
@@ -54,11 +55,10 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | Service | Lifetime | Purpose |
 |---|---|---|
 | `PersistedOperationsOptions` | Singleton | Resolved configuration. |
-| `IDbContextFactory<PersistedOperationsDbContext>` | Singleton (factory) | EF Core context factory. Postgres-backed. |
 | `IPersistedOperationCache` -> `NoOp` or `InMemory` | Singleton | Cache layer. No-op unless `WithInMemoryCache()` was called. |
 | `IPersistedOperationBroadcaster` -> `NoOp` or `RabbitMq` | Singleton | Multi-node invalidation. RabbitMQ with `UseRabbitMqInvalidation()`, no-op with `SingleNode()`. |
 | `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and empties HotChocolate's caches and the Trax cache on broadcast, on losing the broker connection, and on recovering it. |
-| `IPersistedOperationStore` -> `DbPersistedOperationStorage` | Singleton | Programmatic CRUD. |
+| `IPersistedOperationStore` -> `DbPersistedOperationStorage` | Singleton | Programmatic CRUD. Reads and writes through the Effect data provider's `IDataContextProviderFactory`, so the host needs `UsePostgres` (or another data provider); the tables are sets on the Effect `DataContext`. |
 | `IPersistedOperationsService` | Singleton (TryAdd) | The management surface the GraphQL fields and the dashboard call. |
 | `IOperationDocumentStorage` -> `DbPersistedOperationStorage` | Singleton | HotChocolate hot-path lookup. |
 | `IPersistedOperationValidator` -> `HotChocolateSchemaValidator` | Singleton (Replace) | Runs HotChocolate validation against the live schema before every upsert. Overrides the no-op default from `AddPersistedOperationStore`. |

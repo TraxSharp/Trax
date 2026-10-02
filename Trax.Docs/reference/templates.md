@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Project Templates
+description: "The trax-api, trax-scheduler and trax-hub dotnet new templates in Trax.Samples.Templates: installing them, what each generates, running it and adding trains."
 parent: Reference
 nav_order: 4
 ---
@@ -76,7 +77,7 @@ MyCompany.Api/
 - **Trax Effects**: the in-memory data provider and the mediator
 - **Authentication**: API-key auth with a demo key, in Development only (see [Before deploying](#before-deploying))
 - **Application data**: an `AppDbContext` on an in-memory EF Core database, exposed to GraphQL
-- **GraphQL API**: HotChocolate schema at `/trax/graphql` with the Banana Cake Pop IDE
+- **GraphQL API**: HotChocolate schema at `/trax/graphql` with the Nitro IDE in Development
 - **Health check**: `/trax/health`
 
 **Sample trains:** both carry `[TraxAuthorize(Roles = "User")]`, the role the demo key holds,
@@ -227,4 +228,4 @@ dotnet new uninstall Trax.Samples.Templates
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [TraxQuery / TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Run / RunEither
+description: Reference for Run and RunEither, which execute a train from outside, throwing on failure or returning an Either, and how ServiceTrain seals them.
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 8

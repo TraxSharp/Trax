@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseLambdaWorkers
+description: Reference for UseLambdaWorkers, which routes chosen trains' queued runs to an AWS Lambda function by direct invocation, with retry and routing options.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 10.1

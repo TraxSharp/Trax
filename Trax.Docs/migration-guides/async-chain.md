@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Async Chain Migration
+description: Migrating to the async-by-default Junctions, Chain, Resolve, Extract and ShortCircuit in Trax 1.x, with the edit each old pattern needs.
 parent: Reference
 nav_order: 15
 ---

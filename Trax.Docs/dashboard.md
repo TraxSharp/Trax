@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Dashboard
+description: "Trax.Dashboard, the Blazor Server UI at /trax: setup, required web assets, the trains, data, effects and settings pages, manifest groups and options."
 nav_order: 8
 section: Packages
 ---
@@ -22,8 +23,11 @@ dotnet add package Trax.Dashboard
 Or in your `.csproj`:
 
 ```xml
-<PackageReference Include="Trax.Dashboard" Version="1.*" />
+<PackageReference Include="Trax.Dashboard" Version="1.16.0" />
 ```
+
+Pin an exact version, the release these docs are checked against or a newer one, rather than a
+floating `1.*`, which restores whatever was published last.
 
 ### Required: `RequiresAspNetWebAssets`
 
@@ -54,6 +58,12 @@ If you see a 404, your csproj is missing the property. Set it and rebuild.
 Two lines in `Program.cs`, and a decision about who may use it:
 
 ```csharp
+using Trax.Dashboard.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddTrax(trax => trax
@@ -181,7 +191,7 @@ The dashboard supports running any registered train with **custom inputs**, a ca
 
 - **From the Trains page**: Click the **Queue** button next to any train to open a dialog with a form builder (auto-generated from the input type's properties) or a raw JSON editor.
 - **From the Trains page**: Click the **Run** button beside **Queue** to open the same form builder and JSON editor, and run the train now instead of queueing it.
-- **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input. It is refused, with the message the API's `requeueExecution` gives, when the run has no saved input (inputs are saved only with `SaveTrainParameters()`), when what was saved is a placeholder rather than the input (`_truncated` for one over `MaxParameterBytes`, `_unserializable` or `_disposed`), or when the saved input has `[TraxSensitive]` members masked. Each of those would read back as default values, and the train would run with values it never had.
+- **From the Metadata Detail page**: Click the **Re-queue** button to re-run a train with its original input. The button calls `IOperationsService.RequeueExecutionAsync`, the method behind the API's `requeueExecution`. When the original recorded [decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions), or was itself a re-queue that replays them, the new run replays them, so it takes the tracks the original took. It is refused, with the message the API's `requeueExecution` gives, when the run has no saved input (inputs are saved only with `SaveTrainParameters()`), when what was saved is a placeholder rather than the input (`_truncated` for one over `MaxParameterBytes`, `_unserializable` or `_disposed`), or when the saved input has `[TraxSensitive]` members masked. Each of those would read back as default values, and the train would run with values it never had. It is also refused when the run's train is no longer registered, or when its saved input no longer reads as the train's input type; the message names the run, as the API's does.
 
 The queue dialog and **Re-queue** go through `IOperationsService.QueueTrainAsync`, which enqueues through `ITrainExecutionService.QueueAsync`, the same path as the GraphQL `queueTrain` mutation, so the train's `OnQueue` hook fires, its subject key is stamped and the input size cap applies. They enqueue inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` requirements do **not** apply: the dashboard is the admin surface, gated as a whole by its host, and anyone who can reach it can queue any train. The scope also covers the train's `OnQueue` hook and `QueueSubjectKey`, and anything they run or enqueue through `ITrainExecutionService` (including work started with `Task.Run`), so those skip their own `[TraxAuthorize]` requirements too. Protect the dashboard route accordingly. **Run** is different: it calls `IOperationsService.RunTrainAsync` inside the same trusted scope, the call behind the GraphQL [`runTrain`](/docs/sdk-reference/graphql-api/mutations#runtrain) mutation, then opens the run's detail page. The service reads the input, runs the train's `OnQueue` hook on it before the run's row is written (a hook that throws refuses the run), applies the input size cap, writes the run's row and submits it to the job submitter the train is routed to. No work queue entry is written, so the run skips dispatch priority, group `MaxActiveJobs` and [subject serialization](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). Use **Queue** when a run must wait its turn. Dead-letter **Re-queue** and manifest triggers re-run what a manifest fixed and are likewise governed by access to the dashboard itself. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
@@ -201,25 +211,15 @@ Because Run writes no work queue entry, `QueueSubjectKey` does not apply to it. 
 
 A field whose text does not read as its type is refused by name, saying what was expected, and nothing is sent. The JSON tab takes up to 1,048,576 characters. The browser sends a long input to the server in small pieces, so pasting one does not trip the SignalR hub's 32 KB message limit or require raising it.
 
-#### Real-Time Metrics on Home Page
+#### Home Page
 
-The dashboard home page includes real-time operational metrics that update on each polling cycle:
+The home page (`/trax`) reads its numbers through `IOperationsService.GetDashboardMetricsAsync`, the same data the GraphQL `operations.metrics.dashboard` query returns, and refreshes on each polling cycle. It leaves out administration trains when **Hide Administration Trains** is on. Its panels, each of which can be hidden from the User Settings page:
 
-- **Queue Depth** - number of work items waiting to be dispatched
-- **Completed/min** - jobs completed per minute (5-minute rolling window)
-- **Failed/min** - jobs failed per minute (5-minute rolling window)
-- **Throughput Chart** - per-minute completed/failed chart for the last 60 minutes
-- **Throughput Sparkline** - 7-day throughput broken down by the top 3 trains (plus "Other"), with one data point per 6-hour block. Shows which trains are driving volume over the past week.
-
-These complement the existing summary cards (executions today, success rate, currently running, dead letters, active manifests, registered trains).
-
-#### Cancellation Metrics on Home Page
-
-The dashboard home page includes:
-- A **Cancelled** slice in the train state donut chart
-- A **Cancelled** column series in the 24-hour execution chart
-
-Cancelled trains are excluded from the success rate calculation. Cancellation is an operator action, not a failure.
+- **Server Health**: CPU, working set, GC heap and uptime of the process hosting the dashboard (not the workers).
+- **Summary Cards**: executions started today (UTC, any state), success rate, currently running, and dead letters awaiting intervention. The success rate is completed / (completed + failed), so cancelled runs do not count against it; cancellation is an operator action, not a failure.
+- **Executions Chart**: completed, failed and cancelled executions per hour over the last 24 hours, or per minute over the last 60.
+- **Avg Execution Duration (7d)**: the trains with the longest average completed run time.
+- **Failures**: **Top Failing Trains (7d)**, and **Throughput (7d)**, completed runs per train for the top 3 trains plus "Other".
 
 ### Effects Page
 
@@ -306,7 +306,7 @@ The **User Settings** page (`/trax/settings/user`) lets each user customize thei
 |---------|---------|-------------|
 | **Polling Interval** | 5 seconds | How often dashboard pages re-query for fresh data. Range: 1–300 seconds. |
 | **Hide Administration Trains** | `true` | Exclude scheduler internals (ManifestManager, JobDispatcher, JobRunner, MetadataCleanup, DeadLetterCleanup) from statistics, charts, the Trains page and the Metadata and Manifests lists. A train is hidden only when its name is one of theirs exactly, as the API's `hideAdminTrains` filter matches, so a train of your own whose name merely ends the same way stays visible. |
-| **Dashboard Components** | All visible | Toggle visibility of individual home page sections (summary cards, charts, real-time metrics, throughput chart, throughput sparkline). |
+| **Dashboard Components** | All visible | Toggle visibility of the home page panels: Server Health, Summary Cards, Executions Chart, Failures (which also holds the throughput chart) and Avg Execution Duration. |
 
 ## Integration with Existing Blazor Apps
 

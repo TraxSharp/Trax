@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Train Methods
+description: "Index of the methods on Train for composing junctions inside Junctions(): Chain, ShortCircuit, Extract, AddServices, Resolve, Run and DeclaredChain."
 parent: SDK Reference
 nav_order: 1
 has_children: true
@@ -32,4 +33,8 @@ that used to sit above the chain belongs in a junction at the head of it.
 | [AddServices](/docs/sdk-reference/train-methods/add-services) | Stores DI services into Memory so junctions can access them |
 | [Resolve](/docs/sdk-reference/train-methods/resolve) | Ends the chain, taking the `TReturn` result out of Memory |
 | [Run / RunEither](/docs/sdk-reference/train-methods/run) | Executes the train from the outside. `Run` throws on failure, `RunEither` returns `Either` |
+| [Decide](/docs/sdk-reference/train-methods/decide) | Asks a decider several typed questions about a value in Memory, in one call, and stores the typed decisions |
+| [Switch](/docs/sdk-reference/train-methods/switch) | Sends the train down one of several declared tracks, chosen by a decision |
+| [Gate](/docs/sdk-reference/train-methods/gate) | Routes on the probability that a yes/no answer is yes |
+| [Scale](/docs/sdk-reference/train-methods/scale) | Routes on where the state falls on an ordered scale |
 | [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) | Reads the declared chain without running it, and verifies it with `ChainVerification.Verify` |

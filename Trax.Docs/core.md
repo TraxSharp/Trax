@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Core
+description: "Trax.Core overview: trains, junctions, Memory and railway error propagation with no database or DI container, and when to use Core on its own."
 nav_order: 3
 has_children: true
 section: Packages
@@ -21,6 +22,7 @@ dotnet add package Trax.Core
 - **Memory**: a type-keyed store that wires junction outputs to junction inputs automatically
 - **Railway error propagation**: if any junction fails, the train switches to the left track and skips the rest
 - **Declared chains**: a chain declared in `Junctions()` is readable without running it. Trax.Mediator's startup check (registered by `AddMediator`) uses that to refuse to start a host whose chains cannot run
+- **Decisions**: a chain can declare several tracks and let a decider (a typed decision model, a rule table, a test double) choose one per run, with every track verified at startup. See [Decisions](/docs/core/decisions)
 - **IDE extensions**: inlay hints showing cargo types at each junction
 
 ## The Railway
@@ -36,6 +38,9 @@ Left Track:              Exception  ->   [Skip]    ->   [Skip]    -> Exception
 Trax.Core uses `Either<Exception, T>` from [LanguageExt](https://github.com/louthy/language-ext) to represent this. A value is either `Left` (an exception on the left track) or `Right` (successful delivery on the right track):
 
 ```csharp
+using LanguageExt;
+using Trax.Core.Train;
+
 public class CreateUserTrain : Train<CreateUserRequest, User>
 {
     protected override Task<Either<Exception, User>> Junctions() =>

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: IEnqueueContextAccessor
+description: Reference for IEnqueueContextAccessor, which exposes the data context an enqueue commits on so an OnQueue hook can write in the same transaction.
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 6
@@ -8,7 +9,7 @@ nav_order: 6
 
 # IEnqueueContextAccessor
 
-Exposes the data context an enqueue is committing on, so a train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook can make its side-effect part of the same transaction as the work queue row. Registered as a singleton by `AddMediator()`, so a train registered with any lifetime may inject it.
+Exposes the data context an enqueue is committing on, so a train's [`OnQueue`](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) hook can make its side-effect part of the same transaction as the work queue row. The interface is defined in Trax.Effect.Data (namespace below); it is listed under the Mediator API because `AddMediator()` registers it, as a singleton, so a train registered with any lifetime may inject it.
 
 ## Signature
 

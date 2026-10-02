@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddTraxJwtAuth
+description: "Reference for AddTraxJwtAuth: provider shortcuts, JWKS authority or explicit signing key, custom principal resolvers, JwtBuilder methods and multiple issuers."
 parent: API Auth
 grand_parent: SDK Reference
 ---
@@ -138,7 +139,7 @@ services.AddTraxJwtAuth("https://login.example.com", "my-api");
 | Token claim | Lands on |
 |---|---|
 | `sub` (then `nameidentifier`) | `TraxPrincipal.Id` |
-| `name` (then `preferred_username`, `email`) | `TraxPrincipal.DisplayName` |
+| `name` (then `ClaimTypes.Name`, `preferred_username`, and finally the `sub` value) | `TraxPrincipal.DisplayName`. `email` is not consulted: it lands in `Claims` |
 | `role`, `roles`, `ClaimTypes.Role` | `TraxPrincipal.Roles` |
 | Everything else | `TraxPrincipal.Claims` (verbatim, with Trax-reserved claim types filtered out) |
 

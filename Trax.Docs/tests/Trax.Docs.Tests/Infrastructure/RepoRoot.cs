@@ -25,6 +25,19 @@ internal static class RepoRoot
         }
     }
 
+    /// <summary>
+    /// Whether traxsharp.net publishes the file at <paramref name="relative"/> (repo-relative,
+    /// forward slashes) as a page. Mirrors the exclusions in Trax.Website's
+    /// <c>scripts/sync-docs.sh</c>.
+    /// </summary>
+    public static bool IsPublished(string relative) =>
+        System.IO.Path.GetFileName(relative) != "README.md"
+        && !relative.StartsWith("adr/", StringComparison.Ordinal)
+        && !relative.StartsWith(".claude/", StringComparison.Ordinal)
+        && !relative.StartsWith("tools/", StringComparison.Ordinal)
+        && !relative.StartsWith("tests/", StringComparison.Ordinal)
+        && !relative.StartsWith(".github/", StringComparison.Ordinal);
+
     private static bool IsExcluded(string path)
     {
         var s = System.IO.Path.DirectorySeparatorChar;

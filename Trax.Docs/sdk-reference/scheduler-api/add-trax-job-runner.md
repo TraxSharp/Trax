@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddTraxJobRunner
+description: Reference for AddTraxJobRunner, UseTraxJobRunner and UseTraxRunEndpoint, which set up a remote process that executes trains a scheduler dispatches to it.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 10
@@ -188,6 +189,7 @@ Registers the minimum set of services to run `JobRunnerTrain`:
 | `TraxJobRunnerOptions` | Singleton | The posture passed to `configure` |
 | `INonceStore` | Singleton | Where a signing runner records accepted nonces: the `runner_nonce` table through `IDataContext.RunnerNonces`, shared by every instance on the database, or memory after `UseInMemoryNonceStore()`. Registered with `TryAdd`, so a host's own store replaces it. With a `SigningKey` and neither a relational data provider nor `UseInMemoryNonceStore()`, resolving it fails at startup |
 | `RunnerRequestVerifier` | Singleton | Checks the posture at startup and each request's signature and freshness |
+| A decision-recording startup check | Hosted service | Refuses to start the host, naming the trains, when trains that ask a decider run on a host without `AddDecisionRecording()`. Runs as the host starts, before any worker claims work. Added once however many of `AddScheduler`, `AddTraxJobRunner` and `AddTraxWorker` a host calls. See [A host that does not record](/docs/effect/decisions#a-host-that-does-not-record) |
 
 **Not registered:** ManifestManager, JobDispatcher, polling services, startup service, `LocalWorkerService`. This process only runs trains; it doesn't schedule or dispatch them.
 

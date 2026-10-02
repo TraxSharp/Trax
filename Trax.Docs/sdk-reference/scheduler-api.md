@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Scheduler API
+description: "Index of the Trax.Scheduler reference: startup scheduling on AddScheduler, the runtime ITraxScheduler API, management methods and scheduling helpers."
 parent: SDK Reference
 nav_order: 3
 has_children: true
@@ -37,11 +38,12 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 
 | Method | Description |
 |--------|-------------|
+| [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler) | The runtime scheduling interface: every method, plus `TriggerGroupAsync` and the dead-letter operations |
 | [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) | `DisableAsync`, `EnableAsync`, `TriggerAsync`: runtime control of scheduled jobs |
 | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic purging of old metadata for high-frequency trains |
 | [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | Health check that fails when the JobDispatcher stops completing cycles |
 | [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service) | The operations the dashboard and the GraphQL API share: queue a train, run one now, cancel a queued entry, edit group and scheduler settings |
-| [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | Confirms entries staged by a deferred enqueue, and cancels or promotes stale ones |
+| [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | Confirms entries staged by a deferred enqueue, and cancels or promotes stale ones. Defined in Trax.Effect.Data |
 
 ### Helpers
 

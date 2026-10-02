@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Orphan Manifest Cleanup
+description: How the scheduler deletes manifests at startup whose schedule was removed from code, which manifests a host owns, and how to disable or scope the cleanup.
 parent: Scheduling
 nav_order: 4
 ---

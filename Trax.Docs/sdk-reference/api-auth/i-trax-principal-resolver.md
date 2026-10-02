@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ITraxPrincipalResolver
+description: Reference for ITraxPrincipalResolver, which maps a verified API key, JWT or OIDC credential to a TraxPrincipal, with its return semantics and lifetime.
 parent: API Auth
 grand_parent: SDK Reference
 ---

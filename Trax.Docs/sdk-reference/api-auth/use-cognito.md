@@ -1,6 +1,7 @@
 ---
 layout: default
 title: UseCognito
+description: Reference for UseCognito, which configures AddTraxJwtAuth for an Amazon Cognito user pool, and CognitoJwtPrincipalResolver for groups and federated identities.
 parent: API Auth
 grand_parent: SDK Reference
 ---

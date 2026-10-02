@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Train Discovery
+description: "How TrainRegistry scans assemblies and TrainBus routes by input type: input type uniqueness, train name resolution and the train discovery rules."
 parent: Mediator
 nav_order: 1
 ---
@@ -26,7 +27,7 @@ When `RunAsync<TOut>(input, metadata?)` is called, the `TrainBus`:
 
 ### Input Type Uniqueness
 
-The bus's input-keyed `RunAsync` reaches one train per input type: when two trains share one, the first scanned is the one it runs. Discovery still lists both, and a run by name runs the train named. See [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) for the full rules and code examples.
+The bus's input-keyed `RunAsync` reaches one train per input type: when two trains share one, the first scanned is the one it runs. Discovery still lists both, and a run by name runs the train named. See [AddMediator](/docs/sdk-reference/configuration/add-mediator) for the full rules and code examples.
 
 ### Train Name Resolution
 
@@ -49,4 +50,4 @@ The canonical name is the preferred identifier. It is stable across implementati
 
 ## SDK Reference
 
-> [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)

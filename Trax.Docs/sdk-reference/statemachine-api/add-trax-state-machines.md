@@ -1,6 +1,7 @@
 ---
 layout: default
 title: AddStateMachines
+description: Reference for AddStateMachines, which discovers every Machine in the given assemblies and registers the snapshot store, effect claims and mutation trains.
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 1

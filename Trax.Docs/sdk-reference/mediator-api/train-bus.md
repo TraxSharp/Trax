@@ -1,6 +1,7 @@
 ---
 layout: default
 title: TrainBus
+description: "Reference for ITrainBus: RunAsync, RunByNameAsync and InitializeTrain, NoTrainForInputException, nested trains and scope isolation."
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 1
@@ -64,7 +65,7 @@ Like the rest of the bus it is an in-process call and checks no authorization. `
 
 ### InitializeTrain
 
-Resolves and initializes (but does **not** run) the train for the given input type.
+Resolves (but does **not** run) the train for the given input type. It is public on `ITrainBus` but hidden from completion, and no Trax package calls it.
 
 ```csharp
 object InitializeTrain(object trainInput)
@@ -156,11 +157,11 @@ Each `RunAsync` call creates a child DI scope. The train and all its dependencie
 - **Nested isolation**: when a train dispatches another train via `ITrainBus`, the child train gets its own scope. Each train is a black box
 - **Scheduler compatible**: the scheduler already creates per-job scopes; the additional child scope from `TrainBus` adds isolation for the actual train within the job runner's scope
 
-`InitializeTrain` does **not** create a child scope. It resolves from the `TrainBus`'s own scope. This is an internal method used by the scheduler infrastructure.
+`InitializeTrain` does **not** create a child scope. It resolves from the `TrainBus`'s own scope.
 
 ## Remarks
 
-- Trains are discovered by input type at registration time (via [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus)). `RunAsync` and `InitializeTrain` reach one train per input type, the first scanned; `RunByNameAsync` reaches any registered train by name.
+- Trains are discovered by input type at registration time (via [AddMediator](/docs/sdk-reference/configuration/add-mediator)). `RunAsync` and `InitializeTrain` reach one train per input type, the first scanned; `RunByNameAsync` reaches any registered train by name.
 - The `metadata` parameter is for running a train as a record created beforehand, which is how the scheduler and the dashboard's ad-hoc run execute a train. It does not link a child run to a parent.
 - `RunAsync` calls the train's `Run` method internally, which means exceptions are thrown (not returned as `Either`). Use try/catch for error handling.
 - The `cancellationToken` overloads forward the token to `train.Run(input, cancellationToken)`, which propagates it to all steps. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details.

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Persisted Operations
+description: "Persisted GraphQL operations in Trax: the id-to-document contract, hot-fixable changes, setup on one node or many, caching, rollout and managing operations."
 nav_order: 11
 ---
 
@@ -59,6 +60,9 @@ A request names an id, a document, or both. With the id alone, the server runs t
 The minimum configuration enforces persisted-only requests on a host that runs one node:
 
 ```csharp
+using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
+
 builder.Services.AddTraxGraphQL(graphql => graphql
     .AddDbContext<ClientDataContext>()
     .UsePersistedOperations(opts => opts
@@ -230,7 +234,7 @@ mutation Upload($input: UploadPersistedOperationInput!) {
 
 The management mutations and queries always bypass enforcement, because persisting them by id would be a chicken-and-egg. The carve-out is decided from the document's structure, not its text: it applies only when every operation in the request selects `operations` at the root and nothing but `persistedOperations` beneath it. A document that mixes the management surface with any other field, including another `operations` namespace such as `deadLetters`, does not qualify and is enforced normally, as is one that does not parse. An alias or a string argument that happens to read `persistedOperations` is neither the field being selected nor part of the document's structure, so it does not qualify either.
 
-The carve-out is not an authorization boundary. Enforcement is a request-shaping control; what protects the management surface is `GateOperations(...)` plus whatever ASP.NET auth middleware sits in front of the GraphQL endpoint.
+The carve-out is not an authorization boundary. Enforcement is a request-shaping control; what protects the management surface is the operations namespace's authorization posture: `GateOperations(...)`, the builder's `RequireAuthorization()`, or an explicit `AllowAnonymousOperations()`. A host that exposes the namespace with none of the three refuses to start.
 
 ### Programmatically
 
@@ -284,7 +288,7 @@ The HotChocolate-backed validator runs the same rules HotChocolate runs at reque
 
 ## Shape-diff guardrail
 
-Every `UpsertAsync` computes a canonicalized structural hash (sha-256) of the response shape using the document AST. The fingerprint is stored in the row alongside the document. The dashboard editor (v1.1) will compare old vs new fingerprints and refuse a save that changes the response shape unless the operator passes `--force`.
+Every `UpsertAsync` computes a canonicalized structural hash (sha-256) of the response shape using the document AST. The fingerprint is stored in the row alongside the document. On an edit of an existing id, the store compares the old and new fingerprints and refuses a change of response shape with `ShapeDiffViolationException` (`SHAPE_DIFF_VIOLATION`) unless the caller sets `UpsertOptions.BypassShapeDiff` (`bypassShapeDiff` on the upload mutation, the **Bypass shape-diff guardrail** checkbox in the dashboard editor). The check runs in the store, so every path that writes goes through it.
 
 The fingerprint considers these the same shape: whitespace, field reordering, argument changes, variable additions, type-extension swaps that preserve fields. It treats these as different: adding/removing/renaming a field, alias changes, fragment-spread vs inlined fields, `@include` / `@skip` directive changes, mutation vs query.
 
@@ -299,9 +303,9 @@ The fingerprint considers these the same shape: whitespace, field reordering, ar
 | `IPersistedOperationValidator` | DI | Schema validation at upsert time (HotChocolate-backed when `UsePersistedOperations`, no-op for `AddPersistedOperationStore`) |
 | `IPersistedOperationsCapability` | DI | Marker registered by `UsePersistedOperations`, meaning this process serves the management GraphQL fields. The dashboard does not read it: its pages appear whenever `IPersistedOperationsService` is registered |
 | `IOperationDocumentStorage` | HotChocolate hot path | Resolves id to document for the request executor |
-| `PersistedOperationsMiddleware` | ASP.NET pipeline | Enforces inline-query rejection / shadow logging / allowlist |
+| `PersistedOperationEnforcementMiddleware` | HotChocolate execution pipeline (after parsing, before validation) | Enforces inline-query rejection / shadow logging / allowlist on every transport, HTTP and WebSocket alike |
 | `IPersistedOperationBroadcaster` | DI | Multi-node cache invalidation (RabbitMQ with `UseRabbitMqInvalidation`, no-op with `SingleNode()`) |
 
 ## SDK Reference
 
-> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) | [PersistedOperationExceptions](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) | [PersistedOperationsDbContext](/docs/sdk-reference/persisted-operations/persisted-operations-db-context) | [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)
+> [UsePersistedOperations](/docs/sdk-reference/persisted-operations/use-persisted-operations) | [UsePersistedOperationsEnforcement](/docs/sdk-reference/persisted-operations/use-persisted-operations-enforcement) | [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persisted-operations-builder) | [IPersistedOperationsService](/docs/sdk-reference/persisted-operations/i-persisted-operations-service) | [IPersistedOperationStore](/docs/sdk-reference/persisted-operations/i-persisted-operation-store) | [IPersistedOperationValidator](/docs/sdk-reference/persisted-operations/i-persisted-operation-validator) | [PersistedOperationExceptions](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) | [Management mutations](/docs/sdk-reference/persisted-operations/management-mutations) | [PersistedOperation](/docs/sdk-reference/persisted-operations/persisted-operation) | [ShapeFingerprintComputer](/docs/sdk-reference/persisted-operations/shape-fingerprint-computer)

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ITraxAuditSink
+description: Reference for ITraxAuditSink, the destination you implement for audit entries, and its guarantees on batching, threading, retries and dropped batches.
 parent: API Audit
 grand_parent: SDK Reference
 ---

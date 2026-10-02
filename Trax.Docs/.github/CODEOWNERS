@@ -1,0 +1,14 @@
+# Every path needs the maintainer's review. The organisation ruleset requires a
+# code owner's approval on main, and without this file that rule has no owner to
+# ask for.
+#
+# The paths below are listed again on purpose: they decide what CI runs, which
+# packages are restored, and what the adr-guard action other repositories pin
+# executes, so they keep an owner even if the catch-all is ever narrowed.
+*                         @Theauxm
+/.github/                 @Theauxm
+/Directory.Build.props    @Theauxm
+/Directory.Packages.props @Theauxm
+/global.json              @Theauxm
+/.config/                 @Theauxm
+/tools/                   @Theauxm

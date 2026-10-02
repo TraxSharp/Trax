@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Debugging with the Log Table
+description: "Using the trax.log table written by AddDataContextLogging to debug across processes: what a row holds, how to query and correlate it, and what it drops."
 parent: Effect
 nav_order: 7
 ---

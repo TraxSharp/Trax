@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Test Conventions
+description: "Test conventions across the Trax repos: folder layout and what TestFolderLayoutTests checks, fixtures, naming, assertions, coverage, determinism and skipping."
 parent: Reference
 nav_order: 12
 ---

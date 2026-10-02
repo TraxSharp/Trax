@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Schedule / ScheduleAsync
+description: Reference for Schedule and ScheduleAsync, which upsert one recurring manifest by external id, with ScheduleOptions, manifest-level and group-level settings.
 parent: Scheduler API
 grand_parent: SDK Reference
 nav_order: 3
@@ -122,8 +123,10 @@ Each group setting is written only when stated: an existing group keeps any sett
 
 ### Startup Configuration (Recommended, Inferred Input Type)
 
-```csharp
+```csharp compile
 services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(Program).Assembly)
     .AddScheduler(scheduler => scheduler
         .Schedule<ISyncTrain>(
             "sync-daily",
@@ -137,11 +140,12 @@ services.AddTrax(trax => trax
 );
 ```
 
-Only the train interface type is specified. The input type (`SyncInput`) is inferred from `ISyncTrain : IServiceTrain<SyncInput, TOutput>` and validated at configuration time. The output type is not constrained. It can be `Unit` or any other type, and the output is discarded for background jobs.
+`AddScheduler` extends the builder `AddMediator` returns, so it comes after `AddEffects` and
+`AddMediator`; called earlier, it does not compile. Only the train interface type is specified. The input type (`SyncInput`) is inferred from `ISyncTrain : IServiceTrain<SyncInput, TOutput>` and validated at configuration time. The output type is not constrained. It can be `Unit` or any other type, and the output is discarded for background jobs.
 
 ### Runtime Scheduling
 
-```csharp
+```csharp compile
 public class MyService(ITraxScheduler scheduler)
 {
     public async Task SetupSchedule()
@@ -174,12 +178,12 @@ The `Schedule` record defines the timing for a scheduled manifest. Create instan
 |--------|---------|-------------|
 | `WithVariance(TimeSpan variance)` | `Schedule` | Returns a new `Schedule` with the specified variance. The next run after each success is delayed by a random `[0, variance]` duration. A `Schedule` is always `Interval` or `Cron`, so any schedule accepts it. A negative variance throws `InvalidOperationException` when the manifest is scheduled. |
 
-```csharp
+```csharp compile
 // Interval with 2-minute jitter
-var schedule = Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2));
+var every5Minutes = Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(2));
 
 // Cron with 30-minute jitter
-var schedule = Cron.Daily(3).WithVariance(TimeSpan.FromMinutes(30));
+var dailyAt3 = Cron.Daily(3).WithVariance(TimeSpan.FromMinutes(30));
 ```
 
 ## Remarks

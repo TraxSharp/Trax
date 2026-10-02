@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Dead Letters & Cleanup
+description: How a manifest dead-letters after MaxRetries within its failure window, and how to requeue or acknowledge dead letters, configure backoff and clean up metadata.
 parent: Scheduling
 nav_order: 3
 ---
@@ -232,7 +233,7 @@ Deletion uses EF Core's `ExecuteDeleteAsync` for efficient single-statement SQL.
 
 Add `.AddMetadataCleanup()` to your scheduler configuration. By default this cleans up the internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) metadata older than 30 minutes, checking every minute.
 
-See [MetadataCleanup](admin-trains/metadata-cleanup.md) for details on how the cleanup train operates internally.
+See [MetadataCleanup](/docs/scheduler/admin-trains/metadata-cleanup) for details on how the cleanup train operates internally.
 
 ### What Gets Deleted
 
@@ -293,4 +294,4 @@ Jobs execute inline, so tests are fast and don't need database infrastructure.
 
 ## SDK Reference
 
-> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ManifestManagement](/docs/sdk-reference/scheduler-api/manifest-management)
+> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ManifestManagement](/docs/sdk-reference/scheduler-api/manifest-management) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler#dead-letters)

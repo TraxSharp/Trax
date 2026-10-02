@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Configuration
+description: "Reference for AddTrax and AddEffects: the step builder types that enforce registration order, builder properties, extension methods and services you register."
 parent: SDK Reference
 nav_order: 2
 has_children: true
@@ -99,10 +100,10 @@ Inside the `AddEffects()` callback, data provider methods return a more specific
 
 | Type | Returned By | Exposes |
 |------|-------------|---------|
-| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseSqlite()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()` |
-| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseSqlite()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` |
+| `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseSqlite()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()`, `AddNimbleDecider()`, `AddSystemOneDecider()` |
+| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseSqlite()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` and `AddDecisionRecording()` |
 
-Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`) preserve the concrete builder type through chaining. If you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
+Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`, `AddNimbleDecider`, `AddSystemOneDecider`) preserve the concrete builder type through chaining. If you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
 
 ## Ordering Enforcement
 
@@ -169,7 +170,6 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | `SerializeJunctionData` | `bool` | `false` | Whether junction input/output data should be serialized globally |
 | `LogLevel` | `LogLevel` | `LogLevel.Debug` | Minimum log level for effect logging |
 | `TrainParameterJsonSerializerOptions` | `JsonSerializerOptions` | `TraxJsonSerializationOptions.Default` | System.Text.Json options for parameter serialization |
-| `NewtonsoftJsonSerializerSettings` | `JsonSerializerSettings` | `TraxJsonSerializationOptions.NewtonsoftDefault` | Newtonsoft.Json settings for legacy serialization |
 
 ## Extension Methods
 
@@ -183,7 +183,7 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | Serializes train input/output to JSON for persistence (optionally configurable) |
 | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | Adds per-junction execution logging |
 | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | Adds junction progress tracking and cross-server cancellation checking |
-| [AddMediator](/docs/sdk-reference/configuration/add-service-train-bus) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
+| [AddMediator](/docs/sdk-reference/configuration/add-mediator) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
 | [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect) | Registers custom effect provider factories |
 | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | Registers lifecycle hooks that fire on train state transitions |
 | [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the minimum log level for effect logging |
@@ -194,3 +194,7 @@ These properties can be set directly on the `TraxEffectBuilder`:
 |--------|-------------|
 | [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | Classifies a failed run's exception into a `FailureClass`; registered in the container, not through the builder |
 | [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect) | The provider-specific SQL, including a table's estimated row count; registered by `UsePostgres` and `UseSqlite` |
+| [IDataContext](/docs/sdk-reference/configuration/i-data-context) | Trax's own data context: the `trax` tables, transactions, and the scoped registration a data provider adds |
+| [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | The base class and registration helpers for your own schema-per-context EF data contexts |
+| [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider) | What a junction effect implements: code run before and after every `EffectJunction` |
+| [ITraxTrainEventClient](/docs/sdk-reference/configuration/i-trax-train-event-client) | The SignalR hub's client surface: the `TrainEvent` method clients subscribe to |

@@ -1,0 +1,18 @@
+<Project>
+  <!-- This file also ends MSBuild's upward search. The adr-guard action builds tools/Trax.Adr.Guard
+       from the action's checkout inside another repository's CI run, and without a props file here
+       MSBuild would keep walking up the runner's directories and import whatever it found there. -->
+  <PropertyGroup>
+    <!-- Audit direct + transitive dependencies and fail the build on any known
+         vulnerability (low through critical). -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Every project restores with a lockfile. Without this, a locked-mode restore checks a
+       lockfile only where one happens to be committed, and a new project without one restores
+       unlocked and passes CI. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>

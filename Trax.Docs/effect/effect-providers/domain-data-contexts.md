@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Domain Data Contexts
+description: "DomainDataContext, the base for your application's own EF Core context: one schema per context, registration, PostgreSQL enum columns and cross-schema reads."
 parent: Effect Providers
 grand_parent: Effect
 nav_order: 2
@@ -15,6 +16,9 @@ Trax's own `DataContext<T>` is the framework metadata store (it holds the `trax`
 A domain context derives `DomainDataContext<TSelf>`, declares its single schema, and configures its owned entities. The base seals `OnModelCreating` so the cross-cutting conventions cannot be skipped or reordered: it applies the default schema (on PostgreSQL; schema-less providers like SQLite and the in-memory provider are left alone), runs your `ConfigureModel`, and applies a UTC datetime converter.
 
 ```csharp
+using Microsoft.EntityFrameworkCore;
+using Trax.Effect.Data.Services.DomainContext;
+
 public class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
     : DomainDataContext<CatalogDbContext>(options), ICatalogDbContext
 {
@@ -35,9 +39,17 @@ Each context ships a companion `I{Name}DbContext` interface deriving `IDomainDat
 // One pooled factory + a scoped resolver bound to the interface.
 services.AddDomainDataContext<ICatalogDbContext, CatalogDbContext>(o => o.UseNpgsql(connectionString));
 
-// Create the schema and tables idempotently at startup (demo convenience; use migrations in production).
+// Create the schema and tables at startup (demo convenience; use migrations in production).
 await app.Services.EnsureSchemaCreatedAsync<CatalogDbContext>();
 ```
+
+`EnsureSchemaCreatedAsync` creates the default schema with `IF NOT EXISTS`, then runs the model's
+whole create script and swallows any `DbException` it throws. On a second start the script fails
+on its first statement because the tables exist, and that is the steady state. The same swallow
+also hides everything else: a table added to the model later is never created (the script stops at
+the first table that exists), and any other DDL error, such as a permission failure, passes
+silently and surfaces later as a missing table. Once the model changes after its first deployment,
+move the context to migrations.
 
 ## PostgreSQL enum columns
 
@@ -76,4 +88,4 @@ These conventions can be enforced in CI with the [architecture guard packages](/
 
 ## SDK Reference
 
-> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Architecture guards](/docs/reference/architecture-guards)
+> [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Cross-schema data loaders](/docs/sdk-reference/graphql-api/cross-schema-data-loaders) | [Architecture guards](/docs/reference/architecture-guards) | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context)

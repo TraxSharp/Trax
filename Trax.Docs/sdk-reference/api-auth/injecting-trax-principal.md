@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Injecting TraxPrincipal
+description: How to inject the current request's TraxPrincipal into junctions and services, handle resolver failures, and write junctions that also run from the scheduler.
 parent: API Auth
 grand_parent: SDK Reference
 ---
@@ -44,7 +45,7 @@ Scoping means every injection within the same request scope returns the same ins
 - There is no `HttpContext` at all (scheduler path, background service, test code that doesn't set up the accessor)
 - The `ClaimsPrincipal` on the request came from a non-Trax scheme (missing the `trax:principal-id` claim)
 
-In practice this should never surprise you: if your junction injects `TraxPrincipal`, gate the upstream endpoint with `[TraxAuthorize]`. The authorization check rejects anonymous callers with a 401 before the junction is constructed. If the exception does fire, it's a configuration mistake - you forgot to gate the endpoint.
+In practice this should never surprise you: if your junction injects `TraxPrincipal`, gate the upstream endpoint with `[TraxAuthorize]`. The authorization check rejects anonymous callers before the junction is constructed. Over GraphQL that is a `TRAX_AUTHORIZATION` error ("Not authorized.") in the response, not an HTTP 401. If the exception does fire, it's a configuration mistake - you forgot to gate the endpoint.
 
 ## Dual-path junctions (API + scheduler)
 

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: ApiKeyAuthenticationOptions
+description: Reference for ApiKeyAuthenticationOptions, the options passed to AddTraxApiKeyAuth to customize the API-key authentication scheme.
 parent: API Auth
 grand_parent: SDK Reference
 ---

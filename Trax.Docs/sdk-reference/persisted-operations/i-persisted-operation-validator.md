@@ -1,6 +1,7 @@
 ---
 layout: default
 title: IPersistedOperationValidator
+description: Reference for IPersistedOperationValidator, which validates a GraphQL document against the schema before a persisted operation is stored.
 parent: Persisted Operations
 grand_parent: SDK Reference
 ---

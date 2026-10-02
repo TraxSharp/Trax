@@ -1,6 +1,7 @@
 ---
 layout: default
 title: API
+description: "Trax.Api and Trax.Api.GraphQL: the GraphQL layer for running and queueing trains, its two execution modes, packages, health check, auth and named schema."
 nav_order: 7
 section: Packages
 ---
@@ -29,6 +30,13 @@ dotnet add package Trax.Api.GraphQL
 ```
 
 ```csharp
+using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Provider.Json.Extensions;
+using Trax.Mediator.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddTrax(trax => trax
@@ -44,7 +52,7 @@ builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxGraphQL();  // maps at /trax/graphql, opens Banana Cake Pop IDE in browser
+app.UseTraxGraphQL();  // maps at /trax/graphql; the Nitro IDE opens there in a browser, in Development
 app.MapHealthChecks("/trax/health");
 
 app.Run();
@@ -85,7 +93,7 @@ app.Run();
                └──────────────────────┘
 ```
 
-The API server doesn't need `AddScheduler()`. It only needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The scheduler configuration (`AddScheduler`) runs on the scheduler machine only. A host that also serves the [dashboard](/docs/dashboard) is the exception: the dashboard works through the Scheduler's `IOperationsService`, and `UseTraxDashboard()` refuses to start without `AddScheduler()`.
+The API server doesn't need `AddScheduler()`. It needs `AddMediator()` (for train discovery and direct execution) and a data provider (for DB access). The exception is a host that exposes the operations surface (`ExposeOperationQueries()`, `ExposeOperationMutations()`, or persisted operations with the operations namespace on): it needs `IOperationsService`, and with the mutations also `ITraxScheduler` and an `IJobSubmitter`. `AddScheduler()` registers all three, and the host refuses to start without them. The scheduler configuration (`AddScheduler`) runs on the scheduler machine only. A host that also serves the [dashboard](/docs/dashboard) is the exception: the dashboard works through the Scheduler's `IOperationsService`, and `UseTraxDashboard()` refuses to start without `AddScheduler()`.
 
 However, if you want the API to also schedule manifests at startup (like the scheduler does), you can add `AddScheduler()` on the API machine as well. The polling services can be disabled with configuration if you only want startup seeding.
 
@@ -109,21 +117,23 @@ app.MapHealthChecks("/trax/health");
 
 ## Authentication & Middleware
 
-Trax doesn't include built-in auth. You add it with standard ASP.NET Core middleware. `UseTraxGraphQL` accepts a `configure` callback for applying endpoint conventions like authorization, rate limiting, or CORS:
+Trax ships its own authentication packages: [`AddTraxApiKeyAuth`](/docs/sdk-reference/api-auth/add-trax-api-key-auth), [`AddTraxJwtAuth`](/docs/sdk-reference/api-auth/add-trax-jwt-auth) and [`AddTraxOidcAuth`](/docs/sdk-reference/api-auth/add-trax-oidc-auth). Each registers an ASP.NET Core authentication scheme into the combined Trax policy, and gate the endpoint as a whole on the GraphQL builder:
+
+```csharp
+builder.Services.AddTraxApiKeyAuth<MyApiKeyResolver>();
+builder.Services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
+```
+
+Use one of them rather than plain ASP.NET Core authentication. Browsers cannot put a header on a WebSocket upgrade, so an API-key or JWT subscription client sends its credential in the `connection_init` payload, and only the Trax schemes read it there. With no Trax token scheme registered, `connection_init` is accepted as it arrives. Cookie authentication (OIDC) is the exception: the browser sends the cookie on the upgrade. See [API Security](/docs/api-security#subscription-authentication).
+
+Gate the endpoint with the builder's `RequireAuthorization()`, not with an endpoint convention on the mapped route. The builder's gate covers HTTP and the socket, and it is the gate the startup [exposure checks](/docs/authorization#required-exposure-posture) honour. `UseTraxGraphQL` still accepts a `configure` callback for other endpoint conventions, such as rate limiting or CORS:
 
 ```csharp
 app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization("AdminPolicy"));
+    .RequireRateLimiting("api"));
 ```
 
-The callback receives an `IEndpointConventionBuilder` and supports `.RequireAuthorization()`, `.RequireRateLimiting()`, `.RequireCors()`, `.AddEndpointFilter<T>()`, and any other endpoint convention.
-
-For global auth that applies to everything (including non-Trax routes), use middleware instead:
-
-```csharp
-app.UseAuthentication();
-app.UseAuthorization();
-```
+The callback receives an `IEndpointConventionBuilder` and supports `.RequireRateLimiting()`, `.RequireCors()`, `.AddEndpointFilter<T>()`, and any other endpoint convention.
 
 ### Per-Train Authorization
 
@@ -157,4 +167,4 @@ All follow the [trains library pattern](/docs/samples). Trains live in a shared 
 
 ## Next Layer
 
-When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, add [Trax.Dashboard](dashboard.md).
+When you need a monitoring UI for inspecting trains, browsing execution history, and managing manifests from a browser, add [Trax.Dashboard](/docs/dashboard).

@@ -1,6 +1,7 @@
 ---
 layout: default
 title: SkipMigrations
+description: Reference for SkipMigrations, which turns off the automatic migration inside UsePostgres, when to use it (such as Lambda) and how to run migrations separately.
 parent: Configuration
 grand_parent: SDK Reference
 nav_order: 2

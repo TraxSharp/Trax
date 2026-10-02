@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Administrative Trains
+description: The internal trains and polling services the scheduler registers to run the job lifecycle, the work queue, and why they are excluded from MaxActiveJobs.
 parent: Scheduling
 nav_order: 6
 has_children: true
@@ -30,7 +31,7 @@ The scheduler registers hosted services based on the configured data provider:
 
 With PostgreSQL, the ManifestManager and JobDispatcher run independently on their own timers. They communicate through the work queue table. ManifestManager writes entries, JobDispatcher reads them. This means JobDispatcher may not see ManifestManager's freshly-queued entries until its next tick, but no work is lost. Independent intervals allow you to tune each service separately (e.g., fast manifest evaluation with slower dispatch, or vice versa).
 
-In multi-server deployments, each service uses a different concurrency strategy: the ManifestManager uses a PostgreSQL advisory lock for single-leader election, the JobDispatcher uses `FOR UPDATE SKIP LOCKED` for parallel per-entry dispatch, and the cleanup service is naturally idempotent. See [Multi-Server Concurrency](concurrency.md) for details.
+In multi-server deployments, each service uses a different concurrency strategy: the ManifestManager uses a PostgreSQL advisory lock for single-leader election, the JobDispatcher uses `FOR UPDATE SKIP LOCKED` for parallel per-entry dispatch, and the cleanup service is naturally idempotent. See [Multi-Server Concurrency](/docs/scheduler/concurrency) for details.
 
 > **InMemory note:** The `InMemoryManifestManagerTrain` runs only `LoadManifestsJunction`, `ReapFailedJobsJunction`, `DetermineJobsToQueueJunction` and `InMemoryDispatchJobsJunction`. It omits four junctions of the standard train, `CancelTimedOutJobsJunction`, `ReapStalePendingMetadataJunction`, `ReapStaleInProgressMetadataJunction` and `ResolveStaleStagedEntriesJunction`, and replaces `CreateWorkQueueEntriesJunction` with `InMemoryDispatchJobsJunction` (which dispatches jobs inline). It resolves a manifest's stored input type only among the registered trains' input types, as the work-queue dispatcher does, before writing the run's metadata; a manifest whose input resolves to nothing is logged and leaves no `Pending` row. This means timeout cancellation, stale Pending and InProgress recovery, and the stale staged-entry sweep are not available with InMemory.
 

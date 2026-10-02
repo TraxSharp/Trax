@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Effect
+description: "Trax.Effect overview: ServiceTrain, recorded runs in PostgreSQL, SQLite or memory, junctions resolved from DI, pluggable effect providers and setup."
 nav_order: 4
 has_children: true
 section: Packages
@@ -13,11 +14,13 @@ section: Packages
 ```bash
 dotnet add package Trax.Effect
 dotnet add package Trax.Effect.Data.Postgres  # or Trax.Effect.Data.InMemory
+dotnet add package Trax.Effect.Provider.Parameter  # SaveTrainParameters, in the setup below
+dotnet add package Trax.Effect.JunctionProvider.Logging  # AddJunctionLogger
 ```
 
 ## What It Adds
 
-Everything in [Core](core.md), plus:
+Everything in [Core](/docs/core), plus:
 
 - **`ServiceTrain<TIn, TOut>`** - extends `Train` with automatic metadata tracking
 - **Execution metadata** - every train run produces a queryable record (state, timing, input/output, errors)
@@ -37,6 +40,9 @@ Everything in [Core](core.md), plus:
 - `IServiceProvider` access for junction instantiation
 
 ```csharp
+using LanguageExt;
+using Trax.Effect.Services.ServiceTrain;
+
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain
 {
     protected override Task<Either<Exception, User>> Junctions() =>
@@ -53,7 +59,7 @@ Effects are operations that happen as the train passes through its route, provid
 
 - On both tracks, effect providers run `SaveChanges`, and metadata (state, timing, errors) is always persisted
 - If the train reaches the right track (success), output is recorded alongside the metadata
-- If any junction takes the left track (failure), the exception and failure details are recorded. User-tracked models added via custom effect providers are not committed.
+- If any junction takes the left track (failure), the exception and failure details are recorded, and the same `SaveChanges` runs on every provider. Nothing rolls back: whatever the train tracked before it failed, including entities added to the train's `DataContext` and models a custom provider holds, is committed with the failure record.
 
 This gives you full audit trails on every outcome and modularity (add/remove providers without changing train code).
 
@@ -79,8 +85,8 @@ Remove any line and the train still runs; it just passes through fewer junctions
 - Services that need execution audit trails
 - Any application where you want observability without building custom logging
 
-When you need decoupled dispatch (callers don't know which train handles a request), add [Trax.Mediator](mediator.md).
+When you need decoupled dispatch (callers don't know which train handles a request), add [Trax.Mediator](/docs/mediator).
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)
+> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters) | [AddJunctionLogger](/docs/sdk-reference/configuration/add-junction-logger) | [AddJunctionProgress](/docs/sdk-reference/configuration/add-junction-progress) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)

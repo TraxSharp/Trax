@@ -1,3 +1,7 @@
+---
+description: How to report a Trax vulnerability privately, which versions receive security fixes, and a summary of the supply-chain controls behind every release.
+---
+
 # Security Policy
 
 ## Reporting a vulnerability

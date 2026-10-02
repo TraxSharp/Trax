@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Authoring a machine
+description: How to author a state machine as a Machine subclass, wire it into a host, drive it over GraphQL, and keep the C# and TypeScript runtimes in parity.
 parent: State Machines
 nav_order: 1
 ---
@@ -17,6 +18,9 @@ There is no per-machine registration and no effect wiring in the composition roo
 to: the guard that admits it, the reducer that computes the next context, and the effect it fires.
 
 ```csharp
+using Trax.Effect.StateMachine.Persistence;
+using Trax.Effect.StateMachine;
+
 public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 {
     protected override void Configure(IMachineBuilder<CheckoutState, CheckoutTrigger> m)
@@ -122,31 +126,44 @@ A `requestId` makes a retry safe: the same id with the same trigger returns the 
 firing again, and the same id with a different trigger is refused as `request-id-reused`. Advance and send
 share one id space; a send with no `requestId` uses `send:{id}`. The full rule is under
 [persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched).
-An unauthenticated caller gets the opaque authorization error at HTTP 200, not a crash.
+An unauthenticated caller gets the opaque authorization error at HTTP 200, not a crash, and a request that
+reaches a mutation with no user key (`ISnapshotPrincipal.CurrentUserKey` is null) is refused as
+`unauthenticated`.
 
 A complete, runnable version of this (two machines, a GraphQL host, exactly-once over the wire) lives in the
 `StateMachine` sample under `Trax.Samples`.
 
 ## Keep the two runtimes in parity
 
-If your machine has a TypeScript twin, add a `differential` block to its `machine.json` so the exhaustive
-[differential corpus](/docs/statemachine#two-runtimes-one-behavior) can enumerate it. Two fields, both small:
+A TypeScript twin is generated from the machine's [IR](/docs/sdk-reference/statemachine-api/ir-format), so it
+needs a [declaratively authored](/docs/statemachine/declarative-authoring) machine; the delegate machine above
+cannot be exported. The exhaustive [differential corpus](/docs/statemachine#two-runtimes-one-behavior) is
+generated from the same IR. Its inputs are authored in C#, in `Configure`, with `.Differential(...)`:
 
-- `samples`: a few representative inputs per trigger (a no-input case is always added). A guard that accepts
-  `quarter`/`dollar` wants `[{"coin":"quarter"},{"coin":"penny"},{}]`: one that passes, one that fails, one malformed.
-- `seeds`: a representative valid context for any state a trigger cannot reach (context that arrives via
+- **Samples**: a few representative inputs per trigger (a no-input case is always added). A guard that accepts
+  `quarter`/`dollar` wants one input that passes, one that fails, and an empty one.
+- **Seeds**: a representative valid context for any state a trigger cannot reach (context that arrives via
   autosave rather than a transition). The initial state and everything reachable from it need no seed.
 
-```json
-"differential": {
-  "samples": { "Pay": [{ "receipt": "rcpt_1" }, {}] },
-  "seeds": { "Review": { "items": ["book"], "total": 5, "receipt": null } }
-}
+```csharp
+m.Differential(d => d
+    .Sample(CheckoutTrigger.Pay, new JsonObject { ["receipt"] = "rcpt_1" })
+    .EmptySample(CheckoutTrigger.Pay)
+    .Seed(CheckoutState.Review, new JsonObject
+    {
+        ["items"] = new JsonArray("book"),
+        ["total"] = 5,
+        ["receipt"] = null,
+    }));
 ```
 
-Regenerate the corpus with `UPDATE_DIFFERENTIAL=1 npm test`; commit the resulting `differential.json`. Both
-engines then replay it and fail loudly if their hand-written guards or reducers ever drift apart.
+They are exported into the IR's `differential` block, and
+[`trax machine generate --corpus-out`](/docs/reference/cli#trax-machine-generate) regenerates
+`differential.json` from it; commit the result. There is no `machine.json` to edit: the CLI reads only the IR
+it exports from your compiled machine. Both engines then replay the corpus and fail loudly if their guards or
+reducers ever drift apart. The [IDifferentialBuilder](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder)
+reference lists the typed overloads and probe contexts.
 
 ## SDK Reference
 
-> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [AddMediator](/docs/sdk-reference/mediator-api/add-service-train-bus)
+> [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | [AddMediator](/docs/sdk-reference/configuration/add-mediator)

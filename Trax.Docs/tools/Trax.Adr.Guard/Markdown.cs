@@ -104,22 +104,40 @@ public static class Markdown
     private static string[] SplitCells(string line) =>
         Regex.Split(line.Trim('|'), @"(?<!\\)\|").Select(c => c.Replace("\\|", "|")).ToArray();
 
+    /// <summary>A fence line: the character it is drawn with, how long its run is, and what follows.</summary>
+    private readonly record struct Fence(char Character, int Length, bool Bare);
+
     /// <summary>
-    /// The fence marker a line opens or closes, or null if it is not a fence line.
+    /// The fence a line opens or closes, or null if it is not a fence line.
     ///
     /// <para>
-    /// A fence closes only on the marker that opened it. Treating ``` and ~~~ as
-    /// interchangeable meant a tilde line shown inside a backtick block left the fence open,
-    /// and every section lookup after it failed on a document that was perfectly well formed.
+    /// A fence closes only on the character that opened it, with a run at least as long and
+    /// nothing after it, which is CommonMark's rule. Treating ``` and ~~~ as interchangeable
+    /// meant a tilde line shown inside a backtick block left the fence open. Treating any run
+    /// of three as the same marker meant a four-backtick block quoting a three-backtick one
+    /// closed on the inner opener, and a heading the outer block quoted was read as the
+    /// document's own.
     /// </para>
     /// </summary>
-    private static string? FenceMarker(string line)
+    private static Fence? FenceOf(string line)
     {
         var trimmed = line.TrimStart();
-        if (trimmed.StartsWith("```", StringComparison.Ordinal))
-            return "```";
-        return trimmed.StartsWith("~~~", StringComparison.Ordinal) ? "~~~" : null;
+        if (trimmed.Length < 3 || (trimmed[0] != '`' && trimmed[0] != '~'))
+            return null;
+
+        var character = trimmed[0];
+        var length = 0;
+        while (length < trimmed.Length && trimmed[length] == character)
+            length++;
+
+        return length < 3
+            ? null
+            : new Fence(character, length, trimmed[length..].Trim().Length == 0);
     }
+
+    /// <summary>Whether a fence line closes the block <paramref name="open"/> started.</summary>
+    private static bool Closes(Fence line, Fence open) =>
+        line.Character == open.Character && line.Length >= open.Length && line.Bare;
 
     /// <summary>
     /// Lines that markdown renders as code: fenced blocks, and blocks indented by four spaces
@@ -129,17 +147,17 @@ public static class Markdown
     private static bool[] CodeLines(string[] lines)
     {
         var code = new bool[lines.Length];
-        string? fence = null;
+        Fence? fence = null;
         var previousBlank = true;
 
         for (var i = 0; i < lines.Length; i++)
         {
-            var marker = FenceMarker(lines[i]);
+            var marker = FenceOf(lines[i]);
 
-            if (fence is not null)
+            if (fence is { } open)
             {
                 code[i] = true;
-                if (marker == fence)
+                if (marker is { } line && Closes(line, open))
                     fence = null;
                 previousBlank = false;
                 continue;
@@ -252,6 +270,19 @@ public static class CSharp
                 continue;
             }
 
+            // A preprocessor directive runs to the end of its line and holds no literal. Its
+            // text is free prose, so '#region the connection's operations' must not open a
+            // character literal and blank the rest of the file.
+            if (c == '#' && AtLineStart(source, i))
+            {
+                var end = source.IndexOf('\n', i);
+                end = end < 0 ? source.Length : end;
+                if (blankComments)
+                    Blank(i, end);
+                i = end;
+                continue;
+            }
+
             if (c == '/' && i + 1 < source.Length && source[i + 1] == '*')
             {
                 var end = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
@@ -340,6 +371,17 @@ public static class CSharp
         }
 
         return new string(output);
+    }
+
+    /// <summary>Whether only whitespace precedes <paramref name="index"/> on its line.</summary>
+    private static bool AtLineStart(string source, int index)
+    {
+        for (var k = index - 1; k >= 0 && source[k] != '\n'; k--)
+        {
+            if (!char.IsWhiteSpace(source[k]))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>Which kind of line a citation was found on.</summary>

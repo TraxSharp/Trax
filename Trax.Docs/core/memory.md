@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Memory
+description: How Memory, the type-keyed store a train carries, passes junction outputs to later junction inputs, including storage by type, references and tuples.
 parent: Core
 nav_order: 3
 ---

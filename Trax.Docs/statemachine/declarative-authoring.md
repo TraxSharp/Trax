@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Declarative authoring
+description: Declarative state machine authoring, where guards, reducers and context rules are data built from records, so the machine can export its IR.
 parent: State Machines
 nav_order: 2
 ---
@@ -96,9 +97,12 @@ type per state, the validators, and a runnable typed machine, so the only thing 
 the UI that drives it.
 
 Mixing styles is allowed (the delegate and data overloads live on one builder), which lets you migrate a
-machine edge by edge. But an edge left on a delegate guard or reducer is invisible in the export, so a machine
-that needs a complete IR keeps every edge declarative and drops to `When(Func...)` only for the rare case the
-vocabulary cannot express.
+machine edge by edge. But the export cannot see a delegate: an edge left on a delegate guard or reducer is
+still exported, with no guard or reducer, so the generated twin treats it as unconditional and keeps the
+context while the server runs the delegate. Nothing warns. A machine with a twin keeps every edge declarative,
+and for the rare case the vocabulary cannot express it names a custom rule (`Rule.Custom` with `CustomGuard`)
+rather than dropping to `When(Func...)`. See
+[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).
 
 ## SDK Reference
 

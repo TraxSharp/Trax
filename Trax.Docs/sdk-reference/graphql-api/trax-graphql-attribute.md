@@ -1,6 +1,7 @@
 ---
 layout: default
 title: TraxQuery & TraxMutation Attributes
+description: Reference for the TraxQuery and TraxMutation attributes that expose a train in the GraphQL schema, with properties, operation modes, naming and namespaces.
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 4

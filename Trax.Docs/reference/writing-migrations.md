@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Writing Migrations
+description: "How to write a migration for Trax's own tables: embedded SQL scripts that rerun safely, Postgres and SQLite dialects, feature packages and test databases."
 parent: Reference
 nav_order: 13
 ---
@@ -112,8 +113,8 @@ never `now() AT TIME ZONE 'utc'`: a plain timestamp stores the writing session's
 | | Postgres | Sqlite |
 |---|---|---|
 | Schema | tables live in `trax`, DDL is `trax.`-qualified | no schemas, tables unqualified |
-| Types | `jsonb`, `uuid`, `timestamptz` | `TEXT`, `INTEGER` |
-| Style | mixed: lowercase and uppercase keywords side by side, and 5 of the 12 `create table` statements have no `IF NOT EXISTS` | uniform: all 12 are uppercase `CREATE TABLE IF NOT EXISTS` |
+| Types | `jsonb`, `uuid`, `timestamptz`, `bigint` | `TEXT`, `INTEGER`, and `REAL` for a fractional number |
+| Style | mixed: lowercase and uppercase keywords side by side, and 5 of the 13 `create table` statements have no `IF NOT EXISTS` | uniform: uppercase throughout, and 13 of the 14 `CREATE TABLE` statements are `IF NOT EXISTS` (the exception is the transient table `015_snapshot_draft_machine_key.sql` rebuilds `snapshot_draft` through) |
 
 The Postgres style is not a convention to match, it is drift. Write new Postgres scripts the
 way the Sqlite set is already written, with `if not exists` and one case throughout.

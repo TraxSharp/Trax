@@ -1,6 +1,7 @@
 ---
 layout: default
 title: DashboardOptions
+description: Reference for DashboardOptions, the dashboard configuration class, including the authorization posture UseTraxDashboard requires before it starts.
 parent: Dashboard API
 grand_parent: SDK Reference
 nav_order: 3

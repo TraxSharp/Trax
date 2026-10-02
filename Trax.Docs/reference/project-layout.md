@@ -1,6 +1,7 @@
 ---
 layout: default
 title: Project Layout
+description: "Where each kind of thing lives in a Trax repo: data models, migrations, builders, sample applications and tests, and how to find a pattern to mirror."
 parent: Reference
 nav_order: 11
 ---
