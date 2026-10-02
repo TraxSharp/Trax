@@ -1,13 +1,12 @@
 name: Release NuGet Package
 
-# A merge to main verifies main (build-test) but does NOT release. Releases are cut
-# manually: run this workflow from the Actions tab when you want to publish whatever
-# has accumulated on main. semantic-release reads every commit since the last tag, so
-# one run cuts one version at the highest bump those commits call for.
+# Runs only when dispatched by hand from the Actions tab, to publish whatever has
+# accumulated on main. A merge to main runs nothing here: the pull request already built
+# and tested the change. build-test still runs first in every release, so nothing is
+# tagged or published from a main that does not build and pass. semantic-release reads
+# every commit since the last tag, so one run cuts one version at the highest bump those
+# commits call for.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -105,11 +104,10 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     needs: build-test
-    # Only a manual dispatch of main releases. On a push to main this job is skipped, so
-    # the merge is verified without consuming a version number. The ref is checked here
-    # as well as in the environment's branch policy, so a dispatch from any other branch
-    # stops before it reaches the approval.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    # Only a dispatch of main releases. The ref is checked here as well as in the
+    # environment's branch policy, so a dispatch from any other branch stops before it
+    # reaches the approval.
+    if: github.ref == 'refs/heads/main'
     # Gated on the same protected environment as publish, so a dispatch cannot cut a
     # tag, a GitHub release or a changelog entry before an approver signs off. Without
     # this, anyone with write access could burn a version number.
