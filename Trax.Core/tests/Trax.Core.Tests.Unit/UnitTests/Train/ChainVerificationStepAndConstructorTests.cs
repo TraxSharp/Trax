@@ -1,7 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;

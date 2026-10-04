@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;
@@ -106,9 +106,9 @@ public class ChainAfterFailureTests : TestSetup
         public override Task<int> Run(string input) => Task.FromResult(1);
     }
 
-    public sealed class Fails : Junction<string, LanguageExt.Unit>
+    public sealed class Fails : Junction<string, Trax.Core.Functional.Unit>
     {
-        public override Task<LanguageExt.Unit> Run(string input) =>
+        public override Task<Trax.Core.Functional.Unit> Run(string input) =>
             throw new InvalidOperationException("first junction failed");
     }
 

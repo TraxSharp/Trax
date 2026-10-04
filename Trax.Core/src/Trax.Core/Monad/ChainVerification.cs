@@ -1,8 +1,8 @@
 using System.Runtime.CompilerServices;
-using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
 

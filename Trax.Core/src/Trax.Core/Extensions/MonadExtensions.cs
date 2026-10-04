@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
-using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Core.Utils;
 

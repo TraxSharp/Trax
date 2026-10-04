@@ -1,5 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;
@@ -194,10 +194,10 @@ public class MonadTaskTests : TestSetup
         public DoneJunction() { }
     }
 
-    private class UnitJunction : Junction<string, LanguageExt.Unit>
+    private class UnitJunction : Junction<string, Trax.Core.Functional.Unit>
     {
-        public override Task<LanguageExt.Unit> Run(string input) =>
-            Task.FromResult(LanguageExt.Unit.Default);
+        public override Task<Trax.Core.Functional.Unit> Run(string input) =>
+            Task.FromResult(Trax.Core.Functional.Unit.Default);
 
         public UnitJunction() { }
     }

@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Extensions;
 
@@ -10,7 +10,7 @@ public class FunctionalTests : TestSetup
     public async Task TestUnwrapTaskEitherRight()
     {
         // Arrange
-        var either = Task.FromResult<Either<Exception, int>>(Prelude.Right<Exception, int>(42));
+        var either = Task.FromResult<Either<Exception, int>>(Either<Exception, int>.Right(42));
 
         // Act
         var result = await either.Unwrap();
@@ -25,7 +25,7 @@ public class FunctionalTests : TestSetup
         // Arrange
         var exception = new InvalidOperationException("Test exception");
         var either = Task.FromResult<Either<Exception, int>>(
-            Prelude.Left<Exception, int>(exception)
+            Either<Exception, int>.Left(exception)
         );
 
         // Act
@@ -39,7 +39,7 @@ public class FunctionalTests : TestSetup
     public void TestUnwrapEitherRight()
     {
         // Arrange
-        var either = Prelude.Right<Exception, int>(42);
+        var either = Either<Exception, int>.Right(42);
 
         // Act
         var result = either.Unwrap();
@@ -53,7 +53,7 @@ public class FunctionalTests : TestSetup
     {
         // Arrange
         var exception = new InvalidOperationException("Test exception");
-        var either = Prelude.Left<Exception, int>(exception);
+        var either = Either<Exception, int>.Left(exception);
 
         // Act
         Action act = () => either.Unwrap();
@@ -67,7 +67,7 @@ public class FunctionalTests : TestSetup
     {
         // Arrange
         var either = Task.FromResult<Either<Exception, string>>(
-            Prelude.Right<Exception, string>("success")
+            Either<Exception, string>.Right("success")
         );
 
         // Act
@@ -81,7 +81,7 @@ public class FunctionalTests : TestSetup
     public void TestUnwrapEitherRightDifferentTypes()
     {
         // Arrange
-        var either = Prelude.Right<Exception, double>(3.14);
+        var either = Either<Exception, double>.Right(3.14);
 
         // Act
         var result = either.Unwrap();
@@ -96,7 +96,7 @@ public class FunctionalTests : TestSetup
         // Arrange
         var exception = new ArgumentNullException("param");
         var either = Task.FromResult<Either<ArgumentException, bool>>(
-            Prelude.Left<ArgumentException, bool>(exception)
+            Either<ArgumentException, bool>.Left(exception)
         );
 
         // Act
@@ -113,7 +113,7 @@ public class FunctionalTests : TestSetup
     {
         // Arrange
         var exception = new ArgumentException("Test exception");
-        var either = Prelude.Left<Exception, char>(exception);
+        var either = Either<Exception, char>.Left(exception);
 
         // Act
         Action act = () => either.Unwrap();

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
@@ -23,7 +23,7 @@ public class TrainChainAnalyzerTests
     /// </summary>
     private const string StubTypes =
         @"
-namespace LanguageExt
+namespace Trax.Core.Functional
 {
     public struct Unit
     {
@@ -156,9 +156,9 @@ namespace TestApp
     public class NeedsSpecial { }
 
     public class JunctionA : Trax.Core.Junction.IJunction<MyInput, Intermediate> { }
-    public class JunctionB : Trax.Core.Junction.IJunction<NeedsSpecial, LanguageExt.Unit> { }
+    public class JunctionB : Trax.Core.Junction.IJunction<NeedsSpecial, Trax.Core.Functional.Unit> { }
 
-    public class TestTrain : Trax.Core.Train.Train<MyInput, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<MyInput, Trax.Core.Functional.Unit>
     {
         public void Run(MyInput input)
         {
@@ -297,9 +297,9 @@ namespace TestApp
     public class Order { }
 
     public class ProducePairJunction : Trax.Core.Junction.IJunction<string, (User, Order)> { }
-    public class ConsumeUserJunction : Trax.Core.Junction.IJunction<User, LanguageExt.Unit> { }
+    public class ConsumeUserJunction : Trax.Core.Junction.IJunction<User, Trax.Core.Functional.Unit> { }
 
-    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, Trax.Core.Functional.Unit>
     {
         public void Run(string input)
         {
@@ -498,9 +498,9 @@ namespace TestApp
     public interface IProduceResult : Trax.Core.Junction.IJunction<string, Result> { }
     public class Result { }
 
-    public class ConsumeResultJunction : Trax.Core.Junction.IJunction<Result, LanguageExt.Unit> { }
+    public class ConsumeResultJunction : Trax.Core.Junction.IJunction<Result, Trax.Core.Functional.Unit> { }
 
-    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, Trax.Core.Functional.Unit>
     {
         public void Run(string input)
         {
@@ -528,9 +528,9 @@ namespace TestApp
     public class Inner { }
 
     public class ProduceContainerJunction : Trax.Core.Junction.IJunction<string, Container> { }
-    public class ConsumeInnerJunction : Trax.Core.Junction.IJunction<Inner, LanguageExt.Unit> { }
+    public class ConsumeInnerJunction : Trax.Core.Junction.IJunction<Inner, Trax.Core.Functional.Unit> { }
 
-    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, Trax.Core.Functional.Unit>
     {
         public void Run(string input)
         {
@@ -719,9 +719,9 @@ namespace TestApp
     public class Order { }
 
     public class ProducePairJunction : Trax.Core.Junction.IJunction<string, (User, Order)> { }
-    public class ConsumeUserJunction : Trax.Core.Junction.IJunction<User, LanguageExt.Unit> { }
+    public class ConsumeUserJunction : Trax.Core.Junction.IJunction<User, Trax.Core.Functional.Unit> { }
 
-    public class TestTrain : Trax.Core.Train.Train<string, LanguageExt.Unit>
+    public class TestTrain : Trax.Core.Train.Train<string, Trax.Core.Functional.Unit>
     {
         public void Run(string input)
         {

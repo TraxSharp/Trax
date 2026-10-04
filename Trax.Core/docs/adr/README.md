@@ -37,7 +37,7 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 
 | Area | ADRs |
 | --- | --- |
-| `platform` | [0001](./0001-chain-composition-errors-are-compile-time.md), [0002](./0002-a-shipped-seam-stays-public-and-hidden.md), [0003](./0003-plain-train-keeps-an-overridable-run.md) |
+| `platform` | [0001](./0001-chain-composition-errors-are-compile-time.md), [0002](./0002-a-shipped-seam-stays-public-and-hidden.md), [0003](./0003-plain-train-keeps-an-overridable-run.md), [0004](./0004-a-recorded-answer-replays-only-into-the-same-state.md) |
 | `packaging` | [0002](./0002-a-shipped-seam-stays-public-and-hidden.md) |
 
 ## All of them
@@ -47,3 +47,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0001](./0001-chain-composition-errors-are-compile-time.md) | A mis-composed chain does not compile | platform |
 | [0002](./0002-a-shipped-seam-stays-public-and-hidden.md) | A shipped seam stays public, and is hidden rather than narrowed | platform, packaging |
 | [0003](./0003-plain-train-keeps-an-overridable-run.md) | Plain Train stays a consumer base, and its Run stays overridable | platform |
+| [0004](./0004-a-recorded-answer-replays-only-into-the-same-state.md) | A recorded answer replays only into the same state | platform |

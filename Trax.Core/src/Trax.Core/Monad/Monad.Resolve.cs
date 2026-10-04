@@ -1,6 +1,6 @@
-using LanguageExt;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Core.Utils;
 
 namespace Trax.Core.Monad;
@@ -46,7 +46,7 @@ public partial class Monad<TInput, TReturn>
             Recorder.Record(ChainStepKind.Resolve, null, null, typeof(TReturn));
 
             // A recorded chain produces no value. The Left is a sentinel the reader discards;
-            // returning a default Right would hand LanguageExt a null for a reference TReturn.
+            // returning a default Right would put a null on the right track for a reference TReturn.
             return new ChainRecordedException();
         }
 

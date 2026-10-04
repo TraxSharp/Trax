@@ -55,10 +55,13 @@ namespace Trax.Core.Decisions
         public string Fingerprint { get; init; }
         public int Occurrence { get; init; }
         public Trax.Core.Decisions.Question Question { get; init; }
+        public System.Type? QuestionType { get; init; }
         public string? ReplayRefused { get; init; }
         public bool Replayed { get; init; }
         public string RunId { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Decisions.ShadowAnswer> Shadows { get; init; }
+        public string? StateHash { get; init; }
+        public System.Type? StateType { get; init; }
         public string Train { get; init; }
     }
     public sealed class DecisionRefused : System.IEquatable<Trax.Core.Decisions.DecisionRefused>
@@ -69,6 +72,7 @@ namespace Trax.Core.Decisions
         public string Fingerprint { get; init; }
         public int Occurrence { get; init; }
         public Trax.Core.Decisions.Question Question { get; init; }
+        public System.Type? QuestionType { get; init; }
         public string Reason { get; init; }
         public string RunId { get; init; }
         public string Train { get; init; }
@@ -152,6 +156,7 @@ namespace Trax.Core.Decisions
         public RecordedAnswer(Trax.Core.Decisions.Answer Answer, string Fingerprint) { }
         public Trax.Core.Decisions.Answer Answer { get; init; }
         public string Fingerprint { get; init; }
+        public string? StateHash { get; init; }
     }
     public sealed class RuleDecider : Trax.Core.Decisions.IDecider
     {
@@ -216,6 +221,10 @@ namespace Trax.Core.Decisions
         public Trax.Core.Decisions.Answer? Answer { get; init; }
         public System.Type Decider { get; init; }
         public string? Error { get; init; }
+    }
+    public sealed class StateHashKey
+    {
+        public StateHashKey(byte[] key) { }
     }
     public sealed class TrackRouted : System.IEquatable<Trax.Core.Decisions.TrackRouted>
     {
@@ -317,19 +326,64 @@ namespace Trax.Core.Extensions
         public static void AssertLoaded<T>([System.Diagnostics.CodeAnalysis.NotNull] this T? value, [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? valueExpr = null) { }
     }
 }
+namespace Trax.Core.Functional
+{
+    public enum EitherStatus : byte
+    {
+        IsBottom = 0,
+        IsLeft = 1,
+        IsRight = 2,
+    }
+    public readonly struct Either<TLeft, TRight> : System.IEquatable<Trax.Core.Functional.Either<TLeft, TRight>>
+    {
+        public bool IsBottom { get; }
+        public bool IsLeft { get; }
+        public bool IsRight { get; }
+        public Trax.Core.Functional.EitherStatus State { get; }
+        public bool Equals(Trax.Core.Functional.Either<TLeft, TRight> other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public Trax.Core.Functional.Unit IfLeft(System.Action<TLeft> action) { }
+        public Trax.Core.Functional.Unit IfRight(System.Action<TRight> action) { }
+        public void Match(System.Action<TRight> Right, System.Action<TLeft> Left, System.Action? Bottom = null) { }
+        public TResult Match<TResult>(System.Func<TRight, TResult> Right, System.Func<TLeft, TResult> Left, System.Func<TResult>? Bottom = null) { }
+        public Trax.Core.Functional.Either<TRight, TLeft> Swap() { }
+        public override string ToString() { }
+        public TRight ValueUnsafe() { }
+        public static Trax.Core.Functional.Either<TLeft, TRight> Left(TLeft value) { }
+        public static Trax.Core.Functional.Either<TLeft, TRight> Right(TRight value) { }
+        public static TRight op_Explicit(Trax.Core.Functional.Either<TLeft, TRight> either) { }
+        public static TLeft op_Explicit(Trax.Core.Functional.Either<TLeft, TRight> either) { }
+        public static Trax.Core.Functional.Either<TLeft, TRight> op_Implicit(TLeft value) { }
+        public static Trax.Core.Functional.Either<TLeft, TRight> op_Implicit(TRight value) { }
+        public static bool operator !=(Trax.Core.Functional.Either<TLeft, TRight> a, Trax.Core.Functional.Either<TLeft, TRight> b) { }
+        public static bool operator ==(Trax.Core.Functional.Either<TLeft, TRight> a, Trax.Core.Functional.Either<TLeft, TRight> b) { }
+    }
+    public readonly struct Unit : System.IComparable<Trax.Core.Functional.Unit>, System.IEquatable<Trax.Core.Functional.Unit>
+    {
+        public static readonly Trax.Core.Functional.Unit Default;
+        public int CompareTo(Trax.Core.Functional.Unit other) { }
+        public bool Equals(Trax.Core.Functional.Unit other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public override string ToString() { }
+        public static bool operator !=(Trax.Core.Functional.Unit a, Trax.Core.Functional.Unit b) { }
+        public static bool operator ==(Trax.Core.Functional.Unit a, Trax.Core.Functional.Unit b) { }
+    }
+}
 namespace Trax.Core.Junction
 {
     public interface IJunction<TIn, TOut>
     {
-        System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train);
+        System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train);
         System.Threading.Tasks.Task<TOut> Run(TIn input);
     }
     public abstract class Junction<TIn, TOut> : Trax.Core.Junction.IJunction<TIn, TOut>
     {
         protected Junction() { }
         public System.Threading.CancellationToken CancellationToken { get; protected set; }
-        public LanguageExt.Either<System.Exception, TOut> Result { get; }
-        public virtual System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
+        public Trax.Core.Functional.Either<System.Exception, TOut> Result { get; }
+        public virtual System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
         public abstract System.Threading.Tasks.Task<TOut> Run(TIn input);
     }
 }
@@ -398,9 +452,9 @@ namespace Trax.Core.Monad
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance)
             where TJunction :  class { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
-            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit>, new () { }
+            where TJunction : Trax.Core.Junction.IJunction<TIn, Trax.Core.Functional.Unit>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
-            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit> { }
+            where TJunction : Trax.Core.Junction.IJunction<TIn, Trax.Core.Functional.Unit> { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
@@ -412,8 +466,8 @@ namespace Trax.Core.Monad
         public Trax.Core.Train.MonadTask<TInput, TReturn> Gate<TState, TQuestion>(System.Func<Trax.Core.Decisions.GateTracks<TInput, TReturn>, Trax.Core.Decisions.GateTracks<TInput, TReturn>> gate, string? asking = null) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> IChain<TJunction>()
             where TJunction :  class { }
-        public LanguageExt.Either<System.Exception, TReturn> Resolve() { }
-        public LanguageExt.Either<System.Exception, TReturn> Resolve(LanguageExt.Either<System.Exception, TReturn> returnType) { }
+        public Trax.Core.Functional.Either<System.Exception, TReturn> Resolve() { }
+        public Trax.Core.Functional.Either<System.Exception, TReturn> Resolve(Trax.Core.Functional.Either<System.Exception, TReturn> returnType) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale)
             where TLevel :  struct, System.Enum { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TState, TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale, string? asking = null)
@@ -452,9 +506,9 @@ namespace Trax.Core.Train
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
             where TJunction :  class { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
-            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit>, new () { }
+            where TJunction : Trax.Core.Junction.IJunction<TIn, Trax.Core.Functional.Unit>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
-            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit> { }
+            where TJunction : Trax.Core.Junction.IJunction<TIn, Trax.Core.Functional.Unit> { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
@@ -468,8 +522,8 @@ namespace Trax.Core.Train
         public System.Runtime.CompilerServices.TaskAwaiter<Trax.Core.Monad.Monad<TInput, TReturn>> GetAwaiter() { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> IChain<TJunction>()
             where TJunction :  class { }
-        public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> Resolve() { }
-        public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> Resolve(LanguageExt.Either<System.Exception, TReturn> returnType) { }
+        public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Resolve() { }
+        public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Resolve(Trax.Core.Functional.Either<System.Exception, TReturn> returnType) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale)
             where TLevel :  struct, System.Enum { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TState, TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale, string? asking = null)
@@ -503,9 +557,9 @@ namespace Trax.Core.Train
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction>(TJunction instance)
             where TJunction :  class { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
-            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit>, new () { }
+            where TJunction : Trax.Core.Junction.IJunction<TIn, Trax.Core.Functional.Unit>, new () { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
-            where TJunction : Trax.Core.Junction.IJunction<TIn, LanguageExt.Unit> { }
+            where TJunction : Trax.Core.Junction.IJunction<TIn, Trax.Core.Functional.Unit> { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>()
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
@@ -518,11 +572,11 @@ namespace Trax.Core.Train
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Gate<TState, TQuestion>(System.Func<Trax.Core.Decisions.GateTracks<TInput, TReturn>, Trax.Core.Decisions.GateTracks<TInput, TReturn>> gate, string? asking = null) { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> IChain<TJunction>()
             where TJunction :  class { }
-        protected virtual System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> Junctions() { }
+        protected virtual System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Junctions() { }
         protected virtual Trax.Core.Monad.Monad<TInput, TReturn> NewMonad() { }
-        protected LanguageExt.Either<System.Exception, TReturn> Resolve() { }
+        protected Trax.Core.Functional.Either<System.Exception, TReturn> Resolve() { }
         public virtual System.Threading.Tasks.Task<TReturn> Run(TInput input, System.Threading.CancellationToken cancellationToken = default) { }
-        public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TReturn>> RunEither(TInput input) { }
+        public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> RunEither(TInput input) { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale)
             where TLevel :  struct, System.Enum { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TState, TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale, string? asking = null)

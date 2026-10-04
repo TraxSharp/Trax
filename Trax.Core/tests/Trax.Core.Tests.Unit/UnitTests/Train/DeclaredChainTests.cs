@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;
@@ -274,15 +274,15 @@ public class DeclaredChainTests : TestSetup
                 ChainStepKind.Chain,
                 typeof(StringToUnit),
                 typeof(string),
-                typeof(LanguageExt.Unit)
+                typeof(Trax.Core.Functional.Unit)
             ),
             new ChainStep(
                 ChainStepKind.Chain,
                 typeof(StringToUnit),
                 typeof(string),
-                typeof(LanguageExt.Unit)
+                typeof(Trax.Core.Functional.Unit)
             ),
-            new ChainStep(ChainStepKind.Resolve, null, null, typeof(LanguageExt.Unit)),
+            new ChainStep(ChainStepKind.Resolve, null, null, typeof(Trax.Core.Functional.Unit)),
         };
 
         new UnitInstanceFirstTrain().DeclaredChain().Steps.Should().Equal(expected);
@@ -497,10 +497,10 @@ public class DeclaredChainTests : TestSetup
             Chain<NotAJunction>().Chain<StringLength>().Resolve();
     }
 
-    private class StringToUnit : Junction<string, LanguageExt.Unit>
+    private class StringToUnit : Junction<string, Trax.Core.Functional.Unit>
     {
-        public override Task<LanguageExt.Unit> Run(string input) =>
-            Task.FromResult(LanguageExt.Unit.Default);
+        public override Task<Trax.Core.Functional.Unit> Run(string input) =>
+            Task.FromResult(Trax.Core.Functional.Unit.Default);
     }
 
     private class InstanceTrain : Train<string, int>
@@ -509,15 +509,15 @@ public class DeclaredChainTests : TestSetup
             ShortCircuit(new CountingJunction()).Chain(new CountingJunction()).Resolve();
     }
 
-    private class UnitInstanceFirstTrain : Train<string, LanguageExt.Unit>
+    private class UnitInstanceFirstTrain : Train<string, Trax.Core.Functional.Unit>
     {
-        protected override Task<Either<Exception, LanguageExt.Unit>> Junctions() =>
+        protected override Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             Chain<StringToUnit, string>(new StringToUnit()).Chain<StringToUnit, string>().Resolve();
     }
 
-    private class UnitParameterlessFirstTrain : Train<string, LanguageExt.Unit>
+    private class UnitParameterlessFirstTrain : Train<string, Trax.Core.Functional.Unit>
     {
-        protected override Task<Either<Exception, LanguageExt.Unit>> Junctions() =>
+        protected override Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             Chain<StringToUnit, string>().Chain<StringToUnit, string>(new StringToUnit()).Resolve();
     }
 

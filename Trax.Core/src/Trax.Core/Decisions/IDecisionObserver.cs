@@ -74,7 +74,20 @@ public sealed record DecisionRefused(
     Answer? Answer,
     Type Decider,
     string Reason
-);
+)
+{
+    /// <summary>
+    /// The type the question was asked about: the enum a choice or score is between, or the marker
+    /// type a yes or no question is about. Its <see cref="Question.Key"/> is derived from it (see
+    /// <see cref="QuestionKey.For(Type)"/>). Null only on a record built outside a run.
+    /// </summary>
+    /// <remarks>
+    /// Given so a host can treat questions by type rather than by key, for instance to keep
+    /// answers about a sensitive type out of a journal, matching it with inheritance
+    /// (<see cref="Type.IsAssignableTo(Type)"/>) where a key would only match one name.
+    /// </remarks>
+    public Type? QuestionType { get; init; }
+}
 
 /// <summary>
 /// One answered question.
@@ -101,7 +114,12 @@ public sealed record DecisionRefused(
 /// </param>
 /// <param name="ReplayRefused">
 /// Why an answer recorded for this question by an earlier run was not replayed, so the decider
-/// was asked afresh, or null when there was none to refuse.
+/// was asked afresh, or null when there was none to refuse. It says which check refused it: an
+/// answer given to a different asking of the question, one that no longer fits the question, or
+/// one that cannot be shown to be about the same state (see <see cref="StateHash"/>): given about
+/// a different state, recorded without a hash, or recorded with or without a state hash key when
+/// this run hashes the other way or could not resolve its key. It says what does not fit and
+/// never quotes the recorded answer.
 /// </param>
 public sealed record DecisionMade(
     string Train,
@@ -114,7 +132,65 @@ public sealed record DecisionMade(
     bool Replayed,
     IReadOnlyList<ShadowAnswer> Shadows,
     string? ReplayRefused = null
-);
+)
+{
+    /// <summary>
+    /// The hash of the state the question was asked about, taken before the decider was asked:
+    /// <c>k1:</c> and the lower-case hex of an HMAC-SHA256 under the <see cref="StateHashKey"/> the
+    /// train's container supplies, or <c>s1:</c> and the lower-case hex of a SHA-256 when it
+    /// supplies none. It covers every instance field of the state's runtime type, public or
+    /// not (so auto-properties, tuple items, record members and a derived type's members held where
+    /// a base type is declared all count), and every value they hold, recursively, because an
+    /// in-process decider can read all of them. A framework collection counts as its elements and
+    /// its comparers, and a wrapper of one (a read-only wrapper, a <c>Collection&lt;T&gt;</c>, a
+    /// view of a dictionary's keys) as what it wraps. Null when the state cannot be read the same
+    /// way every time: it holds a reference cycle, a delegate, a pointer or handle, a type or
+    /// member, a stream, task or thread, a culture other than the framework's shared instance of
+    /// it, a non-generic hashtable or sorted list, a blocking collection, a wrapper made by
+    /// <c>ArrayList</c>, a collection that enumerates by its own code, a field whose read throws,
+    /// or is nested deeper than 64 or larger than the hash allows (1,000,000 values or 16 MiB of
+    /// encoding). Null too when the container's key cannot be resolved.
+    /// </summary>
+    /// <remarks>
+    /// A host that replays stores it with the answer and returns it in
+    /// <see cref="RecordedAnswer.StateHash"/>. An answer is replayed only into an asking whose
+    /// state hashes exactly the same, so a recorded answer replays only into the same state. A
+    /// keyed and an unkeyed hash never match.
+    ///
+    /// <para>It covers the state's value only. What a decider reads from elsewhere, such as a
+    /// customer it looks up by an id the state holds, is not in it, so a change there counts only
+    /// when the state carries the value itself.</para>
+    ///
+    /// <para>Only the hash leaves the run, never the state. The hash covers values a host may mask
+    /// or withhold elsewhere, so a host that records decisions should register a
+    /// <see cref="StateHashKey"/>, the same in every process that may repeat a run.</para>
+    /// </remarks>
+    public string? StateHash { get; init; }
+
+    /// <summary>
+    /// The type of the state the question was asked about, which <see cref="StateHash"/> was
+    /// taken of: the state's runtime type, or the type the step declared it as when the state was
+    /// null. Null only on a record built outside a run.
+    /// </summary>
+    /// <remarks>
+    /// Given so a host can treat a decision by what it was about, for instance to mask or keep out
+    /// of a journal what it records about a sensitive state type, matching with inheritance
+    /// (<see cref="Type.IsAssignableTo(Type)"/>).
+    /// </remarks>
+    public Type? StateType { get; init; }
+
+    /// <summary>
+    /// The type the question was asked about: the enum a choice or score is between, or the marker
+    /// type a yes or no question is about. Its <see cref="Question.Key"/> is derived from it (see
+    /// <see cref="QuestionKey.For(Type)"/>). Null only on a record built outside a run.
+    /// </summary>
+    /// <remarks>
+    /// Given so a host can treat questions by type rather than by key, for instance to keep
+    /// answers about a sensitive type out of a journal, matching it with inheritance
+    /// (<see cref="Type.IsAssignableTo(Type)"/>) where a key would only match one name.
+    /// </remarks>
+    public Type? QuestionType { get; init; }
+}
 
 /// <summary>
 /// A shadow decider's answer, which the run never acts on.
@@ -155,7 +231,8 @@ public sealed record TrackRouted(
 /// <remarks>
 /// Optional: found in Memory, then in the container. A host that requeues runs implements it from
 /// what it recorded through <see cref="IDecisionObserver"/>: the
-/// <see cref="DecisionMade.Answer"/> and <see cref="DecisionMade.Fingerprint"/>, keyed by train,
+/// <see cref="DecisionMade.Answer"/>, <see cref="DecisionMade.Fingerprint"/> and
+/// <see cref="DecisionMade.StateHash"/>, keyed by train,
 /// run, <see cref="Question.Key"/> and <see cref="DecisionMade.Occurrence"/>. It is asked once per
 /// question, on the run's path, before the decider, so a lookup should be quick.
 ///
@@ -163,8 +240,12 @@ public sealed record TrackRouted(
 /// question as it is asked now was given to a different asking (the question was reworded, its
 /// options or levels changed, or the chain changed so that another step now asks it first), and
 /// one that no longer fits the question (an option renamed or removed, a scale with fewer levels,
-/// a different kind of question) cannot repeat what the earlier run did. Neither is acted on: the
-/// decider is asked afresh, with the reason in <see cref="DecisionMade.ReplayRefused"/>. A recorded
+/// a different kind of question) cannot repeat what the earlier run did. Nor is one whose
+/// <see cref="RecordedAnswer.StateHash"/> differs from the state asked about now, is null, or
+/// cannot be compared because the state cannot be hashed: a recorded answer replays only into
+/// the same state. None of these is acted on: the decider is asked afresh, with the
+/// reason in <see cref="DecisionMade.ReplayRefused"/>. The check is made here, so every replay
+/// inherits it and an implementation only stores and returns the hash. A recorded
 /// choice of a member the step has no track for is replayed like any other, and takes the
 /// fallback track again, as it did the first time. Shadows are not asked a question whose answer
 /// is replayed.</para>
@@ -196,4 +277,12 @@ public interface IDecisionReplay
 /// <param name="Fingerprint">
 /// The <see cref="DecisionMade.Fingerprint"/> the answer was recorded with, exactly as given.
 /// </param>
-public sealed record RecordedAnswer(Answer Answer, string Fingerprint);
+public sealed record RecordedAnswer(Answer Answer, string Fingerprint)
+{
+    /// <summary>
+    /// The <see cref="DecisionMade.StateHash"/> the answer was recorded with, exactly as given.
+    /// An answer is replayed only when it equals the hash of the state asked about now, so one
+    /// left null, such as an answer recorded before states were hashed, is never replayed.
+    /// </summary>
+    public string? StateHash { get; init; }
+}

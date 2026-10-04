@@ -1,7 +1,7 @@
 namespace Trax.Core.Tests.Meta.Tests;
 
 /// <summary>
-/// FluentAssertions only, because the because argument is where a failure explains itself.
+/// AwesomeAssertions only, because the because argument is where a failure explains itself.
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0004-tests-assert-with-fluentassertions.md</c>.</para>
 /// </summary>
@@ -29,7 +29,7 @@ public class NoLegacyAssertTests
     };
 
     [Test]
-    public void TestSources_UseOnly_FluentAssertions()
+    public void TestSources_UseOnly_AwesomeAssertions()
     {
         var offenders = new List<string>();
 
@@ -52,7 +52,7 @@ public class NoLegacyAssertTests
         offenders
             .Should()
             .BeEmpty(
-                "Trax.Docs/reference/test-conventions.md > Assertions requires FluentAssertions exclusively. "
+                "Trax.Docs/reference/test-conventions.md > Assertions requires AwesomeAssertions exclusively. "
                     + "Replace classic NUnit asserts (Assert.That, Assert.AreEqual, Assert.IsTrue, ...) with "
                     + ".Should().Be(...), .Should().BeTrue(), etc. "
                     + "Assert.Pass / Assert.Fail / Assert.Ignore remain acceptable. Offenders:\n  "
@@ -70,11 +70,11 @@ public class NoLegacyAssertTests
         LegacyPatterns
             .Where(p => p.Pattern.IsMatch(statement))
             .Should()
-            .NotBeEmpty("a classic NUnit assertion is not FluentAssertions");
+            .NotBeEmpty("a classic NUnit assertion is not AwesomeAssertions");
 
     [TestCase("x.Should().Be(1);")]
     [TestCase("Assert.Ignore(\"not reachable\");")]
     [TestCase("Assert.Fail(\"unreachable\");")]
-    public void Patterns_LeaveFluentAssertionsAlone(string statement) =>
+    public void Patterns_LeaveAwesomeAssertionsAlone(string statement) =>
         LegacyPatterns.Where(p => p.Pattern.IsMatch(statement)).Should().BeEmpty();
 }

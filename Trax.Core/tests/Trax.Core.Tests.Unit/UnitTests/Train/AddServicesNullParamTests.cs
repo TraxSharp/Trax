@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 

@@ -1,6 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;
@@ -198,11 +197,12 @@ public class ChainTests : TestSetup
         public override Task<bool> Run(string input) => throw new NotImplementedException();
     }
 
-    private interface ITestUnitJunction : IJunction<string, LanguageExt.Unit> { }
+    private interface ITestUnitJunction : IJunction<string, Trax.Core.Functional.Unit> { }
 
-    private class TestUnitJunction : Junction<string, LanguageExt.Unit>, ITestUnitJunction
+    private class TestUnitJunction : Junction<string, Trax.Core.Functional.Unit>, ITestUnitJunction
     {
-        public override async Task<LanguageExt.Unit> Run(string input) => LanguageExt.Unit.Default;
+        public override async Task<Trax.Core.Functional.Unit> Run(string input) =>
+            Trax.Core.Functional.Unit.Default;
     }
 
     private interface ITestJunction : IJunction<string, bool> { }

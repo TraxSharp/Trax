@@ -14,7 +14,7 @@ namespace Trax.Core.Analyzers.Analysis;
 /// </summary>
 internal sealed class MemorySimulator
 {
-    private const string UnitMetadataName = "LanguageExt.Unit";
+    private const string UnitMetadataName = "Trax.Core.Functional.Unit";
 
     private readonly HashSet<ITypeSymbol> _types;
 

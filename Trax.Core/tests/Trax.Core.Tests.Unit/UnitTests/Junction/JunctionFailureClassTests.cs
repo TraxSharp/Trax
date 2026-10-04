@@ -1,6 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
 using Trax.Core.Junction;
 using Trax.Core.Tests.Unit.Utils;

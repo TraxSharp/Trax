@@ -1,8 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;

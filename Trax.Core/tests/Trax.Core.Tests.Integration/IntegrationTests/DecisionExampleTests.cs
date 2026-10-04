@@ -1,5 +1,4 @@
-using FluentAssertions;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
@@ -502,7 +501,10 @@ public class DecisionExampleTests
             _recorded[(decision.Question.Key, decision.Occurrence)] = new RecordedAnswer(
                 decision.Answer,
                 decision.Fingerprint
-            );
+            )
+            {
+                StateHash = decision.StateHash,
+            };
             return Task.CompletedTask;
         }
 
@@ -521,7 +523,7 @@ public class DecisionExampleTests
     private sealed class TriageTicketObserved(IDecider decider, IDecisionObserver observer)
         : Trax.Core.Train.Train<SupportRequest, Resolution>
     {
-        protected override Task<LanguageExt.Either<Exception, Resolution>> Junctions() =>
+        protected override Task<Trax.Core.Functional.Either<Exception, Resolution>> Junctions() =>
             AddServices(decider, observer)
                 .Chain<ParseTicket>()
                 .Switch<Ticket, TicketTrack>(tracks =>
@@ -546,7 +548,10 @@ public class DecisionExampleTests
         IDecisionObserver observer
     ) : Trax.Core.Train.Train<Post, ModerationOutcome>
     {
-        protected override Task<LanguageExt.Either<Exception, ModerationOutcome>> Junctions() =>
+        protected override Task<Trax.Core.Functional.Either<
+            Exception,
+            ModerationOutcome
+        >> Junctions() =>
             AddServices(decider, candidate, observer)
                 .Decide<Post>(q =>
                     q.YesNo<ContainsThreat>()
@@ -572,7 +577,7 @@ public class DecisionExampleTests
         IDecisionObserver observer
     ) : Trax.Core.Train.Train<LoanApplication, LoanDecision>
     {
-        protected override Task<LanguageExt.Either<Exception, LoanDecision>> Junctions() =>
+        protected override Task<Trax.Core.Functional.Either<Exception, LoanDecision>> Junctions() =>
             AddServices(decider, replay, observer)
                 .Switch<LoanApplication, Underwriting>(tracks =>
                     tracks

@@ -1,6 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 
@@ -113,10 +112,10 @@ public class ShortCircuitTests : TestSetup
     }
 
     [Theory]
-    public async Task TestValidOptionJunctionTest()
+    public async Task TestValidStructInputJunctionTest()
     {
         // Arrange
-        var input = new Option<object>();
+        var input = new Maybe();
         var train = new TestTrainOption().Activate(input);
 
         // Act
@@ -154,15 +153,18 @@ public class ShortCircuitTests : TestSetup
             throw new NotImplementedException();
     }
 
-    public class TestOptionJunctionTest : Junction<Option<object>, string>
+    // A struct input whose default value is valid.
+    public readonly record struct Maybe(object? Value);
+
+    public class TestOptionJunctionTest : Junction<Maybe, string>
     {
-        public override async Task<string> Run(Option<object> input)
+        public override async Task<string> Run(Maybe input)
         {
             return "hello world";
         }
     }
 
-    private class TestTrainOption : Train<Option<object>, string>
+    private class TestTrainOption : Train<Maybe, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
             throw new NotImplementedException();

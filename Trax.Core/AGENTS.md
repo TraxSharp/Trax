@@ -25,7 +25,7 @@ if your work contradicts one, say so rather than silently overriding it.
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
 index lists them by repo. Twenty name `core`: executable guards, exact version pinning, the
-dependency direction, the three test conventions (FluentAssertions, no `[Ignore]`, no fixed
+dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the documentation lints, the public API baseline, test frameworks staying out of shipped
 libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration

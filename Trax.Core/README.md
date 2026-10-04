@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Core/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/core)
 
-> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
 > run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
 Trax.Core defines trains for .NET. A train is a typed pipeline of small steps (junctions): when a junction throws, the rest are skipped and the train returns the exception. It has no database and no DI container, and the other Trax layers build on it.
@@ -23,7 +23,7 @@ Trax.Core targets .NET 10.
 ## Example
 
 ```csharp
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 
@@ -94,5 +94,5 @@ privately as described in [SECURITY.md](https://github.com/TraxSharp/Trax.Core/b
 
 MIT. There is no commercial edition, and there will not be one.
 
-Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+Trax .NET is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
 other organization using the Trax name.

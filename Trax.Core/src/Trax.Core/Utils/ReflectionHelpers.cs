@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 
@@ -181,25 +181,27 @@ internal static class ReflectionHelpers
     }
 
     /// <summary>
-    /// Extracts the Right value from a dynamic Either object.
+    /// Reads the right value of an <see cref="Either{TLeft, TRight}"/> whose type arguments are known only at run
+    /// time. False when the object is not an Either or its value is not on the right side.
     /// </summary>
-    internal static Option<dynamic> GetRightFromDynamicEither(dynamic eitherObject)
+    internal static bool TryGetRightFromEither(object eitherObject, out object? rightValue)
     {
+        rightValue = null;
         var eitherType = eitherObject.GetType();
+        if (!eitherType.IsGenericType || eitherType.GetGenericTypeDefinition() != typeof(Either<,>))
+            return false;
 
-        if (eitherType.IsGenericType && eitherType.GetGenericTypeDefinition() == typeof(Either<,>))
-        {
-            var isRightProp = eitherType.GetProperty("IsRight");
-            var isRight = (bool)isRightProp.GetValue(eitherObject, null);
+        if (
+            !(bool)
+                eitherType
+                    .GetProperty(nameof(Either<object, object>.IsRight))!
+                    .GetValue(eitherObject)!
+        )
+            return false;
 
-            if (isRight)
-            {
-                var rightValueProp = eitherType.GetProperty("Case");
-                var rightValue = rightValueProp.GetValue(eitherObject, null);
-                return rightValue;
-            }
-        }
-
-        return Option<dynamic>.None;
+        rightValue = eitherType
+            .GetMethod(nameof(Either<object, object>.ValueUnsafe))!
+            .Invoke(eitherObject, null);
+        return true;
     }
 }

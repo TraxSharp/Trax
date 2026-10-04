@@ -1,9 +1,9 @@
 using System.ComponentModel;
+using System.Runtime.ExceptionServices;
 using System.Text.Json.Serialization;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Route;
@@ -75,7 +75,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         var resultEither = await RunEither(input);
 
         if (resultEither.IsLeft)
-            resultEither.Swap().ValueUnsafe().Rethrow();
+            ExceptionDispatchInfo.Capture(resultEither.Swap().ValueUnsafe()).Throw();
 
         return resultEither.Unwrap();
     }

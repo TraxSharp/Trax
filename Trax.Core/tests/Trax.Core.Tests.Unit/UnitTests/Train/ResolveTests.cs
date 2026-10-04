@@ -1,7 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 
@@ -47,7 +46,11 @@ public class ResolveTests : TestSetup
         // Arrange
         var intInput = 1;
         var stringInput = "string";
-        var train = new TestTupleTrain().Activate(LanguageExt.Unit.Default, intInput, stringInput);
+        var train = new TestTupleTrain().Activate(
+            Trax.Core.Functional.Unit.Default,
+            intInput,
+            stringInput
+        );
 
         // Act
         var result = train.Resolve();
@@ -134,7 +137,7 @@ public class ResolveTests : TestSetup
             throw new NotImplementedException();
     }
 
-    private class TestTupleTrain : Train<LanguageExt.Unit, (int, string)>
+    private class TestTupleTrain : Train<Trax.Core.Functional.Unit, (int, string)>
     {
         protected override Task<Either<Exception, (int, string)>> Junctions() =>
             throw new NotImplementedException();

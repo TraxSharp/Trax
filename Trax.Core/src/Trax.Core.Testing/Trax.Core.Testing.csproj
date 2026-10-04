@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Core.Testing</AssemblyName>
-    <PackageDescription>Reusable architecture-guard infrastructure and hygiene checkers for Trax codebases, with NUnit base fixtures: subclass a fixture, supply options, and run dotnet test (no test bodies to write). The underlying checkers return offender lists if you prefer your own framework.</PackageDescription>
+    <PackageDescription>Reusable architecture-guard infrastructure and hygiene checkers for Trax .NET codebases, with NUnit base fixtures: subclass a fixture, supply options, and run dotnet test (no test bodies to write). The underlying checkers return offender lists if you prefer your own framework.</PackageDescription>
     <PackageTags>trax;dotnet;testing;architecture;guards;conventions;nunit</PackageTags>
   </PropertyGroup>
 

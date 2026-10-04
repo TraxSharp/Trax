@@ -1,6 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 

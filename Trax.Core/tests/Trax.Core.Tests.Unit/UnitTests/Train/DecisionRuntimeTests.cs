@@ -1,9 +1,8 @@
-using FluentAssertions;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 using Trax.Core.Train;
@@ -14,7 +13,12 @@ namespace Trax.Core.Tests.Unit.UnitTests.Train;
 /// What a deciding run does around the decision itself: shadows that must never hold it up,
 /// replays that no longer fit, observers that fail, a cancelled run, and how a shadow's agreement
 /// is judged against the step's own routing.
+///
+/// <para>The replay tests pin core/0004 (docs/adr/0004-a-recorded-answer-replays-only-into-the-same-state.md):
+/// a recorded answer is replayed only into an asking whose state hashes exactly as the state it
+/// was given about did, and is asked afresh otherwise.</para>
 /// </summary>
+[Property("adr", "docs/adr/0004-a-recorded-answer-replays-only-into-the-same-state.md")]
 public class DecisionRuntimeTests : TestSetup
 {
     /// <summary>Long enough never to be reached by a run that is working, so it only names a hang.</summary>
@@ -44,6 +48,7 @@ public class DecisionRuntimeTests : TestSetup
 
         result.IsRight.Should().BeTrue();
         log.Should().Equal("Left");
+        await shadow.Entered.Task.WaitAsync(Hang);
         shadow.Token.IsCancellationRequested.Should().BeTrue("a shadow not waited for is stopped");
         observer
             .Decisions.Should()
@@ -74,6 +79,7 @@ public class DecisionRuntimeTests : TestSetup
             .WaitAsync(Hang);
 
         result.IsRight.Should().BeTrue();
+        await shadow.Entered.Task.WaitAsync(Hang);
         var handle = () => shadow.Token.WaitHandle;
         handle
             .Should()
@@ -588,6 +594,735 @@ public class DecisionRuntimeTests : TestSetup
 
     #endregion
 
+    #region Replays about another state
+
+    [TestCaseSource(nameof(EveryKindOfAsking))]
+    public async Task Replay_OfTheSameState_IsReplayedWithoutAskingTheDecider(
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain,
+        string key,
+        ScriptedDecider recording,
+        ScriptedDecider live
+    )
+    {
+        var journal = await Recorded(chain, new Services(), recording, input: "20");
+        var observer = new RecordingObserver();
+
+        var result = await Run(
+            chain,
+            new Services()
+                .With<IDecider>(live)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer),
+            input: "20"
+        );
+
+        result.IsRight.Should().BeTrue();
+        live.Requests.Should()
+            .BeEmpty(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: the state is the one the recorded answer was given about"
+            );
+
+        var made = observer.Decisions.Single(d => d.Question.Key == key);
+        made.Replayed.Should().BeTrue();
+        made.ReplayRefused.Should().BeNull();
+        made.StateHash.Should().Be(journal.StateHash(key));
+    }
+
+    [TestCaseSource(nameof(EveryKindOfAsking))]
+    public async Task Replay_OfADifferentState_IsAskedAfreshAndSaysWhy(
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain,
+        string key,
+        ScriptedDecider recording,
+        ScriptedDecider live
+    )
+    {
+        // The answer was given about an amount of 20; the retry is asked about 2000.
+        var journal = await Recorded(chain, new Services(), recording, input: "20");
+        var observer = new RecordingObserver();
+
+        var result = await Run(
+            chain,
+            new Services()
+                .With<IDecider>(live)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer),
+            input: "2000"
+        );
+
+        result.IsRight.Should().BeTrue();
+        live.Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: an answer about 20 is not an answer about 2000"
+            )
+            .Which.State.Should()
+            .Be("2000");
+
+        var made = observer.Decisions.Single(d => d.Question.Key == key);
+        made.Replayed.Should().BeFalse();
+        made.Decider.Should().Be(typeof(ScriptedDecider));
+        made.ReplayRefused.Should().Contain("was given about a different state");
+        made.StateHash.Should().NotBeNull().And.NotBe(journal.StateHash(key));
+    }
+
+    private static IEnumerable<TestCaseData> EveryKindOfAsking()
+    {
+        yield return new TestCaseData(
+            (Func<MonadTask<string, bool>, MonadTask<string, bool>>)(
+                t => t.Decide<string>(q => q.Choice<Lane>()).Switch<Lane>(s => Lanes(s, []))
+            ),
+            QuestionKey.For<Lane>(),
+            new ScriptedDecider().Choose(Lane.Right),
+            new ScriptedDecider().Choose(Lane.Left)
+        ).SetArgDisplayNames("Decide");
+        yield return new TestCaseData(
+            (Func<MonadTask<string, bool>, MonadTask<string, bool>>)(
+                t => t.Switch<string, Lane>(s => Lanes(s, []))
+            ),
+            QuestionKey.For<Lane>(),
+            new ScriptedDecider().Choose(Lane.Right),
+            new ScriptedDecider().Choose(Lane.Left)
+        ).SetArgDisplayNames("Switch");
+        yield return new TestCaseData(
+            (Func<MonadTask<string, bool>, MonadTask<string, bool>>)(
+                t =>
+                    t.Gate<string, Flag>(g =>
+                            g.Yes(y => y, atLeast: 0.7).No(n => n, below: 0.3).Unsure(u => u)
+                        )
+                        .Chain<StringToBool>()
+            ),
+            QuestionKey.For<Flag>(),
+            new ScriptedDecider().YesNo<Flag>(0.9),
+            new ScriptedDecider().YesNo<Flag>(0.1)
+        ).SetArgDisplayNames("Gate");
+        yield return new TestCaseData(
+            (Func<MonadTask<string, bool>, MonadTask<string, bool>>)(
+                t => t.Scale<string, Level>(s => s.AtLeast(Level.Low, l => l)).Chain<StringToBool>()
+            ),
+            QuestionKey.For<Level>(),
+            new ScriptedDecider().Score<Level>(2),
+            new ScriptedDecider().Score<Level>(0)
+        ).SetArgDisplayNames("Scale");
+    }
+
+    [Test]
+    public async Task Replay_InALoopWhoseItemsComeBackInAnotherOrder_AsksAfreshForEachItemThatMoved()
+    {
+        // The earlier run asked about 'a' then 'b'. The retry meets them as 'b' then 'a', so the
+        // answer recorded for each occurrence was given about the other item.
+        var journal = await Recorded(
+            TwoItems("a", "b", []),
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+        var log = new List<string>();
+
+        var result = await Run(
+            TwoItems("b", "a", log),
+            new Services()
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        result.IsRight.Should().BeTrue();
+        log.Should().Equal("Left", "Left");
+        decider
+            .Requests.Select(r => r.State)
+            .Should()
+            .Equal(
+                ["b", "a"],
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: each occurrence's answer was about the other item"
+            );
+        observer
+            .Decisions.Should()
+            .OnlyContain(d =>
+                !d.Replayed && d.ReplayRefused!.Contains("was given about a different state")
+            );
+    }
+
+    [Test]
+    public async Task Replay_InALoop_ReplaysTheItemsThatMatchAndAsksAboutTheOnesThatDoNot()
+    {
+        var journal = await Recorded(
+            TwoItems("a", "b", []),
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+        var log = new List<string>();
+
+        var result = await Run(
+            TwoItems("a", "c", log),
+            new Services()
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        result.IsRight.Should().BeTrue();
+        log.Should().Equal("Right", "Left");
+        decider
+            .Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: only the item whose state changed is asked"
+            )
+            .Which.State.Should()
+            .Be("c");
+        observer
+            .Decisions.Select(d => (d.Occurrence, d.Replayed))
+            .Should()
+            .Equal((0, true), (1, false));
+    }
+
+    [Test]
+    public async Task Replay_OfAnAnswerRecordedWithoutAStateHash_IsAskedAfresh()
+    {
+        var journal = await Recorded(
+            t => t.Switch<string, Lane>(s => Lanes(s, [])),
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+        var log = new List<string>();
+
+        var result = await Run(
+            t => t.Switch<string, Lane>(s => Lanes(s, log)),
+            new Services()
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal.HoldStateHash(QuestionKey.For<Lane>(), null))
+                .With<IDecisionObserver>(observer)
+        );
+
+        result.IsRight.Should().BeTrue();
+        log.Should().Equal("Left");
+        decider
+            .Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: an answer recorded without a state hash is not replayed"
+            );
+        observer
+            .Decisions.Single()
+            .Should()
+            .Match<DecisionMade>(d =>
+                !d.Replayed && d.ReplayRefused!.Contains("recorded without a hash of the state")
+            );
+    }
+
+    [Test]
+    public async Task Replay_OfAStateThatCannotBeHashed_IsAskedAfreshWithoutFailing()
+    {
+        Func<List<string>, Func<MonadTask<string, bool>, MonadTask<string, bool>>> chain = log =>
+            t =>
+                t.Chain(new MakeParcel(new CallbackParcel()))
+                    .Decide<IParcel>(q => q.Choice<Lane>())
+                    .Switch<Lane>(s => Lanes(s, log));
+        var journal = await Recorded(
+            chain([]),
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        journal
+            .StateHash(QuestionKey.For<Lane>())
+            .Should()
+            .BeNull("a state holding a delegate has no hash");
+
+        // Even a recorded hash, which a state that cannot be hashed never has, is not trusted
+        // against a state that cannot be hashed to compare it with.
+        journal.HoldStateHash(QuestionKey.For<Lane>(), new string('0', 64));
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+        var log = new List<string>();
+
+        var result = await Run(
+            chain(log),
+            new Services()
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        result
+            .IsRight.Should()
+            .BeTrue(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: a state that cannot be hashed never fails the run"
+            );
+        log.Should().Equal("Left");
+        decider
+            .Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: a state that cannot be hashed cannot be shown to match"
+            );
+
+        var made = observer.Decisions.Single();
+        made.Replayed.Should().BeFalse();
+        made.StateHash.Should().BeNull();
+        made.ReplayRefused.Should().Contain("the state cannot be hashed");
+    }
+
+    [Test]
+    public async Task StateHash_IsAHashOfTheState_NotTheState()
+    {
+        var observer = new RecordingObserver();
+
+        await Run(
+            t => t.Switch<string, Lane>(s => Lanes(s, [])),
+            new Services()
+                .With<IDecider>(new ScriptedDecider().Choose(Lane.Left))
+                .With<IDecisionObserver>(observer),
+            input: "refund 2000"
+        );
+
+        observer
+            .Decisions.Single()
+            .StateHash.Should()
+            .MatchRegex("^s1:[0-9a-f]{64}$")
+            .And.NotContain("refund");
+    }
+
+    [Test]
+    public async Task StateType_IsTheRuntimeTypeOfTheStateAskedAbout()
+    {
+        var observer = new RecordingObserver();
+
+        await Run(
+            t =>
+                t.Chain(new MakeParcel(new WrappingParcel()))
+                    .Decide<IParcel>(q => q.Choice<Lane>())
+                    .Switch<Lane>(s => Lanes(s, [])),
+            new Services()
+                .With<IDecider>(new ScriptedDecider().Choose(Lane.Left))
+                .With<IDecisionObserver>(observer)
+        );
+
+        observer.Decisions.Single().StateType.Should().Be(typeof(WrappingParcel));
+    }
+
+    [Test]
+    public async Task StateHash_UnderAKeyFromTheContainer_IsKeyedAndReplays()
+    {
+        var key = new StateHashKey([.. Enumerable.Range(0, 32).Select(i => (byte)i)]);
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain = t =>
+            t.Switch<string, Lane>(s => Lanes(s, []));
+        var journal = await Recorded(
+            chain,
+            new Services().With(key),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        journal
+            .StateHash(QuestionKey.For<Lane>())
+            .Should()
+            .MatchRegex(
+                "^k1:[0-9a-f]{64}$",
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: a host that supplies a key gets a keyed hash"
+            );
+
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        await Run(
+            chain,
+            new Services()
+                .With(key)
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        decider.Requests.Should().BeEmpty("the same state under the same key replays");
+        observer.Decisions.Single().Replayed.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Replay_OfAnAnswerRecordedUnderAKey_IntoARunWithoutOne_IsAskedAfresh()
+    {
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain = t =>
+            t.Switch<string, Lane>(s => Lanes(s, []));
+        var journal = await Recorded(
+            chain,
+            new Services().With(new StateHashKey(new byte[32])),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        await Run(
+            chain,
+            new Services()
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        decider
+            .Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: a keyed and an unkeyed hash never match"
+            );
+        observer
+            .Decisions.Single()
+            .ReplayRefused.Should()
+            .Contain(
+                "was recorded under a state hash key and this run hashes the state without one",
+                "the reason names the key, not a change in the state"
+            );
+    }
+
+    /// <summary>
+    /// Recorded without a key, so a run that fell back to hashing without one when its key could
+    /// not be resolved would match the recording and replay it.
+    /// </summary>
+    [Test]
+    public async Task Replay_WhenTheStateHashKeyCannotBeResolved_IsAskedAfresh()
+    {
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain = t =>
+            t.Switch<string, Lane>(s => Lanes(s, []));
+        var journal = await Recorded(
+            chain,
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        var result = await Run(
+            chain,
+            new Services()
+                .Throwing<StateHashKey>(new InvalidOperationException("the vault is down"))
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        result.IsRight.Should().BeTrue("a key that cannot be resolved never fails the run");
+        decider
+            .Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: a state that was not "
+                    + "hashed under the host's key cannot be shown to match"
+            );
+        var made = observer.Decisions.Single();
+        made.Replayed.Should().BeFalse();
+        made.StateHash.Should().BeNull("the state is not hashed without the key the host meant");
+        made.ReplayRefused.Should().Contain("the state hash key could not be resolved");
+    }
+
+    [Test]
+    public async Task Replay_OfAnAnswerRecordedWithoutAKey_IntoARunWithOne_SaysSo()
+    {
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain = t =>
+            t.Switch<string, Lane>(s => Lanes(s, []));
+        var journal = await Recorded(
+            chain,
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        await Run(
+            chain,
+            new Services()
+                .With(new StateHashKey(new byte[32]))
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        decider.Requests.Should().ContainSingle();
+        observer
+            .Decisions.Single()
+            .ReplayRefused.Should()
+            .Contain(
+                "was recorded without a state hash key and this run hashes the state under one"
+            );
+    }
+
+    [Test]
+    public async Task Replay_OfAnAnswerRecordedUnderAnotherKey_SaysTheKeyMayHaveChanged()
+    {
+        Func<MonadTask<string, bool>, MonadTask<string, bool>> chain = t =>
+            t.Switch<string, Lane>(s => Lanes(s, []));
+        var journal = await Recorded(
+            chain,
+            new Services().With(new StateHashKey(new byte[32])),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        await Run(
+            chain,
+            new Services()
+                .With(new StateHashKey([.. Enumerable.Repeat((byte)1, 32)]))
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        decider
+            .Requests.Should()
+            .ContainSingle(
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: a hash under another key never matches"
+            );
+        observer
+            .Decisions.Single()
+            .ReplayRefused.Should()
+            .Contain("was given about a different state")
+            .And.Contain("or the state hash key has changed since");
+    }
+
+    [Test]
+    public async Task Shadow_OnATupleState_IsHandedTheTuplesItems()
+    {
+        var shadow = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        var result = await Run(
+            t =>
+                t.Chain(new Makes<(Order, Customer)>((new Order(20), new Customer("ann"))))
+                    .Decide<(Order, Customer)>(q =>
+                        q.Choice<Lane>().Shadow<IShadow>().WaitForShadows(Hang)
+                    )
+                    .Switch<Lane>(s => Lanes(s, [])),
+            Shadowed(new ScriptedDecider().Choose(Lane.Left), shadow, observer)
+        );
+
+        result.IsRight.Should().BeTrue();
+        shadow
+            .Requests.Should()
+            .ContainSingle()
+            .Which.State.Should()
+            .Be((new Order(20), new Customer("ann")), "a shadow sees what the live decider sees");
+    }
+
+    [TestCaseSource(nameof(ShapesJsonWouldNotTellApart))]
+    public async Task Replay_OfAStateThatDiffersWhereJsonWouldNotSee_IsAskedAfresh(
+        Func<decimal, decimal, Task<(int Asked, DecisionMade Made)>> repeat
+    )
+    {
+        var (asked, made) = await repeat(20, 2000);
+
+        asked
+            .Should()
+            .Be(
+                1,
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: the decider can "
+                    + "read the amount, so an answer about 20 is not one about 2000"
+            );
+        made.Replayed.Should().BeFalse();
+        made.ReplayRefused.Should().Contain("was given about a different state");
+    }
+
+    [TestCaseSource(nameof(ShapesJsonWouldNotTellApart))]
+    public async Task Replay_OfTheSameValueInEachShape_IsReplayed(
+        Func<decimal, decimal, Task<(int Asked, DecisionMade Made)>> repeat
+    )
+    {
+        var (asked, made) = await repeat(20, 20);
+
+        asked
+            .Should()
+            .Be(
+                0,
+                "0004-a-recorded-answer-replays-only-into-the-same-state.md: an equal state "
+                    + "built again replays"
+            );
+        made.Replayed.Should().BeTrue();
+    }
+
+    private static IEnumerable<TestCaseData> ShapesJsonWouldNotTellApart()
+    {
+        yield return Shape(
+            "ATuple",
+            (a, b) =>
+                Repeat((new Order(a), new Customer("ann")), (new Order(b), new Customer("ann")))
+        );
+        yield return Shape(
+            "APublicField",
+            (a, b) => Repeat(new FieldOrder { Amount = a }, new FieldOrder { Amount = b })
+        );
+        yield return Shape(
+            "ADerivedTypeHeldAsItsAbstractBase",
+            (a, b) =>
+                Repeat(
+                    new Checkout { Payment = new Card { Amount = a } },
+                    new Checkout { Payment = new Card { Amount = b } }
+                )
+        );
+        yield return Shape(
+            "AJsonIgnoredProperty",
+            (a, b) => Repeat(new IgnoredOrder { Amount = a }, new IgnoredOrder { Amount = b })
+        );
+        yield return Shape(
+            "APrivateField",
+            (a, b) => Repeat(new PrivateOrder(a), new PrivateOrder(b))
+        );
+    }
+
+    private static TestCaseData Shape(
+        string name,
+        Func<decimal, decimal, Task<(int Asked, DecisionMade Made)>> repeat
+    ) => new TestCaseData(repeat).SetArgDisplayNames(name);
+
+    /// <summary>
+    /// Records a run that asks about <paramref name="first"/>, then repeats it about
+    /// <paramref name="second"/>, and says how many times the repeat asked its decider.
+    /// </summary>
+    private static async Task<(int Asked, DecisionMade Made)> Repeat<T>(T first, T second)
+    {
+        static Func<MonadTask<string, bool>, MonadTask<string, bool>> About(T state) =>
+            t => t.Chain(new Makes<T>(state)).Switch<T, Lane>(s => Lanes(s, []));
+
+        var journal = await Recorded(
+            About(first),
+            new Services(),
+            new ScriptedDecider().Choose(Lane.Right)
+        );
+        var decider = new ScriptedDecider().Choose(Lane.Left);
+        var observer = new RecordingObserver();
+
+        var result = await Run(
+            About(second),
+            new Services()
+                .With<IDecider>(decider)
+                .With<IDecisionReplay>(journal)
+                .With<IDecisionObserver>(observer)
+        );
+
+        result.IsRight.Should().BeTrue();
+        return (decider.Requests.Count, observer.Decisions.Single());
+    }
+
+    [Test]
+    public async Task Replay_OfAStateWithACycle_IsAskedAfreshWithoutFailing()
+    {
+        static Node Looped()
+        {
+            var node = new Node();
+            node.Next = node;
+            return node;
+        }
+
+        var (asked, made) = await Repeat(Looped(), Looped());
+
+        asked.Should().Be(1, "0004-a-recorded-answer-replays-only-into-the-same-state.md");
+        made.StateHash.Should().BeNull();
+        made.ReplayRefused.Should().Contain("recorded without a hash");
+    }
+
+    [Test]
+    public async Task QuestionType_IsTheTypeTheQuestionWasAskedAbout()
+    {
+        var observer = new RecordingObserver();
+
+        await Run(
+            t =>
+                t.Decide<string>(q => q.Choice<Lane>().YesNo<Flag>())
+                    .Switch<Lane>(s => Lanes(s, [])),
+            new Services()
+                .With<IDecider>(new ScriptedDecider().Choose(Lane.Left).YesNo<Flag>(0.9))
+                .With<IDecisionObserver>(observer)
+        );
+
+        observer.Decisions.Select(d => d.QuestionType).Should().Equal(typeof(Lane), typeof(Flag));
+    }
+
+    [Test]
+    public async Task QuestionType_IsOnARefusalToo()
+    {
+        var observer = new RecordingObserver();
+
+        await Run(
+            t => t.Switch<string, Lane>(s => Lanes(s, [])),
+            new Services().With<IDecider>(new ScriptedDecider()).With<IDecisionObserver>(observer)
+        );
+
+        observer.Refusals.Should().ContainSingle().Which.QuestionType.Should().Be(typeof(Lane));
+    }
+
+    public sealed record Order(decimal Amount);
+
+    public sealed record Customer(string Name);
+
+    public sealed class FieldOrder
+    {
+        public decimal Amount;
+    }
+
+    public abstract class Payment
+    {
+        public string Kind { get; set; } = "x";
+    }
+
+    public sealed class Card : Payment
+    {
+        public decimal Amount { get; set; }
+    }
+
+    public sealed class Checkout
+    {
+        public Payment Payment { get; set; } = null!;
+    }
+
+    public sealed class IgnoredOrder
+    {
+        [System.Text.Json.Serialization.JsonIgnore]
+        public decimal Amount { get; set; }
+    }
+
+    public sealed class PrivateOrder(decimal amount)
+    {
+        private readonly decimal _amount = amount;
+
+        public bool IsLarge() => _amount > 100;
+    }
+
+    public sealed class Node
+    {
+        public Node? Next { get; set; }
+    }
+
+    private sealed class Makes<T>(T value) : Junction<string, T>
+    {
+        public override Task<T> Run(string input) => Task.FromResult(value);
+    }
+
+    /// <summary>
+    /// Asks about the lane for <paramref name="first"/> and then for <paramref name="second"/>, as
+    /// a loop over two items does: the same question, at occurrences 0 and 1.
+    /// </summary>
+    private static Func<MonadTask<string, bool>, MonadTask<string, bool>> TwoItems(
+        string first,
+        string second,
+        List<string> log
+    ) =>
+        t =>
+            t.Chain(new Becomes(first))
+                .Switch<string, Lane>(s => LaneMarks(s, log))
+                .Chain(new Becomes(second))
+                .Switch<string, Lane>(s => LaneMarks(s, log))
+                .Chain<StringToBool>();
+
+    /// <summary>A Left and a Right track that each note that they ran and carry the state on.</summary>
+    private static Tracks<string, bool, Lane> LaneMarks(
+        Tracks<string, bool, Lane> tracks,
+        List<string> log
+    ) =>
+        tracks
+            .When(Lane.Left, l => l.Chain(new Mark(log, "Left")))
+            .When(Lane.Right, r => r.Chain(new Mark(log, "Right")));
+
+    private class Becomes(string value) : Junction<string, string>
+    {
+        public override Task<string> Run(string input) => Task.FromResult(value);
+    }
+
+    #endregion
+
     #region Replays that no longer fit
 
     [TestCaseSource(nameof(StaleReplays))]
@@ -619,13 +1354,16 @@ public class DecisionRuntimeTests : TestSetup
         made.Decider.Should().Be(typeof(ScriptedDecider));
         made.ReplayRefused.Should().Contain("no longer fits").And.Contain(why);
         made.ReplayRefused.Should().NotContain("the decider");
+        made.ReplayRefused.Should()
+            .NotContain("Middle", "the reason never quotes the recorded answer")
+            .And.NotContain("0.9", "the reason never quotes the recorded answer");
     }
 
     private static IEnumerable<TestCaseData> StaleReplays()
     {
         yield return new TestCaseData(
             new ChoiceAnswer("Middle"),
-            "'Middle', which is not one of its options"
+            "its recorded answer is not one of its options"
         ).SetName("Replay_AskedAfresh_AnOptionSinceRemoved");
         yield return new TestCaseData(new YesNoAnswer(0.9), "not a choice").SetName(
             "Replay_AskedAfresh_AnotherKindOfAnswer"
@@ -1225,8 +1963,9 @@ public class DecisionRuntimeTests : TestSetup
 
     private static Task<Either<Exception, bool>> Run(
         Func<MonadTask<string, bool>, MonadTask<string, bool>> chain,
-        Services services
-    ) => new DecidingTrain(chain, services).RunEither("x");
+        Services services,
+        string input = "x"
+    ) => new DecidingTrain(chain, services).RunEither(input);
 
     private static Services Shadowed(
         ScriptedDecider live,
@@ -1410,9 +2149,17 @@ public class DecisionRuntimeTests : TestSetup
     {
         public CancellationToken Token { get; private set; }
 
+        /// <summary>
+        /// Completes once the shadow has been asked, which happens on its own thread and may be
+        /// after the step has stopped waiting for it.
+        /// </summary>
+        public TaskCompletionSource Entered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct)
         {
             Token = ct;
+            Entered.TrySetResult();
             return new TaskCompletionSource<DecisionResult>().Task;
         }
     }
@@ -1566,11 +2313,14 @@ public class DecisionRuntimeTests : TestSetup
     private static async Task<Journal> Recorded(
         Func<MonadTask<string, bool>, MonadTask<string, bool>> chain,
         Services services,
-        IDecider decider
+        IDecider decider,
+        string input = "x"
     )
     {
         var journal = new Journal();
-        await Run(chain, services.With<IDecider>(decider).With<IDecisionObserver>(journal));
+        (await Run(chain, services.With<IDecider>(decider).With<IDecisionObserver>(journal), input))
+            .IsRight.Should()
+            .BeTrue("the run being recorded must succeed");
         return journal;
     }
 
@@ -1586,9 +2336,10 @@ public class DecisionRuntimeTests : TestSetup
                 .Chain<StringToBool>();
 
     /// <summary>
-    /// Records every answer with its fingerprint and replays it by key and occurrence, as a host's
-    /// journal does. <see cref="Hold"/> replaces a recorded answer, keeping the fingerprint, to
-    /// replay an answer of the test's choosing against the question as it was really asked.
+    /// Records every answer with its fingerprint and state hash and replays it by key and
+    /// occurrence, as a host's journal does. <see cref="Hold"/> replaces a recorded answer, keeping
+    /// the fingerprint and hash, to replay an answer of the test's choosing against the question as
+    /// it was really asked. <see cref="HoldStateHash"/> replaces the hash alone.
     /// </summary>
     private sealed class Journal : IDecisionObserver, IDecisionReplay
     {
@@ -1600,16 +2351,29 @@ public class DecisionRuntimeTests : TestSetup
         public Journal Hold(string key, Answer answer)
         {
             _held ??= [];
-            _held[(key, 0)] = new RecordedAnswer(answer, _recorded[(key, 0)].Fingerprint);
+            _held[(key, 0)] = _recorded[(key, 0)] with { Answer = answer };
             return this;
         }
+
+        public Journal HoldStateHash(string key, string? stateHash)
+        {
+            _held ??= new(_recorded);
+            _held[(key, 0)] = _recorded[(key, 0)] with { StateHash = stateHash };
+            return this;
+        }
+
+        public string? StateHash(string key, int occurrence = 0) =>
+            _recorded[(key, occurrence)].StateHash;
 
         public Task Decided(DecisionMade decision, CancellationToken cancellationToken)
         {
             _recorded[(decision.Question.Key, decision.Occurrence)] = new RecordedAnswer(
                 decision.Answer,
                 decision.Fingerprint
-            );
+            )
+            {
+                StateHash = decision.StateHash,
+            };
             return Task.CompletedTask;
         }
 

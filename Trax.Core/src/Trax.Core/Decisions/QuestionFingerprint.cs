@@ -10,7 +10,8 @@ namespace Trax.Core.Decisions;
 /// <remarks>
 /// It covers the step that asks, the type the step asks about, the kind of question, its key, its
 /// instructions, and every option or level with its description (or what a yes and a no mean).
-/// It never covers the state's value, which differs from run to run by design. Any change to what
+/// It never covers the state's value, which differs from run to run by design; a replay checks
+/// the value separately, against <see cref="DecisionMade.StateHash"/>. Any change to what
 /// it covers, such as a reworded question, an option added or removed, or another step asking the
 /// same question inserted ahead of it, gives a different fingerprint, and the recorded answer is
 /// not replayed.

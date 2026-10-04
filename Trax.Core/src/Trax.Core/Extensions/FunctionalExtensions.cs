@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using LanguageExt;
+using Trax.Core.Functional;
 
 namespace Trax.Core.Extensions;
 
@@ -30,10 +30,7 @@ public static class FunctionalExtensions
         where L : Exception
     {
         var result = await option;
-        if (result.IsRight)
-            return result.RightToSeq().Head();
-        else
-            throw result.LeftToSeq().Head;
+        return result.Unwrap();
     }
 
     /// <summary>
@@ -53,9 +50,9 @@ public static class FunctionalExtensions
         where L : Exception
     {
         if (option.IsRight)
-            return option.RightToSeq().Head();
+            return option.ValueUnsafe();
 
-        throw option.LeftToSeq().Head;
+        throw option.Swap().ValueUnsafe();
     }
 
     /// <summary>

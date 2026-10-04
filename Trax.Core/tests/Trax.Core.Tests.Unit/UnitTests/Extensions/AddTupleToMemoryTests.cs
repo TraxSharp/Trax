@@ -1,8 +1,8 @@
 using System.Runtime.CompilerServices;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Extensions;

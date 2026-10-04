@@ -1,5 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;

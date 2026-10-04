@@ -14,7 +14,7 @@ public sealed class TrainChainAnalyzer : DiagnosticAnalyzer
 {
     private const string MonadTypeName = "Monad";
     private const string MonadNamespace = "Trax.Core.Monad";
-    private const string UnitMetadataName = "LanguageExt.Unit";
+    private const string UnitMetadataName = "Trax.Core.Functional.Unit";
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(

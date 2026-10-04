@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Train;
 
 namespace Trax.Core.Monad;

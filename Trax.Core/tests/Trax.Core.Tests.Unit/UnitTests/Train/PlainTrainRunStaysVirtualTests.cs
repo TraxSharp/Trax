@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
 

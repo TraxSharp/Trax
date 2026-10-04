@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Extensions;
 using CoreLoggerExtensions = Trax.Core.Extensions.LoggerExtensions;

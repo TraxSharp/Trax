@@ -69,7 +69,9 @@ internal abstract class QuestionSpec
 
     /// <summary>
     /// Why an answer recorded by an earlier run cannot be replayed for this question as it is asked
-    /// now, or null when it can. It has to fit exactly as a fresh answer does.
+    /// now, or null when it can. It has to fit exactly as a fresh answer does. The reason says what
+    /// does not fit and never quotes the recorded answer, because it is logged and recorded, and
+    /// which questions are sensitive is the host's to say.
     /// </summary>
     public string? ReplayProblem(Answer answer)
     {
@@ -80,7 +82,7 @@ internal abstract class QuestionSpec
         }
         catch (InvalidAnswerException invalid)
         {
-            return invalid.Message;
+            return invalid.ReplayReason;
         }
     }
 
@@ -102,7 +104,8 @@ internal abstract class QuestionSpec
     {
         if (double.IsNaN(value) || value is < 0 or > 1)
             throw new InvalidAnswerException(
-                $"answered with {what} {Format(value)}, which is not between 0 and 1"
+                $"answered with {what} {Format(value)}, which is not between 0 and 1",
+                "its recorded answer gives a confidence or probability that is not between 0 and 1"
             );
     }
 
@@ -111,7 +114,15 @@ internal abstract class QuestionSpec
 }
 
 /// <summary>An answer that does not fit its question. The run fails rather than act on it.</summary>
-internal sealed class InvalidAnswerException(string message) : Exception(message);
+/// <param name="message">What is wrong, naming the answer, for a live answer.</param>
+/// <param name="replayReason">
+/// What is wrong without naming the answer, for one recorded by an earlier run.
+/// </param>
+internal sealed class InvalidAnswerException(string message, string replayReason)
+    : Exception(message)
+{
+    public string ReplayReason { get; } = replayReason;
+}
 
 /// <summary>Reads an enum's members, in order of their values, and the description each carries.</summary>
 internal static class EnumMembers<T>
@@ -196,14 +207,16 @@ internal sealed class ChoiceSpec<TTrack>(
     {
         if (answer is not ChoiceAnswer choice)
             throw new InvalidAnswerException(
-                $"answered '{Key}' with a {answer.GetType().Name}, not a choice"
+                $"answered '{Key}' with a {answer.GetType().Name}, not a choice",
+                "its recorded answer is not a choice"
             );
 
         // A name that is not a member cannot be represented, so it is refused. A member that was
         // not offered is kept: routing treats it as a choice it has no track for.
         if (!EnumMembers<TTrack>.TryParse(choice.Choice ?? "", out var chosen))
             throw new InvalidAnswerException(
-                $"answered '{Key}' with '{choice.Choice}', which is not one of its options"
+                $"answered '{Key}' with '{choice.Choice}', which is not one of its options",
+                "its recorded answer is not one of its options"
             );
 
         CheckProbability(choice.Confidence, "a confidence of");
@@ -265,14 +278,16 @@ internal sealed class ScoreSpec<TLevel>(string? asking) : QuestionSpec
     {
         if (answer is not ScoreAnswer score)
             throw new InvalidAnswerException(
-                $"answered '{Key}' with a {answer.GetType().Name}, not a score"
+                $"answered '{Key}' with a {answer.GetType().Name}, not a score",
+                "its recorded answer is not a score"
             );
 
         var top = Levels.Count - 1;
 
         if (double.IsNaN(score.Score) || score.Score < 0 || score.Score > top)
             throw new InvalidAnswerException(
-                $"scored '{Key}' at {Format(score.Score)}, outside its levels 0 to {top}"
+                $"scored '{Key}' at {Format(score.Score)}, outside its levels 0 to {top}",
+                $"its recorded score is outside its levels 0 to {top}"
             );
 
         CheckProbability(score.Confidence, "a confidence of");
@@ -283,7 +298,8 @@ internal sealed class ScoreSpec<TLevel>(string? asking) : QuestionSpec
         {
             if (given.Count != Levels.Count)
                 throw new InvalidAnswerException(
-                    $"gave {given.Count} probabilities for '{Key}', which has {Levels.Count} levels"
+                    $"gave {given.Count} probabilities for '{Key}', which has {Levels.Count} levels",
+                    $"its recorded answer does not give one probability for each of its {Levels.Count} levels"
                 );
 
             probabilities = [];
@@ -336,7 +352,8 @@ internal sealed class YesNoSpec<TQuestion>(string? asking, string? yes, string? 
     {
         if (answer is not YesNoAnswer yesNo)
             throw new InvalidAnswerException(
-                $"answered '{Key}' with a {answer.GetType().Name}, not a yes/no"
+                $"answered '{Key}' with a {answer.GetType().Name}, not a yes/no",
+                "its recorded answer is not a yes/no"
             );
 
         CheckProbability(yesNo.Probability, "a probability of");

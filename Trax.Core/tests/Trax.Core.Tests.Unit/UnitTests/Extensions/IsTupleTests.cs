@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Core.Extensions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Extensions;

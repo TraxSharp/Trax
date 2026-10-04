@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Exceptions;

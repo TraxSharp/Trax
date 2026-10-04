@@ -1,6 +1,6 @@
-using LanguageExt;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 
 namespace Trax.Core.Monad;
 

@@ -1,8 +1,8 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Tests.Examples.Brewery;
 using Trax.Core.Tests.Examples.Brewery.Junctions.Bottle;

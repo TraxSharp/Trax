@@ -1,7 +1,6 @@
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 using Trax.Core.Utils;

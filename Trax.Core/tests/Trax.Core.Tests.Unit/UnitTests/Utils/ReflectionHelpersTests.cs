@@ -1,5 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Utils;
 
@@ -27,29 +27,37 @@ public class ReflectionHelpersTests : TestSetup
     }
 
     [Theory]
-    public async Task GetRightFromDynamicEither_RightValue_ReturnsSome()
+    public async Task TryGetRightFromEither_RightValue_ReturnsTheValue()
     {
         // Arrange
         Either<Exception, int> either = 42;
 
         // Act
-        var result = ReflectionHelpers.GetRightFromDynamicEither(either);
+        var found = ReflectionHelpers.TryGetRightFromEither(either, out var value);
 
         // Assert
-        result.IsSome.Should().BeTrue();
+        found.Should().BeTrue();
+        value.Should().Be(42);
     }
 
     [Theory]
-    public async Task GetRightFromDynamicEither_LeftValue_ReturnsNone()
+    public async Task TryGetRightFromEither_LeftValue_ReturnsFalse()
     {
         // Arrange
         Either<Exception, int> either = new Exception("fail");
 
         // Act
-        var result = ReflectionHelpers.GetRightFromDynamicEither(either);
+        var found = ReflectionHelpers.TryGetRightFromEither(either, out var value);
 
         // Assert
-        result.IsNone.Should().BeTrue();
+        found.Should().BeFalse();
+        value.Should().BeNull();
+    }
+
+    [Theory]
+    public async Task TryGetRightFromEither_NotAnEither_ReturnsFalse()
+    {
+        ReflectionHelpers.TryGetRightFromEither("not an either", out _).Should().BeFalse();
     }
 
     #region Test helpers

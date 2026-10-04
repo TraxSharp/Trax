@@ -1,7 +1,6 @@
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 using Trax.Core.Utils;
@@ -124,10 +123,8 @@ public partial class Monad<TInput, TReturn>
         var tupleItem2Field = tuple.GetType().GetField("Item2")!;
         var eitherResult = tupleItem2Field.GetValue(tuple)!;
 
-        var maybeRightValue = ReflectionHelpers.GetRightFromDynamicEither(eitherResult);
-        if (maybeRightValue.IsSome)
+        if (ReflectionHelpers.TryGetRightFromEither(eitherResult, out var rightValue))
         {
-            object rightValue = maybeRightValue.ValueUnsafe()!;
             FunctionalExtensions.AssertLoaded(rightValue);
             ShortCircuitValue = (TReturn)rightValue;
             ShortCircuitValueSet = true;

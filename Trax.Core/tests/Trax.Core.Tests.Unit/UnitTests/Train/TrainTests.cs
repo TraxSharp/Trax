@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Train;
 
 namespace Trax.Core.Tests.Unit.UnitTests.Train;
@@ -14,10 +14,10 @@ public class TrainTests
         var train = new UnitTrain();
 
         // Act
-        var result = await train.Run(LanguageExt.Unit.Default);
+        var result = await train.Run(Trax.Core.Functional.Unit.Default);
 
         // Assert
-        result.Should().Be(LanguageExt.Unit.Default);
+        result.Should().Be(Trax.Core.Functional.Unit.Default);
     }
 
     [Theory]
@@ -28,18 +28,19 @@ public class TrainTests
 
         // Act
         await Assert.ThrowsAsync<NotImplementedException>(async () =>
-            await train.Run(LanguageExt.Unit.Default)
+            await train.Run(Trax.Core.Functional.Unit.Default)
         );
     }
 
-    private class UnitTrain : Train<LanguageExt.Unit, LanguageExt.Unit>
+    private class UnitTrain : Train<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
     {
-        protected override async Task<Either<Exception, LanguageExt.Unit>> Junctions() => Resolve();
+        protected override async Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
+            Resolve();
     }
 
-    private class NotImplementedTrain : Train<LanguageExt.Unit, LanguageExt.Unit>
+    private class NotImplementedTrain : Train<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
     {
-        protected override async Task<Either<Exception, LanguageExt.Unit>> Junctions() =>
+        protected override async Task<Either<Exception, Trax.Core.Functional.Unit>> Junctions() =>
             new NotImplementedException();
     }
 }

@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using LanguageExt;
 using Trax.Core.Decisions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Monad;
 

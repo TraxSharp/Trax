@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Prepare;
 

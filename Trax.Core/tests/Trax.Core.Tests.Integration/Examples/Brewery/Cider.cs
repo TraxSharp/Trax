@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Bottle;
 using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Brew;
 using Trax.Core.Tests.Integration.Examples.Brewery.Junctions.Ferment;

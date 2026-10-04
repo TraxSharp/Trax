@@ -10,7 +10,7 @@
              The Pack path in analyzers/dotnet/cs handles NuGet packaging separately. -->
     <NoWarn>RS2008</NoWarn>
     <!-- Shown on nuget.org and in the package manager, where a consumer decides to install it. -->
-    <Description>Deprecated Roslyn analyzer for Trax.Core (diagnostics CHAIN001 and CHAIN002). It checked chains rooted at Activate(), which can no longer be written, so it no longer reports anything and there is no reason to install it. Trax verifies every registered train's chain at host startup instead.</Description>
+    <Description>Deprecated Roslyn analyzer for Trax.Core (diagnostics CHAIN001 and CHAIN002). It checked chains rooted at Activate(), which can no longer be written, so it no longer reports anything and there is no reason to install it. Trax .NET verifies every registered train's chain at host startup instead.</Description>
     <PackageTags>trax;dotnet;analyzer;roslyn;deprecated</PackageTags>
     <!-- An analyzer, not a library a consumer calls: there is no API to document. -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

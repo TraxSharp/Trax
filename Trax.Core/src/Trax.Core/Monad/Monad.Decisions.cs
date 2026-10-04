@@ -43,8 +43,9 @@ public partial class Monad<TInput, TReturn>
     /// <see cref="IDecisionObserver.Refused"/> first; so does a decider that throws, classified as its exception says. A later <see cref="Switch{TTrack}"/>, <see cref="Gate{TQuestion}"/> or
     /// <see cref="Scale{TLevel}"/> routes on the decisions without asking again. An answer replayed
     /// from an earlier run (<see cref="IDecisionReplay"/>) that was given to a different asking of
-    /// the question, or no longer fits it, is not acted on either; the decider is asked afresh
-    /// instead. A cancelled run asks nothing.
+    /// the question, no longer fits it, or was given about a state other than the one in Memory
+    /// now (<see cref="DecisionMade.StateHash"/>), is not acted on either; the decider is asked
+    /// afresh instead. A cancelled run asks nothing.
     /// </remarks>
     public MonadTask<TInput, TReturn> Decide<TState>(
         Func<Questions<TState>, Questions<TState>> questions
@@ -310,6 +311,24 @@ public partial class Monad<TInput, TReturn>
             s => QuestionFingerprint.Of(step, typeof(TState), questionsAsked[s.Key])
         );
 
+        // The state hashed once, on first need and before the decider or any step after this one
+        // can change it, so a replayed answer is acted on only for the state it was given about.
+        // A state that cannot be hashed has no hash, so nothing recorded for it is replayed; that
+        // is never the run's failure.
+        string? stateHash = null;
+        var hashed = false;
+        var keyResolved = true;
+
+        void HashState()
+        {
+            if (hashed)
+                return;
+
+            hashed = true;
+            keyResolved = HashKey(out var key);
+            stateHash = keyResolved ? StateDigest.Of(state, key) : null;
+        }
+
         try
         {
             var replay = Optional<IDecisionReplay>();
@@ -335,18 +354,32 @@ public partial class Monad<TInput, TReturn>
                 // option since renamed or dropped, fewer levels, another kind of question) cannot
                 // repeat what that run did, so the decider is asked as if nothing had been
                 // recorded.
+                // The reason names what does not fit, never the recorded answer itself.
                 var problem =
                     earlier.Fingerprint != fingerprints[spec.Key]
-                        ? "was given to the question as an earlier version of the chain asked it, "
-                            + "and the question or the steps asking it have changed since"
+                        ? "it was given to the question as an earlier version of the chain asked "
+                            + "it, and the question or the steps asking it have changed since"
                         : spec.ReplayProblem(earlier.Answer);
 
                 if (problem is not null)
                 {
                     replayRefused[spec.Key] =
                         $"the answer recorded for '{spec.Key}' no longer fits the question as it "
-                        + $"is asked now: it {problem}";
+                        + $"is asked now: {problem}";
                     Warn($"{at}: {replayRefused[spec.Key]}. The decider is asked afresh.");
+                    continue;
+                }
+
+                // A recorded answer replays only into the state it was given about: the hash of
+                // the state asked about now must equal the recorded one exactly.
+                HashState();
+
+                if (
+                    StateProblem(spec.Key, earlier.StateHash, stateHash, keyResolved) is { } differs
+                )
+                {
+                    replayRefused[spec.Key] = differs;
+                    Warn($"{at}: {differs}. The decider is asked afresh.");
                     continue;
                 }
 
@@ -431,6 +464,11 @@ public partial class Monad<TInput, TReturn>
                 pending.Select(s => questionsAsked[s.Key]).ToList()
             );
 
+            // Hashed before the live decider is asked, so the hash an observer records is of the
+            // state the decider was given.
+            if (observer is not null)
+                HashState();
+
             // Written once, here, before the live decider or any step after this one can change
             // the state, and read back separately for each shadow on its own thread, so no shadow
             // shares an object with the run or with another shadow. A state that cannot be
@@ -445,7 +483,7 @@ public partial class Monad<TInput, TReturn>
                 }
                 catch (Exception e)
                 {
-                    uncopied = Uncopied(e);
+                    uncopied = Uncopied(e.Message);
                 }
 
             // Disposed when this step is done with the shadows, whether they finished or not, so
@@ -535,7 +573,10 @@ public partial class Monad<TInput, TReturn>
                         answer,
                         deciderType!,
                         $"the decider {reason}"
-                    );
+                    )
+                    {
+                        QuestionType = spec.On,
+                    };
 
                     // The step fails on the refusal either way, so an observer that cannot record
                     // it is only logged: its failure would hide why the step failed.
@@ -605,7 +646,12 @@ public partial class Monad<TInput, TReturn>
                 wasReplayed,
                 compared,
                 replayRefused.GetValueOrDefault(spec.Key)
-            );
+            )
+            {
+                StateHash = stateHash,
+                QuestionType = spec.On,
+                StateType = (object?)state is { } held ? held.GetType() : typeof(TState),
+            };
 
             if (
                 await Tell(observer, (o, ct) => o.Decided(made, ct), at).ConfigureAwait(false) is
@@ -694,8 +740,81 @@ public partial class Monad<TInput, TReturn>
         return null;
     }
 
-    private static string Uncopied(Exception e) =>
-        $"was not asked, because its own copy of the state could not be made through JSON: {e.Message}";
+    /// <summary>
+    /// The <see cref="StateHashKey"/> from the train's container, or null when it registers none.
+    /// False when resolving it failed, so the state goes unhashed and nothing is replayed, rather
+    /// than hashed without the key the host meant to use.
+    /// </summary>
+    private bool HashKey(out StateHashKey? key)
+    {
+        key = null;
+
+        try
+        {
+            key =
+                (
+                    Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
+                )?.GetService(typeof(StateHashKey)) as StateHashKey;
+            return true;
+        }
+        catch (Exception e)
+        {
+            Warn(
+                $"the state hash key could not be resolved, so the state is not hashed: {e.Message}"
+            );
+            return false;
+        }
+    }
+
+    private static string Uncopied(string why) =>
+        $"was not asked, because its own copy of the state could not be made through JSON: {why}";
+
+    /// <summary>
+    /// Why an answer recorded under <paramref name="recorded"/> is not about the state as it is now,
+    /// hashed as <paramref name="current"/>, or null when it is. Refuses unless both hashes exist
+    /// and are equal, so an answer recorded before states were hashed, or a state that cannot be
+    /// written, is asked afresh rather than assumed to match. The reason says when the state hash
+    /// key is what differs, or could not be resolved, rather than blaming the state.
+    /// </summary>
+    private static string? StateProblem(
+        string key,
+        string? recorded,
+        string? current,
+        bool keyResolved
+    )
+    {
+        var answer = $"the answer recorded for '{key}'";
+
+        if (recorded is null)
+            return $"{answer} was recorded without a hash of the state it was given about, so it "
+                + "cannot be shown to be about the state as it is now";
+
+        if (current is null)
+            return keyResolved
+                ? $"{answer} cannot be shown to be about the state as it is now, because the "
+                    + "state cannot be hashed to compare it: it holds a cycle, a delegate, a "
+                    + "handle or something else that cannot be read the same way every time, or "
+                    + "is too large or too deep"
+                : $"{answer} cannot be shown to be about the state as it is now, because the "
+                    + "state hash key could not be resolved, so the state was not hashed";
+
+        if (string.Equals(recorded, current, StringComparison.Ordinal))
+            return null;
+
+        var recordedKeyed = recorded.StartsWith(StateDigest.KeyedPrefix, StringComparison.Ordinal);
+        var currentKeyed = current.StartsWith(StateDigest.KeyedPrefix, StringComparison.Ordinal);
+
+        return recordedKeyed && !currentKeyed
+                ? $"{answer} was recorded under a state hash key and this run hashes the state "
+                    + "without one, so it cannot be compared"
+            : !recordedKeyed && currentKeyed
+                ? $"{answer} was recorded without a state hash key and this run hashes the state "
+                    + "under one, so it cannot be compared"
+            : currentKeyed
+                ? $"{answer} was given about a different state from the one it is asked about "
+                    + "now, or the state hash key has changed since"
+            : $"{answer} was given about a different state from the one it is asked about now";
+    }
 
     /// <summary>
     /// A shadow that cannot be asked, because the state could not be written for it, recorded as
@@ -747,7 +866,7 @@ public partial class Monad<TInput, TReturn>
                     }
                     catch (Exception e)
                     {
-                        return new ShadowResult(deciderType, null, Uncopied(e));
+                        return new ShadowResult(deciderType, null, Uncopied(e.Message));
                     }
 
                     var result = await shadow

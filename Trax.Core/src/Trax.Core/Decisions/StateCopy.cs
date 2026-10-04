@@ -16,7 +16,10 @@ namespace Trax.Core.Decisions;
 /// It is written with the options the System One adapter writes a state with
 /// (<see cref="JsonSerializerDefaults.Web"/>), so a shadow that sends the state on sees what it
 /// would have seen from the original. A property with no setter that holds a collection or an
-/// object is filled in from the JSON rather than left as its constructor made it.
+/// object is filled in from the JSON rather than left as its constructor made it. A value tuple is
+/// the one exception: those options write no fields, and a tuple holds nothing else, so its items
+/// are written and read as its members (<c>item1</c>, <c>item2</c>, and so on) and a shadow asked
+/// about a tuple sees what the live decider sees.
 /// </remarks>
 internal static class StateCopy
 {
@@ -48,11 +51,37 @@ internal static class StateCopy
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             PreferredObjectCreationHandling = JsonObjectCreationHandling.Populate,
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { WriteTupleItems } },
         };
 
         options.MakeReadOnly(populateMissingResolver: true);
         return options;
     }
+
+    /// <summary>Writes and reads a value tuple's items, which are fields, as its members.</summary>
+    private static void WriteTupleItems(JsonTypeInfo info)
+    {
+        if (info.Kind != JsonTypeInfoKind.Object || !IsValueTuple(info.Type))
+            return;
+
+        foreach (var field in info.Type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var item = info.CreateJsonPropertyInfo(
+                field.FieldType,
+                info.Options.PropertyNamingPolicy?.ConvertName(field.Name) ?? field.Name
+            );
+            item.Get = field.GetValue;
+            item.Set = field.SetValue;
+            item.AttributeProvider = field;
+            info.Properties.Add(item);
+        }
+    }
+
+    private static bool IsValueTuple(Type type) =>
+        type.IsValueType
+        && type.IsGenericType
+        && type.Namespace == "System"
+        && type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal);
 
     /// <summary>
     /// Looks through <paramref name="type"/> and what it holds for something JSON cannot write, or,
