@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
 using Trax.Effect.Models.Metadata;

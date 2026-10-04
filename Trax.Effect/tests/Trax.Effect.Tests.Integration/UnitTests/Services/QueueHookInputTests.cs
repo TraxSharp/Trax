@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
@@ -184,7 +184,7 @@ public class QueueHookInputTests
             return Task.CompletedTask;
         }
 
-        protected override Task<LanguageExt.Either<Exception, string>> Junctions() =>
-            Task.FromResult<LanguageExt.Either<Exception, string>>("done");
+        protected override Task<Trax.Core.Functional.Either<Exception, string>> Junctions() =>
+            Task.FromResult<Trax.Core.Functional.Either<Exception, string>>("done");
     }
 }

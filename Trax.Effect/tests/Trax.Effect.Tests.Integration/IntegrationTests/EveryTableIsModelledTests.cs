@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Trax.Effect.Data.Services.DataContext;
@@ -117,6 +117,27 @@ public class EveryTableIsModelledTests : TestSetup
             .BeEquivalentTo(
                 migrated["decision"],
                 $"the RecordedDecision model maps exactly the columns its migration creates. See {Adr}."
+            );
+    }
+
+    [Test]
+    public async Task Junction_run_is_mapped_column_for_column()
+    {
+        using var context = (IDataContext)DataContextFactory.Create();
+        var migrated = await MigratedColumns((DbContext)context);
+        var mapped = MappedColumns((DbContext)context);
+
+        mapped
+            .Should()
+            .ContainKey(
+                "junction_run",
+                $"AddJunctionEvents reaches junction_run through IDataContext.JunctionRuns. See {Adr}."
+            );
+        mapped["junction_run"]
+            .Should()
+            .BeEquivalentTo(
+                migrated["junction_run"],
+                $"the JunctionRun model maps exactly the columns its migration creates. See {Adr}."
             );
     }
 

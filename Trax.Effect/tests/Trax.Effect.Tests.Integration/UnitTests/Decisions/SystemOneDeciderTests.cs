@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
 using Trax.Core.Train;
@@ -1042,7 +1042,7 @@ public class SystemOneDeciderTests
 
     private sealed class RefundTrain(IDecider decider) : Train<string, string>
     {
-        protected override Task<LanguageExt.Either<Exception, string>> Junctions() =>
+        protected override Task<Trax.Core.Functional.Either<Exception, string>> Junctions() =>
             AddServices(decider)
                 .Decide<string>(q => q.Choice<RefundRoute>().Choice<RefundReason>())
                 .Resolve();

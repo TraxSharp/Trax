@@ -101,4 +101,10 @@ public class CreateManifest
     /// whitespace when set.
     /// </summary>
     public string? Owner { get; set; }
+
+    /// <summary>
+    /// Whether the manifest's automatic retries and dead-letter requeues replay the failed run's
+    /// recorded decisions (the default). When false they ask the model afresh instead.
+    /// </summary>
+    public bool ReplayDecisionsOnRetry { get; set; } = true;
 }

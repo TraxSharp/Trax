@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
 namespace Trax.Effect.Tests.Broadcaster.UnitTests;

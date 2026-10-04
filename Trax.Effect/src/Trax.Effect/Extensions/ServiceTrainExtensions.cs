@@ -1,10 +1,9 @@
 using System.Text.Json;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Exceptions;
 using Trax.Effect.Models.Host;

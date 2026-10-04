@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Nodes;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace Trax.Effect.StateMachine.Tests.UnitTests;
 

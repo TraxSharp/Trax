@@ -14,11 +14,11 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 /// <para>
 /// A train awaits its lifecycle hooks inline, so publishing never waits on the broker.
 /// <see cref="PublishAsync"/> writes the event to a bounded queue and returns; one background
-/// sender publishes the queue in order. When the queue is full it gives up a non-terminal event
-/// (<c>Started</c>, <c>StateChanged</c>, <c>DataChanged</c>) before a terminal one (<c>Completed</c>,
-/// <c>Failed</c>, <c>Cancelled</c>): an incoming non-terminal event is dropped, and an incoming
-/// terminal event replaces the oldest queued non-terminal one. Every drop is counted and logged,
-/// and the train carries on.
+/// sender publishes the queue in order. When the queue is full it gives up a junction event
+/// before any train event, and a non-terminal train event (<c>Started</c>, <c>StateChanged</c>,
+/// <c>DataChanged</c>) before a terminal one (<c>Completed</c>, <c>Failed</c>, <c>Cancelled</c>): an
+/// incoming junction event is dropped, and any other incoming event replaces the oldest queued
+/// event of a lower rank. Every drop is counted and logged, and the train carries on.
 /// </para>
 /// <para>
 /// Each publish waits for the broker's confirm, bounded by <see cref="PublishTimeout"/>. An event
@@ -64,6 +64,12 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
     private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(2);
 
+    /// <summary>How long junction events are dropped after the first failure to send one.</summary>
+    internal static readonly TimeSpan FirstJunctionBackoff = TimeSpan.FromSeconds(1);
+
+    /// <summary>The longest junction events are dropped after a failure before one is tried again.</summary>
+    internal static readonly TimeSpan MaxJunctionBackoff = TimeSpan.FromMinutes(1);
+
     private static readonly CreateChannelOptions ConfirmedChannel = new(
         publisherConfirmationsEnabled: true,
         publisherConfirmationTrackingEnabled: true
@@ -81,6 +87,10 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
 
     private IConnection? _connection;
     private IChannel? _channel;
+    private IChannel? _junctionChannel;
+    private int _junctionFailing;
+    private TimeSpan _junctionBackoff;
+    private DateTime _junctionUnavailableUntil = DateTime.MinValue;
     private long _dropped;
     private long _droppedSinceReport;
     private long _refused;
@@ -127,6 +137,12 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
     /// <summary>Events dropped because the broker refused them <see cref="MaxRefusedAttempts"/> times.</summary>
     internal long RefusedEvents => Interlocked.Read(ref _refused);
 
+    /// <summary>The clock the junction backoff is measured on. For tests.</summary>
+    internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+
+    /// <summary>Until when junction events are dropped without being tried, after a failure.</summary>
+    internal DateTime JunctionUnavailableUntil => _junctionUnavailableUntil;
+
     /// <summary>
     /// Queues <paramref name="message"/> for the background sender and returns without waiting
     /// for the broker. When the queue is full an event is dropped and counted, by the policy in the
@@ -146,7 +162,8 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             _logger?.LogWarning(
                 "RabbitMQ broadcaster queue is full ({Capacity} events): dropping {EventType} for "
                     + "train {TrainName} ({ExternalId}) and further events until the broker catches up. "
-                    + "Terminal events are kept in preference to Started and other non-terminal ones.",
+                    + "Train events are kept in preference to junction events, and terminal ones in "
+                    + "preference to Started and other non-terminal ones.",
                 _queueCapacity,
                 dropped.EventType,
                 dropped.TrainName,
@@ -164,7 +181,12 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         {
             while (await _queue.ReadAsync(ct) is { } message)
             {
-                await SendWithRetryAsync(message, ct);
+                // A junction event goes on a channel and exchange of their own, and is given up at
+                // once when it cannot be sent, so it never holds up or closes the train events.
+                if (IsJunctionEvent(message))
+                    await SendJunctionAsync(message, ct);
+                else
+                    await SendWithRetryAsync(message, ct);
 
                 if (_queue.Count == 0)
                 {
@@ -255,6 +277,10 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         }
     }
 
+    private static bool IsJunctionEvent(TrainLifecycleEventMessage message) =>
+        message.Junction is not null
+        || TrainLifecycleEventMessage.IsJunctionEvent(message.EventType);
+
     // The broker answered and turned this event down: it closed the channel with a channel-level
     // error (access refused, not found, not allowed, precondition failed), or nacked the publish.
     private static bool IsRefusal(Exception ex) =>
@@ -269,9 +295,61 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             _ => false,
         };
 
+    private async Task SendJunctionAsync(TrainLifecycleEventMessage message, CancellationToken ct)
+    {
+        // After a failure, junction events are dropped without opening a channel or declaring the
+        // exchange until the backoff passes, so a junction exchange that cannot be used costs the
+        // sender, and the train events behind it, one attempt per backoff rather than one per step.
+        if (UtcNow() < _junctionUnavailableUntil)
+        {
+            _logger?.LogDebug("RabbitMQ broadcaster dropped a junction event while backing off.");
+            return;
+        }
+
+        try
+        {
+            await SendAsync(message, ct);
+            _junctionBackoff = TimeSpan.Zero;
+            _junctionUnavailableUntil = DateTime.MinValue;
+            if (Interlocked.Exchange(ref _junctionFailing, 0) == 1)
+                _logger?.LogInformation(
+                    "RabbitMQ broadcaster is publishing junction events to {Exchange} again.",
+                    _options.EffectiveJunctionExchangeName
+                );
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await DisposeQuietlyAsync(_junctionChannel);
+            _junctionChannel = null;
+
+            _junctionBackoff =
+                _junctionBackoff == TimeSpan.Zero ? FirstJunctionBackoff
+                : _junctionBackoff * 2 > MaxJunctionBackoff ? MaxJunctionBackoff
+                : _junctionBackoff * 2;
+            _junctionUnavailableUntil = UtcNow() + _junctionBackoff;
+
+            // One warning per outage; the steps lost inside it are Debug.
+            if (Interlocked.Exchange(ref _junctionFailing, 1) == 0)
+                _logger?.LogWarning(
+                    ex,
+                    "RabbitMQ broadcaster cannot publish junction events to exchange {Exchange}; "
+                        + "dropping them until it can, trying again after a growing pause of up to "
+                        + "a minute. Train events are not affected.",
+                    _options.EffectiveJunctionExchangeName
+                );
+            else
+                _logger?.LogDebug(ex, "RabbitMQ broadcaster dropped a junction event.");
+        }
+    }
+
     private async Task SendAsync(TrainLifecycleEventMessage message, CancellationToken ct)
     {
-        var channel = await EnsureChannelAsync(ct);
+        var junction = IsJunctionEvent(message);
+        var channel = await EnsureChannelAsync(junction, ct);
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
 
         var properties = new BasicProperties
@@ -283,8 +361,12 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         // The channel tracks confirms, so this completes once the broker has confirmed the event.
         using var bound = CancellationTokenSource.CreateLinkedTokenSource(ct);
         bound.CancelAfter(_publishTimeout);
+        // A junction event goes to an exchange of its own, which only receivers that know junction
+        // events bind, so one that predates them never receives one.
+        var exchange = junction ? _options.EffectiveJunctionExchangeName : _options.ExchangeName;
+
         await channel.BasicPublishAsync(
-            exchange: _options.ExchangeName,
+            exchange: exchange,
             routingKey: string.Empty,
             mandatory: false,
             basicProperties: properties,
@@ -296,18 +378,25 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             "Published {EventType} event for train {TrainName} to exchange {Exchange}.",
             message.EventType,
             message.TrainName,
-            _options.ExchangeName
+            exchange
         );
     }
 
-    // Only the sender calls this, so no lock is needed.
-    private async Task<IChannel> EnsureChannelAsync(CancellationToken ct)
+    // Only the sender calls this, so no lock is needed. Train events and junction events each have
+    // a channel of their own, which declares only its own exchange, so a junction exchange the
+    // broker refuses closes the junction channel and never the train one. The junction exchange is
+    // declared only once there is a junction event to send.
+    private async Task<IChannel> EnsureChannelAsync(bool junction, CancellationToken ct)
     {
-        if (_channel is { IsOpen: true })
-            return _channel;
+        var current = junction ? _junctionChannel : _channel;
+        if (current is { IsOpen: true })
+            return current;
 
-        await DisposeQuietlyAsync(_channel);
-        _channel = null;
+        await DisposeQuietlyAsync(current);
+        if (junction)
+            _junctionChannel = null;
+        else
+            _channel = null;
 
         if (_connection is not { IsOpen: true })
         {
@@ -325,7 +414,7 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             // Declared on every channel: the exchange may have been deleted, or lost with a broker
             // restart, since the last one.
             await channel.ExchangeDeclareAsync(
-                exchange: _options.ExchangeName,
+                exchange: junction ? _options.EffectiveJunctionExchangeName : _options.ExchangeName,
                 type: ExchangeType.Fanout,
                 durable: true,
                 autoDelete: false,
@@ -338,7 +427,10 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             throw;
         }
 
-        _channel = channel;
+        if (junction)
+            _junctionChannel = channel;
+        else
+            _channel = channel;
         return channel;
     }
 
@@ -360,6 +452,14 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
 
         if (connectionToo)
         {
+            await DisposeQuietlyAsync(_junctionChannel);
+            _junctionChannel = null;
+
+            _junctionBackoff =
+                _junctionBackoff == TimeSpan.Zero ? FirstJunctionBackoff
+                : _junctionBackoff * 2 > MaxJunctionBackoff ? MaxJunctionBackoff
+                : _junctionBackoff * 2;
+            _junctionUnavailableUntil = UtcNow() + _junctionBackoff;
             await DisposeQuietlyAsync(_connection);
             _connection = null;
         }
@@ -442,6 +542,7 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
             );
 
         await DisposeQuietlyAsync(_channel);
+        await DisposeQuietlyAsync(_junctionChannel);
         await DisposeQuietlyAsync(_connection);
         _abandon.Dispose();
         GC.SuppressFinalize(this);

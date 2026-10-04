@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;

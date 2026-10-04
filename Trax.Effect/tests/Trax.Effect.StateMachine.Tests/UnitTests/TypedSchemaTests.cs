@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace Trax.Effect.StateMachine.Tests.UnitTests;
 

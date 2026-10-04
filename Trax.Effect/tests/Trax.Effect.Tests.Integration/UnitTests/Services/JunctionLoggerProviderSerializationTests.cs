@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Utils;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;

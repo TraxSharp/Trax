@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using FluentAssertions;
+using AwesomeAssertions;
 using Npgsql.NameTranslation;
 
 namespace Trax.Effect.Tests.Meta.Tests;

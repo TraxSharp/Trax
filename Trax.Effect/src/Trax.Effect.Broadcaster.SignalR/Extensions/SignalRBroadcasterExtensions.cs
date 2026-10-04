@@ -22,8 +22,9 @@ public static class SignalRBroadcasterExtensions
     /// </summary>
     /// <param name="builder">The broadcaster builder.</param>
     /// <param name="configure">
-    /// Optional callback to filter events (<c>OnlyForEvents</c>, <c>OnlyForTrains</c>)
-    /// or replace the default <c>TraxClientEvent</c> projection (<c>WithProjection</c>).
+    /// Optional callback to filter events (<c>OnlyForEvents</c>, <c>OnlyForTrains</c>),
+    /// replace the default <c>TraxClientEvent</c> projection (<c>WithProjection</c>), or send each
+    /// step of a run as well (<c>WithJunctionEvents</c>).
     /// </param>
     /// <remarks>
     /// Map the hub endpoint with an authorization posture, e.g.
@@ -71,6 +72,12 @@ public static class SignalRBroadcasterExtensions
         builder.ServiceCollection.AddSingleton<ITrainEventHandler>(sp =>
             sp.GetRequiredService<SignalRTrainEventDispatcher>()
         );
+
+        // Junction events reach the dispatcher only when the host asked for them.
+        if (config.JunctionEvents)
+            builder.ServiceCollection.AddSingleton<IJunctionEventHandler>(sp =>
+                sp.GetRequiredService<SignalRTrainEventDispatcher>()
+            );
 
         // The dispatcher delivers from a background queue; stopping the host drains it.
         builder.ServiceCollection.AddHostedService(sp =>

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -17,10 +17,16 @@ namespace Trax.Effect.Tests.Broadcaster.UnitTests;
 /// The background sender of <see cref="RabbitMqTrainEventBroadcaster"/> against a connection the test
 /// controls: how it retries a broker it cannot reach, reports dropped events once the queue drains,
 /// gives up on shutdown, and closes a channel the broker already closed.
+///
+/// <para>Its junction-exchange backoff test enforces docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md:
+/// a failing junction exchange must not cost train events.</para>
 /// </summary>
+[Property("adr", "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md")]
 [TestFixture]
 public class RabbitMqBroadcasterSenderTests
 {
+    private const string Adr = "docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md";
+
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
     private static TrainLifecycleEventMessage Message(
@@ -365,6 +371,84 @@ public class RabbitMqBroadcasterSenderTests
     }
 
     [Test]
+    public async Task AJunctionExchangeThatFails_IsNotTriedAgainUntilItsBackoffPasses()
+    {
+        var connection = OpenConnection();
+        var opened = 0;
+        var refusing = OpenChannel();
+        refusing
+            .ExchangeDeclareAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<IDictionary<string, object?>?>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>()
+            )
+            .ThrowsAsync(ClosedByPeer());
+        var trains = OpenChannel();
+        var published = Records(trains);
+        connection
+            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+                Task.FromResult(Interlocked.Increment(ref opened) == 2 ? trains : refusing)
+            );
+        var now = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc);
+        var broadcaster = Broadcaster(connection, new CapturingLogger());
+        broadcaster.UtcNow = () => now;
+
+        for (var i = 0; i < 5; i++)
+            await broadcaster.PublishAsync(Junction($"j{i}"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("train"), CancellationToken.None);
+        await published.Reaches(1).WaitAsync(Timeout);
+
+        opened
+            .Should()
+            .Be(
+                2,
+                $"one junction attempt, then the train channel; the rest were dropped. See {Adr}."
+            );
+        broadcaster
+            .JunctionUnavailableUntil.Should()
+            .Be(
+                now + RabbitMqTrainEventBroadcaster.FirstJunctionBackoff,
+                $"a failing junction exchange waits out its backoff. See {Adr}."
+            );
+
+        // Past the backoff, a junction event is tried again, and a second failure doubles it.
+        now += RabbitMqTrainEventBroadcaster.FirstJunctionBackoff;
+        await broadcaster.PublishAsync(Junction("again"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("train-2"), CancellationToken.None);
+        await published.Reaches(2).WaitAsync(Timeout);
+
+        opened.Should().Be(3, $"past the backoff a junction event is tried again. See {Adr}.");
+        broadcaster
+            .JunctionUnavailableUntil.Should()
+            .Be(
+                now + RabbitMqTrainEventBroadcaster.FirstJunctionBackoff * 2,
+                $"a second failure doubles the backoff. See {Adr}."
+            );
+        published
+            .ExternalIds.Should()
+            .Equal(new[] { "train", "train-2" }, $"train events keep flowing. See {Adr}.");
+        await broadcaster.DisposeAsync();
+    }
+
+    private static TrainLifecycleEventMessage Junction(string externalId) =>
+        Message(externalId, "JunctionStarted") with
+        {
+            Junction = new JunctionEventPayload(
+                0,
+                Trax.Effect.Enums.JunctionRunKind.Junction,
+                "Ship",
+                Trax.Effect.Enums.JunctionRunState.InProgress,
+                DateTime.UtcNow
+            ),
+        };
+
+    [Test]
     public async Task Sender_DeclaresTheExchangeOnEveryChannelItOpens()
     {
         var connection = OpenConnection();
@@ -386,7 +470,19 @@ public class RabbitMqBroadcasterSenderTests
         await second
             .Received(1)
             .ExchangeDeclareAsync(
+                "trax.lifecycle",
                 Arg.Any<string>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<IDictionary<string, object?>?>(),
+                Arg.Any<bool>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>()
+            );
+        await second
+            .DidNotReceive()
+            .ExchangeDeclareAsync(
+                "trax.lifecycle.junctions",
                 Arg.Any<string>(),
                 Arg.Any<bool>(),
                 Arg.Any<bool>(),
@@ -471,6 +567,37 @@ public class RabbitMqBroadcasterSenderTests
                 "a full queue gives up a Started event before a run's terminal one"
             );
         broadcaster.DroppedEvents.Should().Be(2);
+    }
+
+    [Test]
+    public async Task AFullQueue_GivesUpJunctionEventsBeforeAnyTrainEvent()
+    {
+        var connection = OpenConnection();
+        var channel = OpenChannel();
+        var held = new Gate();
+        ChannelsFrom(connection, () => held.Pass(channel));
+        var published = Records(channel);
+        var broadcaster = Broadcaster(connection, new CapturingLogger(), queueCapacity: 2);
+
+        await broadcaster.PublishAsync(Message("held"), CancellationToken.None);
+        await held.Entered.WaitAsync(Timeout); // the sender holds this one; the queue is empty
+        await broadcaster.PublishAsync(Message("j1", "JunctionStarted"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("j2", "Decided"), CancellationToken.None); // full
+        await broadcaster.PublishAsync(Message("s"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("j3", "JunctionCompleted"), CancellationToken.None);
+        await broadcaster.PublishAsync(Message("s", "Completed"), CancellationToken.None);
+
+        held.Release();
+        await published.Reaches(3).WaitAsync(Timeout);
+        await broadcaster.DisposeAsync();
+
+        published
+            .Events.Should()
+            .Equal(
+                [("held", "Started"), ("s", "Started"), ("s", "Completed")],
+                "a full queue gives up a run's steps before any run's own events"
+            );
+        broadcaster.DroppedEvents.Should().Be(3);
     }
 
     [Test]

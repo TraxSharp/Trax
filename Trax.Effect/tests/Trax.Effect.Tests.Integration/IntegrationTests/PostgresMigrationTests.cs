@@ -1,6 +1,6 @@
+using AwesomeAssertions;
 using DbUp;
 using DbUp.Postgresql;
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Trax.Effect.Data.Postgres.Utils;
@@ -605,6 +605,51 @@ public class PostgresMigrationTests
             .ScriptIndexNames.Should()
             .Contain(["ix_work_queue_subject_queued", "ix_metadata_external_id"])
             .And.NotContain(name => name.EndsWith("_ccnew"));
+    }
+
+    [Test]
+    public void A_duplicate_met_while_building_a_scripts_unique_index_runs_the_scripts_again()
+    {
+        static PostgresException Error(string sqlState, string? constraint) =>
+            new(
+                "could not create unique index",
+                "ERROR",
+                "ERROR",
+                sqlState,
+                constraintName: constraint
+            );
+
+        DatabaseMigrator
+            .IsRetryable(
+                Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
+            )
+            .Should()
+            .BeTrue("migration 062 clears a duplicate queued replay before it builds the index");
+        DatabaseMigrator
+            .IsRetryable(
+                new InvalidOperationException(
+                    "wrapped",
+                    Error(PostgresErrorCodes.UniqueViolation, "ix_work_queue_unique_queued_replay")
+                )
+            )
+            .Should()
+            .BeTrue();
+        DatabaseMigrator
+            .IsRetryable(Error(PostgresErrorCodes.LockNotAvailable, null))
+            .Should()
+            .BeTrue();
+        DatabaseMigrator
+            .IsRetryable(Error(PostgresErrorCodes.UniqueViolation, "some_consumer_index"))
+            .Should()
+            .BeFalse("only an index a script builds again is retried");
+        DatabaseMigrator
+            .IsRetryable(Error(PostgresErrorCodes.UniqueViolation, null))
+            .Should()
+            .BeFalse();
+        DatabaseMigrator
+            .IsRetryable(Error(PostgresErrorCodes.SyntaxError, null))
+            .Should()
+            .BeFalse();
     }
 
     private static readonly TimeSpan Bounded = TimeSpan.FromSeconds(60);

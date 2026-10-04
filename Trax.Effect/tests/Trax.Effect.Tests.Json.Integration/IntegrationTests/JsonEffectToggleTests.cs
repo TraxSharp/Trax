@@ -1,7 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;

@@ -1,7 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Junctions.BeginTransaction;
 using Trax.Effect.Data.Junctions.CommitTransaction;
 using Trax.Effect.Data.Services.DataContext;

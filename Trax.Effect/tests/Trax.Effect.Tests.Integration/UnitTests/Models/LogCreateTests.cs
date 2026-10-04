@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Log.DTOs;

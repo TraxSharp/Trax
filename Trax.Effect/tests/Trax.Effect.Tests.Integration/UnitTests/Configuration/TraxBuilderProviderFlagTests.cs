@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 

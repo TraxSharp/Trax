@@ -14,8 +14,8 @@
   />
   <ItemGroup>
     <!-- Trax.* : exact CI pin, overridable by TraxLocalVersion -->
-    <PackageVersion Include="Trax.Core" Version="1.9.0" />
-    <PackageVersion Include="Trax.Core.Testing" Version="1.9.0" />
+    <PackageVersion Include="Trax.Core" Version="1.9.1" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.9.1" />
   </ItemGroup>
   <ItemGroup>
     <!-- third-party : plain exact -->
@@ -26,7 +26,7 @@
     <PackageVersion Include="dbup-postgresql" Version="7.0.1" />
     <PackageVersion Include="dbup-sqlite" Version="6.0.4" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
-    <PackageVersion Include="FluentAssertions" Version="8.11.0" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />

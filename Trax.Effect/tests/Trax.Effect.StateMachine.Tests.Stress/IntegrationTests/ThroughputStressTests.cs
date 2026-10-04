@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Effect.StateMachine.Tests.Stress.Fakes;
 using Trax.Effect.StateMachine.Tests.Stress.Fixtures;

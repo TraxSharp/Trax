@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>SQLite data provider for Trax.Effect. Adds UseSqlite(connectionString) to the AddEffects builder, which persists train runs to SQLite and applies the Trax schema on startup. For single-server apps and local development; use Postgres when several servers share the work.</Description>
+    <Description>SQLite data provider for Trax.Effect. Adds UseSqlite(connectionString) to the AddEffects builder, which persists train runs to SQLite and applies the Trax .NET schema on startup. For single-server apps and local development; use Postgres when several servers share the work.</Description>
     <AssemblyName>Trax.Effect.Data.Sqlite</AssemblyName>
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
   </PropertyGroup>

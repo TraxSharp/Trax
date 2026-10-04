@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

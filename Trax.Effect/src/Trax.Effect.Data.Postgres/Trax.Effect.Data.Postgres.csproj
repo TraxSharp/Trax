@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>PostgreSQL data provider for Trax.Effect. Adds UsePostgres(connectionString) to the AddEffects builder, which persists train runs to Postgres and applies the Trax schema migrations on startup. The production choice.</Description>
+    <Description>PostgreSQL data provider for Trax.Effect. Adds UsePostgres(connectionString) to the AddEffects builder, which persists train runs to Postgres and applies the Trax .NET schema migrations on startup. The production choice.</Description>
     <AssemblyName>Trax.Effect.Data.Postgres</AssemblyName>
   </PropertyGroup>
 

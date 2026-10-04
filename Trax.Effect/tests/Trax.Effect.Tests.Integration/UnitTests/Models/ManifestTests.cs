@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using NUnit.Framework;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -199,7 +199,7 @@ public class ManifestTests
     {
         var m = new Manifest { Name = null! };
 
-        m.NameType.Should().Be(typeof(LanguageExt.Unit));
+        m.NameType.Should().Be(typeof(Trax.Core.Functional.Unit));
     }
 
     [Test]
@@ -207,7 +207,7 @@ public class ManifestTests
     {
         var m = new Manifest { Name = typeof(SomeFakeTrain).FullName!, PropertyTypeName = null };
 
-        m.PropertyType.Should().Be(typeof(LanguageExt.Unit));
+        m.PropertyType.Should().Be(typeof(Trax.Core.Functional.Unit));
     }
 
     [Test]
@@ -279,7 +279,7 @@ public class ManifestTests
         NewManifest()
             .ResolvePropertyType([typeof(TestProperties)])
             .Should()
-            .Be(typeof(LanguageExt.Unit));
+            .Be(typeof(Trax.Core.Functional.Unit));
     }
 
     #endregion

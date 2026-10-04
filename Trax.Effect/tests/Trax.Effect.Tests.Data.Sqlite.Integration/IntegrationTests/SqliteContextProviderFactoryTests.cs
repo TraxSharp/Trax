@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Sqlite.Services.SqliteContextFactory;

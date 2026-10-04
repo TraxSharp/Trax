@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
@@ -39,6 +39,7 @@ public class InMemorySchedulerColumnTests : TestSetup
                     Name = typeof(InMemorySchedulerColumnTests),
                     FailureWindowSeconds = 900,
                     Owner = "orders",
+                    ReplayDecisionsOnRetry = false,
                 }
             );
             await context.Track(manifest);
@@ -75,6 +76,7 @@ public class InMemorySchedulerColumnTests : TestSetup
 
         storedManifest.FailureWindowSeconds.Should().Be(900);
         storedManifest.Owner.Should().Be("orders");
+        storedManifest.ReplayDecisionsOnRetry.Should().BeFalse();
         storedEntry.IsExplicitTrigger.Should().BeTrue();
         storedRow.OverriddenSettings.Should().Equal("MaxActiveJobs");
     }

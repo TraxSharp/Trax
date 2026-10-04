@@ -71,6 +71,15 @@ admitted on expires. It is set after the host's `ConfigureConnection`, which can
 user revoked before their credential expires is still connected until it does; that bound is the
 credential's lifetime, which the host controls.
 
+**A browser reaches the hub only from an origin the host serves or allows.** A request to the hub
+(negotiate, a WebSocket upgrade, Server-Sent Events, long polling) that carries an `Origin` header is
+refused with `403`, whatever its credentials, unless the origin is on the hub's own host or is
+allowed: by `AllowOrigins(...)` when the host calls it, otherwise by the host's CORS default policy.
+With neither, only the hub's own origin is. A request with no `Origin`, which is what a non-browser
+client sends, is left to the posture. This is the rule Trax.Api applies to its GraphQL sockets
+(`AllowSocketOrigins`), for the same reason: a browser sends a site's cookies with a request another
+site makes, and a WebSocket is not covered by CORS.
+
 **Access is still all-or-nothing per connection.** A connection the posture admits receives every
 train's events. Per-connection filtering is the open alternative above.
 
@@ -89,6 +98,9 @@ the choice it has to make, and the removal is recorded in the package's
   `RequireAuthorization()` keeps the host's fallback policy (over long polling, and over WebSockets
   with negotiation skipped), that an unknown policy or a role name with a comma fails at mapping, and
   that a connection whose authentication expires is closed even when the host tries to turn that off.
+  It pins that a client from a foreign origin is refused with `403` even with valid credentials, on
+  negotiate and on a WebSocket without negotiation, and that the hub's own origin, an origin given to
+  `AllowOrigins` and one the CORS default policy allows are admitted.
 - [MapTraxTrainEventHub](/docs/sdk-reference/configuration/map-trax-train-event-hub) is the rule
   this produces.
 
@@ -97,6 +109,7 @@ the hub, and a custom projection can put the failure reason back.
 
 ## Changelog
 
+- **2026-10-03**: A browser reaches the hub only from its own origin or one the host allows.
 - **2026-09-30**: A bare `RequireAuthorization()` applies the fallback policy with the default one,
   named policies are resolved at mapping, a role name with a comma is refused, and a connection is
   closed when its authentication expires.

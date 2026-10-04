@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 
 namespace Trax.Effect.StateMachine.Persistence.Integration;

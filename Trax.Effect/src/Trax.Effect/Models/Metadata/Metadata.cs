@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using LanguageExt;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -329,7 +329,9 @@ public class Metadata : IModel, IDisposable
     /// foreign key, because the original may be deleted first; a run whose chain names a run that
     /// no longer exists, belongs to another train, or ran without recording its decisions
     /// (<see cref="DecisionsRecorded"/>) fails before its first junction, classified permanent,
-    /// rather than asking afresh. A question no run in the chain reached is asked afresh.
+    /// rather than asking afresh, unless it is a manifest's retry, which asks afresh and is marked
+    /// <see cref="ReplayAbandoned"/>. The chain stops at a run so marked. A question no run in the
+    /// chain reached is asked afresh.
     /// </remarks>
     [Column("replay_decisions_of")]
     [JsonPropertyName("replay_decisions_of")]
@@ -350,6 +352,22 @@ public class Metadata : IModel, IDisposable
     [JsonPropertyName("decisions_recorded")]
     [JsonInclude]
     public bool DecisionsRecorded { get; set; }
+
+    /// <summary>
+    /// True when the run named a run to replay (<see cref="ReplayDecisionsOf"/>) and asked its
+    /// questions afresh instead, because the replay could not be honoured. Only a manifest's retry
+    /// does that; any other run fails instead.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReplayDecisionsOf"/> is kept, as the record of what the run was queued to do. A
+    /// later replay of this run stops here rather than going on to the run it named, whose answers
+    /// this run never acted on: it replays this run's own answers when this run recorded them, and
+    /// fails, as for any run that did not record its decisions, when it did not.
+    /// </remarks>
+    [Column("replay_abandoned")]
+    [JsonPropertyName("replay_abandoned")]
+    [JsonInclude]
+    public bool ReplayAbandoned { get; set; }
 
     /// <summary>
     /// Gets the manifest that defines this train execution.

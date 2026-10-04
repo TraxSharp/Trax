@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,6 +53,37 @@ public class SqliteEnumPartialIndexTests : TestSetup
                 "a manifest has at most one queued entry, which the dispatcher relies on"
             );
     }
+
+    [Test]
+    public async Task A_second_queued_replay_of_one_run_is_refused()
+    {
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        using var context = (IDataContext)
+            await factory.CreateDbContextAsync(CancellationToken.None);
+        var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);
+
+        var dispatched = Replaying(source);
+        dispatched.Status = WorkQueueStatus.Dispatched;
+        await context.Track(dispatched);
+        await context.Track(Replaying(source));
+        await context.SaveChanges(CancellationToken.None);
+
+        await context.Track(Replaying(source));
+        var second = () => context.SaveChanges(CancellationToken.None);
+
+        await second
+            .Should()
+            .ThrowAsync<DbUpdateException>("a run's answers are replayed by one queued entry");
+    }
+
+    private static WorkQueue Replaying(long source) =>
+        WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(IQueuedTrain).FullName!,
+                ReplayDecisionsOf = source,
+            }
+        );
 
     [Test]
     public async Task A_dispatched_entry_does_not_count_against_the_queued_one()

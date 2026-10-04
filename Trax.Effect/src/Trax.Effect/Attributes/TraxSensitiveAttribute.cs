@@ -2,7 +2,8 @@ namespace Trax.Effect.Attributes;
 
 /// <summary>
 /// Marks a property or field of a train's input or output (or of anything reachable from them)
-/// whose value must not be written wherever Trax keeps a copy of that input or output.
+/// whose value must not be written wherever Trax keeps a copy of that input or output, or a type a
+/// routing step asks about whose answers must not be published.
 /// </summary>
 /// <remarks>
 /// Masked in the stored input and output (<c>SaveTrainParameters</c>), in the junction output the
@@ -30,9 +31,22 @@ namespace Trax.Effect.Attributes;
 /// readable wherever the columns are. Keep a secret out of an input entirely where you can, and
 /// pass a reference to it instead.
 /// </para>
+/// <para>
+/// On the enum or marker type a routing step asks about (<c>Decide</c>, <c>Switch</c>, <c>Gate</c>,
+/// <c>Scale</c>), it withholds the answer: junction events (<c>AddJunctionEvents</c>) and
+/// <c>trax.junction_run</c> then record that the question was asked and answered, but not the
+/// option, score, probability, confidence or track. On a type it does nothing else: it does not mask
+/// a property of that type, which takes the mark on the property. <c>AddDecisionRecording</c> keeps
+/// the full answer in <c>trax.decision</c> either way, because a requeue replays it from there.
+/// </para>
 /// </remarks>
 [AttributeUsage(
-    AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter,
+    AttributeTargets.Property
+        | AttributeTargets.Field
+        | AttributeTargets.Parameter
+        | AttributeTargets.Enum
+        | AttributeTargets.Class
+        | AttributeTargets.Struct,
     AllowMultiple = false,
     Inherited = true
 )]

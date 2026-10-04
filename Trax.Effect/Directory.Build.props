@@ -46,7 +46,7 @@
        version in CI) is the package being checked, not the baseline. -->
   <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').Replace('\', '/').StartsWith('src/'))">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.57.2</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.58.0</PackageValidationBaselineVersion>
     <!-- Ship the XML doc file so the /// summaries reach consumers' IntelliSense. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

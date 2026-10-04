@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using FluentAssertions;
+using AwesomeAssertions;
 using static Trax.Effect.StateMachine.Rules;
 
 namespace Trax.Effect.StateMachine.Tests.UnitTests;

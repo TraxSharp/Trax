@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
@@ -191,7 +191,7 @@ public class ModelCoverageGapTests
                 StartTimeUtc = DateTime.UtcNow,
                 InputType = typeof(int),
                 OutputType = typeof(string),
-                State = LanguageExt.EitherStatus.IsRight,
+                State = Trax.Core.Functional.EitherStatus.IsRight,
             },
             meta
         );
@@ -219,7 +219,7 @@ public class ModelCoverageGapTests
                 StartTimeUtc = DateTime.UtcNow,
                 InputType = typeof(int),
                 OutputType = typeof(string),
-                State = LanguageExt.EitherStatus.IsRight,
+                State = Trax.Core.Functional.EitherStatus.IsRight,
             },
             meta
         );
@@ -243,7 +243,7 @@ public class ModelCoverageGapTests
                 StartTimeUtc = DateTime.UtcNow,
                 InputType = typeof(int),
                 OutputType = typeof(string),
-                State = LanguageExt.EitherStatus.IsRight,
+                State = Trax.Core.Functional.EitherStatus.IsRight,
             },
             meta
         );

@@ -1,5 +1,5 @@
+using AwesomeAssertions;
 using DbUp;
-using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Trax.Effect.Data.Sqlite.Utils;
 

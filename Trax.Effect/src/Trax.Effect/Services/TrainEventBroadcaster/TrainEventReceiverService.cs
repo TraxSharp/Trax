@@ -45,6 +45,9 @@ public class TrainEventReceiverService : BackgroundService
     /// throws, stops the receiver and retries after 5 seconds, doubling to at most 2 minutes. Each message stamped
     /// with this host's instance id is skipped; every other one goes to all registered
     /// <see cref="ITrainEventHandler"/>s in a fresh scope, with each handler's exception logged and swallowed.
+    /// A junction event (one carrying <see cref="TrainLifecycleEventMessage.Junction"/>, or naming a junction
+    /// event type) goes to the registered <see cref="IJunctionEventHandler"/>s instead, and never to an
+    /// <see cref="ITrainEventHandler"/>; with none registered it is dropped.
     /// </summary>
     /// <param name="stoppingToken">Signalled when the host stops.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -81,6 +84,45 @@ public class TrainEventReceiverService : BackgroundService
                         );
 
                         await using var scope = _serviceProvider.CreateAsyncScope();
+
+                        // A junction event goes only to the handlers written for one, so a train
+                        // event handler is never handed an event type it does not know. One that
+                        // claims to be a junction event but carries no step is dropped.
+                        if (IsJunctionMessage(message))
+                        {
+                            if (message.Junction is null)
+                            {
+                                _logger?.LogWarning(
+                                    "Dropping {EventType} for train {TrainName}: a junction event with no junction payload.",
+                                    message.EventType,
+                                    message.TrainName
+                                );
+                                return;
+                            }
+
+                            foreach (
+                                var handler in scope.ServiceProvider.GetServices<IJunctionEventHandler>()
+                            )
+                            {
+                                try
+                                {
+                                    await handler.HandleAsync(message, ct);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.LogError(
+                                        ex,
+                                        "JunctionEventHandler ({HandlerType}) threw while handling {EventType} for train {TrainName}.",
+                                        handler.GetType().Name,
+                                        message.EventType,
+                                        message.TrainName
+                                    );
+                                }
+                            }
+
+                            return;
+                        }
+
                         var handlers = scope.ServiceProvider.GetServices<ITrainEventHandler>();
 
                         foreach (var handler in handlers)
@@ -147,6 +189,10 @@ public class TrainEventReceiverService : BackgroundService
         await _receiver.StopAsync(cancellationToken);
         await base.StopAsync(cancellationToken);
     }
+
+    private static bool IsJunctionMessage(TrainLifecycleEventMessage message) =>
+        message.Junction is not null
+        || TrainLifecycleEventMessage.IsJunctionEvent(message.EventType);
 
     private bool IsLocalEvent(TrainLifecycleEventMessage message) =>
         string.Equals(message.InstanceId, _localInstanceId, StringComparison.Ordinal);

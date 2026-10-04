@@ -102,6 +102,21 @@ public class RecordedDecision
     [Column("routes")]
     public string? Routes { get; set; }
 
+    /// <summary>
+    /// The hash of the state the question was asked about, as Trax.Core computed it: <c>k1:</c> and
+    /// 64 lowercase hex characters of an HMAC-SHA256 when a state hash key is configured, otherwise
+    /// <c>s1:</c> and 64 of a plain SHA-256. A replay hands it back, and Trax.Core replays the
+    /// answer only into a state that hashes the same; a null one is never replayed.
+    /// </summary>
+    /// <remarks>
+    /// Null when Trax.Core could not encode the state, when the row predates the column, and when
+    /// no key is configured and the state can hold a value marked <c>[TraxSensitive]</c> or the
+    /// question is about a type so marked, because an unkeyed hash of such a state can be checked
+    /// against guessed values by anyone who reads it.
+    /// </remarks>
+    [Column("state_hash")]
+    public string? StateHash { get; set; }
+
     /// <summary>When the question was answered.</summary>
     [Column("decided_at")]
     public DateTime DecidedAt { get; set; }

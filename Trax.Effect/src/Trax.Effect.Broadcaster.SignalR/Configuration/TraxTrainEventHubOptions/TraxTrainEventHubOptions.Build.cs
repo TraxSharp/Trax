@@ -38,16 +38,21 @@ public partial class TraxTrainEventHubOptions
             _requireAuthorization,
             _policies.ToArray(),
             _roles.ToArray(),
-            _configureConnection ?? (_ => { })
+            _configureConnection ?? (_ => { }),
+            _allowedOrigins?.ToArray()
         );
     }
 }
 
-/// <summary>The validated authorization posture and connection options for the hub endpoint.</summary>
+/// <summary>
+/// The validated authorization posture, connection options and allowed origins for the hub
+/// endpoint. <see cref="AllowedOrigins"/> is null when the host's CORS default policy decides.
+/// </summary>
 internal sealed record TrainEventHubPosture(
     bool AllowAnonymous,
     bool RequireAuthorization,
     IReadOnlyList<string> Policies,
     IReadOnlyList<string> Roles,
-    Action<HttpConnectionDispatcherOptions> ConfigureConnection
+    Action<HttpConnectionDispatcherOptions> ConfigureConnection,
+    IReadOnlyList<string>? AllowedOrigins = null
 );

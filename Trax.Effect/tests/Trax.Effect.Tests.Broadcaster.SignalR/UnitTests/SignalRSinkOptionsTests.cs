@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Broadcaster.SignalR.Configuration;
 using Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions;
 using Trax.Effect.Broadcaster.SignalR.Models;

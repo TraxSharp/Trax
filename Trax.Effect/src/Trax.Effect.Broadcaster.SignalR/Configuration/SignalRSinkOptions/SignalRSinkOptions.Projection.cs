@@ -6,7 +6,8 @@ public partial class SignalRSinkOptions
 {
     /// <summary>
     /// Replace the default <c>TraxClientEvent</c> projection. The supplied function is invoked
-    /// for every event that passes the filters and produces the payload sent to clients.
+    /// for every train event that passes the filters and produces the payload sent to clients.
+    /// Junction events are shaped by <see cref="WithJunctionProjection{TClient}"/> instead.
     /// </summary>
     /// <typeparam name="TClient">The shape sent to SignalR clients. Must be JSON-serializable.</typeparam>
     public SignalRSinkOptions WithProjection<TClient>(

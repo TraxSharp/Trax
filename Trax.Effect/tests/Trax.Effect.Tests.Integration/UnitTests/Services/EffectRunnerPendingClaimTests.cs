@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 using Trax.Effect.Models;
 using Trax.Effect.Models.Metadata;

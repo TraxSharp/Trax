@@ -12,6 +12,7 @@ namespace Trax.Effect.Broadcaster.RabbitMQ
         public RabbitMqBroadcasterOptions() { }
         public required string ConnectionString { get; set; }
         public string ExchangeName { get; set; }
+        public string? JunctionExchangeName { get; set; }
         public ushort PrefetchCount { get; set; }
     }
     public class RabbitMqTrainEventReceiver : System.IAsyncDisposable, Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver

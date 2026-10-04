@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 
 namespace Trax.Effect.StateMachine.Persistence.Integration;

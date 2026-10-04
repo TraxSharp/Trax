@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>The shared data layer behind the Trax.Effect data providers: the IDataContext over the Trax tables (metadata, logs, manifests, work queue), AddDataContextLogging, and the DomainDataContext base with AddDomainDataContext for your own schemas. You normally get it through Trax.Effect.Data.Postgres, .Sqlite or .InMemory rather than installing it directly.</Description>
+    <Description>The shared data layer behind the Trax.Effect data providers: the IDataContext over the Trax .NET tables (metadata, logs, manifests, work queue), AddDataContextLogging, and the DomainDataContext base with AddDomainDataContext for your own schemas. You normally get it through Trax.Effect.Data.Postgres, .Sqlite or .InMemory rather than installing it directly.</Description>
     <AssemblyName>Trax.Effect.Data</AssemblyName>
   </PropertyGroup>
 
@@ -15,5 +15,11 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <!-- The junction run writer's flush is for tests that read the rows it writes. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Data.InMemory.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Data.Sqlite.Integration" />
   </ItemGroup>
 </Project>

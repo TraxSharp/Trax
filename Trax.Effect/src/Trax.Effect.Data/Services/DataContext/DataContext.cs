@@ -131,6 +131,11 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     public DbSet<Effect.Models.RecordedDecision.RecordedDecision> RecordedDecisions { get; set; }
 
     /// <summary>
+    /// Gets or sets the DbSet for the steps of each run, recorded by <c>AddJunctionEvents</c>.
+    /// </summary>
+    public DbSet<Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
+
+    /// <summary>
     /// Gets or sets the DbSet for the state-machine drafts Trax.Effect.StateMachine.Persistence stores.
     /// </summary>
     public DbSet<Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
@@ -171,6 +176,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         );
         Models.RunnerNonce.PersistentRunnerNonce.OnModelCreating(modelBuilder);
         Models.RecordedDecision.PersistentRecordedDecision.OnModelCreating(modelBuilder);
+        Models.JunctionRun.PersistentJunctionRun.OnModelCreating(modelBuilder);
         Models.SnapshotDraft.PersistentSnapshotDraft.OnModelCreating(modelBuilder);
         Models.EffectClaim.PersistentEffectClaim.OnModelCreating(modelBuilder);
     }

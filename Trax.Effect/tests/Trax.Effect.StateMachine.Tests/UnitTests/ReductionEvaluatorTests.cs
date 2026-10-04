@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace Trax.Effect.StateMachine.Tests.UnitTests;
 
@@ -71,7 +71,7 @@ public class ReductionEvaluatorTests
             .AsArray()
             .Should()
             .ContainSingle()
-            .Which.GetValue<string>()
+            .Which!.GetValue<string>()
             .Should()
             .Be("book");
         result["receipt"]!.GetValue<string>().Should().Be("rcpt_1");

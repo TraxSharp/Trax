@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.SignalR.Client;
 using Trax.Effect.Broadcaster.SignalR.Models;
 using Trax.Effect.Broadcaster.SignalR.Services;

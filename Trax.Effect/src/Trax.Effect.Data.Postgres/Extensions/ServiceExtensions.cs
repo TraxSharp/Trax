@@ -141,6 +141,8 @@ public static class ServiceExtensions
                             o.MapEnum<DeadLetterStatus>("dead_letter_status", "trax");
                             o.MapEnum<WorkQueueStatus>("work_queue_status", "trax");
                             o.MapEnum<MisfirePolicy>("misfire_policy", "trax");
+                            o.MapEnum<JunctionRunKind>("junction_run_kind", "trax");
+                            o.MapEnum<JunctionRunState>("junction_run_state", "trax");
                         }
                     )
                     .UseLoggerFactory(new NullLoggerFactory())

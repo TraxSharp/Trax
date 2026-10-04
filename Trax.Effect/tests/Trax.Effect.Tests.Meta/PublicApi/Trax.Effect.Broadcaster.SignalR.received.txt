@@ -15,6 +15,10 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions
             where T2 :  class
             where T3 :  class { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithDeliveryQueueCapacity(int capacity) { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithJunctionAnswers() { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithJunctionEvents() { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithJunctionProjection<TClient>(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, TClient> projection)
+            where TClient :  notnull { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.SignalRSinkOptions.SignalRSinkOptions WithProjection<TClient>(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, TClient> projection)
             where TClient :  notnull { }
     }
@@ -24,6 +28,7 @@ namespace Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions
     public class TraxTrainEventHubOptions
     {
         public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions AllowAnonymous() { }
+        public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions AllowOrigins(params string[] origins) { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions ConfigureConnection(System.Action<Microsoft.AspNetCore.Http.Connections.HttpConnectionDispatcherOptions> configure) { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions RequireAuthorization(params string[] policies) { }
         public Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions.TraxTrainEventHubOptions RequireRoles(params string[] roles) { }
@@ -61,11 +66,87 @@ namespace Trax.Effect.Broadcaster.SignalR.Models
         [System.Text.Json.Serialization.JsonPropertyName("trainName")]
         public string TrainName { get; init; }
     }
+    public class TraxJunctionClientEvent : System.IEquatable<Trax.Effect.Broadcaster.SignalR.Models.TraxJunctionClientEvent>
+    {
+        public TraxJunctionClientEvent(
+                    long MetadataId,
+                    string ExternalId,
+                    string TrainName,
+                    string EventType,
+                    System.DateTime Timestamp,
+                    int Position,
+                    string Kind,
+                    string Name,
+                    string State,
+                    System.DateTime StartedAt,
+                    System.DateTime? EndedAt,
+                    double? DurationMs,
+                    string? FailureClass,
+                    string? FailureException,
+                    string? QuestionKey,
+                    string? Answer,
+                    double? Confidence,
+                    bool Replayed,
+                    bool AnswerWithheld,
+                    bool NameWithheld,
+                    int? TrackPosition) { }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("answer")]
+        public string? Answer { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("answerWithheld")]
+        public bool AnswerWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("confidence")]
+        public double? Confidence { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("durationMs")]
+        public double? DurationMs { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("endedAt")]
+        public System.DateTime? EndedAt { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("eventType")]
+        public string EventType { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("externalId")]
+        public string ExternalId { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("failureClass")]
+        public string? FailureClass { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("failureException")]
+        public string? FailureException { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("kind")]
+        public string Kind { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("metadataId")]
+        public long MetadataId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string Name { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("nameWithheld")]
+        public bool NameWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
+        public int Position { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("questionKey")]
+        public string? QuestionKey { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("replayed")]
+        public bool Replayed { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("startedAt")]
+        public System.DateTime StartedAt { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("state")]
+        public string State { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+        public System.DateTime Timestamp { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("trackPosition")]
+        public int? TrackPosition { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("trainName")]
+        public string TrainName { get; init; }
+    }
 }
 namespace Trax.Effect.Broadcaster.SignalR.Services
 {
     public interface ITraxTrainEventClient
     {
+        System.Threading.Tasks.Task JunctionEvent(object payload);
         System.Threading.Tasks.Task TrainEvent(object payload);
     }
     public sealed class TraxTrainEventHub : Microsoft.AspNetCore.SignalR.Hub<Trax.Effect.Broadcaster.SignalR.Services.ITraxTrainEventClient>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
@@ -57,7 +58,10 @@ public static class SignalRHubEndpointExtensions
     /// may connect. Every policy the posture names is resolved through the host's
     /// <see cref="IAuthorizationPolicyProvider"/> here, so an unknown one fails at startup. A bare
     /// <c>RequireAuthorization()</c> applies the host's default policy and, when it has one, its
-    /// fallback policy as well. A connection is closed once the authentication it was admitted on
+    /// fallback policy as well. A browser request from an origin other than the hub's own is
+    /// refused with <c>403</c> unless <c>AllowOrigins</c> allows it or, without that call, the
+    /// host's CORS default policy does; a request with no <c>Origin</c> header is left to the
+    /// posture. A connection is closed once the authentication it was admitted on
     /// expires (<see cref="HttpConnectionDispatcherOptions.CloseOnAuthenticationExpiration"/>,
     /// which <c>ConfigureConnection</c> cannot turn off). <c>AllowAnonymous()</c> is logged as a
     /// warning at startup. The hub's
@@ -116,6 +120,25 @@ public static class SignalRHubEndpointExtensions
                 connection.CloseOnAuthenticationExpiration = true;
             }
         );
+
+        // A browser request from an origin the host does not serve or allow is refused before it
+        // reaches the hub, on negotiate and on every transport, whatever its credentials.
+        var allowedOrigins = posture.AllowedOrigins;
+        hub.Add(endpoint =>
+        {
+            var next = endpoint.RequestDelegate;
+            if (next is null)
+                return;
+
+            endpoint.RequestDelegate = context =>
+            {
+                if (HubOriginPolicy.IsAllowed(context, allowedOrigins))
+                    return next(context);
+
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            };
+        });
 
         if (posture.AllowAnonymous)
         {

@@ -272,7 +272,7 @@ namespace Trax.Effect.StateMachine.Persistence.Mutations
     public class AdvanceSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.IAdvanceSnapshot
     {
         public AdvanceSnapshot() { }
-        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>> Junctions() { }
+        protected override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotOutput>> Junctions() { }
     }
     public class AdvanceSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.AdvanceSnapshotInput>
     {
@@ -301,7 +301,7 @@ namespace Trax.Effect.StateMachine.Persistence.Mutations
     public class LoadSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.ILoadSnapshot
     {
         public LoadSnapshot() { }
-        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>> Junctions() { }
+        protected override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotOutput>> Junctions() { }
     }
     public class LoadSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.LoadSnapshotInput>
     {
@@ -322,7 +322,7 @@ namespace Trax.Effect.StateMachine.Persistence.Mutations
     public class SaveSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.ISaveSnapshot
     {
         public SaveSnapshot() { }
-        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>> Junctions() { }
+        protected override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotOutput>> Junctions() { }
     }
     public class SaveSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.SaveSnapshotInput>
     {
@@ -345,7 +345,7 @@ namespace Trax.Effect.StateMachine.Persistence.Mutations
     public class SendSnapshot : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>, Trax.Effect.StateMachine.Persistence.Mutations.ISendSnapshot
     {
         public SendSnapshot() { }
-        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>> Junctions() { }
+        protected override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotOutput>> Junctions() { }
     }
     public class SendSnapshotInput : System.IEquatable<Trax.Effect.StateMachine.Persistence.Mutations.SendSnapshotInput>
     {

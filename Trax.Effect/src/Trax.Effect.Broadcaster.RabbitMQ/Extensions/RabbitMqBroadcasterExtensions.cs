@@ -48,6 +48,16 @@ public static class RabbitMqBroadcasterExtensions
             );
         }
 
+        if (options.EffectiveJunctionExchangeName == options.ExchangeName)
+        {
+            throw new ArgumentException(
+                "UseRabbitMq() requires RabbitMqBroadcasterOptions.JunctionExchangeName to differ "
+                    + "from ExchangeName, so a receiver that predates junction events never receives "
+                    + "one. Omit it to use the default, ExchangeName + \".junctions\".",
+                nameof(configure)
+            );
+        }
+
         builder.ServiceCollection.AddSingleton(options);
         builder
             .ServiceCollection.AddSingleton<RabbitMqTrainEventBroadcaster>()
@@ -55,7 +65,17 @@ public static class RabbitMqBroadcasterExtensions
                 sp.GetRequiredService<RabbitMqTrainEventBroadcaster>()
             );
         builder
-            .ServiceCollection.AddSingleton<RabbitMqTrainEventReceiver>()
+            .ServiceCollection.AddSingleton(sp => new RabbitMqTrainEventReceiver(
+                sp.GetRequiredService<RabbitMqBroadcasterOptions>(),
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<RabbitMqTrainEventReceiver>>()
+            )
+            {
+                // Only a host that handles junction events binds their exchange.
+                BindJunctionExchange =
+                    sp.GetService<IServiceProviderIsService>()
+                        ?.IsService(typeof(IJunctionEventHandler))
+                    ?? true,
+            })
             .AddSingleton<ITrainEventReceiver>(sp =>
                 sp.GetRequiredService<RabbitMqTrainEventReceiver>()
             );

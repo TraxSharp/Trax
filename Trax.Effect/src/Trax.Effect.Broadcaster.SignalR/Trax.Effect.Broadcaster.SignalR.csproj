@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>SignalR sink for Trax train lifecycle events. Adds UseSignalRHub() to the UseBroadcaster builder and MapTraxTrainEventHub() for the endpoint, so browser and Blazor clients receive train events as they happen.</Description>
+    <Description>SignalR sink for Trax .NET train lifecycle events. Adds UseSignalRHub() to the UseBroadcaster builder and MapTraxTrainEventHub() for the endpoint, so browser and Blazor clients receive train events as they happen.</Description>
     <AssemblyName>Trax.Effect.Broadcaster.SignalR</AssemblyName>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>

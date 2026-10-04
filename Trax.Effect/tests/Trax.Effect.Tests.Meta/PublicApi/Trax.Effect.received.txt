@@ -98,7 +98,7 @@ namespace Trax.Effect.Attributes
     {
         public TraxRemoteAttribute() { }
     }
-    [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Field | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=true)]
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct | System.AttributeTargets.Enum | System.AttributeTargets.Property | System.AttributeTargets.Field | System.AttributeTargets.Parameter, AllowMultiple=false, Inherited=true)]
     public sealed class TraxSensitiveAttribute : System.Attribute
     {
         public TraxSensitiveAttribute() { }
@@ -182,6 +182,21 @@ namespace Trax.Effect.Enums
         AwaitingIntervention = 0,
         Retried = 1,
         Acknowledged = 2,
+    }
+    public enum JunctionRunKind
+    {
+        Junction = 0,
+        Choice = 1,
+        Score = 2,
+        YesNo = 3,
+        Route = 4,
+    }
+    public enum JunctionRunState
+    {
+        InProgress = 0,
+        Completed = 1,
+        Failed = 2,
+        Cancelled = 3,
     }
     public enum MisfirePolicy
     {
@@ -428,7 +443,7 @@ namespace Trax.Effect.Models.JunctionMetadata.DTOs
         public string Name { get; set; }
         public System.Type OutputType { get; set; }
         public System.DateTime? StartTimeUtc { get; set; }
-        public LanguageExt.EitherStatus State { get; set; }
+        public Trax.Core.Functional.EitherStatus State { get; set; }
     }
 }
 namespace Trax.Effect.Models.JunctionMetadata
@@ -456,7 +471,7 @@ namespace Trax.Effect.Models.JunctionMetadata
         [System.ComponentModel.DataAnnotations.Schema.Column("start_time_utc")]
         public System.DateTime? StartTimeUtc { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("state")]
-        public LanguageExt.EitherStatus State { get; set; }
+        public Trax.Core.Functional.EitherStatus State { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_external_id")]
         public string TrainExternalId { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_metadata_id")]
@@ -465,6 +480,49 @@ namespace Trax.Effect.Models.JunctionMetadata
         public string TrainName { get; }
         public override string ToString() { }
         public static Trax.Effect.Models.JunctionMetadata.JunctionMetadata Create(Trax.Effect.Models.JunctionMetadata.DTOs.CreateJunctionMetadata junctionMetadata, Trax.Effect.Models.Metadata.Metadata metadata) { }
+    }
+}
+namespace Trax.Effect.Models.JunctionRun
+{
+    public class JunctionRun
+    {
+        public JunctionRun() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("answer")]
+        public string? Answer { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("answer_withheld")]
+        public bool AnswerWithheld { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("attempt")]
+        public int? Attempt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("confidence")]
+        public double? Confidence { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("ended_at")]
+        public System.DateTime? EndedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_class")]
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("failure_exception")]
+        public string? FailureException { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("kind")]
+        public Trax.Effect.Enums.JunctionRunKind Kind { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        public long MetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+        public string Name { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("name_withheld")]
+        public bool NameWithheld { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("position")]
+        public int Position { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("question_key")]
+        public string? QuestionKey { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("replayed")]
+        public bool Replayed { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("started_at")]
+        public System.DateTime StartedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state")]
+        public Trax.Effect.Enums.JunctionRunState State { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("track_position")]
+        public int? TrackPosition { get; set; }
     }
 }
 namespace Trax.Effect.Models.Log.DTOs
@@ -533,6 +591,7 @@ namespace Trax.Effect.Models.Manifest.DTOs
         public string? Owner { get; set; }
         public int Priority { get; set; }
         public Trax.Effect.Models.Manifest.IManifestProperties? Properties { get; set; }
+        public bool ReplayDecisionsOnRetry { get; set; }
         public Trax.Effect.Enums.ScheduleType ScheduleType { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
         public int? TimeoutSeconds { get; set; }
@@ -621,6 +680,8 @@ namespace Trax.Effect.Models.Manifest
         public System.Type PropertyType { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("property_type")]
         public string? PropertyTypeName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_on_retry")]
+        public bool ReplayDecisionsOnRetry { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("schedule_type")]
         public Trax.Effect.Enums.ScheduleType ScheduleType { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
@@ -638,7 +699,7 @@ namespace Trax.Effect.Models.Manifest
         public object GetPropertiesUntyped(System.Collections.Generic.IEnumerable<System.Type> registeredInputTypes) { }
         public System.Type ResolvePropertyType(System.Collections.Generic.IEnumerable<System.Type> registeredInputTypes) { }
         public void SetExclusions(System.Collections.Generic.List<Trax.Effect.Models.Manifest.Exclusion> exclusions) { }
-        public LanguageExt.Unit SetProperties(Trax.Effect.Models.Manifest.IManifestProperties properties) { }
+        public Trax.Core.Functional.Unit SetProperties(Trax.Effect.Models.Manifest.IManifestProperties properties) { }
         public override string ToString() { }
         public static Trax.Effect.Models.Manifest.Manifest Create(Trax.Effect.Models.Manifest.DTOs.CreateManifest manifest) { }
     }
@@ -742,6 +803,10 @@ namespace Trax.Effect.Models.Metadata
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("parent_id")]
         public long? ParentId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("replay_abandoned")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("replay_abandoned")]
+        public bool ReplayAbandoned { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_of")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("replay_decisions_of")]
@@ -754,7 +819,7 @@ namespace Trax.Effect.Models.Metadata
         public System.DateTime StartTime { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("train_state")]
         public Trax.Effect.Enums.TrainState TrainState { get; set; }
-        public LanguageExt.Unit AddException(System.Exception trainException) { }
+        public Trax.Core.Functional.Unit AddException(System.Exception trainException) { }
         public void Dispose() { }
         public T? GetInput<T>() { }
         public dynamic? GetInputObject() { }
@@ -853,6 +918,8 @@ namespace Trax.Effect.Models.RecordedDecision
         public string? Routes { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("shadows")]
         public string? Shadows { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state_hash")]
+        public string? StateHash { get; set; }
     }
 }
 namespace Trax.Effect.Models.RunnerNonce
@@ -1070,8 +1137,8 @@ namespace Trax.Effect.Services.EffectJunction
     {
         protected EffectJunction() { }
         public Trax.Effect.Models.JunctionMetadata.JunctionMetadata? Metadata { get; }
-        public override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
-        public System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(LanguageExt.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain) { }
+        public override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
+        public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain) { }
         public abstract override System.Threading.Tasks.Task<TOut> Run(TIn input) { }
     }
 }
@@ -1265,6 +1332,10 @@ namespace Trax.Effect.Services.ServiceTrain
 }
 namespace Trax.Effect.Services.TrainEventBroadcaster
 {
+    public interface IJunctionEventHandler
+    {
+        System.Threading.Tasks.Task HandleAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct);
+    }
     public interface ITrainEventBroadcaster
     {
         System.Threading.Tasks.Task PublishAsync(Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage message, System.Threading.CancellationToken ct);
@@ -1278,6 +1349,68 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         System.Threading.Tasks.Task StartAsync(System.Func<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage, System.Threading.CancellationToken, System.Threading.Tasks.Task> handler, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken ct);
     }
+    public sealed class JunctionEventPayload : System.IEquatable<Trax.Effect.Services.TrainEventBroadcaster.JunctionEventPayload>
+    {
+        public const string WithheldName = "(withheld)";
+        public JunctionEventPayload(
+                    int Position,
+                    Trax.Effect.Enums.JunctionRunKind Kind,
+                    string Name,
+                    Trax.Effect.Enums.JunctionRunState State,
+                    System.DateTime StartedAt,
+                    System.DateTime? EndedAt = default,
+                    double? DurationMs = default,
+                    Trax.Core.Exceptions.FailureClass? FailureClass = default,
+                    string? FailureException = null,
+                    string? QuestionKey = null,
+                    string? Answer = null,
+                    double? Confidence = default,
+                    bool Replayed = false,
+                    string? Decider = null,
+                    bool AnswerWithheld = false,
+                    int? Attempt = default,
+                    bool NameWithheld = false,
+                    int? TrackPosition = default) { }
+        [System.Text.Json.Serialization.JsonPropertyName("answer")]
+        public string? Answer { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("answerWithheld")]
+        public bool AnswerWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("attempt")]
+        public int? Attempt { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("confidence")]
+        public double? Confidence { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("decider")]
+        public string? Decider { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("durationMs")]
+        public double? DurationMs { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("endedAt")]
+        public System.DateTime? EndedAt { get; init; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<Trax.Core.Exceptions.FailureClass?>?))]
+        [System.Text.Json.Serialization.JsonPropertyName("failureClass")]
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("failureException")]
+        public string? FailureException { get; init; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<Trax.Effect.Enums.JunctionRunKind>?))]
+        [System.Text.Json.Serialization.JsonPropertyName("kind")]
+        public Trax.Effect.Enums.JunctionRunKind Kind { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string Name { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("nameWithheld")]
+        public bool NameWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("position")]
+        public int Position { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("questionKey")]
+        public string? QuestionKey { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("replayed")]
+        public bool Replayed { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("startedAt")]
+        public System.DateTime StartedAt { get; init; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<Trax.Effect.Enums.JunctionRunState>?))]
+        [System.Text.Json.Serialization.JsonPropertyName("state")]
+        public Trax.Effect.Enums.JunctionRunState State { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("trackPosition")]
+        public int? TrackPosition { get; init; }
+    }
     public class TrainEventReceiverService : Microsoft.Extensions.Hosting.BackgroundService
     {
         public TrainEventReceiverService(Trax.Effect.Services.TrainEventBroadcaster.ITrainEventReceiver receiver, System.IServiceProvider serviceProvider, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Services.TrainEventBroadcaster.TrainEventReceiverService>? logger = null) { }
@@ -1287,6 +1420,13 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
     public class TrainLifecycleEventMessage : System.IEquatable<Trax.Effect.Services.TrainEventBroadcaster.TrainLifecycleEventMessage>
     {
         public const string DataChangedEventType = "DataChanged";
+        public const string DecidedEventType = "Decided";
+        public const string DecisionRefusedEventType = "DecisionRefused";
+        public const string JunctionCancelledEventType = "JunctionCancelled";
+        public const string JunctionCompletedEventType = "JunctionCompleted";
+        public const string JunctionFailedEventType = "JunctionFailed";
+        public const string JunctionStartedEventType = "JunctionStarted";
+        public const string RoutedEventType = "Routed";
         public TrainLifecycleEventMessage(long MetadataId, string ExternalId, string TrainName, string TrainState, System.DateTime Timestamp, string? FailureJunction, string? FailureReason, string EventType, string? Executor, string? Output, string? HostName = null, string? HostEnvironment = null, string? ChangeDomain = null) { }
         [System.Text.Json.Serialization.JsonPropertyName("changeDomain")]
         public string? ChangeDomain { get; init; }
@@ -1308,6 +1448,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public string? HostName { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("instanceId")]
         public string? InstanceId { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("junction")]
+        public Trax.Effect.Services.TrainEventBroadcaster.JunctionEventPayload? Junction { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("metadataId")]
         public long MetadataId { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("output")]
@@ -1318,6 +1460,7 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public string TrainName { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("trainState")]
         public string TrainState { get; init; }
+        public static bool IsJunctionEvent(string? eventType) { }
     }
 }
 namespace Trax.Effect.Services.TrainLifecycleHook

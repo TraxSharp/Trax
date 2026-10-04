@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Functional;
 using Trax.Effect.Data.InMemory.Services.InMemoryContext;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;

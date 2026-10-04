@@ -1,8 +1,9 @@
+using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using DbUp;
 using DbUp.Engine;
-using LanguageExt;
 using Npgsql;
+using Trax.Core.Functional;
 
 namespace Trax.Effect.Data.Postgres.Utils;
 
@@ -70,7 +71,10 @@ public static partial class DatabaseMigrator
     /// another transaction holds would otherwise wait for as long as that transaction stays open,
     /// and every write to the table on every other instance would queue behind it. When a script
     /// gives up on its lock (<c>55P03</c>) the migrator runs the pending scripts again, up to ten
-    /// times, and then fails the start with that error.
+    /// times, and then fails the start with that error. So it does when a unique index a script
+    /// builds meets a duplicate (<c>23505</c> naming that index): a concurrent build lets writers
+    /// in while it runs, so a row the script's own clean-up would have resolved can land in the
+    /// middle of it, and running the script again resolves it first.
     /// </para>
     /// <para>
     /// Every connection it opens has its time zone pinned to UTC, whatever the connection string
@@ -128,11 +132,11 @@ public static partial class DatabaseMigrator
                     if (result.Successful)
                         break;
 
-                    if (!IsLockTimeout(result.Error) || attempt >= policy.Attempts)
-                        result.Error.Rethrow();
+                    if (!IsRetryable(result.Error) || attempt >= policy.Attempts)
+                        ExceptionDispatchInfo.Capture(result.Error).Throw();
 
                     Console.WriteLine(
-                        $"A Trax migration script gave up waiting for a table lock (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
+                        $"A Trax migration script gave up waiting for a table lock, or met a duplicate while building a unique index (attempt {attempt} of {policy.Attempts}); running the pending scripts again."
                     );
                     if (policy.Backoff > TimeSpan.Zero)
                         await Task.Delay(policy.Backoff * attempt);
@@ -152,11 +156,25 @@ public static partial class DatabaseMigrator
         }
     }
 
-    private static bool IsLockTimeout(Exception? error)
+    /// <summary>
+    /// Whether running the pending scripts again can get past <paramref name="error"/>: a script
+    /// gave up waiting for a lock, or a unique index a script builds met a duplicate, which the
+    /// script's own clean-up resolves when it runs again.
+    /// </summary>
+    internal static bool IsRetryable(Exception? error)
     {
         for (var current = error; current is not null; current = current.InnerException)
-            if (current is PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable })
-                return true;
+            switch (current)
+            {
+                case PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable }:
+                    return true;
+                case PostgresException
+                {
+                    SqlState: PostgresErrorCodes.UniqueViolation,
+                    ConstraintName: { } index,
+                } when ScriptIndexNames.Contains(index):
+                    return true;
+            }
         return false;
     }
 

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Models.Host;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Models;

@@ -22,4 +22,12 @@ public interface ITraxTrainEventClient
     /// </param>
     /// <returns>A task that completes when SignalR has handed the message to the transport.</returns>
     Task TrainEvent(object payload);
+
+    /// <summary>
+    /// Delivers one junction event (a step of a run) to the client, under the method name
+    /// <c>"JunctionEvent"</c>. Sent only by a sink configured with <c>WithJunctionEvents()</c>.
+    /// </summary>
+    /// <param name="payload">The step as a <c>TraxJunctionClientEvent</c>.</param>
+    /// <returns>A task that completes when SignalR has handed the message to the transport.</returns>
+    Task JunctionEvent(object payload);
 }

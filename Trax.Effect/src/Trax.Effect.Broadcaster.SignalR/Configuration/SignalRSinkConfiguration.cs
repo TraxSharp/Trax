@@ -1,3 +1,4 @@
+using Trax.Effect.Broadcaster.SignalR.Services;
 using Trax.Effect.Services.TrainEventBroadcaster;
 
 namespace Trax.Effect.Broadcaster.SignalR.Configuration;
@@ -12,9 +13,17 @@ internal sealed class SignalRSinkConfiguration
         IReadOnlySet<string> eventTypeFilter,
         IReadOnlySet<string> trainNameFilter,
         Func<TrainLifecycleEventMessage, object> projection,
-        int deliveryQueueCapacity
+        int deliveryQueueCapacity,
+        bool junctionEvents = false,
+        Func<TrainLifecycleEventMessage, object>? junctionProjection = null
     )
     {
+        JunctionEvents = junctionEvents;
+        JunctionProjection =
+            junctionProjection
+            ?? (
+                message => DefaultTraxJunctionClientEventProjection.Project(message, answers: false)
+            );
         EventTypeFilter = eventTypeFilter;
         TrainNameFilter = trainNameFilter;
         Projection = projection;
@@ -43,14 +52,34 @@ internal sealed class SignalRSinkConfiguration
     public int DeliveryQueueCapacity { get; }
 
     /// <summary>
-    /// Returns true if a message satisfies both the event-type and train-name filters.
+    /// Whether junction events are sent to clients. Off unless <c>WithJunctionEvents()</c> was called.
+    /// </summary>
+    public bool JunctionEvents { get; }
+
+    /// <summary>
+    /// Projection applied to each junction event before it is sent to clients. By default a
+    /// <c>TraxJunctionClientEvent</c> without the answer or the confidence.
+    /// </summary>
+    public Func<TrainLifecycleEventMessage, object> JunctionProjection { get; }
+
+    /// <summary>
+    /// Returns true if a message satisfies both the event-type and train-name filters. A junction
+    /// event also needs <see cref="JunctionEvents"/>, so a sink that did not ask for them never
+    /// sends one, whatever the filters allow.
     /// </summary>
     public bool Matches(TrainLifecycleEventMessage message)
     {
+        if (IsJunctionEvent(message) && !JunctionEvents)
+            return false;
         if (EventTypeFilter.Count > 0 && !EventTypeFilter.Contains(message.EventType))
             return false;
         if (TrainNameFilter.Count > 0 && !TrainNameFilter.Contains(message.TrainName))
             return false;
         return true;
     }
+
+    /// <summary>Whether the message is a junction event rather than one of the train's own.</summary>
+    public static bool IsJunctionEvent(TrainLifecycleEventMessage message) =>
+        message.Junction is not null
+        || TrainLifecycleEventMessage.IsJunctionEvent(message.EventType);
 }

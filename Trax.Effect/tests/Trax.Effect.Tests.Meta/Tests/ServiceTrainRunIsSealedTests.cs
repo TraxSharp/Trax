@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Tests.Meta.Tests;

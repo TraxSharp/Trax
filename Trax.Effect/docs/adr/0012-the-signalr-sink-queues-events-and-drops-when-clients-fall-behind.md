@@ -9,7 +9,9 @@ status: accepted
 A train awaits its lifecycle hooks inline, so whatever a hook waits on, the train waits on. The
 SignalR sink's hook therefore does not wait on delivery to clients. It filters the event and writes
 it to a bounded queue; one background sender delivers the queue in order through `Clients.All`. When
-the queue is full the event is dropped, counted and logged, and the train carries on.
+the queue is full the event is dropped, counted and logged, and the train carries on; a junction
+event (`0019`) is given up first, so an incoming train event takes the place of the oldest queued
+junction event before it is dropped itself.
 
 ## Status
 
@@ -66,4 +68,5 @@ rather than a guard, and nothing stops a new hook elsewhere from awaiting a clie
 
 ## Changelog
 
+- **2026-10-02**: A full queue gives up junction events before train events.
 - **2026-09-28**: Recorded.

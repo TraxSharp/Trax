@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Tests.Integration.Fixtures;

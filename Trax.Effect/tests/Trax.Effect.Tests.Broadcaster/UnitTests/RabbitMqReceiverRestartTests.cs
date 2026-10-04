@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using Trax.Effect.Broadcaster.RabbitMQ;

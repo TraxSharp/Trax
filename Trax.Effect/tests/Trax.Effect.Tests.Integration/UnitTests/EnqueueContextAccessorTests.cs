@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.EnqueueContext;

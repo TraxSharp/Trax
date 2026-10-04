@@ -149,6 +149,18 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
         ((DbContext)this).Set<Effect.Models.RecordedDecision.RecordedDecision>();
 
     /// <summary>
+    /// The <c>trax.junction_run</c> table: the steps of each run, in order, written by
+    /// <c>AddJunctionEvents</c>. Read a run's timeline with
+    /// <c>JunctionRuns.ForRun(metadataId)</c> (<c>JunctionRunQueries</c>), ordered by <c>Position</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
+    /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.JunctionRun.JunctionRun> JunctionRuns =>
+        ((DbContext)this).Set<Effect.Models.JunctionRun.JunctionRun>();
+
+    /// <summary>
     /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft, written by
     /// Trax.Effect.StateMachine.Persistence. Filter by <c>UserKey</c> when querying directly, because the draft
     /// id alone is not unique across users.

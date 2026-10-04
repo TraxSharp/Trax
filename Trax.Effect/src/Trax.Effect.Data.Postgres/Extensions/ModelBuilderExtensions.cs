@@ -50,6 +50,8 @@ public static class ModelBuilderExtensions
         modelBuilder.HasPostgresEnum<DeadLetterStatus>(schema: "trax");
         modelBuilder.HasPostgresEnum<WorkQueueStatus>(schema: "trax");
         modelBuilder.HasPostgresEnum<MisfirePolicy>(schema: "trax");
+        modelBuilder.HasPostgresEnum<JunctionRunKind>(schema: "trax");
+        modelBuilder.HasPostgresEnum<JunctionRunState>(schema: "trax");
 
         return modelBuilder;
     }
@@ -93,6 +95,8 @@ public static class ModelBuilderExtensions
         npgsqlDataSourceBuilder.MapEnum<DeadLetterStatus>("trax.dead_letter_status");
         npgsqlDataSourceBuilder.MapEnum<WorkQueueStatus>("trax.work_queue_status");
         npgsqlDataSourceBuilder.MapEnum<MisfirePolicy>("trax.misfire_policy");
+        npgsqlDataSourceBuilder.MapEnum<JunctionRunKind>("trax.junction_run_kind");
+        npgsqlDataSourceBuilder.MapEnum<JunctionRunState>("trax.junction_run_state");
 
         configure?.Invoke(npgsqlDataSourceBuilder);
 

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Broadcaster.SignalR.Models;
 using Trax.Effect.Broadcaster.SignalR.Services;
 using Trax.Effect.Services.TrainEventBroadcaster;

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -298,6 +298,21 @@ public class Manifest : IModel
     [Column("owner")]
     public string? Owner { get; set; }
 
+    /// <summary>
+    /// Whether a retry of this manifest's failed run replays the decisions that run recorded.
+    /// True by default.
+    /// </summary>
+    /// <remarks>
+    /// When true, the scheduler's automatic retries and a requeue of the manifest's dead letter run
+    /// with <c>ReplayDecisionsOf</c> pointing at the failed run, so they take the tracks it took
+    /// rather than asking again. When false they ask the decider (the model) afresh instead of
+    /// replaying the failed run's recorded decisions, for a manifest whose failures are as likely
+    /// to come from a decision as from what followed it. Only matters on a host that records
+    /// decisions (<c>AddDecisionRecording</c>).
+    /// </remarks>
+    [Column("replay_decisions_on_retry")]
+    public bool ReplayDecisionsOnRetry { get; set; } = true;
+
     #endregion
 
     #region ForeignKeys
@@ -418,6 +433,7 @@ public class Manifest : IModel
             VarianceSeconds = manifest.VarianceSeconds,
             FailureWindowSeconds = manifest.FailureWindowSeconds,
             Owner = manifest.Owner,
+            ReplayDecisionsOnRetry = manifest.ReplayDecisionsOnRetry,
         };
 
         if (manifest.Properties != null)

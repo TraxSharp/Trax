@@ -1,10 +1,12 @@
-using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
+using Trax.Effect.Extensions;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
+using Trax.Effect.Services.JunctionEvents;
 using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.EffectJunction;
@@ -95,12 +97,37 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
 
         Metadata.StartTimeUtc = DateTime.UtcNow;
 
-        var result = await base.RailwayJunction(previousOutput, serviceTrain);
+        // A junction skipped because an earlier one failed did not run, so it is not a step.
+        var events = previousOutput.IsRight ? JunctionEventRun.For(serviceTrain.Metadata) : null;
+        var position = events is null
+            ? -1
+            : await JunctionSteps.Started(events, Metadata.Name, Metadata.StartTimeUtc.Value);
+
+        Either<Exception, TOut> result;
+
+        try
+        {
+            result = await base.RailwayJunction(previousOutput, serviceTrain);
+        }
+        catch (Exception thrown) when (events is not null)
+        {
+            // A cancellation of the run's token leaves the junction by throwing.
+            await ReportEnded(events, position, serviceTrain, thrown);
+            throw;
+        }
 
         Metadata.EndTimeUtc = DateTime.UtcNow;
         Metadata.State = result.State;
         // A Left input skips Run: an earlier junction failed and this one never executed.
         Metadata.HasRan = previousOutput.IsRight;
+
+        if (events is not null)
+            await ReportEnded(
+                events,
+                position,
+                serviceTrain,
+                result.IsLeft ? result.Swap().ValueUnsafe() : null
+            );
 
         if (serviceTrain.JunctionEffectRunner is not null)
             await serviceTrain.JunctionEffectRunner.AfterJunctionExecution(
@@ -110,5 +137,41 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             );
 
         return result;
+    }
+
+    /// <summary>
+    /// Publishes the junction's end. Publishing cannot change the junction's result: whatever goes
+    /// wrong is logged.
+    /// </summary>
+    private async Task ReportEnded<TTrainIn, TTrainOut>(
+        JunctionEventRun events,
+        int position,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
+        Exception? failure
+    )
+    {
+        try
+        {
+            await JunctionSteps.Ended(
+                events,
+                position,
+                Metadata!.Name,
+                Metadata.StartTimeUtc ?? DateTime.UtcNow,
+                Metadata.EndTimeUtc ?? DateTime.UtcNow,
+                failure,
+                failure is not null && serviceTrain.IsRequestedCancellation(failure),
+                serviceTrain.ServiceProvider,
+                serviceTrain.Logger
+            );
+        }
+        catch (Exception e)
+        {
+            serviceTrain.Logger?.LogWarning(
+                e,
+                "Could not publish the end of junction ({JunctionName}) in train ({TrainName}); the junction's result stands.",
+                Metadata?.Name,
+                serviceTrain.TrainName
+            );
+        }
     }
 }

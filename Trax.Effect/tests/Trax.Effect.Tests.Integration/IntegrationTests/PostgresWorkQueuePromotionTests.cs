@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.WorkQueuePromotion;
 using Trax.Effect.Enums;

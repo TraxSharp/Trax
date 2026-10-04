@@ -40,4 +40,22 @@ public static class BuilderOrderExtensions
     public static TraxEffectBuilderWithData AddDecisionRecording(
         this TraxEffectBuilder configurationBuilder
     ) => throw new InvalidOperationException(DataProviderBeforeDecisions);
+
+    /// <summary>Not callable: <c>AddDecisionRecording</c> comes after a data provider.</summary>
+    [Obsolete(DataProviderBeforeDecisions, error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static TraxEffectBuilderWithData AddDecisionRecording(
+        this TraxEffectBuilder configurationBuilder,
+        Action<Decisions.DecisionRecordingOptions> configure
+    ) => throw new InvalidOperationException(DataProviderBeforeDecisions);
+
+    internal const string DataProviderBeforeJunctionEvents =
+        "Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddJunctionEvents().";
+
+    /// <summary>Not callable: <c>AddJunctionEvents</c> comes after a data provider.</summary>
+    [Obsolete(DataProviderBeforeJunctionEvents, error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static TraxEffectBuilderWithData AddJunctionEvents(
+        this TraxEffectBuilder configurationBuilder
+    ) => throw new InvalidOperationException(DataProviderBeforeJunctionEvents);
 }

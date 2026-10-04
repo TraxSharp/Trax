@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>Persistence for the Trax snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
+    <Description>Persistence for the Trax .NET snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
     <AssemblyName>Trax.Effect.StateMachine.Persistence</AssemblyName>
   </PropertyGroup>
 

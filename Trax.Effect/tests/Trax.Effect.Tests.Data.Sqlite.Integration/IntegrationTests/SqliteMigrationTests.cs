@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Trax.Effect.Data.Sqlite.Utils;
 
@@ -12,6 +12,7 @@ public class SqliteMigrationTests
         "background_job",
         "dead_letter",
         "decision",
+        "junction_run",
         "log",
         "manifest",
         "manifest_group",
@@ -58,6 +59,7 @@ public class SqliteMigrationTests
         "ix_runner_nonce_expires_at",
         "ix_work_queue_replay_decisions_of",
         "ix_metadata_replay_decisions_of",
+        "ix_metadata_manifest_id_id",
     ];
 
     private static string CreateTempDbPath() =>

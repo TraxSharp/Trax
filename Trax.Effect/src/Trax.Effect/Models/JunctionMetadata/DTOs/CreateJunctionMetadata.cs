@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 
 namespace Trax.Effect.Models.JunctionMetadata.DTOs;
 

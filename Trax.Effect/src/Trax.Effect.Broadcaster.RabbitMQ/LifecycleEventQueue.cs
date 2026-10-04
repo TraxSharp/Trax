@@ -4,14 +4,17 @@ namespace Trax.Effect.Broadcaster.RabbitMQ;
 
 /// <summary>
 /// The bounded, single-reader queue between <see cref="RabbitMqTrainEventBroadcaster.PublishAsync"/>
-/// and its background sender. When it is full it gives up a non-terminal event before a terminal
-/// one, so a run whose <c>Started</c> reached subscribers does not then lose its outcome.
+/// and its background sender. When it is full it gives up a junction event before a train's own
+/// event, and a non-terminal train event before a terminal one, so a run whose <c>Started</c>
+/// reached subscribers does not then lose its outcome, and a busy run's steps never crowd out
+/// another run's lifecycle.
 /// </summary>
 /// <remarks>
-/// A full queue treats an incoming event by its kind. A non-terminal one (<c>Started</c>,
-/// <c>StateChanged</c>, <c>DataChanged</c>) is dropped. A terminal one (<c>Completed</c>,
-/// <c>Failed</c>, <c>Cancelled</c>) takes the place of the oldest queued non-terminal event, and is
-/// dropped itself only when every queued event is terminal too.
+/// Events rank lowest to highest: junction events (<c>JunctionStarted</c>, <c>Decided</c> and the
+/// rest), then non-terminal ones (<c>Started</c>, <c>StateChanged</c>, <c>DataChanged</c>), then
+/// terminal ones (<c>Completed</c>, <c>Failed</c>, <c>Cancelled</c>). A full queue drops an incoming
+/// junction event. Any other incoming event takes the place of the oldest queued event of a lower
+/// rank, and is dropped itself only when none is queued.
 /// </remarks>
 internal sealed class LifecycleEventQueue(int capacity)
 {
@@ -56,22 +59,22 @@ internal sealed class LifecycleEventQueue(int capacity)
                 return true;
             }
 
-            if (!IsTerminal(message))
-            {
-                dropped = message;
-                return true;
-            }
+            var rank = Rank(message);
 
-            for (var node = _items.First; node is not null; node = node.Next)
+            // The lowest-ranked queued event below this one's rank goes first, oldest first.
+            for (var below = 0; below < rank; below++)
             {
-                if (IsTerminal(node.Value))
-                    continue;
+                for (var node = _items.First; node is not null; node = node.Next)
+                {
+                    if (Rank(node.Value) != below)
+                        continue;
 
-                // One out, one in: the count the sender waits on is unchanged.
-                dropped = node.Value;
-                _items.Remove(node);
-                _items.AddLast(message);
-                return true;
+                    // One out, one in: the count the sender waits on is unchanged.
+                    dropped = node.Value;
+                    _items.Remove(node);
+                    _items.AddLast(message);
+                    return true;
+                }
             }
 
             dropped = message;
@@ -108,6 +111,10 @@ internal sealed class LifecycleEventQueue(int capacity)
         }
     }
 
-    private static bool IsTerminal(TrainLifecycleEventMessage message) =>
-        message.EventType is "Completed" or "Failed" or "Cancelled";
+    private static int Rank(TrainLifecycleEventMessage message) =>
+        message.Junction is not null
+        || TrainLifecycleEventMessage.IsJunctionEvent(message.EventType)
+            ? 0
+        : message.EventType is "Completed" or "Failed" or "Cancelled" ? 2
+        : 1;
 }

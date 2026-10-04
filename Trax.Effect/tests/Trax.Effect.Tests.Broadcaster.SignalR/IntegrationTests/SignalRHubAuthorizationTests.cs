@@ -2,7 +2,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -273,6 +273,152 @@ public class SignalRHubAuthorizationTests
         operatorClient.State.Should().Be(HubConnectionState.Connected);
     }
 
+    private const string ForeignOrigin = "https://elsewhere.example";
+
+    [Test]
+    public async Task AnAuthorizedClientFromAForeignOrigin_IsRefusedWith403()
+    {
+        using var host = await StartHostAsync(hub => hub.RequireAuthorization());
+        await using var connection = Client(host, user: "alice", origin: ForeignOrigin);
+
+        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+
+        (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden, "valid credentials do not admit a foreign origin");
+    }
+
+    [Test]
+    public async Task AnAuthorizedClientFromAForeignOrigin_IsRefusedOnAWebSocketWithoutNegotiation()
+    {
+        using var host = await StartHostAsync(hub => hub.RequireAuthorization());
+
+        await using (var foreign = WebSocketClient(host, user: "alice", origin: ForeignOrigin))
+        {
+            var connect = async () => await foreign.StartAsync().WaitAsync(Timeout);
+            await connect.Should().ThrowAsync<Exception>(Adr);
+            foreign.State.Should().Be(HubConnectionState.Disconnected);
+        }
+
+        await using var own = WebSocketClient(host, user: "alice", origin: "http://localhost");
+        await own.StartAsync().WaitAsync(Timeout);
+        own.State.Should().Be(HubConnectionState.Connected);
+    }
+
+    [TestCase("POST", "hubs/trax-events/negotiate?negotiateVersion=1")]
+    [TestCase("GET", "hubs/trax-events")]
+    public async Task ARequestFromAForeignOrigin_IsAnswered403_OnEveryHubEndpoint(
+        string method,
+        string path
+    )
+    {
+        using var host = await StartHostAsync(hub => hub.RequireAuthorization());
+        using var client = host.GetTestServer().CreateClient();
+        using var request = new HttpRequestMessage(new HttpMethod(method), path);
+        request.Headers.Add("X-Test-User", "alice");
+        request.Headers.Add("Origin", ForeignOrigin);
+
+        using var response = await client.SendAsync(request).WaitAsync(Timeout);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden, Adr);
+    }
+
+    [Test]
+    public async Task AClientFromTheHubsOwnOrigin_IsAdmitted()
+    {
+        using var host = await StartHostAsync(hub => hub.RequireAuthorization());
+        await using var connection = Client(host, user: "alice", origin: "http://localhost");
+
+        await connection.StartAsync().WaitAsync(Timeout);
+
+        connection.State.Should().Be(HubConnectionState.Connected);
+    }
+
+    [Test]
+    public async Task AnAllowedOrigin_IsAdmitted_AndAnyOtherIsRefused()
+    {
+        using var host = await StartHostAsync(hub =>
+            hub.RequireAuthorization().AllowOrigins("HTTPS://App.Example:443")
+        );
+
+        await using (var allowed = Client(host, user: "alice", origin: "https://app.example"))
+        {
+            await allowed.StartAsync().WaitAsync(Timeout);
+            allowed.State.Should().Be(HubConnectionState.Connected);
+        }
+
+        await using var other = Client(host, user: "alice", origin: ForeignOrigin);
+        var connect = async () => await other.StartAsync().WaitAsync(Timeout);
+        (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden);
+    }
+
+    [Test]
+    public async Task WithoutAllowOrigins_TheHostsCorsDefaultPolicyDecides()
+    {
+        using var host = await StartHostAsync(
+            hub => hub.RequireAuthorization(),
+            services: s =>
+                s.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins("https://app.example")))
+        );
+
+        await using (var allowed = Client(host, user: "alice", origin: "https://app.example"))
+        {
+            await allowed.StartAsync().WaitAsync(Timeout);
+            allowed.State.Should().Be(HubConnectionState.Connected);
+        }
+
+        await using var other = Client(host, user: "alice", origin: ForeignOrigin);
+        var connect = async () => await other.StartAsync().WaitAsync(Timeout);
+        (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden);
+    }
+
+    [Test]
+    public async Task AllowOriginsWithNoOrigins_IgnoresTheCorsDefaultPolicy()
+    {
+        using var host = await StartHostAsync(
+            hub => hub.RequireAuthorization().AllowOrigins(),
+            services: s => s.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin()))
+        );
+        await using var connection = Client(host, user: "alice", origin: ForeignOrigin);
+
+        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+
+        (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden);
+    }
+
+    [Test]
+    public async Task AnAnonymousHub_StillRefusesAForeignOrigin()
+    {
+        using var host = await StartHostAsync(hub => hub.AllowAnonymous());
+        await using var connection = Client(host, user: null, origin: ForeignOrigin);
+
+        var connect = async () => await connection.StartAsync().WaitAsync(Timeout);
+
+        (await connect.Should().ThrowAsync<HttpRequestException>(Adr))
+            .Which.StatusCode.Should()
+            .Be(HttpStatusCode.Forbidden);
+    }
+
+    [TestCase("app.example")]
+    [TestCase("https://app.example/path")]
+    [TestCase("ftp://app.example")]
+    [TestCase("null")]
+    public async Task AllowOrigins_WithSomethingThatIsNotAnOrigin_FailsAtStartup(string origin)
+    {
+        var start = async () =>
+            await StartHostAsync(hub => hub.RequireAuthorization().AllowOrigins(origin));
+
+        (await start.Should().ThrowAsync<ArgumentException>())
+            .Which.ParamName.Should()
+            .Be("origins");
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task AConnectionWhoseAuthenticationExpires_IsClosed(bool hostTriesToTurnItOff)
@@ -344,36 +490,38 @@ public class SignalRHubAuthorizationTests
     private static async Task<IHost> StartHostAsync(
         Action<TraxTrainEventHubOptions> hub,
         ILoggerProvider? logs = null,
-        Action<AuthorizationOptions>? authorization = null
+        Action<AuthorizationOptions>? authorization = null,
+        Action<IServiceCollection>? services = null
     )
     {
         var builder = new HostBuilder().ConfigureWebHost(webHost =>
             webHost
                 .UseTestServer()
-                .ConfigureServices(services =>
+                .ConfigureServices(collection =>
                 {
-                    services.AddLogging(l =>
+                    services?.Invoke(collection);
+                    collection.AddLogging(l =>
                     {
                         if (logs is not null)
                             l.AddProvider(logs);
                     });
-                    services.AddSignalR();
-                    services.AddRouting();
-                    services
+                    collection.AddSignalR();
+                    collection.AddRouting();
+                    collection
                         .AddAuthentication(HeaderAuthenticationHandler.SchemeName)
                         .AddScheme<AuthenticationSchemeOptions, HeaderAuthenticationHandler>(
                             HeaderAuthenticationHandler.SchemeName,
                             _ => { }
                         );
-                    services.AddAuthorization(o =>
+                    collection.AddAuthorization(o =>
                     {
                         o.AddPolicy("TraxEvents", p => p.RequireClaim("scope", "trax.events"));
                         authorization?.Invoke(o);
                     });
 
                     var registry = new EffectRegistry();
-                    services.AddSingleton<IEffectRegistry>(registry);
-                    new TraxBuilder(services, registry).AddEffects(effects =>
+                    collection.AddSingleton<IEffectRegistry>(registry);
+                    new TraxBuilder(collection, registry).AddEffects(effects =>
                         effects.UseBroadcaster(b => b.UseSignalRHub())
                     );
                 })
@@ -393,7 +541,12 @@ public class SignalRHubAuthorizationTests
     /// A client that skips negotiation and opens a WebSocket straight away, so the posture is
     /// checked on the WebSocket upgrade request rather than on a negotiate call.
     /// </summary>
-    private static HubConnection WebSocketClient(IHost host, string user, string? role = null)
+    private static HubConnection WebSocketClient(
+        IHost host,
+        string user,
+        string? role = null,
+        string? origin = null
+    )
     {
         var server = host.GetTestServer();
         var connection = new HubConnectionBuilder()
@@ -411,6 +564,8 @@ public class SignalRHubAuthorizationTests
                             request.Headers["X-Test-User"] = user;
                             if (role is not null)
                                 request.Headers["X-Test-Role"] = role;
+                            if (origin is not null)
+                                request.Headers["Origin"] = origin;
                         };
                         return await client.ConnectAsync(context.Uri, cancellationToken);
                     };
@@ -426,7 +581,8 @@ public class SignalRHubAuthorizationTests
         string? user,
         string? role = null,
         string? scope = null,
-        int? expiresInMs = null
+        int? expiresInMs = null,
+        string? origin = null
     )
     {
         var server = host.GetTestServer();
@@ -443,6 +599,8 @@ public class SignalRHubAuthorizationTests
                         options.Headers["X-Test-Role"] = role;
                     if (scope is not null)
                         options.Headers["X-Test-Scope"] = scope;
+                    if (origin is not null)
+                        options.Headers["Origin"] = origin;
                     if (expiresInMs is not null)
                         options.Headers["X-Test-Expires-In-Ms"] = expiresInMs.Value.ToString(
                             System.Globalization.CultureInfo.InvariantCulture

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 
 namespace Trax.Effect.Tests.Integration.UnitTests.Services;

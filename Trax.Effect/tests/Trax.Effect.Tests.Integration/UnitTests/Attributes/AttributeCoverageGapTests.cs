@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using NUnit.Framework;
 using Trax.Effect.Attributes;
 using Trax.Effect.Utils;

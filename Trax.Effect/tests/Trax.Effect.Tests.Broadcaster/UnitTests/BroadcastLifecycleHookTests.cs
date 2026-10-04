@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using NSubstitute;
 using Trax.Core.Exceptions;
 using Trax.Effect.Enums;

@@ -1,11 +1,10 @@
 using System.ComponentModel;
 using System.Runtime.ExceptionServices;
 using System.Text.Json.Serialization;
-using LanguageExt;
-using LanguageExt.UnsafeValueAccess;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 using Trax.Effect.Attributes;
@@ -16,6 +15,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.Decisions;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectRunner;
+using Trax.Effect.Services.JunctionEvents;
 using Trax.Effect.Services.LifecycleHookOutputPolicy;
 using Trax.Effect.Services.LifecycleHookRunner;
 
@@ -367,6 +367,16 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // recorded even when it dies before it ends. See Trax.Docs/adr/0041.
         Metadata.DecisionsRecorded =
             ServiceProvider.GetService(typeof(IDecisionRunRecorder)) is not null;
+
+        // A manifest's retry on a host that records no decisions cannot replay, and asks afresh
+        // (BeginDecisions). Marked on the first write, so a run that dies mid-way carries it too,
+        // and a later replay of it stops here instead of going on to the run it named.
+        if (
+            !Metadata.DecisionsRecorded
+            && Metadata.ReplayDecisionsOf is not null
+            && Metadata.ManifestId is not null
+        )
+            Metadata.ReplayAbandoned = true;
         await EffectRunner.Update(Metadata);
 
         // Not the caller's token, for the same reason SaveOutcome does not take it. An
@@ -405,6 +415,18 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // before it asks anything.
             DecisionRun.Current = await BeginDecisions();
 
+            // The same for the run's junction events, when the host publishes them
+            // (AddJunctionEvents): its junctions and decisions report against this run only.
+            JunctionEventRun.Current = ServiceProvider.GetService(typeof(JunctionEventPublisher))
+                is JunctionEventPublisher junctionEvents
+                ? await junctionEvents.BeginAsync(
+                    Metadata,
+                    GetType(),
+                    ServiceProvider,
+                    CancellationToken
+                )
+                : null;
+
             Logger?.LogTrace("Running Train: ({TrainName})", TrainName);
             result = await RunEither(input);
         }
@@ -417,6 +439,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // The run decides nothing after its junctions, so its decision state goes now, on
             // every path, rather than with whatever terminal write or hook comes next.
             DecisionRun.Current = null;
+            JunctionEventRun.Current = null;
         }
 
         if (result.IsLeft)
@@ -499,7 +522,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             }
 
             unrecorded?.Drop(Metadata);
-            exception.Rethrow();
+            ExceptionDispatchInfo.Capture(exception).Throw();
         }
 
         var output = result.Unwrap();
@@ -587,11 +610,36 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     /// </summary>
     /// <remarks>
     /// A run queued to replay an earlier run's decisions cannot honour that on a host that records
-    /// none, so it fails, classified permanent, instead of asking afresh. See Trax.Docs/adr/0041.
+    /// none, so it fails, classified permanent, instead of asking afresh, unless it is a manifest's
+    /// retry: that asks afresh, with a warning, and is marked <see cref="Trax.Effect.Models.Metadata.Metadata.ReplayAbandoned"/>.
+    /// See Trax.Docs/adr/0041.
     /// </remarks>
     private async Task<DecisionRun?> BeginDecisions()
     {
         Metadata.AssertLoaded();
+
+        // A run refuses to start when an observer registered after AddTrax would keep Trax's own
+        // from being told about its decisions: decision recording would not record them, and
+        // junction events would not withhold the steps of a track whose answer is withheld.
+        if (
+            ServiceProvider?.GetService(typeof(DecisionObserverCheck))
+            is DecisionObserverCheck check
+        )
+        {
+            try
+            {
+                check.ThrowIfReplaced();
+            }
+            catch (InvalidOperationException e)
+            {
+                throw DecisionRun.Classified(
+                    e,
+                    Metadata.Name,
+                    Metadata.ExternalId,
+                    FailureClass.Permanent
+                );
+            }
+        }
 
         if (
             ServiceProvider?.GetService(typeof(IDecisionRunRecorder))
@@ -600,10 +648,24 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             return await recorder.Begin(Metadata, GetType(), CancellationToken);
 
         if (Metadata.ReplayDecisionsOf is not null)
-            throw DecisionRun.Unreplayable(
-                Metadata,
-                "this host does not record decisions (AddDecisionRecording), so it has none to replay"
+        {
+            const string why =
+                "this host does not record decisions (AddDecisionRecording), so it has none to replay";
+
+            // A manifest's retry was queued by the scheduler, not by someone who asked for the
+            // original's decisions, so it asks afresh rather than failing the retry.
+            if (Metadata.ManifestId is null)
+                throw DecisionRun.Unreplayable(Metadata, why);
+
+            Logger?.LogWarning(
+                "Retry {RunId} of train ({TrainName}) asks its questions afresh instead of replaying "
+                    + "the decisions of run {Source}, because {Reason}.",
+                Metadata.ExternalId,
+                TrainName,
+                Metadata.ReplayDecisionsOf,
+                why
             );
+        }
 
         return null;
     }

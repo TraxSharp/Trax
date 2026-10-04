@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.StateMachine.Tests.Fakes;
 
 namespace Trax.Effect.StateMachine.Tests.UnitTests;

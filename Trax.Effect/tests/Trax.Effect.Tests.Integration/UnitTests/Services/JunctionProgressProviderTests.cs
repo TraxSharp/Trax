@@ -1,6 +1,6 @@
 using System.Reflection;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvider;
 using Trax.Effect.Models;

@@ -86,6 +86,21 @@ internal sealed class DecisionRun
     /// <summary>The id of the row written for each question's latest asking, for its routing.</summary>
     public ConcurrentDictionary<string, long> Latest { get; } = new();
 
+    private volatile bool _onWithheldTrack;
+
+    /// <summary>
+    /// True once the run has taken a track on a question whose answer is withheld. From then on
+    /// the decision journal's log withholds the keys, answers, tracks and deciders of the run's
+    /// later decisions and routings too, as junction events withhold the steps of such a track,
+    /// since they would give the track away. It is never cleared, because where a track rejoins
+    /// the chain is not reported.
+    /// </summary>
+    public bool OnWithheldTrack
+    {
+        get => _onWithheldTrack;
+        set => _onWithheldTrack = _onWithheldTrack || value;
+    }
+
     /// <summary>
     /// The failure for a run that names a run to replay that cannot be replayed. It is classified
     /// permanent: running it again on the same host hits the same wall, and asking afresh would

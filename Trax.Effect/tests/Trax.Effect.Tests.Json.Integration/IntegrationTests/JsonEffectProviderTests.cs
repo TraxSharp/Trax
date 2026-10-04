@@ -1,7 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Extensions;
+using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;

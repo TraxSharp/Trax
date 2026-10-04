@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,6 +48,54 @@ public class SqliteSchedulerColumnStorageTests : TestSetup
 
         stored.FailureWindowSeconds.Should().Be(3600);
         stored.Owner.Should().Be("billing-service");
+    }
+
+    [Test]
+    public async Task A_manifests_replay_decisions_on_retry_is_stored()
+    {
+        long off,
+            on;
+        using (var context = (IDataContext)DataContextFactory.Create())
+        {
+            off = (
+                await SaveManifest(
+                    context,
+                    new CreateManifest
+                    {
+                        Name = typeof(SqliteSchedulerColumnStorageTests),
+                        ReplayDecisionsOnRetry = false,
+                    }
+                )
+            ).Id;
+            on = (
+                await SaveManifest(
+                    context,
+                    new CreateManifest { Name = typeof(SqliteSchedulerColumnStorageTests) }
+                )
+            ).Id;
+        }
+
+        using var readBack = (IDataContext)DataContextFactory.Create();
+        (await readBack.Manifests.AsNoTracking().SingleAsync(m => m.Id == off))
+            .ReplayDecisionsOnRetry.Should()
+            .BeFalse();
+        (await readBack.Manifests.AsNoTracking().SingleAsync(m => m.Id == on))
+            .ReplayDecisionsOnRetry.Should()
+            .BeTrue("a manifest replays its failed run's decisions unless told not to");
+    }
+
+    [Test]
+    public async Task A_manifest_row_written_without_the_column_replays_decisions_on_retry()
+    {
+        using var context = (IDataContext)DataContextFactory.Create();
+        var column = await ((DbContext)context)
+            .Database.SqlQueryRaw<string>(
+                "SELECT dflt_value AS Value FROM pragma_table_info('manifest') "
+                    + "WHERE name = 'replay_decisions_on_retry' AND \"notnull\" = 1"
+            )
+            .ToListAsync();
+
+        column.Should().Equal(["1"], "existing manifests keep replaying decisions on retry");
     }
 
     [Test]
