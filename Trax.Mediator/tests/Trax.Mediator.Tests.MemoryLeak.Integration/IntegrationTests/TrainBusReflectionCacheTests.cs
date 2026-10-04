@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Mediator.Services.TrainBus;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;

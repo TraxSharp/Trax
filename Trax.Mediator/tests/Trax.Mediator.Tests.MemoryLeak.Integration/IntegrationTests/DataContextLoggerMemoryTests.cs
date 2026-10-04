@@ -1,5 +1,5 @@
 using System.Threading.Channels;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;

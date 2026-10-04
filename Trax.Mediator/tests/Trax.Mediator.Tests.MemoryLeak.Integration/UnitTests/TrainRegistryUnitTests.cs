@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Trains;

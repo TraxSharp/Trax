@@ -1,9 +1,9 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;

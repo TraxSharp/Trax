@@ -1,7 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.WorkQueuePromotion;

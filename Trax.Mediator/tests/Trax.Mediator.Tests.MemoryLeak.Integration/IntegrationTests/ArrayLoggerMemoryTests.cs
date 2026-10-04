@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Utils;

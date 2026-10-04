@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Provider.Parameter.Configuration;
 using Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory;

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.ConcurrencyLimiter;
 using Trax.Mediator.Services.Principal;

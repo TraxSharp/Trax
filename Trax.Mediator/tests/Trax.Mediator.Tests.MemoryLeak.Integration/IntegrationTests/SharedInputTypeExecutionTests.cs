@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;

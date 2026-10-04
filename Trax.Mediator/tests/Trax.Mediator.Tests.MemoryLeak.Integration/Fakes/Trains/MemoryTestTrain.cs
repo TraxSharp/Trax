@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Fakes.Models;

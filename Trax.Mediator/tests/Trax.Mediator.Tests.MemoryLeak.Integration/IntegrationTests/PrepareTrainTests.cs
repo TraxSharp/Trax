@@ -1,9 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;

@@ -1,8 +1,8 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;

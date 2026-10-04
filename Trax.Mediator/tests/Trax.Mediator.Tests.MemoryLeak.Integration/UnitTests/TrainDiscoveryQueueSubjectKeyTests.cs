@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainDiscovery;

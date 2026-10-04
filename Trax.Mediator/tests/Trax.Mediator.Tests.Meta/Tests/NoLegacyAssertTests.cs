@@ -4,7 +4,7 @@ using Trax.Core.Testing.Guards;
 namespace Trax.Mediator.Tests.Meta.Tests;
 
 /// <summary>
-/// FluentAssertions only, because the because argument is where a failure explains itself.
+/// AwesomeAssertions only, because the because argument is where a failure explains itself.
 /// The check is the shipped <see cref="HygieneGuards.NoLegacyAsserts"/>, so this repo applies the
 /// same patterns as every other one, <c>ClassicAssert</c>, <c>CollectionAssert</c> and
 /// <c>StringAssert</c> included.
@@ -16,7 +16,7 @@ namespace Trax.Mediator.Tests.Meta.Tests;
 public class NoLegacyAssertTests
 {
     [Test]
-    public void TestSources_UseOnly_FluentAssertions() => AssertClean(RepoRoot.Path);
+    public void TestSources_UseOnly_AwesomeAssertions() => AssertClean(RepoRoot.Path);
 
     [Test]
     public void Guard_fails_on_a_classic_assert()
@@ -56,7 +56,7 @@ public class NoLegacyAssertTests
         result
             .Offenders.Should()
             .BeEmpty(
-                "Trax.Docs/adr/0004-tests-assert-with-fluentassertions.md requires FluentAssertions "
+                "Trax.Docs/adr/0004-tests-assert-with-fluentassertions.md requires AwesomeAssertions "
                     + "exclusively. "
                     + result.FailureMessage
             );

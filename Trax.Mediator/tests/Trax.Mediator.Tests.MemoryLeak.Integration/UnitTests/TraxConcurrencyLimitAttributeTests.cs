@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;

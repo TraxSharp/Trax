@@ -1,5 +1,5 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Core.Train;
 using Trax.Mediator.Tests.MemoryLeak.Integration.Utils;

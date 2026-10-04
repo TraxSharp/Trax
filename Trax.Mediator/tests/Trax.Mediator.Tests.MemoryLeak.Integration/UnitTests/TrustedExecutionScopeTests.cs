@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Mediator.Services.TrustedExecution;
 
 namespace Trax.Mediator.Tests.MemoryLeak.Integration.UnitTests;

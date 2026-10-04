@@ -1,7 +1,7 @@
 using System.Text.Json;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;

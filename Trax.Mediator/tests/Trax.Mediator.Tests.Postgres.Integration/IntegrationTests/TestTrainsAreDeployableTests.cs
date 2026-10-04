@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Core.Monad;
 using Trax.Core.Train;
 
