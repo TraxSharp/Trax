@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Authorization;
 using HotChocolate.Execution;
@@ -120,6 +120,35 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
         throwingProvider.GetServiceCallCount.Should().Be(0);
     }
 
+    /// <summary>
+    /// The anonymous invariant asks only that nothing re-gates the entity, so a schema that no
+    /// longer carries its type, its entry field or the <c>discover</c> namespace at all leaves
+    /// nothing gated to report.
+    /// </summary>
+    [TestCase(false, true, true)]
+    [TestCase(true, false, true)]
+    [TestCase(false, false, false)]
+    public async Task Validator_AbsentTypeEntryFieldOrNamespace_DoesNotThrow(
+        bool includeObjectType,
+        bool includeEntryField,
+        bool includeDiscover
+    )
+    {
+        var (config, services) = await BuildSchemaAsync(
+            includeAuthorizeOnType: false,
+            includeAuthorizeOnField: false,
+            includeObjectType,
+            includeEntryField,
+            includeDiscover
+        );
+        var validator = new QueryModelAuthorizationSchemaValidator(config, services);
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .NotThrowAsync();
+    }
+
     private sealed class ThrowingServiceProvider : IServiceProvider
     {
         public int GetServiceCallCount { get; private set; }
@@ -136,7 +165,13 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
     private static async Task<(
         GraphQLConfiguration Config,
         IServiceProvider Services
-    )> BuildSchemaAsync(bool includeAuthorizeOnType, bool includeAuthorizeOnField)
+    )> BuildSchemaAsync(
+        bool includeAuthorizeOnType,
+        bool includeAuthorizeOnField,
+        bool includeObjectType = true,
+        bool includeEntryField = true,
+        bool includeDiscover = true
+    )
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -150,28 +185,41 @@ public class QueryModelAllowAnonymousSchemaValidatorTests
 
         var gql = services.AddGraphQLServer("trax").AddAuthorization();
 
-        ObjectType<AnonThing> objectType = includeAuthorizeOnType
-            ? new ObjectType<AnonThing>(d => d.Authorize(new[] { "Admin" }))
-            : new ObjectType<AnonThing>();
-        gql.AddType(objectType);
+        if (includeObjectType)
+        {
+            ObjectType<AnonThing> objectType = includeAuthorizeOnType
+                ? new ObjectType<AnonThing>(d => d.Authorize(new[] { "Admin" }))
+                : new ObjectType<AnonThing>();
+            gql.AddType(objectType);
+        }
 
         gql.AddQueryType(d =>
         {
             d.Name("RootQuery");
-            d.Field("discover").Type<DiscoverObjectType>().Resolve(_ => new object());
+            if (includeDiscover)
+                d.Field("discover").Type<DiscoverObjectType>().Resolve(_ => new object());
+            else
+                d.Field("ping").Type<StringType>().Resolve(_ => "pong");
         });
 
-        gql.AddTypeExtension(
-            new ObjectTypeExtension(d =>
-            {
-                d.Name("DiscoverQueries");
-                var field = d.Field("anonThings")
-                    .Type<ListType<ObjectType<AnonThing>>>()
-                    .Resolve(_ => Array.Empty<AnonThing>());
-                if (includeAuthorizeOnField)
-                    field.Authorize(new[] { "Admin" });
-            })
-        );
+        if (includeDiscover)
+            gql.AddTypeExtension(
+                new ObjectTypeExtension(d =>
+                {
+                    d.Name("DiscoverQueries");
+                    if (!includeEntryField)
+                    {
+                        d.Field("other").Type<StringType>().Resolve(_ => "other");
+                        return;
+                    }
+
+                    var field = d.Field("anonThings")
+                        .Type<ListType<ObjectType<AnonThing>>>()
+                        .Resolve(_ => Array.Empty<AnonThing>());
+                    if (includeAuthorizeOnField)
+                        field.Authorize(new[] { "Admin" });
+                })
+            );
 
         var sp = services.BuildServiceProvider();
         var resolver = sp.GetRequiredService<IRequestExecutorProvider>();

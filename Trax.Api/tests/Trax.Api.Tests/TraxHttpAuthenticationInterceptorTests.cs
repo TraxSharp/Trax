@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Configuration;
 using Microsoft.AspNetCore.Authentication;
@@ -146,6 +146,96 @@ public class TraxHttpAuthenticationInterceptorTests
         httpContext.User.Identity.AuthenticationType.Should().Be("schemeA");
     }
 
+    [Test]
+    public async Task OnCreateAsync_UserWithNoIdentity_WalksTheSchemes()
+    {
+        var principal = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.Name, "bob")], authenticationType: "schemeA")
+        );
+        var schemeProvider = Substitute.For<IAuthenticationSchemeProvider>();
+        schemeProvider
+            .GetAllSchemesAsync()
+            .Returns([
+                new AuthenticationScheme("schemeA", "A", typeof(SuccessAuthenticationHandler)),
+            ]);
+        var httpContext = BuildHttpContext(
+            schemeProvider,
+            authenticatedAs: new ClaimsPrincipal(),
+            successPrincipalForScheme: ("schemeA", principal)
+        );
+
+        await new TraxHttpAuthenticationInterceptor(NoEndpointPolicy).OnCreateAsync(
+            httpContext,
+            Substitute.For<IRequestExecutor>(),
+            OperationRequestBuilder.New(),
+            CancellationToken.None
+        );
+
+        httpContext.User.Identity!.Name.Should().Be("bob");
+    }
+
+    [Test]
+    public async Task OnCreateAsync_EndpointPolicyNamingNoScheme_AuthenticatesWithAnyScheme()
+    {
+        // A policy that names no scheme leaves the choice to the registered schemes, as ASP.NET
+        // Core's default scheme would, so the first one that authenticates the request wins.
+        var principal = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.Name, "carol")], authenticationType: "schemeA")
+        );
+        var schemeProvider = Substitute.For<IAuthenticationSchemeProvider>();
+        schemeProvider
+            .GetAllSchemesAsync()
+            .Returns([
+                new AuthenticationScheme("schemeA", "A", typeof(SuccessAuthenticationHandler)),
+            ]);
+        var httpContext = BuildHttpContext(
+            schemeProvider,
+            authenticatedAs: null,
+            successPrincipalForScheme: ("schemeA", principal),
+            policy: p => p.RequireAuthenticatedUser()
+        );
+
+        await new TraxHttpAuthenticationInterceptor(EndpointPolicyNamed("SignedIn")).OnCreateAsync(
+            httpContext,
+            Substitute.For<IRequestExecutor>(),
+            OperationRequestBuilder.New(),
+            CancellationToken.None
+        );
+
+        httpContext
+            .User.Identity!.Name.Should()
+            .Be("carol", "per docs/adr/0010-a-scheme-policy-requires-its-scheme.md");
+    }
+
+    [Test]
+    public async Task OnCreateAsync_EndpointPolicyNotRegistered_Throws()
+    {
+        var httpContext = BuildHttpContext(
+            Substitute.For<IAuthenticationSchemeProvider>(),
+            authenticatedAs: null,
+            policy: null
+        );
+
+        var act = () =>
+            new TraxHttpAuthenticationInterceptor(EndpointPolicyNamed("Missing"))
+                .OnCreateAsync(
+                    httpContext,
+                    Substitute.For<IRequestExecutor>(),
+                    OperationRequestBuilder.New(),
+                    CancellationToken.None
+                )
+                .AsTask();
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*'Missing'*");
+    }
+
+    private static GraphQLConfiguration EndpointPolicyNamed(string policy) =>
+        new Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder(
+            new ServiceCollection()
+        )
+            .RequireAuthorization(policy)
+            .Build();
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     /// <summary>
@@ -158,7 +248,8 @@ public class TraxHttpAuthenticationInterceptorTests
     private static HttpContext BuildHttpContext(
         IAuthenticationSchemeProvider schemeProvider,
         ClaimsPrincipal? authenticatedAs,
-        (string Scheme, ClaimsPrincipal Principal)? successPrincipalForScheme = null
+        (string Scheme, ClaimsPrincipal Principal)? successPrincipalForScheme = null,
+        Action<Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder>? policy = null
     )
     {
         var ctx = new DefaultHttpContext();
@@ -194,6 +285,11 @@ public class TraxHttpAuthenticationInterceptorTests
         var services = new ServiceCollection();
         services.AddSingleton(authService);
         services.AddSingleton(schemeProvider);
+        services.AddAuthorizationCore(o =>
+        {
+            if (policy is not null)
+                o.AddPolicy("SignedIn", policy);
+        });
         ctx.RequestServices = services.BuildServiceProvider();
         return ctx;
     }

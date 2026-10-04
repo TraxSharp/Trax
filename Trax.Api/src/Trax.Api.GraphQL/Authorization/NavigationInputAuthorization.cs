@@ -6,6 +6,7 @@ using HotChocolate.Data.Sorting;
 using HotChocolate.Language;
 using HotChocolate.Resolvers;
 using HotChocolate.Types;
+using HotChocolate.Types.Descriptors.Configurations;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Api.GraphQL.Authorization;
@@ -23,13 +24,15 @@ namespace Trax.Api.GraphQL.Authorization;
 /// although a predicate over a column reveals the column's value a comparison at a time.
 /// </para>
 /// <para>
-/// This middleware runs on a query model's entry field, ahead of the filtering and sorting
-/// middleware. It walks the arguments the caller supplied against their input types, collects
-/// every input built over a type whose object type carries <c>@authorize</c>, and evaluates
-/// those directives through HotChocolate's own <see cref="IAuthorizationHandler"/>, the same call
-/// the <c>@authorize</c> middleware makes. A refusal produces the error that middleware produces.
-/// Inputs the caller did not use cost nothing, so reading a gated type stays a matter of
-/// selecting it, as it was.
+/// This middleware runs on every field that takes a filter or sort argument, ahead of the
+/// filtering and sorting middleware: a query model's entry field, a type extension's resolver,
+/// a filtered navigation on an entity. <see cref="NavigationInputAuthorizationInterceptor"/>
+/// attaches it to each one, so the rule does not depend on who contributed the field. It walks
+/// the arguments the caller supplied against their input types, collects every input built over a
+/// type whose object type carries <c>@authorize</c>, and evaluates those directives through
+/// HotChocolate's own <see cref="IAuthorizationHandler"/>, the same call the <c>@authorize</c>
+/// middleware makes. A refusal produces the error that middleware produces. Inputs the caller did
+/// not use cost nothing, so reading a gated type stays a matter of selecting it, as it was.
 /// See <c>docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md</c>.
 /// </para>
 /// </remarks>
@@ -42,10 +45,27 @@ internal static class NavigationInputAuthorization
     > GatesBySchema = new();
 
     /// <summary>
-    /// Builds the middleware for the entry field of <paramref name="entityType"/>. The entity's
+    /// The key the middleware is registered under, so a field never carries it twice.
+    /// </summary>
+    public const string MiddlewareKey = "Trax.NavigationInputAuthorization";
+
+    /// <summary>
+    /// Attaches the middleware to the entry field of <paramref name="entityType"/>. The entity's
     /// own gate is the entry field's directive, so it is not evaluated twice.
     /// </summary>
-    public static FieldMiddleware Create(Type entityType) =>
+    public static void Apply(IObjectFieldDescriptor field, Type entityType) =>
+        field
+            .Extend()
+            .Configuration.MiddlewareConfigurations.Add(
+                new FieldMiddlewareConfiguration(Create(entityType), key: MiddlewareKey)
+            );
+
+    /// <summary>
+    /// Builds the middleware. <paramref name="coveredEntity"/> is the type whose gate the field
+    /// already carries as its own directive, if any; every other type the inputs reach is
+    /// evaluated.
+    /// </summary>
+    public static FieldMiddleware Create(Type? coveredEntity) =>
         next =>
             async context =>
             {
@@ -69,7 +89,8 @@ internal static class NavigationInputAuthorization
                     );
                 }
 
-                reached.Remove(entityType);
+                if (coveredEntity is not null)
+                    reached.Remove(coveredEntity);
 
                 foreach (var type in reached)
                 {
@@ -92,22 +113,16 @@ internal static class NavigationInputAuthorization
             };
 
     /// <summary>
-    /// Fails closed: with no authorization handler registered there is nothing that could allow
-    /// the caller, so the gate refuses.
+    /// Evaluates the directive through HotChocolate's handler, which every Trax schema registers.
+    /// Were it missing, resolving it throws and the field fails, so the gate still refuses.
     /// </summary>
-    private static async ValueTask<AuthorizeResult> AuthorizeAsync(
+    private static ValueTask<AuthorizeResult> AuthorizeAsync(
         IMiddlewareContext context,
         AuthorizeDirective directive
-    )
-    {
-        var handler = context.Services.GetService<IAuthorizationHandler>();
-        if (handler is null)
-            return AuthorizeResult.NotAllowed;
-
-        return await handler
-            .AuthorizeAsync(context, directive, context.RequestAborted)
-            .ConfigureAwait(false);
-    }
+    ) =>
+        context
+            .Services.GetRequiredService<IAuthorizationHandler>()
+            .AuthorizeAsync(context, directive, context.RequestAborted);
 
     /// <summary>
     /// Records the runtime type of every filter or sort input the value uses, descending through

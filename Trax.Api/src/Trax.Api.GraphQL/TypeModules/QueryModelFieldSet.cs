@@ -44,9 +44,6 @@ internal static class QueryModelFieldSet
         return null;
     }
 
-    /// <summary>Whether the model narrows its field set.</summary>
-    public static bool IsRestricted(Type entityType) => Restricted(entityType) is not null;
-
     internal static void BindFilterFields<TEntity>(IFilterInputTypeDescriptor<TEntity> descriptor)
     {
         if (Restricted(typeof(TEntity)) is not { } properties)

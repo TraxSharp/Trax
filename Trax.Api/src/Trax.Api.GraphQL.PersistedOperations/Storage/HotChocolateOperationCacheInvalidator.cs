@@ -8,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 
 /// <summary>
-/// Empties HotChocolate's request-pipeline caches when a persisted operation document
-/// changes. Without this, the parsed-document cache (keyed by persisted-op id) and the
+/// Advances this node's cache generation and empties HotChocolate's request-pipeline caches when
+/// a persisted operation document changes. Without this, the parsed-document cache (keyed by persisted-op id) and the
 /// prepared-operation cache (keyed by
 /// <c>{schema}-{executorVersion}-{documentId}+{operationName}</c>) keep serving the
 /// previous document even after <c>IOperationDocumentStorage.TryReadAsync</c> returns the
@@ -22,21 +22,31 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage;
 /// persisted-operations package therefore substitutes
 /// <see cref="ClearableDocumentCache"/> and <see cref="ClearablePreparedOperationCache"/>,
 /// and this type empties them.
+/// <para>
+/// The generation advance is what makes the change hold: every cache entry stamped before it is
+/// unservable from that moment, including one a request still running writes afterwards. The
+/// clear only frees the memory. See
+/// <c>docs/adr/0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md</c>.
+/// </para>
 /// </remarks>
 internal sealed class HotChocolateOperationCacheInvalidator
 {
     private readonly IServiceProvider _rootServices;
+    private readonly PersistedOperationCacheGeneration _generation;
     private readonly ILogger<HotChocolateOperationCacheInvalidator> _logger;
     private volatile string? _schemaName;
 
     public HotChocolateOperationCacheInvalidator(
         IServiceProvider rootServices,
+        PersistedOperationCacheGeneration generation,
         ILogger<HotChocolateOperationCacheInvalidator> logger
     )
     {
         ArgumentNullException.ThrowIfNull(rootServices);
+        ArgumentNullException.ThrowIfNull(generation);
         ArgumentNullException.ThrowIfNull(logger);
         _rootServices = rootServices;
+        _generation = generation;
         _logger = logger;
     }
 
@@ -47,11 +57,14 @@ internal sealed class HotChocolateOperationCacheInvalidator
     public void SetSchemaName(string? schemaName) => _schemaName = schemaName;
 
     /// <summary>
-    /// Empties both caches. Safe to call from any thread. Never throws except on
-    /// cancellation; otherwise logs and returns.
+    /// Advances the generation, so nothing cached before this call is served again, then empties
+    /// both caches. Safe to call from any thread. Never throws except on cancellation; otherwise
+    /// logs and returns.
     /// </summary>
     public async Task InvalidateAsync(CancellationToken ct)
     {
+        // First and unconditionally: this is the part a cancelled or failed clear must not skip.
+        _generation.Advance();
         ct.ThrowIfCancellationRequested();
 
         try

@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.AspNetCore;
 using HotChocolate.Execution;

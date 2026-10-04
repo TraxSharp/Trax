@@ -136,7 +136,12 @@ public static class GraphQLServiceExtensions
         // Fail fast (before any HotChocolate wiring) when an exposed train has not declared
         // its authorization posture. Runs against the same rule as the query-model side.
         ValidateTrainExposureAuthorization(trainRegistrations, config.AuthorizationRequired);
-        TrainTypeModule.AssignTrainNames(trainRegistrations);
+        var trainNames = TrainTypeModule.AssignTrainNames(trainRegistrations);
+
+        // Every field Trax places on its root and namespace types, and every type it generates,
+        // claimed by exactly one surface: two that claim the same name refuse the host here,
+        // naming both, rather than HotChocolate merging them into one.
+        var nameCensus = SchemaNameCensus.Take(config, trainRegistrations, trainNames);
 
         // A train registered after this call skipped the checks above. Refuse the host, naming it,
         // rather than leave its field silently missing.
@@ -148,6 +153,15 @@ public static class GraphQLServiceExtensions
 
         services.AddTraxApi();
         services.AddSingleton<TrainTypeModule>();
+
+        // requeueAllDeadLetters runs its fold here, in the background, stopped only by the host
+        // shutting down. See docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md.
+        services.TryAddSingleton(sp => new DeadLetterRequeueJobs(
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<ILogger<DeadLetterRequeueJobs>>(),
+            sp.GetService<TimeProvider>() ?? TimeProvider.System,
+            sp.GetService<IHostApplicationLifetime>()?.ApplicationStopping ?? CancellationToken.None
+        ));
         services.AddTransient<GraphQLSubscriptionHook>();
         services
             .AddSingleton<LifecycleHookFactory<GraphQLSubscriptionHook>>()
@@ -170,8 +184,14 @@ public static class GraphQLServiceExtensions
         // curates user-facing subscriptions. So the lifecycle hooks stream all trains here.
         var operationsExposed = config.OperationQueriesExposed || config.OperationMutationsExposed;
         services.AddSingleton(
-            new TrainLifecycleStreamOptions { StreamAllTrains = operationsExposed }
+            new TrainLifecycleStreamOptions
+            {
+                StreamAllTrains = operationsExposed,
+                IncludeJunctionAnswersForBroadcastSubscribers =
+                    config.JunctionAnswersForBroadcastAllowed,
+            }
         );
+        services.AddSingleton<LifecycleStreamRule>();
 
         // Fail fast at startup if the operations surface is exposed without its backing services,
         // instead of masking a runtime "Unexpected Execution Error" per request.
@@ -210,6 +230,8 @@ public static class GraphQLServiceExtensions
         graphqlBuilder
             .AddSubscriptionType<LifecycleSubscriptions>()
             .AddType<TrainLifecycleEventType>()
+            .AddType<JunctionEventGraphType>()
+            .AddType<JunctionStepGraphType>()
             .AddTypeModule<TrainTypeModule>()
             // The schema container does not forward to the application one, so the filter's
             // logger comes from the root provider HotChocolate exposes for exactly this.
@@ -260,39 +282,22 @@ public static class GraphQLServiceExtensions
             );
         }
 
-        // Wire HotChocolate's @authorize directive handler whenever an @authorize can reach the
-        // schema. The directive runs against ASP.NET Core's IAuthorizationService, so RequireRole
-        // and policy definitions registered via services.AddAuthorization(...) apply. Wiring is
-        // conditional so a host with nothing gated takes on no authorization services. A host that
-        // never called AddAuthentication() still serves a gated or [TraxAllowAnonymous] field: the
-        // HTTP interceptor looks IAuthenticationSchemeProvider up optionally and treats its absence
-        // as an anonymous caller.
+        // Wire HotChocolate's @authorize directive handler on every host. The directive runs
+        // against ASP.NET Core's IAuthorizationService, so RequireRole and policy definitions
+        // registered via services.AddAuthorization(...) apply. A host that never called
+        // AddAuthentication() still serves a gated or [TraxAllowAnonymous] field: the HTTP
+        // interceptor looks IAuthenticationSchemeProvider up optionally and treats its absence as
+        // an anonymous caller.
         //
-        // These can put one in the schema: a [TraxAuthorize] query model or navigation target,
-        // an operations gate (GateOperations(...) or GateOperationsToAuthenticatedUsers()),
-        // [TraxAuthorize] or [TraxAllowAnonymous] on a type-extension resolver, which is what
-        // TypeExtensionExposureInterceptor requires of a field that inherits no gate and turns
-        // into an @authorize directive, and any consumer type module.
-        var authorizationInSchema =
-            config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0)
-            || config.NavigationTargets.Any(t => t.IsGated)
-            || config.OperationsAuthorizeAttributes.Count > 0
-            || AnyTypeExtensionDeclaresPosture(config.AdditionalTypeExtensions)
-            // A type module builds its types at schema construction, so what it contributes
-            // cannot be inspected here; any module may carry a [TraxAuthorize] resolver.
-            || config.AdditionalTypeModules.Count > 0;
-
-        if (authorizationInSchema)
-        {
-            // HotChocolate's authorization handler resolves ASP.NET Core's IAuthorizationService,
-            // which a host that never called AddAuthorization() does not have: without this the
-            // schema builds and then fails to activate the handler. Both calls are additive and
-            // idempotent (they TryAdd), so a host that configured its own policies keeps them.
-            services.AddLogging();
-            services.AddAuthorization();
-
-            graphqlBuilder.AddAuthorization();
-        }
+        // This used to be wired only when Trax could see an @authorize coming from its
+        // configuration. A [TraxAuthorize] on a member of any object type in the schema becomes
+        // one (TypeExtensionExposureInterceptor emits it), and which object types reach the schema
+        // is known only once HotChocolate builds it, so the wiring cannot depend on that list.
+        // Both service calls are additive and idempotent (they TryAdd), so a host that configured
+        // its own policies keeps them.
+        services.AddLogging();
+        services.AddAuthorization();
+        graphqlBuilder.AddAuthorization();
 
         ApplyHardeningDefaults(services, graphqlBuilder, config);
 
@@ -300,11 +305,8 @@ public static class GraphQLServiceExtensions
         // HotChocolate keeps a single IHttpRequestInterceptor, so two would replace each other.
         // It resolves the ASP.NET Core services it needs from the request, and only its
         // configuration from the schema container.
-        if (authorizationInSchema || config.AuthorizationRequired)
-        {
-            graphqlBuilder.BridgeApplicationService<GraphQLConfiguration>();
-            graphqlBuilder.AddHttpRequestInterceptor<TraxHttpAuthenticationInterceptor>();
-        }
+        graphqlBuilder.BridgeApplicationService<GraphQLConfiguration>();
+        graphqlBuilder.AddHttpRequestInterceptor<TraxHttpAuthenticationInterceptor>();
 
         if (config.ModelRegistrations.Count > 0)
         {
@@ -314,7 +316,7 @@ public static class GraphQLServiceExtensions
             var hasGated = config.ModelRegistrations.Any(r => r.AuthorizeAttributes.Count > 0);
             var hasAnonymous = config.ModelRegistrations.Any(r => r.AllowAnonymous);
 
-            if (hasGated)
+            if (hasGated || config.NavigationTargets.Any(t => t.IsGated))
                 services.AddHostedService<QueryModelAuthorizationValidator>();
 
             // Schema validator covers both positive (gated has @authorize) and
@@ -424,25 +426,27 @@ public static class GraphQLServiceExtensions
             schemaConfiguration(graphqlBuilder);
         }
 
-        // The exposure census for type-extension fields. Registered whenever a type extension
-        // could exist: through Trax's own AddTypeExtension(s), through a consumer type module
-        // (AddTypeModule<T>()), which can contribute an ObjectTypeExtension, or through a
-        // ConfigureSchema callback, which has full builder access and can add one Trax never
-        // sees. A host with none of the three cannot have a type-extension field, and pays
-        // nothing.
-        if (
-            config.AdditionalTypeExtensions.Count > 0
-            || config.AdditionalTypeModules.Count > 0
-            || config.SchemaConfigurations.Count > 0
-        )
-        {
-            var exposureReport = new TypeExtensionExposureReport();
-            services.AddSingleton(exposureReport);
-            graphqlBuilder.TryAddTypeInterceptor(
-                new TypeExtensionExposureInterceptor(config, exposureReport)
-            );
-            services.AddHostedService<TypeExtensionExposureValidator>();
-        }
+        // Turns [TraxAuthorize] on any resolver into @authorize, and censuses the fields type
+        // extensions add. Registered on every host: a query model's or an output type's own member
+        // can carry [TraxAuthorize] on a host with no type extension at all, and its gate must not
+        // depend on whether one happens to be registered. Registered after the ConfigureSchema
+        // callbacks, as before, so the census reads the schema they contributed to.
+        var exposureReport = new TypeExtensionExposureReport();
+        services.AddSingleton(exposureReport);
+        graphqlBuilder.TryAddTypeInterceptor(
+            new TypeExtensionExposureInterceptor(config, exposureReport)
+        );
+
+        // A type extension's field that lands on a name Trax or another extension already uses.
+        graphqlBuilder.TryAddTypeInterceptor(
+            new SchemaFieldCollisionInterceptor(nameCensus, exposureReport)
+        );
+        services.AddHostedService<TypeExtensionExposureValidator>();
+
+        // Every field that takes a where or order argument authorizes the gated types those
+        // inputs reach, whoever contributed the field: a query model's entry field, a type
+        // extension's resolver, a filtered navigation. A field with no such argument is untouched.
+        graphqlBuilder.TryAddTypeInterceptor(new NavigationInputAuthorizationInterceptor());
 
         // Registered unconditionally, so remote lifecycle events and data-change signals reach
         // HotChocolate subscriptions whether UseBroadcaster() was called before AddTraxGraphQL or
@@ -458,32 +462,14 @@ public static class GraphQLServiceExtensions
         services.AddTransient<ITrainEventHandler, GraphQLTrainEventHandler>();
         services.AddTransient<ITrainEventHandler, GraphQLDataChangeHandler>();
 
+        // Junction events reach this handler two ways: on the run's path for a run on this host,
+        // and through TrainEventReceiverService for a run on another. Neither happens unless the
+        // host called AddJunctionEvents(), so without it this is never resolved. A singleton,
+        // because the run's path resolves it once per step and it holds no per-request state.
+        services.AddSingleton<IJunctionEventHandler, GraphQLJunctionEventHandler>();
+
         return services;
     }
-
-    /// <summary>
-    /// Whether any registered type-extension class declares an authorization posture, on the class
-    /// or on one of its resolvers. A declaration becomes a directive, so either flavour means the
-    /// schema needs the authorization types registered.
-    /// </summary>
-    /// <remarks>
-    /// Deciding this from the registration list rather than the built schema is deliberate: the
-    /// answer is needed while the schema is still being configured, and a consumer who adds a
-    /// declared type extension from a <c>ConfigureSchema</c> callback has the builder in hand and
-    /// can call <c>AddAuthorization()</c> there.
-    /// </remarks>
-    private static bool AnyTypeExtensionDeclaresPosture(IReadOnlyList<Type> typeExtensions) =>
-        typeExtensions.Any(type =>
-            DeclaresPosture(type)
-            || type.GetMembers(
-                    BindingFlags.Public
-                        | BindingFlags.NonPublic
-                        | BindingFlags.Instance
-                        | BindingFlags.Static
-                        | BindingFlags.DeclaredOnly
-                )
-                .Any(DeclaresPosture)
-        );
 
     /// <summary>
     /// Binds every query model to its filter input, so a navigation from another model's filter
@@ -516,15 +502,6 @@ public static class GraphQLServiceExtensions
                     ?? typeof(QueryModelSortInputType<>).MakeGenericType(reg.EntityType)
             );
     }
-
-    private static bool DeclaresPosture(MemberInfo member) =>
-        member.IsDefined(typeof(TraxAuthorizeAttribute), inherit: true)
-        || member.IsDefined(typeof(TraxAllowAnonymousAttribute), inherit: true)
-        // A foreign attribute is refused rather than honoured, but the refusal happens at schema
-        // build, so the authorization types still have to be there for the schema to get that far.
-        || TraxAuthorization.ForeignAuthorizationAttributes.Any(name =>
-            member.GetCustomAttributes(inherit: true).Any(a => a.GetType().FullName == name)
-        );
 
     /// <summary>
     /// Registers the Trax GraphQL schema on a named HotChocolate server ("trax").
@@ -730,7 +707,9 @@ public static class GraphQLServiceExtensions
         graphqlBuilder.BridgeApplicationService<TraxApplicationServices>();
         graphqlBuilder.AddSocketSessionInterceptor(sp => new TraxCompositeSocketInterceptor(
             sp.GetRequiredService<TraxApplicationServices>(),
-            config.MaxOperationsPerConnection
+            config.MaxOperationsPerConnection,
+            config.MaxConnectionLifetime,
+            config.ConnectionCredentialRecheckInterval
         ));
 
         // A connection runs a bounded number of operations at once. The composite marks an

@@ -1,5 +1,5 @@
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -25,9 +25,12 @@ namespace Trax.Api.Tests.Audit;
 /// The audit pipeline "captures each request". A request the endpoint gate refuses is a request,
 /// and the one an operator most needs a record of. The endpoint policy refuses inside execution,
 /// never from the HTTP interceptor, so the refusal reaches the audit listener.
-/// <para>Enforces <c>docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md</c>.</para>
+/// <para>Enforces <c>docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md</c>, and
+/// <c>docs/adr/0035-a-refused-request-is-always-audited.md</c>: a subscription refused when it
+/// subscribes is audited although accepted ones are skipped by default.</para>
 /// </summary>
 [Property("adr", "docs/adr/0009-the-endpoint-policy-applies-to-every-transport.md")]
+[Property("adr", "docs/adr/0035-a-refused-request-is-always-audited.md")]
 [TestFixture]
 public class AuditRefusedRequestTests
 {
@@ -60,9 +63,37 @@ public class AuditRefusedRequestTests
             .BeTrue($"a request the endpoint gate refused must leave an audit record ({Adr})");
         var refusal = CapturingSink.Entries.Last();
         refusal.Success.Should().BeFalse();
-        refusal.ErrorText.Should().Be("Not authorized.");
+        refusal.ErrorText.Should().Be("TRAX_AUTHORIZATION");
         refusal.PrincipalId.Should().Be("<anonymous>");
         refusal.Document.Should().Contain("auditPing");
+    }
+
+    [Test]
+    public async Task ASubscriptionTheOperationsGateRefuses_IsAudited_UnderTheDefaultOptions()
+    {
+        using var host = await StartAsync(gateOperationsToRole: "Admin");
+        var client = host.GetTestClient();
+        CapturingSink.Entries.Clear();
+
+        // Signed in, without the role the operations gate asks for: the data-change feed refuses
+        // the subscriber when it subscribes.
+        using var request = Post("subscription { onDataChanged { domain } }");
+        request.Headers.Add("X-Api-Key", ApiKey);
+        request.Headers.Accept.ParseAdd("text/event-stream");
+        var response = await client.SendAsync(request);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("TRAX_AUTHORIZATION");
+
+        (await WaitForEntriesAsync(1))
+            .Should()
+            .BeTrue(
+                "a refused subscription is audited even though accepted ones are skipped by default "
+                    + "(docs/adr/0035-a-refused-request-is-always-audited.md)"
+            );
+        var refusal = CapturingSink.Entries.Single();
+        refusal.Success.Should().BeFalse();
+        refusal.ErrorText.Should().Be("TRAX_AUTHORIZATION");
+        refusal.PrincipalId.Should().EndWith("auditor");
+        refusal.Document.Should().Contain("onDataChanged");
     }
 
     private static async Task<bool> WaitForEntriesAsync(int count)
@@ -88,7 +119,7 @@ public class AuditRefusedRequestTests
             ),
         };
 
-    private static Task<IHost> StartAsync() =>
+    private static Task<IHost> StartAsync(string? gateOperationsToRole = null) =>
         new HostBuilder()
             .ConfigureWebHost(web =>
                 web.UseTestServer()
@@ -107,13 +138,17 @@ public class AuditRefusedRequestTests
                         s.AddSingleton(Substitute.For<ITrainExecutionService>());
                         s.AddSingleton(Substitute.For<ITraxHealthService>());
                         s.AddTraxGraphQL(g =>
+                        {
                             g.ExposeOperationQueries()
                                 .RequireAuthorization()
                                 .AddTypeExtension<AuditPingQuery>()
                                 .AddAudit<CapturingSink>(o =>
                                     o.FlushInterval = TimeSpan.FromMilliseconds(10)
-                                )
-                        );
+                                );
+                            return gateOperationsToRole is null
+                                ? g
+                                : g.GateOperations(roles: gateOperationsToRole);
+                        });
                     })
                     .Configure(app =>
                     {

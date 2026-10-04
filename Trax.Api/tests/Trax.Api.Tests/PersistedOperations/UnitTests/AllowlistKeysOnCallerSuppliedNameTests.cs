@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Middleware;
 
@@ -92,9 +92,7 @@ public class AllowlistKeysOnCallerSuppliedNameTests
 
     private static PersistedOperationPolicy Build(Action<PersistedOperationsBuilder> configure)
     {
-        var builder = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake;Database=fake")
-            .SingleNode();
+        var builder = new PersistedOperationsBuilder().SingleNode();
         configure(builder);
         var options = builder.Build();
         return new PersistedOperationPolicy(options, new AllowlistMatcher(options));

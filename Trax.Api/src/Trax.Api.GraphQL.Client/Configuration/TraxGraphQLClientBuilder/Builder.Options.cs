@@ -13,10 +13,11 @@ public sealed partial class TraxGraphQLClientBuilder
     }
 
     /// <summary>
-    /// Replace the underlying <see cref="HttpClient"/>. Use this to attach authentication
-    /// handlers, logging delegates, custom timeouts, etc. The supplied client's
-    /// <c>BaseAddress</c> is overwritten with the URI passed to
-    /// <see cref="ServiceExtensions.AddTraxGraphQLClient"/>.
+    /// Sends requests through a <see cref="HttpClient"/> you own instead of the one
+    /// <c>IHttpClientFactory</c> creates. The client is not changed (requests go to the URI passed
+    /// to <see cref="ServiceExtensions.AddTraxGraphQLClient"/>, whatever its <c>BaseAddress</c>), so
+    /// one client can serve several GraphQL clients. To add handlers, resilience or timeouts,
+    /// prefer <see cref="HttpClientBuilder"/>.
     /// </summary>
     public TraxGraphQLClientBuilder ConfigureHttpClient(HttpClient httpClient)
     {

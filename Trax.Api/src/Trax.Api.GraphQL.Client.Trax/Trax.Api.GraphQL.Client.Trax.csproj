@@ -6,7 +6,7 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.GraphQL.Client.Trax</AssemblyName>
     <RootNamespace>Trax.Api.GraphQL.Client.Trax</RootNamespace>
-    <PackageDescription>Trax integration layer for Trax.Api.GraphQL.Client: AssemblySchemaProvider, GraphQLQueryJunction, log correlation, dashboard discovery.</PackageDescription>
+    <PackageDescription>Trax .NET integration layer for Trax.Api.GraphQL.Client: AssemblySchemaProvider, GraphQLQueryJunction, log correlation, dashboard discovery.</PackageDescription>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Projection;
 
 namespace Trax.Api.Tests;

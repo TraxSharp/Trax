@@ -40,8 +40,7 @@ internal sealed class TypeExtensionExposureValidator(
             return;
 
         throw new InvalidOperationException(
-            $"{violations.Count} GraphQL field(s) added by a type extension have no authorization "
-                + "posture:"
+            $"{violations.Count} GraphQL field(s) cannot be served as declared:"
                 + Environment.NewLine
                 + Environment.NewLine
                 + string.Join(

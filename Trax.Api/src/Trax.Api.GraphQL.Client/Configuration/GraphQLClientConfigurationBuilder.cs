@@ -28,19 +28,48 @@ public class GraphQLClientConfigurationBuilder
 
     /// <summary>
     /// Builds a configuration from the current options. Each call creates a new GraphQL.Client HTTP
-    /// client over the same <see cref="HttpClient"/>.
+    /// client over the same <see cref="HttpClient"/>. With no <see cref="HttpClient"/> set, it
+    /// creates a long-lived one whose pooled connections are replaced every
+    /// <see cref="PooledConnectionLifetime"/>, so DNS changes are seen, and disposes it with the
+    /// configuration. A client registered with <c>AddTraxGraphQLClient</c> gets its
+    /// <see cref="HttpClient"/> from <c>IHttpClientFactory</c> instead.
     /// </summary>
-    public IGraphQLClientConfiguration Build() =>
-        new GraphQLClientConfiguration(
+    /// <exception cref="InvalidOperationException"><see cref="GraphQLClientOptions"/> names an endpoint other than the client's address.</exception>
+    public IGraphQLClientConfiguration Build() => Build(httpClientFactory: null);
+
+    /// <summary>
+    /// How long a pooled connection of an <see cref="HttpClient"/> the client creates is reused
+    /// before it is replaced: two minutes, the value Microsoft's HttpClient guidance uses.
+    /// </summary>
+    internal static readonly TimeSpan PooledConnectionLifetime = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Builds the configuration over <see cref="HttpClient"/> when one was supplied, otherwise
+    /// over the client <paramref name="httpClientFactory"/> creates, otherwise over a long-lived
+    /// client of its own.
+    /// </summary>
+    internal IGraphQLClientConfiguration Build(Func<HttpClient>? httpClientFactory)
+    {
+        var supplied = HttpClient;
+        var owned = supplied is null && httpClientFactory is null;
+        var client =
+            supplied
+            ?? httpClientFactory?.Invoke()
+            ?? new HttpClient(
+                new SocketsHttpHandler { PooledConnectionLifetime = PooledConnectionLifetime }
+            );
+
+        return new GraphQLClientConfiguration(
             _baseAddress,
             WebsocketJsonSerializer,
             GraphQLClientOptions,
             JsonSerializerOptions,
-            DisposeHttpClient,
+            DisposeHttpClient || owned,
             RemoveSubscriptionsFromSchema,
             ResponseStrictness,
-            HttpClient
+            client
         );
+    }
 
     /// <summary>The transport serializer. Defaults to GraphQL.Client's System.Text.Json serializer.</summary>
     public IGraphQLWebsocketJsonSerializer WebsocketJsonSerializer { get; set; } =
@@ -65,17 +94,21 @@ public class GraphQLClientConfigurationBuilder
     public GraphQLHttpClientOptions GraphQLClientOptions { get; set; } = new();
 
     /// <summary>
-    /// The HTTP client requests go through. Defaults to a new <see cref="System.Net.Http.HttpClient"/>;
-    /// replace it to add authentication handlers or timeouts. Its <c>BaseAddress</c> is overwritten.
+    /// An HTTP client to send requests through instead of the default, or <c>null</c> (the
+    /// default) for the one <c>IHttpClientFactory</c> creates under this client's name. A
+    /// supplied client is not changed: requests are sent to the client's address whatever its
+    /// <c>BaseAddress</c>, so one client can serve several GraphQL clients. Prefer adding handlers
+    /// through <see cref="TraxGraphQLClientBuilder.HttpClientBuilder"/>.
     /// </summary>
-    public HttpClient HttpClient { get; set; } = new();
+    public HttpClient? HttpClient { get; set; }
 
-    /// <summary>Whether disposing the configuration also disposes <see cref="HttpClient"/>. <c>false</c> by default.</summary>
+    /// <summary>Whether disposing the configuration also disposes a supplied <see cref="HttpClient"/>. <c>false</c> by default.</summary>
     public bool DisposeHttpClient { get; set; } = false;
 
     /// <summary>
-    /// Subscriptions in the schema require a subscription type on every client query regardless
-    /// of intent, so they may be removed from the introspected schema if subscriptions aren't used.
+    /// Whether the schema's subscription type is dropped before queries are validated against it,
+    /// by every schema provider the client builder registers. <c>true</c> by default: the executor
+    /// sends queries and mutations only.
     /// </summary>
     public bool RemoveSubscriptionsFromSchema { get; set; } = true;
 

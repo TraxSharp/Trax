@@ -101,14 +101,21 @@ public class IntrospectingSchemaProvider : ISchemaProvider
     /// <summary>Creates a provider that introspects the endpoint in <paramref name="configuration"/> when the schema is first requested.</summary>
     /// <param name="configuration">Supplies the endpoint, HTTP client and subscription setting.</param>
     public IntrospectingSchemaProvider(IGraphQLClientConfiguration configuration)
+        : this(configuration, TimeProvider.System) { }
+
+    internal IntrospectingSchemaProvider(
+        IGraphQLClientConfiguration configuration,
+        TimeProvider time
+    )
     {
         _configuration = configuration;
-        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync);
+        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync, time);
     }
 
     /// <summary>
     /// Returns the schema, loading it on the first call and sharing the result. A load that
-    /// fails is not kept, so the next call loads again. <paramref name="cancellationToken"/>
+    /// fails is not kept: it is loaded again once a capped, jittered backoff has passed, and a call
+    /// before then gets the failure. <paramref name="cancellationToken"/>
     /// cancels this caller's wait, not a load other callers share.
     /// </summary>
     /// <param name="cancellationToken">Cancels waiting for the schema.</param>
@@ -128,7 +135,7 @@ public class IntrospectingSchemaProvider : ISchemaProvider
         catch (Exception ex) when (ex is not GraphQLSchemaIntrospectionException)
         {
             throw new GraphQLSchemaIntrospectionException(
-                $"Failed to introspect schema at {_configuration.HttpClient.BaseAddress}.",
+                $"Failed to introspect schema at {_configuration.BaseAddress}.",
                 ex
             );
         }
@@ -136,7 +143,7 @@ public class IntrospectingSchemaProvider : ISchemaProvider
         if (response.Errors is { Length: > 0 })
         {
             throw new GraphQLSchemaIntrospectionException(
-                $"Introspection at {_configuration.HttpClient.BaseAddress} returned errors: "
+                $"Introspection at {_configuration.BaseAddress} returned errors: "
                     + string.Join("; ", response.Errors.Select(e => e.Message))
             );
         }
@@ -166,30 +173,12 @@ public class IntrospectingSchemaProvider : ISchemaProvider
 
         var sdl = IntrospectionSdlBuilder.Build(parsed.__Schema);
 
-        // Collect custom scalar names. graphql-dotnet ships built-in types for String, Int,
-        // Float, Boolean, ID but treats anything else (Any, DateTime, Uuid, JSON, ...) as
-        // unresolved — failing schema initialization the moment a field references one.
-        // Register a permissive scalar instance for each, keyed on the SDL name.
-        var customScalars = new List<IGraphType>();
-        foreach (var type in parsed.__Schema.Types)
-        {
-            if (
-                type.Kind == "SCALAR"
-                && type.Name is { Length: > 0 } name
-                && !IntrospectionSdlBuilder.IsBuiltinScalar(name)
-                && !name.StartsWith("__", StringComparison.Ordinal)
-            )
-            {
-                customScalars.Add(new PermissiveScalarGraphType(name));
-            }
-        }
-
         try
         {
-            var schema = Schema.For(sdl);
-            if (customScalars.Count > 0)
-                schema.RegisterTypes(customScalars.ToArray());
-            return schema;
+            // The subscription type is already gone, so the SDL is built as it is. The custom
+            // scalars it declares are backed by permissive scalars there, as for the other
+            // providers.
+            return SdlSchema.Build(sdl, removeSubscriptions: false);
         }
         catch (Exception ex)
         {

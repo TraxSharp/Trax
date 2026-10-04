@@ -22,7 +22,9 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 /// A broadcast sent while the connection is down never reaches this node, because its queue
 /// goes with the connection. So, as with any pub/sub invalidation channel, losing the connection
 /// empties every cache, and so does recovering it: what was cached in between may already be
-/// out of date.
+/// out of date. The broker can also close the channel alone, leaving the connection up, which
+/// the client's recovery does not cover: the receiver empties its caches, subscribes again on a
+/// new channel (retrying with a growing delay), and empties them once more when it has.
 /// </para>
 /// </remarks>
 internal sealed class PersistedOperationReceiverService : IHostedService, IAsyncDisposable
@@ -32,9 +34,13 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
     private readonly HotChocolateOperationCacheInvalidator _hcInvalidator;
     private readonly ILogger<PersistedOperationReceiverService> _logger;
 
+    private readonly CancellationTokenSource _stopping = new();
     private IConnection? _connection;
     private IChannel? _channel;
     private string? _queueName;
+
+    /// <summary>The channel the receiver currently consumes on. For tests.</summary>
+    internal IChannel? Channel => _channel;
 
     public PersistedOperationReceiverService(
         PersistedOperationsOptions options,
@@ -70,11 +76,25 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
                 : EmptyEveryCacheAsync("the connection to the broker was lost");
         _connection.RecoverySucceededAsync += (_, _) =>
             EmptyEveryCacheAsync("the connection to the broker recovered");
-        _channel = await _connection
+        await ConsumeAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Persisted-operation invalidation receiver started on queue {Queue}.",
+            _queueName
+        );
+    }
+
+    /// <summary>
+    /// Opens a channel, binds a fresh server-named queue to the fanout exchange and consumes it.
+    /// </summary>
+    private async Task ConsumeAsync(CancellationToken cancellationToken)
+    {
+        var channel = await _connection!
             .CreateChannelAsync(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        channel.ChannelShutdownAsync += (_, args) => OnChannelShutdownAsync(args);
 
-        await _channel
+        await channel
             .ExchangeDeclareAsync(
                 exchange: RabbitMqPersistedOperationBroadcaster.ExchangeName,
                 type: ExchangeType.Fanout,
@@ -84,7 +104,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             )
             .ConfigureAwait(false);
 
-        var queue = await _channel
+        var queue = await channel
             .QueueDeclareAsync(
                 queue: string.Empty,
                 durable: false,
@@ -93,40 +113,93 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-        _queueName = queue.QueueName;
 
-        await _channel
+        await channel
             .QueueBindAsync(
-                queue: _queueName,
+                queue: queue.QueueName,
                 exchange: RabbitMqPersistedOperationBroadcaster.ExchangeName,
                 routingKey: string.Empty,
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
 
-        var consumer = new AsyncEventingBasicConsumer(_channel);
-        consumer.ReceivedAsync += OnMessageAsync;
+        _channel = channel;
+        _queueName = queue.QueueName;
 
-        await _channel
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        // Acknowledged on the channel that delivered it, which may not be the current one.
+        consumer.ReceivedAsync += (_, ea) => OnMessageAsync(channel, ea);
+
+        await channel
             .BasicConsumeAsync(
-                queue: _queueName,
+                queue: queue.QueueName,
                 autoAck: false,
                 consumer: consumer,
                 cancellationToken: cancellationToken
             )
             .ConfigureAwait(false);
-
-        _logger.LogInformation(
-            "Persisted-operation invalidation receiver started on queue {Queue}.",
-            _queueName
-        );
     }
 
-    private async Task OnMessageAsync(object _, BasicDeliverEventArgs ea)
+    /// <summary>
+    /// The broker closed this receiver's channel while the connection stayed up. Connection
+    /// recovery does not reopen it, so nothing would be received again: empty the caches and
+    /// subscribe again in the background.
+    /// </summary>
+    private Task OnChannelShutdownAsync(ShutdownEventArgs args)
     {
-        if (_channel is null)
-            return;
+        if (
+            args.Initiator == ShutdownInitiator.Application
+            || _stopping.IsCancellationRequested
+            || _connection is not { IsOpen: true }
+        )
+            // Closed by this service, or with the connection, whose own events and recovery
+            // cover it.
+            return Task.CompletedTask;
 
+        _ = Task.Run(SubscribeAgainAsync);
+        return EmptyEveryCacheAsync("the broker closed the receiver's channel");
+    }
+
+    private async Task SubscribeAgainAsync()
+    {
+        var delay = TimeSpan.FromSeconds(1);
+        while (!_stopping.IsCancellationRequested)
+        {
+            try
+            {
+                await ConsumeAsync(_stopping.Token).ConfigureAwait(false);
+                await EmptyEveryCacheAsync("the receiver subscribed again on a new channel")
+                    .ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (!_stopping.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not subscribe to persisted-operation invalidations again; retrying in {Delay}.",
+                    delay
+                );
+                try
+                {
+                    await Task.Delay(delay, _stopping.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxResubscribeDelay.Ticks));
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private static readonly TimeSpan MaxResubscribeDelay = TimeSpan.FromSeconds(30);
+
+    private async Task OnMessageAsync(IChannel channel, BasicDeliverEventArgs ea)
+    {
         try
         {
             var message = JsonSerializer.Deserialize<PersistedOperationChangedMessage>(
@@ -139,7 +212,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
                 await _hcInvalidator.InvalidateAsync(CancellationToken.None).ConfigureAwait(false);
             }
 
-            await _channel
+            await channel
                 .BasicAckAsync(ea.DeliveryTag, multiple: false, CancellationToken.None)
                 .ConfigureAwait(false);
         }
@@ -151,7 +224,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             );
             try
             {
-                await _channel
+                await channel
                     .BasicNackAsync(
                         ea.DeliveryTag,
                         multiple: false,
@@ -177,12 +250,15 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
             "Emptying the persisted-operation caches because {Reason}; a change broadcast meanwhile may not have arrived.",
             reason
         );
-        (_cache as InMemoryPersistedOperationCache)?.InvalidateAll();
+        // The invalidator advances the generation, which makes every cached entry on this node,
+        // the lookup cache's included, unservable.
         await _hcInvalidator.InvalidateAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        await _stopping.CancelAsync().ConfigureAwait(false);
+
         if (_channel is { IsOpen: true })
         {
             if (_queueName is not null)
@@ -212,6 +288,9 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
 
     public async ValueTask DisposeAsync()
     {
+        if (!_stopping.IsCancellationRequested)
+            await _stopping.CancelAsync().ConfigureAwait(false);
+
         if (_channel is not null)
         {
             if (_channel.IsOpen)

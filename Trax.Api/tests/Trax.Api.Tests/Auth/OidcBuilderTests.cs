@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.Auth.Oidc;
 
 namespace Trax.Api.Tests.Auth;

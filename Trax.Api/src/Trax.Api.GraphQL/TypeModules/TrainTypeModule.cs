@@ -1,3 +1,5 @@
+using System.Reflection;
+using HotChocolate;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Language;
 using HotChocolate.Types;
@@ -53,12 +55,7 @@ public partial class TrainTypeModule(
         // (e.g. IAddressValidationTrain → "AddressValidation" + "Response" collides with the
         // output CLR class AddressValidationResponse). When that happens we fall back to
         // "{trainName}MutationResponse" instead.
-        var outputTypeGraphQLNames = new HashSet<string>(
-            registrations
-                .Where(r => (r.IsQuery || r.IsMutation) && HasTypedOutput(r))
-                .Select(r => r.OutputType.Name),
-            StringComparer.OrdinalIgnoreCase
-        );
+        var outputTypeGraphQLNames = OutputTypeGraphQLNames(registrations);
 
         foreach (var reg in registrations)
         {
@@ -67,7 +64,7 @@ public partial class TrainTypeModule(
 
             // Unit input is not allowed on GraphQL-exposed trains — each train must have
             // a dedicated input record for mediator routing and schema generation.
-            if (reg.InputType == typeof(LanguageExt.Unit))
+            if (reg.InputType == typeof(Trax.Core.Functional.Unit))
             {
                 var attrType = reg.IsQuery ? "[TraxQuery]" : "[TraxMutation]";
                 throw new InvalidOperationException(
@@ -106,10 +103,7 @@ public partial class TrainTypeModule(
                 // Every mutation train gets a response type. Default name is "{trainName}Response";
                 // if that collides with an output ObjectType name we fall back to
                 // "{trainName}MutationResponse" to keep the schema build from failing.
-                var defaultResponseName = $"{trainName}Response";
-                var responseTypeName = outputTypeGraphQLNames.Contains(defaultResponseName)
-                    ? $"{trainName}MutationResponse"
-                    : defaultResponseName;
+                var responseTypeName = ResponseTypeName(trainName, outputTypeGraphQLNames);
                 types.Add(BuildResponseType(responseTypeName, reg));
                 responseTypeNames[reg] = responseTypeName;
 
@@ -178,6 +172,47 @@ public partial class TrainTypeModule(
 
         return new ValueTask<IReadOnlyCollection<ITypeSystemMember>>(types);
     }
+
+    /// <summary>
+    /// The GraphQL names the exposed trains' output object types take: the class's
+    /// <c>[GraphQLName]</c> when it has one, which is what HotChocolate names the type, otherwise
+    /// the class name.
+    /// </summary>
+    internal static HashSet<string> OutputTypeGraphQLNames(
+        IEnumerable<TrainRegistration> registrations
+    ) =>
+        new(
+            registrations
+                .Where(r => (r.IsQuery || r.IsMutation) && HasTypedOutput(r))
+                .Select(r => GraphQLTypeName(r.OutputType)),
+            StringComparer.OrdinalIgnoreCase
+        );
+
+    /// <summary>
+    /// The name of a mutation train's response type: <c>{trainName}Response</c>, or
+    /// <c>{trainName}MutationResponse</c> when an output type already takes the first.
+    /// </summary>
+    internal static string ResponseTypeName(string trainName, HashSet<string> outputTypeNames)
+    {
+        var defaultResponseName = $"{trainName}Response";
+        return outputTypeNames.Contains(defaultResponseName)
+            ? $"{trainName}MutationResponse"
+            : defaultResponseName;
+    }
+
+    /// <summary>
+    /// The name HotChocolate gives the object type it infers for <paramref name="type"/>: its
+    /// <c>[GraphQLName]</c>, or the class name.
+    /// </summary>
+    internal static string GraphQLTypeName(Type type) =>
+        type.GetCustomAttribute<GraphQLNameAttribute>()?.Name ?? type.Name;
+
+    /// <summary>
+    /// Whether the train contributes an output object type of its own, as opposed to the generic
+    /// run response.
+    /// </summary>
+    internal static bool ContributesOutputType(TrainRegistration registration) =>
+        HasTypedOutput(registration);
 
     /// <summary>
     /// Gives every exposed train its GraphQL name: the attribute's <c>Name</c>, or one derived
@@ -381,7 +416,7 @@ public partial class TrainTypeModule(
     /// properties are all typed as System.Object (which HotChocolate ignores).
     /// </summary>
     private static bool HasTypedOutput(TrainRegistration registration) =>
-        registration.OutputType != typeof(LanguageExt.Unit)
+        registration.OutputType != typeof(Trax.Core.Functional.Unit)
         && registration.OutputType != typeof(object)
         && HasGraphQLRepresentableProperties(registration.OutputType);
 

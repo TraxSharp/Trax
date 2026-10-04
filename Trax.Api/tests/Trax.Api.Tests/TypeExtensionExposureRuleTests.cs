@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Configuration;
 
 namespace Trax.Api.Tests;

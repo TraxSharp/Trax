@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using GraphQL.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;

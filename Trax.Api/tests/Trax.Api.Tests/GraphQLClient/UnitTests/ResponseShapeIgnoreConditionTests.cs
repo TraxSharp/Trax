@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Client;
 
 namespace Trax.Api.Tests.GraphQLClient.UnitTests;

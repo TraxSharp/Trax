@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.GraphQL.Client.Typed;

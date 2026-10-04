@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
@@ -53,10 +53,15 @@ public class SubscriptionPrincipalPropagationE2ETests
         await ExpectAckAsync(ws);
         await SubscribeAsync(ws, "sub-1", WhoAmISubscription);
 
-        await PokeAsync(host, "ping", AdminApiKey, scheme: Schemes.ApiKey);
-        var payload = await ReceiveNextAsync(ws, "sub-1");
+        var payload = await PokeUntilReceivedAsync(
+            host,
+            "ping",
+            AdminApiKey,
+            Schemes.ApiKey,
+            (ws, "sub-1")
+        );
 
-        payload.GetString().Should().Be("TraxApiKey:admin");
+        payload[0].GetString().Should().Be("TraxApiKey:admin");
     }
 
     [Test]
@@ -70,10 +75,9 @@ public class SubscriptionPrincipalPropagationE2ETests
         await ExpectAckAsync(ws);
         await SubscribeAsync(ws, "sub-1", WhoAmISubscription);
 
-        await PokeAsync(host, "ping", token, scheme: Schemes.Jwt);
-        var payload = await ReceiveNextAsync(ws, "sub-1");
+        var payload = await PokeUntilReceivedAsync(host, "ping", token, Schemes.Jwt, (ws, "sub-1"));
 
-        payload.GetString().Should().Be("TraxJwt:alice");
+        payload[0].GetString().Should().Be("TraxJwt:alice");
     }
 
     // ── Subscriber identity is independent of poker identity ────────────
@@ -89,10 +93,15 @@ public class SubscriptionPrincipalPropagationE2ETests
         await ExpectAckAsync(ws);
         await SubscribeAsync(ws, "sub-1", WhoAmISubscription);
 
-        await PokeAsync(host, "ping", PlayerApiKey, scheme: Schemes.ApiKey);
-        var payload = await ReceiveNextAsync(ws, "sub-1");
+        var payload = await PokeUntilReceivedAsync(
+            host,
+            "ping",
+            PlayerApiKey,
+            Schemes.ApiKey,
+            (ws, "sub-1")
+        );
 
-        payload.GetString().Should().Be("TraxApiKey:admin");
+        payload[0].GetString().Should().Be("TraxApiKey:admin");
     }
 
     // ── Concurrent subscribers with different principals ────────────────
@@ -112,13 +121,17 @@ public class SubscriptionPrincipalPropagationE2ETests
         await ExpectAckAsync(wsPlayer);
         await SubscribeAsync(wsPlayer, "sub-player", WhoAmISubscription);
 
-        await PokeAsync(host, "ping", AdminApiKey, scheme: Schemes.ApiKey);
+        var payloads = await PokeUntilReceivedAsync(
+            host,
+            "ping",
+            AdminApiKey,
+            Schemes.ApiKey,
+            (wsAdmin, "sub-admin"),
+            (wsPlayer, "sub-player")
+        );
 
-        var adminPayload = await ReceiveNextAsync(wsAdmin, "sub-admin");
-        var playerPayload = await ReceiveNextAsync(wsPlayer, "sub-player");
-
-        adminPayload.GetString().Should().Be("TraxApiKey:admin");
-        playerPayload.GetString().Should().Be("TraxApiKey:player");
+        payloads[0].GetString().Should().Be("TraxApiKey:admin");
+        payloads[1].GetString().Should().Be("TraxApiKey:player");
     }
 
     [Test]
@@ -142,13 +155,17 @@ public class SubscriptionPrincipalPropagationE2ETests
         await ExpectAckAsync(ws2);
         await SubscribeAsync(ws2, "s2", WhoAmISubscription);
 
-        await PokeAsync(host, "ping", jwtToken, scheme: Schemes.Jwt);
+        var payloads = await PokeUntilReceivedAsync(
+            host,
+            "ping",
+            jwtToken,
+            Schemes.Jwt,
+            (ws1, "s1"),
+            (ws2, "s2")
+        );
 
-        var one = await ReceiveNextAsync(ws1, "s1");
-        var two = await ReceiveNextAsync(ws2, "s2");
-
-        one.GetString().Should().Be("TraxJwt:sub-one");
-        two.GetString().Should().Be("TraxJwt:sub-two");
+        payloads[0].GetString().Should().Be("TraxJwt:sub-one");
+        payloads[1].GetString().Should().Be("TraxJwt:sub-two");
     }
 
     // ── Under load: N subscribers, N distinct principals ────────────────
@@ -173,19 +190,19 @@ public class SubscriptionPrincipalPropagationE2ETests
                 subscribers.Add((ws, "TraxJwt:" + id, $"sub-{i}"));
             }
 
-            // Single broadcast that fans out to all N subscribers.
-            await PokeAsync(host, "fanout", SignJwt("poker", "poker"), scheme: Schemes.Jwt);
-
-            var collected = await Task.WhenAll(
-                subscribers.Select(async s =>
-                {
-                    var payload = await ReceiveNextAsync(s.Ws, s.SubId);
-                    return (Expected: s.ExpectedId, Actual: payload.GetString());
-                })
+            // Each broadcast fans out to all N subscribers.
+            var payloads = await PokeUntilReceivedAsync(
+                host,
+                "fanout",
+                SignJwt("poker", "poker"),
+                Schemes.Jwt,
+                subscribers.Select(s => (s.Ws, s.SubId)).ToArray()
             );
 
-            foreach (var (expected, actual) in collected)
-                actual.Should().Be(expected);
+            payloads
+                .Select(p => p.GetString())
+                .Should()
+                .Equal(subscribers.Select(s => s.ExpectedId));
         }
         finally
         {
@@ -211,9 +228,14 @@ public class SubscriptionPrincipalPropagationE2ETests
         var pokerToken = SignJwt("poker", "poker");
         for (var i = 0; i < Events; i++)
         {
-            await PokeAsync(host, $"ping-{i}", pokerToken, scheme: Schemes.Jwt);
-            var payload = await ReceiveNextAsync(ws, "sub-1");
-            payload.GetString().Should().Be("TraxJwt:alice");
+            var payload = await PokeUntilReceivedAsync(
+                host,
+                $"ping-{i}",
+                pokerToken,
+                Schemes.Jwt,
+                (ws, "sub-1")
+            );
+            payload[0].GetString().Should().Be("TraxJwt:alice");
         }
     }
 
@@ -248,11 +270,9 @@ public class SubscriptionPrincipalPropagationE2ETests
                 payload = new { query },
             }
         );
+        // graphql-transport-ws has no "subscribe_ack", so the subscription may not be wired to
+        // its topic yet when this returns. PokeUntilReceivedAsync publishes until it is.
         await SendRawAsync(ws, msg);
-        // graphql-transport-ws has no "subscribe_ack". Give HC a moment to
-        // fully wire the subscription to the in-memory topic before events
-        // fire, or the first event will be lost.
-        await Task.Delay(100);
     }
 
     private static async Task SendRawAsync(WebSocket ws, string json)
@@ -350,6 +370,32 @@ public class SubscriptionPrincipalPropagationE2ETests
         throw new TimeoutException(
             $"Did not receive a 'next' frame for subscription {subscriptionId}."
         );
+    }
+
+    /// <summary>
+    /// Pokes as the given principal until every subscriber has received a <c>whoAmI</c> event, and
+    /// returns the first each received, in the order given. A single poke can race ahead of a
+    /// subscription that is not yet wired to its topic, since the protocol acknowledges no
+    /// subscribe; publishing again until it arrives waits exactly as long as that takes.
+    /// </summary>
+    private static async Task<JsonElement[]> PokeUntilReceivedAsync(
+        IHost host,
+        string tag,
+        string credential,
+        Schemes scheme,
+        params (WebSocket Ws, string SubId)[] subscribers
+    )
+    {
+        var received = Task.WhenAll(subscribers.Select(s => ReceiveNextAsync(s.Ws, s.SubId)));
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!received.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            await PokeAsync(host, tag, credential, scheme);
+            // allowed-delay: re-publish interval, bounded by the 10s deadline; WhenAny wakes the
+            // instant every subscriber has received.
+            await Task.WhenAny(received, Task.Delay(100));
+        }
+        return await received;
     }
 
     /// <summary>

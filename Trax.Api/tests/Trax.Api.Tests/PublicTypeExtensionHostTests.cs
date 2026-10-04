@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

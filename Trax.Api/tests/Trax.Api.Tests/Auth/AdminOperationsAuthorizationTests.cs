@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;

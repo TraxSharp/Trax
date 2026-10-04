@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -193,6 +193,90 @@ public class AddAuditTests
             && sd.ImplementationType?.Name.Contains("Disclaimer") == true
         );
         disclaimerCount.Should().Be(1);
+    }
+
+    private static IEnumerable<TestCaseData> InvalidOptions()
+    {
+        yield return Case(o => o.ChannelCapacity = 0, nameof(TraxAuditOptions.ChannelCapacity));
+        yield return Case(o => o.BatchSize = 0, nameof(TraxAuditOptions.BatchSize));
+        yield return Case(o => o.BatchSize = -1, nameof(TraxAuditOptions.BatchSize));
+        yield return Case(
+            o => o.FlushInterval = TimeSpan.Zero,
+            nameof(TraxAuditOptions.FlushInterval)
+        );
+        yield return Case(
+            o => o.MaxDocumentLength = -1,
+            nameof(TraxAuditOptions.MaxDocumentLength)
+        );
+        yield return Case(
+            o => o.MaxOperationNameLength = 0,
+            nameof(TraxAuditOptions.MaxOperationNameLength)
+        );
+        yield return Case(
+            o => o.MaxErrorTextLength = 0,
+            nameof(TraxAuditOptions.MaxErrorTextLength)
+        );
+        yield return Case(o => o.MaxRetries = -1, nameof(TraxAuditOptions.MaxRetries));
+        yield return Case(o => o.MaxRetries = 101, nameof(TraxAuditOptions.MaxRetries));
+        yield return Case(
+            o => o.RetryBackoff = TimeSpan.FromMilliseconds(-1),
+            nameof(TraxAuditOptions.RetryBackoff)
+        );
+        yield return Case(
+            o => o.MaxRetryBackoff = TimeSpan.Zero,
+            nameof(TraxAuditOptions.MaxRetryBackoff)
+        );
+        yield return Case(
+            o => o.MaxRetryBackoff = TimeSpan.FromHours(2),
+            nameof(TraxAuditOptions.MaxRetryBackoff)
+        );
+        yield return Case(
+            o => o.RetryBackoff = TimeSpan.FromMinutes(1),
+            nameof(TraxAuditOptions.RetryBackoff)
+        );
+        yield return Case(
+            o => o.DefaultPrincipalId = "",
+            nameof(TraxAuditOptions.DefaultPrincipalId)
+        );
+
+        static TestCaseData Case(Action<TraxAuditOptions> configure, string option) =>
+            new TestCaseData(configure, option).SetArgDisplayNames(option);
+    }
+
+    [TestCaseSource(nameof(InvalidOptions))]
+    public async Task AddAudit_InvalidOptions_RefuseStartup_NamingTheOption(
+        Action<TraxAuditOptions> configure,
+        string option
+    )
+    {
+        using var host = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddLogging();
+                new TraxGraphQLBuilder(services).AddAudit<TestSink>(configure);
+            })
+            .Build();
+
+        var start = () => host.StartAsync();
+
+        (await start.Should().ThrowAsync<OptionsValidationException>())
+            .Which.Message.Should()
+            .Contain($"TraxAuditOptions.{option}");
+    }
+
+    [Test]
+    public async Task AddAudit_DefaultOptions_StartAndStop()
+    {
+        using var host = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddLogging();
+                new TraxGraphQLBuilder(services).AddAudit<TestSink>();
+            })
+            .Build();
+
+        await host.StartAsync();
+        await host.StopAsync();
     }
 
     private sealed class DroppingRedactor : ITraxAuditRedactor

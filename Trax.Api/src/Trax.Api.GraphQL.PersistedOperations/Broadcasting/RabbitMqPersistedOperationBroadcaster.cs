@@ -10,6 +10,11 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 /// exchange so every other node clears its local cache entry. Wired only
 /// when the consumer calls <c>UseRabbitMqInvalidation()</c>.
 /// </summary>
+/// <remarks>
+/// The channel runs in publisher-confirm mode, so a publish completes only once the broker has
+/// accepted the message, and throws when the broker refuses it or does not answer within
+/// <see cref="ConfirmTimeout"/>.
+/// </remarks>
 internal sealed class RabbitMqPersistedOperationBroadcaster
     : IPersistedOperationBroadcaster,
         IAsyncDisposable
@@ -21,6 +26,9 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
     /// </summary>
     internal const string ExchangeName = "trax.persisted_operations.invalidation";
 
+    /// <summary>How long a publish waits for the broker's confirm before it counts as failed.</summary>
+    internal static readonly TimeSpan ConfirmTimeout = TimeSpan.FromSeconds(10);
+
     private readonly PersistedOperationsOptions _options;
     private readonly ILogger<RabbitMqPersistedOperationBroadcaster> _logger;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
@@ -28,6 +36,9 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
     private IConnection? _connection;
     private IChannel? _channel;
     private bool _exchangeDeclared;
+
+    /// <summary>The channel publishes go out on, once one is open. For tests.</summary>
+    internal IChannel? Channel => _channel;
 
     public RabbitMqPersistedOperationBroadcaster(
         PersistedOperationsOptions options,
@@ -47,6 +58,10 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
 
     public async Task PublishAsync(PersistedOperationChangedMessage message, CancellationToken ct)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(ConfirmTimeout);
+        ct = timeout.Token;
+
         var channel = await EnsureChannelAsync(ct).ConfigureAwait(false);
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
 
@@ -96,7 +111,13 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             }
 
             _channel = await _connection
-                .CreateChannelAsync(cancellationToken: ct)
+                .CreateChannelAsync(
+                    new CreateChannelOptions(
+                        publisherConfirmationsEnabled: true,
+                        publisherConfirmationTrackingEnabled: true
+                    ),
+                    ct
+                )
                 .ConfigureAwait(false);
 
             if (!_exchangeDeclared)

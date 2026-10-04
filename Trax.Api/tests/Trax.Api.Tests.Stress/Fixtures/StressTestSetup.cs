@@ -1,5 +1,9 @@
 using System.Diagnostics;
-using FluentAssertions;
+using System.Security.Claims;
+using System.Text.Json;
+using AwesomeAssertions;
+using HotChocolate;
+using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -123,6 +127,86 @@ public abstract class StressTestSetup
 
     /// <summary>The fixture's container, for tests that drive a service directly.</summary>
     protected IServiceProvider Services => _serviceProvider;
+
+    /// <summary>The role <see cref="AddOperationsGraphQL"/> gates the operations namespace to.</summary>
+    protected const string AdminRole = "Admin";
+
+    /// <summary>
+    /// Adds the Trax schema with the operations namespace exposed and gated to
+    /// <see cref="AdminRole"/>, as a production admin host has it, so a request runs the whole
+    /// pipeline: validation, authorization, the error filter, serialization, and HotChocolate's
+    /// execution timeout (30 s by default). Call it from <see cref="ConfigureServices"/>.
+    /// </summary>
+    protected static void AddOperationsGraphQL(IServiceCollection services) =>
+        Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+            services,
+            graphql =>
+                graphql
+                    .ExposeOperationQueries()
+                    .ExposeOperationMutations()
+                    .GateOperations(roles: AdminRole)
+        );
+
+    /// <summary>A signed-in caller holding <paramref name="role"/>.</summary>
+    protected static ClaimsPrincipal Caller(string role) =>
+        new(
+            new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, "stress"), new Claim(ClaimTypes.Role, role)],
+                "Stress"
+            )
+        );
+
+    private IRequestExecutor? _executor;
+
+    /// <summary>
+    /// Runs <paramref name="document"/> through the schema's request executor as
+    /// <paramref name="caller"/> (an <see cref="AdminRole"/> holder by default) and returns the
+    /// whole response. Needs <see cref="AddOperationsGraphQL"/>.
+    /// </summary>
+    protected async Task<JsonElement> ExecuteGraphQLAsync(
+        string document,
+        CancellationToken ct = default,
+        ClaimsPrincipal? caller = null
+    )
+    {
+        _executor ??= await _serviceProvider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax", ct);
+
+        var result = await _executor.ExecuteAsync(
+            OperationRequestBuilder
+                .New()
+                .SetDocument(document)
+                .SetGlobalState(nameof(ClaimsPrincipal), caller ?? Caller(AdminRole))
+                .Build(),
+            ct
+        );
+
+        return JsonDocument.Parse(((OperationResult)result).ToJson()).RootElement.Clone();
+    }
+
+    /// <summary>
+    /// <see cref="ExecuteGraphQLAsync"/>, failing the test on any GraphQL error, and returning the
+    /// payload of the single field under <c>operations</c> (or under the namespace in
+    /// <paramref name="path"/>, such as <c>deadLetters</c>).
+    /// </summary>
+    protected async Task<JsonElement> OperationsFieldAsync(
+        string document,
+        CancellationToken ct = default,
+        params string[] path
+    )
+    {
+        var response = await ExecuteGraphQLAsync(document, ct);
+        response
+            .TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse($"the request must succeed: {response.GetRawText()}");
+
+        var node = response.GetProperty("data").GetProperty("operations");
+        foreach (var segment in path)
+            node = node.GetProperty(segment);
+        return node.EnumerateObject().Single().Value;
+    }
 
     /// <summary>Runs one SQL statement against the stress database.</summary>
     protected static async Task ExecSqlAsync(string sql)

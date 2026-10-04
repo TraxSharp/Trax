@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.AspNetCore;
 using HotChocolate.AspNetCore.Subscriptions;
 using HotChocolate.AspNetCore.Subscriptions.Protocols;
@@ -256,71 +256,4 @@ public class SocketJwtRunsTheSchemeHandlerTests
             .Where(call => call.GetMethodInfo().Name == nameof(ISocketConnection.CloseAsync))
             .Select(call => call.GetArguments()[1])
             .OfType<ConnectionCloseReason>();
-
-    /// <summary>
-    /// A clock the test moves by hand. Timers fire synchronously inside <see cref="Advance"/>.
-    /// </summary>
-    private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
-    {
-        private readonly List<ManualTimer> _timers = [];
-        private DateTimeOffset _now = start;
-
-        public override DateTimeOffset GetUtcNow() => _now;
-
-        public override ITimer CreateTimer(
-            TimerCallback callback,
-            object? state,
-            TimeSpan dueTime,
-            TimeSpan period
-        )
-        {
-            var timer = new ManualTimer(this, callback, state);
-            timer.Change(dueTime, period);
-            lock (_timers)
-                _timers.Add(timer);
-            return timer;
-        }
-
-        public void Advance(TimeSpan by)
-        {
-            _now += by;
-            ManualTimer[] timers;
-            lock (_timers)
-                timers = [.. _timers];
-            foreach (var timer in timers)
-                timer.FireIfDue(_now);
-        }
-
-        private sealed class ManualTimer(
-            ManualTimeProvider owner,
-            TimerCallback callback,
-            object? state
-        ) : ITimer
-        {
-            private DateTimeOffset? _due;
-
-            public bool Change(TimeSpan dueTime, TimeSpan period)
-            {
-                _due = dueTime == Timeout.InfiniteTimeSpan ? null : owner._now + dueTime;
-                return true;
-            }
-
-            public void FireIfDue(DateTimeOffset now)
-            {
-                if (_due is { } due && due <= now)
-                {
-                    _due = null;
-                    callback(state);
-                }
-            }
-
-            public void Dispose() => _due = null;
-
-            public ValueTask DisposeAsync()
-            {
-                _due = null;
-                return ValueTask.CompletedTask;
-            }
-        }
-    }
 }

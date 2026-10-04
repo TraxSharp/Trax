@@ -30,6 +30,11 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
         public System.TimeSpan? Ttl { get; }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.CacheOptions WithTtl(System.TimeSpan ttl) { }
     }
+    public sealed class PersistedOperationStoreBuilder
+    {
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder SingleNode() { }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder UseRabbitMqInvalidation(string connectionString) { }
+    }
     public sealed class PersistedOperationsBuilder
     {
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder AllowOperations(params string[] operationNames) { }
@@ -39,8 +44,11 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder LogNonPersistedRequests(bool log = true) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder RequirePersisted(bool require = true) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder SingleNode() { }
+        [System.Obsolete("Not used: persisted operations read and write through the Trax data context regis" +
+            "tered by AddEffects(e => e.UsePostgres(...)). Remove the call.")]
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder UseDatabase(string connectionString) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder UseRabbitMqInvalidation(string connectionString) { }
+        public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder WithCacheMaxAge(System.TimeSpan maxAge) { }
         public Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder WithInMemoryCache(System.Action<Trax.Api.GraphQL.PersistedOperations.Configuration.CacheOptions>? configure = null) { }
     }
     public sealed class PersistedOperationsOptions
@@ -49,7 +57,9 @@ namespace Trax.Api.GraphQL.PersistedOperations.Configuration
         public System.Collections.Generic.IReadOnlyList<System.Func<string, bool>> AllowOperationPredicates { get; }
         public System.Collections.Generic.IReadOnlySet<string> AllowedOperationNames { get; }
         public bool CacheEnabled { get; }
+        public System.TimeSpan CacheMaxAge { get; }
         public System.TimeSpan CacheTtl { get; }
+        [System.Obsolete("Not used: persisted operations read and write through the Trax data context.")]
         public string DatabaseConnectionString { get; }
         public bool ExposeOperationsNamespace { get; }
         public bool LogNonPersistedRequests { get; }
@@ -62,7 +72,14 @@ namespace Trax.Api.GraphQL.PersistedOperations.Extensions
 {
     public static class ServiceCollectionPersistedOperationsExtensions
     {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddPersistedOperationStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationStoreBuilder> configure) { }
+        [System.Obsolete("A persisted-operation store must say how a change reaches the GraphQL nodes. Use " +
+            "AddPersistedOperationStore(store => store.UseRabbitMqInvalidation(...)) or AddPe" +
+            "rsistedOperationStore(store => store.SingleNode()).", true)]
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddPersistedOperationStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string databaseConnectionString) { }
+        [System.Obsolete("The database connection string is not used: the store reads and writes through th" +
+            "e Trax data context. Use AddPersistedOperationStore(store => store.UseRabbitMqIn" +
+            "validation(...)).")]
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddPersistedOperationStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string databaseConnectionString, string rabbitMqInvalidationConnectionString) { }
     }
     public static class TraxGraphQLBuilderPersistedOperationsExtensions
@@ -240,6 +257,14 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions
         public const string CodeValue = "INVALID_INPUT";
         public PersistedOperationInputException(string message) { }
         public override string Code { get; }
+    }
+    public sealed class PersistedOperationNotBroadcastException : Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions.PersistedOperationException
+    {
+        public const string CodeValue = "CHANGE_NOT_BROADCAST";
+        public PersistedOperationNotBroadcastException(string id, Trax.Effect.Models.PersistedOperation.PersistedOperation? operation, System.Exception inner) { }
+        public override string Code { get; }
+        public string Id { get; }
+        public Trax.Effect.Models.PersistedOperation.PersistedOperation? Operation { get; }
     }
     public sealed class PersistedOperationParseException : Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions.PersistedOperationException
     {

@@ -40,6 +40,11 @@ key, or an unkeyed one with no unmarked request, is a request someone forgot to 
 refuses to start rather than passing having checked nothing. The same holds for the
 `ValidateGraphQLClientAssembliesAsync` helpers.
 
+**A mark names a registered client.** A request marked with a key no client is registered
+under is validated by none of them, so any validation of the assembly holding it refuses to
+start, naming the request and the key. A mistyped key fails the boot instead of quietly leaving
+its request unchecked.
+
 **The mark governs validation only.** The executor a caller resolves still decides which
 server a request goes to; running a request through the wrong key fails that server's schema
 validation, as before. `IGraphQLClientValidator.ValidateAssembliesAsync` with an explicit
@@ -52,10 +57,12 @@ filter is unchanged and ignores the mark.
   helper validates only its own requests; a request belongs to the client its attribute names,
   matched by value.
 - [GraphQL Client](/docs/api-graphql-client#talking-to-multiple-servers) is the rule this produces.
-
-Not covered: nothing checks that every key used in a `[GraphQLClient]` mark has a client
-registered under it, so a request marked with a mistyped key is validated by no client.
+- `UnregisteredClientKeyTests` pins the registered-key rule: a request marked with a key no
+  client has refuses startup for the unkeyed and for a keyed client, the validation helpers refuse
+  it too, and a host registering every marked key starts.
 
 ## Changelog
 
+- **2026-10-01**: A request marked with a key no client is registered under refuses startup; the
+  gap this ADR recorded as not covered is closed.
 - **2026-09-30**: Recorded.

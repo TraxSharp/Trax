@@ -37,7 +37,6 @@ public class NoFixedTaskDelayTests
         ["tests/Trax.Api.Tests/Auth/TrainAuthorizationServiceTests.cs"] = 2,
         ["tests/Trax.Api.Tests/AuthE2E/TraxCallerProbe.cs"] = 1,
         ["tests/Trax.Api.Tests/AuthE2E/TraxCallerAttackVectorE2ETests.cs"] = 1,
-        ["tests/Trax.Api.Tests/AuthE2E/SubscriptionPrincipalPropagationE2ETests.cs"] = 1,
     };
 
     [Test]

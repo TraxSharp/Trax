@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using FluentAssertions;
+using AwesomeAssertions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 
 namespace Trax.Api.Tests.Auth;

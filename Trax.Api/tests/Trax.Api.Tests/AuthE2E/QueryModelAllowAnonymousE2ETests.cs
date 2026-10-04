@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.Auth;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;

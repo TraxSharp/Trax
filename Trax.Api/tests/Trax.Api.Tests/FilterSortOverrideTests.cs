@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Data.Filters;
 using HotChocolate.Data.Sorting;
 using Microsoft.EntityFrameworkCore;

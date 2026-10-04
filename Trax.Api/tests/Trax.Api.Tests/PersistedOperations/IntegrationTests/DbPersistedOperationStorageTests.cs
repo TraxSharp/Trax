@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Language;
 using Microsoft.EntityFrameworkCore;
@@ -35,10 +35,7 @@ public class DbPersistedOperationStorageTests
 
         await PostgresFixture.ClearAsync();
 
-        var options = new PersistedOperationsBuilder()
-            .UseDatabase(PostgresFixture.ConnectionString)
-            .SingleNode()
-            .Build();
+        var options = new PersistedOperationsBuilder().SingleNode().Build();
 
         _factory = PostgresFixture.Services.GetRequiredService<IDataContextProviderFactory>();
 
@@ -52,6 +49,7 @@ public class DbPersistedOperationStorageTests
             _broadcaster,
             new NoOpPersistedOperationValidator(),
             NoOpInvalidator(),
+            _generation,
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -272,37 +270,62 @@ public class DbPersistedOperationStorageTests
     }
 
     [Test]
-    public async Task Upsert_BroadcasterThrows_OperationStillSucceeds()
+    public async Task AChangeThatCouldNotBeBroadcast_IsSaved_AndSaysSo()
     {
-        // Broadcaster failure must NEVER fail the user-visible operation.
-        // The DB write succeeds; staleness on other nodes self-heals via TTL.
-        var throwing = new ThrowingBroadcaster();
-        var options = new PersistedOperationsBuilder()
-            .UseDatabase(PostgresFixture.ConnectionString)
-            .SingleNode()
-            .Build();
         var storage = new DbPersistedOperationStorage(
             _factory,
-            options,
+            new PersistedOperationsBuilder().SingleNode().Build(),
             new NoOpPersistedOperationCache(),
-            throwing,
+            new ThrowingBroadcaster(),
             new NoOpPersistedOperationValidator(),
             NoOpInvalidator(),
+            _generation,
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
+        var before = _generation.Current;
 
-        Func<Task> act = () =>
+        Func<Task> upload = () =>
             storage.UpsertAsync(
                 "throw_v1",
                 "query Q { greet(name: \"x\") }",
                 null,
                 CancellationToken.None
             );
-        await act.Should().NotThrowAsync();
+        var thrown = await upload
+            .Should()
+            .ThrowAsync<Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions.PersistedOperationNotBroadcastException>();
+        thrown.Which.Code.Should().Be("CHANGE_NOT_BROADCAST");
+        thrown.Which.Id.Should().Be("throw_v1");
+        thrown.Which.Operation!.Id.Should().Be("throw_v1");
+        _generation
+            .Current.Should()
+            .BeGreaterThan(before, "this node's caches still apply the change");
+        (await storage.GetAsync("throw_v1", null, CancellationToken.None))
+            .Should()
+            .NotBeNull("the change is saved");
 
-        var row = await storage.GetAsync("throw_v1", null, CancellationToken.None);
-        row.Should().NotBeNull("the DB write must succeed even when the broadcaster throws");
+        Func<Task> deactivate = () =>
+            storage.DeactivateAsync("throw_v1", null, "retired", CancellationToken.None);
+        (
+            await deactivate
+                .Should()
+                .ThrowAsync<Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions.PersistedOperationNotBroadcastException>()
+        )
+            .Which.Operation.Should()
+            .BeNull();
+    }
+
+    [Test]
+    public async Task AChange_IsBroadcastWhetherOrNotTheCallerIsStillWaiting()
+    {
+        // Once the row is saved the broadcast is not the caller's to cancel.
+        using var callerToken = new CancellationTokenSource();
+
+        await _storage.UpsertAsync("greet_v1", "query Greet { hi }", null, callerToken.Token);
+
+        _broadcaster.Messages.Should().ContainSingle();
+        _broadcaster.LastTokenCouldCancel.Should().BeFalse();
     }
 
     private sealed class ThrowingBroadcaster
@@ -599,22 +622,18 @@ public class DbPersistedOperationStorageTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()
             ),
-            new PersistedOperationsBuilder()
-                .UseDatabase(PostgresFixture.ConnectionString)
-                .SingleNode()
-                .WithInMemoryCache()
-                .Build()
+            new PersistedOperationsBuilder().SingleNode().WithInMemoryCache().Build(),
+            _generation,
+            TimeProvider.System
         );
         var storage = new DbPersistedOperationStorage(
             _factory,
-            new PersistedOperationsBuilder()
-                .UseDatabase(PostgresFixture.ConnectionString)
-                .SingleNode()
-                .Build(),
+            new PersistedOperationsBuilder().SingleNode().Build(),
             memCache,
             new NoOpPersistedOperationBroadcaster(),
             new NoOpPersistedOperationValidator(),
             NoOpInvalidator(),
+            _generation,
             TimeProvider.System,
             NullLogger<DbPersistedOperationStorage>.Instance
         );
@@ -648,23 +667,162 @@ public class DbPersistedOperationStorageTests
         second!.ToString().Should().Contain("hello");
     }
 
+    [Test]
+    public async Task TryReadAsync_ForARequestThatSentItsOwnDocument_DoesNotReadTheStore()
+    {
+        await _storage.UpsertAsync(
+            "greet_v1",
+            "query Greet { hello }",
+            null,
+            CancellationToken.None
+        );
+        PersistedOperationRequestScope.Begin(_generation, carriesDocument: true);
+        try
+        {
+            var read = await _storage.TryReadAsync(
+                new OperationDocumentId("greet_v1"),
+                CancellationToken.None
+            );
+
+            read.Should().BeNull("the document the request sent is what runs");
+        }
+        finally
+        {
+            PersistedOperationRequestScope.End();
+        }
+    }
+
+    [Test]
+    public async Task TryReadAsync_ADocumentFromTheLookupCache_TellsTheRequestWhenItWasRead()
+    {
+        var clock = new Trax.Api.Tests.PersistedOperations.Fixtures.ManualClock();
+        var options = new PersistedOperationsBuilder().SingleNode().WithInMemoryCache().Build();
+        var storage = new DbPersistedOperationStorage(
+            _factory,
+            options,
+            new InMemoryPersistedOperationCache(
+                new Microsoft.Extensions.Caching.Memory.MemoryCache(
+                    new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()
+                ),
+                options,
+                _generation,
+                clock
+            ),
+            new NoOpPersistedOperationBroadcaster(),
+            new NoOpPersistedOperationValidator(),
+            NoOpInvalidator(),
+            _generation,
+            clock,
+            NullLogger<DbPersistedOperationStorage>.Instance
+        );
+        await storage.UpsertAsync(
+            "greet_v1",
+            "query Greet { hello }",
+            null,
+            CancellationToken.None
+        );
+        var readAt = clock.GetTimestamp();
+        await storage.TryReadAsync(new OperationDocumentId("greet_v1"), CancellationToken.None);
+        clock.Advance(TimeSpan.FromSeconds(30));
+
+        var scope = PersistedOperationRequestScope.Begin(_generation, carriesDocument: false);
+        try
+        {
+            (
+                await storage.TryReadAsync(
+                    new OperationDocumentId("greet_v1"),
+                    CancellationToken.None
+                )
+            )
+                .Should()
+                .NotBeNull();
+            scope.SourceTimestamp.Should().Be(readAt, "the document is as old as its first read");
+        }
+        finally
+        {
+            PersistedOperationRequestScope.End();
+        }
+    }
+
+    [Test]
+    public async Task TryReadAsync_AnIdUploadedAfterItWasMissing_IsFound()
+    {
+        var id = new OperationDocumentId("late_v1");
+        (await _storage.TryReadAsync(id, CancellationToken.None)).Should().BeNull();
+
+        await _storage.UpsertAsync("late_v1", "query Late { hello }", null, CancellationToken.None);
+
+        (await _storage.TryReadAsync(id, CancellationToken.None)).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task TryReadAsync_ACacheTraxDidNotSupply_IsReadAndFilled()
+    {
+        var foreign = new DictionaryCache();
+        var storage = new DbPersistedOperationStorage(
+            _factory,
+            new PersistedOperationsBuilder().SingleNode().Build(),
+            foreign,
+            new NoOpPersistedOperationBroadcaster(),
+            new NoOpPersistedOperationValidator(),
+            NoOpInvalidator(),
+            _generation,
+            TimeProvider.System,
+            NullLogger<DbPersistedOperationStorage>.Instance
+        );
+        await storage.UpsertAsync(
+            "greet_v1",
+            "query Greet { hello }",
+            null,
+            CancellationToken.None
+        );
+
+        await storage.TryReadAsync(new OperationDocumentId("greet_v1"), CancellationToken.None);
+        foreign.Entries.Should().ContainKey("greet_v1");
+
+        foreign.Entries["greet_v1"] = "query Greet { version }";
+        var second = await storage.TryReadAsync(
+            new OperationDocumentId("greet_v1"),
+            CancellationToken.None
+        );
+        second!.ToString().Should().Contain("version");
+    }
+
+    private sealed class DictionaryCache : IPersistedOperationCache
+    {
+        public Dictionary<string, string> Entries { get; } = new();
+
+        public string? TryGet(string? tenantKey, string id) =>
+            Entries.TryGetValue(id, out var doc) ? doc : null;
+
+        public void Set(string? tenantKey, string id, string document) => Entries[id] = document;
+
+        public void Invalidate(string? tenantKey, string id) => Entries.Remove(id);
+    }
+
     /// <summary>
     /// Invalidator over an empty service provider: HC cache lookups all
     /// return null so this is effectively a no-op for tests that exercise
     /// the storage outside a real HotChocolate schema.
     /// </summary>
-    private static HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
+    private HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
         new(
             new ServiceCollection().BuildServiceProvider(),
+            _generation,
             NullLogger<HotChocolateOperationCacheInvalidator>.Instance
         );
+
+    private readonly PersistedOperationCacheGeneration _generation = new();
 
     private sealed class RecordingBroadcaster : IPersistedOperationBroadcaster
     {
         public List<PersistedOperationChangedMessage> Messages { get; } = new();
 
+        public bool LastTokenCouldCancel { get; private set; }
+
         public Task PublishAsync(PersistedOperationChangedMessage message, CancellationToken ct)
         {
+            LastTokenCouldCancel = ct.CanBeCanceled;
             Messages.Add(message);
             return Task.CompletedTask;
         }

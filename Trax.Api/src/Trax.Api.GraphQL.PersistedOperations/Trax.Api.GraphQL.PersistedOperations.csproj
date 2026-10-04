@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.GraphQL.PersistedOperations</AssemblyName>
-    <PackageDescription>Persisted GraphQL operations for Trax: server-managed manifest mapping build-time-stable operation IDs to documents. Lets shipped clients (mobile, etc.) hot-fix server-side queries without redeploying the client. Includes shape-diff guardrail, optional in-memory cache, and optional RabbitMQ-backed multi-node cache invalidation.</PackageDescription>
+    <PackageDescription>Persisted GraphQL operations for Trax .NET: server-managed manifest mapping build-time-stable operation IDs to documents. Lets shipped clients (mobile, etc.) hot-fix server-side queries without redeploying the client. Includes shape-diff guardrail, optional in-memory cache, and optional RabbitMQ-backed multi-node cache invalidation.</PackageDescription>
     <PackageTags>trax;graphql;persisted-operations;hotchocolate</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

@@ -12,7 +12,8 @@ socket: at the endpoint `UseTraxGraphQL()` maps, and at one the host maps itself
 `MapGraphQL(path, "trax")`. Anything else gets `403`
 before the handshake completes. The allowed origins are the ones passed to
 `AllowSocketOrigins(...)` on the Trax GraphQL builder, or, when that is not called, the origins
-of the host's CORS default policy.
+the host's CORS default policy names or its origin predicate admits. A default policy built with
+`AllowAnyOrigin()` names none, so it allows no origin besides the endpoint's own.
 
 ## Status
 
@@ -56,6 +57,13 @@ break every same-origin SPA and every host whose browser clients are already lis
 policy, which is nearly all of them. The endpoint's own host plus the CORS default covers those
 without configuration.
 
+**Treating the CORS default's `AllowAnyOrigin()` as allowing every origin.** That is what it
+means over HTTP, where a browser sends no cookies with it: CORS refuses to pair
+`AllowAnyOrigin()` with credentials, and ASP.NET Core will not build such a policy. A WebSocket
+upgrade has no such switch. The browser attaches the site's cookies to every handshake, so a
+socket is always a credentialed request, and it follows what CORS allows for one: an origin the
+policy names, or one its predicate admits, and never "any".
+
 **Comparing the scheme for same-origin.** Strict same-origin includes the scheme, but TLS is
 commonly terminated in front of the app, so an https page reaches it as http and would be
 refused. The host is compared and the scheme is not.
@@ -69,14 +77,20 @@ rather than the default, must call `AllowSocketOrigins(...)`.** Its sockets are 
 **The rule belongs to the Trax schema.** A host's own HotChocolate schema on the same host keeps
 its own behaviour.
 
+**A host whose CORS default policy is `AllowAnyOrigin()` and whose browser clients are on
+another origin must list them**, with `AllowSocketOrigins(...)` or `WithOrigins(...)`. Until it
+does, their sockets get `403`; HTTP is unchanged.
+
 **A request that is not a WebSocket upgrade is untouched.** CORS still governs HTTP.
 
 ## Exemplars
 
 - `SocketUpgradeOriginTests` drives the endpoint over a test server: an unlisted origin is
   refused with `403`, the endpoint's own origin (over http and https) and a request with no
-  `Origin` are acked, an explicit list and the CORS default policy (including
-  `AllowAnyOrigin`) each admit their origins, an explicit list replaces the CORS default, a
+  `Origin` are acked, an explicit list and the CORS default policy's origins and origin
+  predicate each admit their origins, a default policy allowing any origin admits only the
+  endpoint's own (a cookie-authenticated upgrade included), an explicit list replaces the CORS
+  default, a
   spelled-out default port matches, an HTTP POST from an unlisted origin is unaffected, and
   `AllowSocketOrigins` rejects anything that is not an origin. The same cases run against a host
   that maps the schema itself, and a second schema on that host is shown to be unaffected.
@@ -87,4 +101,6 @@ rewrites it) is compared against what the app sees. A HotChocolate upgrade that 
 
 ## Changelog
 
+- **2026-10-01**: The CORS default policy's `AllowAnyOrigin()` no longer allows a cross-origin
+  socket; only origins the policy names or its predicate admits do.
 - **2026-09-27**: Recorded.

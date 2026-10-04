@@ -28,4 +28,13 @@ public sealed class TrainLifecycleStreamOptions
     /// When <c>false</c> (default), only <c>[TraxBroadcast]</c> trains are streamed.
     /// </summary>
     public bool StreamAllTrains { get; internal init; }
+
+    /// <summary>
+    /// When <c>true</c>, subscribers outside the operations view see the <c>answer</c> and
+    /// <c>confidence</c> of a run's steps on <c>onJunctionEvent</c>. When <c>false</c> (default),
+    /// only the operations view sees them. Set by
+    /// <c>AllowJunctionAnswersForBroadcastSubscribers()</c>. An answer to a question about a
+    /// <c>[TraxSensitive]</c> type is withheld from everyone either way.
+    /// </summary>
+    public bool IncludeJunctionAnswersForBroadcastSubscribers { get; internal init; }
 }

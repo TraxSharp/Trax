@@ -34,4 +34,13 @@ public record ManifestDetail(
     DateTime? ScheduledAt,
     DateTime? NextScheduledRun,
     int? VarianceSeconds
-);
+)
+{
+    /// <summary>
+    /// Whether a retry of the manifest's failed run (an automatic retry, or a requeue of its dead
+    /// letter) replays the decisions that run recorded rather than asking the decider again.
+    /// Set at scheduling with <c>ScheduleOptions.ReplayDecisionsOnRetry</c>, and afterwards with the
+    /// <c>setManifestsReplayDecisionsOnRetry</c> mutation (or the dashboard's matching action).
+    /// </summary>
+    public bool ReplayDecisionsOnRetry { get; init; } = true;
+}

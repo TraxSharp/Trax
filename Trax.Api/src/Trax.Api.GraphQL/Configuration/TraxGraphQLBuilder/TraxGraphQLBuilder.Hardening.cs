@@ -1,5 +1,6 @@
 using HotChocolate.CostAnalysis;
 using Microsoft.AspNetCore.Http;
+using Trax.Api.GraphQL.Subscriptions;
 
 namespace Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 
@@ -20,6 +21,12 @@ public partial class TraxGraphQLBuilder
     internal int MaxOperationsPerRequestValue { get; private set; } = 50;
 
     internal int MaxOperationsPerConnectionValue { get; private set; } = 100;
+
+    internal TimeSpan MaxConnectionLifetimeValue { get; private set; } =
+        TraxCompositeSocketInterceptor.DefaultMaxConnectionLifetime;
+
+    internal TimeSpan ConnectionCredentialRecheckIntervalValue { get; private set; } =
+        TraxCompositeSocketInterceptor.DefaultCredentialRecheckInterval;
 
     internal bool AuthorizationRequired { get; private set; }
 
@@ -126,6 +133,43 @@ public partial class TraxGraphQLBuilder
                 "MaxOperationsPerConnection must be positive."
             );
         MaxOperationsPerConnectionValue = maxOperations;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets how long one WebSocket connection stays open. The default is one hour, and the longest
+    /// a host may set is one day. At the lifetime the connection is closed with code 1001 (Going
+    /// Away), which graphql-ws clients reconnect after, authenticating again in the new
+    /// <c>connection_init</c>. Every connection has one, however it authenticated: a JWT connection
+    /// still closes earlier, at its token's <c>exp</c>, and a cookie connection at its sign-in's
+    /// expiry. See
+    /// <c>docs/adr/0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md</c>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="lifetime"/> is not positive, or is longer than one day.
+    /// </exception>
+    public TraxGraphQLBuilder MaxConnectionLifetime(TimeSpan lifetime)
+    {
+        TraxCompositeSocketInterceptor.RequireConnectionDuration(lifetime, nameof(lifetime));
+        MaxConnectionLifetimeValue = lifetime;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets how often an API-key WebSocket connection's key is resolved again. The default is five
+    /// minutes, and the longest a host may set is one day. When the key no longer resolves to the
+    /// principal the connection opened as (it was revoked or rotated, or its roles or claims
+    /// changed), or the resolver fails, the connection is closed with code 1008 (policy
+    /// violation). Each re-check is one call to the host's API-key resolver per open connection.
+    /// See <c>docs/adr/0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md</c>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="interval"/> is not positive, or is longer than one day.
+    /// </exception>
+    public TraxGraphQLBuilder RecheckConnectionCredentialsEvery(TimeSpan interval)
+    {
+        TraxCompositeSocketInterceptor.RequireConnectionDuration(interval, nameof(interval));
+        ConnectionCredentialRecheckIntervalValue = interval;
         return this;
     }
 

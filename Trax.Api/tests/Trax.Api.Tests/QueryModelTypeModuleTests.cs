@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Types;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.Configuration;

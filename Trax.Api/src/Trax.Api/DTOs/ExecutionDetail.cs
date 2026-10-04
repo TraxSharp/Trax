@@ -33,6 +33,11 @@ namespace Trax.Api.DTOs;
 /// <param name="ScheduledTime">When the run was due, for a scheduled run; <c>null</c> otherwise.</param>
 /// <param name="Executor">The project (entry assembly) of the process that ran it.</param>
 /// <param name="HostLabels">The host's user-supplied labels as a JSON object, or <c>null</c>.</param>
+/// <param name="ReplayDecisionsOf">
+/// The execution whose recorded decisions this one was queued to replay (a requeue, or a
+/// manifest's retry that replays), as the dashboard's "Replays Decisions Of" shows it;
+/// <c>null</c> for a run queued to ask its questions afresh.
+/// </param>
 public record ExecutionDetail(
     long Id,
     string ExternalId,
@@ -58,5 +63,6 @@ public record ExecutionDetail(
     long? ParentId = null,
     DateTime? ScheduledTime = null,
     string? Executor = null,
-    string? HostLabels = null
+    string? HostLabels = null,
+    long? ReplayDecisionsOf = null
 );

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using Microsoft.Extensions.Logging;
 using NSubstitute;

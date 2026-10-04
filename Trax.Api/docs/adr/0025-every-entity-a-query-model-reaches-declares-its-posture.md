@@ -21,7 +21,9 @@ follow from treating the inputs as part of that surface:
   field and wherever another model's input reaches it.
 - **A gated type's authorization reaches its inputs.** A `where` or `order` that passes through a
   navigation to a type carrying `@authorize` is authorized against that type's directives before
-  the query runs, as selecting the type would be.
+  the query runs, as selecting the type would be. This holds on every field that takes a filter
+  or sort argument, whoever contributed it: a query model's entry field, a type extension's
+  `[UseFiltering]` or `[UseSorting]` resolver, and a filtered navigation on an entity.
 - **A declared `[TraxAuthorize]` on a navigation target gates its inferred object type**, as it
   does a model's.
 
@@ -76,15 +78,23 @@ it touches.** Inputs the caller does not use cost nothing.
   target refusing an anonymous read, filter (inline and as a variable) and sort.
 - `QueryModelFilterSortFieldSetTests` pins that `Explicit` and `ExposeAs` narrow the inputs on the
   model's own field and through a navigation.
+- `FilterInputPostureTests` pins the same refusal on Postgres for a type extension's filtered and
+  sorted resolver and for a `[UseFiltering]` collection navigation, with the role holder served.
 - The query-model authorization end-to-end suite drives the input authorization over HTTP with
   API keys: anonymous and Player callers refused through `publicBooks.linkedOwnedBook` and
   `owners.books.some`, Admin served.
 
 Not covered: a host-supplied filter or sort override (`AddFilterType`/`AddSortType`) is used as
 given, so it can offer fields the type does not; the reach check still walks it, and the input
-authorization still applies to it. A `ConfigureSchema` callback that removes the entry-field
-middleware is not detected.
+authorization still applies to it. A `ConfigureSchema` callback or type interceptor that removes the
+middleware from a field is not detected.
 
 ## Changelog
 
+- **2026-10-01**: A method of the entity counts as a navigation as a property does: the reach
+  check follows the fields HotChocolate binds from either, and a gated entity a method returns
+  has its object type gated.
+- **2026-10-01**: The input authorization is attached by a type interceptor to every field with
+  a filter or sort argument, not only to a query model's entry field, so the rule above holds
+  for type-extension resolvers and filtered navigations too.
 - **2026-09-30**: Recorded.

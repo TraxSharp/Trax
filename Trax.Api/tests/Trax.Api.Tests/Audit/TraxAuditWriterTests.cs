@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -58,7 +58,8 @@ public class TraxAuditWriterTests
 
     private static (TraxAuditChannel channel, TraxAuditWriter writer, ServiceProvider sp) Build(
         ITraxAuditSink sink,
-        TraxAuditOptions opts
+        TraxAuditOptions opts,
+        Microsoft.Extensions.Logging.ILogger<TraxAuditWriter>? logger = null
     )
     {
         var services = new ServiceCollection();
@@ -76,7 +77,7 @@ public class TraxAuditWriterTests
             sp,
             Options.Create(opts),
             TimeProvider.System,
-            NullLogger<TraxAuditWriter>.Instance
+            logger ?? NullLogger<TraxAuditWriter>.Instance
         );
         return (channel, writer, sp);
     }
@@ -109,6 +110,38 @@ public class TraxAuditWriterTests
             sink.Batches[0].Select(e => e.PrincipalId).Should().BeEquivalentTo(["a", "b"]);
 
             await writer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Test]
+    public async Task Drains_EntriesArrivingWhileABatchFills_JoinThatBatch()
+    {
+        var sink = new RecordingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 3,
+                // Longer than the test: only a full batch is written before the stop.
+                FlushInterval = TimeSpan.FromMinutes(5),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            channel.TryEnqueue(SampleEntry("a"));
+            // The writer has taken "a" and is waiting for the batch to fill.
+            await WaitUntilAsync(() => channel.Reader.Count == 0, TimeSpan.FromSeconds(10));
+            channel.TryEnqueue(SampleEntry("b"));
+            channel.TryEnqueue(SampleEntry("c"));
+            await WaitUntilAsync(() => sink.Batches.Count >= 1, TimeSpan.FromSeconds(10));
+
+            sink.Batches.Should().ContainSingle();
+            sink.Batches[0].Select(e => e.PrincipalId).Should().Equal("a", "b", "c");
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await writer.StopAsync(shutdown.Token);
         }
     }
 
@@ -355,6 +388,255 @@ public class TraxAuditWriterTests
 
             sink.Batches.Should().BeEmpty();
         }
+    }
+
+    [Test]
+    public async Task LoopFault_DropsAndCountsTheBatch_AndKeepsWriting()
+    {
+        // A fault outside the sink call (here the retry's warning log throws) cannot be retried;
+        // the writer counts the batch as dropped and carries on with the next one.
+        var sink = new FailingSink(failUntil: 1);
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 1,
+                FlushInterval = TimeSpan.FromMilliseconds(20),
+                MaxRetries = 3,
+                RetryBackoff = TimeSpan.FromMilliseconds(5),
+                ChannelCapacity = 100,
+            },
+            new WarningThrowingLogger()
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            channel.TryEnqueue(SampleEntry("lost"));
+            await WaitUntilAsync(() => channel.TotalDropped >= 1, TimeSpan.FromSeconds(10));
+            channel.TryEnqueue(SampleEntry("kept"));
+            await WaitUntilAsync(() => sink.Attempts >= 2, TimeSpan.FromSeconds(10));
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await writer.StopAsync(shutdown.Token);
+
+            channel.TotalDropped.Should().Be(1);
+            sink.Attempts.Should().Be(2, "the second entry was written on its first attempt");
+        }
+    }
+
+    /// <summary>A logger that throws when asked to write a warning, and only then.</summary>
+    private sealed class WarningThrowingLogger
+        : Microsoft.Extensions.Logging.ILogger<TraxAuditWriter>
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == Microsoft.Extensions.Logging.LogLevel.Warning)
+                throw new InvalidOperationException("log sink unavailable");
+        }
+    }
+
+    [Test]
+    public async Task Stop_SinkHonoursCancellation_StopsAtTheShutdownTimeout_AndCountsTheBatchOnce()
+    {
+        var sink = new CancellableHangingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 2,
+                FlushInterval = TimeSpan.FromMilliseconds(20),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            channel.TryEnqueue(SampleEntry("a"));
+            channel.TryEnqueue(SampleEntry("b"));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+            await writer.StopAsync(shutdown.Token).WaitAsync(TimeSpan.FromSeconds(10));
+            await sink.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            channel.TotalDropped.Should().Be(2);
+        }
+    }
+
+    /// <summary>A sink whose write completes only when its token is cancelled.</summary>
+    private sealed class CancellableHangingSink : ITraxAuditSink
+    {
+        public TaskCompletionSource Entered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Cancelled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
+        {
+            Entered.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            }
+            finally
+            {
+                Cancelled.TrySetResult();
+            }
+        }
+    }
+
+    [Test]
+    public async Task Stop_BatchFinishingAfterShutdownGaveUp_IsNotCountedTwice()
+    {
+        var sink = new ReleasableSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 1,
+                FlushInterval = TimeSpan.FromMilliseconds(20),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            channel.TryEnqueue(SampleEntry("a"));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+            await writer.StopAsync(shutdown.Token).WaitAsync(TimeSpan.FromSeconds(10));
+            channel.TotalDropped.Should().Be(1, "shutdown gave up on the batch");
+
+            // The sink returns after all. The batch was already counted when shutdown gave up.
+            sink.Release.SetResult();
+            await writer.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+
+            channel.TotalDropped.Should().Be(1);
+        }
+    }
+
+    /// <summary>A sink whose write ignores cancellation and completes when released.</summary>
+    private sealed class ReleasableSink : ITraxAuditSink
+    {
+        public TaskCompletionSource Entered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
+        {
+            Entered.TrySetResult();
+            return Release.Task;
+        }
+    }
+
+    [Test]
+    public async Task Stop_CalledTwiceAtOnce_CountsEachUnwrittenEntryOnce()
+    {
+        var sink = new HangingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 2,
+                FlushInterval = TimeSpan.FromMilliseconds(20),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+            for (var i = 0; i < 3; i++)
+                channel.TryEnqueue(SampleEntry($"e{i}"));
+            await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+            await Task.WhenAll(writer.StopAsync(shutdown.Token), writer.StopAsync(shutdown.Token))
+                .WaitAsync(TimeSpan.FromSeconds(10));
+
+            channel.TotalDropped.Should().Be(3);
+        }
+    }
+
+    [Test]
+    public async Task Stop_IdleWriterWithNoTimeLeft_DropsNothing()
+    {
+        var sink = new RecordingSink();
+        var (channel, writer, sp) = Build(
+            sink,
+            new TraxAuditOptions
+            {
+                BatchSize = 2,
+                FlushInterval = TimeSpan.FromMilliseconds(20),
+                ChannelCapacity = 100,
+            }
+        );
+        using (sp)
+        {
+            await writer.StartAsync(CancellationToken.None);
+
+            await writer.StopAsync(new CancellationToken(canceled: true));
+
+            channel.TotalDropped.Should().Be(0);
+        }
+    }
+
+    [Test]
+    public void RetryDelay_NeverExceedsTheCap_AtAnyAttempt()
+    {
+        var cap = TimeSpan.FromSeconds(30);
+        var baseDelay = TimeSpan.FromMilliseconds(100);
+
+        for (var attempt = 0; attempt <= 100; attempt++)
+        {
+            var delay = TraxAuditWriter.RetryDelay(attempt, baseDelay, cap);
+
+            delay.Should().BeLessThanOrEqualTo(cap, $"attempt {attempt}");
+            delay.Should().BeGreaterThanOrEqualTo(TimeSpan.Zero, $"attempt {attempt}");
+        }
+    }
+
+    [Test]
+    public void RetryDelay_GrowsExponentially_WithJitterInTheUpperHalf()
+    {
+        var baseDelay = TimeSpan.FromMilliseconds(100);
+        var cap = TimeSpan.FromSeconds(30);
+
+        for (var attempt = 0; attempt < 8; attempt++)
+        {
+            var ceiling = TimeSpan.FromMilliseconds(100 * Math.Pow(2, attempt));
+            var delays = Enumerable
+                .Range(0, 50)
+                .Select(_ => TraxAuditWriter.RetryDelay(attempt, baseDelay, cap))
+                .ToList();
+
+            delays.Should().OnlyContain(d => d >= ceiling / 2 && d <= ceiling);
+            delays.Distinct().Should().HaveCountGreaterThan(1, "the delay is jittered");
+        }
+    }
+
+    [Test]
+    public void RetryDelay_AtTheCap_StaysWithinIt()
+    {
+        var cap = TimeSpan.FromSeconds(30);
+
+        var delays = Enumerable
+            .Range(0, 50)
+            .Select(_ => TraxAuditWriter.RetryDelay(40, TimeSpan.FromMilliseconds(100), cap));
+
+        delays.Should().OnlyContain(d => d >= cap / 2 && d <= cap);
     }
 
     [Test]

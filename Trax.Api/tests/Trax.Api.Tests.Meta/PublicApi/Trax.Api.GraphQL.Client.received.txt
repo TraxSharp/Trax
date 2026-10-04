@@ -3,6 +3,7 @@ namespace Trax.Api.GraphQL.Client
     public class FileSchemaProvider : Trax.Api.GraphQL.Client.ISchemaProvider
     {
         public FileSchemaProvider(string path) { }
+        public FileSchemaProvider(string path, bool removeSubscriptionsFromSchema) { }
         public System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default) { }
     }
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
@@ -16,7 +17,7 @@ namespace Trax.Api.GraphQL.Client
         public GraphQLClientConfigurationBuilder(System.Uri baseAddress) { }
         public bool DisposeHttpClient { get; set; }
         public GraphQL.Client.Http.GraphQLHttpClientOptions GraphQLClientOptions { get; set; }
-        public System.Net.Http.HttpClient HttpClient { get; set; }
+        public System.Net.Http.HttpClient? HttpClient { get; set; }
         public System.Text.Json.JsonSerializerOptions JsonSerializerOptions { get; set; }
         public bool RemoveSubscriptionsFromSchema { get; set; }
         public Trax.Api.GraphQL.Client.ResponseStrictness ResponseStrictness { get; set; }
@@ -125,6 +126,7 @@ namespace Trax.Api.GraphQL.Client
     }
     public sealed class TraxGraphQLClientBuilder
     {
+        public Microsoft.Extensions.DependencyInjection.IHttpClientBuilder HttpClientBuilder { get; }
         public Microsoft.Extensions.DependencyInjection.IServiceCollection Services { get; }
         public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder Configure(System.Action<Trax.Api.GraphQL.Client.GraphQLClientConfigurationBuilder> mutate) { }
         public Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder ConfigureHttpClient(System.Net.Http.HttpClient httpClient) { }

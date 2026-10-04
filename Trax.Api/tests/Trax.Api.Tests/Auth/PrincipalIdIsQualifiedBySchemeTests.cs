@@ -1,5 +1,5 @@
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.AspNetCore.Subscriptions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;

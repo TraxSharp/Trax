@@ -9,8 +9,10 @@ public sealed partial class PersistedOperationsBuilder
     /// <remarks>
     /// Every node caches the documents it serves: HotChocolate's parsed-document and
     /// prepared-operation caches always, and the Trax lookup cache when
-    /// <see cref="WithInMemoryCache"/> is on. Neither of HotChocolate's caches expires, so a change
-    /// made on one node reaches the others only through this broadcast. Each node binds its own
+    /// <see cref="WithInMemoryCache"/> is on, each for at most <see cref="WithCacheMaxAge"/>. A
+    /// change made on one node reaches the others at once only through this broadcast; the
+    /// maximum age is the backstop when a broadcast is lost. A publish the broker does not confirm
+    /// is reported to the caller as <c>CHANGE_NOT_BROADCAST</c>. Each node binds its own
     /// queue to a fanout exchange; when the connection to the broker drops, the node empties its
     /// caches, and empties them again once the connection recovers, because a change broadcast
     /// in between was not delivered to it.
@@ -39,8 +41,9 @@ public sealed partial class PersistedOperationsBuilder
     /// Persisted operations refuse to start unless the host either declares this or calls
     /// <see cref="UseRabbitMqInvalidation"/>. The declaration is a claim about the deployment that
     /// nothing at runtime can check: run a second node, or write the store from another process
-    /// (a CI uploader using <c>AddPersistedOperationStore</c>), and a change made there does not
-    /// reach this node's caches until it restarts. Such a deployment needs the broadcaster.
+    /// (a CI uploader using <c>AddPersistedOperationStore</c>), and a change made there reaches
+    /// this node's caches only when the entry reaches its maximum age (<see cref="WithCacheMaxAge"/>).
+    /// Such a deployment needs the broadcaster.
     /// </remarks>
     public PersistedOperationsBuilder SingleNode()
     {

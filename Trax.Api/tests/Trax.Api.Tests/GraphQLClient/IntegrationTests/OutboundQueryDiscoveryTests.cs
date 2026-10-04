@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Client.Trax;
 using Trax.Api.Tests.GraphQLClient.IntegrationTests.Fakes;
 

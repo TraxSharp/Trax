@@ -2,6 +2,7 @@ using HotChocolate.Execution;
 using HotChocolate.Language;
 using HotChocolate.PersistedOperations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
@@ -37,8 +38,16 @@ internal sealed class DbPersistedOperationStorage
     private readonly IPersistedOperationBroadcaster _broadcaster;
     private readonly IPersistedOperationValidator _validator;
     private readonly HotChocolateOperationCacheInvalidator _hcInvalidator;
+    private readonly PersistedOperationCacheGeneration _generation;
+    private readonly StampedCache<string> _misses;
     private readonly TimeProvider _clock;
     private readonly ILogger<DbPersistedOperationStorage> _logger;
+
+    /// <summary>
+    /// How many unknown ids each generation of the miss cache holds; the cache keeps at most
+    /// twice this.
+    /// </summary>
+    internal const int MissCacheCapacity = 512;
 
     public DbPersistedOperationStorage(
         IDataContextProviderFactory factory,
@@ -47,6 +56,7 @@ internal sealed class DbPersistedOperationStorage
         IPersistedOperationBroadcaster broadcaster,
         IPersistedOperationValidator validator,
         HotChocolateOperationCacheInvalidator hcInvalidator,
+        PersistedOperationCacheGeneration generation,
         TimeProvider clock,
         ILogger<DbPersistedOperationStorage> logger
     )
@@ -57,6 +67,7 @@ internal sealed class DbPersistedOperationStorage
         ArgumentNullException.ThrowIfNull(broadcaster);
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(hcInvalidator);
+        ArgumentNullException.ThrowIfNull(generation);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(logger);
         _factory = factory;
@@ -65,12 +76,37 @@ internal sealed class DbPersistedOperationStorage
         _broadcaster = broadcaster;
         _validator = validator;
         _hcInvalidator = hcInvalidator;
+        _generation = generation;
+        _misses = new StampedCache<string>(
+            MissCacheCapacity,
+            generation,
+            clock,
+            options.CacheMaxAge
+        );
         _clock = clock;
         _logger = logger;
     }
 
     // ----- IOperationDocumentStorage (HC hot path) -----
 
+    /// <summary>
+    /// Reads the active document stored under <paramref name="documentId"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A request that sent its own document is never looked up: HotChocolate names such a request
+    /// by its document's hash and asks the store for it, but the document runs as sent, so the
+    /// store has nothing to add, and under <c>RequirePersisted</c> the document is refused without
+    /// a database read.
+    /// </para>
+    /// <para>
+    /// An id the store does not hold is remembered, so asking for it again does not read the
+    /// database until the next change or the cache's maximum age. Every entry, found or missing,
+    /// is stamped with the generation that was current before the read, so a read a change
+    /// overtook is never served. See
+    /// <c>docs/adr/0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md</c>.
+    /// </para>
+    /// </remarks>
     public async ValueTask<IOperationDocument?> TryReadAsync(
         OperationDocumentId documentId,
         CancellationToken cancellationToken
@@ -79,13 +115,34 @@ internal sealed class DbPersistedOperationStorage
         if (documentId.IsEmpty)
             return null;
 
+        var scope = PersistedOperationRequestScope.For(_generation);
+        if (scope is { CarriesDocument: true })
+            return null;
+
         var id = documentId.Value;
         // v1 has no tenant resolver; hot-path lookups always use the null-tenant row set.
         var tenantKey = (string?)null;
 
-        var cached = _cache.TryGet(tenantKey, id);
-        if (cached is not null)
+        // Both taken before anything is read, so whatever the read returns is filed under a
+        // generation and time no later than the data it saw.
+        var generation = _generation.Current;
+        var readAt = _clock.GetTimestamp();
+
+        if (_cache is InMemoryPersistedOperationCache stamped)
+        {
+            if (stamped.TryGet(tenantKey, id, out var hit, out var hitReadAt))
+            {
+                scope?.NoteSource(hitReadAt);
+                return new OperationDocumentSourceText(hit);
+            }
+        }
+        else if (_cache.TryGet(tenantKey, id) is { } cached)
+        {
             return new OperationDocumentSourceText(cached);
+        }
+
+        if (_misses.TryGet(id, out _))
+            return null;
 
         var sentinel = Normalize(tenantKey);
         var ctx = await _factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -99,9 +156,19 @@ internal sealed class DbPersistedOperationStorage
                 .ConfigureAwait(false);
 
             if (document is null)
+            {
+                _misses.Add(id, id, generation, readAt);
                 return null;
+            }
 
-            _cache.Set(tenantKey, id, document);
+            if (_cache is InMemoryPersistedOperationCache stampedCache)
+                stampedCache.Set(tenantKey, id, document, generation, readAt);
+            else if (_generation.Current == generation)
+                // A cache Trax did not supply cannot carry the stamp; skip it when a change
+                // overtook the read.
+                _cache.Set(tenantKey, id, document);
+
+            scope?.NoteSource(readAt);
             return new OperationDocumentSourceText(document);
         }
         finally
@@ -210,6 +277,8 @@ internal sealed class DbPersistedOperationStorage
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
+            await using var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+
             var existing = await ctx
                 .PersistedOperations.FirstOrDefaultAsync(
                     p => p.TenantKey == sentinel && p.Id == id,
@@ -278,13 +347,13 @@ internal sealed class DbPersistedOperationStorage
             );
 
             await ctx.SaveChanges(ct).ConfigureAwait(false);
+            if (tx is not null)
+                await tx.CommitAsync(ct).ConfigureAwait(false);
 
-            _cache.Invalidate(tenantKey, id);
-            await _hcInvalidator.InvalidateAsync(ct).ConfigureAwait(false);
-            await PublishAsync(tenantKey, id, PersistedOperationChangeType.Upsert, ct)
+            var saved = Denormalize(existing);
+            await ApplyChangeAsync(tenantKey, id, PersistedOperationChangeType.Upsert, saved)
                 .ConfigureAwait(false);
-
-            return Denormalize(existing);
+            return saved;
         }
         finally
         {
@@ -307,6 +376,8 @@ internal sealed class DbPersistedOperationStorage
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
+            await using var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+
             var row =
                 await ctx
                     .PersistedOperations.FirstOrDefaultAsync(
@@ -336,10 +407,10 @@ internal sealed class DbPersistedOperationStorage
             );
 
             await ctx.SaveChanges(ct).ConfigureAwait(false);
+            if (tx is not null)
+                await tx.CommitAsync(ct).ConfigureAwait(false);
 
-            _cache.Invalidate(tenantKey, id);
-            await _hcInvalidator.InvalidateAsync(ct).ConfigureAwait(false);
-            await PublishAsync(tenantKey, id, PersistedOperationChangeType.Deactivate, ct)
+            await ApplyChangeAsync(tenantKey, id, PersistedOperationChangeType.Deactivate, null)
                 .ConfigureAwait(false);
         }
         finally
@@ -357,6 +428,8 @@ internal sealed class DbPersistedOperationStorage
         var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
         try
         {
+            await using var tx = await LockAsync(ctx, sentinel, id, ct).ConfigureAwait(false);
+
             var row =
                 await ctx
                     .PersistedOperations.FirstOrDefaultAsync(
@@ -386,10 +459,10 @@ internal sealed class DbPersistedOperationStorage
             );
 
             await ctx.SaveChanges(ct).ConfigureAwait(false);
+            if (tx is not null)
+                await tx.CommitAsync(ct).ConfigureAwait(false);
 
-            _cache.Invalidate(tenantKey, id);
-            await _hcInvalidator.InvalidateAsync(ct).ConfigureAwait(false);
-            await PublishAsync(tenantKey, id, PersistedOperationChangeType.Restore, ct)
+            await ApplyChangeAsync(tenantKey, id, PersistedOperationChangeType.Restore, null)
                 .ConfigureAwait(false);
         }
         finally
@@ -400,13 +473,60 @@ internal sealed class DbPersistedOperationStorage
 
     // ----- helpers -----
 
-    private async Task PublishAsync(
-        string? tenantKey,
+    /// <summary>
+    /// Opens a transaction that holds the only write lock on <c>(tenant, id)</c> until it ends, so
+    /// changes to one id are applied one at a time and each reads the row the previous one left.
+    /// </summary>
+    /// <remarks>
+    /// On PostgreSQL a transaction-scoped advisory lock keyed on the id, which also covers an id
+    /// that has no row yet (a row lock cannot). SQLite's transactions take the database write lock
+    /// when they begin, which serializes them already. The in-memory provider has no
+    /// transactions and returns null; it runs in one process for tests.
+    /// </remarks>
+    private static async Task<IDbContextTransaction?> LockAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        string tenantSentinel,
         string id,
-        string changeType,
         CancellationToken ct
     )
     {
+        var database = ((DbContext)ctx).Database;
+        if (!database.IsRelational())
+            return null;
+
+        var tx = await database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        if (database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true)
+        {
+            var key = $"trax.persisted_operation\u001f{tenantSentinel}\u001f{id}";
+            await database
+                .ExecuteSqlInterpolatedAsync(
+                    $"select pg_advisory_xact_lock(hashtextextended({key}, 0))",
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+
+        return tx;
+    }
+
+    /// <summary>
+    /// Applies a committed change to this node's caches and broadcasts it to the others. Runs
+    /// without the caller's cancellation token: once the change is saved, it must reach the
+    /// caches whether or not the caller is still waiting.
+    /// </summary>
+    /// <exception cref="PersistedOperationNotBroadcastException">
+    /// The broadcast was not confirmed. The change is saved and applied here.
+    /// </exception>
+    private async Task ApplyChangeAsync(
+        string? tenantKey,
+        string id,
+        string changeType,
+        PersistedOperation? saved
+    )
+    {
+        _cache.Invalidate(tenantKey, id);
+        await _hcInvalidator.InvalidateAsync(CancellationToken.None).ConfigureAwait(false);
+
         try
         {
             await _broadcaster
@@ -417,18 +537,20 @@ internal sealed class DbPersistedOperationStorage
                         changeType,
                         _clock.GetUtcNow().UtcDateTime
                     ),
-                    ct
+                    CancellationToken.None
                 )
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            // Broadcaster errors must never fail the user-visible operation.
-            _logger.LogWarning(
+            _logger.LogError(
                 ex,
-                "Persisted-operation broadcaster failed to publish change for id '{Id}'.",
-                id
+                "Persisted operation '{Id}' was changed ({ChangeType}) but the change could not be broadcast; "
+                    + "other nodes serve what they cached until it reaches its maximum age.",
+                id,
+                changeType
             );
+            throw new PersistedOperationNotBroadcastException(id, saved, ex);
         }
     }
 

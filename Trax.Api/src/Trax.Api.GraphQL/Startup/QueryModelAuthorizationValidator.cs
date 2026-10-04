@@ -7,7 +7,8 @@ namespace Trax.Api.GraphQL.Startup;
 
 /// <summary>
 /// Fail-loud startup check that every <see cref="HotChocolate.Authorization"/>
-/// directive emitted for a <c>[TraxQueryModel]</c> entity points at a policy
+/// directive emitted for a <c>[TraxQueryModel]</c> entity, or for a gated entity a query model
+/// reaches, points at a policy
 /// the host has actually registered. Without this, a typoed
 /// <c>[TraxAuthorize(Policy = "AdmnPolicy")]</c> would compile, ship, and
 /// silently deny every caller at runtime — the worst-of-both: insecure to
@@ -26,9 +27,19 @@ internal sealed class QueryModelAuthorizationValidator(
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var reg in configuration.ModelRegistrations)
+        // A gated navigation target's directive is evaluated the same way, wherever the target is
+        // selected or filtered through, so its policies are checked with the models'.
+        var gated = configuration
+            .ModelRegistrations.Select(r => (r.EntityType, r.AuthorizeAttributes))
+            .Concat(
+                configuration
+                    .NavigationTargets.Where(t => t.IsGated)
+                    .Select(t => (t.EntityType, t.AuthorizeAttributes))
+            );
+
+        foreach (var (entityType, attributes) in gated)
         {
-            foreach (var attr in reg.AuthorizeAttributes)
+            foreach (var attr in attributes)
             {
                 if (string.IsNullOrWhiteSpace(attr.Policy))
                     continue;
@@ -38,7 +49,7 @@ internal sealed class QueryModelAuthorizationValidator(
                 var policy = await policyProvider.GetPolicyAsync(attr.Policy);
                 if (policy is null)
                     throw new InvalidOperationException(
-                        $"[TraxAuthorize(Policy = \"{attr.Policy}\")] on '{reg.EntityType.FullName}' "
+                        $"[TraxAuthorize(Policy = \"{attr.Policy}\")] on '{entityType.FullName}' "
                             + "references an authorization policy that is not registered. Call "
                             + $"`services.AddAuthorization(opts => opts.AddPolicy(\"{attr.Policy}\", ...))` "
                             + "during host setup, or pass an existing policy name to [TraxAuthorize]."

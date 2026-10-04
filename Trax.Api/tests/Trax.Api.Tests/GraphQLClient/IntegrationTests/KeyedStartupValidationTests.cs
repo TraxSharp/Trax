@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Trax.Api.GraphQL.Client;
@@ -52,6 +52,9 @@ public class KeyedStartupValidationTests
             .AddKeyedTraxGraphQLClient(TraxKey, _trax.BaseAddress)
             .ConfigureHttpClient(_trax.CreateHttpClient())
             .UseStartupValidation(typeof(KeyedStartupValidationTests).Assembly);
+        // The test assembly also holds a request marked for this key; every key a request is
+        // marked with needs a registered client.
+        services.AddKeyedTraxGraphQLClient(ProbeServer.Billing, _players.BaseAddress);
         await using var sp = services.BuildServiceProvider();
 
         foreach (var hosted in sp.GetServices<IHostedService>())
@@ -90,6 +93,9 @@ public class KeyedStartupValidationTests
         services
             .AddKeyedTraxGraphQLClient(PlayersKey, _players.BaseAddress)
             .ConfigureHttpClient(_players.CreateHttpClient());
+        // The other keys the test assembly's requests are marked with.
+        services.AddKeyedTraxGraphQLClient(TraxKey, _trax.BaseAddress);
+        services.AddKeyedTraxGraphQLClient(ProbeServer.Billing, _players.BaseAddress);
         await using var sp = services.BuildServiceProvider();
 
         await sp.Invoking(p =>

@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Effect.Attributes;

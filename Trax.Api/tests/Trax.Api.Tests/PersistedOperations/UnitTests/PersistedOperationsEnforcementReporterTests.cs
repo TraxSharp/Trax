@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Startup;
@@ -18,9 +18,7 @@ public class PersistedOperationsEnforcementReporterTests
         bool shadowLogging = false
     )
     {
-        var builder = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake;Database=fake")
-            .SingleNode();
+        var builder = new PersistedOperationsBuilder().SingleNode();
         builder.RequirePersisted(requirePersisted);
 
         // Enforcement off with no shadow logging is refused by Build(), so the shadow flag comes

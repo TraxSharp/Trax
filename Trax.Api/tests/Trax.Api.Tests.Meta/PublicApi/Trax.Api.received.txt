@@ -6,6 +6,25 @@ namespace Trax.Api.DTOs
         public Trax.Effect.Services.ChangeSignal.ChangeDomain Domain { get; init; }
         public System.DateTime Timestamp { get; init; }
     }
+    public class DeadLetterRequeueJob : System.IEquatable<Trax.Api.DTOs.DeadLetterRequeueJob>
+    {
+        public DeadLetterRequeueJob(System.Guid Id, Trax.Api.DTOs.DeadLetterRequeueJobStatus Status, int AwaitingAtStart, System.DateTime StartedAt, System.DateTime? FinishedAt, int? Count, string Message) { }
+        public int AwaitingAtStart { get; init; }
+        public int? Count { get; init; }
+        public System.DateTime? FinishedAt { get; init; }
+        public System.Guid Id { get; init; }
+        public string Message { get; init; }
+        public bool Started { get; init; }
+        public System.DateTime StartedAt { get; init; }
+        public Trax.Api.DTOs.DeadLetterRequeueJobStatus Status { get; init; }
+    }
+    public enum DeadLetterRequeueJobStatus
+    {
+        Running = 0,
+        Succeeded = 1,
+        Failed = 2,
+        Canceled = 3,
+    }
     public class DeadLetterSummary : System.IEquatable<Trax.Api.DTOs.DeadLetterSummary>
     {
         public DeadLetterSummary(long Id, long ManifestId, string ManifestName, Trax.Effect.Enums.DeadLetterStatus Status, System.DateTime DeadLetteredAt, string Reason, int RetryCountAtDeadLetter, System.DateTime? ResolvedAt, string? ResolutionNote, long? RetryMetadataId) { }
@@ -58,7 +77,8 @@ namespace Trax.Api.DTOs
                     long? ParentId = default,
                     System.DateTime? ScheduledTime = default,
                     string? Executor = null,
-                    string? HostLabels = null) { }
+                    string? HostLabels = null,
+                    long? ReplayDecisionsOf = default) { }
         public bool CancellationRequested { get; init; }
         public int ChildCount { get; init; }
         public string? CurrentlyRunningJunction { get; init; }
@@ -80,6 +100,7 @@ namespace Trax.Api.DTOs
         public string Name { get; init; }
         public string? Output { get; init; }
         public long? ParentId { get; init; }
+        public long? ReplayDecisionsOf { get; init; }
         public System.DateTime? ScheduledTime { get; init; }
         public string? StackTrace { get; init; }
         public System.DateTime StartTime { get; init; }
@@ -130,6 +151,68 @@ namespace Trax.Api.DTOs
         public bool IsNullable { get; init; }
         public string Name { get; init; }
         public string TypeName { get; init; }
+    }
+    public sealed class JunctionEvent : System.IEquatable<Trax.Api.DTOs.JunctionEvent>
+    {
+        public JunctionEvent(long MetadataId, string ExternalId, string TrainName, Trax.Api.DTOs.JunctionEventType EventType, System.DateTime Timestamp, Trax.Api.DTOs.JunctionStep Junction) { }
+        public Trax.Api.DTOs.JunctionEventType EventType { get; init; }
+        public string ExternalId { get; init; }
+        public Trax.Api.DTOs.JunctionStep Junction { get; init; }
+        public long MetadataId { get; init; }
+        public long Sequence { get; init; }
+        public System.DateTime Timestamp { get; init; }
+        public string TrainName { get; init; }
+    }
+    public enum JunctionEventType
+    {
+        JunctionStarted = 0,
+        JunctionCompleted = 1,
+        JunctionFailed = 2,
+        JunctionCancelled = 3,
+        Decided = 4,
+        DecisionRefused = 5,
+        Routed = 6,
+    }
+    public sealed class JunctionStep : System.IEquatable<Trax.Api.DTOs.JunctionStep>
+    {
+        public JunctionStep(
+                    int Position,
+                    Trax.Effect.Enums.JunctionRunKind Kind,
+                    string Name,
+                    Trax.Effect.Enums.JunctionRunState State,
+                    System.DateTime StartedAt,
+                    System.DateTime? EndedAt,
+                    double? DurationMs,
+                    Trax.Core.Exceptions.FailureClass? FailureClass,
+                    string? FailureException,
+                    string? QuestionKey,
+                    string? Answer,
+                    double? Confidence,
+                    bool Replayed,
+                    string? Decider,
+                    bool AnswerWithheld,
+                    int? Attempt,
+                    bool NameWithheld = false,
+                    int? TrackPosition = default) { }
+        public string? Answer { get; init; }
+        public bool AnswerWithheld { get; init; }
+        public int? Attempt { get; init; }
+        public double? Confidence { get; init; }
+        public string? Decider { get; init; }
+        public double? DurationMs { get; init; }
+        public System.DateTime? EndedAt { get; init; }
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; init; }
+        public string? FailureException { get; init; }
+        public Trax.Effect.Enums.JunctionRunKind Kind { get; init; }
+        public string Name { get; init; }
+        public bool NameWithheld { get; init; }
+        public int Position { get; init; }
+        public string? QuestionKey { get; init; }
+        public bool Replayed { get; init; }
+        public System.DateTime StartedAt { get; init; }
+        public Trax.Effect.Enums.JunctionRunState State { get; init; }
+        public int? TrackPosition { get; init; }
+        public static Trax.Api.DTOs.JunctionStep From(Trax.Effect.Models.JunctionRun.JunctionRun row) { }
     }
     public class LogEntry : System.IEquatable<Trax.Api.DTOs.LogEntry>
     {
@@ -190,6 +273,7 @@ namespace Trax.Api.DTOs
         public int Priority { get; init; }
         public string? Properties { get; init; }
         public string? PropertyTypeName { get; init; }
+        public bool ReplayDecisionsOnRetry { get; init; }
         public Trax.Effect.Enums.ScheduleType ScheduleType { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
         public int? TimeoutSeconds { get; init; }
@@ -256,6 +340,7 @@ namespace Trax.Api.DTOs
         public int MaxRetries { get; init; }
         public string Name { get; init; }
         public int Priority { get; init; }
+        public bool ReplayDecisionsOnRetry { get; init; }
         public Trax.Effect.Enums.ScheduleType ScheduleType { get; init; }
         public int? TimeoutSeconds { get; init; }
     }

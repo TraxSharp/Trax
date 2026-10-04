@@ -50,10 +50,17 @@ public static class TraxGraphQLBuilderAuditExtensions
         services.AddSingleton<TraxGraphQLAuditListener>();
         services.AddSingleton<IHostedService, TraxAuditWriter>();
 
+        // The options pattern's startup validation: an out-of-range value refuses the host
+        // before any hosted service starts (docs/adr/0001-a-misconfigured-host-fails-at-startup.md).
+        services.AddOptions<TraxAuditOptions>().ValidateOnStart();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<
+                IValidateOptions<TraxAuditOptions>,
+                TraxAuditOptionsValidator
+            >()
+        );
         if (configure is not null)
             services.Configure(configure);
-        else
-            services.AddOptions<TraxAuditOptions>();
 
         EnsureDisclaimerLog(services);
 

@@ -88,8 +88,11 @@ public partial class TraxGraphQLBuilder
         )
         {
             GetRequestsAllowed = GetRequestsAllowed,
+            JunctionAnswersForBroadcastAllowed = JunctionAnswersForBroadcastAllowed,
             SocketAllowedOrigins = SocketAllowedOrigins,
             MaxOperationsPerConnection = MaxOperationsPerConnectionValue,
+            MaxConnectionLifetime = MaxConnectionLifetimeValue,
+            ConnectionCredentialRecheckInterval = ConnectionCredentialRecheckIntervalValue,
             NavigationTargets = NavigationTargetPosture.Discover(
                 modelRegistrations.Select(r => r.EntityType)
             ),

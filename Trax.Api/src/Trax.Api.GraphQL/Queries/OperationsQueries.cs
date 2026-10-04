@@ -7,11 +7,14 @@ using Trax.Api.GraphQL.Validation;
 using Trax.Api.Services.HealthCheck;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
+using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.JunctionRun;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
@@ -133,7 +136,8 @@ public class OperationsQueries
     /// </summary>
     /// <remarks>
     /// Settings can hold credentials. They are reachable only here, under the operations
-    /// namespace, so they answer to the same gate as an execution's input.
+    /// namespace, so they answer to the same gate as an execution's input, and a settings member
+    /// marked <c>[TraxSensitive]</c> is written as <c>{"_redacted": true}</c>.
     /// </remarks>
     public IReadOnlyList<EffectInfo> GetEffects(
         [Service] IEffectRegistry registry,
@@ -167,15 +171,20 @@ public class OperationsQueries
         Converters = { new JsonStringEnumConverter() },
     };
 
+    /// <summary><see cref="SettingsJson"/> with every <c>[TraxSensitive]</c> member masked.</summary>
+    private static readonly JsonSerializerOptions RedactedSettingsJson =
+        TraxRedaction.WithRedaction(SettingsJson);
+
     // Serialized against the runtime type so a settings object typed as object still writes
-    // its properties. A settings type System.Text.Json cannot write (a delegate, a pointer)
-    // reads as null rather than failing the whole effects list.
+    // its properties, and a [TraxSensitive] member at any depth is written as the mask, as every
+    // other copy on the operations surface is. A settings type System.Text.Json cannot write
+    // (a delegate, a pointer) reads as null rather than failing the whole effects list.
     private static string? SerializeSettings(IConfigurableProviderFactory factory)
     {
         var settings = factory.GetConfiguration();
         try
         {
-            return JsonSerializer.Serialize(settings, settings.GetType(), SettingsJson);
+            return JsonSerializer.Serialize(settings, settings.GetType(), RedactedSettingsJson);
         }
         catch (Exception e) when (e is NotSupportedException or JsonException)
         {
@@ -223,7 +232,7 @@ public class OperationsQueries
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="sqlDialect">Resolved from DI when the provider registers one; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="skip">How many manifests to skip (negative is treated as 0).</param>
+    /// <param name="skip">How many manifests to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
     /// <param name="isEnabled">Only enabled (<c>true</c>) or disabled (<c>false</c>) manifests.</param>
     /// <param name="scheduleType">Only manifests with this schedule type.</param>
@@ -302,7 +311,10 @@ public class OperationsQueries
                 m.DependsOnManifestId,
                 m.Priority,
                 m.ManifestGroup.Name
-            ))
+            )
+            {
+                ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
+            })
             .ToListAsync(ct);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
@@ -346,7 +358,10 @@ public class OperationsQueries
                 m.DependsOnManifestId,
                 m.Priority,
                 m.ManifestGroup.Name
-            ))
+            )
+            {
+                ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
+            })
             .FirstOrDefaultAsync(ct);
     }
 
@@ -392,7 +407,10 @@ public class OperationsQueries
                 m.ScheduledAt,
                 m.NextScheduledRun,
                 m.VarianceSeconds
-            ))
+            )
+            {
+                ReplayDecisionsOnRetry = m.ReplayDecisionsOnRetry,
+            })
             .FirstOrDefaultAsync(ct);
 
         return detail is null
@@ -534,7 +552,7 @@ public class OperationsQueries
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="sqlDialect">Resolved from DI when the provider registers one; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="skip">How many executions to skip (negative is treated as 0).</param>
+    /// <param name="skip">How many executions to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
     /// <param name="trainState">Only executions in this state.</param>
     /// <param name="trainName">Only executions of this train (the train interface's full name, matched exactly).</param>
@@ -741,7 +759,8 @@ public class OperationsQueries
                 m.ParentId,
                 m.ScheduledTime,
                 m.Executor,
-                m.HostLabels
+                m.HostLabels,
+                m.ReplayDecisionsOf
             ))
             .FirstOrDefaultAsync(ct);
 
@@ -798,6 +817,46 @@ public class OperationsQueries
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
         return new PagedResult<ExecutionSummary>(items, totalCount, 0, take, false, nextCursor);
+    }
+
+    /// <summary>
+    /// The steps of one execution, in the order it reached them, as <c>AddJunctionEvents()</c>
+    /// recorded them: each junction that ran, each question a routing step asked and the track it
+    /// took. Empty for an execution with none recorded, and for an id with no execution.
+    /// </summary>
+    /// <remarks>
+    /// <para>Read through <c>JunctionRunQueries.ForRun</c>, the query the dashboard's timeline
+    /// reads too. A step carries no input, output or failure message, and an answer to a question
+    /// about a <c>[TraxSensitive]</c> type is never present. The recorded decider is not kept, so
+    /// <c>decider</c> is always null here.</para>
+    /// <para>The rows trail the live <c>onJunctionEvent</c> stream by moments. A client following
+    /// a running execution subscribes first, then reads this, and keeps for each position whichever
+    /// is further along.</para>
+    /// </remarks>
+    /// <param name="metadataId">The execution's id.</param>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="afterPosition">Only steps after this position (a keyset cursor for the next page).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    public async Task<IReadOnlyList<JunctionStep>> GetJunctionRuns(
+        long metadataId,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        CancellationToken ct,
+        int? afterPosition = null,
+        int take = OperationsPageBounds.MaxPageSize
+    )
+    {
+        RunIdArgument.Require(metadataId);
+        take = OperationsPageBounds.Take(take);
+
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+
+        IQueryable<JunctionRun> rows = db.JunctionRuns.AsNoTracking().ForRun(metadataId);
+        if (afterPosition is { } after)
+            rows = rows.Where(r => r.Position > after);
+
+        var page = await rows.Take(take).ToListAsync(ct);
+        return page.Select(JunctionStep.From).ToList();
     }
 
     // Names and enum spellings follow the options the queue and run paths deserialize input

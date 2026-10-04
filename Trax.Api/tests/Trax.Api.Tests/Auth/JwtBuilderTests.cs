@@ -1,5 +1,5 @@
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt;
 

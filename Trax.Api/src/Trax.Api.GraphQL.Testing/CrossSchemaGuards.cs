@@ -1,5 +1,8 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
 using Trax.Core.Testing;
@@ -15,23 +18,6 @@ namespace Trax.Api.GraphQL.Testing;
 public static class CrossSchemaGuards
 {
     private static readonly Regex CamelCase = new("^[a-z][A-Za-z0-9]*$", RegexOptions.Compiled);
-    private static readonly Regex UsesLoader = new(@"\bCrossSchemaLoader<", RegexOptions.Compiled);
-    private static readonly Regex ExtendObjectType = new(
-        @"\[\s*ExtendObjectType",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>
-    /// A <c>[Parent]</c> resolver parameter: captures any <c>requires:</c> declaration and
-    /// the parameter name, e.g. <c>[Parent(requires: nameof(Article.BillId))] Article a</c>.
-    /// </summary>
-    private static readonly Regex ParentParameter = new(
-        @"\[\s*Parent\s*(?:\((?<requires>(?:[^()]|\([^()]*\))*)\))?\s*\]\s*[\w.<>?\[\]]+\s+(?<name>\w+)",
-        RegexOptions.Compiled
-    );
-
-    /// <summary>The identifiers named inside a <c>requires:</c> argument.</summary>
-    private static readonly Regex RequiredNames = new(@"\w+", RegexOptions.Compiled);
 
     /// <summary>
     /// Each edge in the manifest must reference a real integer foreign key on its source, a target
@@ -81,8 +67,12 @@ public static class CrossSchemaGuards
     }
 
     /// <summary>
-    /// Every <c>[ExtendObjectType]</c> resolver in a cross-schema project must route through a
-    /// <c>CrossSchemaLoader</c>, so a cross-schema field can never become a hidden N+1.
+    /// Every resolver on a type extension in a cross-schema project must route through a
+    /// <c>CrossSchemaLoader</c>, so a cross-schema field can never become a hidden N+1. Checked per
+    /// resolver: a public method of an <c>[ExtendObjectType]</c> class (in any attribute list, with
+    /// or without its namespace or type argument) or of a source-generated <c>[ObjectType&lt;T&gt;]</c>
+    /// extension that is not <c>[GraphQLIgnore]</c>, and which names <c>CrossSchemaLoader&lt;,&gt;</c>
+    /// in its parameters or body.
     /// </summary>
     public static GuardResult EdgeResolversUseLoader(
         ArchitectureGuardOptions options,
@@ -100,17 +90,20 @@ public static class CrossSchemaGuards
             if (!rel.Contains($"{crossSchemaProjectSuffix}/", StringComparison.Ordinal))
                 continue;
 
-            var stripped = SourceText.StripCommentsAndStrings(File.ReadAllText(file));
-            if (!ExtendObjectType.IsMatch(stripped))
-                continue;
+            foreach (var extension in TypeExtensions(file))
+            foreach (var resolver in extension.Members.OfType<MethodDeclarationSyntax>())
+            {
+                if (!IsResolver(resolver))
+                    continue;
 
-            inspected++;
-            if (!UsesLoader.IsMatch(stripped))
-                offenders.Add(rel);
+                inspected++;
+                if (!NamesLoader(resolver))
+                    offenders.Add($"{rel}: {extension.Identifier.Text}.{resolver.Identifier.Text}");
+            }
         }
 
         var message =
-            $"Every [ExtendObjectType] resolver in a {crossSchemaProjectSuffix} project must resolve "
+            $"Every resolver on a type extension in a {crossSchemaProjectSuffix} project must resolve "
             + "through a CrossSchemaLoader<>, never an ad-hoc DbContext query, so the field is batched. "
             + "Offenders:\n  "
             + string.Join("\n  ", offenders);
@@ -126,9 +119,13 @@ public static class CrossSchemaGuards
     /// silently receive a default value.
     /// </summary>
     /// <remarks>
-    /// Source-scanning, so the key it recognises is the <c>Id</c> convention. An entity whose key
-    /// is declared with <c>[Key]</c> under another name still needs an explicit <c>requires:</c>
-    /// here, which costs one annotation and documents the dependency at the call site.
+    /// Parses each file's syntax tree and checks each resolver on its own: the reads are the
+    /// member accesses on the <c>[Parent]</c> parameter inside that method (<c>p.X</c>,
+    /// <c>p?.X</c>, <c>p!.X</c>), method calls excluded, and the declared names come from that
+    /// parameter's <c>requires</c> argument, a <c>nameof</c> or a string, compared ignoring case
+    /// since a string names the GraphQL field. Source-scanning, so the key it recognises is the
+    /// <c>Id</c> convention: an entity whose key is declared with <c>[Key]</c> under another name
+    /// still needs an explicit <c>requires:</c> here.
     /// </remarks>
     public static GuardResult ExtensionResolversDeclareParentRequirements(
         ArchitectureGuardOptions options
@@ -141,32 +138,30 @@ public static class CrossSchemaGuards
 
         foreach (var file in SourceFiles.CSharpUnder(root, [.. options.SourceScanRoots]))
         {
-            var source = File.ReadAllText(file);
-            if (!ExtendObjectType.IsMatch(source))
-                continue;
-
-            var stripped = SourceText.StripCommentsAndStrings(source);
-            if (!ExtendObjectType.IsMatch(stripped))
-                continue;
-
             var rel = Path.GetRelativePath(root, file).Replace('\\', '/');
 
-            foreach (Match parameter in ParentParameter.Matches(stripped))
+            foreach (var extension in TypeExtensions(file))
+            foreach (var method in extension.Members.OfType<MethodDeclarationSyntax>())
+            foreach (var parameter in method.ParameterList.Parameters)
             {
+                var parent = Attributes(parameter.AttributeLists)
+                    .FirstOrDefault(a => NameIs(a.Name, "Parent"));
+                if (parent is null)
+                    continue;
+
                 inspected++;
+                var name = parameter.Identifier.Text;
+                var declared = RequiredNames(parent);
 
-                var name = parameter.Groups["name"].Value;
-                var declared = RequiredNames
-                    .Matches(parameter.Groups["requires"].Value)
-                    .Select(m => m.Value)
-                    .ToHashSet(StringComparer.Ordinal);
-
-                foreach (var read in PropertyReads(stripped, name))
+                foreach (var read in PropertyReads(method, name))
                 {
                     if (read is "Id" || declared.Contains(read))
                         continue;
 
-                    offenders.Add($"{rel}: reads {name}.{read} without [Parent(requires: ...)]");
+                    offenders.Add(
+                        $"{rel}: {extension.Identifier.Text}.{method.Identifier.Text} reads "
+                            + $"{name}.{read} without [Parent(requires: ...)]"
+                    );
                 }
             }
         }
@@ -181,20 +176,159 @@ public static class CrossSchemaGuards
     }
 
     /// <summary>
-    /// Distinct property names read off <paramref name="parameterName"/>, ignoring method calls
-    /// (<c>p.Foo(</c>) — those are behaviour on the instance, not a projected column.
+    /// The type extensions declared in <paramref name="file"/>: classes carrying
+    /// <c>[ExtendObjectType]</c> in any form, or HotChocolate's source-generated
+    /// <c>[ObjectType&lt;T&gt;]</c>. A quick text check skips files that cannot hold one before
+    /// parsing.
     /// </summary>
-    private static IEnumerable<string> PropertyReads(string source, string parameterName)
+    private static IEnumerable<ClassDeclarationSyntax> TypeExtensions(string file)
     {
-        var pattern = new Regex(
-            $@"\b{Regex.Escape(parameterName)}\.(?<property>\w+)\s*(?<call>\()?",
-            RegexOptions.Compiled
+        var text = File.ReadAllText(file);
+        if (!text.Contains("ObjectType", StringComparison.Ordinal))
+            return [];
+
+        return CSharpSyntaxTree
+            .ParseText(text)
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Where(c => Attributes(c.AttributeLists).Any(IsTypeExtensionAttribute));
+    }
+
+    private static bool IsTypeExtensionAttribute(AttributeSyntax attribute) =>
+        NameIs(attribute.Name, "ExtendObjectType")
+        || (
+            NameIs(attribute.Name, "ObjectType") && Unqualified(attribute.Name) is GenericNameSyntax
         );
 
-        return pattern
-            .Matches(source)
-            .Where(m => !m.Groups["call"].Success)
-            .Select(m => m.Groups["property"].Value)
-            .Distinct(StringComparer.Ordinal);
+    private static IEnumerable<AttributeSyntax> Attributes(SyntaxList<AttributeListSyntax> lists) =>
+        lists.SelectMany(l => l.Attributes);
+
+    /// <summary>
+    /// Whether an attribute's name is <paramref name="name"/>, written with or without its
+    /// namespace, its <c>Attribute</c> suffix or a type argument.
+    /// </summary>
+    private static bool NameIs(NameSyntax attributeName, string name)
+    {
+        var simple = Unqualified(attributeName).Identifier.Text;
+        return simple == name || simple == name + "Attribute";
     }
+
+    private static SimpleNameSyntax Unqualified(NameSyntax name) =>
+        name switch
+        {
+            QualifiedNameSyntax qualified => qualified.Right,
+            AliasQualifiedNameSyntax alias => alias.Name,
+            _ => (SimpleNameSyntax)name,
+        };
+
+    /// <summary>
+    /// A member HotChocolate exposes as a field: a public method that is not marked
+    /// <c>[GraphQLIgnore]</c>.
+    /// </summary>
+    private static bool IsResolver(MethodDeclarationSyntax method) =>
+        method.Modifiers.Any(SyntaxKind.PublicKeyword)
+        && !Attributes(method.AttributeLists).Any(a => NameIs(a.Name, "GraphQLIgnore"));
+
+    private static bool NamesLoader(MethodDeclarationSyntax method) =>
+        method
+            .DescendantNodes()
+            .OfType<GenericNameSyntax>()
+            .Any(g => g.Identifier.Text == "CrossSchemaLoader");
+
+    /// <summary>
+    /// The names a <c>[Parent]</c> attribute's <c>requires</c> argument declares (named or first
+    /// positional): the last identifier of a <c>nameof</c>, or each identifier in a string.
+    /// </summary>
+    private static HashSet<string> RequiredNames(AttributeSyntax parent)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var arguments = parent.ArgumentList?.Arguments ?? default;
+        var requires =
+            arguments.FirstOrDefault(a => a.NameColon?.Name.Identifier.Text == "requires")
+            ?? arguments.FirstOrDefault(a => a.NameColon is null && a.NameEquals is null);
+        if (requires is null)
+            return names;
+
+        foreach (var node in requires.Expression.DescendantNodesAndSelf())
+        {
+            switch (node)
+            {
+                case InvocationExpressionSyntax
+                {
+                    Expression: IdentifierNameSyntax { Identifier.Text: "nameof" }
+                } nameOf when nameOf.ArgumentList.Arguments.Count == 1:
+                    names.Add(LastIdentifier(nameOf.ArgumentList.Arguments[0].Expression));
+                    break;
+                case LiteralExpressionSyntax literal
+                    when literal.IsKind(SyntaxKind.StringLiteralExpression):
+                    foreach (Match word in Identifier.Matches(literal.Token.ValueText))
+                        names.Add(word.Value);
+                    break;
+            }
+        }
+
+        return names;
+    }
+
+    private static readonly Regex Identifier = new(@"[A-Za-z_]\w*", RegexOptions.Compiled);
+
+    private static string LastIdentifier(ExpressionSyntax expression) =>
+        (expression as MemberAccessExpressionSyntax)?.Name.Identifier.Text ?? expression.ToString();
+
+    /// <summary>
+    /// Distinct property names <paramref name="method"/> reads off its parameter
+    /// <paramref name="parameterName"/>: <c>p.X</c>, <c>p?.X</c>, <c>p!.X</c> and
+    /// <c>(p).X</c>. A method call (<c>p.Foo()</c>) is behaviour on the instance, not a projected
+    /// column, and is not a read.
+    /// </summary>
+    private static IEnumerable<string> PropertyReads(
+        MethodDeclarationSyntax method,
+        string parameterName
+    )
+    {
+        var reads = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var node in method.DescendantNodes())
+        {
+            switch (node)
+            {
+                case MemberAccessExpressionSyntax member
+                    when IsParameter(member.Expression, parameterName) && !IsCalled(member):
+                    reads.Add(member.Name.Identifier.Text);
+                    break;
+                case ConditionalAccessExpressionSyntax conditional
+                    when IsParameter(conditional.Expression, parameterName)
+                        && FirstBinding(conditional.WhenNotNull) is { } nested
+                        && nested.Parent is not InvocationExpressionSyntax:
+                    reads.Add(nested.Name.Identifier.Text);
+                    break;
+            }
+        }
+        return reads;
+    }
+
+    /// <summary>The leftmost member binding of a chain such as <c>?.A.B</c> or <c>?.A()</c>.</summary>
+    private static MemberBindingExpressionSyntax? FirstBinding(ExpressionSyntax expression) =>
+        expression
+            .DescendantNodesAndSelf()
+            .OfType<MemberBindingExpressionSyntax>()
+            .FirstOrDefault();
+
+    private static bool IsCalled(MemberAccessExpressionSyntax member) =>
+        member.Parent is InvocationExpressionSyntax invocation && invocation.Expression == member;
+
+    private static bool IsParameter(ExpressionSyntax expression, string parameterName) =>
+        expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.Text == parameterName,
+            PostfixUnaryExpressionSyntax
+            {
+                RawKind: (int)SyntaxKind.SuppressNullableWarningExpression
+            } suppressed => IsParameter(suppressed.Operand, parameterName),
+            ParenthesizedExpressionSyntax parenthesized => IsParameter(
+                parenthesized.Expression,
+                parameterName
+            ),
+            _ => false,
+        };
 }

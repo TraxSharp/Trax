@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using HotChocolate.AspNetCore.Subscriptions;
 using Microsoft.AspNetCore.Authentication;
@@ -36,12 +35,6 @@ internal static class JwtSocketAuthentication
 {
     /// <summary>The close message a session receives when its token expires.</summary>
     internal const string ExpiredMessage = "The access token has expired.";
-
-    // Timers stay referenced for as long as their connection is, and no longer.
-    private static readonly ConditionalWeakTable<ISocketConnection, ITimer> ExpiryTimers = new();
-
-    // ITimer's largest due time, a little under 50 days. A later expiry is reached in steps.
-    private static readonly TimeSpan MaxTimerDue = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
 
     /// <summary>
     /// Authenticates <paramref name="token"/> with <paramref name="scheme"/>'s handler, in a
@@ -117,8 +110,9 @@ internal static class JwtSocketAuthentication
 
     /// <summary>
     /// Closes <paramref name="session"/>'s connection with <c>PolicyViolation</c> at
-    /// <paramref name="expiresAt"/>. A later HTTP request with the same token would be refused
-    /// from then on; the connection is refused the same way. The timer goes with the connection.
+    /// <paramref name="expiresAt"/>, or earlier when its maximum lifetime comes first. A later HTTP
+    /// request with the same token would be refused from then on; the connection is refused the
+    /// same way. The timer goes with the connection.
     /// </summary>
     public static void CloseAtExpiry(
         ISocketSession session,
@@ -130,59 +124,13 @@ internal static class JwtSocketAuthentication
         if (expiresAt is not { } at)
             return;
 
-        var connection = session.Connection;
-        var time = applicationServices.GetService<TimeProvider>() ?? TimeProvider.System;
-
-        ITimer? timer = null;
-        timer = time.CreateTimer(
-            _ =>
-            {
-                var remaining = at - time.GetUtcNow();
-                if (remaining > TimeSpan.Zero)
-                {
-                    timer?.Change(Min(remaining, MaxTimerDue), Timeout.InfiniteTimeSpan);
-                    return;
-                }
-
-                _ = CloseAsync(connection, logger);
-            },
-            null,
-            Timeout.InfiniteTimeSpan,
-            Timeout.InfiniteTimeSpan
-        );
-
-        ExpiryTimers.AddOrUpdate(connection, timer);
-        connection.RequestAborted.Register(static state => ((ITimer)state!).Dispose(), timer);
-
-        var due = at - time.GetUtcNow();
-        timer.Change(
-            due <= TimeSpan.Zero ? TimeSpan.Zero : Min(due, MaxTimerDue),
-            Timeout.InfiniteTimeSpan
-        );
-    }
-
-    private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
-
-    private static async Task CloseAsync(ISocketConnection connection, ILogger logger)
-    {
-        try
-        {
-            await connection
-                .CloseAsync(ExpiredMessage, ConnectionCloseReason.PolicyViolation, default)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "Closing a subscription connection whose token expired failed.");
-        }
-        finally
-        {
-            if (ExpiryTimers.TryGetValue(connection, out var timer))
-            {
-                ExpiryTimers.Remove(connection);
-                timer.Dispose();
-            }
-        }
+        SocketConnectionLifetime
+            .For(
+                session.Connection,
+                applicationServices.GetService<TimeProvider>() ?? TimeProvider.System,
+                logger
+            )
+            .CloseAt(at, ConnectionCloseReason.PolicyViolation, ExpiredMessage);
     }
 
     /// <summary>Sets the upgrade request's user to <paramref name="principal"/>.</summary>

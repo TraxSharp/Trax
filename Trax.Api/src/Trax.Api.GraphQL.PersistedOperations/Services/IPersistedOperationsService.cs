@@ -51,7 +51,10 @@ public interface IPersistedOperationsService
         CancellationToken ct
     );
 
-    /// <summary>Deactivates an active operation. A reason is required.</summary>
+    /// <summary>
+    /// Deactivates an operation. A reason is required. Deactivating one that is already inactive
+    /// succeeds, records the new reason, and sends the change to every node again.
+    /// </summary>
     Task<DeactivatePersistedOperationPayload> DeactivateAsync(
         DeactivatePersistedOperationInput input,
         CancellationToken ct

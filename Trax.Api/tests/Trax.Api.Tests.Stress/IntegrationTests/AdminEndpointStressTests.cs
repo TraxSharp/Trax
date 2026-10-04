@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Api.DTOs;
@@ -7,6 +7,7 @@ using Trax.Api.GraphQL.Queries;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Metrics;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -374,49 +375,43 @@ public class AdminEndpointStressTests : StressTestSetup
     }
 
     [Test]
-    public async Task Executions_DeepOffset_IsSlowerThanKeyset_ProvingKeysetRequirement()
+    public async Task Executions_DeepestOffset_WithinBudget_AndDeeperIsRefused()
     {
-        // Keyset at the far end stays within budget.
-        var keyset = await TimeAsync(
+        // The deepest offset served (Api ADR 0017) stays within a list read's budget at scale;
+        // anything deeper is refused with a code that points at the keyset cursor.
+        await MeasureAsync(
+            $"operations.executions (skip {OperationsPageBounds.MaxSkip:N0})",
+            ListBudget,
             async (sp, ct) =>
-                await new OperationsQueries().GetExecutions(
+            {
+                var page = await new OperationsQueries().GetExecutions(
                     Factory(sp),
                     ct,
-                    take: 25,
-                    afterId: 200,
-                    sqlDialect: Dialect(sp)
-                )
-        );
-
-        // OFFSET near the end of the table must scan every skipped row.
-        var deepSkip = (int)Math.Max(0, Profile.Metadata - 50);
-        var offset = await TimeAsync(
-            async (sp, ct) =>
-                await new OperationsQueries().GetExecutions(
-                    Factory(sp),
-                    ct,
-                    skip: deepSkip,
+                    skip: OperationsPageBounds.MaxSkip,
                     take: 25,
                     sqlDialect: Dialect(sp)
-                )
+                );
+                page.Items.Should().HaveCount(25);
+            }
         );
 
-        TestContext.Out.WriteLine(
-            $"keyset(far end)={keyset.TotalMilliseconds:F0}ms vs OFFSET({deepSkip:N0})="
-                + $"{offset.TotalMilliseconds:F0}ms — ratio {offset.TotalMilliseconds / Math.Max(1, keyset.TotalMilliseconds):F1}x"
-        );
-
-        keyset
-            .Should()
-            .BeLessThan(
-                ListBudget,
-                "keyset pagination is the dashboard's required paging strategy"
+        var deeper = async () =>
+            await new OperationsQueries().GetExecutions(
+                Factory(Services),
+                CancellationToken.None,
+                skip: (int)Math.Max(OperationsPageBounds.MaxSkip + 1, Profile.Metadata - 50),
+                take: 25,
+                sqlDialect: Dialect(Services)
             );
-        offset
-            .Should()
-            .BeGreaterThan(
-                keyset,
-                "deep OFFSET scans all skipped rows; the client must page by afterId, never skip"
+
+        (await deeper.Should().ThrowAsync<HotChocolate.GraphQLException>())
+            .Which.Errors.Should()
+            .ContainSingle()
+            .Which.Code.Should()
+            .Be(
+                OperationsPageBounds.SkipTooDeepCode,
+                "a deep offset reads every skipped row; the client pages by afterId "
+                    + "(docs/adr/0017-an-operations-page-is-at-most-500-rows.md)"
             );
     }
 
@@ -895,6 +890,34 @@ public class AdminEndpointStressTests : StressTestSetup
     }
 
     [Test]
+    public async Task JunctionRuns_WithinBudget()
+    {
+        // Eight steps for each of the newest 250k runs, ~2M rows, so the read of one run's
+        // timeline is measured against a table of real size. Idempotent across runs.
+        await ExecSqlAsync(
+            """
+            INSERT INTO trax.junction_run (metadata_id, position, kind, name, state, started_at, ended_at)
+            SELECT m.id, p.position, 'junction', 'StressStep' || p.position, 'completed',
+                   m.start_time, m.start_time + interval '5 milliseconds'
+            FROM (SELECT id, start_time FROM trax.metadata ORDER BY id DESC LIMIT 250000) m
+            CROSS JOIN generate_series(0, 7) AS p(position)
+            ON CONFLICT (metadata_id, position) DO NOTHING
+            """
+        );
+        var runId = await ScalarAsync<long>("SELECT max(metadata_id) FROM trax.junction_run");
+
+        await MeasureAsync(
+            "operations.junctionRuns",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var steps = await new OperationsQueries().GetJunctionRuns(runId, Factory(sp), ct);
+                steps.Should().HaveCount(8);
+            }
+        );
+    }
+
+    [Test]
     public async Task ExecutionDetail_WithChildCount_WithinBudget()
     {
         await MeasureAsync(
@@ -941,6 +964,94 @@ public class AdminEndpointStressTests : StressTestSetup
                     Operations(sp),
                     ct
                 );
+            }
+        );
+    }
+
+    #endregion
+
+    #region Exact-count filters (a filter makes totalCount an exact COUNT over the matching rows)
+
+    /// <summary>How many seeded runs satisfy <paramref name="match"/>, by the seed's arithmetic.</summary>
+    private static int SeededRuns(Func<long, bool> match)
+    {
+        var count = 0;
+        for (long g = 1; g <= Profile.Metadata; g++)
+            if (match(g))
+                count++;
+        return count;
+    }
+
+    private static bool SeededFailed(long g) => g % 9 is 4 or 5;
+
+    [Test]
+    public async Task Executions_FilterByTrainState_CountsExactly_WithinBudget()
+    {
+        var failed = SeededRuns(SeededFailed);
+        await MeasureAsync(
+            "operations.executions (trainState: FAILED, exact count)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    trainState: TrainState.Failed,
+                    sqlDialect: Dialect(sp)
+                );
+                page.Items.Should()
+                    .HaveCount(25)
+                    .And.OnlyContain(e => e.TrainState == TrainState.Failed);
+                page.IsEstimatedCount.Should().BeFalse("a filtered total is exact");
+                page.TotalCount.Should().Be(failed);
+            }
+        );
+    }
+
+    [Test]
+    public async Task Executions_FilterByFailureClass_CountsExactly_WithinBudget()
+    {
+        var permanent = SeededRuns(g => SeededFailed(g) && g / 9 % 3 == 2);
+        await MeasureAsync(
+            "operations.executions (failureClass: PERMANENT, exact count)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    failureClass: FailureClass.Permanent,
+                    sqlDialect: Dialect(sp)
+                );
+                page.Items.Should().HaveCount(25);
+                page.IsEstimatedCount.Should().BeFalse("a filtered total is exact");
+                page.TotalCount.Should().Be(permanent);
+            }
+        );
+    }
+
+    [Test]
+    public async Task Executions_HideAdminTrains_CountsExactly_WithinBudget()
+    {
+        // The seed has no scheduler-internal runs, so the filter keeps every row and the exact
+        // count is over the whole table: the worst case for it.
+        await MeasureAsync(
+            "operations.executions (hideAdminTrains, exact count)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var page = await new OperationsQueries().GetExecutions(
+                    Factory(sp),
+                    ct,
+                    take: 25,
+                    hideAdminTrains: true,
+                    sqlDialect: Dialect(sp)
+                );
+                page.Items.Should().HaveCount(25);
+                page.IsEstimatedCount.Should().BeFalse("a filtered total is exact");
+                page.TotalCount.Should().Be((int)Profile.Metadata);
             }
         );
     }

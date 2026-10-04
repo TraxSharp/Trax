@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;

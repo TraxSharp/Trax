@@ -1,9 +1,10 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Caching;
 using HotChocolate.Language;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
 
@@ -223,6 +224,59 @@ public class HotChocolateCacheInvalidationTests
         operations.Should().BeOfType<ClearablePreparedOperationCache>();
 
         return (documents, operations);
+    }
+
+    [Test]
+    public async Task TheReplacementCaches_TakeTheSizesTheHostConfigured()
+    {
+        await using var sp = await GraphQLFixture.BuildAsync(
+            po => po.SingleNode(),
+            services =>
+                services
+                    .AddGraphQL("trax")
+                    .ModifyOptions(o =>
+                    {
+                        o.OperationDocumentCacheSize = 37;
+                        o.PreparedOperationCacheSize = 41;
+                    })
+        );
+        var executor = await GraphQLFixture.GetExecutorAsync(sp);
+
+        // Calling AddGraphQL for the schema again after UsePersistedOperations still leaves
+        // Trax's caches in place.
+        executor
+            .Schema.Services.GetRequiredService<IDocumentCache>()
+            .Should()
+            .BeOfType<ClearableDocumentCache>()
+            .Which.Capacity.Should()
+            .Be(37);
+        executor
+            .Schema.Services.GetRequiredService<IPreparedOperationCache>()
+            .Should()
+            .BeOfType<ClearablePreparedOperationCache>()
+            .Which.Capacity.Should()
+            .Be(41);
+    }
+
+    [Test]
+    public async Task ACacheThatReplacesTraxs_StopsTheExecutorFromStarting()
+    {
+        await using var sp = await GraphQLFixture.BuildAsync(
+            po => po.SingleNode(),
+            services =>
+                services
+                    .AddGraphQL("trax")
+                    .ConfigureSchemaServices(sc =>
+                        sc.AddSingleton(Substitute.For<IPreparedOperationCache>())
+                    )
+        );
+
+        var build = () => GraphQLFixture.GetExecutorAsync(sp);
+
+        (await build.Should().ThrowAsync<Exception>())
+            .Which.ToString()
+            .Should()
+            .Contain("Trax's document and prepared-operation caches");
     }
 
     [Test]

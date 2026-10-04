@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests.Exceptions;

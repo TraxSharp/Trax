@@ -23,15 +23,13 @@ public sealed partial class PersistedOperationsBuilder
 
     // ----- cache -----
     private bool _cacheEnabled;
-    private TimeSpan _cacheTtl = TimeSpan.FromMinutes(15);
+    private TimeSpan? _cacheTtl;
     private bool _cacheConfigured;
+    private TimeSpan _cacheMaxAge = PersistedOperationsOptions.DefaultCacheMaxAge;
 
     // ----- broadcasting -----
     private string? _rabbitMqConnectionString;
     private bool _singleNode;
-
-    // ----- database -----
-    private string? _databaseConnectionString;
 
     // ----- schema exposure -----
     private bool _exposeOperationsNamespace = true;

@@ -321,6 +321,248 @@ public class CrossSchemaGuardsTests
         result.Inspected.Should().Be(0);
     }
 
+    private static GuardResult ParentRequirements(string path, string source)
+    {
+        using var repo = new TempRepo().Write(path, source);
+        return CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(
+            new ArchitectureGuardOptions
+            {
+                RepoRootOverride = repo.Root,
+                SourceScanRoots = ["libs"],
+            }
+        );
+    }
+
+    private static GuardResult LoaderUse(string source)
+    {
+        using var repo = new TempRepo().Write("src/App.CrossSchema/Edges/Edge.cs", source);
+        return CrossSchemaGuards.EdgeResolversUseLoader(
+            new() { RepoRootOverride = repo.Root, SourceScanRoots = ["src"] }
+        );
+    }
+
+    [TestCase("[Authorize, ExtendObjectType(typeof(Article))]", "public sealed class E")]
+    [TestCase("[HotChocolate.Types.ExtendObjectType<Article>]", "public sealed class E")]
+    [TestCase("[ExtendObjectTypeAttribute(typeof(Article))]", "public sealed class E")]
+    [TestCase("[ObjectType<Article>]", "public static partial class E")]
+    [TestCase("[global::ExtendObjectType(typeof(Article))]", "public sealed class E")]
+    public void ExtensionResolvers_EveryFormOfTypeExtension_IsInspected(
+        string attributes,
+        string declaration
+    )
+    {
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            $$"""
+            {{attributes}}
+            {{declaration}}
+            {
+                public static int GetBill([Parent] Article article) => article.BillId;
+            }
+            """
+        );
+
+        result.Inspected.Should().Be(1);
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("article.BillId");
+    }
+
+    [TestCase("article?.BillId")]
+    [TestCase("article!.BillId")]
+    [TestCase("(article).BillId")]
+    public void ExtensionResolvers_NullConditionalAndSuppressedReads_AreReads(string read)
+    {
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            $$"""
+            [ExtendObjectType(typeof(Article))]
+            public sealed class E
+            {
+                public int? GetBill([Parent] Article? article) => {{read}};
+            }
+            """
+        );
+
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("article.BillId");
+    }
+
+    [Test]
+    public void ExtensionResolvers_ReadsAreCheckedPerResolver()
+    {
+        // Both resolvers name their parent `article`; one declares BillId and reads it, the other
+        // reads only the key. Neither is an offender.
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            """
+            [ExtendObjectType(typeof(Article))]
+            public sealed class E
+            {
+                public int GetBill([Parent(requires: nameof(Article.BillId))] Article article) =>
+                    article.BillId;
+
+                public int GetKey([Parent] Article article) => article.Id;
+            }
+            """
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+        result.Inspected.Should().Be(2);
+    }
+
+    [Test]
+    public void ExtensionResolvers_AResolverReadingWhatAnotherDeclared_IsOffender()
+    {
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            """
+            [ExtendObjectType(typeof(Article))]
+            public sealed class E
+            {
+                public int GetBill([Parent(requires: nameof(Article.BillId))] Article article) =>
+                    article.BillId;
+
+                public int GetOther([Parent] Article article) => article.BillId;
+            }
+            """
+        );
+
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("GetOther");
+    }
+
+    [TestCase("requires: \"billId\"")]
+    [TestCase("\"BillId\"")]
+    public void ExtensionResolvers_RequiresAsAString_Declares(string requires)
+    {
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            $$"""
+            [ExtendObjectType(typeof(Article))]
+            public sealed class E
+            {
+                public int GetBill([Parent({{requires}})] Article article) => article.BillId;
+            }
+            """
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+    }
+
+    [Test]
+    public void EdgeResolversUseLoader_IsCheckedPerResolver()
+    {
+        var result = LoaderUse(
+            """
+            [ExtendObjectType(typeof(Loan))]
+            public sealed class E
+            {
+                public Task<Book?> GetBook([Parent] Loan loan, CrossSchemaLoader<C, Book> books) =>
+                    books.LoadAsync(loan.BookId);
+
+                public Task<Book?> GetLatest([Parent] Loan loan, ICatalogDbContext db) => null!;
+            }
+            """
+        );
+
+        result.Inspected.Should().Be(2);
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("GetLatest");
+    }
+
+    [Test]
+    public void EdgeResolversUseLoader_FindsResolversOnEveryFormOfTypeExtension()
+    {
+        var result = LoaderUse(
+            """
+            [Authorize, ObjectType<Loan>]
+            public static partial class E
+            {
+                public static Task<Book?> GetBook([Parent] Loan loan, ICatalogDbContext db) => null!;
+            }
+            """
+        );
+
+        result.Inspected.Should().Be(1);
+        result.Offenders.Should().ContainSingle().Which.Should().Contain("GetBook");
+    }
+
+    [Test]
+    public void EdgeResolversUseLoader_IgnoresMembersThatAreNotResolvers()
+    {
+        var result = LoaderUse(
+            """
+            [ExtendObjectType(typeof(Loan))]
+            public sealed class E
+            {
+                public Task<Book?> GetBook(CrossSchemaLoader<C, Book> books) => null!;
+
+                private static int Helper(ICatalogDbContext db) => 0;
+
+                [GraphQLIgnore]
+                public int Ignored(ICatalogDbContext db) => 0;
+            }
+            """
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+        result.Inspected.Should().Be(1);
+    }
+
+    [Test]
+    public void ExtensionResolvers_ANestedRead_IsAReadOfTheFirstMember()
+    {
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            """
+            [ExtendObjectType(typeof(Article))]
+            public sealed class E
+            {
+                public int GetLength([Parent] Article article) => article.Title.Length;
+
+                public string? GetTitle([Parent] Article? article) => article?.Title.Trim();
+            }
+            """
+        );
+
+        result.Offenders.Should().HaveCount(2).And.OnlyContain(o => o.Contains("article.Title"));
+    }
+
+    [Test]
+    public void ExtensionResolvers_RequiresNamingTheMemberAlone_Declares()
+    {
+        var result = ParentRequirements(
+            "libs/Edges/E.cs",
+            """
+            [ExtendObjectType(typeof(Article))]
+            public sealed class E
+            {
+                public int GetBill([Parent(requires: nameof(BillId))] Article article) =>
+                    article.BillId;
+            }
+            """
+        );
+
+        result.Passed.Should().BeTrue(result.FailureMessage);
+    }
+
+    [Test]
+    public void EdgeResolversUseLoader_IgnoresExtensionsOutsideTheCrossSchemaProject()
+    {
+        using var repo = new TempRepo().Write(
+            "src/App.Api/Extensions/E.cs",
+            """
+            [ExtendObjectType(typeof(Loan))]
+            public sealed class E
+            {
+                public int GetDays([Parent] Loan loan, ICatalogDbContext db) => 0;
+            }
+            """
+        );
+
+        var result = CrossSchemaGuards.EdgeResolversUseLoader(
+            new() { RepoRootOverride = repo.Root, SourceScanRoots = ["src"] }
+        );
+
+        result.Inspected.Should().Be(0);
+    }
+
     [Test]
     public void ExtensionResolvers_NullOptions_Throws()
     {

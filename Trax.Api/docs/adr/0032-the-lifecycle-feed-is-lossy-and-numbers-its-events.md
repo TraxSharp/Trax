@@ -64,12 +64,14 @@ which is all a subscription on that node receives.
   filtered event is not a loss; only a jump past the subscription's starting point counts; an
   unnumbered event passes through; the publisher numbers each topic from one and a failed send
   uses no number.
-- `SubscriptionStressTests` holds it at load: under a sustained publish rate every subscriber
-  either receives every event or sees a skip in `sequence`.
+- `SubscriptionStressTests.cs`, in the explicit stress suite that CI does not run, holds it at
+  load: under a sustained publish rate every subscriber either receives every event or sees a
+  skip in `sequence`. It is evidence, not enforcement; `LifecycleSequenceTests` is the guard.
 - [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) is the rule this produces.
 
 Not covered: nothing checks that a client refetches on a skip; that is the client's half.
 
 ## Changelog
 
+- **2026-10-02**: The stress suite cited as evidence rather than as a guard, since CI never runs it.
 - **2026-09-30**: Recorded.

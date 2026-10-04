@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;

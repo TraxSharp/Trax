@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -26,8 +26,9 @@ namespace Trax.Api.Tests;
 
 /// <summary>
 /// Every paged read on the operations surface clamps <c>take</c> to 1 through
-/// <see cref="OperationsPageBounds.MaxPageSize"/> and treats a negative <c>skip</c> as 0.
-/// The table is seeded with one row more than the cap, so a request for more returns exactly
+/// <see cref="OperationsPageBounds.MaxPageSize"/>, treats a negative <c>skip</c> as 0, and
+/// refuses a <c>skip</c> above <see cref="OperationsPageBounds.MaxSkip"/> with
+/// <see cref="OperationsPageBounds.SkipTooDeepCode"/>. The table is seeded with one row more than the cap, so a request for more returns exactly
 /// the cap. Shares <c>trax_api_operations</c> with <see cref="OperationsQueriesTests"/>: it
 /// seeds once and every other fixture truncates in its own set-up. The decision is
 /// <c>docs/adr/0017-an-operations-page-is-at-most-500-rows.md</c>.
@@ -249,6 +250,38 @@ public class OperationsPageBoundsTests
         (await query(_factory, -10, 3))
             .Should()
             .Be((3, 0, 3), Because("clamps take to 1..500 and skip to 0 or more"));
+    }
+
+    [TestCaseSource(nameof(Queries))]
+    public async Task Skip_AtTheCap_IsServed(
+        Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
+    )
+    {
+        (await query(_factory, OperationsPageBounds.MaxSkip, 3))
+            .Should()
+            .Be((0, OperationsPageBounds.MaxSkip, 3), Because("serves a skip up to the cap"));
+    }
+
+    [TestCaseSource(nameof(Queries))]
+    public async Task Skip_AboveTheCap_IsRefusedWithACodePointingAtAfterId(
+        Func<IDataContextProviderFactory, int, int, Task<(int Count, int Skip, int Take)>> query
+    )
+    {
+        var act = () => query(_factory, OperationsPageBounds.MaxSkip + 1, 3);
+
+        var refused = (await act.Should().ThrowAsync<HotChocolate.GraphQLException>()).Which;
+        var error = refused.Errors.Should().ContainSingle().Which;
+        error
+            .Code.Should()
+            .Be(OperationsPageBounds.SkipTooDeepCode, Because("refuses a skip above 10,000"));
+        error
+            .Message.Should()
+            .Contain("afterId", Because("points deeper paging at the keyset cursor"));
+        error
+            .Extensions.Should()
+            .ContainKey("maxSkip")
+            .WhoseValue.Should()
+            .Be(OperationsPageBounds.MaxSkip);
     }
 
     [Test]

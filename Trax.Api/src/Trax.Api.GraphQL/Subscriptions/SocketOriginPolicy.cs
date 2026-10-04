@@ -14,7 +14,8 @@ internal static class SocketOriginPolicy
     /// <summary>
     /// True when the upgrade may proceed: it carries no <c>Origin</c>, or the origin is on the
     /// request's own host, or it is allowed. <paramref name="allowedOrigins"/> is the normalized
-    /// explicit list, or <c>null</c> to use the host's CORS default policy.
+    /// explicit list, or <c>null</c> to use the host's CORS default policy, whose
+    /// <c>AllowAnyOrigin()</c> admits no origin besides the endpoint's own.
     /// </summary>
     public static bool IsAllowed(HttpContext context, IReadOnlyList<string>? allowedOrigins)
     {
@@ -33,12 +34,15 @@ internal static class SocketOriginPolicy
 
         var cors = context.RequestServices.GetService<IOptions<CorsOptions>>()?.Value;
         var policy = cors?.GetPolicy(cors.DefaultPolicyName);
-        if (policy is null)
+
+        // A browser attaches its cookies to every WebSocket upgrade, so a socket is always a
+        // credentialed request. CORS never lets AllowAnyOrigin() carry credentials, and neither
+        // does the socket: only an origin the policy names, or its origin predicate admits, is
+        // allowed.
+        if (policy is null || policy.AllowAnyOrigin)
             return false;
 
-        return policy.AllowAnyOrigin
-            || policy.IsOriginAllowed(origin)
-            || policy.IsOriginAllowed(normalized);
+        return policy.IsOriginAllowed(origin) || policy.IsOriginAllowed(normalized);
     }
 
     /// <summary>

@@ -31,8 +31,8 @@ internal sealed record NavigationTargetPosture(
         );
 
     /// <summary>
-    /// Every class a query model can reach through its public properties, transitively, that is
-    /// not itself a query model, with the posture each declares.
+    /// Every class a query model can reach through its public properties and methods,
+    /// transitively, that is not itself a query model, with the posture each declares.
     /// </summary>
     /// <remarks>
     /// This is a superset read off the CLR types, before any schema exists, and is used only to
@@ -49,9 +49,9 @@ internal sealed record NavigationTargetPosture(
 
         while (queue.TryDequeue(out var type))
         {
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var returned in MemberTypes(type))
             {
-                if (Candidate(prop.PropertyType) is not { } target || !seen.Add(target))
+                if (Candidate(returned) is not { } target || !seen.Add(target))
                     continue;
 
                 targets.Add(Read(target));
@@ -63,12 +63,45 @@ internal sealed record NavigationTargetPosture(
     }
 
     /// <summary>
-    /// The class a property navigates to, unwrapping a collection, or <c>null</c> when the
-    /// property holds a scalar.
+    /// The types an entity's public members hand back, which is what HotChocolate infers fields
+    /// from: every property, and every method that returns something. A method is the same reach
+    /// as a property, since HotChocolate binds <c>GetOwner()</c> as a field <c>owner</c>.
     /// </summary>
-    private static Type? Candidate(Type propertyType)
+    private static IEnumerable<Type> MemberTypes(Type type)
     {
-        var type = propertyType;
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            yield return prop.PropertyType;
+
+        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (
+                method.IsSpecialName
+                || method.DeclaringType == typeof(object)
+                || method.ReturnType == typeof(void)
+            )
+                continue;
+
+            yield return Unwrap(method.ReturnType);
+        }
+    }
+
+    /// <summary>A resolver's <c>Task&lt;T&gt;</c> or <c>ValueTask&lt;T&gt;</c> is a <c>T</c> field.</summary>
+    private static Type Unwrap(Type type) =>
+        type.IsGenericType
+        && (
+            type.GetGenericTypeDefinition() == typeof(Task<>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTask<>)
+        )
+            ? type.GetGenericArguments()[0]
+            : type;
+
+    /// <summary>
+    /// The class a member navigates to, unwrapping a collection, or <c>null</c> when the member
+    /// holds a scalar.
+    /// </summary>
+    private static Type? Candidate(Type memberType)
+    {
+        var type = memberType;
 
         if (type != typeof(string) && !type.IsArray)
         {

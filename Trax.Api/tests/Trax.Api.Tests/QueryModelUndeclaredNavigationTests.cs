@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.EntityFrameworkCore;
@@ -19,67 +19,37 @@ namespace Trax.Api.Tests;
 /// <summary>
 /// An entity that is not a <c>[TraxQueryModel]</c> declares no authorization posture. When a
 /// query model has a navigation to it, HotChocolate infers an object type for it with every
-/// public property, and nothing asks the host to decide whether that surface is public.
+/// public property, so the host refuses to start until the entity declares whether that surface
+/// is public, before any request could read or filter on it.
 /// </summary>
 [TestFixture]
 public class QueryModelUndeclaredNavigationTests
 {
     private const string Secret = "tok_live_0123456789";
 
+    private const string Adr =
+        "Trax.Api docs/adr/0025-every-entity-a-query-model-reaches-declares-its-posture.md";
+
     [Test]
-    public async Task An_anonymous_caller_cannot_read_an_undeclared_entity_through_a_navigation()
+    public async Task A_navigation_to_an_undeclared_entity_refuses_startup_before_it_can_be_read()
     {
-        IRequestExecutor executor;
-        ServiceProvider provider;
-        try
-        {
-            (provider, executor) = await StartAsync();
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains(nameof(UndeclaredAccount)))
-        {
-            // Refusing the schema at startup, naming the undeclared entity, is a valid fix.
-            return;
-        }
+        var act = () => StartAsync();
 
-        await using var _ = provider;
-        var result = await executor.ExecuteAsync(
-            "{ discover { undeclaredPosts { nodes { title account { apiToken } } } } }"
-        );
-        var json = result.ExpectOperationResult().ToJson();
-
-        json.Should()
-            .NotContain(
-                Secret,
-                "UndeclaredAccount has neither [TraxAuthorize] nor [TraxAllowAnonymous]"
-            );
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain(typeof(UndeclaredAccount).FullName!, Adr)
+            .And.Contain("'UndeclaredPost.account'", "the object field reads the entity");
     }
 
     [Test]
-    public async Task An_anonymous_caller_cannot_filter_on_an_undeclared_entity_through_a_navigation()
+    public async Task A_navigation_to_an_undeclared_entity_refuses_startup_before_it_can_be_filtered_or_sorted()
     {
-        IRequestExecutor executor;
-        ServiceProvider provider;
-        try
-        {
-            (provider, executor) = await StartAsync();
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains(nameof(UndeclaredAccount)))
-        {
-            return;
-        }
+        var act = () => StartAsync();
 
-        await using var _ = provider;
-        var hit = await executor.ExecuteAsync(
-            "{ discover { undeclaredPosts(where: { account: { apiToken: { startsWith: \"tok_live_0\" } } }) { nodes { title } } } }"
-        );
-
-        hit.ExpectOperationResult()
-            .ToJson()
-            .Should()
-            .NotContain(
-                "hello",
-                "a filter on apiToken is an oracle that recovers it one character at a time"
-            );
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain("'UndeclaredPostFilterInput.account'", Adr)
+            .And.Contain("'UndeclaredPostSortInput.account'", Adr);
     }
 
     private static async Task<(ServiceProvider, IRequestExecutor)> StartAsync()
@@ -100,8 +70,16 @@ public class QueryModelUndeclaredNavigationTests
         var provider = services.BuildServiceProvider();
 
         // Every startup validator Trax registered runs, as it would in a host.
-        foreach (var hosted in provider.GetServices<IHostedService>())
-            await hosted.StartAsync(default);
+        try
+        {
+            foreach (var hosted in provider.GetServices<IHostedService>())
+                await hosted.StartAsync(default);
+        }
+        catch
+        {
+            await provider.DisposeAsync();
+            throw;
+        }
 
         using (var scope = provider.CreateScope())
         {

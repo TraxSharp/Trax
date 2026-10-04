@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -10,6 +10,7 @@ using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Middleware;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Effect.Extensions;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
 
@@ -50,13 +51,11 @@ public class ExtensionMethodTests
             StubDataContextFactory
         >();
         var builder = new TraxGraphQLBuilder(sc);
-        builder.UsePersistedOperations(opts => opts.UseDatabase(FakeConn).SingleNode());
+        builder.UsePersistedOperations(opts => opts.SingleNode());
 
         await using var sp = sc.BuildServiceProvider();
 
-        sp.GetRequiredService<PersistedOperationsOptions>()
-            .DatabaseConnectionString.Should()
-            .Be(FakeConn);
+        sp.GetRequiredService<PersistedOperationsOptions>().SingleNode.Should().BeTrue();
         sp.GetRequiredService<IPersistedOperationCache>()
             .Should()
             .BeOfType<NoOpPersistedOperationCache>();
@@ -83,9 +82,7 @@ public class ExtensionMethodTests
             StubDataContextFactory
         >();
         var builder = new TraxGraphQLBuilder(sc);
-        builder.UsePersistedOperations(opts =>
-            opts.UseDatabase(FakeConn).SingleNode().WithInMemoryCache()
-        );
+        builder.UsePersistedOperations(opts => opts.SingleNode().WithInMemoryCache());
 
         await using var sp = sc.BuildServiceProvider();
 
@@ -115,9 +112,7 @@ public class ExtensionMethodTests
         >();
         var builder = new TraxGraphQLBuilder(sc);
         builder.UsePersistedOperations(opts =>
-            opts.UseDatabase(FakeConn)
-                .WithInMemoryCache()
-                .UseRabbitMqInvalidation("amqp://localhost")
+            opts.WithInMemoryCache().UseRabbitMqInvalidation("amqp://localhost")
         );
 
         await using var sp = sc.BuildServiceProvider();
@@ -182,19 +177,142 @@ public class ExtensionMethodTests
         context.Response.StatusCode.Should().Be(204);
     }
 
+    /// <summary>
+    /// A store that can change what the GraphQL nodes serve refuses to start without a way to
+    /// reach them. The overload that takes only a connection string has no way to say, so a
+    /// host built against it is refused at startup.
+    /// </summary>
     [Test]
-    public void AddPersistedOperationStore_NullServices_Throws()
+    public void AddPersistedOperationStore_WithOnlyAConnectionString_RefusesToStart()
     {
-        Action act = () => ((IServiceCollection)null!).AddPersistedOperationStore("Host=x");
-        act.Should().Throw<ArgumentNullException>();
+        var overload = typeof(ServiceCollectionPersistedOperationsExtensions).GetMethod(
+            nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
+            [typeof(IServiceCollection), typeof(string)]
+        )!;
+
+        var act = () => overload.Invoke(null, [new ServiceCollection(), FakeConn]);
+
+        act.Should()
+            .Throw<System.Reflection.TargetInvocationException>()
+            .WithInnerException<InvalidOperationException>()
+            .WithMessage("*UseRabbitMqInvalidation*SingleNode*");
+    }
+
+    /// <summary>
+    /// The in-memory data provider has no transactions; the store still applies changes there,
+    /// one process being all it serves.
+    /// </summary>
+    [Test]
+    public async Task AStoreOverTheInMemoryProvider_AppliesChanges()
+    {
+        var sc = new ServiceCollection();
+        sc.AddLogging();
+        sc.AddTrax(trax =>
+            trax.AddEffects(effects =>
+                Trax.Effect.Data.InMemory.Extensions.ServiceExtensions.UseInMemory(effects)
+            )
+        );
+        sc.AddPersistedOperationStore(store => store.SingleNode());
+        await using var sp = sc.BuildServiceProvider();
+        var store = sp.GetRequiredService<IPersistedOperationStore>();
+
+        await store.UpsertAsync("mem_v1", "query Greet { hello }", null, CancellationToken.None);
+        await store.DeactivateAsync("mem_v1", null, "retired", CancellationToken.None);
+        await store.RestoreAsync("mem_v1", null, CancellationToken.None);
+
+        (await store.GetAsync("mem_v1", null, CancellationToken.None)).Should().NotBeNull();
     }
 
     [Test]
-    public void AddPersistedOperationStore_EmptyConnectionString_Throws()
+    public void AddPersistedOperationStore_NullArguments_Throw()
+    {
+        Action nullServices = () =>
+            ((IServiceCollection)null!).AddPersistedOperationStore(store => store.SingleNode());
+        Action nullConfigure = () =>
+            new ServiceCollection().AddPersistedOperationStore(
+                (Action<PersistedOperationStoreBuilder>)null!
+            );
+        nullServices.Should().Throw<ArgumentNullException>();
+        nullConfigure.Should().Throw<ArgumentNullException>();
+    }
+
+    [Test]
+    public void AddPersistedOperationStore_NeitherABrokerNorSingleNode_RefusesToStart()
+    {
+        Action act = () => new ServiceCollection().AddPersistedOperationStore(_ => { });
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*UseRabbitMqInvalidation*SingleNode*");
+    }
+
+    [Test]
+    public void AddPersistedOperationStore_BothABrokerAndSingleNode_RefusesToStart()
+    {
+        Action act = () =>
+            new ServiceCollection().AddPersistedOperationStore(store =>
+                store.SingleNode().UseRabbitMqInvalidation("amqp://localhost")
+            );
+        act.Should().Throw<InvalidOperationException>().WithMessage("*contradict*");
+    }
+
+    [Test]
+    public void AddPersistedOperationStore_EmptyBrokerConnectionString_Throws()
+    {
+        Action act = () =>
+            new ServiceCollection().AddPersistedOperationStore(store =>
+                store.UseRabbitMqInvalidation(" ")
+            );
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public async Task AddPersistedOperationStore_WithABroker_BroadcastsOverRabbitMq()
     {
         var sc = new ServiceCollection();
-        Action act = () => sc.AddPersistedOperationStore(string.Empty);
-        act.Should().Throw<ArgumentException>();
+        sc.AddLogging();
+        sc.AddPersistedOperationStore(store => store.UseRabbitMqInvalidation("amqp://localhost"));
+        await using var sp = sc.BuildServiceProvider();
+
+        sp.GetRequiredService<IPersistedOperationBroadcaster>()
+            .Should()
+            .BeOfType<RabbitMqPersistedOperationBroadcaster>();
+        sp.GetRequiredService<PersistedOperationsOptions>()
+            .RabbitMqConnectionString.Should()
+            .Be("amqp://localhost");
+    }
+
+    [Test]
+    public void AddPersistedOperationStore_SingleNode_BroadcastsNothing()
+    {
+        var sc = new ServiceCollection();
+        sc.AddPersistedOperationStore(store => store.SingleNode());
+        using var sp = sc.BuildServiceProvider();
+
+        sp.GetRequiredService<IPersistedOperationBroadcaster>()
+            .Should()
+            .BeOfType<NoOpPersistedOperationBroadcaster>();
+    }
+
+    /// <summary>
+    /// The overload taking a database and a broker connection string still works for hosts built
+    /// against it; the database string is not used. Called by reflection, as such a host would.
+    /// </summary>
+    [Test]
+    public async Task AddPersistedOperationStore_TheTwoStringOverload_StillBroadcasts()
+    {
+        var overload = typeof(ServiceCollectionPersistedOperationsExtensions).GetMethod(
+            nameof(ServiceCollectionPersistedOperationsExtensions.AddPersistedOperationStore),
+            [typeof(IServiceCollection), typeof(string), typeof(string)]
+        )!;
+        var sc = new ServiceCollection();
+        sc.AddLogging();
+
+        overload.Invoke(null, [sc, FakeConn, "amqp://localhost"]);
+
+        await using var sp = sc.BuildServiceProvider();
+        sp.GetRequiredService<IPersistedOperationBroadcaster>()
+            .Should()
+            .BeOfType<RabbitMqPersistedOperationBroadcaster>();
     }
 
     [Test]
@@ -202,7 +320,7 @@ public class ExtensionMethodTests
     {
         var sc = new ServiceCollection();
         sc.AddLogging();
-        sc.AddPersistedOperationStore(FakeConn);
+        sc.AddPersistedOperationStore(store => store.SingleNode());
 
         sc.Should().Contain(s => s.ServiceType == typeof(PersistedOperationsOptions));
         sc.Should().Contain(s => s.ServiceType == typeof(IPersistedOperationStore));
@@ -224,7 +342,7 @@ public class ExtensionMethodTests
             Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,
             StubDataContextFactory
         >();
-        sc.AddPersistedOperationStore(FakeConn);
+        sc.AddPersistedOperationStore(store => store.SingleNode());
 
         await using var sp = sc.BuildServiceProvider(
             new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true }
@@ -248,7 +366,7 @@ public class ExtensionMethodTests
             Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,
             StubDataContextFactory
         >();
-        sc.AddPersistedOperationStore(FakeConn);
+        sc.AddPersistedOperationStore(store => store.SingleNode());
         await using var sp = sc.BuildServiceProvider();
 
         var invalidate = () =>
@@ -264,7 +382,6 @@ public class ExtensionMethodTests
         var options = new PersistedOperationsOptions
         {
             CacheEnabled = true,
-            DatabaseConnectionString = "Host=x",
             RabbitMqConnectionString = string.Empty,
         };
 
@@ -282,7 +399,6 @@ public class ExtensionMethodTests
         var options = new PersistedOperationsOptions
         {
             CacheEnabled = true,
-            DatabaseConnectionString = "Host=x",
             RabbitMqConnectionString = "amqp://localhost",
         };
         (
@@ -313,7 +429,6 @@ public class ExtensionMethodTests
         var options = new PersistedOperationsOptions
         {
             CacheEnabled = true,
-            DatabaseConnectionString = "Host=x",
             RabbitMqConnectionString = null,
         };
         var svc = new PersistedOperationReceiverService(
@@ -341,7 +456,7 @@ public class ExtensionMethodTests
     [Test]
     public void ReceiverService_NullArgs_Throw()
     {
-        var options = new PersistedOperationsOptions { DatabaseConnectionString = "Host=x" };
+        var options = new PersistedOperationsOptions();
         (
             (Action)(
                 () =>
@@ -399,6 +514,7 @@ public class ExtensionMethodTests
     private static HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
         new(
             new ServiceCollection().BuildServiceProvider(),
+            new PersistedOperationCacheGeneration(),
             NullLogger<HotChocolateOperationCacheInvalidator>.Instance
         );
 
@@ -413,7 +529,7 @@ public class ExtensionMethodTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn).SingleNode());
+        builder.UsePersistedOperations(po => po.SingleNode());
 
         var config = builder.AllowAnonymousOperations().Build();
         config.OperationQueriesExposed.Should().BeTrue();
@@ -431,9 +547,7 @@ public class ExtensionMethodTests
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
 
-        builder.UsePersistedOperations(po =>
-            po.UseDatabase(FakeConn).SingleNode().ExposeOperationsNamespace(false)
-        );
+        builder.UsePersistedOperations(po => po.SingleNode().ExposeOperationsNamespace(false));
 
         var config = builder.Build();
         config
@@ -461,9 +575,7 @@ public class ExtensionMethodTests
         var sc = new ServiceCollection();
         var builder = new TraxGraphQLBuilder(sc);
 
-        builder.UsePersistedOperations(po =>
-            po.UseDatabase(FakeConn).SingleNode().ExposeOperationsNamespace(false)
-        );
+        builder.UsePersistedOperations(po => po.SingleNode().ExposeOperationsNamespace(false));
 
         sc.Any(d => d.ServiceType == typeof(IPersistedOperationStore)).Should().BeTrue();
         sc.Any(d => d.ServiceType == typeof(PersistedOperationsOptions)).Should().BeTrue();
@@ -477,9 +589,7 @@ public class ExtensionMethodTests
     public void ExposeOperationsNamespaceFalse_NeedsNoAcknowledgement()
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
-        builder.UsePersistedOperations(po =>
-            po.UseDatabase(FakeConn).SingleNode().ExposeOperationsNamespace(false)
-        );
+        builder.UsePersistedOperations(po => po.SingleNode().ExposeOperationsNamespace(false));
 
         Action act = () => builder.Build();
 
@@ -490,7 +600,7 @@ public class ExtensionMethodTests
     public void ExposeOperationsNamespaceTrue_IsTheDefaultAndStillRequiresAnAnswer()
     {
         var builder = new TraxGraphQLBuilder(new ServiceCollection());
-        builder.UsePersistedOperations(po => po.UseDatabase(FakeConn).SingleNode());
+        builder.UsePersistedOperations(po => po.SingleNode());
 
         Action act = () => builder.Build();
 

@@ -21,8 +21,7 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
 {
     private readonly LifecycleEventPublisher _publisher;
     private readonly ILogger<GraphQLTrainEventHandler>? _logger;
-    private readonly bool _streamAllTrains;
-    private readonly HashSet<string> _enabledTrains;
+    private readonly LifecycleStreamRule _rule;
 
     /// <summary>
     /// Creates the handler and captures, once, the set of trains marked <c>[TraxBroadcast]</c>.
@@ -41,17 +40,11 @@ public class GraphQLTrainEventHandler : ITrainEventHandler
     {
         _publisher = LifecycleEventPublisher.For(eventSender);
         _logger = logger;
-        _streamAllTrains = options.StreamAllTrains;
-        _enabledTrains = discoveryService
-            .DiscoverTrains()
-            .Where(r => r.IsBroadcastEnabled)
-            .Select(r => r.ServiceType.FullName!)
-            .ToHashSet();
+        _rule = new LifecycleStreamRule(discoveryService, options);
     }
 
     // Admin observability forwards every train; otherwise only [TraxBroadcast] trains.
-    private bool ShouldForward(string trainName) =>
-        _streamAllTrains || _enabledTrains.Contains(trainName);
+    private bool ShouldForward(string trainName) => _rule.Publishes(trainName);
 
     /// <summary>
     /// Forwards a lifecycle message from another process to the matching lifecycle subscription on

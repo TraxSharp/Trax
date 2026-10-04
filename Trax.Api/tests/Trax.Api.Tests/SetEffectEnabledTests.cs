@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Effect.Services.EffectRegistry;
 
@@ -91,5 +91,16 @@ public class SetEffectEnabledTests
             .Success.Should()
             .BeFalse();
         _registry.IsEnabled(typeof(ToggleableFactory)).Should().BeTrue();
+    }
+
+    [Test]
+    public void AnEffectTypeWithNoFullName_IsMatchedByItsName()
+    {
+        // A generic parameter is a Type with no FullName; the registry still keys on it.
+        var unnamed = typeof(List<>).GetGenericArguments()[0];
+        _registry.Register(unnamed, enabled: true, toggleable: true);
+
+        new OperationsMutations().SetEffectEnabled("T", false, _registry).Success.Should().BeTrue();
+        _registry.IsEnabled(unnamed).Should().BeFalse();
     }
 }

@@ -2,9 +2,11 @@ namespace Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 
 /// <summary>
 /// Base class for every exception thrown by the persisted-operations storage
-/// layer that represents a rejected upload (as opposed to an internal fault).
-/// Callers wrapping <see cref="IPersistedOperationStore.UpsertAsync"/> can
-/// catch this single type to render a structured error to the user.
+/// layer that represents a refused change, or a saved change that did not reach
+/// every node (as opposed to an internal fault). Callers wrapping
+/// <see cref="IPersistedOperationStore"/> can catch this single type to render
+/// a structured error to the user; <see cref="PersistedOperationNotBroadcastException"/>
+/// is the one whose change was saved.
 /// </summary>
 public abstract class PersistedOperationException : InvalidOperationException
 {

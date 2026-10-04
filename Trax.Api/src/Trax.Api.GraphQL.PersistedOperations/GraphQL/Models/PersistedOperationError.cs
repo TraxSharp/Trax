@@ -68,6 +68,10 @@ public sealed record PersistedOperationError(
     internal static PersistedOperationError FromShapeDiff(ShapeDiffViolationException ex) =>
         new(ex.Code, ex.Message, Locations: null, Path: null, ex.OldFingerprint, ex.NewFingerprint);
 
+    internal static PersistedOperationError FromNotBroadcast(
+        PersistedOperationNotBroadcastException ex
+    ) => new(ex.Code, ex.Message, Locations: null, Path: null, null, null);
+
     /// <summary>Build a NOT_FOUND error.</summary>
     public static PersistedOperationError NotFound(string id) =>
         new(

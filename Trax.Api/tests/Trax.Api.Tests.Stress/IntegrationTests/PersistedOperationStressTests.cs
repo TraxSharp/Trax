@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Language;
 using HotChocolate.PersistedOperations;
@@ -49,7 +49,7 @@ public class PersistedOperationStressTests : StressTestSetup
     protected override void ConfigureServices(IServiceCollection services)
     {
         new TraxGraphQLBuilder(services).UsePersistedOperations(po =>
-            po.UseDatabase(ConnectionString).SingleNode().ExposeOperationsNamespace(false)
+            po.SingleNode().ExposeOperationsNamespace(false)
         );
         services.Replace(
             ServiceDescriptor.Singleton<IPersistedOperationValidator>(

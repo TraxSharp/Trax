@@ -2,7 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt.Testing;
 

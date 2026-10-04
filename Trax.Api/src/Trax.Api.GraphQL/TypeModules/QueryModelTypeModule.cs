@@ -117,9 +117,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         QueryModelRegistration reg
     )
     {
-        var fieldName = reg.Attribute.Name ?? DeriveModelName(reg.EntityType.Name);
-
-        var field = descriptor.Field(fieldName);
+        var field = descriptor.Field(FieldName(reg));
 
         if (reg.Attribute.Description is not null)
             field.Description(reg.Attribute.Description);
@@ -164,7 +162,7 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         // authorized as if it were selected. Registered first so it runs before paging,
         // filtering and sorting touch the database.
         if (attr.Filtering || attr.Sorting)
-            field.Use(NavigationInputAuthorization.Create(typeof(TEntity)));
+            NavigationInputAuthorization.Apply(field, typeof(TEntity));
 
         // Apply features in the correct middleware pipeline order:
         // Paging > Projection > Filtering > Sorting
@@ -305,6 +303,10 @@ internal sealed class QueryModelTypeModule(GraphQLConfiguration configuration) :
         Collect(exposeAs);
         return names;
     }
+
+    /// <summary>The field a query model's entry takes under <c>discover</c> or its namespace.</summary>
+    internal static string FieldName(QueryModelRegistration reg) =>
+        reg.Attribute.Name ?? DeriveModelName(reg.EntityType.Name);
 
     /// <summary>
     /// Derives a pluralized camelCase GraphQL field name from a class name.

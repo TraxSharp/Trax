@@ -11,11 +11,7 @@ public sealed partial class PersistedOperationsBuilder
     /// message names the misconfigured method, explains the constraint, and
     /// suggests a fix.
     /// </exception>
-    /// <param name="requireNodeTopology">
-    /// False only for <c>AddPersistedOperationStore</c>, which serves no requests and so caches
-    /// nothing to keep consistent.
-    /// </param>
-    internal PersistedOperationsOptions Build(bool requireNodeTopology = true)
+    internal PersistedOperationsOptions Build()
     {
         if (!_requirePersisted && !_logNonPersistedRequests)
             throw new InvalidOperationException(
@@ -30,11 +26,11 @@ public sealed partial class PersistedOperationsBuilder
                     + "Pass non-empty operation names only."
             );
 
-        if (requireNodeTopology && _rabbitMqConnectionString is null && !_singleNode)
+        if (_rabbitMqConnectionString is null && !_singleNode)
             throw new InvalidOperationException(
                 "Persisted operations need to know how a change reaches every node. "
-                    + "Each node caches the documents it serves, and HotChocolate's caches do not expire, "
-                    + "so an upload, deactivation or restore made on one node is seen by another only "
+                    + "Each node caches the documents it serves for up to the cache's maximum age, so an "
+                    + "upload, deactivation or restore made on one node is seen by another at once only "
                     + "if it is broadcast. Call UseRabbitMqInvalidation(connectionString) when more than "
                     + "one node serves this endpoint, or SingleNode() when exactly one process serves it "
                     + "and writes the store."
@@ -47,10 +43,11 @@ public sealed partial class PersistedOperationsBuilder
                     + "or SingleNode() when exactly one does."
             );
 
-        if (string.IsNullOrWhiteSpace(_databaseConnectionString))
+        if (_cacheTtl is { } ttl && ttl > _cacheMaxAge)
             throw new InvalidOperationException(
-                "UseDatabase(connectionString) is required. "
-                    + "The persisted-operations storage layer reads and writes against trax.persisted_operation."
+                $"WithInMemoryCache's TTL ({ttl}) is longer than the cache's maximum age ({_cacheMaxAge}). "
+                    + "No cache keeps a persisted operation longer than WithCacheMaxAge allows, so this TTL "
+                    + "would not take effect. Shorten the TTL, or raise WithCacheMaxAge."
             );
 
         return new PersistedOperationsOptions
@@ -61,10 +58,10 @@ public sealed partial class PersistedOperationsBuilder
             AllowOperationPredicates = _allowOperationPredicates,
             AllowIntrospection = _allowIntrospection,
             CacheEnabled = _cacheEnabled,
-            CacheTtl = _cacheTtl,
+            CacheTtl = _cacheTtl ?? _cacheMaxAge,
+            CacheMaxAge = _cacheMaxAge,
             RabbitMqConnectionString = _rabbitMqConnectionString,
             SingleNode = _singleNode,
-            DatabaseConnectionString = _databaseConnectionString!,
             ExposeOperationsNamespace = _exposeOperationsNamespace,
         };
     }

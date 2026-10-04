@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
@@ -99,12 +99,12 @@ public class HostConfigurationErrorTests
             ServiceType = typeof(IOrphanTrain),
             ImplementationType = typeof(OrphanTrain),
             InputType = typeof(OrphanInput),
-            OutputType = typeof(LanguageExt.Unit),
+            OutputType = typeof(Trax.Core.Functional.Unit),
             Lifetime = ServiceLifetime.Scoped,
             ServiceTypeName = typeof(IOrphanTrain).FullName!,
             ImplementationTypeName = nameof(OrphanTrain),
             InputTypeName = nameof(OrphanInput),
-            OutputTypeName = nameof(LanguageExt.Unit),
+            OutputTypeName = nameof(Trax.Core.Functional.Unit),
             RequiredPolicies = [],
             RequiredRoles = [],
             IsQuery = false,

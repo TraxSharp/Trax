@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.TestHost;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
 

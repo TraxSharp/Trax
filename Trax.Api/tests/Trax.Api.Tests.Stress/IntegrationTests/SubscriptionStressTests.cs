@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
@@ -16,14 +16,16 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Mediator.Extensions;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
 /// <summary>
-/// Fan-out SLAs for the two subscription paths the dashboard keeps open: <c>onDataChanged</c>,
-/// fed by every admin write through the change-signal coalescer, and the lifecycle stream
-/// (<c>onTrainStateChanged</c>), fed by every run's state changes.
+/// Fan-out SLAs for the subscription paths the dashboard keeps open: <c>onDataChanged</c>,
+/// fed by every admin write through the change-signal coalescer, the lifecycle stream
+/// (<c>onTrainStateChanged</c>), fed by every run's state changes, and <c>onJunctionEvent</c>,
+/// fed by every run's steps on one shared topic.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -295,6 +297,138 @@ public class SubscriptionStressTests
         sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
     }
 
+    [Test]
+    public async Task OnJunctionEvent_ManyRunsOnTheTopic_EachSubscriberGetsItsRunInFullOrSignalsAGap()
+    {
+        // Many runs stepping at once on the one junction topic, each followed by its own share of
+        // the subscribers: every subscriber reads every run's steps and keeps only its run's, so
+        // the fan-out cost is subscribers x all steps, not subscribers x their run's steps. The
+        // steps go through the handler the run's path calls, so its publish bound is what is
+        // measured on the run's side. Paced at 500 steps a second for four seconds.
+        const int Runs = 100;
+        const int StepsPerRun = 20;
+        const int PerTick = 50;
+        var tick = TimeSpan.FromMilliseconds(100);
+
+        var handler = _provider.GetServices<IJunctionEventHandler>().Single();
+        var subscribers = new List<Subscribers<Step>>();
+        try
+        {
+            for (var run = 1; run <= Runs; run++)
+            {
+                var metadataId = run;
+                subscribers.Add(
+                    await Subscribers<Step>.AttachAsync(
+                        _executor,
+                        $"subscription {{ onJunctionEvent(metadataId: {metadataId}) "
+                            + "{ sequence metadataId junction { position } } }",
+                        Math.Max(1, SubscriberCount / Runs),
+                        json => new Step(
+                            long.Parse(NumberField(json, "position")),
+                            long.Parse(NumberField(json, "sequence"))
+                        ),
+                        prime: () => HandleStep(handler, metadataId, position: 0)
+                    )
+                );
+            }
+
+            var slowest = TimeSpan.Zero;
+            var sw = Stopwatch.StartNew();
+            var sent = 0;
+            for (var position = 1; position <= StepsPerRun; position++)
+            for (var run = 1; run <= Runs; run++)
+            {
+                var publish = Stopwatch.StartNew();
+                await HandleStep(handler, run, position);
+                if (publish.Elapsed > slowest)
+                    slowest = publish.Elapsed;
+                if (++sent % PerTick == 0)
+                    // allowed-delay: paces the publisher to a fixed step rate; this is the load
+                    // shape under test, not a wait for a condition.
+                    await Task.Delay(tick);
+            }
+            var published = sw.Elapsed;
+
+            var delivered = true;
+            foreach (var group in subscribers)
+                delivered &= await group.WaitUntilAsync(
+                    received => received.Any(e => e.Position == StepsPerRun),
+                    Deadline
+                );
+            var drained = sw.Elapsed - published;
+
+            var outcomes = subscribers
+                .SelectMany(g => g.Streams())
+                .Select(s =>
+                {
+                    var numbers = s.BeforeReset.Concat(s.Received).Select(e => e.Sequence).ToList();
+                    return (
+                        Received: s.Received.Count,
+                        Gap: numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(x => x)
+                    );
+                })
+                .ToArray();
+            TestContext.Out.WriteLine(
+                $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
+                    + $"{published.TotalMilliseconds:F0}ms to {outcomes.Length:N0} subscribers "
+                    + $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
+                    + $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
+                    + $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
+                    + $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+            );
+
+            delivered.Should().BeTrue("each run's last step should reach its subscribers");
+            drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
+            slowest
+                .Should()
+                .BeLessThan(
+                    TimeSpan.FromSeconds(1),
+                    "a step's publish is bounded, so fan-out never holds a run up, per "
+                        + "docs/adr/0037-a-runs-step-feed-follows-one-run-with-its-trains-visibility.md"
+                );
+            outcomes
+                .Should()
+                .OnlyContain(
+                    o => o.Received == StepsPerRun || o.Gap,
+                    "a subscriber that lost steps of its run must see a skip in sequence"
+                );
+        }
+        finally
+        {
+            foreach (var group in subscribers)
+                await group.DisposeAsync();
+        }
+    }
+
+    /// <summary>One junction event as a subscriber received it.</summary>
+    private sealed record Step(long Position, long Sequence);
+
+    private static Task HandleStep(IJunctionEventHandler handler, long metadataId, int position) =>
+        handler.HandleAsync(
+            new TrainLifecycleEventMessage(
+                MetadataId: metadataId,
+                ExternalId: metadataId.ToString("D32"),
+                TrainName: typeof(IStressProbeTrain).FullName!,
+                TrainState: nameof(TrainState.InProgress),
+                Timestamp: DateTime.UtcNow,
+                FailureJunction: null,
+                FailureReason: null,
+                EventType: TrainLifecycleEventMessage.JunctionStartedEventType,
+                Executor: null,
+                Output: null
+            )
+            {
+                Junction = new JunctionEventPayload(
+                    position,
+                    JunctionRunKind.Junction,
+                    "Step" + position,
+                    JunctionRunState.InProgress,
+                    DateTime.UtcNow
+                ),
+            },
+            CancellationToken.None
+        );
+
     /// <summary>One lifecycle event as a subscriber received it.</summary>
     private sealed record Lifecycle(long MetadataId, long Sequence);
 
@@ -369,8 +503,8 @@ public class SubscriptionStressTests
         private readonly ConcurrentDictionary<int, ConcurrentQueue<T>> _received = new();
         private readonly ConcurrentDictionary<int, T[]> _beforeReset = new();
 
-        // Disposing a response stream does not end an enumeration already in progress, so the
-        // readers are cancelled explicitly.
+        // Disposing a response stream ends its topic subscription and so its reader; the readers
+        // are also cancelled, so teardown never waits on one.
         private readonly CancellationTokenSource _stop = new();
 
         public static async Task<Subscribers<T>> AttachAsync(

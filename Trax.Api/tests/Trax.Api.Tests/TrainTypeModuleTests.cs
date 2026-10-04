@@ -1,14 +1,14 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;
-using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.TypeModules;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -1273,6 +1273,82 @@ public class TrainTypeModuleTests
         types.OfType<ObjectTypeExtension>().Should().HaveCountGreaterThanOrEqualTo(3);
 
         // Namespace type should exist
+        types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
+    }
+
+    [TestCase(
+        "library",
+        1,
+        TestName = "A query model in another namespace leaves the train's namespace to it"
+    )]
+    [TestCase(
+        null,
+        1,
+        TestName = "A query model in no namespace leaves the train's namespace to it"
+    )]
+    [TestCase(
+        "players",
+        0,
+        TestName = "A query model in the same namespace owns its type and field"
+    )]
+    public async Task CreateTypesAsync_QueryNamespace_IsDeclaredByTheTrainUnlessAQueryModelOwnsIt(
+        string? modelNamespace,
+        int namespaceBaseTypes
+    )
+    {
+        var config = new GraphQLConfiguration(
+            [
+                new QueryModelRegistration(
+                    typeof(TypedOutput2),
+                    typeof(Microsoft.EntityFrameworkCore.DbContext),
+                    new TraxQueryModelAttribute { Name = "books", Namespace = modelNamespace }
+                ),
+            ],
+            [],
+            [],
+            []
+        );
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+        ]);
+
+        var types = await new TrainTypeModule(discovery, config).CreateTypesAsync(
+            null!,
+            CancellationToken.None
+        );
+
+        types
+            .Count(t => t.GetType() == typeof(ObjectType))
+            .Should()
+            .Be(namespaceBaseTypes, "two modules declaring one namespace type would collide");
+    }
+
+    [Test]
+    public async Task CreateTypesAsync_QueryNamespaceWithoutAConfiguration_IsDeclaredByTheTrain()
+    {
+        var discovery = new StubDiscoveryService([
+            CreateRegistration<TypedInput>(
+                "LookupTrain",
+                typeof(TypedOutput),
+                name: "Lookup",
+                isQuery: true,
+                operations: GraphQLOperation.Run,
+                graphqlNamespace: "players"
+            ),
+        ]);
+
+        var types = await new TrainTypeModule(discovery).CreateTypesAsync(
+            null!,
+            CancellationToken.None
+        );
+
         types.Count(t => t.GetType() == typeof(ObjectType)).Should().Be(1);
     }
 

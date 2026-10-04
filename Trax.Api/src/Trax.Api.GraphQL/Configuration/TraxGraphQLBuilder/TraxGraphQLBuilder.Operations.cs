@@ -80,8 +80,11 @@ public partial class TraxGraphQLBuilder
     /// <see cref="GateOperationsToAuthenticatedUsers"/>.
     /// </para>
     /// <para>
-    /// Repeated calls accumulate: policies are AND'd, roles are unioned and OR'd, the same way
-    /// repeated <c>[TraxAuthorize]</c> attributes combine on a train or an entity.
+    /// Repeated calls accumulate, and each one is a requirement of its own that the caller must
+    /// meet, the way repeated <c>[Authorize]</c> attributes combine in ASP.NET Core and repeated
+    /// <c>[TraxAuthorize]</c> attributes combine on an entity or a resolver:
+    /// <c>GateOperations(roles: "Admin").GateOperations(roles: "Support")</c> requires both roles.
+    /// Within one call, a comma-separated <paramref name="roles"/> list is any of.
     /// </para>
     /// </remarks>
     /// <param name="policy">
@@ -91,7 +94,8 @@ public partial class TraxGraphQLBuilder
     /// A comma-separated list of roles. The caller must hold at least one.
     /// </param>
     /// <exception cref="InvalidOperationException">
-    /// Neither <paramref name="policy"/> nor <paramref name="roles"/> is given. Thrown while
+    /// Neither <paramref name="policy"/> nor <paramref name="roles"/> is given, or
+    /// <paramref name="roles"/> is given but names no role (<c>","</c>). Thrown while
     /// <c>AddTraxGraphQL</c> runs, so the host does not start.
     /// </exception>
     public TraxGraphQLBuilder GateOperations(string? policy = null, string? roles = null)
@@ -103,6 +107,16 @@ public partial class TraxGraphQLBuilder
                     + "inputs, outputs and logs and requeues, cancels and reconfigures work, so it "
                     + "does not default to any signed-in caller. If any authenticated user is "
                     + "really who should reach it, call GateOperationsToAuthenticatedUsers()."
+            );
+
+        // A role list that parses to nothing would otherwise leave a gate that asks for no role,
+        // which is GateOperationsToAuthenticatedUsers() by accident.
+        if (!string.IsNullOrWhiteSpace(roles) && AuthorizeDirectives.ParseRoles(roles).Length == 0)
+            throw new InvalidOperationException(
+                $"GateOperations(roles: \"{roles}\") names no role: the list holds only "
+                    + "separators and whitespace. Name one or more roles, or, if any authenticated "
+                    + "user is really who should reach the operations namespace, call "
+                    + "GateOperationsToAuthenticatedUsers()."
             );
 
         OperationsAuthorizeAttributes.Add(

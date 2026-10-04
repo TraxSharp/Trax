@@ -5,6 +5,7 @@ using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Authorization;
+using Trax.Api.GraphQL.Validation;
 
 namespace Trax.Api.GraphQL.Subscriptions;
 
@@ -60,6 +61,21 @@ public class LifecycleSubscriptions
     public TrainLifecycleEvent OnTrainStateChanged([EventMessage] TrainLifecycleEvent e) => e;
 
     /// <summary>
+    /// Fires for each step of the run <paramref name="metadataId"/>: a junction starting, completing,
+    /// failing or being cancelled, a question a routing step asked, and the track it took. Only a
+    /// host that called <c>AddJunctionEvents()</c> publishes them, and you receive them exactly when
+    /// you would receive that run's train events. In the operations view, read
+    /// <c>operations.junctionRuns</c> for the steps a run took before you subscribed or that a gap
+    /// in <c>sequence</c> lost. A broadcast subscriber cannot read it, so it has no way to recover a
+    /// lost step: it sees only the steps that reach it after it subscribed.
+    /// </summary>
+    /// <param name="metadataId">The run to follow (its execution id).</param>
+    /// <param name="e">The event.</param>
+    [AuthorizedPerSubscriber]
+    [Subscribe(With = nameof(SubscribeToJunctionEvent))]
+    public JunctionEvent OnJunctionEvent(long metadataId, [EventMessage] JunctionEvent e) => e;
+
+    /// <summary>
     /// Fires when a scheduler/admin data domain changes (work queue, dead letters, manifests,
     /// manifest groups, scheduler config). One event per coalesced burst; the payload names the
     /// domain so a client can refetch just that view.
@@ -68,7 +84,7 @@ public class LifecycleSubscriptions
     [Subscribe(With = nameof(SubscribeToDataChanged))]
     public DataChangedEvent OnDataChanged([EventMessage] DataChangedEvent e) => e;
 
-    internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainStarted(
+    internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainStarted(
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
@@ -76,7 +92,7 @@ public class LifecycleSubscriptions
         CancellationToken ct
     ) => SubscribeLifecycle(nameof(OnTrainStarted), receiver, sender, access, user, ct);
 
-    internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainCompleted(
+    internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainCompleted(
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
@@ -84,7 +100,7 @@ public class LifecycleSubscriptions
         CancellationToken ct
     ) => SubscribeLifecycle(nameof(OnTrainCompleted), receiver, sender, access, user, ct);
 
-    internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainFailed(
+    internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainFailed(
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
@@ -92,7 +108,7 @@ public class LifecycleSubscriptions
         CancellationToken ct
     ) => SubscribeLifecycle(nameof(OnTrainFailed), receiver, sender, access, user, ct);
 
-    internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainCancelled(
+    internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainCancelled(
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
@@ -100,7 +116,7 @@ public class LifecycleSubscriptions
         CancellationToken ct
     ) => SubscribeLifecycle(nameof(OnTrainCancelled), receiver, sender, access, user, ct);
 
-    internal ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeToTrainStateChanged(
+    internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainStateChanged(
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
@@ -108,7 +124,47 @@ public class LifecycleSubscriptions
         CancellationToken ct
     ) => SubscribeLifecycle(nameof(OnTrainStateChanged), receiver, sender, access, user, ct);
 
-    internal async ValueTask<IAsyncEnumerable<DataChangedEvent>> SubscribeToDataChanged(
+    internal async ValueTask<ISourceStream<JunctionEvent>> SubscribeToJunctionEvent(
+        long metadataId,
+        [Service] ITopicEventReceiver receiver,
+        [Service] ITopicEventSender sender,
+        [Service] LifecycleSubscriptionAccess access,
+        [GlobalState(PrincipalState)] ClaimsPrincipal? user,
+        CancellationToken ct
+    )
+    {
+        RunIdArgument.Require(metadataId);
+
+        // Who may see a run's steps is who may see its train's events: the same visibility,
+        // decided once here, and the same refusal for a subscriber who could see nothing.
+        var visibility = await access.LifecycleFor(user).ConfigureAwait(false);
+        if (visibility.IsEmpty)
+            throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
+
+        const string topic = nameof(OnJunctionEvent);
+        var stream = await receiver.SubscribeAsync<JunctionEvent>(topic, ct).ConfigureAwait(false);
+        long baseline;
+        try
+        {
+            baseline = await LifecycleEventPublisher
+                .For(sender)
+                .LastPublishedAsync(topic, ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        return new SubscriberSourceStream<JunctionEvent>(
+            stream,
+            (topicStream, readCt) =>
+                ReadJunctionEvents(topicStream, metadataId, visibility, baseline, readCt)
+        );
+    }
+
+    internal async ValueTask<ISourceStream<DataChangedEvent>> SubscribeToDataChanged(
         [Service] ITopicEventReceiver receiver,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
@@ -121,10 +177,10 @@ public class LifecycleSubscriptions
         var stream = await receiver
             .SubscribeAsync<DataChangedEvent>(nameof(OnDataChanged), ct)
             .ConfigureAwait(false);
-        return Read(stream);
+        return new SubscriberSourceStream<DataChangedEvent>(stream, Read);
     }
 
-    private static async ValueTask<IAsyncEnumerable<TrainLifecycleEvent>> SubscribeLifecycle(
+    private static async ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeLifecycle(
         string topic,
         ITopicEventReceiver receiver,
         ITopicEventSender sender,
@@ -143,11 +199,24 @@ public class LifecycleSubscriptions
 
         // Read once the subscription is registered: every event numbered above it is sent to this
         // subscription, so a later jump past it is a loss, not an event from before it existed.
-        var baseline = await LifecycleEventPublisher
-            .For(sender)
-            .LastPublishedAsync(topic, ct)
-            .ConfigureAwait(false);
-        return ReadLifecycle(stream, visibility, baseline);
+        long baseline;
+        try
+        {
+            baseline = await LifecycleEventPublisher
+                .For(sender)
+                .LastPublishedAsync(topic, ct)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        return new SubscriberSourceStream<TrainLifecycleEvent>(
+            stream,
+            (topicStream, readCt) => ReadLifecycle(topicStream, visibility, baseline, readCt)
+        );
     }
 
     /// <summary>
@@ -164,12 +233,57 @@ public class LifecycleSubscriptions
     /// learn how many events other trains produced. See
     /// <c>docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md</c>.
     /// </remarks>
-    internal static async IAsyncEnumerable<TrainLifecycleEvent> ReadLifecycle(
+    internal static IAsyncEnumerable<TrainLifecycleEvent> ReadLifecycle(
         ISourceStream<TrainLifecycleEvent> stream,
         LifecycleVisibility visibility,
         long baseline,
+        CancellationToken ct = default
+    ) =>
+        ReadNumbered(
+            stream,
+            baseline,
+            e => e.PublishSequence,
+            visibility.Present,
+            (e, sequence) => e with { Sequence = sequence },
+            ct
+        );
+
+    /// <summary>
+    /// Reads the junction event topic for one subscriber: only the steps of the run
+    /// <paramref name="metadataId"/>, each passed through <paramref name="visibility"/>, numbered
+    /// exactly as <see cref="ReadLifecycle"/> numbers train events.
+    /// </summary>
+    /// <remarks>
+    /// The topic carries every run's steps, so a loss is reported whichever run the lost events
+    /// belonged to, for the same reason a lifecycle subscription reports one for a train it cannot
+    /// see: a needless refetch is cheap, a silent gap is not, and the jump of two says nothing about
+    /// how much other runs did.
+    /// </remarks>
+    internal static IAsyncEnumerable<JunctionEvent> ReadJunctionEvents(
+        ISourceStream<JunctionEvent> stream,
+        long metadataId,
+        LifecycleVisibility visibility,
+        long baseline,
+        CancellationToken ct = default
+    ) =>
+        ReadNumbered(
+            stream,
+            baseline,
+            e => e.PublishSequence,
+            e => e.MetadataId == metadataId ? visibility.Present(e) : null,
+            (e, sequence) => e with { Sequence = sequence },
+            ct
+        );
+
+    private static async IAsyncEnumerable<T> ReadNumbered<T>(
+        ISourceStream<T> stream,
+        long baseline,
+        Func<T, long> publishSequence,
+        Func<T, T?> present,
+        Func<T, long, T> numbered,
         [EnumeratorCancellation] CancellationToken ct = default
     )
+        where T : class
     {
         var lastPublished = baseline;
         var lost = false;
@@ -183,22 +297,20 @@ public class LifecycleSubscriptions
             {
                 // An event sent without a number (by host code using the transport directly)
                 // carries no information about losses and is delivered as it is.
-                if (e.PublishSequence > 0)
+                var published = publishSequence(e);
+                if (published > 0)
                 {
-                    if (e.PublishSequence > lastPublished + 1)
+                    if (published > lastPublished + 1)
                         lost = true;
-                    lastPublished = Math.Max(lastPublished, e.PublishSequence);
+                    lastPublished = Math.Max(lastPublished, published);
                 }
 
-                if (visibility.Present(e) is not { } visible)
+                if (present(e) is not { } visible)
                     continue;
 
                 sequence += lost ? 2 : 1;
                 lost = false;
-                yield return visible with
-                {
-                    Sequence = sequence,
-                };
+                yield return numbered(visible, sequence);
             }
         }
     }

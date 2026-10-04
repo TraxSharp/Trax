@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Client;
 
 namespace Trax.Api.Tests.GraphQLClient.UnitTests;
@@ -89,6 +89,28 @@ public class IntrospectingSchemaProviderTests
         var ex = await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>();
         ex.Which.InnerException.Should().BeAssignableTo<Exception>();
         ex.Which.Message.Should().Contain("stub/graphql");
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_AFieldOfAnUndeclaredType_FailsTheLoadWithTheGeneratedSdl()
+    {
+        // The schema is initialised as it is loaded, so a schema graphql-dotnet cannot use fails
+        // the load (which is retried after its backoff) rather than the first validation.
+        const string body = """
+            {"data":{"__schema":{"queryType":{"name":"Query"},"types":[
+              {"kind":"OBJECT","name":"Query","fields":[{"name":"thing","type":{"kind":"OBJECT","name":"Thing"}}]}
+            ]}}}
+            """;
+        var provider = new IntrospectingSchemaProvider(
+            BuildConfig(new StubHttpMessageHandler(body))
+        );
+
+        var act = async () => await provider.GetSchemaAsync();
+
+        (await act.Should().ThrowAsync<GraphQLSchemaIntrospectionException>())
+            .Which.Message.Should()
+            .Contain("Generated SDL")
+            .And.Contain("thing: Thing");
     }
 
     [Test]

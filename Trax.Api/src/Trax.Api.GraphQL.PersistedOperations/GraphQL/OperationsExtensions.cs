@@ -2,6 +2,7 @@ using HotChocolate.Types;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
 using Trax.Api.GraphQL.Validation;
+using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.PersistedOperations.GraphQL;
 
@@ -16,9 +17,12 @@ internal sealed class OperationsQueriesPersistedOperationsExtension
 {
     /// <summary>
     /// Nested namespace exposing persisted-operation queries (paged list,
-    /// single lookup, audit history).
+    /// single lookup, audit history). It groups fields and reads nothing itself, so it is as open
+    /// as the <c>operations</c> field above it: the gate the host declared for the namespace is
+    /// on that field, and every field under it is behind it.
     /// </summary>
     [NamespaceField]
+    [TraxAllowAnonymous]
     public PersistedOperationQueries PersistedOperations() => new();
 }
 
@@ -31,8 +35,9 @@ internal sealed class OperationsMutationsPersistedOperationsExtension
 {
     /// <summary>
     /// Nested namespace exposing persisted-operation mutations (upload,
-    /// deactivate, restore).
+    /// deactivate, restore). Open as far as its parent is, as on the query side.
     /// </summary>
     [NamespaceField]
+    [TraxAllowAnonymous]
     public PersistedOperationMutations PersistedOperations() => new();
 }

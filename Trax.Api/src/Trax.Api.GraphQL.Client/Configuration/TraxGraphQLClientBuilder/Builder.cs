@@ -23,20 +23,28 @@ public sealed partial class TraxGraphQLClientBuilder
 {
     internal TraxGraphQLClientBuilder(
         IServiceCollection services,
-        GraphQLClientConfigurationBuilder configBuilder
-    )
-        : this(services, configBuilder, serviceKey: null) { }
-
-    internal TraxGraphQLClientBuilder(
-        IServiceCollection services,
         GraphQLClientConfigurationBuilder configBuilder,
-        object? serviceKey
+        object? serviceKey,
+        IHttpClientBuilder httpClientBuilder
     )
     {
         Services = services;
         ConfigBuilder = configBuilder;
         ServiceKey = serviceKey;
+        HttpClientBuilder = httpClientBuilder;
     }
+
+    /// <summary>
+    /// The named <c>IHttpClientFactory</c> client this GraphQL client sends through, one per
+    /// client (keyed clients each have their own). Add handlers, resilience or timeouts to it the
+    /// standard way, for example <c>.HttpClientBuilder.AddHttpMessageHandler&lt;AuthHandler&gt;()</c>
+    /// or <c>.AddStandardResilienceHandler()</c> from Microsoft.Extensions.Http.Resilience. Its
+    /// primary handler is a <see cref="System.Net.Http.SocketsHttpHandler"/> whose pooled
+    /// connections are replaced every two minutes, so the long-lived client the GraphQL client
+    /// holds still sees DNS changes. Not used when <see cref="ConfigureHttpClient"/> supplied a
+    /// client.
+    /// </summary>
+    public IHttpClientBuilder HttpClientBuilder { get; }
 
     /// <summary>The DI container that <c>AddTraxGraphQLClient</c> was called against.</summary>
     public IServiceCollection Services { get; }

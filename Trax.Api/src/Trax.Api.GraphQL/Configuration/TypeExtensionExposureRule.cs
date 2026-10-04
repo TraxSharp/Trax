@@ -112,22 +112,4 @@ internal static class TypeExtensionExposureRule
                     + "Pick one.",
             _ => throw new ArgumentOutOfRangeException(nameof(violation), violation, null),
         };
-
-    /// <summary>
-    /// The message for a posture declared on the type-extension class rather than on its
-    /// resolvers, where the target is a schema root type.
-    /// </summary>
-    /// <remarks>
-    /// Kept for a posture Trax cannot place. <c>[TraxAuthorize]</c> on an <c>[ExtendObjectType]</c>
-    /// class applies to the fields that extension contributes, which is what someone writing it
-    /// there means, so it needs no diagnostic of its own.
-    /// </remarks>
-    public static string BuildClassLevelMessage(
-        string fieldPath,
-        string extensionClass,
-        string parentDescription
-    ) =>
-        $"GraphQL field '{fieldPath}' is added by a type extension ({extensionClass}) whose "
-        + $"class-level posture cannot be applied to {parentDescription}. Move the attribute onto "
-        + "the resolver method.";
 }

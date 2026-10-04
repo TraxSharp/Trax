@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -220,6 +220,53 @@ public class OperationsBatchMutationsTests
         response.Count.Should().Be(1);
         await using var db = await _factory.CreateDbContextAsync(default);
         (await db.Manifests.AnyAsync(m => m.IsEnabled)).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task SetManifestsEnabled_AnEmptyList_IsRefusedRatherThanMeaningAll()
+    {
+        var group = await SeedGroup(enabled: true);
+        await SeedManifest(group, enabled: true);
+
+        var response = await new OperationsMutations().SetManifestsEnabled(
+            [],
+            false,
+            Operations,
+            default
+        );
+
+        response
+            .Success.Should()
+            .BeFalse(
+                "an empty batch is a refusal, returned in the payload (docs/adr/0028-an-operations-mutation-returns-a-refusal-and-throws-a-failure.md)"
+            );
+        response.Message.Should().Be("No ids were given.");
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.Manifests.AllAsync(m => m.IsEnabled)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task SetManifestsEnabled_MoreThanOneBatch_IsRefusedAndWritesNothing()
+    {
+        var group = await SeedGroup(enabled: true);
+        var id = await SeedManifest(group, enabled: true);
+        var ids = Enumerable
+            .Range(0, OperationsService.MaxBatchSize)
+            .Select(i => (long)i + 1_000_000)
+            .Append(id)
+            .ToArray();
+
+        var response = await new OperationsMutations().SetManifestsEnabled(
+            ids,
+            false,
+            Operations,
+            default
+        );
+
+        response.Success.Should().BeFalse();
+        response.Count.Should().Be(0);
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.Manifests.SingleAsync(m => m.Id == id)).IsEnabled.Should().BeTrue();
     }
 
     [Test]

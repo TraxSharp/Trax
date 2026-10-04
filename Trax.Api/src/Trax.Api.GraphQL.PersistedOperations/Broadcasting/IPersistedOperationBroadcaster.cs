@@ -9,9 +9,10 @@ namespace Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 public interface IPersistedOperationBroadcaster
 {
     /// <summary>
-    /// Publish an invalidation event. Must not throw on transport failures
-    /// (the local DB write has already succeeded; broadcaster errors should
-    /// be logged but never fail the user-visible operation).
+    /// Publish an invalidation event, and complete only once the transport has taken
+    /// responsibility for it (for RabbitMQ, the broker's publisher confirm). Throws when it could
+    /// not: the store has already saved the change, and reports it to its caller as
+    /// <c>CHANGE_NOT_BROADCAST</c> so the operator knows the other nodes were not told.
     /// </summary>
     Task PublishAsync(PersistedOperationChangedMessage message, CancellationToken ct);
 }

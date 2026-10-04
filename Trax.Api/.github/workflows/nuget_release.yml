@@ -43,6 +43,23 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      rabbitmq:
+        # Default 'guest' user is restricted to localhost in RabbitMQ.
+        # GitHub Actions service containers route through port forwarding,
+        # so the broker sees connections as non-localhost and rejects
+        # 'guest'. Override with a dedicated test user.
+        image: rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671
+        env:
+          RABBITMQ_DEFAULT_USER: trax
+          RABBITMQ_DEFAULT_PASS: trax123
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1

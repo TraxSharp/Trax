@@ -36,22 +36,28 @@ internal static class ResourceQueryCache
                 return ReadResource(assembly, candidate);
         }
 
-        // Last resort: case-insensitive endsWith match (defensive against build-tool casing
-        // surprises on Linux vs Windows).
-        foreach (var manifestName in manifest)
-        {
-            foreach (var candidate in candidates)
-            {
-                if (
-                    manifestName.EndsWith(candidate, StringComparison.OrdinalIgnoreCase)
-                    || manifestName.EndsWith(
-                        attribute.ResourceName,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-                    return ReadResource(assembly, manifestName);
-            }
-        }
+        // Last resort, for a request whose namespace does not match the folder its file is in:
+        // a resource whose name ends with the given one at a '.' boundary, compared ignoring case
+        // (build tools differ on casing between Linux and Windows). A name only one resource ends
+        // with is that resource; a name several end with is refused, because picking one by
+        // manifest order could send a different document, a mutation included.
+        var normalized = Normalize(attribute.ResourceName);
+        var matches = manifest
+            .Where(name => EndsAtBoundary(name, normalized))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (matches.Count == 1)
+            return ReadResource(assembly, matches[0]);
+
+        if (matches.Count > 1)
+            throw new InvalidOperationException(
+                $"[GraphQLQueryResource(\"{attribute.ResourceName}\")] on '{type.FullName}' matches "
+                    + $"{matches.Count} embedded resources in {assembly.GetName().Name}: "
+                    + string.Join(", ", matches)
+                    + ". Qualify the name with its folder (for example \"Queries/Player.graphql\") "
+                    + "or move the request into the namespace its file is embedded under."
+            );
 
         throw new InvalidOperationException(
             $"Embedded resource for '{type.FullName}' not found. Tried: "
@@ -66,7 +72,7 @@ internal static class ResourceQueryCache
     {
         // Default convention: {Namespace}.{ResourceName} (with subfolders as dots).
         var ns = type.Namespace;
-        var normalized = resourceName.Replace('/', '.').Replace('\\', '.');
+        var normalized = Normalize(resourceName);
         if (!string.IsNullOrEmpty(ns))
             yield return $"{ns}.{normalized}";
 
@@ -78,6 +84,16 @@ internal static class ResourceQueryCache
         // If the resource name already looks fully qualified, accept it as-is.
         yield return normalized;
     }
+
+    private static string Normalize(string resourceName) =>
+        resourceName.Replace('/', '.').Replace('\\', '.');
+
+    private static bool EndsAtBoundary(string manifestName, string suffix) =>
+        manifestName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+        && (
+            manifestName.Length == suffix.Length
+            || manifestName[manifestName.Length - suffix.Length - 1] == '.'
+        );
 
     private static string ReadResource(Assembly assembly, string resourceName)
     {

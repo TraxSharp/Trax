@@ -1,9 +1,8 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;
-using LanguageExt;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +14,7 @@ using Trax.Api.GraphQL.Authorization;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.GraphQL.Startup;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Functional;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;

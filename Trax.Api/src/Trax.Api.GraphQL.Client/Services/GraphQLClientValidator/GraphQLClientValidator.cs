@@ -15,6 +15,13 @@ internal class GraphQLClientValidator : IGraphQLClientValidator
     private readonly DocumentValidator _validator = new();
     private readonly GraphQLDocumentBuilder _documentBuilder = new();
 
+    /// <summary>
+    /// The most validated queries kept. A request type's query is one constant string, so a host's
+    /// set is small; a client that builds query text per call would otherwise grow the cache
+    /// without end. Past the bound a query is still validated, just not remembered.
+    /// </summary>
+    internal const int MaxCachedQueries = 1024;
+
     internal ConcurrentDictionary<string, OperationType> CachedQueries { get; } = new();
 
     /// <summary>Creates a validator that checks queries against the schema from <paramref name="schemaProvider"/>.</summary>
@@ -59,13 +66,30 @@ internal class GraphQLClientValidator : IGraphQLClientValidator
 
         var schema = await _schemaProvider.GetSchemaAsync(cancellationToken).ConfigureAwait(false);
 
+        // The specification's Operation Type Existence rule. graphql-dotnet's validator skips the
+        // fields of a root type the schema does not have, so without this a subscription against a
+        // schema with no subscription type (the client's default) would validate.
+        var root = operation.Operation switch
+        {
+            OperationType.Query => schema.Query,
+            OperationType.Mutation => schema.Mutation,
+            _ => (global::GraphQL.Types.IObjectGraphType?)schema.Subscription,
+        };
+        if (root is null)
+            throw new GraphQLValidationException(
+                query,
+                Array.Empty<global::GraphQL.ExecutionError>(),
+                $"The schema has no {operation.Operation.ToString().ToLowerInvariant()} type."
+            );
+
         var options = new ValidationOptions { Schema = schema, Document = document };
         var validationResult = await _validator.ValidateAsync(options).ConfigureAwait(false);
 
         if (!validationResult.IsValid)
             throw new GraphQLValidationException(query, validationResult.Errors.ToArray());
 
-        CachedQueries[query] = operation.Operation;
+        if (CachedQueries.Count < MaxCachedQueries)
+            CachedQueries.TryAdd(query, operation.Operation);
         return operation.Operation;
     }
 }

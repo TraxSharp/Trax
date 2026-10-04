@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Hooks;

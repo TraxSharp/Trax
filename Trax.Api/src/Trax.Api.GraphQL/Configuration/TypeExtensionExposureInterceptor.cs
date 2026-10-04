@@ -94,9 +94,20 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
         _configuration = configuration;
         _report = report;
 
+        // A query model's navigation target declares its own posture (api/0025), so an extension
+        // of it inherits that posture exactly as an extension of a model does. Models are entered
+        // after, so a type that is both takes the model's posture.
+        _postureByEntityType = new Dictionary<Type, TypeExtensionParentPosture>();
+        foreach (var target in configuration.NavigationTargets)
+        {
+            _postureByEntityType[target.EntityType] =
+                target.IsGated ? TypeExtensionParentPosture.Gated
+                : target.AllowAnonymous ? TypeExtensionParentPosture.Anonymous
+                : TypeExtensionParentPosture.NotExposed;
+        }
+
         // Last registration wins, matching how the rest of the pipeline resolves a duplicate
         // entity registration, rather than throwing here for a conflict the census did not cause.
-        _postureByEntityType = new Dictionary<Type, TypeExtensionParentPosture>();
         foreach (var reg in configuration.ModelRegistrations)
         {
             _postureByEntityType[reg.EntityType] =
@@ -129,9 +140,55 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
             if (!declaration.HasAuthorize)
                 continue;
 
+            if (MalformedAttribute(declaration.Authorize) is { } malformed)
+            {
+                _report.Add(
+                    MalformedViolation(
+                        $"{objectType.Name}.{field.Name}",
+                        $"{resolver.DeclaringType?.FullName}.{resolver.Name}",
+                        malformed
+                    )
+                );
+                continue;
+            }
+
             AuthorizeDirectives.Emit(field, declaration.Authorize, discoveryContext.TypeInspector);
         }
     }
+
+    /// <summary>
+    /// Describes the first attribute whose shape would build a different gate from the one it
+    /// reads as: an empty policy name, or a role list that names no role. Either one dropped would
+    /// leave a gate that asks for less, so the field is refused instead, as the same attribute on
+    /// a query model is.
+    /// </summary>
+    private static string? MalformedAttribute(IReadOnlyList<TraxAuthorizeAttribute> attributes)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.Policy is not null && string.IsNullOrWhiteSpace(attribute.Policy))
+                return "[TraxAuthorize] with an empty Policy";
+
+            if (
+                attribute.Roles is not null
+                && AuthorizeDirectives.ParseRoles(attribute.Roles).Length == 0
+            )
+                return $"[TraxAuthorize(Roles = \"{attribute.Roles}\")], which names no role";
+        }
+
+        return null;
+    }
+
+    private static TypeExtensionExposureViolation MalformedViolation(
+        string fieldPath,
+        string resolver,
+        string malformed
+    ) =>
+        new(
+            fieldPath,
+            $"GraphQL field '{fieldPath}' ({resolver}) declares {malformed}, so the gate it "
+                + "means cannot be built. Remove the argument or name a real value."
+        );
 
     // ── Phase 2: the census, on the merged type ─────────────────────────
 
@@ -178,6 +235,13 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
                         )
                     )
                 );
+                continue;
+            }
+
+            // Phase 1 refused to build this field's gate; say why rather than that it is missing.
+            if (MalformedAttribute(declaration.Authorize) is { } malformed)
+            {
+                _report.Add(MalformedViolation(fieldPath, resolver, malformed));
                 continue;
             }
 
@@ -338,12 +402,14 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
 
         // The operations namespace always carries a declared posture before the schema exists:
         // the builder refuses to expose it without GateOperations(), RequireAuthorization() or
-        // AllowAnonymousOperations() (api/0004). A field grafted onto it, Trax's own persisted
-        // operation namespaces among them, inherits that decision.
+        // AllowAnonymousOperations() (api/0004). A field grafted onto it inherits that decision.
+        // Without a gate of its own the namespace is as reachable as the root it hangs off: under
+        // RequireAuthorization() the endpoint gate covers the field, and under
+        // AllowAnonymousOperations() nothing does, so the field declares, as on a root type.
         if (OperationsTypes.Contains(runtimeType))
             return _configuration.OperationsAuthorizeAttributes.Count > 0
                 ? TypeExtensionParentPosture.Gated
-                : TypeExtensionParentPosture.NotExposed;
+                : TypeExtensionParentPosture.Anonymous;
 
         return _postureByEntityType.TryGetValue(runtimeType, out var posture)
             ? posture
@@ -363,5 +429,8 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
         : RootTypes.Contains(objectType.RuntimeType) ? $"the schema root type '{objectType.Name}'"
         : IsRootLike(objectType)
             ? $"'{objectType.Name}', a namespace reached from the schema root through an ungated field"
+        : OperationsTypes.Contains(objectType.RuntimeType)
+            ? $"'{objectType.Name}', under the operations namespace, which "
+                + "AllowAnonymousOperations() leaves without a gate of its own"
         : $"'{objectType.Name}', which is [TraxAllowAnonymous]";
 }

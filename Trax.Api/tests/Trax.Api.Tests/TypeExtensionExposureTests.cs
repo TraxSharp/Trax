@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
@@ -193,20 +193,83 @@ public class TypeExtensionExposureTests
     // ── A field on a type that is not an exposed surface ─────────────────
 
     /// <summary>
-    /// <c>OperationsMutations</c> is not a query model and not a root type: it reaches the schema
-    /// only under the <c>operations</c> field, whose posture governs. This is the row that keeps
-    /// the census from failing every host that uses persisted operations, whose management
-    /// mutations are exactly this shape.
+    /// Under <c>AllowAnonymousOperations()</c> the <c>operations</c> namespace has no gate of its
+    /// own, so a field grafted onto one of its types inherits nothing and has to declare, exactly
+    /// as on a root type.
     /// </summary>
     [Test]
-    public async Task UnexposedParent_UndeclaredField_Starts()
+    public async Task AnonymousOperations_UndeclaredField_FailsStartup()
     {
         var ex = await StartAsync(
             g => g.AddTypeExtension<UndeclaredOnOperationsMutations>(),
             exposeOperations: true
         );
 
+        ex.Should()
+            .BeOfType<InvalidOperationException>(
+                "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md: every exposed "
+                    + "parent type's extension fields declare their posture"
+            );
+        ex!.Message.Should().Contain("OperationsMutations.undeclaredOperationsField");
+        ex.Message.Should().Contain("AllowAnonymousOperations()");
+    }
+
+    [Test]
+    public async Task AnonymousOperations_DeclaredField_Starts()
+    {
+        (
+            await StartAsync(
+                g => g.AddTypeExtension<AnonymousOnOperationsMutations>(),
+                exposeOperations: true
+            )
+        )
+            .Should()
+            .BeNull();
+    }
+
+    /// <summary>
+    /// A gated <c>operations</c> field covers everything under it, so a field grafted onto one of
+    /// its types inherits that gate. This is the row that keeps the census from failing every host
+    /// that uses persisted operations, whose management namespaces are exactly this shape.
+    /// </summary>
+    [Test]
+    public async Task GatedOperations_UndeclaredField_Starts()
+    {
+        var ex = await StartAsync(g =>
+            g.ExposeOperationMutations()
+                .GateOperations(roles: "Admin")
+                .AddTypeExtension<UndeclaredOnOperationsMutations>()
+        );
+
         ex.Should().BeNull();
+    }
+
+    // ── A query model's navigation target declares a posture too ─────────
+
+    [Test]
+    public async Task AnonymousNavigationTarget_UndeclaredField_FailsStartup()
+    {
+        var ex = await StartAsync(g => g.AddTypeExtension<UndeclaredOnCensusAuthor>());
+
+        ex.Should()
+            .BeOfType<InvalidOperationException>(
+                "a field on a [TraxAllowAnonymous] navigation target inherits no gate, per "
+                    + "docs/adr/0003-a-type-extension-field-declares-its-own-posture.md"
+            );
+        ex!.Message.Should().Contain("CensusAuthor.undeclaredAuthorField");
+        ex.Message.Should().Contain("[TraxAllowAnonymous]");
+    }
+
+    [Test]
+    public async Task AnonymousNavigationTarget_DeclaredField_Starts()
+    {
+        (await StartAsync(g => g.AddTypeExtension<AnonymousOnCensusAuthor>())).Should().BeNull();
+    }
+
+    [Test]
+    public async Task GatedNavigationTarget_UndeclaredField_Starts()
+    {
+        (await StartAsync(g => g.AddTypeExtension<UndeclaredOnCensusAccount>())).Should().BeNull();
     }
 
     // ── Root types have no parent to inherit from ────────────────────────
@@ -405,8 +468,12 @@ public class TypeExtensionExposureTests
 
     // ── Registration ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The same interceptor turns a member's <c>[TraxAuthorize]</c> into <c>@authorize</c>, and a
+    /// query model's own member can carry one on a host with no type extension at all.
+    /// </summary>
     [Test]
-    public void NoTypeExtensionsAndNoSchemaCallback_DoesNotRegisterTheCensus()
+    public void NoTypeExtensionsAndNoSchemaCallback_StillRegistersTheCensus()
     {
         var services = BaseServices();
         services.AddTraxGraphQL(g => g.AddDbContext<CensusDbContext>());
@@ -414,7 +481,7 @@ public class TypeExtensionExposureTests
         services
             .Any(sd => sd.ImplementationType == typeof(TypeExtensionExposureValidator))
             .Should()
-            .BeFalse("a host with no type extension cannot have a type-extension field");
+            .BeTrue("a member's declared posture is enforced on every host");
     }
 
     [Test]
@@ -472,6 +539,24 @@ public class PublicThing : CensusEntityBase
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public CensusAuthor? Author { get; set; }
+    public CensusAccount? Account { get; set; }
+}
+
+/// <summary>A navigation target of <see cref="PublicThing"/>, open to anonymous callers.</summary>
+[TraxAllowAnonymous]
+public class CensusAuthor
+{
+    public int Id { get; set; }
+    public string Handle { get; set; } = string.Empty;
+}
+
+/// <summary>A navigation target of <see cref="PublicThing"/>, gated.</summary>
+[TraxAuthorize(Roles = "admin")]
+public class CensusAccount
+{
+    public int Id { get; set; }
+    public string Email { get; set; } = string.Empty;
 }
 
 [TraxQueryModel]
@@ -639,4 +724,30 @@ public sealed class AnonymousSubscription
 public sealed class UndeclaredOnOperationsMutations
 {
     public bool UndeclaredOperationsField() => true;
+}
+
+[ExtendObjectType(typeof(Trax.Api.GraphQL.Mutations.OperationsMutations))]
+public sealed class AnonymousOnOperationsMutations
+{
+    [TraxAllowAnonymous]
+    public bool DeclaredOperationsField() => true;
+}
+
+[ExtendObjectType(typeof(CensusAuthor))]
+public sealed class UndeclaredOnCensusAuthor
+{
+    public string UndeclaredAuthorField([Parent] CensusAuthor author) => author.Handle;
+}
+
+[ExtendObjectType(typeof(CensusAuthor))]
+public sealed class AnonymousOnCensusAuthor
+{
+    [TraxAllowAnonymous]
+    public string DeclaredAuthorField([Parent] CensusAuthor author) => author.Handle;
+}
+
+[ExtendObjectType(typeof(CensusAccount))]
+public sealed class UndeclaredOnCensusAccount
+{
+    public string UndeclaredAccountField([Parent] CensusAccount account) => account.Email;
 }

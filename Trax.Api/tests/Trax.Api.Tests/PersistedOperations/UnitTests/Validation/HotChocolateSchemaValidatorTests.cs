@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.AspNetCore.Authorization;
 using HotChocolate.Execution.Configuration;

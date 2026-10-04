@@ -2,7 +2,7 @@ using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.AspNetCore.Authorization;
@@ -258,6 +258,7 @@ public class EndpointPolicyOnSocketsTests
         );
         services.AddScoped(_ => scheduler);
         services.AddScoped(_ => Substitute.For<IJobSubmitter>());
+        services.AddSingleton(Trax.Api.Tests.Fakes.SeededManifests.With("m-1"));
     }
 
     private static void Pipeline(IApplicationBuilder app)

@@ -27,7 +27,10 @@ public sealed partial class TraxGraphQLClientBuilder
     public TraxGraphQLClientBuilder UseFileSchema(string sdlPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sdlPath);
-        ReplaceSchemaProvider(_ => new FileSchemaProvider(sdlPath));
+        ReplaceSchemaProvider(sp => new FileSchemaProvider(
+            sdlPath,
+            ResolveConfiguration(sp).RemoveSubscriptionsFromSchema
+        ));
         return this;
     }
 }

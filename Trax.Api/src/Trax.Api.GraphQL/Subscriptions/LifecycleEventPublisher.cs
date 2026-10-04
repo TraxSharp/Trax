@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;
@@ -51,21 +52,87 @@ internal sealed class LifecycleEventPublisher
     /// Numbers <paramref name="lifecycleEvent"/> as the next event on <paramref name="topic"/> and
     /// sends it. A send that throws uses no number.
     /// </summary>
-    public async ValueTask PublishAsync(
+    public ValueTask PublishAsync(
         string topic,
         TrainLifecycleEvent lifecycleEvent,
         CancellationToken ct
+    ) => PublishAsync(topic, next => lifecycleEvent with { PublishSequence = next }, ct);
+
+    /// <summary>
+    /// Numbers <paramref name="junctionEvent"/> as the next event on <paramref name="topic"/> and
+    /// sends it, waiting at most <paramref name="bound"/> in all, because it is called on the run's
+    /// path and the next junction waits for it.
+    /// </summary>
+    /// <remarks>
+    /// An event that cannot take its turn within the bound is dropped, and the number it would have
+    /// had is skipped, so every subscription reports the loss through its <c>sequence</c> as it
+    /// reports one its own buffer caused. A send that is still running when the bound expires is
+    /// left to finish on its own and keeps its number: if it arrives the subscription sees it, and
+    /// if it never does the next event shows the gap. The same holds for a send still running when
+    /// <paramref name="ct"/> is cancelled, which then throws. A send that throws uses no number.
+    /// </remarks>
+    public ValueTask PublishAsync(
+        string topic,
+        JunctionEvent junctionEvent,
+        TimeSpan bound,
+        CancellationToken ct
+    ) => PublishAsync(topic, next => junctionEvent with { PublishSequence = next }, ct, bound);
+
+    private async ValueTask PublishAsync<T>(
+        string topic,
+        Func<long, T> numbered,
+        CancellationToken ct,
+        TimeSpan? bound = null
     )
     {
         var sequence = _topics.GetOrAdd(topic, _ => new TopicSequence());
-        await sequence.Gate.WaitAsync(ct).ConfigureAwait(false);
+        var started = Stopwatch.GetTimestamp();
+
+        if (bound is { } limit)
+        {
+            if (!await sequence.Gate.WaitAsync(limit, ct).ConfigureAwait(false))
+            {
+                Interlocked.Increment(ref sequence.Dropped);
+                return;
+            }
+        }
+        else
+            await sequence.Gate.WaitAsync(ct).ConfigureAwait(false);
+
+        // Numbers given up by dropped events are used here, so the jump past them is a gap.
+        var skipped = Interlocked.Exchange(ref sequence.Dropped, 0);
+        Task? send = null;
+        long next = 0;
         try
         {
-            var next = sequence.Last + 1;
-            await _sender
-                .SendAsync(topic, lifecycleEvent with { PublishSequence = next }, ct)
-                .ConfigureAwait(false);
+            next = sequence.Last + skipped + 1;
+            send = _sender.SendAsync(topic, numbered(next), ct).AsTask();
+            if (bound is { } sendLimit)
+            {
+                var remaining = sendLimit - Stopwatch.GetElapsedTime(started);
+                await send.WaitAsync(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, ct)
+                    .ConfigureAwait(false);
+            }
+            else
+                await send.ConfigureAwait(false);
+
             sequence.Last = next;
+        }
+        catch (Exception ex) when (send is { IsFaulted: false, IsCanceled: false })
+        {
+            // The bound expired or the caller cancelled while the send was still running (or as it
+            // finished). It is left to finish, and its number is taken whether or not it arrives, so
+            // no later event can be sent under the same number.
+            sequence.Last = next;
+            _ = send.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            if (ex is not TimeoutException)
+                throw;
+        }
+        catch
+        {
+            // A failed send uses no number; the skipped ones are still owed to the next event.
+            Interlocked.Add(ref sequence.Dropped, skipped);
+            throw;
         }
         finally
         {
@@ -84,7 +151,8 @@ internal sealed class LifecycleEventPublisher
         await sequence.Gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return sequence.Last;
+            // Numbers dropped before the subscription existed are not owed to it.
+            return sequence.Last + Interlocked.Read(ref sequence.Dropped);
         }
         finally
         {
@@ -96,5 +164,8 @@ internal sealed class LifecycleEventPublisher
     {
         public readonly SemaphoreSlim Gate = new(1, 1);
         public long Last;
+
+        /// <summary>Numbers given up by events dropped since the last send, owed as a gap.</summary>
+        public long Dropped;
     }
 }

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Hosting;
 
 namespace Trax.Api.StateMachine.E2E;

@@ -1,6 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -12,6 +11,7 @@ using NSubstitute.ExceptionExtensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Auth;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;

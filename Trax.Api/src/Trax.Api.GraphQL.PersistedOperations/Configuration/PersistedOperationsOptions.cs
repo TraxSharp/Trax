@@ -68,10 +68,20 @@ public sealed class PersistedOperationsOptions
     public bool CacheEnabled { get; internal set; }
 
     /// <summary>
-    /// In-memory cache TTL when <see cref="CacheEnabled"/> is true. Defaults to 15 minutes. It
-    /// bounds only the Trax lookup cache; HotChocolate's caches do not expire.
+    /// In-memory cache TTL when <see cref="CacheEnabled"/> is true. Defaults to
+    /// <see cref="CacheMaxAge"/>, and never exceeds it.
     /// </summary>
-    public TimeSpan CacheTtl { get; internal set; } = TimeSpan.FromMinutes(15);
+    public TimeSpan CacheTtl { get; internal set; } = DefaultCacheMaxAge;
+
+    /// <summary>
+    /// The longest any persisted-operation cache on a node keeps an entry, counted from when its
+    /// document was read from the database: HotChocolate's parsed-document and prepared-operation
+    /// caches, the lookup cache, and the record of ids the store does not hold. Defaults to five
+    /// minutes. The backstop for a change that did not reach this node.
+    /// </summary>
+    public TimeSpan CacheMaxAge { get; internal set; } = DefaultCacheMaxAge;
+
+    internal static readonly TimeSpan DefaultCacheMaxAge = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// RabbitMQ connection string for cross-node invalidation, set by
@@ -87,8 +97,10 @@ public sealed class PersistedOperationsOptions
     public bool SingleNode { get; internal set; }
 
     /// <summary>
-    /// Database connection string for <c>trax.persisted_operation</c> reads
-    /// and writes. Required.
+    /// Not used, and always empty. Persisted operations read and write through the Trax data
+    /// context that <c>AddEffects(e =&gt; e.UsePostgres(...))</c> registers.
     /// </summary>
+    [Obsolete("Not used: persisted operations read and write through the Trax data context.")]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public string DatabaseConnectionString { get; internal set; } = string.Empty;
 }

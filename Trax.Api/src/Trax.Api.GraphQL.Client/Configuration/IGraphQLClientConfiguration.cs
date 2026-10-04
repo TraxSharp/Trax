@@ -14,7 +14,11 @@ public interface IGraphQLClientConfiguration
     /// <summary>The GraphQL endpoint every request is sent to.</summary>
     Uri BaseAddress { get; }
 
-    /// <summary>The HTTP client requests go through. Its <c>BaseAddress</c> is set to <see cref="BaseAddress"/>.</summary>
+    /// <summary>
+    /// The HTTP client requests go through: the one <c>IHttpClientFactory</c> creates under this
+    /// client's name, or the one supplied. Its <c>BaseAddress</c> is not used or changed; requests are
+    /// sent to <see cref="BaseAddress"/>.
+    /// </summary>
     HttpClient HttpClient { get; }
 
     /// <summary>The GraphQL.Client HTTP client built over <see cref="HttpClient"/>, used for requests and schema introspection.</summary>
@@ -33,8 +37,9 @@ public interface IGraphQLClientConfiguration
     bool DisposeHttpClient { get; }
 
     /// <summary>
-    /// Whether the introspected schema has its subscription type dropped before queries are validated
-    /// against it. Applies to <see cref="IntrospectingSchemaProvider"/> only.
+    /// Whether the schema has its subscription type dropped before queries are validated against it.
+    /// Every schema provider the client builder registers honours it: introspection,
+    /// <c>UseFileSchema</c> and <c>UseAssemblySchema</c>.
     /// </summary>
     bool RemoveSubscriptionsFromSchema { get; }
 

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;
@@ -18,7 +18,7 @@ public class BuilderValidationTests
     [Test]
     public void Build_DefaultConfig_Succeeds()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn).SingleNode();
+        var b = new PersistedOperationsBuilder().SingleNode();
         var opts = b.Build();
         opts.RequirePersisted.Should().BeTrue();
         opts.LogNonPersistedRequests.Should().BeFalse();
@@ -29,18 +29,17 @@ public class BuilderValidationTests
     }
 
     [Test]
-    public void Build_NoDatabase_Throws()
+    public void Build_WithoutUseDatabase_Succeeds()
     {
-        var b = new PersistedOperationsBuilder().SingleNode();
-        Action act = () => b.Build();
-        act.Should().Throw<InvalidOperationException>().WithMessage("*UseDatabase*");
+        // Storage reads and writes through the Trax data context; no connection string is needed.
+        var act = () => new PersistedOperationsBuilder().SingleNode().Build();
+        act.Should().NotThrow();
     }
 
     [Test]
     public void Build_NeitherEnforceNorLog_Throws()
     {
         var b = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
             .SingleNode()
             .RequirePersisted(false)
             .LogNonPersistedRequests(false);
@@ -54,7 +53,7 @@ public class BuilderValidationTests
     [Test]
     public void Build_NeitherABroadcasterNorSingleNode_RefusesToStart()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn);
+        var b = new PersistedOperationsBuilder();
 
         Action act = () => b.Build();
         act.Should()
@@ -69,7 +68,6 @@ public class BuilderValidationTests
     public void Build_BothABroadcasterAndSingleNode_RefusesToStart()
     {
         var b = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
             .SingleNode()
             .UseRabbitMqInvalidation("amqp://localhost");
 
@@ -83,7 +81,6 @@ public class BuilderValidationTests
         // The broadcast empties HotChocolate's caches too, which exist whether or not the Trax
         // lookup cache is on, so it is not tied to WithInMemoryCache.
         var opts = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
             .UseRabbitMqInvalidation("amqp://localhost")
             .Build();
 
@@ -96,7 +93,6 @@ public class BuilderValidationTests
     public void Build_RabbitMqWithCache_Succeeds()
     {
         var opts = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
             .WithInMemoryCache()
             .UseRabbitMqInvalidation("amqp://localhost")
             .Build();
@@ -109,7 +105,6 @@ public class BuilderValidationTests
     public void Build_AllowOperationsWithEmptyName_Throws()
     {
         var b = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
             .SingleNode()
             .AllowOperations("ValidName", string.Empty);
 
@@ -120,7 +115,7 @@ public class BuilderValidationTests
     [Test]
     public void WithInMemoryCache_CalledTwice_Throws()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn).WithInMemoryCache();
+        var b = new PersistedOperationsBuilder().WithInMemoryCache();
         Action act = () => b.WithInMemoryCache();
         act.Should()
             .Throw<InvalidOperationException>()
@@ -131,7 +126,6 @@ public class BuilderValidationTests
     public void WithInMemoryCache_TtlOverride_Applies()
     {
         var opts = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
             .SingleNode()
             .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(5)))
             .Build();
@@ -142,31 +136,88 @@ public class BuilderValidationTests
     [Test]
     public void WithInMemoryCache_NonPositiveTtl_Throws()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn);
+        var b = new PersistedOperationsBuilder();
         Action act = () => b.WithInMemoryCache(c => c.WithTtl(TimeSpan.Zero));
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Test]
+    public void CacheMaxAge_DefaultsToFiveMinutes_AndTheLookupTtlFollowsIt()
+    {
+        var opts = new PersistedOperationsBuilder().SingleNode().WithInMemoryCache().Build();
+
+        opts.CacheMaxAge.Should().Be(TimeSpan.FromMinutes(5));
+        opts.CacheTtl.Should().Be(TimeSpan.FromMinutes(5));
+    }
+
+    [Test]
+    public void WithCacheMaxAge_Applies_AndBoundsTheDefaultTtl()
+    {
+        var opts = new PersistedOperationsBuilder()
+            .SingleNode()
+            .WithCacheMaxAge(TimeSpan.FromSeconds(30))
+            .WithInMemoryCache()
+            .Build();
+
+        opts.CacheMaxAge.Should().Be(TimeSpan.FromSeconds(30));
+        opts.CacheTtl.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
+    public void WithCacheMaxAge_NonPositive_Throws()
+    {
+        var b = new PersistedOperationsBuilder();
+        Action act = () => b.WithCacheMaxAge(TimeSpan.Zero);
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public void ALookupTtlLongerThanTheMaximumAge_RefusesToStart()
+    {
+        var b = new PersistedOperationsBuilder()
+            .SingleNode()
+            .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(15)));
+
+        Action act = () => b.Build();
+        act.Should().Throw<InvalidOperationException>().WithMessage("*TTL*WithCacheMaxAge*");
+    }
+
+    [Test]
     public void UseRabbitMqInvalidation_EmptyConnString_Throws()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn).WithInMemoryCache();
+        var b = new PersistedOperationsBuilder().WithInMemoryCache();
         Action act = () => b.UseRabbitMqInvalidation(string.Empty);
         act.Should().Throw<ArgumentException>().WithMessage("*connection string*");
     }
 
+    /// <summary>
+    /// <c>UseDatabase</c> is obsolete and chooses nothing; it still compiles and still refuses an
+    /// empty string, for hosts built against it. Called by reflection, as such a host would.
+    /// </summary>
     [Test]
-    public void UseDatabase_EmptyConnString_Throws()
+    public void UseDatabase_IsAcceptedButChoosesNothing()
     {
-        var b = new PersistedOperationsBuilder();
-        Action act = () => b.UseDatabase(string.Empty);
-        act.Should().Throw<ArgumentException>();
+        var useDatabase = typeof(PersistedOperationsBuilder).GetMethod("UseDatabase")!;
+        var b = new PersistedOperationsBuilder().SingleNode();
+
+        useDatabase.Invoke(b, ["Host=elsewhere"]).Should().BeSameAs(b);
+        var empty = () => useDatabase.Invoke(b, [string.Empty]);
+
+        empty
+            .Should()
+            .Throw<System.Reflection.TargetInvocationException>()
+            .WithInnerException<ArgumentException>();
+        typeof(PersistedOperationsOptions)
+            .GetProperty("DatabaseConnectionString")!
+            .GetValue(b.Build())
+            .Should()
+            .Be(string.Empty);
     }
 
     [Test]
     public void AllowOperations_NullArray_Throws()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn);
+        var b = new PersistedOperationsBuilder();
         Action act = () => b.AllowOperations(null!);
         act.Should().Throw<ArgumentNullException>();
     }
@@ -174,7 +225,7 @@ public class BuilderValidationTests
     [Test]
     public void AllowOperationsMatching_NullPredicate_Throws()
     {
-        var b = new PersistedOperationsBuilder().UseDatabase(FakeConn);
+        var b = new PersistedOperationsBuilder();
         Action act = () => b.AllowOperationsMatching(null!);
         act.Should().Throw<ArgumentNullException>();
     }
@@ -182,11 +233,7 @@ public class BuilderValidationTests
     [Test]
     public void DisableIntrospection_FlipsFlag()
     {
-        var opts = new PersistedOperationsBuilder()
-            .UseDatabase(FakeConn)
-            .SingleNode()
-            .DisableIntrospection()
-            .Build();
+        var opts = new PersistedOperationsBuilder().SingleNode().DisableIntrospection().Build();
 
         opts.AllowIntrospection.Should().BeFalse();
     }

@@ -1,8 +1,9 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using Trax.Api.Exceptions;
 using Trax.Api.GraphQL.Errors;
 using Trax.Core.Exceptions;
+using Trax.Effect.Exceptions;
 using Trax.Mediator.Exceptions;
 using Trax.Scheduler.Services.RunExecutor;
 
@@ -180,6 +181,112 @@ public class TraxErrorFilterTests
         result.Message.Should().Be("Remote run endpoint returned nothing for order 42.");
     }
 
+    [TestCase("{ order 42 is not closed yet }")]
+    [TestCase("""{"trainName":"My.Train","message":"no type"}""")]
+    [TestCase(
+        """{"trainName":"My.Train","trainExternalId":"ext-1","type":"","junction":"Close","message":"m"}"""
+    )]
+    public void OnError_TrainExceptionStartingWithABraceButCarryingNothing_PassesThrough(
+        string message
+    )
+    {
+        // Only a message that parses as carried exception data with a type is read as one; any
+        // other message is the author's, whatever its first character.
+        var result = _filter.OnError(CreateError(new TrainException(message)));
+
+        result.Message.Should().Be(message);
+    }
+
+    [Test]
+    public void OnError_CarriedTrainExceptionWithNoMessage_ReturnsTheGenericMessage()
+    {
+        var json =
+            """{"trainName":"My.Train","trainExternalId":"ext-1","type":"TrainException","junction":"Close","message":""}""";
+
+        var result = _filter.OnError(CreateError(new TrainException(json)));
+
+        result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
+    }
+
+    [Test]
+    public void OnError_TrainExceptionSubclass_ReturnsTheGenericMessage()
+    {
+        // Only an exact TrainException's message is a train author's, the same rule the
+        // operations queueTrain and runTrain refusals apply.
+        var ex = new ConsumerTrainException("Ledger 7 is locked by batch 0x2f on db-primary.");
+
+        var result = _filter.OnError(CreateError(ex));
+
+        result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
+        result.Code.Should().Be("TRAX_TRAIN_ERROR");
+    }
+
+    [Test]
+    public void OnError_TrainAlreadyStartedException_ReturnsTheGenericMessage()
+    {
+        var ex = new TrainAlreadyStartedException(4242, "Contoso.Billing.ICloseLedgerTrain");
+
+        var result = _filter.OnError(CreateError(ex));
+
+        result.Message.Should().Be(TraxErrorFilter.TrainFailedMessage, Adr);
+        result.Message.Should().NotContain("4242").And.NotContain("Contoso");
+    }
+
+    #endregion
+
+    #region Exception detail
+
+    private static IEnumerable<TestCaseData> MappedExceptions()
+    {
+        yield return new TestCaseData(new TrainException("Order 42 is closed.")).SetArgDisplayNames(
+            nameof(TrainException)
+        );
+        yield return new TestCaseData(
+            new RemoteRunException("Remote run endpoint returned HTTP 502")
+        ).SetArgDisplayNames(nameof(RemoteRunException));
+        yield return new TestCaseData(
+            new ConsumerTrainException("internal detail")
+        ).SetArgDisplayNames(nameof(ConsumerTrainException));
+        yield return new TestCaseData(
+            new TrainAuthorizationException("My.Train", "Missing role: Admin")
+        ).SetArgDisplayNames(nameof(TrainAuthorizationException));
+        yield return new TestCaseData(new TrainNotFoundException("My.Train")).SetArgDisplayNames(
+            nameof(TrainNotFoundException)
+        );
+        yield return new TestCaseData(
+            new AmbiguousTrainNameException("IMyTrain", ["Ns.A.IMyTrain", "Ns.B.IMyTrain"])
+        ).SetArgDisplayNames(nameof(AmbiguousTrainNameException));
+        yield return new TestCaseData(
+            new TrainInputValidationException("IMyTrain", 2048, 1024)
+        ).SetArgDisplayNames(nameof(TrainInputValidationException));
+        yield return new TestCaseData(
+            new NoTrainForInputException(typeof(TraxErrorFilterTests), ["Contoso.Trains"])
+        ).SetArgDisplayNames(nameof(NoTrainForInputException));
+    }
+
+    [TestCaseSource(nameof(MappedExceptions))]
+    public void OnError_MappedException_IsDetachedFromTheError(Exception ex)
+    {
+        var result = _filter.OnError(CreateError(ex));
+
+        result
+            .Exception.Should()
+            .BeNull(
+                "HotChocolate writes an attached exception's message and stack trace into the "
+                    + "response when exception details are on, after the filters have run"
+            );
+    }
+
+    [Test]
+    public void OnError_UnmappedException_KeepsTheExceptionForHotChocolatesOwnHandling()
+    {
+        var ex = new InvalidOperationException("internal");
+
+        var result = _filter.OnError(CreateError(ex));
+
+        result.Exception.Should().BeSameAs(ex);
+    }
+
     #endregion
 
     #region TrainAuthorizationException
@@ -335,4 +442,6 @@ public class TraxErrorFilterTests
     }
 
     #endregion
+
+    private sealed class ConsumerTrainException(string message) : TrainException(message);
 }

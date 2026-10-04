@@ -31,8 +31,8 @@ public static class ServiceExtensions
         ArgumentNullException.ThrowIfNull(baseAddress);
 
         var configBuilder = new GraphQLClientConfigurationBuilder(baseAddress);
-        Register(services, configBuilder, serviceKey: null);
-        return new TraxGraphQLClientBuilder(services, configBuilder);
+        var http = Register(services, configBuilder, serviceKey: null);
+        return new TraxGraphQLClientBuilder(services, configBuilder, serviceKey: null, http);
     }
 
     /// <summary>
@@ -61,35 +61,67 @@ public static class ServiceExtensions
         ArgumentNullException.ThrowIfNull(baseAddress);
 
         var configBuilder = new GraphQLClientConfigurationBuilder(baseAddress);
-        Register(services, configBuilder, serviceKey);
-        return new TraxGraphQLClientBuilder(services, configBuilder, serviceKey);
+        var http = Register(services, configBuilder, serviceKey);
+        return new TraxGraphQLClientBuilder(services, configBuilder, serviceKey, http);
     }
 
     /// <summary>
-    /// Registers the four client services either unkeyed (<paramref name="serviceKey"/> is
-    /// <c>null</c>) or keyed. Keyed registrations resolve their dependencies by the same key,
-    /// because Microsoft DI does not cascade the key to a service's own constructor arguments.
-    /// The configuration is built lazily so chained builder calls can mutate state before DI
-    /// resolves the singleton.
+    /// The name of the <c>IHttpClientFactory</c> client a GraphQL client sends through. A keyed
+    /// client's name carries its key's type as well as its value, so the string key
+    /// <c>"Billing"</c> and an enum value <c>Billing</c> get different clients.
     /// </summary>
-    private static void Register(
+    internal static string HttpClientName(object? serviceKey) =>
+        serviceKey is null
+            ? "Trax.Api.GraphQL.Client"
+            : $"Trax.Api.GraphQL.Client:{serviceKey.GetType().FullName}:{serviceKey}";
+
+    /// <summary>
+    /// Registers the four client services either unkeyed (<paramref name="serviceKey"/> is
+    /// <c>null</c>) or keyed, and the named HttpClient they send through. Keyed registrations
+    /// resolve their dependencies by the same key, because Microsoft DI does not cascade the key to
+    /// a service's own constructor arguments. The configuration is built lazily so chained builder
+    /// calls can mutate state before DI resolves the singleton.
+    /// </summary>
+    /// <remarks>
+    /// The configuration is a singleton that keeps its HttpClient, so the factory's handler
+    /// rotation never reaches it. Following Microsoft's guidance for a long-lived client from the
+    /// factory, the primary handler is a <see cref="SocketsHttpHandler"/> with a
+    /// <see cref="SocketsHttpHandler.PooledConnectionLifetime"/>, and the factory's handler
+    /// lifetime is infinite.
+    /// </remarks>
+    private static IHttpClientBuilder Register(
         IServiceCollection services,
         GraphQLClientConfigurationBuilder configBuilder,
         object? serviceKey
     )
     {
+        var httpClientName = HttpClientName(serviceKey);
+        var http = services
+            .AddHttpClient(httpClientName)
+            .UseSocketsHttpHandler(
+                (handler, _) =>
+                    handler.PooledConnectionLifetime =
+                        GraphQLClientConfigurationBuilder.PooledConnectionLifetime
+            )
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+
+        IGraphQLClientConfiguration Configuration(IServiceProvider sp) =>
+            configBuilder.Build(() =>
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient(httpClientName)
+            );
+
         if (serviceKey is null)
         {
-            services.AddSingleton<IGraphQLClientConfiguration>(_ => configBuilder.Build());
+            services.AddSingleton<IGraphQLClientConfiguration>(Configuration);
             services.AddSingleton<ISchemaProvider, IntrospectingSchemaProvider>();
             services.AddSingleton<IGraphQLClientValidator, GraphQLClientValidator>();
             services.AddSingleton<IGraphQLClientExecutor, GraphQLClientExecutor>();
-            return;
+            return http;
         }
 
         services.AddKeyedSingleton<IGraphQLClientConfiguration>(
             serviceKey,
-            (_, _) => configBuilder.Build()
+            (sp, _) => Configuration(sp)
         );
         services.AddKeyedSingleton<ISchemaProvider>(
             serviceKey,
@@ -112,6 +144,7 @@ public static class ServiceExtensions
                     sp.GetService<ILogger<GraphQLClientExecutor>>()
                 )
         );
+        return http;
     }
 
     /// <summary>
@@ -125,7 +158,7 @@ public static class ServiceExtensions
     /// <c>builder.UseStartupValidation(...)</c> on the Trax integration package instead.
     /// </summary>
     /// <exception cref="GraphQLValidationException">A request's query is not valid against the schema.</exception>
-    /// <exception cref="InvalidOperationException">The assemblies hold no unmarked request type.</exception>
+    /// <exception cref="InvalidOperationException">The assemblies hold no unmarked request type, or a request marked with a key no client is registered under.</exception>
     public static Task ValidateGraphQLClientAssembliesAsync(
         this IServiceProvider services,
         params Assembly[] assemblies
@@ -137,6 +170,7 @@ public static class ServiceExtensions
         return validator.ValidateClientRequestsAsync(
             assemblies,
             serviceKey: null,
+            IsRegisteredClientKey(services),
             CancellationToken.None
         );
     }
@@ -149,7 +183,7 @@ public static class ServiceExtensions
     /// clients are registered; requests for the other servers can share the assemblies.
     /// </summary>
     /// <exception cref="GraphQLValidationException">A request's query is not valid against the schema.</exception>
-    /// <exception cref="InvalidOperationException">No request type is marked with <paramref name="serviceKey"/>, or no client is registered under it.</exception>
+    /// <exception cref="InvalidOperationException">No request type is marked with <paramref name="serviceKey"/>, no client is registered under it, or a request is marked with a key no client is registered under.</exception>
     public static Task ValidateGraphQLClientAssembliesAsync(
         this IServiceProvider services,
         object serviceKey,
@@ -163,7 +197,14 @@ public static class ServiceExtensions
         return validator.ValidateClientRequestsAsync(
             assemblies,
             serviceKey,
+            IsRegisteredClientKey(services),
             CancellationToken.None
         );
     }
+
+    /// <summary>
+    /// Whether a keyed GraphQL client is registered under a key in <paramref name="services"/>.
+    /// </summary>
+    internal static Func<object, bool> IsRegisteredClientKey(IServiceProvider services) =>
+        key => services.GetKeyedService<IGraphQLClientValidator>(key) is not null;
 }

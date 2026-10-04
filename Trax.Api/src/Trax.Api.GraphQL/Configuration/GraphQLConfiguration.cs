@@ -2,6 +2,7 @@ using HotChocolate.CostAnalysis;
 using HotChocolate.Execution.Configuration;
 using Microsoft.AspNetCore.Http;
 using Trax.Api.GraphQL.Filtering;
+using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.GraphQL.Configuration;
@@ -66,6 +67,19 @@ public class GraphQLConfiguration
     public int MaxOperationsPerConnection { get; internal init; } = 100;
 
     /// <summary>
+    /// How long one WebSocket connection stays open before it is closed with Going Away (default
+    /// one hour).
+    /// </summary>
+    public TimeSpan MaxConnectionLifetime { get; internal init; } =
+        TraxCompositeSocketInterceptor.DefaultMaxConnectionLifetime;
+
+    /// <summary>
+    /// How often an API-key WebSocket connection's key is resolved again (default five minutes).
+    /// </summary>
+    public TimeSpan ConnectionCredentialRecheckInterval { get; internal init; } =
+        TraxCompositeSocketInterceptor.DefaultCredentialRecheckInterval;
+
+    /// <summary>
     /// True when <c>RequireAuthorization()</c> was called on the builder.
     /// Gates GraphQL execution (HTTP POST and GET-with-query); the schema download, the
     /// GraphQL IDE and introspection follow <see cref="IntrospectionPredicate"/> instead.
@@ -117,6 +131,12 @@ public class GraphQLConfiguration
     /// <c>docs/adr/0024-graphql-get-is-off-unless-the-host-opts-in.md</c>.
     /// </summary>
     internal bool GetRequestsAllowed { get; init; }
+
+    /// <summary>
+    /// Whether broadcast subscribers see the answers on <c>onJunctionEvent</c>, set by
+    /// <c>TraxGraphQLBuilder.AllowJunctionAnswersForBroadcastSubscribers()</c>. Off by default.
+    /// </summary>
+    internal bool JunctionAnswersForBroadcastAllowed { get; init; }
 
     /// <summary>
     /// The classes the query models reach through their properties that are not query models

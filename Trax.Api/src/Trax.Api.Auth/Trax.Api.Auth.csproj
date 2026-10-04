@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.Auth</AssemblyName>
-    <PackageDescription>Core principal abstraction (TraxPrincipal, ITraxPrincipalResolver) and claim-type constants shared by the Trax auth schemes. The scheme packages bring it in; reference it directly to write a resolver or inject TraxPrincipal. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
+    <PackageDescription>Core principal abstraction (TraxPrincipal, ITraxPrincipalResolver) and claim-type constants shared by the Trax .NET auth schemes. The scheme packages bring it in; reference it directly to write a resolver or inject TraxPrincipal. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
     <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
     <PackageTags>trax;auth;security</PackageTags>
     <!-- The package README leads with the security disclaimer, then shows usage. -->

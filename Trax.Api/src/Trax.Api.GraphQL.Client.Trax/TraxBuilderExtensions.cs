@@ -35,8 +35,10 @@ public static class TraxBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(configureSchema);
 
-        var provider = new AssemblySchemaProvider(configureSchema);
-        builder.ReplaceSchemaProvider(_ => provider);
+        builder.ReplaceSchemaProvider(sp => new AssemblySchemaProvider(
+            configureSchema,
+            builder.ResolveConfiguration(sp).RemoveSubscriptionsFromSchema
+        ));
         return builder;
     }
 
@@ -51,7 +53,8 @@ public static class TraxBuilderExtensions
     /// marked <c>[GraphQLClient(key)]</c> with its key; the unkeyed client validates only the types
     /// that carry no such mark. Requests for several servers can therefore share an assembly.
     /// Finding no request type for this client also refuses startup, because that is a request
-    /// left unmarked rather than nothing to check.</para>
+    /// left unmarked rather than nothing to check, and so does a request in the assemblies marked
+    /// with a key no client is registered under, which no client would validate.</para>
     /// </summary>
     public static TraxGraphQLClientBuilder UseStartupValidation(
         this TraxGraphQLClientBuilder builder,
@@ -71,6 +74,7 @@ public static class TraxBuilderExtensions
                 builder.ResolveValidator(sp),
                 assemblies,
                 builder.ServiceKey,
+                ServiceExtensions.IsRegisteredClientKey(sp),
                 sp.GetService<ILogger<GraphQLClientStartupValidator>>()
             )
         );

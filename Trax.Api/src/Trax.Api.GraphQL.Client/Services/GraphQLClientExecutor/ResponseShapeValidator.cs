@@ -98,7 +98,8 @@ internal static class ResponseShapeValidator
             // conditions affect writing, so the property is still expected in the response.
             if (
                 prop.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition
-                == JsonIgnoreCondition.Always
+                    == JsonIgnoreCondition.Always
+                || prop.GetIndexParameters().Length > 0
             )
                 continue;
 

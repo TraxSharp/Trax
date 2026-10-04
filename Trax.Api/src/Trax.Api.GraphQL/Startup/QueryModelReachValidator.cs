@@ -98,8 +98,9 @@ internal sealed class QueryModelReachValidator(
 
     /// <summary>
     /// Follows the navigations on every query model's object type: the fields HotChocolate bound
-    /// from a property of the entity itself, which is what a navigation is. A field a type
-    /// extension contributes declares its own posture under api/0003 and is not followed.
+    /// from a member of the entity itself, a property or a method, either of which returns
+    /// another entity as readily. A field a type extension contributes declares its own posture
+    /// under api/0003 and is not followed.
     /// </summary>
     private static void WalkObjectTypes(
         ISchemaDefinition schema,
@@ -119,9 +120,10 @@ internal sealed class QueryModelReachValidator(
                 if (field.IsIntrospectionField)
                     continue;
 
+                var member = field.ResolverMember ?? field.Member;
                 if (
-                    (field.ResolverMember ?? field.Member) is not PropertyInfo property
-                    || property.DeclaringType?.IsAssignableFrom(type.RuntimeType) != true
+                    member is not (PropertyInfo or MethodInfo)
+                    || member.DeclaringType?.IsAssignableFrom(type.RuntimeType) != true
                 )
                     continue;
 

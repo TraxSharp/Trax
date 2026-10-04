@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
@@ -105,14 +105,31 @@ public class HotChocolateOperationCacheInvalidatorTests
         var nullServices = () =>
             new HotChocolateOperationCacheInvalidator(
                 null!,
+                new PersistedOperationCacheGeneration(),
                 NullLogger<HotChocolateOperationCacheInvalidator>.Instance
             );
-        var nullLogger = () => new HotChocolateOperationCacheInvalidator(services, null!);
+        var nullGeneration = () =>
+            new HotChocolateOperationCacheInvalidator(
+                services,
+                null!,
+                NullLogger<HotChocolateOperationCacheInvalidator>.Instance
+            );
+        var nullLogger = () =>
+            new HotChocolateOperationCacheInvalidator(
+                services,
+                new PersistedOperationCacheGeneration(),
+                null!
+            );
 
         nullServices.Should().Throw<ArgumentNullException>();
+        nullGeneration.Should().Throw<ArgumentNullException>();
         nullLogger.Should().Throw<ArgumentNullException>();
     }
 
     private static HotChocolateOperationCacheInvalidator Build(IServiceProvider services) =>
-        new(services, NullLogger<HotChocolateOperationCacheInvalidator>.Instance);
+        new(
+            services,
+            new PersistedOperationCacheGeneration(),
+            NullLogger<HotChocolateOperationCacheInvalidator>.Instance
+        );
 }

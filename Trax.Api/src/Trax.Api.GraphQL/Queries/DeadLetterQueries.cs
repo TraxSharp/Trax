@@ -16,7 +16,7 @@ public class DeadLetterQueries
     /// </summary>
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="skip">How many dead letters to skip (negative is treated as 0).</param>
+    /// <param name="skip">How many dead letters to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
     /// <param name="status">Only dead letters in this status; <c>null</c> for all.</param>
     /// <param name="afterId">Only dead letters older than this id (a keyset cursor).</param>
@@ -78,6 +78,17 @@ public class DeadLetterQueries
             NextCursor: nextCursor
         );
     }
+
+    /// <summary>
+    /// A requeue-all job <c>requeueAllDeadLetters</c> started on this node, or <c>null</c> when this
+    /// node does not know the id: it was started on another node, this node has restarted since,
+    /// or it finished more than 24 hours ago. A job is read on the node that started it; the
+    /// backlog itself is <c>deadLetters(status: AWAITING_INTERVENTION).totalCount</c> on any node.
+    /// </summary>
+    public DeadLetterRequeueJob? GetRequeueAllJob(
+        Guid id,
+        [Service] Trax.Api.GraphQL.Mutations.DeadLetterRequeueJobs jobs
+    ) => jobs.Get(id);
 
     /// <summary>
     /// One dead letter by id, or <c>null</c> when none has that id.

@@ -16,8 +16,7 @@ namespace Trax.Api.GraphQL.Hooks;
 public class GraphQLSubscriptionHook : ITrainLifecycleHook
 {
     private readonly LifecycleEventPublisher _publisher;
-    private readonly bool _streamAllTrains;
-    private readonly HashSet<string> _enabledTrains;
+    private readonly LifecycleStreamRule _rule;
 
     /// <summary>
     /// Creates the hook and captures, once, the set of trains marked <c>[TraxBroadcast]</c>.
@@ -33,17 +32,11 @@ public class GraphQLSubscriptionHook : ITrainLifecycleHook
     )
     {
         _publisher = LifecycleEventPublisher.For(eventSender);
-        _streamAllTrains = options.StreamAllTrains;
-        _enabledTrains = discoveryService
-            .DiscoverTrains()
-            .Where(r => r.IsBroadcastEnabled)
-            .Select(r => r.ServiceType.FullName!)
-            .ToHashSet();
+        _rule = new LifecycleStreamRule(discoveryService, options);
     }
 
     // Admin observability streams every train; otherwise only [TraxBroadcast] trains.
-    private bool ShouldPublish(string trainName) =>
-        _streamAllTrains || _enabledTrains.Contains(trainName);
+    private bool ShouldPublish(string trainName) => _rule.Publishes(trainName);
 
     /// <summary>Publishes to <c>onTrainStarted</c> when the train is published at all.</summary>
     /// <param name="metadata">The execution that started.</param>

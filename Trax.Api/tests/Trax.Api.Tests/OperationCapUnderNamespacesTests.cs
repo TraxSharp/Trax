@@ -1,11 +1,11 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
-using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
@@ -104,6 +104,20 @@ public class OperationCapUnderNamespacesTests
         ErrorCodes(result)
             .Should()
             .Contain(TooMany, "the cap counts the operations under each namespace, per " + Adr);
+    }
+
+    [Test]
+    public async Task ASpreadOfAnUndefinedFragment_CountsNothingAndIsRefusedByValidation()
+    {
+        var executor = await BuildExecutorAsync(cap: 3);
+
+        var result = await executor.ExecuteAsync(
+            $"mutation {{ dispatch {{ {Calls(3)} ...Missing }} }}"
+        );
+
+        var codes = ErrorCodes(result);
+        codes.Should().NotBeEmpty("GraphQL validation refuses a spread of an undefined fragment");
+        codes.Should().NotContain(TooMany, "an undefined fragment adds no operations to the count");
     }
 
     [Test]

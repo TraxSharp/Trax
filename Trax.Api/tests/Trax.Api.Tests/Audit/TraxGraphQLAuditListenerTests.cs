@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json.Nodes;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;
@@ -24,16 +24,21 @@ namespace Trax.Api.Tests.Audit;
 /// interpretation branches.
 /// <para>Enforces <c>docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md</c>: no literal from the document and no variable reaches the entry
 /// unless the host's redactor returns it.</para>
+/// <para>Enforces <c>docs/adr/0035-a-refused-request-is-always-audited.md</c>: the skip options
+/// drop only a request that succeeded, so a refused or failed subscription is audited.</para>
 /// </summary>
 [Property(
     "adr",
     "docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md"
 )]
+[Property("adr", "docs/adr/0035-a-refused-request-is-always-audited.md")]
 [TestFixture]
 public class TraxGraphQLAuditListenerTests
 {
     private const string Adr =
         "docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md";
+
+    private const string RefusalAdr = "docs/adr/0035-a-refused-request-is-always-audited.md";
 
     #region BuildVariables — repro and coverage
 
@@ -108,6 +113,35 @@ public class TraxGraphQLAuditListenerTests
         captured["list"]!.AsArray().Select(n => n!.GetValue<int>()).Should().Equal(1, 2, 3);
         captured["obj"]!["name"]!.GetValue<string>().Should().Be("bob");
         captured["obj"]!["count"]!.GetValue<int>().Should().Be(7);
+    }
+
+    [Test]
+    public async Task BuildVariables_NullFloatAndBooleanValues_KeepTheirJsonShape()
+    {
+        await using var host = await TestHost.BuildAsync(configureServices: KeepAllVariables);
+
+        var result = await host.Executor.ExecuteAsync(
+            QueryRequestBuilder(
+                    "query Q($f: Decimal!, $n: String, $b: Boolean!) "
+                        + "{ decimal(f: $f) maybe(s: $n) @include(if: $b) }"
+                )
+                .SetVariableValues(
+                    new Dictionary<string, object?>
+                    {
+                        ["f"] = 3.25m,
+                        ["n"] = null,
+                        ["b"] = true,
+                    }
+                )
+                .Build()
+        );
+        AssertNoErrors(result);
+
+        var captured = host.DrainEntries().Should().ContainSingle().Subject.Variables!;
+        captured["f"]!.GetValue<decimal>().Should().Be(3.25m);
+        captured.ContainsKey("n").Should().BeTrue();
+        captured["n"].Should().BeNull();
+        captured["b"]!.GetValue<bool>().Should().BeTrue();
     }
 
     [Test]
@@ -245,6 +279,45 @@ public class TraxGraphQLAuditListenerTests
     }
 
     [Test]
+    public async Task IntrospectionQuery_WhenBothSkipsAreOff_IsCaptured()
+    {
+        await using var host = await TestHost.BuildAsync(opts =>
+        {
+            opts.SkipIntrospection = false;
+            opts.SkipSubscriptions = false;
+        });
+
+        AssertNoErrors(await host.Executor.ExecuteAsync("{ __typename }"));
+
+        host.DrainEntries().Should().ContainSingle();
+    }
+
+    [Test]
+    public async Task IntrospectionInsideATopLevelFragment_IsSkipped()
+    {
+        // Decided from the compiled operation, whose fragments are expanded.
+        await using var host = await TestHost.BuildAsync();
+
+        AssertNoErrors(
+            await host.Executor.ExecuteAsync("{ ...F } fragment F on TestQuery { __typename }")
+        );
+
+        host.DrainEntries().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task DataFieldInsideATopLevelFragment_IsCaptured()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        AssertNoErrors(
+            await host.Executor.ExecuteAsync("{ __typename ...F } fragment F on TestQuery { ping }")
+        );
+
+        host.DrainEntries().Should().ContainSingle();
+    }
+
+    [Test]
     public async Task IntrospectionQuery_WhenSkipIntrospectionFalse_IsCaptured()
     {
         await using var host = await TestHost.BuildAsync(opts => opts.SkipIntrospection = false);
@@ -371,6 +444,58 @@ public class TraxGraphQLAuditListenerTests
     }
 
     [Test]
+    public async Task UnauthorizedSubscription_IsAudited_UnderTheDefaultOptions()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("subscription { onSecret }");
+        result.Should().BeOfType<OperationResult>("authorization refused the subscription");
+
+        var entry = host.DrainEntries()
+            .Should()
+            .ContainSingle(
+                $"a refused subscription is audited under the default options ({RefusalAdr})"
+            )
+            .Subject;
+        entry.Success.Should().BeFalse();
+        entry.ErrorText.Should().Be("TRAX_AUTHORIZATION");
+        entry.Document.Should().Contain("onSecret");
+    }
+
+    [Test]
+    public async Task SubscriptionWhoseSubscribeStepFails_IsAudited_UnderTheDefaultOptions()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("subscription { onBroken }");
+        if (result is IResponseStream stream)
+            await stream.DisposeAsync();
+
+        var entry = host.DrainEntries()
+            .Should()
+            .ContainSingle(
+                $"a failed subscription is audited under the default options ({RefusalAdr})"
+            )
+            .Subject;
+        entry.Success.Should().BeFalse();
+        entry.Document.Should().Contain("onBroken");
+    }
+
+    [Test]
+    public async Task SubscriptionThatFailsValidation_IsAudited_UnderTheDefaultOptions()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync("subscription { onPing notAField }");
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle($"an invalid subscription is audited ({RefusalAdr})")
+            .Which.Success.Should()
+            .BeFalse();
+    }
+
+    [Test]
     public async Task SkipSubscriptions_Enabled_QueriesAreStillAudited()
     {
         await using var host = await TestHost.BuildAsync(opts => opts.SkipSubscriptions = true);
@@ -399,11 +524,31 @@ public class TraxGraphQLAuditListenerTests
 
         result.ExpectOperationResult().Errors.Should().NotBeNullOrEmpty();
 
-        // HotChocolate masks the exception in the response, so the audit trail is the only
-        // place the real cause survives.
+        // HotChocolate masks the exception in the response. The entry names the exception type,
+        // which is server vocabulary; its message can quote what the caller sent.
         var entry = host.DrainEntries().Should().ContainSingle().Subject;
         entry.Success.Should().BeFalse();
-        entry.ErrorText.Should().Be("request pipeline exploded");
+        entry.ErrorText.Should().Be("System.InvalidOperationException");
+    }
+
+    [Test]
+    public async Task RequestPipelineException_WithRecordErrorMessages_IsAuditedWithTheMessage()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.RecordErrorMessages = true);
+
+        await host.Executor.ExecuteAsync(
+            OperationRequestBuilder
+                .New()
+                .SetDocument("query Boom { ping }")
+                .SetOperationName("Boom")
+                .Build()
+        );
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle()
+            .Which.ErrorText.Should()
+            .Be("request pipeline exploded");
     }
 
     [Test]
@@ -421,6 +566,34 @@ public class TraxGraphQLAuditListenerTests
 
         result.ExpectOperationResult().Errors.Should().BeNullOrEmpty();
         host.DrainEntries().Should().BeEmpty();
+        host.Channel.TotalDropped.Should()
+            .Be(1, "an entry that could not be captured is counted in trax.audit.dropped");
+    }
+
+    [Test]
+    public async Task EntryThatCannotBeBuilt_IsCountedAsDropped()
+    {
+        await using var host = await TestHost.BuildAsync(configureServices: services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FailingClock()))
+        );
+
+        var result = await host.Executor.ExecuteAsync("{ ping }");
+
+        result.ExpectOperationResult().Errors.Should().BeNullOrEmpty();
+        host.DrainEntries().Should().BeEmpty();
+        host.Channel.TotalDropped.Should()
+            .Be(1, "an entry that could not be built is counted in trax.audit.dropped");
+    }
+
+    /// <summary>Reads the clock once, for the start of the request, and fails every read after it.</summary>
+    private sealed class FailingClock : TimeProvider
+    {
+        private int _reads;
+
+        public override long GetTimestamp() =>
+            Interlocked.Increment(ref _reads) == 1
+                ? 0
+                : throw new InvalidOperationException("clock unavailable");
     }
 
     private sealed class ThrowingHttpContextAccessor : IHttpContextAccessor
@@ -430,6 +603,74 @@ public class TraxGraphQLAuditListenerTests
             get => throw new InvalidOperationException("no ambient context");
             set => throw new NotSupportedException();
         }
+    }
+
+    #endregion
+
+    #region Error text
+
+    [Test]
+    public async Task ResolverErrorQuotingAnInput_IsNotRecorded_ByDefault()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("{ checkPassword(password: \"hunter2\") }");
+        result
+            .ExpectOperationResult()
+            .Errors!.Single()
+            .Message.Should()
+            .Contain("hunter2", "the resolver quotes the input");
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry
+            .ErrorText.Should()
+            .NotContain("hunter2", $"error messages are not recorded by default ({Adr})");
+        entry.ErrorText.Should().Be("PASSWORD_REJECTED at checkPassword");
+    }
+
+    [Test]
+    public async Task VariableCoercionError_DoesNotRecordTheValue_ByDefault()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync(
+            QueryRequestBuilder("query Q($i: Int!) { complexInt(i: $i) }")
+                .SetVariableValues(new Dictionary<string, object?> { ["i"] = "hunter2" })
+                .Build()
+        );
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.ErrorText.Should().NotBeNullOrEmpty().And.NotContain("hunter2");
+    }
+
+    [Test]
+    public async Task ErrorWithoutACode_IsRecordedAsMasked_ByDefault()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync("{ uncoded(secret: \"hunter2\") }");
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle()
+            .Which.ErrorText.Should()
+            .Be("<masked> at uncoded");
+    }
+
+    [Test]
+    public async Task ResolverErrorQuotingAnInput_IsRecorded_WhenTheHostOptsIn()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.RecordErrorMessages = true);
+
+        await host.Executor.ExecuteAsync("{ checkPassword(password: \"hunter2\") }");
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle()
+            .Which.ErrorText.Should()
+            .Be("Password hunter2 was rejected.");
     }
 
     #endregion
@@ -503,6 +744,112 @@ public class TraxGraphQLAuditListenerTests
         document.Should().ContainAll("if: true", "$s: String = \"\"", "list: [0, 0]");
     }
 
+    [Test]
+    public async Task DirectiveArgumentLiterals_AtEveryLocation_AreReplaced_StructureIsKept()
+    {
+        // A directive can sit on the operation, a variable definition, a field, an inline
+        // fragment and a fragment definition. Every string and number in its arguments is
+        // replaced like any other literal; the directive names and argument names remain.
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync(
+            "query Q($s: String! = \"x\" @audited(name: \"var-secret\", weight: 1111)) "
+                + "@audited(name: \"op-secret\", weight: 2222) { "
+                + "a: echo(s: $s) @audited(name: \"field-secret\", weight: 3333) "
+                + "... on TestQuery @audited(name: \"inline-secret\", weight: 4444) { ping } "
+                + "...F } "
+                + "fragment F on TestQuery @audited(name: \"fragment-secret\", weight: 5.55) { ping }"
+        );
+        AssertNoErrors(result);
+
+        var document = host.DrainEntries().Should().ContainSingle().Subject.Document;
+        document
+            .Should()
+            .NotContainAny(
+                [
+                    "var-secret",
+                    "op-secret",
+                    "field-secret",
+                    "inline-secret",
+                    "fragment-secret",
+                    "1111",
+                    "2222",
+                    "3333",
+                    "4444",
+                    "5.55",
+                ],
+                $"a literal in a directive argument is replaced like any other ({Adr})"
+            );
+        document
+            .Should()
+            .ContainAll("@audited(name: \"\", weight: 0)", "a: echo", "fragment F on TestQuery");
+    }
+
+    [Test]
+    public async Task DirectiveArgumentLiterals_InADocumentThatFailsValidation_AreReplaced()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync(
+            "{ ping @unknownDirective(secret: \"directive-secret\", pin: 9876) }"
+        );
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.Document.Should().NotContainAny("directive-secret", "9876");
+        entry.Document.Should().Contain("@unknownDirective(secret: \"\", pin: 0)");
+    }
+
+    #endregion
+
+    #region Size limits
+
+    [Test]
+    public async Task LongOperationName_IsCutToTheLimit()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.MaxOperationNameLength = 64);
+        var name = "Q" + new string('x', 1_000_000);
+
+        await host.Executor.ExecuteAsync(
+            QueryRequestBuilder($"query {name} {{ ping }}").SetOperationName(name).Build()
+        );
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.OperationName.Should().StartWith("Qxxx").And.EndWith("...[truncated]");
+        entry.OperationName!.Length.Should().Be(64 + "...[truncated]".Length);
+    }
+
+    [Test]
+    public async Task OperationName_UnderTheLimit_IsKept()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync(
+            QueryRequestBuilder("query Ping { ping }").SetOperationName("Ping").Build()
+        );
+
+        host.DrainEntries().Should().ContainSingle().Which.OperationName.Should().Be("Ping");
+    }
+
+    [Test]
+    public async Task LongErrorText_IsCutToTheLimit()
+    {
+        await using var host = await TestHost.BuildAsync(opts =>
+        {
+            opts.MaxErrorTextLength = 128;
+            opts.RecordErrorMessages = true;
+        });
+        // Every unknown field is its own error, so the joined text grows with the request.
+        var fields = string.Join(" ", Enumerable.Range(0, 2_000).Select(i => $"missing{i}"));
+
+        await host.Executor.ExecuteAsync($"{{ {fields} }}");
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.ErrorText.Should().EndWith("...[truncated]");
+        entry.ErrorText!.Length.Should().Be(128 + "...[truncated]".Length);
+    }
+
     #endregion
 
     #region Document truncation
@@ -558,6 +905,68 @@ public class TraxGraphQLAuditListenerTests
     }
 
     [Test]
+    public async Task DocumentTruncation_NestedSelections_ListEveryField()
+    {
+        await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 8);
+
+        AssertNoErrors(await host.Executor.ExecuteAsync("{ owner { name pet { name } } }"));
+
+        host.DrainEntries()
+            .Should()
+            .ContainSingle()
+            .Subject.Document.Should()
+            .EndWith("[selected fields: Owner.name, Owner.pet, Pet.name, TestQuery.owner]");
+    }
+
+    [Test]
+    public async Task DocumentTruncation_DocumentThatFailsValidation_KeepsOnlyTheHead()
+    {
+        // No operation was compiled, so there is no field list to add.
+        await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 8);
+
+        await host.Executor.ExecuteAsync("{ notARealField anotherOne }");
+
+        var document = host.DrainEntries().Should().ContainSingle().Subject.Document;
+        document.Should().EndWith("...[truncated]").And.NotContain("[selected fields");
+        document.Length.Should().Be(8 + "...[truncated]".Length);
+    }
+
+    [Test]
+    public async Task RequestWithOnlyADocumentIdThatIsNotFound_IsAuditedWithAnEmptyDocument()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync(
+            OperationRequestBuilder.New().SetDocumentId("not-a-stored-document").Build()
+        );
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.Document.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task RequestRefusedBeforeItsTextIsParsed_IsAuditedWithAnEmptyDocument()
+    {
+        // A request refused ahead of the document cache, before HotChocolate parsed its text,
+        // has no document to record. Over HTTP the transport parses first, so this is only an
+        // executor called with unparsed text.
+        await using var host = await TestHost.BuildAsync();
+
+        await host.Executor.ExecuteAsync(
+            OperationRequestBuilder
+                .New()
+                .SetDocument("query Early { ping }")
+                .SetOperationName("Early")
+                .Build()
+        );
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.Success.Should().BeFalse();
+        entry.Document.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task DocumentTruncation_NoMarkerWhenUnderLimit()
     {
         await using var host = await TestHost.BuildAsync(opts => opts.MaxDocumentLength = 65_536);
@@ -600,6 +1009,29 @@ public class TraxGraphQLAuditListenerTests
         entries.Should().HaveCount(1);
         entries[0].PrincipalId.Should().Be("user-42");
         entries[0].PrincipalType.Should().Be("api-key");
+    }
+
+    [Test]
+    public async Task Principal_WithoutATypeClaim_HasNoPrincipalType()
+    {
+        var httpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [new Claim(TraxAuthClaimTypes.PrincipalId, "user-7")],
+                    authenticationType: "test"
+                )
+            ),
+        };
+        await using var host = await TestHost.BuildAsync(configureServices: s =>
+            s.AddSingleton<IHttpContextAccessor>(new FixedHttpContextAccessor(httpContext))
+        );
+
+        AssertNoErrors(await host.Executor.ExecuteAsync("{ ping }"));
+
+        var entry = host.DrainEntries().Should().ContainSingle().Subject;
+        entry.PrincipalId.Should().Be("user-7");
+        entry.PrincipalType.Should().BeNull();
     }
 
     [Test]
@@ -729,6 +1161,16 @@ public class TraxGraphQLAuditListenerTests
                     key: "TraxAuditTestFault",
                     after: "DocumentValidationMiddleware"
                 )
+                .UseRequest(
+                    next =>
+                        context =>
+                            context.Request.OperationName == "Early"
+                                ? throw new InvalidOperationException("refused before parsing")
+                                : next(context),
+                    key: "TraxAuditTestEarlyFault",
+                    before: "DocumentCacheMiddleware"
+                )
+                .AddDirectiveType(new AuditedDirectiveType())
                 .AddType<EnumType<Mood>>()
                 .AddType<InputObjectType<FooInput>>()
                 // Mirrors AddTraxAudit: HotChocolate 16 activates diagnostic listeners
@@ -756,11 +1198,51 @@ public class TraxGraphQLAuditListenerTests
         }
     }
 
+    /// <summary>
+    /// A custom executable directive allowed at every executable location, carrying a string and
+    /// a number, so the literal stripper is checked wherever a directive can appear.
+    /// </summary>
+    private sealed class AuditedDirectiveType : DirectiveType
+    {
+        protected override void Configure(IDirectiveTypeDescriptor descriptor)
+        {
+            descriptor.Name("audited");
+            descriptor.Argument("name").Type<StringType>();
+            descriptor.Argument("weight").Type<FloatType>();
+            descriptor.Location(
+                DirectiveLocation.Query
+                    | DirectiveLocation.Field
+                    | DirectiveLocation.InlineFragment
+                    | DirectiveLocation.FragmentDefinition
+                    | DirectiveLocation.VariableDefinition
+            );
+        }
+    }
+
     public class TestSubscription
     {
         [Subscribe]
         [Topic("ping")]
         public string OnPing([EventMessage] string message) => message;
+
+        /// <summary>Refuses every subscriber when subscribing, as Trax's lifecycle feeds refuse one who could receive nothing.</summary>
+        public IAsyncEnumerable<string> SubscribeToSecret() =>
+            throw new GraphQLException(
+                ErrorBuilder
+                    .New()
+                    .SetMessage("Not authorized.")
+                    .SetCode("TRAX_AUTHORIZATION")
+                    .Build()
+            );
+
+        [Subscribe(With = nameof(SubscribeToSecret))]
+        public string OnSecret([EventMessage] string message) => message;
+
+        public IAsyncEnumerable<string> SubscribeToBroken() =>
+            throw new InvalidOperationException("event source unavailable");
+
+        [Subscribe(With = nameof(SubscribeToBroken))]
+        public string OnBroken([EventMessage] string message) => message;
     }
 
     public enum Mood
@@ -774,6 +1256,10 @@ public class TraxGraphQLAuditListenerTests
         public string Name { get; set; } = "";
         public int Count { get; set; }
     }
+
+    public sealed record Owner(string Name, Pet Pet);
+
+    public sealed record Pet(string Name);
 
     public sealed class LoginInput
     {
@@ -798,6 +1284,25 @@ public class TraxGraphQLAuditListenerTests
             $"{s}-{i}-{e}-{list.Length}-{obj.Name}-{obj.Count}";
 
         public string Throws() => throw new InvalidOperationException("resolver exploded");
+
+        public int ComplexInt(int i) => i;
+
+        public string? Maybe(string? s) => s;
+
+        public Owner Owner() => new("o", new Pet("p"));
+
+        /// <summary>A resolver whose error message quotes what the caller sent, with a code.</summary>
+        public bool CheckPassword(string password) =>
+            throw new GraphQLException(
+                ErrorBuilder
+                    .New()
+                    .SetMessage($"Password {password} was rejected.")
+                    .SetCode("PASSWORD_REJECTED")
+                    .Build()
+            );
+
+        /// <summary>The same, with no code.</summary>
+        public bool Uncoded(string secret) => throw new GraphQLException($"Rejected {secret}.");
     }
 
     #endregion

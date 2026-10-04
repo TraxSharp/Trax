@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
 using HotChocolate.Types.Descriptors;

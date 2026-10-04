@@ -66,9 +66,9 @@ internal static class ListElementFilterNaming
     /// <summary>
     /// The element input's name. Deliberately outside HotChocolate's
     /// <c>{Scalar}OperationFilterInput</c> / <c>List{Scalar}OperationFilterInput</c>
-    /// namespace: a collection whose element cannot be restricted (a nullable one) keeps
-    /// the stock types, and reusing a stock name for a restricted type would collide with
-    /// it at schema build.
+    /// namespace: the stock inputs of the same scalar are still in the schema wherever a
+    /// scalar property uses them, and reusing a stock name for a restricted type would collide
+    /// with it at schema build.
     /// </summary>
     public static string ElementTypeName(Type elementType) =>
         ScalarName(elementType) + "ElementFilterInput";

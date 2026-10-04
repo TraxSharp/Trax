@@ -1,13 +1,13 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;
-using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;

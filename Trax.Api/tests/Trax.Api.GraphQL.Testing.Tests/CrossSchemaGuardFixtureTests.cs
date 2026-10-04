@@ -97,6 +97,40 @@ public sealed class CrossSchemaGuardFixtureSelfTest : CrossSchemaGuardFixture
     }
 
     [Test]
+    public void A_scan_that_finds_no_parent_resolver_fails_naming_the_opt_out()
+    {
+        using var empty = new TempRepo().Write("src/App/App.csproj", "<Project />");
+        var options = new ArchitectureGuardOptions
+        {
+            RepoRootOverride = empty.Root,
+            SourceScanRoots = ["src"],
+        };
+        var result = CrossSchemaGuards.ExtensionResolversDeclareParentRequirements(options);
+
+        AssertionException? failure = null;
+        using (new NUnit.Framework.Internal.TestExecutionContext.IsolatedContext())
+        {
+            try
+            {
+                AssertInspected(
+                    result,
+                    expected: true,
+                    "[Parent] resolver",
+                    nameof(ExpectsParentResolvers),
+                    options
+                );
+            }
+            catch (AssertionException ex)
+            {
+                failure = ex;
+            }
+        }
+
+        failure.Should().NotBeNull("an empty scan must not pass");
+        failure!.Message.Should().Contain("[src]").And.Contain(nameof(ExpectsParentResolvers));
+    }
+
+    [Test]
     public void A_scan_that_finds_nothing_passes_when_the_repo_opts_out()
     {
         var result = new GuardResult([], 0, "");
@@ -112,4 +146,43 @@ public sealed class CrossSchemaGuardFixtureSelfTest : CrossSchemaGuardFixture
 
     [OneTimeTearDown]
     public void Cleanup() => _repo.Dispose();
+}
+
+/// <summary>
+/// A consumer repo with no cross-schema edges: it opts out of both scans, and every inherited
+/// guard passes on a source tree that holds no resolver at all.
+/// </summary>
+[TestFixture]
+public sealed class CrossSchemaGuardFixtureOptOutSelfTest : CrossSchemaGuardFixture
+{
+    private TempRepo _repo = null!;
+
+    protected override ArchitectureGuardOptions Options =>
+        new() { RepoRootOverride = _repo.Root, SourceScanRoots = ["src"] };
+
+    protected override bool ExpectsCrossSchemaResolvers => false;
+
+    protected override bool ExpectsParentResolvers => false;
+
+    [OneTimeSetUp]
+    public void CreateRepoWithoutResolvers() =>
+        _repo = new TempRepo()
+            .Write("src/App/App.csproj", "<Project />")
+            .Write("src/App/Book.cs", "public sealed class Book { public int Id { get; set; } }");
+
+    [OneTimeTearDown]
+    public void Cleanup() => _repo.Dispose();
+}
+
+/// <summary>
+/// The fixture with nothing configured: it scans this repository from its root with an empty edge
+/// manifest. Trax.Api has no cross-schema project, so it opts out of expecting resolvers; any type
+/// extension in the repository that reads off its parent is still checked.
+/// </summary>
+[TestFixture]
+public sealed class CrossSchemaGuardFixtureDefaultsSelfTest : CrossSchemaGuardFixture
+{
+    protected override bool ExpectsCrossSchemaResolvers => false;
+
+    protected override bool ExpectsParentResolvers => false;
 }

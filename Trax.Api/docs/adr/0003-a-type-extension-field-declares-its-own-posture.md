@@ -18,9 +18,11 @@ Inheritance is what makes this narrow enough to ship. A field on a gated parent 
 behind that parent's `@authorize`, so it needs no marker. A field on a type carrying neither
 marker is reached only inside some other surface's output: a train's, whose posture governs, or
 a query model's navigation, whose target must itself declare a posture under
-[0025](./0025-every-entity-a-query-model-reaches-declares-its-posture.md). The operations
+[0025](./0025-every-entity-a-query-model-reaches-declares-its-posture.md), and an extension of
+that target inherits the posture it declares, as an extension of a model does. The operations
 namespace's types take the posture the host declared for the whole namespace
-([0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md)). What has to
+([0004](./0004-the-operations-namespace-gates-independently-of-the-endpoint.md)): gated by
+`GateOperations(...)`, or as open as the root under `AllowAnonymousOperations()`. What has to
 declare is an anonymous parent, which inherits nothing, and a root, which has no parent: the
 root types themselves and the namespaces Trax hangs off them through ungated fields
 (`discover`, `dispatch`, and the per-namespace types under them).
@@ -91,10 +93,11 @@ Both read the same member, method or property, and the census asserts that every
 accepts on the strength of `[TraxAuthorize]` carries the emitted directive, so the two phases
 cannot disagree about which fields are gated.
 
-**The census runs whenever a type extension can exist**: a host that adds one through
-`AddTypeExtension(s)`, contributes one from a type module (`AddTypeModule<T>()`), or registers a
-`ConfigureSchema` callback. HotChocolate's authorization is wired in all three cases, since a type
-module's types cannot be inspected before the schema builds.
+**The interceptor, and HotChocolate's authorization, are part of every schema.** The phase that
+emits `@authorize` reads any object type's resolver, a query model's or a train output type's own
+method included, not only a type extension's. A member's declared posture is therefore enforced on
+every host, whether or not anything else in the host happens to register a type extension, and
+which object types reach the schema is known only once HotChocolate builds it.
 
 **Return type is not an exemption.** A field returning a gated entity still has to declare.
 What the field returns is not what the field does, and a census that reasons about return
@@ -109,6 +112,8 @@ types has to keep re-deriving a second type's posture to answer a question about
   it resolves their parent to be, and that the host refuses to start. It includes the case that
   justifies reading the merged type, a type extension registered through `ConfigureSchema`, which
   never reaches `AdditionalTypeExtensions`, and the refusal of HotChocolate's attributes.
+- `DeclaredMemberPostureTests` proves a `[TraxAuthorize]` resolver method on a query model, and
+  on a train's output type, is gated on a host with no type extension.
 - `ResolverAuthorizationTests` proves the emitted directive is a real gate over HTTP:
   `[TraxAuthorize(Roles = ...)]` on a resolver refuses an anonymous caller and a caller without
   the role, serves the role holder, and leaves a `[TraxAllowAnonymous]` sibling open.
@@ -120,15 +125,26 @@ the vocabulary decision rather than this one, which is recorded centrally as
 
 Not covered:
 
-- A field built from a lambda in a schema callback has no member to carry an attribute, so the
-  census skips it. Trax's own `discover` and `operations` entry fields are built this way and
-  are gated by the code that builds them.
+- A field built from a lambda, in a `ConfigureSchema` callback or in a consumer type module's
+  `ObjectTypeExtension`, has no member to carry an attribute, so the census skips it. Trax's own
+  `discover` and `operations` entry fields are built this way and are gated by the code that
+  builds them.
 - A resolver reached through a route Trax does not own at all, such as a minimal-API endpoint
   over the same data, is outside the schema and outside this rule.
 - Nothing checks that a marker is the *right* one. `[AllowAnonymous]` on a field that should
   have been gated satisfies the census, which asks only that somebody decided.
 
 ## Changelog
+
+- **2026-10-01**: An extension of a query model's navigation target inherits the posture the
+  target declares, and an extension of an operations type under `AllowAnonymousOperations()`
+  inherits nothing and declares, as on a root type. Trax's own persisted-operations namespace
+  fields declare `[TraxAllowAnonymous]`: they group fields and sit behind whatever gate the
+  `operations` field carries. Named type-module lambda fields under *Not covered*.
+- **2026-10-01**: The interceptor and HotChocolate's authorization are registered on every host,
+  not only one with a type extension, a type module or a `ConfigureSchema` callback, so a
+  `[TraxAuthorize]` on any object type's own resolver is enforced everywhere.
+  `DeclaredMemberPostureTests` pins it.
 
 - **2026-09-30**: Corrected the premise that a type carrying neither marker reaches the schema
   only inside a train's output: a query model's navigation target does too, and

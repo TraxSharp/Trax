@@ -47,7 +47,10 @@ namespace Trax.Api.GraphQL.Errors;
 /// logged as an error, because the fix belongs to whoever runs the host.
 /// </item>
 /// <item>
-/// <see cref="TrainException"/>: execution failures; code <c>TRAX_TRAIN_ERROR</c>. A
+/// <see cref="TrainException"/>: execution failures; code <c>TRAX_TRAIN_ERROR</c>. Only an exact
+/// <see cref="TrainException"/>'s message is a train author's: a subclass, Trax's own or a
+/// consumer's, gets <see cref="TrainFailedMessage"/>, as the operations service's
+/// <c>queueTrain</c> and <c>runTrain</c> refusals do. A
 /// message a train author wrote is passed through, and authors are expected to treat it as
 /// client-safe. A message that carries another exception, as the structured
 /// <see cref="TrainExceptionData"/> JSON a nested train produces, passes through only the
@@ -60,6 +63,8 @@ namespace Trax.Api.GraphQL.Errors;
 /// <c>docs/adr/0014-only-a-train-exceptions-own-message-reaches-the-client.md</c>.
 /// </item>
 /// </list>
+/// Every mapped case detaches the exception from the error, so HotChocolate's exception details,
+/// when a host switches them on, add nothing to the public shape above.
 /// Any other exception type (including <see cref="InvalidOperationException"/>) is
 /// left with HotChocolate's default masked message. Use the typed exceptions above
 /// when you want a message to reach the client.
@@ -94,32 +99,45 @@ internal class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) : IError
         if (error.Exception is null)
             return error;
 
+        // Every mapped case detaches the exception: HotChocolate writes an attached exception's
+        // message and stack trace into the response when the host switches exception details on,
+        // after the filters have run, so a mapped error would otherwise carry everything its
+        // public message leaves out. An unmapped exception keeps it, as HotChocolate's own
+        // development detail.
         return error.Exception switch
         {
-            TrainAuthorizationException => error
-                .WithMessage(TrainAuthorizationException.PublicMessage)
-                .WithCode("TRAX_AUTHORIZATION"),
-            TrainNotFoundException ex => error
-                .WithMessage(ex.Message)
-                .WithCode("TRAX_TRAIN_NOT_FOUND"),
-            AmbiguousTrainNameException ex => error
-                .WithMessage(ex.Message)
-                .WithCode("TRAX_AMBIGUOUS_TRAIN"),
-            TrainInputValidationException ex => error
-                .WithMessage(ex.Message)
-                .WithCode("TRAX_INVALID_INPUT"),
+            TrainAuthorizationException => Public(
+                error,
+                TrainAuthorizationException.PublicMessage,
+                "TRAX_AUTHORIZATION"
+            ),
+            TrainNotFoundException ex => Public(error, ex.Message, "TRAX_TRAIN_NOT_FOUND"),
+            AmbiguousTrainNameException ex => Public(error, ex.Message, "TRAX_AMBIGUOUS_TRAIN"),
+            TrainInputValidationException ex => Public(error, ex.Message, "TRAX_INVALID_INPUT"),
             NoTrainForInputException ex => HostConfiguration(error, ex),
             // Ahead of the TrainException arm it derives from: the runner chose what a client
             // may read, and the full message is the calling side's record of the failure.
-            RemoteRunException ex => error
-                .WithMessage(ex.PublicMessage ?? TrainFailedMessage)
-                .WithCode("TRAX_TRAIN_ERROR"),
-            TrainException ex => error
-                .WithMessage(PublicTrainMessage(ex.Message))
-                .WithCode("TRAX_TRAIN_ERROR"),
+            RemoteRunException ex => Public(
+                error,
+                ex.PublicMessage ?? TrainFailedMessage,
+                "TRAX_TRAIN_ERROR"
+            ),
+            // Only an exact TrainException's message is a train author's. A subclass carries
+            // whatever its author put in it (Trax's own TrainAlreadyStartedException names a
+            // metadata id and the train's FullName), so it reads as a failed train, the same rule
+            // the operations service applies to a queueTrain or runTrain refusal.
+            TrainException ex when ex.GetType() == typeof(TrainException) => Public(
+                error,
+                PublicTrainMessage(ex.Message),
+                "TRAX_TRAIN_ERROR"
+            ),
+            TrainException => Public(error, TrainFailedMessage, "TRAX_TRAIN_ERROR"),
             _ => error,
         };
     }
+
+    private static IError Public(IError error, string message, string code) =>
+        error.WithMessage(message).WithCode(code).WithException(null);
 
     private IError HostConfiguration(IError error, NoTrainForInputException exception)
     {
@@ -131,12 +149,8 @@ internal class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) : IError
             exception.ScannedAssemblies
         );
 
-        // HotChocolate writes an attached exception's message and stack trace into the response
-        // when the host switches exception details on, so the exception is detached once logged.
-        return error
-            .WithMessage(TrainNotRunMessage)
-            .WithCode("TRAX_HOST_CONFIGURATION")
-            .WithException(null);
+        // Detached once logged, like every mapped case.
+        return Public(error, TrainNotRunMessage, "TRAX_HOST_CONFIGURATION");
     }
 
     /// <summary>

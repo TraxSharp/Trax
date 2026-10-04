@@ -174,6 +174,15 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
                 .ConfigureAwait(false);
             return UploadPersistedOperationPayload.Ok(PersistedOperationDto.From(row));
         }
+        catch (PersistedOperationNotBroadcastException ex) when (ex.Operation is not null)
+        {
+            // Saved, so the payload carries the operation; not every node was told, so it is
+            // not a success.
+            return new UploadPersistedOperationPayload(
+                PersistedOperationDto.From(ex.Operation),
+                [PersistedOperationError.FromNotBroadcast(ex)]
+            );
+        }
         catch (PersistedOperationParseException ex)
         {
             return UploadPersistedOperationPayload.Fail(
@@ -212,21 +221,28 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
                 [InvalidInput("reason is required.")]
             );
 
-        var existing = await Store.GetAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false);
+        // Any row, active or not: deactivating an inactive operation is not an error, and doing it
+        // again sends the change to every node again.
+        // A caller that supplied only a store (the overloads kept for compiled callers) sees
+        // active operations only.
+        var existing = _contextFactory is null
+            ? await Store.GetAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false)
+            : await FindAnyAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false);
         if (existing is null)
             return new DeactivatePersistedOperationPayload(
                 null,
                 [PersistedOperationError.NotFound(input.Id)]
             );
 
-        await Store
-            .DeactivateAsync(input.Id, input.TenantKey, input.Reason, ct)
+        var errors = await NotBroadcastErrorsAsync(
+                Store.DeactivateAsync(input.Id, input.TenantKey, input.Reason, ct)
+            )
             .ConfigureAwait(false);
         existing.IsActive = false;
         existing.DeprecationReason = input.Reason;
         return new DeactivatePersistedOperationPayload(
             PersistedOperationDto.From(existing),
-            Array.Empty<PersistedOperationError>()
+            errors
         );
     }
 
@@ -247,13 +263,32 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
                 [PersistedOperationError.NotFound(input.Id)]
             );
 
-        await Store.RestoreAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false);
+        var errors = await NotBroadcastErrorsAsync(
+                Store.RestoreAsync(input.Id, input.TenantKey, ct)
+            )
+            .ConfigureAwait(false);
         raw.IsActive = true;
         raw.DeprecationReason = null;
-        return new RestorePersistedOperationPayload(
-            PersistedOperationDto.From(raw),
-            Array.Empty<PersistedOperationError>()
-        );
+        return new RestorePersistedOperationPayload(PersistedOperationDto.From(raw), errors);
+    }
+
+    /// <summary>
+    /// Runs a deactivation or restore. A change that was saved but not broadcast is still the
+    /// operation's new state, so it comes back as a payload error beside it rather than a throw.
+    /// </summary>
+    private static async Task<IReadOnlyList<PersistedOperationError>> NotBroadcastErrorsAsync(
+        Task change
+    )
+    {
+        try
+        {
+            await change.ConfigureAwait(false);
+            return Array.Empty<PersistedOperationError>();
+        }
+        catch (PersistedOperationNotBroadcastException ex)
+        {
+            return [PersistedOperationError.FromNotBroadcast(ex)];
+        }
     }
 
     private async Task<Trax.Effect.Models.PersistedOperation.PersistedOperation?> FindAnyAsync(

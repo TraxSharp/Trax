@@ -37,8 +37,9 @@ public sealed class GraphQLQueryResourceAttribute : Attribute
 
     /// <summary>
     /// The resource file name. Looked up as <c>{namespace}.{name}</c>, then
-    /// <c>{assembly}.{name}</c>, then as given, with <c>/</c> and <c>\</c> read as dots, and finally by
-    /// a case-insensitive suffix match.
+    /// <c>{assembly}.{name}</c>, then as given, with <c>/</c> and <c>\</c> read as dots. When none of
+    /// those exists, the one resource whose name ends with <c>.{name}</c> (ignoring case) is used, and
+    /// a name more than one resource ends with is refused: qualify it with its folder.
     /// </summary>
     public string ResourceName { get; }
 }

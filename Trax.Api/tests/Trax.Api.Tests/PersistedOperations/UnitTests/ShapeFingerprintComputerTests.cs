@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.ShapeDiff;
 
 namespace Trax.Api.Tests.PersistedOperations.UnitTests;

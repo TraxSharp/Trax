@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
+using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Instrumentation;
 using HotChocolate.Execution.Processing;
@@ -52,6 +54,7 @@ public sealed class TraxGraphQLAuditListener(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Trax audit listener failed to start capture. Skipping request.");
+            channel.RecordDropped(1, "Trax audit listener failed to start capturing a request.");
             return EmptyScope;
         }
     }
@@ -61,26 +64,20 @@ public sealed class TraxGraphQLAuditListener(
     /// HotChocolate 16 no longer hangs the request-level exception off the context, so the
     /// listener records it here and reads it back when the scope completes.
     /// </remarks>
-    public override void RequestError(RequestContext context, Exception exception)
-    {
-        try
-        {
-            context.ContextData[ExceptionKey] = exception;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Trax audit listener failed to record a request exception.");
-        }
-    }
+    public override void RequestError(RequestContext context, Exception exception) =>
+        context.ContextData[ExceptionKey] = exception;
 
     /// <summary>
     /// Both skips need the compiled operation, which exists only partway through the pipeline,
-    /// so they are decided when the scope completes rather than when it opens. A request that
-    /// never produced an operation (a parse or validation failure) is audited.
+    /// so they are decided when the scope completes rather than when it opens. They apply only to
+    /// a request that succeeded (for a subscription, one that returned a stream): a request that
+    /// was refused or failed is always audited, because refusals are what an audit trail is for.
+    /// A request that never produced an operation (a parse or validation failure) is audited too.
+    /// See <c>docs/adr/0035-a-refused-request-is-always-audited.md</c>.
     /// </summary>
-    private bool ShouldSkipOnComplete(RequestContext context)
+    private bool ShouldSkipOnComplete(RequestContext context, bool success)
     {
-        if (!_options.SkipIntrospection && !_options.SkipSubscriptions)
+        if (!success || (!_options.SkipIntrospection && !_options.SkipSubscriptions))
             return false;
 
         if (!context.TryGetOperation(out var operation))
@@ -89,29 +86,19 @@ public sealed class TraxGraphQLAuditListener(
         if (_options.SkipSubscriptions && operation.Kind == OperationType.Subscription)
             return true;
 
-        return _options.SkipIntrospection && SelectsOnlyIntrospection(operation.Definition);
+        return _options.SkipIntrospection && SelectsOnlyIntrospection(operation);
     }
 
     /// <summary>
-    /// True when every top-level selection of the executed operation is <c>__schema</c>,
-    /// <c>__type</c> or <c>__typename</c>. A fragment spread or inline fragment at the top level
-    /// is not treated as introspection, so the request is audited.
+    /// True when every root selection of the compiled operation is <c>__schema</c>,
+    /// <c>__type</c> or <c>__typename</c>. The compiled operation has its fragments expanded, so
+    /// a field inside a top-level fragment counts as the field it is.
     /// </summary>
-    private static bool SelectsOnlyIntrospection(OperationDefinitionNode definition)
+    private static bool SelectsOnlyIntrospection(Operation operation)
     {
-        var selections = definition.SelectionSet.Selections;
-        if (selections.Count == 0)
-            return false;
-
-        foreach (var selection in selections)
-        {
-            if (selection is not FieldNode field)
+        foreach (var selection in operation.RootSelectionSet.Selections)
+            if (selection.Field.Name is not ("__schema" or "__type" or "__typename"))
                 return false;
-
-            var name = field.Name.Value;
-            if (name is not ("__schema" or "__type" or "__typename"))
-                return false;
-        }
 
         return true;
     }
@@ -135,25 +122,28 @@ public sealed class TraxGraphQLAuditListener(
     {
         try
         {
-            if (ShouldSkipOnComplete(context))
+            var (success, errorText) = InterpretResult(context);
+            if (ShouldSkipOnComplete(context, success))
                 return;
 
             var elapsed = timeProvider.GetElapsedTime(startTicks);
             var document = CaptureDocument(context);
             var variables = BuildVariables(context);
             var redactedVariables = SafeRedact(variables);
-            var (success, errorText) = InterpretResult(context);
 
             var entry = new TraxAuditEntry(
                 PrincipalId: principal.Id,
                 PrincipalType: principal.Type,
-                OperationName: context.Request.OperationName,
+                OperationName: Truncate(
+                    context.Request.OperationName,
+                    _options.MaxOperationNameLength
+                ),
                 Document: document,
                 Variables: redactedVariables,
                 DurationMs: (long)elapsed.TotalMilliseconds,
                 Timestamp: startTime,
                 Success: success,
-                ErrorText: errorText,
+                ErrorText: Truncate(errorText, _options.MaxErrorTextLength),
                 Metadata: null
             );
 
@@ -162,6 +152,7 @@ public sealed class TraxGraphQLAuditListener(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Trax audit listener failed to build entry. Skipping.");
+            channel.RecordDropped(1, "Trax audit listener failed to build an entry.");
         }
     }
 
@@ -180,7 +171,7 @@ public sealed class TraxGraphQLAuditListener(
         var parsed = RequestDocument(context);
         var document = parsed is null
             ? string.Empty
-            : AuditLiteralStripper.Strip(parsed)?.ToString() ?? string.Empty;
+            : AuditLiteralStripper.Strip(parsed).ToString();
         if (document.Length <= _options.MaxDocumentLength)
             return document;
 
@@ -206,25 +197,32 @@ public sealed class TraxGraphQLAuditListener(
         ?? (context.Request.Document as OperationDocument)?.Document;
 
     private const string TruncatedMarker = "...[truncated]";
+
+    /// <summary>
+    /// <paramref name="value"/> cut to <paramref name="maxLength"/> characters and marked, when
+    /// it is longer.
+    /// </summary>
+    private static string? Truncate(string? value, int maxLength) =>
+        value is null || value.Length <= maxLength
+            ? value
+            : string.Concat(value.AsSpan(0, maxLength), TruncatedMarker);
+
     private const string ExecutedFieldsMarker = " [selected fields: ";
 
     /// <summary>
     /// Every <c>Type.field</c> the operation selects, across all of its possible types, in
-    /// ordinal order. Walks each selection set once.
+    /// ordinal order. The compiled operation is a tree, one selection set per selection and
+    /// possible type, so each is reached once.
     /// </summary>
     private static SortedSet<string> ExecutedFieldCoordinates(Operation operation)
     {
         var coordinates = new SortedSet<string>(StringComparer.Ordinal);
-        var visited = new HashSet<int>();
         var pending = new Stack<SelectionSet>();
         pending.Push(operation.RootSelectionSet);
 
         while (pending.Count > 0)
         {
             var selectionSet = pending.Pop();
-            if (!visited.Add(selectionSet.Id))
-                continue;
-
             foreach (var selection in selectionSet.Selections)
             {
                 coordinates.Add($"{selection.DeclaringType.Name}.{selection.Field.Name}");
@@ -248,10 +246,8 @@ public sealed class TraxGraphQLAuditListener(
         // VariableValues holds one collection per operation so batched requests keep their
         // values separate. The inner collection enumerates VariableValue directly.
         var variables = new JsonObject();
-        foreach (var collection in context.VariableValues)
+        foreach (var collection in context.VariableValues.OfType<IVariableValueCollection>())
         {
-            if (collection is null)
-                continue;
             foreach (var variable in collection)
                 variables[variable.Name] = ToJson(variable.Value);
         }
@@ -271,8 +267,8 @@ public sealed class TraxGraphQLAuditListener(
             IntValueNode number => JsonNode.Parse(number.Value),
             FloatValueNode number => JsonNode.Parse(number.Value),
             BooleanValueNode boolean => JsonValue.Create(boolean.Value),
-            EnumValueNode enumValue => JsonValue.Create(enumValue.Value),
-            _ => JsonValue.Create(value.ToString()),
+            // An enum value; any other node is recorded by its value's text the same way.
+            _ => JsonValue.Create(Convert.ToString(value.Value, CultureInfo.InvariantCulture)),
         };
 
     private JsonObject? SafeRedact(JsonObject? variables)
@@ -288,22 +284,53 @@ public sealed class TraxGraphQLAuditListener(
         }
     }
 
-    private static (bool Success, string? ErrorText) InterpretResult(RequestContext context)
+    /// <summary>
+    /// Whether the request failed, and what to record about why. By default an error is recorded
+    /// as its code and path and an exception as its type, because a message can quote what the
+    /// caller sent; <see cref="TraxAuditOptions.RecordErrorMessages"/> records the messages.
+    /// </summary>
+    private (bool Success, string? ErrorText) InterpretResult(RequestContext context)
     {
         if (
             context.ContextData.TryGetValue(ExceptionKey, out var parked)
             && parked is Exception exception
         )
-            return (false, exception.Message);
+            return (false, DescribeException(exception));
 
         if (context.Result is OperationResult { Errors.Count: > 0 } operationResult)
-        {
-            var joined = string.Join("; ", operationResult.Errors.Select(e => e.Message));
-            return (false, joined);
-        }
+            return (false, DescribeErrors(operationResult.Errors));
 
         return (true, null);
     }
+
+    private string DescribeErrors(IEnumerable<IError> errors) =>
+        string.Join(
+            "; ",
+            errors.Select(e => _options.RecordErrorMessages ? e.Message : Describe(e))
+        );
+
+    /// <summary>
+    /// A <see cref="GraphQLException"/> carries the errors it stands for, which are recorded like
+    /// any other; any other exception is recorded as its type.
+    /// </summary>
+    private string DescribeException(Exception exception)
+    {
+        if (_options.RecordErrorMessages)
+            return exception.Message;
+
+        return exception is GraphQLException { Errors.Count: > 0 } graphQLException
+            ? DescribeErrors(graphQLException.Errors)
+            : exception.GetType().ToString();
+    }
+
+    /// <summary>What is recorded for an error by default: its code and where it was raised.</summary>
+    private static string Describe(IError error)
+    {
+        var code = error.Code ?? MaskedErrorMarker;
+        return error.Path is null ? code : $"{code} at {error.Path}";
+    }
+
+    private const string MaskedErrorMarker = "<masked>";
 
     private sealed class RequestScope(
         TraxGraphQLAuditListener listener,

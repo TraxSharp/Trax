@@ -1,9 +1,13 @@
 using System.Net.WebSockets;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +18,8 @@ using Trax.Api.Services.HealthCheck;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Api.Tests;
@@ -32,6 +38,8 @@ public class SocketUpgradeOriginTests
 {
     private const string Adr =
         "docs/adr/0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md";
+
+    private const string CookiePolicy = "SignedIn";
 
     [Test]
     public async Task UnlistedOrigin_IsRefusedWith403()
@@ -105,13 +113,79 @@ public class SocketUpgradeOriginTests
     }
 
     [Test]
-    public async Task CorsDefaultPolicyAllowingAnyOrigin_AcksAnyOrigin()
+    public async Task CorsDefaultPolicyAllowingAnyOrigin_AdmitsOnlyTheEndpointsOwnOrigin()
     {
         await using var app = await StartAsync(configureServices: s =>
             s.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin()))
         );
 
-        (await UpgradeAsync(app, "https://anything.example")).Should().Be("connection_ack");
+        (await UpgradeAsync(app, "https://anything.example"))
+            .Should()
+            .Be(
+                "403",
+                "a browser sends its cookies on every upgrade, so a policy naming no origin "
+                    + "admits none, per "
+                    + Adr
+            );
+        (await UpgradeAsync(app, "http://localhost")).Should().Be("connection_ack");
+    }
+
+    [Test]
+    public async Task CorsDefaultPolicyOriginPredicate_AdmitsWhatThePredicateAdmits()
+    {
+        await using var app = await StartAsync(configureServices: s =>
+            s.AddCors(o =>
+                o.AddDefaultPolicy(p =>
+                    p.SetIsOriginAllowed(origin =>
+                        origin.EndsWith(".corp.example", StringComparison.Ordinal)
+                    )
+                )
+            )
+        );
+
+        (await UpgradeAsync(app, "https://app.corp.example")).Should().Be("connection_ack");
+        (await UpgradeAsync(app, "https://anything.example")).Should().Be("403");
+    }
+
+    [Test]
+    public async Task CookieAuthenticatedUpgrade_UnderAnAnyOriginCorsPolicy_IsAdmittedOnlyFromTheEndpointsOwnOrigin()
+    {
+        await using var app = await StartAsync(
+            graphql => graphql.RequireAuthorization(CookiePolicy),
+            s =>
+            {
+                s.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin()));
+                s.AddSingleton(Substitute.For<IOperationsService>());
+                s.AddSingleton(Substitute.For<ITrainExecutionService>());
+                s.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
+                s.AddAuthorization(o =>
+                    o.AddPolicy(
+                        CookiePolicy,
+                        p =>
+                            p.AddAuthenticationSchemes(
+                                    CookieAuthenticationDefaults.AuthenticationScheme
+                                )
+                                .RequireAuthenticatedUser()
+                    )
+                );
+            },
+            cookieSignIn: true
+        );
+        var cookie = await SignInAsync(app);
+
+        (await UpgradeAsync(app, "https://anything.example", cookie: cookie))
+            .Should()
+            .Be(
+                "403",
+                "a signed-in browser's socket is admitted only from an origin the host lists, per "
+                    + Adr
+            );
+        (await UpgradeAsync(app, "http://localhost", cookie: cookie))
+            .Should()
+            .Be("connection_ack", "the endpoint's own page keeps its signed-in socket");
+        (await UpgradeAsync(app, "http://localhost"))
+            .Should()
+            .Be("(closed)", "without the cookie the endpoint policy refuses the connection");
     }
 
     [Test]
@@ -268,7 +342,8 @@ public class SocketUpgradeOriginTests
         Action<TraxGraphQLBuilder>? graphql = null,
         Action<IServiceCollection>? configureServices = null,
         bool selfMapped = false,
-        bool mapOther = false
+        bool mapOther = false,
+        bool cookieSignIn = false
     )
     {
         var builder = WebApplication.CreateBuilder();
@@ -287,13 +362,35 @@ public class SocketUpgradeOriginTests
         configureServices?.Invoke(services);
         services.AddTraxGraphQL(g =>
         {
-            g.AddDbContext<OrderTestDbContext>();
+            // The test entities include an anonymous one, which an endpoint gated by
+            // RequireAuthorization() refuses, so the signed-in host serves the operations
+            // namespace instead.
+            if (cookieSignIn)
+                g.ExposeOperationQueries();
+            else
+                g.AddDbContext<OrderTestDbContext>();
             graphql?.Invoke(g);
             return g;
         });
 
         var app = builder.Build();
         app.UseRouting();
+        if (cookieSignIn)
+        {
+            app.UseAuthentication();
+            app.MapPost(
+                "/sign-in",
+                (HttpContext http) =>
+                    http.SignInAsync(
+                        new ClaimsPrincipal(
+                            new ClaimsIdentity(
+                                [new Claim(ClaimTypes.NameIdentifier, "alice")],
+                                CookieAuthenticationDefaults.AuthenticationScheme
+                            )
+                        )
+                    )
+            );
+        }
         if (selfMapped)
             app.MapGraphQL("/trax/graphql", "trax");
         else
@@ -304,6 +401,15 @@ public class SocketUpgradeOriginTests
         return app;
     }
 
+    /// <summary>Signs in through the cookie scheme and returns the cookie a browser would hold.</summary>
+    private static async Task<string> SignInAsync(WebApplication app)
+    {
+        using var client = app.GetTestServer().CreateClient();
+        using var response = await client.PostAsync("/sign-in", content: null);
+        response.EnsureSuccessStatusCode();
+        return response.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+    }
+
     /// <summary>
     /// Opens a graphql-transport-ws socket carrying <paramref name="origin"/>. Returns the HTTP
     /// status when the handshake is refused, otherwise the type of the reply to
@@ -312,13 +418,19 @@ public class SocketUpgradeOriginTests
     private static async Task<string> UpgradeAsync(
         WebApplication app,
         string? origin,
-        string path = "/trax/graphql"
+        string path = "/trax/graphql",
+        string? cookie = null
     )
     {
         var client = app.GetTestServer().CreateWebSocketClient();
         client.SubProtocols.Add("graphql-transport-ws");
-        if (origin is not null)
-            client.ConfigureRequest = r => r.Headers["Origin"] = origin;
+        client.ConfigureRequest = r =>
+        {
+            if (origin is not null)
+                r.Headers["Origin"] = origin;
+            if (cookie is not null)
+                r.Headers["Cookie"] = cookie;
+        };
 
         WebSocket ws;
         try

@@ -1,13 +1,13 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
-using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Configuration;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -743,7 +743,10 @@ public class OperationsExposureTests
         if (registerHealth)
             services.AddScoped(_ => _healthService ?? Substitute.For<ITraxHealthService>());
         if (registerScheduler)
+        {
             services.AddScoped(_ => _scheduler ?? Substitute.For<ITraxScheduler>());
+            services.AddSingleton(Trax.Api.Tests.Fakes.SeededManifests.With("abc"));
+        }
 
         // Always register stubs in case the schema asks for them via type wiring.
         services.AddScoped<ITraxHealthService>(_ =>

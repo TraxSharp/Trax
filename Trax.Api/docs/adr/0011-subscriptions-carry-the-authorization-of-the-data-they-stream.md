@@ -80,8 +80,11 @@ every build.
   fields.
 
 Not covered: a subscriber's principal is fixed when it subscribes. A role revoked afterwards is
-not re-checked for that subscription.
+not re-checked for that subscription; an API-key socket is closed within one re-check interval of
+its key's roles changing, and every socket at its maximum lifetime
+([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)).
 
 ## Changelog
 
+- **2026-10-01**: Not covered now names the bound 0033 puts on a revoked role.
 - **2026-09-27**: Recorded.

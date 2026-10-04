@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.Subscriptions;
 using static Trax.Api.Tests.Auth.SocketInterceptorTestHelpers;
 

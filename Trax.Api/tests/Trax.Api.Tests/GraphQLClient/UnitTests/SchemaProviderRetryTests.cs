@@ -1,5 +1,5 @@
 using System.Net;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Client;
@@ -10,8 +10,9 @@ namespace Trax.Api.Tests.GraphQLClient.UnitTests;
 
 /// <summary>
 /// A schema provider loads once and shares the result, but a load that failed is not kept:
-/// the next request loads again, so a server that was briefly unreachable at boot does not
-/// leave the client unable to validate anything until the process restarts. A caller's
+/// once its backoff has passed the next request loads again, so a server that was briefly
+/// unreachable at boot does not leave the client unable to validate anything until the process
+/// restarts. A caller's
 /// cancellation token stops that caller's wait without cancelling the shared load.
 /// </summary>
 [TestFixture]
@@ -51,13 +52,15 @@ public class SchemaProviderRetryTests
                 ? throw new HttpRequestException("connection refused")
                 : Ok(MinimalIntrospection)
         );
-        var provider = new IntrospectingSchemaProvider(Config(handler));
+        var time = new ManualTime();
+        var provider = new IntrospectingSchemaProvider(Config(handler), time);
 
         await provider
             .Invoking(p => p.GetSchemaAsync())
             .Should()
             .ThrowAsync<GraphQLSchemaIntrospectionException>();
 
+        time.PassBackoff();
         var schema = await provider.GetSchemaAsync();
 
         schema.Query.Should().NotBeNull();
@@ -138,13 +141,15 @@ public class SchemaProviderRetryTests
         var path = Path.Combine(Path.GetTempPath(), $"trax-retry-{Guid.NewGuid():N}.graphql");
         try
         {
-            var provider = new FileSchemaProvider(path);
+            var time = new ManualTime();
+            var provider = new FileSchemaProvider(path, removeSubscriptionsFromSchema: true, time);
 
             await provider
                 .Invoking(p => p.GetSchemaAsync())
                 .Should()
                 .ThrowAsync<GraphQLSchemaIntrospectionException>();
 
+            time.PassBackoff();
             await File.WriteAllTextAsync(path, "type Query { n: Int }");
             var schema = await provider.GetSchemaAsync();
 
@@ -160,17 +165,24 @@ public class SchemaProviderRetryTests
     public async Task An_assembly_schema_that_failed_to_build_once_is_built_again()
     {
         var attempts = 0;
-        var provider = new AssemblySchemaProvider(b =>
-        {
-            if (++attempts == 1)
-                throw new InvalidOperationException("first build fails");
-            b.AddQueryType<TestQuery>();
-        });
+        var time = new ManualTime();
+        var provider = new AssemblySchemaProvider(
+            b =>
+            {
+                if (++attempts == 1)
+                    throw new InvalidOperationException("first build fails");
+                b.AddQueryType<TestQuery>();
+            },
+            removeSubscriptionsFromSchema: true,
+            time
+        );
 
         await provider
             .Invoking(p => p.GetSchemaAsync())
             .Should()
             .ThrowAsync<InvalidOperationException>();
+
+        time.PassBackoff();
 
         var schema = await provider.GetSchemaAsync();
 
@@ -193,5 +205,14 @@ public class SchemaProviderRetryTests
             await gate.ConfigureAwait(false);
             return Ok(body);
         }
+    }
+
+    private sealed class ManualTime : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void PassBackoff() => _now += RetryingAsyncLazy<object>.MaxBackoff;
     }
 }

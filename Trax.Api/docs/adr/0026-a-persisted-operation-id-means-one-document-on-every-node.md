@@ -21,7 +21,9 @@ reaches every node: `UseRabbitMqInvalidation(...)` when more than one node serve
 
 Each node caches what it serves in two layers. HotChocolate's parsed-document and
 prepared-operation caches are keyed on the request's document id, are always on, and never expire;
-Trax substitutes clearable versions of both. The optional Trax lookup cache
+Trax substitutes clearable versions of both, which since
+[0034](./0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md)
+also have a maximum age. The optional Trax lookup cache
 (`WithInMemoryCache()`) sits under them with a TTL. An upload, deactivation or restore empties the
 caches on the node that made it and broadcasts the change, and the receiver on every other node
 empties its own.
@@ -51,8 +53,9 @@ may have dropped messages (Redis's client-side caching reference prescribes the 
 ## Consequences
 
 **`SingleNode()` is a claim nothing can check at runtime.** A second node, or a CI uploader
-writing the store from another process, makes it false. `AddPersistedOperationStore` has an
-overload taking the broker's connection string so such an uploader can broadcast its changes.
+writing the store from another process, makes it false. `AddPersistedOperationStore` takes the
+same declaration, `UseRabbitMqInvalidation(...)` or `SingleNode()`, and refuses to start with
+neither, so such an uploader broadcasts its changes.
 
 ## Exemplars
 
@@ -66,9 +69,13 @@ overload taking the broker's connection string so such an uploader can broadcast
 - `BuilderValidationTests` pins the refusal to start with neither a broadcaster nor
   `SingleNode()`, and with both.
 
-Not covered: whether `SingleNode()` is true of the deployment, and a broadcast lost while the
-broker connection stays up (the receiver nacks a message it cannot process).
+Not covered: whether `SingleNode()` is true of the deployment. A broadcast lost while the broker
+connection stays up is bounded by the caches' maximum age
+([0034](./0034-a-cached-persisted-operation-is-never-older-than-the-last-change-or-its-maximum-age.md)),
+not prevented.
 
 ## Changelog
 
+- **2026-10-01**: The rejected TTL returns as a backstop beside the broadcast, not instead of it
+  (0034); `AddPersistedOperationStore` now takes the same broker-or-`SingleNode()` declaration.
 - **2026-09-30**: Recorded.

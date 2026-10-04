@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.Tests.Meta.Infrastructure;
 
 namespace Trax.Api.Tests.Meta.Tests;

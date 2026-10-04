@@ -6,7 +6,7 @@ namespace Trax.Api.GraphQL.Client;
 
 /// <summary>
 /// The default <see cref="IGraphQLClientConfiguration"/>, produced by
-/// <see cref="GraphQLClientConfigurationBuilder.Build"/>. Infrastructure used by the client
+/// <see cref="GraphQLClientConfigurationBuilder.Build()"/>. Infrastructure used by the client
 /// registration; not intended to be constructed directly. Depend on
 /// <see cref="IGraphQLClientConfiguration"/> instead.
 /// </summary>
@@ -16,7 +16,8 @@ internal class GraphQLClientConfiguration : IGraphQLClientConfiguration, IDispos
 
     /// <summary>
     /// Creates the configuration and the GraphQL.Client HTTP client over <paramref name="httpClient"/>,
-    /// overwriting that client's <c>BaseAddress</c> with <paramref name="baseAddress"/>.
+    /// which is not changed: requests are sent to <paramref name="baseAddress"/>, set as the
+    /// options' endpoint.
     /// </summary>
     /// <param name="baseAddress">The GraphQL endpoint.</param>
     /// <param name="jsonSerializer">The transport serializer.</param>
@@ -27,6 +28,7 @@ internal class GraphQLClientConfiguration : IGraphQLClientConfiguration, IDispos
     /// <param name="responseStrictness">How strictly responses are checked.</param>
     /// <param name="httpClient">The HTTP client requests go through.</param>
     /// <exception cref="ArgumentNullException">Any reference argument is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">The options name an endpoint other than <paramref name="baseAddress"/>.</exception>
     public GraphQLClientConfiguration(
         Uri baseAddress,
         IGraphQLWebsocketJsonSerializer jsonSerializer,
@@ -44,9 +46,20 @@ internal class GraphQLClientConfiguration : IGraphQLClientConfiguration, IDispos
         ArgumentNullException.ThrowIfNull(jsonSerializerOptions);
         ArgumentNullException.ThrowIfNull(httpClient);
 
+        // Requests go to the endpoint in the GraphQL.Client options, an absolute URI, so the
+        // HttpClient's BaseAddress is neither read nor set: a supplied client is not changed and
+        // can serve several configurations. An endpoint already set must be this address.
+        if (graphQLHttpClientOptions.EndPoint is null)
+            graphQLHttpClientOptions.EndPoint = baseAddress;
+        else if (graphQLHttpClientOptions.EndPoint != baseAddress)
+            throw new InvalidOperationException(
+                $"The GraphQL.Client options name the endpoint {graphQLHttpClientOptions.EndPoint}, "
+                    + $"but the client is registered for {baseAddress}. Leave EndPoint unset; the "
+                    + "client's address is used."
+            );
+
         BaseAddress = baseAddress;
         HttpClient = httpClient;
-        HttpClient.BaseAddress = baseAddress;
 
         JsonSerializerOptions = jsonSerializerOptions;
         GraphQLClientOptions = graphQLHttpClientOptions;

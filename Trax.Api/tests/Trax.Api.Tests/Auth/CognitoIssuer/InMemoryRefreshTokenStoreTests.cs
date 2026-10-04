@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.Auth.Jwt.Cognito.Issuer;
 
 namespace Trax.Api.Tests.Auth.CognitoIssuer;

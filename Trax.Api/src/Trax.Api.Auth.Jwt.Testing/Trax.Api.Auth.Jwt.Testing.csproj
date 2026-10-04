@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.Auth.Jwt.Testing</AssemblyName>
-    <PackageDescription>Test fixtures for Trax JWT auth: a self-hosted JWKS server, RS256/HS256 token minters, and helpers to mint Cognito-shaped tokens for use in integration tests. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
+    <PackageDescription>Test fixtures for Trax .NET JWT auth: a self-hosted JWKS server, RS256/HS256 token minters, and helpers to mint Cognito-shaped tokens for use in integration tests. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
     <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
     <PackageTags>trax;auth;jwt;testing;jwks</PackageTags>
     <!-- The package README leads with the security disclaimer, then shows usage. -->

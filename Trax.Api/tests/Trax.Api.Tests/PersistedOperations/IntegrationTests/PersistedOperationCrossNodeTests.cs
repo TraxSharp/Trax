@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Execution.Caching;
@@ -34,9 +34,9 @@ public class PersistedOperationCrossNodeTests
     public async Task OneTimeSetUp()
     {
         if (!PostgresFixture.IsPostgresReachable())
-            Assert.Ignore("Postgres not reachable.");
+            Unavailable("Postgres");
         if (!IsRabbitMqReachable())
-            Assert.Ignore("RabbitMQ not reachable.");
+            Unavailable("RabbitMQ");
 
         _nodeA = await StartNodeAsync();
         _nodeB = await StartNodeAsync();
@@ -93,6 +93,26 @@ public class PersistedOperationCrossNodeTests
     }
 
     [Test]
+    public async Task ADeactivationOnOneNode_DuringARequestOnTheOther_StaysInForceThere()
+    {
+        var id = $"cross_node_held_{Guid.NewGuid():N}";
+        var held = GraphQLFixture.Hold(id);
+        await Store(_nodeA)
+            .UpsertAsync(id, GraphQLFixture.HeldDocument(id), null, CancellationToken.None);
+        var generationOnB = _nodeB.GetRequiredService<PersistedOperationCacheGeneration>();
+
+        var running = ExecuteByIdAsync(_nodeB, id);
+        await held.Entered;
+        var before = generationOnB.Current;
+        await Store(_nodeA).DeactivateAsync(id, null, "retired", CancellationToken.None);
+        await WaitUntilAsync(() => generationOnB.Current > before);
+        held.Release();
+        await running;
+
+        (await ExecuteByIdAsync(_nodeB, id)).Should().Contain("HC0020", AdrHint);
+    }
+
+    [Test]
     public async Task ANodeThatMayHaveMissedABroadcast_EmptiesItsCaches()
     {
         var id = $"cross_node_missed_{Guid.NewGuid():N}";
@@ -126,6 +146,15 @@ public class PersistedOperationCrossNodeTests
         return node;
     }
 
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline)
+            // determinism: polling for a broker-delivered broadcast, bounded by the deadline above.
+            await Task.Delay(20);
+        condition().Should().BeTrue("the broadcast should arrive within the deadline");
+    }
+
     private static IPersistedOperationStore Store(IServiceProvider node) =>
         node.GetRequiredService<IPersistedOperationStore>();
 
@@ -155,6 +184,20 @@ public class PersistedOperationCrossNodeTests
             OperationRequestBuilder.New().SetDocumentId(new OperationDocumentId(id)).Build()
         );
         return ((OperationResult)result).ToJson();
+    }
+
+    /// <summary>
+    /// Skips the fixture on a developer machine without the service, and fails it in CI, where
+    /// both services are declared: a skipped run there would report green without ever
+    /// checking that a change on one node reaches the other.
+    /// </summary>
+    private static void Unavailable(string service)
+    {
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            Assert.Fail(
+                $"{service} is not reachable, and CI declares it for this fixture. {AdrHint}"
+            );
+        Assert.Ignore($"{service} not reachable.");
     }
 
     private static bool IsRabbitMqReachable()

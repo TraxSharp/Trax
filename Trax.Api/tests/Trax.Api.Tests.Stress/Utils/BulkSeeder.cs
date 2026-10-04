@@ -152,11 +152,14 @@ public static class BulkSeeder
         // ── metadata (identity id 1..Metadata) ───────────────────────────────
         // 9-way state mix: 4 completed, 2 failed, in_progress, pending, cancelled.
         // Terminal states (completed/failed/cancelled) get an end_time; the rest are null.
+        // A failed run is classified transient, conflict or permanent by (g / 9) % 3, so the
+        // failureClass filter has a real share of the table to count; every other run keeps the
+        // column's default, unclassified.
         log($"Seeding {profile.Metadata:N0} metadata...");
         await SeedTable(
             conn,
             profile.Metadata,
-            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment) "
+            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment, failure_class) "
                 + "SELECT lpad(g::text, 32, '0'), "
                 + $"       '{TrainName}' || (g % {profile.TrainNames}), "
                 + "       (ARRAY['completed','completed','completed','completed','failed','failed','in_progress','pending','cancelled']::trax.train_state[])[1 + (g % 9)], "
@@ -172,7 +175,10 @@ public static class BulkSeeder
                 // into a handful of groups — the real shape of that endpoint at scale.
                 + $"       'stress-instance-' || (g % {HostInstances}), "
                 + $"       'stress-host-' || (g % {HostInstances}), "
-                + "       'Production' "
+                + "       'Production', "
+                + "       CASE WHEN (g % 9) IN (4,5) "
+                + "            THEN (ARRAY['transient','conflict','permanent']::trax.failure_class[])[1 + ((g / 9) % 3)] "
+                + "            ELSE 'unclassified'::trax.failure_class END "
                 + "FROM generate_series(@lo, @hi) g",
             ct
         );
@@ -292,9 +298,17 @@ public static class BulkSeeder
         var metadata = await ScalarLong(conn, "SELECT count(*) FROM trax.metadata", ct);
         var logs = await ScalarLong(conn, "SELECT count(*) FROM trax.log", ct);
         var persisted = await ScalarLong(conn, "SELECT count(*) FROM trax.persisted_operation", ct);
+        // A seed from before failed runs were classified leaves them all unclassified; reseed it.
+        var classified = await ScalarLong(
+            conn,
+            "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
+                + "WHERE failure_class <> 'unclassified' LIMIT 1) c",
+            ct
+        );
         return metadata >= profile.Metadata * 0.95
             && logs >= profile.Log * 0.95
-            && persisted >= profile.PersistedOperations * 0.95;
+            && persisted >= profile.PersistedOperations * 0.95
+            && classified > 0;
     }
 
     private static async Task SeedTable(

@@ -1,11 +1,11 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
-using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.Services.HealthCheck;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -183,7 +183,7 @@ public class GraphQLOperationsTests
         operationResult!.Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
         json.Should().Contain("true");
-        json.Should().Contain("Manifest triggered");
+        json.Should().Contain("Manifest triggered: its queued run is due now");
         await _scheduler.Received(1).TriggerAsync("test-job", Arg.Any<CancellationToken>());
     }
 
@@ -328,6 +328,24 @@ public class GraphQLOperationsTests
         // Register discovery and effect registry before AddTraxGraphQL (needed during schema build)
         services.AddSingleton(_discoveryService);
         services.AddSingleton(Substitute.For<IEffectRegistry>());
+
+        // The manifest mutations look the external id up before asking the scheduler.
+        var factory =
+            new Trax.Effect.Data.InMemory.Services.InMemoryContextFactory.InMemoryContextProviderFactory(
+                new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
+            );
+        await using (var db = await factory.CreateDbContextAsync(default))
+        {
+            var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
+                new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
+            );
+            manifest.ExternalId = "test-job";
+            await db.Track(manifest);
+            await db.SaveChanges(default);
+        }
+        services.AddSingleton<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>(
+            factory
+        );
 
         // Register GraphQL schema (this calls AddTraxApi which registers concrete services).
         // The operations namespace is opt-in; tests in this fixture exercise it

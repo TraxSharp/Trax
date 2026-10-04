@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
 using Microsoft.EntityFrameworkCore;
@@ -7,10 +7,13 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
+using Trax.Api.GraphQL.Hooks;
 using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -107,6 +110,54 @@ public class SubscriptionAuthorizationTests
         received["failureReason"].Should().Be("db at 10.0.0.5 refused");
         received["hostName"].Should().Be("worker-1");
         received["sequence"].Should().Be(1L, "the first event a subscription delivers is number 1");
+    }
+
+    [Test]
+    public async Task EventsPublishedBeforeASubscription_AreNotReportedAsLostToIt()
+    {
+        // The sequence numbering is docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md:
+        // a subscription starts counting from what was already published when it subscribed.
+        var executor = await BuildAsync(g =>
+            g.ExposeOperationQueries().GateOperations(roles: "Admin")
+        );
+        var hook = _provider!.GetRequiredService<GraphQLSubscriptionHook>();
+        for (var i = 0; i < 5; i++)
+            await hook.OnCompleted(Completed("Some.Earlier.Train"), default);
+
+        await using var sub = await SubscribeAsync(executor, LifecycleQuery, User("Admin"));
+        var received = await sub.NextAsync(() =>
+            hook.OnCompleted(Completed("Some.Later.Train"), default).GetAwaiter().GetResult()
+        );
+
+        received["trainName"].Should().Be("Some.Later.Train");
+        received["sequence"]
+            .Should()
+            .Be(
+                1L,
+                "the five earlier events were published before the subscription existed, so "
+                    + "none of them was lost to it"
+            );
+    }
+
+    /// <summary>
+    /// Two <c>GateOperations(roles:)</c> calls each add a requirement, and the subscriber has to
+    /// meet both, as two <c>[Authorize(Roles = ...)]</c> attributes combine in ASP.NET Core.
+    /// </summary>
+    [Test]
+    public async Task OperationsGatedByTwoRoleCalls_RequiresBothRoles()
+    {
+        var executor = await BuildAsync(g =>
+            g.ExposeOperationQueries()
+                .GateOperations(roles: "Admin")
+                .GateOperations(roles: "Support")
+        );
+
+        (await SubscribeAsync(executor, DataChangedQuery, User("Support")))
+            .Refused.Should()
+            .BeTrue("each GateOperations(roles:) call is a requirement of its own");
+        (await SubscribeAsync(executor, DataChangedQuery, User("Admin", "Support")))
+            .Refused.Should()
+            .BeFalse();
     }
 
     #endregion
@@ -329,10 +380,13 @@ public class SubscriptionAuthorizationTests
 
     #region Helpers
 
-    private static ClaimsPrincipal User(string role) =>
+    private static ClaimsPrincipal User(params string[] roles) =>
         new(
             new ClaimsIdentity(
-                [new Claim(ClaimTypes.Name, role), new Claim(ClaimTypes.Role, role)],
+                [
+                    new Claim(ClaimTypes.Name, string.Join("+", roles)),
+                    .. roles.Select(role => new Claim(ClaimTypes.Role, role)),
+                ],
                 "Test"
             )
         );
@@ -372,6 +426,20 @@ public class SubscriptionAuthorizationTests
             GraphQLOperations = GraphQLOperation.Run,
             IsRemote = false,
         };
+
+    private static Metadata Completed(string trainName)
+    {
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = trainName,
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        metadata.TrainState = TrainState.Completed;
+        return metadata;
+    }
 
     private static TrainLifecycleEvent Event(
         string trainName,

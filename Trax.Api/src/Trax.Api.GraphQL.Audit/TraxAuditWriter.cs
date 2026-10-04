@@ -197,23 +197,10 @@ public sealed class TraxAuditWriter(
             if (TryTake(batch))
                 continue;
 
-            if (batch.Count == 0)
-            {
-                if (!await channel.Reader.WaitToReadAsync(ct))
-                    break;
-                continue;
-            }
-
-            try
-            {
-                if (!await channel.Reader.WaitToReadAsync(flushCts.Token))
-                    break;
-            }
-            catch (OperationCanceledException)
-                when (flushCts.IsCancellationRequested && !ct.IsCancellationRequested)
-            {
+            // The wait above said an entry was ready and this loop is the channel's only reader,
+            // so an empty batch here means shutdown abandoned the drain.
+            if (batch.Count == 0 || !await WaitForMoreAsync(flushCts, ct))
                 break;
-            }
         }
 
         if (batch.Count > 0)
@@ -223,6 +210,45 @@ public sealed class TraxAuditWriter(
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The wait before retry <paramref name="attempt"/> (0 for the first retry): exponential
+    /// backoff, <paramref name="baseDelay"/> doubled per attempt and capped at
+    /// <paramref name="maxDelay"/>, with "equal jitter", a random point in the upper half of that
+    /// value. The cap keeps a long run of failures from blocking the single writer for an
+    /// unbounded time; the jitter keeps writers on many nodes from retrying a shared sink in step;
+    /// the lower half is never used, so a failing sink is never retried at once.
+    /// </summary>
+    internal static TimeSpan RetryDelay(int attempt, TimeSpan baseDelay, TimeSpan maxDelay)
+    {
+        // Computed in double and capped before converting, so a large attempt cannot overflow.
+        var ceiling = Math.Min(
+            baseDelay.TotalMilliseconds * Math.Pow(2, attempt),
+            maxDelay.TotalMilliseconds
+        );
+        var half = ceiling / 2;
+        return TimeSpan.FromMilliseconds(half + Random.Shared.NextDouble() * half);
+    }
+
+    /// <summary>
+    /// Waits for another entry while a partial batch is held. <c>false</c> when the flush
+    /// interval ran out or the channel completed, either of which sends the batch as it is.
+    /// </summary>
+    private async Task<bool> WaitForMoreAsync(
+        CancellationTokenSource flushCts,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            return await channel.Reader.WaitToReadAsync(flushCts.Token);
+        }
+        catch (OperationCanceledException)
+            when (flushCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     /// <summary>Returns <c>true</c> when the sink accepted the batch, <c>false</c> after the last retry.</summary>
@@ -249,9 +275,7 @@ public sealed class TraxAuditWriter(
                     attempt + 1,
                     _options.MaxRetries
                 );
-                var delay = TimeSpan.FromMilliseconds(
-                    _options.RetryBackoff.TotalMilliseconds * Math.Pow(2, attempt)
-                );
+                var delay = RetryDelay(attempt, _options.RetryBackoff, _options.MaxRetryBackoff);
                 await Task.Delay(delay, timeProvider, ct);
             }
             catch (Exception ex)

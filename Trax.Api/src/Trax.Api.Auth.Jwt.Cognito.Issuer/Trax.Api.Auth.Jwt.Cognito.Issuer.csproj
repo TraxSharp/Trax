@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.Auth.Jwt.Cognito.Issuer</AssemblyName>
-    <PackageDescription>Token-issuance primitives for Amazon Cognito-shaped JWTs: RS256 access-token and ID-token minting with Cognito claim conventions (token_use, client_id, cognito:groups, identities[]), plus a refresh-token store contract and in-memory implementation. Symmetric counterpart to Trax.Api.Auth.Jwt.Cognito's validator. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
+    <PackageDescription>Token-issuance primitives for Amazon Cognito-shaped JWTs: RS256 access-token and ID-token minting with Cognito claim conventions (token_use, client_id, cognito:groups, identities[]), plus a refresh-token store contract and in-memory implementation. Symmetric counterpart to Trax.Api.Auth.Jwt.Cognito's validator. NO WARRANTY. Trax .NET auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
     <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
     <PackageTags>trax;auth;jwt;cognito;aws;security;issuer</PackageTags>
     <!-- The package README leads with the security disclaimer, then shows usage. -->

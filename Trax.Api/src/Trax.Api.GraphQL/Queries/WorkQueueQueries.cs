@@ -21,7 +21,7 @@ public class WorkQueueQueries
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="sqlDialect">Resolved from DI when the provider registers one; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="skip">How many entries to skip (negative is treated as 0).</param>
+    /// <param name="skip">How many entries to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
     /// <param name="status">Only entries in this status.</param>
     /// <param name="trainName">Only entries for this train (matched exactly).</param>

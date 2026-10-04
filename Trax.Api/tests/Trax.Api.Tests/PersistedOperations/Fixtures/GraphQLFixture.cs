@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using HotChocolate;
 using HotChocolate.Execution;
 using HotChocolate.Types;
@@ -47,14 +48,35 @@ public static class GraphQLFixture
     public static Task<ServiceProvider> BuildAsync() => BuildAsync(po => po.SingleNode());
 
     /// <summary>
+    /// Builds the stack with <paramref name="topology"/>, then lets <paramref name="services"/>
+    /// add or replace registrations (a fake clock, a broadcaster that fails) before the provider
+    /// is built.
+    /// </summary>
+    public static Task<ServiceProvider> BuildAsync(
+        Func<
+            Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder,
+            Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder
+        > topology,
+        Action<IServiceCollection> services
+    ) => BuildCoreAsync(topology, services);
+
+    /// <summary>
     /// Builds the stack with the persisted-operations options <paramref name="topology"/> adds
     /// to the database connection: <c>SingleNode()</c> or <c>UseRabbitMqInvalidation(...)</c>.
     /// </summary>
-    public static async Task<ServiceProvider> BuildAsync(
+    public static Task<ServiceProvider> BuildAsync(
         Func<
             Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder,
             Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder
         > topology
+    ) => BuildCoreAsync(topology, null);
+
+    private static async Task<ServiceProvider> BuildCoreAsync(
+        Func<
+            Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder,
+            Trax.Api.GraphQL.PersistedOperations.Configuration.PersistedOperationsBuilder
+        > topology,
+        Action<IServiceCollection>? services
     )
     {
         await DatabaseMigrator.Migrate(PostgresFixture.ConnectionString);
@@ -71,11 +93,46 @@ public static class GraphQLFixture
                 .ExposeOperationMutations()
                 .AllowAnonymousOperations()
                 .AddTypeExtension<HelloQuery>()
-                .UsePersistedOperations(po =>
-                    topology(po.UseDatabase(PostgresFixture.ConnectionString))
-                )
+                .UsePersistedOperations(po => topology(po))
         );
+        services?.Invoke(sc);
         return sc.BuildServiceProvider();
+    }
+
+    private static readonly ConcurrentDictionary<string, HeldRequest> s_held = new();
+
+    /// <summary>
+    /// A document whose <c>held</c> field does not return until <see cref="HeldRequest.Release"/>
+    /// is called for <paramref name="gate"/>, so a test can change the store while a request that
+    /// already read it is still running.
+    /// </summary>
+    public static string HeldDocument(string gate) => $"query Held {{ held(gate: \"{gate}\") }}";
+
+    /// <summary>Opens the gate a <see cref="HeldDocument"/> request waits on.</summary>
+    public static HeldRequest Hold(string gate) => s_held.GetOrAdd(gate, _ => new HeldRequest());
+
+    /// <summary>The two sides of a held request: it has entered the resolver, and it may leave.</summary>
+    public sealed class HeldRequest
+    {
+        private readonly TaskCompletionSource _entered = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private readonly TaskCompletionSource _released = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        /// <summary>Completes once the resolver is running.</summary>
+        public Task Entered => _entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        /// <summary>Lets the resolver return.</summary>
+        public void Release() => _released.TrySetResult();
+
+        internal async Task<string> RunAsync()
+        {
+            _entered.TrySetResult();
+            await _released.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            return "held";
+        }
     }
 
     public static async Task<IRequestExecutor> GetExecutorAsync(
@@ -98,5 +155,8 @@ public static class GraphQLFixture
 
         [TraxAllowAnonymous]
         public string Version() => "v1";
+
+        [TraxAllowAnonymous]
+        public Task<string> Held(string gate) => Hold(gate).RunAsync();
     }
 }

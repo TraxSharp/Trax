@@ -27,10 +27,12 @@ internal sealed class NavigationTargetPostureInterceptor(GraphQLConfiguration co
         TypeSystemConfiguration configuration
     )
     {
-        if (discoveryContext.Type is not ObjectType)
-            return;
-
-        if (configuration is not ObjectTypeConfiguration objectType)
+        // An object type extension carries the same configuration type; the gate belongs on the
+        // type itself.
+        if (
+            discoveryContext.Type is not ObjectType
+            || configuration is not ObjectTypeConfiguration objectType
+        )
             return;
 
         if (!_gated.TryGetValue(objectType.RuntimeType, out var target))

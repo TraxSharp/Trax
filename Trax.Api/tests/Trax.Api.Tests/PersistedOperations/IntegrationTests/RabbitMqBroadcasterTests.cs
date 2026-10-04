@@ -1,6 +1,7 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using RabbitMQ.Client;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
@@ -48,7 +49,6 @@ public class RabbitMqBroadcasterTests
     public async Task PublishAsync_DeliversMessage_ToReceiverOnSameExchange()
     {
         var options = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake")
             .WithInMemoryCache()
             .UseRabbitMqInvalidation(AmqpUri)
             .Build();
@@ -97,10 +97,83 @@ public class RabbitMqBroadcasterTests
     }
 
     [Test]
+    public async Task PublishAsync_CompletesOnlyOnceTheBrokerHasConfirmedIt()
+    {
+        var options = new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build();
+        await using var publisher = new RabbitMqPersistedOperationBroadcaster(
+            options,
+            NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
+        );
+
+        await publisher.PublishAsync(
+            new PersistedOperationChangedMessage(
+                null,
+                $"confirm_{Guid.NewGuid():N}",
+                PersistedOperationChangeType.Upsert,
+                DateTime.UtcNow
+            ),
+            CancellationToken.None
+        );
+
+        // A channel numbers its publishes only in publisher-confirm mode; otherwise this is 0.
+        (await publisher.Channel!.GetNextPublishSequenceNumberAsync())
+            .Should()
+            .BeGreaterThan(1UL);
+    }
+
+    [Test]
+    public async Task PublishAsync_AfterItsChannelClosed_OpensAnotherOnTheSameConnection()
+    {
+        var options = new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build();
+        await using var publisher = new RabbitMqPersistedOperationBroadcaster(
+            options,
+            NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
+        );
+        var message = new PersistedOperationChangedMessage(
+            null,
+            $"reopen_{Guid.NewGuid():N}",
+            PersistedOperationChangeType.Upsert,
+            DateTime.UtcNow
+        );
+        await publisher.PublishAsync(message, CancellationToken.None);
+        var first = publisher.Channel!;
+        await first.CloseAsync();
+
+        await publisher.PublishAsync(message, CancellationToken.None);
+
+        publisher.Channel.Should().NotBeSameAs(first);
+        publisher.Channel!.IsOpen.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task PublishAsync_WhenTheBrokerCannotBeReached_Throws()
+    {
+        var options = new PersistedOperationsBuilder()
+            .UseRabbitMqInvalidation("amqp://trax:trax123@localhost:1/")
+            .Build();
+        await using var publisher = new RabbitMqPersistedOperationBroadcaster(
+            options,
+            NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
+        );
+
+        var act = () =>
+            publisher.PublishAsync(
+                new PersistedOperationChangedMessage(
+                    null,
+                    "unreachable",
+                    PersistedOperationChangeType.Upsert,
+                    DateTime.UtcNow
+                ),
+                CancellationToken.None
+            );
+
+        await act.Should().ThrowAsync<Exception>();
+    }
+
+    [Test]
     public async Task TwoReceivers_BothObserveSameMessage()
     {
         var options = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake")
             .WithInMemoryCache()
             .UseRabbitMqInvalidation(AmqpUri)
             .Build();
@@ -167,7 +240,6 @@ public class RabbitMqBroadcasterTests
         // This proves StopAsync actually unbinds the consumer rather than
         // leaving it silently running.
         var options = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake")
             .WithInMemoryCache()
             .UseRabbitMqInvalidation(AmqpUri)
             .Build();
@@ -209,10 +281,73 @@ public class RabbitMqBroadcasterTests
     }
 
     [Test]
+    public async Task AReceiverWhoseChannelTheBrokerCloses_EmptiesItsCaches_AndKeepsReceiving()
+    {
+        var options = new PersistedOperationsBuilder()
+            .WithInMemoryCache()
+            .UseRabbitMqInvalidation(AmqpUri)
+            .Build();
+        var cache = new RecordingCache();
+        var generation = new PersistedOperationCacheGeneration();
+        var svc = new PersistedOperationReceiverService(
+            options,
+            cache,
+            new HotChocolateOperationCacheInvalidator(
+                new ServiceCollection().BuildServiceProvider(),
+                generation,
+                NullLogger<HotChocolateOperationCacheInvalidator>.Instance
+            ),
+            NullLogger<PersistedOperationReceiverService>.Instance
+        );
+        await using var publisher = new RabbitMqPersistedOperationBroadcaster(
+            options,
+            NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
+        );
+        await svc.StartAsync(CancellationToken.None);
+        try
+        {
+            var before = generation.Current;
+
+            // Acknowledging a delivery the channel never had is a channel-level error: the broker
+            // closes that channel and leaves the connection up.
+            await svc.Channel!.BasicAckAsync(deliveryTag: 9_999, multiple: false);
+
+            (await WaitUntilAsync(() => generation.Current > before, TimeSpan.FromSeconds(10)))
+                .Should()
+                .BeTrue("a receiver that lost its channel may have missed a broadcast");
+
+            var id = $"after_channel_close_{Guid.NewGuid():N}";
+            var received = await WaitUntilAsync(
+                () =>
+                {
+                    publisher
+                        .PublishAsync(
+                            new PersistedOperationChangedMessage(
+                                null,
+                                id,
+                                PersistedOperationChangeType.Upsert,
+                                DateTime.UtcNow
+                            ),
+                            CancellationToken.None
+                        )
+                        .GetAwaiter()
+                        .GetResult();
+                    return cache.Invalidations.Any(p => p.Id == id);
+                },
+                TimeSpan.FromSeconds(15)
+            );
+            received.Should().BeTrue("the receiver subscribes again on a new channel");
+        }
+        finally
+        {
+            await svc.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Test]
     public async Task ReceiverService_DisposeWithoutStop_ReleasesResourcesIdempotently()
     {
         var options = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake")
             .WithInMemoryCache()
             .UseRabbitMqInvalidation(AmqpUri)
             .Build();
@@ -239,7 +374,6 @@ public class RabbitMqBroadcasterTests
         // receiver's OnMessageAsync should fail to deserialize, log, and
         // nack without crashing the host.
         var options = new PersistedOperationsBuilder()
-            .UseDatabase("Host=fake")
             .WithInMemoryCache()
             .UseRabbitMqInvalidation(AmqpUri)
             .Build();
@@ -289,7 +423,6 @@ public class RabbitMqBroadcasterTests
         var options = new PersistedOperationsOptions
         {
             CacheEnabled = true,
-            DatabaseConnectionString = "Host=fake",
             RabbitMqConnectionString = string.Empty,
         };
 
@@ -309,6 +442,7 @@ public class RabbitMqBroadcasterTests
     private static HotChocolateOperationCacheInvalidator NoOpInvalidator() =>
         new(
             new ServiceCollection().BuildServiceProvider(),
+            new PersistedOperationCacheGeneration(),
             NullLogger<HotChocolateOperationCacheInvalidator>.Instance
         );
 

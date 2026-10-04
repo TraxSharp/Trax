@@ -1,4 +1,5 @@
 using GraphQL.Types;
+using GraphQLParser.AST;
 
 namespace Trax.Api.GraphQL.Client;
 
@@ -9,10 +10,8 @@ namespace Trax.Api.GraphQL.Client;
 /// query validation.
 ///
 /// The client validator only cares that fields and types exist and that operations are
-/// well-formed. <see cref="ScalarGraphType.ParseLiteral"/> falls back on the base class's
-/// reasonable default (delegates through <see cref="ScalarGraphType.CanParseLiteral"/>), so the only
-/// override we need is <see cref="ParseValue"/>, which graphql-dotnet declares abstract.
-/// Server-side execution applies the real scalar semantics.
+/// well-formed, so every literal is accepted, an object or a list included (an <c>Any</c> or
+/// <c>JSON</c> argument is usually one). Server-side execution applies the real scalar semantics.
 /// </summary>
 internal sealed class PermissiveScalarGraphType : ScalarGraphType
 {
@@ -24,4 +23,9 @@ internal sealed class PermissiveScalarGraphType : ScalarGraphType
     }
 
     public override object? ParseValue(object? value) => value;
+
+    public override bool CanParseLiteral(GraphQLValue value) => true;
+
+    public override object? ParseLiteral(GraphQLValue value) =>
+        value is GraphQLNullValue ? null : value;
 }

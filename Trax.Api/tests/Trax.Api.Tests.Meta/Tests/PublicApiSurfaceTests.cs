@@ -42,6 +42,9 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.Api.GraphQL.Client.GraphQLClientConfigurationBuilder).Assembly
         ).SetName("Trax.Api.GraphQL.Client");
+        yield return new TestCaseData(
+            typeof(Trax.Api.GraphQL.Audit.TraxAuditOptions).Assembly
+        ).SetName("Trax.Api.GraphQL.Audit");
     }
 
     [TestCaseSource(nameof(Assemblies))]

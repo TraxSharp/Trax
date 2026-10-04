@@ -1,10 +1,10 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;

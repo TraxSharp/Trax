@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.AspNetCore.Builder;
@@ -240,9 +240,7 @@ public class PersistedOperationTransportTests
                 .AddTypeExtension<GraphQLFixture.HelloQuery>()
                 .UsePersistedOperations(po =>
                 {
-                    po.UseDatabase(PostgresFixture.ConnectionString)
-                        .SingleNode()
-                        .ExposeOperationsNamespace(false);
+                    po.SingleNode().ExposeOperationsNamespace(false);
                     configure(po);
                 })
         );

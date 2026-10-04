@@ -1,4 +1,8 @@
+using System.Collections;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -15,11 +19,27 @@ namespace Trax.Api.GraphQL.Queries;
 /// then written with <see cref="TraxRedaction.WithRedaction"/>. When that cannot be done (the
 /// type is not the input of a train registered on this host, or the JSON does not read as it),
 /// nothing proves the copy holds no sensitive member, so the whole value is masked.
+/// <para>
+/// A member whose declared type does not say what it holds (<see cref="object"/>,
+/// <see cref="JsonElement"/>, <see cref="JsonNode"/>, <see cref="JsonDocument"/>, or a collection
+/// or dictionary of them) is masked too. The stored copy was written from the runtime value, so
+/// it can hold a <c>[TraxSensitive]</c> member of a type the declared one does not name, and
+/// reading it back as the declared type gives JSON with nothing to mark it. The masking runs per
+/// member, so the members whose types are known still read as stored.
+/// </para>
 /// </remarks>
 internal static class TransportInputRedaction
 {
     /// <summary>What a value that could not be read as its type is shown as.</summary>
     internal static readonly string FullyMasked = $$"""{"{{TraxRedaction.MarkerProperty}}":true}""";
+
+    /// <summary>
+    /// The dispatcher's options with every <c>[TraxSensitive]</c> member and every open-ended
+    /// member written as the mask.
+    /// </summary>
+    internal static readonly JsonSerializerOptions WriteOptions = MaskingOpenEndedMembers(
+        TraxRedaction.WithRedaction(TraxJsonSerializationOptions.ManifestProperties)
+    );
 
     /// <summary>
     /// The stored JSON with its sensitive members masked, or <c>null</c> when there is none.
@@ -43,11 +63,95 @@ internal static class TransportInputRedaction
             var value = JsonSerializer.Deserialize(json, inputType, options);
             return value is null
                 ? FullyMasked
-                : JsonSerializer.Serialize(value, inputType, TraxRedaction.WithRedaction(options));
+                : JsonSerializer.Serialize(value, inputType, WriteOptions);
         }
         catch (Exception e) when (e is JsonException or NotSupportedException)
         {
             return FullyMasked;
+        }
+    }
+
+    private static JsonSerializerOptions MaskingOpenEndedMembers(JsonSerializerOptions redacting)
+    {
+        var options = new JsonSerializerOptions(redacting)
+        {
+            TypeInfoResolver = JsonTypeInfoResolver
+                .Combine([.. redacting.TypeInfoResolverChain])
+                .WithAddedModifier(MaskOpenEndedMembers),
+        };
+        options.MakeReadOnly();
+        return options;
+    }
+
+    private static void MaskOpenEndedMembers(JsonTypeInfo typeInfo)
+    {
+        if (typeInfo.Kind != JsonTypeInfoKind.Object)
+            return;
+
+        foreach (var property in typeInfo.Properties)
+            if (IsOpenEnded(property.PropertyType, depth: 0))
+                property.CustomConverter =
+                    Activator.CreateInstance(
+                        typeof(MaskConverter<>).MakeGenericType(property.PropertyType)
+                    ) as JsonConverter;
+    }
+
+    /// <summary>
+    /// Whether a value of <paramref name="type"/> can hold members its type does not declare:
+    /// <see cref="object"/>, a JSON DOM type, a non-generic collection, or a collection or
+    /// dictionary whose elements are one of those.
+    /// </summary>
+    internal static bool IsOpenEnded(Type type, int depth)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (
+            type == typeof(object)
+            || type == typeof(JsonElement)
+            || type == typeof(JsonDocument)
+            || typeof(JsonNode).IsAssignableFrom(type)
+        )
+            return true;
+
+        if (type == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(type))
+            return false;
+
+        var elementTypes = (
+            type.IsInterface ? type.GetInterfaces().Append(type) : type.GetInterfaces()
+        )
+            .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+            .Select(i => ElementValueType(i.GetGenericArguments()[0]))
+            .ToList();
+
+        // A collection that names no element type reads its elements back as JSON.
+        if (elementTypes.Count == 0)
+            return true;
+
+        return depth < MaxElementDepth && elementTypes.Any(e => IsOpenEnded(e, depth + 1));
+    }
+
+    /// <summary>How many collections deep an element type is looked through.</summary>
+    private const int MaxElementDepth = 8;
+
+    /// <summary>A dictionary's entries are judged by their value type.</summary>
+    private static Type ElementValueType(Type element) =>
+        element.IsGenericType && element.GetGenericTypeDefinition() == typeof(KeyValuePair<,>)
+            ? element.GetGenericArguments()[1]
+            : element;
+
+    /// <summary>Writes the mask whatever the value is. Only ever used to write.</summary>
+    private sealed class MaskConverter<T> : JsonConverter<T>
+    {
+        public override T Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options
+        ) => throw new NotSupportedException("A masked copy is never read back.");
+
+        public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteBoolean(TraxRedaction.MarkerProperty, true);
+            writer.WriteEndObject();
         }
     }
 

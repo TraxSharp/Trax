@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Configuration;
+using Trax.Api.Services.Authorization;
 using Trax.Effect.Attributes;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -33,7 +34,8 @@ namespace Trax.Api.GraphQL.Subscriptions;
 internal sealed class LifecycleSubscriptionAccess(
     GraphQLConfiguration configuration,
     ITrainDiscoveryService discovery,
-    IAuthorizationService authorization
+    IAuthorizationService authorization,
+    TrainLifecycleStreamOptions streamOptions
 )
 {
     /// <summary>What replaces a failure reason a broadcast subscriber may not see.</summary>
@@ -57,7 +59,10 @@ internal sealed class LifecycleSubscriptionAccess(
             if (await SatisfiesTrainAsync(user, train).ConfigureAwait(false))
                 trains.Add(train.ServiceType.FullName!);
 
-        return new LifecycleVisibility(All: false, trains);
+        return new LifecycleVisibility(All: false, trains)
+        {
+            JunctionAnswers = streamOptions.IncludeJunctionAnswersForBroadcastSubscribers,
+        };
     }
 
     /// <summary>
@@ -83,15 +88,16 @@ internal sealed class LifecycleSubscriptionAccess(
         if (!IsAuthenticated(user))
             return false;
 
-        AuthorizeDirectives.ExtractRules(gate, out var policies, out var roles);
+        AuthorizeDirectives.ExtractRules(gate, out var policies, out var roleSets);
         foreach (var policy in policies)
             if (
                 !(await authorization.AuthorizeAsync(user!, policy).ConfigureAwait(false)).Succeeded
             )
                 return false;
 
-        // @authorize(roles:) on the operations field is an IsInRole check.
-        return roles.Length == 0 || roles.Any(user!.IsInRole);
+        // Each @authorize(roles:) on the operations field is an IsInRole check, and the field
+        // carries one per GateOperations(roles:) call, all of which must pass.
+        return roleSets.All(roles => roles.Any(user!.IsInRole));
     }
 
     private async ValueTask<bool> SatisfiesTrainAsync(
@@ -116,12 +122,10 @@ internal sealed class LifecycleSubscriptionAccess(
             )
                 return false;
 
-        if (train.RequiredRoles.Count == 0)
-            return true;
-
         // Exact, as TrainAuthorizationService and @authorize compare roles (Trax.Docs
-        // adr/0026-train-roles-match-exactly-like-authorize.md).
-        return train.RequiredRoles.Any(user!.IsInRole);
+        // adr/0026-train-roles-match-exactly-like-authorize.md), and one requirement per
+        // attribute that names roles, as TrainAuthorizationService applies them.
+        return TrainRoleRequirements.For(train).All(roles => roles.Any(user!.IsInRole));
     }
 
     private static bool IsAuthenticated(ClaimsPrincipal? user) =>
@@ -139,6 +143,12 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
     );
 
     public bool IsEmpty => !All && Trains.Count == 0;
+
+    /// <summary>
+    /// Outside the operations view, whether the answers on a run's steps are shown. Off unless the
+    /// host called <c>AllowJunctionAnswersForBroadcastSubscribers()</c>.
+    /// </summary>
+    public bool JunctionAnswers { get; init; }
 
     /// <summary>
     /// The event as this subscriber should see it, or <c>null</c> when it should not see it.
@@ -160,6 +170,49 @@ internal sealed record LifecycleVisibility(bool All, IReadOnlySet<string> Trains
                 : LifecycleSubscriptionAccess.MaskedFailureReason,
             HostName = null,
             HostEnvironment = null,
+        };
+    }
+
+    /// <summary>
+    /// The junction event as this subscriber should see it, or <c>null</c> when it should not see
+    /// it: exactly when it would not see the train's own events.
+    /// </summary>
+    /// <remarks>
+    /// Outside the operations view the host detail a step carries is withheld, as it is from a
+    /// train event: the decider's type name, and the exception type of a failure unless it is a
+    /// <c>TrainException</c>, the one a train raises for its clients. The answer and confidence
+    /// are withheld too unless the host opted in (<see cref="JunctionAnswers"/>), and so is
+    /// everything on a step on a decision track that names what ran there, of any kind: its name,
+    /// its question key and its answer. The step itself, its position and its timing still arrive.
+    /// </remarks>
+    public JunctionEvent? Present(JunctionEvent e)
+    {
+        if (All)
+            return e;
+
+        if (!Trains.Contains(e.TrainName))
+            return null;
+
+        // Without the opt-in a broadcast subscriber is not shown answers, and what ran on a
+        // decision track (a junction, a further question, a further route) gives the answer away,
+        // so whatever names it is withheld as well.
+        var step =
+            !JunctionAnswers && e.Junction.OnATrack ? e.Junction.WithTrackWithheld() : e.Junction;
+        return e with
+        {
+            Junction = step with
+            {
+                Decider = null,
+                Answer = JunctionAnswers ? step.Answer : null,
+                Confidence = JunctionAnswers ? step.Confidence : null,
+                FailureException = string.Equals(
+                    step.FailureException,
+                    "TrainException",
+                    StringComparison.Ordinal
+                )
+                    ? step.FailureException
+                    : null,
+            },
         };
     }
 }

@@ -18,21 +18,47 @@ namespace Trax.Api.GraphQL.Client.Trax;
 public sealed class AssemblySchemaProvider : ISchemaProvider
 {
     private readonly Action<IRequestExecutorBuilder> _configure;
+    private readonly bool _removeSubscriptions;
     private readonly RetryingAsyncLazy<ISchema> _schema;
 
-    /// <summary>Creates a provider that builds the schema from <paramref name="configure"/> when it is first requested.</summary>
+    /// <summary>
+    /// Creates a provider that builds the schema from <paramref name="configure"/> when it is first
+    /// requested, and drops the subscription type, the client's default.
+    /// </summary>
     /// <param name="configure">Configures a HotChocolate request executor builder the same way the server does.</param>
     /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <c>null</c>.</exception>
     public AssemblySchemaProvider(Action<IRequestExecutorBuilder> configure)
+        : this(configure, removeSubscriptionsFromSchema: true) { }
+
+    /// <summary>Creates a provider that builds the schema from <paramref name="configure"/> when it is first requested.</summary>
+    /// <param name="configure">Configures a HotChocolate request executor builder the same way the server does.</param>
+    /// <param name="removeSubscriptionsFromSchema">
+    /// Whether the subscription type is dropped before queries are validated, as
+    /// <see cref="IGraphQLClientConfiguration.RemoveSubscriptionsFromSchema"/> says.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <c>null</c>.</exception>
+    public AssemblySchemaProvider(
+        Action<IRequestExecutorBuilder> configure,
+        bool removeSubscriptionsFromSchema
+    )
+        : this(configure, removeSubscriptionsFromSchema, TimeProvider.System) { }
+
+    internal AssemblySchemaProvider(
+        Action<IRequestExecutorBuilder> configure,
+        bool removeSubscriptionsFromSchema,
+        TimeProvider time
+    )
     {
         ArgumentNullException.ThrowIfNull(configure);
         _configure = configure;
-        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync);
+        _removeSubscriptions = removeSubscriptionsFromSchema;
+        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync, time);
     }
 
     /// <summary>
     /// Returns the schema, loading it on the first call and sharing the result. A load that
-    /// fails is not kept, so the next call loads again. <paramref name="cancellationToken"/>
+    /// fails is not kept: it is loaded again once a capped, jittered backoff has passed, and a call
+    /// before then gets the failure. <paramref name="cancellationToken"/>
     /// cancels this caller's wait, not a load other callers share.
     /// </summary>
     /// <param name="cancellationToken">Cancels waiting for the schema.</param>
@@ -54,7 +80,7 @@ public sealed class AssemblySchemaProvider : ISchemaProvider
 
         try
         {
-            return Schema.For(sdl);
+            return SdlSchema.Build(sdl, _removeSubscriptions);
         }
         catch (Exception ex)
         {

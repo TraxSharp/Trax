@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -412,7 +412,6 @@ public class CoverageGapTests
         (await mutations.AcknowledgeDeadLetters([1, 2], "note", scheduler, ct))
             .Should()
             .BeSameAs(batch);
-        (await mutations.RequeueAllDeadLetters(scheduler, ct)).Should().BeSameAs(batch);
         (await mutations.AcknowledgeAllDeadLetters("note", scheduler, ct)).Should().BeSameAs(batch);
     }
 
@@ -431,14 +430,36 @@ public class CoverageGapTests
         var mutations = new Trax.Api.GraphQL.Mutations.OperationsMutations();
         var ct = CancellationToken.None;
 
+        var factory =
+            new Trax.Effect.Data.InMemory.Services.InMemoryContextFactory.InMemoryContextProviderFactory(
+                new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
+            );
+        await using (var db = await factory.CreateDbContextAsync(ct))
+        {
+            var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
+                new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
+            );
+            manifest.ExternalId = "ext";
+            await db.Track(manifest);
+            await db.SaveChanges(ct);
+        }
+
         mutations.DeadLetters().Should().NotBeNull();
-        (await mutations.TriggerManifest("ext", scheduler, ct)).Success.Should().BeTrue();
-        (await mutations.TriggerManifestDelayed("ext", TimeSpan.FromSeconds(5), scheduler, ct))
+        (await mutations.TriggerManifest("ext", scheduler, factory, ct)).Success.Should().BeTrue();
+        (
+            await mutations.TriggerManifestDelayed(
+                "ext",
+                TimeSpan.FromSeconds(5),
+                scheduler,
+                factory,
+                ct
+            )
+        )
             .Success.Should()
             .BeTrue();
-        (await mutations.DisableManifest("ext", scheduler, ct)).Success.Should().BeTrue();
-        (await mutations.EnableManifest("ext", scheduler, ct)).Success.Should().BeTrue();
-        (await mutations.CancelManifest("ext", scheduler, ct)).Count.Should().Be(3);
+        (await mutations.DisableManifest("ext", scheduler, factory, ct)).Success.Should().BeTrue();
+        (await mutations.EnableManifest("ext", scheduler, factory, ct)).Success.Should().BeTrue();
+        (await mutations.CancelManifest("ext", scheduler, factory, ct)).Count.Should().Be(3);
         (await mutations.TriggerGroup(7, scheduler, ct)).Count.Should().Be(2);
         (await mutations.CancelGroup(7, scheduler, ct)).Count.Should().Be(5);
     }

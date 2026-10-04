@@ -156,23 +156,21 @@ internal static class ListElementFilterBinding
     /// </summary>
     private static Type? BuildListFilterType(Type element)
     {
-        var elementFilter = BuildElementFilterType(element);
+        // A nullable element shares its underlying type's input, as it does in stock
+        // HotChocolate, which filters an int?[] through IntOperationFilterInput. Its `neq`
+        // lowers to the same untranslatable Any(x => x != value), so it is restricted the same
+        // way; `eq: null` stays available, because the element input's fields are nullable.
+        var underlying = Nullable.GetUnderlyingType(element) ?? element;
+
+        var elementFilter = BuildElementFilterType(underlying);
         if (elementFilter is null)
             return null;
 
-        return typeof(ListElementFilterInputType<,>).MakeGenericType(element, elementFilter);
+        return typeof(ListElementFilterInputType<,>).MakeGenericType(underlying, elementFilter);
     }
 
     private static Type? BuildElementFilterType(Type element)
     {
-        // Nullable elements are left on HotChocolate's stock input. The C# `struct`
-        // constraint on ComparableOperationFilterInputType<T> means "non-nullable value
-        // type", so Nullable<T> cannot close it, and a nullable enum has no non-nullable
-        // enum filter to derive from either. Binding one throws at startup rather than
-        // producing a restricted type, so these keep the stock behaviour instead.
-        if (Nullable.GetUnderlyingType(element) is not null)
-            return null;
-
         if (element.IsEnum)
             return typeof(EnumListElementFilterInputType<>).MakeGenericType(element);
 

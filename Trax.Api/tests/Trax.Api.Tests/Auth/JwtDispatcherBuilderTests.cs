@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.Auth.Jwt;
 
 namespace Trax.Api.Tests.Auth;

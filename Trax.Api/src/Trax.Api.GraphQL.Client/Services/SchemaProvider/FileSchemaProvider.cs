@@ -5,8 +5,10 @@ namespace Trax.Api.GraphQL.Client;
 /// <summary>
 /// Loads the schema from a checked-in SDL file (typically <c>schema.graphql</c>). The file is
 /// read once, parsed into an <see cref="ISchema"/>, and cached for the lifetime of the provider.
-/// A read that fails (the file is missing, empty or not valid SDL) is not cached, so the next
-/// call reads the file again.
+/// Custom scalars the SDL declares (<c>Any</c>, <c>UUID</c>, <c>URL</c>, ...) are accepted as
+/// permissive scalars, as <see cref="IntrospectingSchemaProvider"/> accepts them.
+/// A read that fails (the file is missing, empty or not valid SDL) is not cached: the file is read
+/// again once a capped, jittered backoff has passed.
 ///
 /// Use this when:
 /// <list type="bullet">
@@ -22,21 +24,40 @@ namespace Trax.Api.GraphQL.Client;
 public class FileSchemaProvider : ISchemaProvider
 {
     private readonly string _path;
+    private readonly bool _removeSubscriptions;
     private readonly RetryingAsyncLazy<ISchema> _schema;
 
-    /// <summary>Creates a provider for the SDL file at <paramref name="path"/>. The file is not read until the schema is first requested.</summary>
+    /// <summary>
+    /// Creates a provider for the SDL file at <paramref name="path"/> that drops the subscription
+    /// type, the client's default. The file is not read until the schema is first requested.
+    /// </summary>
     /// <param name="path">An absolute path, or one relative to the process's working directory.</param>
     /// <exception cref="ArgumentException"><paramref name="path"/> is null, empty or whitespace.</exception>
     public FileSchemaProvider(string path)
+        : this(path, removeSubscriptionsFromSchema: true) { }
+
+    /// <summary>Creates a provider for the SDL file at <paramref name="path"/>. The file is not read until the schema is first requested.</summary>
+    /// <param name="path">An absolute path, or one relative to the process's working directory.</param>
+    /// <param name="removeSubscriptionsFromSchema">
+    /// Whether the subscription type is dropped before queries are validated, as
+    /// <see cref="IGraphQLClientConfiguration.RemoveSubscriptionsFromSchema"/> says.
+    /// </param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is null, empty or whitespace.</exception>
+    public FileSchemaProvider(string path, bool removeSubscriptionsFromSchema)
+        : this(path, removeSubscriptionsFromSchema, TimeProvider.System) { }
+
+    internal FileSchemaProvider(string path, bool removeSubscriptionsFromSchema, TimeProvider time)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _path = path;
-        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync);
+        _removeSubscriptions = removeSubscriptionsFromSchema;
+        _schema = new RetryingAsyncLazy<ISchema>(LoadSchemaAsync, time);
     }
 
     /// <summary>
     /// Returns the schema, loading it on the first call and sharing the result. A load that
-    /// fails is not kept, so the next call loads again. <paramref name="cancellationToken"/>
+    /// fails is not kept: it is loaded again once a capped, jittered backoff has passed, and a call
+    /// before then gets the failure. <paramref name="cancellationToken"/>
     /// cancels this caller's wait, not a load other callers share.
     /// </summary>
     /// <param name="cancellationToken">Cancels waiting for the schema.</param>
@@ -71,7 +92,7 @@ public class FileSchemaProvider : ISchemaProvider
 
         try
         {
-            return Schema.For(sdl);
+            return SdlSchema.Build(sdl, _removeSubscriptions);
         }
         catch (Exception ex)
         {

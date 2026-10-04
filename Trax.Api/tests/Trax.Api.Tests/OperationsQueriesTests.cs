@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -1104,6 +1104,202 @@ public class OperationsQueriesTests
         }
     }
 
+    private async Task<long> SeedIntervalManifest()
+    {
+        await SeedManifests(1);
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var seeded = await db.Manifests.FirstAsync();
+        seeded.ScheduleType = ScheduleType.Interval;
+        seeded.IntervalSeconds = 60;
+        seeded.CronExpression = null;
+        seeded.TimeoutSeconds = 30;
+        seeded.MaxRetries = 2;
+        await db.SaveChanges(default);
+        return seeded.Id;
+    }
+
+    private async Task<OperationResponse> RefusedUpdate(long id, UpdateManifestInput input)
+    {
+        var signal = new RecordingChangeSignal();
+        var resp = await new OperationsMutations().UpdateManifest(
+            id,
+            input,
+            _factory,
+            signal,
+            default
+        );
+
+        resp.Success.Should().BeFalse(resp.Message);
+        signal.Domains.Should().BeEmpty("a refused update changes nothing");
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var m = await db.Manifests.AsNoTracking().FirstAsync(x => x.Id == id);
+        m.ScheduleType.Should().Be(ScheduleType.Interval, "nothing is saved");
+        m.IntervalSeconds.Should().Be(60, "nothing is saved");
+        m.CronExpression.Should().BeNull("nothing is saved");
+        m.TimeoutSeconds.Should().Be(30, "nothing is saved");
+        m.MaxRetries.Should().Be(2, "nothing is saved");
+        return resp;
+    }
+
+    [Test]
+    public async Task UpdateManifest_UnparseableCronExpression_IsRefusedAndNotSaved()
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(
+            id,
+            new UpdateManifestInput(ScheduleType: ScheduleType.Cron, CronExpression: "every day")
+        );
+
+        resp.Message.Should().Contain("5 or 6");
+    }
+
+    [Test]
+    public async Task UpdateManifest_SwitchToCronWithoutAnExpression_IsRefused()
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(
+            id,
+            new UpdateManifestInput(ScheduleType: ScheduleType.Cron)
+        );
+
+        resp.Message.Should().Contain("cronExpression");
+    }
+
+    [Test]
+    public async Task UpdateManifest_BlankCronExpression_IsRefused()
+    {
+        var id = await SeedIntervalManifest();
+
+        await RefusedUpdate(
+            id,
+            new UpdateManifestInput(ScheduleType: ScheduleType.Cron, CronExpression: "   ")
+        );
+    }
+
+    [TestCase(0)]
+    [TestCase(-60)]
+    public async Task UpdateManifest_NonPositiveInterval_IsRefused(int seconds)
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(id, new UpdateManifestInput(IntervalSeconds: seconds));
+
+        resp.Message.Should().Contain("intervalSeconds");
+    }
+
+    [Test]
+    public async Task UpdateManifest_SwitchToIntervalWithoutAnInterval_IsRefused()
+    {
+        var id = await SeedIntervalManifest();
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var m = await db.Manifests.FirstAsync(x => x.Id == id);
+            m.ScheduleType = ScheduleType.Cron;
+            m.CronExpression = "0 0 * * *";
+            m.IntervalSeconds = null;
+            await db.SaveChanges(default);
+        }
+
+        var resp = await new OperationsMutations().UpdateManifest(
+            id,
+            new UpdateManifestInput(ScheduleType: ScheduleType.Interval),
+            _factory,
+            new RecordingChangeSignal(),
+            default
+        );
+
+        resp.Success.Should().BeFalse();
+        resp.Message.Should().Contain("intervalSeconds");
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public async Task UpdateManifest_ZeroTimeout_IsRefused(int seconds)
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(id, new UpdateManifestInput(TimeoutSeconds: seconds));
+
+        resp.Message.Should().Contain("timeoutSeconds");
+    }
+
+    [Test]
+    public async Task UpdateManifest_NegativeMaxRetries_IsRefused()
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(id, new UpdateManifestInput(MaxRetries: -1));
+
+        resp.Message.Should().Contain("maxRetries");
+    }
+
+    [TestCase(ScheduleType.Once)]
+    [TestCase(ScheduleType.Dependent)]
+    [TestCase(ScheduleType.DormantDependent)]
+    public async Task UpdateManifest_SwitchToATypeTheInputCannotComplete_IsRefused(
+        ScheduleType type
+    )
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(id, new UpdateManifestInput(ScheduleType: type));
+
+        resp.Message.Should().Contain(type.ToString());
+    }
+
+    [Test]
+    public async Task UpdateManifest_SameTypeTheInputCannotComplete_IsKept()
+    {
+        await SeedManifests(1);
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var m = await db.Manifests.FirstAsync();
+            m.ScheduleType = ScheduleType.Once;
+            await db.SaveChanges(default);
+            id = m.Id;
+        }
+
+        var resp = await new OperationsMutations().UpdateManifest(
+            id,
+            new UpdateManifestInput(ScheduleType: ScheduleType.Once, Priority: 3),
+            _factory,
+            new RecordingChangeSignal(),
+            default
+        );
+
+        resp.Success.Should().BeTrue(resp.Message);
+    }
+
+    [Test]
+    public async Task UpdateManifest_FieldsOutsideTheSchedule_SaveWhenTheStoredScheduleIsUnrunnable()
+    {
+        // The schedule is checked only when the input changes it, so an operator can still
+        // disable a manifest whose stored schedule the scheduler cannot run.
+        await SeedManifests(1);
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var m = await db.Manifests.FirstAsync();
+            m.ScheduleType = ScheduleType.Cron;
+            m.CronExpression = null;
+            await db.SaveChanges(default);
+            id = m.Id;
+        }
+
+        var resp = await new OperationsMutations().UpdateManifest(
+            id,
+            new UpdateManifestInput(IsEnabled: false),
+            _factory,
+            new RecordingChangeSignal(),
+            default
+        );
+
+        resp.Success.Should().BeTrue(resp.Message);
+    }
+
     [Test]
     public async Task UpdateManifest_MissingId_ReturnsFalse()
     {
@@ -1301,6 +1497,57 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task RequeueExecution_AskedAfresh_IsQueuedWithoutReplayingTheDecisions()
+    {
+        var id = await SeedRequeueSourceAsync("{\"v\": 1}", recordDecision: true);
+        var ops = RequeueOperations(out var execution);
+
+        var resp = await new OperationsMutations().RequeueExecution(
+            id,
+            ops,
+            default,
+            askAfresh: true
+        );
+
+        resp.Success.Should().BeTrue(resp.Message);
+        resp.Count.Should().Be(1);
+        await execution
+            .DidNotReceive()
+            .QueueAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Is<QueueTrainOptions>(o => o != null && o.ReplayDecisionsOf != null),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task RequeueExecution_PassesAskAfreshToTheSharedRequeue(bool askAfresh)
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.RequeueExecutionAsync(42, Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(true, Count: 1));
+        ops.RequeueExecutionAsync(42, Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(true, Count: 1));
+
+        await new OperationsMutations().RequeueExecution(42, ops, default, askAfresh);
+
+        if (askAfresh)
+            await ops.Received(1).RequeueExecutionAsync(42, true, Arg.Any<CancellationToken>());
+        else
+        {
+            await ops.Received(1).RequeueExecutionAsync(42, Arg.Any<CancellationToken>());
+            await ops.DidNotReceive()
+                .RequeueExecutionAsync(
+                    Arg.Any<long>(),
+                    Arg.Any<bool>(),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+    }
+
+    [Test]
     public async Task RequeueExecution_ARunThatRecordedNoDecisions_IsQueuedAsAnOrdinaryEnqueue()
     {
         var id = await SeedRequeueSourceAsync("{\"v\": 1}");
@@ -1413,6 +1660,39 @@ public class OperationsQueriesTests
         resp.Success.Should().BeFalse();
         resp.Message.Should().Contain("too large to save");
         execution.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [TestCase("{\"_unserializable\": true, \"_error\": \"NotSupportedException\"}")]
+    [TestCase(
+        "{\"_disposed\": true, \"_message\": \"Input object contained disposed JsonDocument objects\"}"
+    )]
+    [TestCase("{\"_truncated\": true, \"_maxBytes\": 1024}")]
+    public async Task RequeueExecution_WithASavedPlaceholder_ReturnsFalseWithoutQueuing(
+        string placeholder
+    )
+    {
+        // What the parameter effect saves in place of an input it could not record.
+        var id = await SeedRequeueSourceAsync(placeholder);
+        var ops = RequeueOperations(out var execution);
+
+        var resp = await new OperationsMutations().RequeueExecution(id, ops, default);
+
+        resp.Success.Should().BeFalse();
+        execution.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [TestCase("{\"_unserializable\": false, \"v\": 1}")]
+    [TestCase("{\"_disposed\": \"yes\"}")]
+    [TestCase("[1, 2]")]
+    public async Task RequeueExecution_WithAnInputThatIsNotAPlaceholder_IsQueued(string input)
+    {
+        var id = await SeedRequeueSourceAsync(input);
+        var ops = RequeueOperations(out var execution);
+
+        var resp = await new OperationsMutations().RequeueExecution(id, ops, default);
+
+        resp.Success.Should().BeTrue(resp.Message);
+        execution.ReceivedCalls().Should().NotBeEmpty();
     }
 
     [Test]
@@ -1801,6 +2081,22 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task GetExecutionDetail_CarriesTheRunARequeueReplays()
+    {
+        var source = await SeedRequeueSourceAsync("{\"v\": 1}", recordDecision: true);
+        var requeued = await SeedRequeueSourceAsync("{\"v\": 1}", replayDecisionsOf: source);
+
+        var queries = new OperationsQueries();
+        var replaying = await queries.GetExecutionDetail(requeued, _factory, default);
+        var original = await queries.GetExecutionDetail(source, _factory, default);
+
+        replaying!
+            .ReplayDecisionsOf.Should()
+            .Be(source, "the dashboard's Replays Decisions Of reads the same column");
+        original!.ReplayDecisionsOf.Should().BeNull();
+    }
+
+    [Test]
     public async Task GetManifests_AndGetManifest_CarryTheGroupName()
     {
         var groupId = await SeedManifestGroup("nightly-billing");
@@ -1862,6 +2158,43 @@ public class OperationsQueriesTests
     }
 
     [Test]
+    public async Task ManifestReads_CarryWhetherARetryReplaysDecisions()
+    {
+        var groupId = await SeedManifestGroup("replay-group");
+        long optedOut;
+        long byDefault;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var off = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            off.ManifestGroupId = groupId;
+            off.ReplayDecisionsOnRetry = false;
+            var on = Manifest.Create(new CreateManifest { Name = typeof(SomeFakeTrain) });
+            on.ManifestGroupId = groupId;
+            await db.Track(off);
+            await db.Track(on);
+            await db.SaveChanges(default);
+            optedOut = off.Id;
+            byDefault = on.Id;
+        }
+
+        var queries = new OperationsQueries();
+
+        (await queries.GetManifest(optedOut, _factory, default))!
+            .ReplayDecisionsOnRetry.Should()
+            .BeFalse();
+        (await queries.GetManifest(byDefault, _factory, default))!
+            .ReplayDecisionsOnRetry.Should()
+            .BeTrue();
+        (await queries.GetManifestDetail(optedOut, _factory, Discovery, default))!
+            .ReplayDecisionsOnRetry.Should()
+            .BeFalse();
+        (await queries.GetManifests(_factory, default, manifestGroupId: groupId))
+            .Items.Should()
+            .Contain(m => m.Id == optedOut && !m.ReplayDecisionsOnRetry)
+            .And.Contain(m => m.Id == byDefault && m.ReplayDecisionsOnRetry);
+    }
+
+    [Test]
     public async Task GetManifestDetail_MissingId_ReturnsNull()
     {
         (await new OperationsQueries().GetManifestDetail(99999, _factory, Discovery, default))
@@ -1913,6 +2246,57 @@ public class OperationsQueriesTests
         effect.Configuration.Should().BeNull();
     }
 
+    [Test]
+    public void GetEffects_SensitiveSettingMembers_ReadMasked()
+    {
+        var registry = Substitute.For<IEffectRegistry>();
+        registry
+            .GetAll()
+            .Returns(new Dictionary<Type, bool> { { typeof(FakeCredentialedFactory), true } });
+        var services = Substitute.For<IServiceProvider>();
+        services.GetService(typeof(FakeCredentialedFactory)).Returns(new FakeCredentialedFactory());
+
+        var configuration = new OperationsQueries()
+            .GetEffects(registry, services)
+            .Single()
+            .Configuration;
+
+        using var json = System.Text.Json.JsonDocument.Parse(configuration!);
+        var root = json.RootElement;
+        root.GetProperty("endpoint").GetString().Should().Be("https://sink.example");
+        root.GetProperty("apiKey").GetProperty("_redacted").GetBoolean().Should().BeTrue();
+        root.GetProperty("nested")
+            .GetProperty("password")
+            .GetProperty("_redacted")
+            .GetBoolean()
+            .Should()
+            .BeTrue();
+        configuration.Should().NotContain("sk-live-123").And.NotContain("hunter2");
+    }
+
+    public record FakeNestedCredential(
+        [property: Trax.Effect.Attributes.TraxSensitive] string Password
+    );
+
+    public record FakeCredentialedSettings(
+        string Endpoint,
+        [property: Trax.Effect.Attributes.TraxSensitive] string ApiKey,
+        object Nested
+    );
+
+    public class FakeCredentialedFactory
+        : Trax.Effect.Services.EffectProviderFactory.IConfigurableProviderFactory
+    {
+        public object GetConfiguration() =>
+            new FakeCredentialedSettings(
+                "https://sink.example",
+                "sk-live-123",
+                new FakeNestedCredential("hunter2")
+            );
+
+        public Type GetConfigurationType() => typeof(FakeCredentialedSettings);
+    }
+
     public record FakeUnwritableSettings(Action Callback);
 
     public class FakeUnwritableFactory
@@ -1962,6 +2346,63 @@ public class OperationsQueriesTests
                 ["playerId", "nickname", "bonus"],
                 "only Condition = Always hides a property from the reader"
             );
+    }
+
+    [Test]
+    public void GetTrains_InputSchema_LeavesOutAPropertyItCannotRead()
+    {
+        var discovery =
+            NSubstitute.Substitute.For<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>();
+        var registration = FakeRegistration(typeof(IUserTrain), typeof(WriteOnlyInput));
+        NSubstitute.SubstituteExtensions.Returns(discovery.DiscoverTrains(), [registration]);
+
+        var schema = new OperationsQueries().GetTrains(discovery).Single().InputSchema;
+
+        schema.Select(p => p.Name).Should().Equal("playerId");
+    }
+
+    public class WriteOnlyInput
+    {
+        public string PlayerId { get; set; } = "";
+
+        public string Secret
+        {
+            set => _ = value;
+        }
+    }
+
+    [Test]
+    public async Task GetGroups_NameFilter_CountsExactly()
+    {
+        await SeedManifestGroup("billing-a");
+        await SeedManifestGroup("billing-b");
+        await SeedManifestGroup("search");
+
+        var result = await new ManifestGroupQueries().GetGroups(
+            _factory,
+            default,
+            nameContains: "billing"
+        );
+
+        result.Items.Select(g => g.Name).Should().BeEquivalentTo(["billing-a", "billing-b"]);
+        result.TotalCount.Should().Be(2);
+        result.IsEstimatedCount.Should().BeFalse("a filtered count is exact");
+    }
+
+    [Test]
+    public async Task CancelExecution_ARefusedRequest_IsReturnedAsTheRefusal()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.CancelExecutionsAsync(
+                Arg.Any<IReadOnlyCollection<long>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new OperationResult(false, Count: 0, Message: "refused"));
+
+        var resp = await new OperationsMutations().CancelExecution(7, ops, default);
+
+        resp.Success.Should().BeFalse();
+        resp.Message.Should().Be("refused");
     }
 
     public record IgnoreConditionInput(

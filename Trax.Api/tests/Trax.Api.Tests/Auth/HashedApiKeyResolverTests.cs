@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 

@@ -25,10 +25,11 @@ namespace Trax.Api.Services.Authorization;
 /// user in an <see cref="HttpContext"/>, authorized trains are rejected.
 /// </para>
 /// <para>
-/// Combinator semantics for <see cref="Trax.Effect.Attributes.TraxAuthorizeAttribute"/>:
-/// policies AND (every policy must pass), roles OR (the user must hold at least one).
-/// A bare <c>[TraxAuthorize]</c> requires an authenticated user but imposes no policy
-/// or role requirement.
+/// Combinator semantics for <see cref="Trax.Effect.Attributes.TraxAuthorizeAttribute"/> are
+/// ASP.NET Core's for multiple <c>[Authorize]</c> attributes: every policy must pass, and every
+/// attribute that names roles is a requirement of its own, met by holding at least one of the
+/// roles it lists (see <see cref="TrainRoleRequirements"/>). A bare <c>[TraxAuthorize]</c>
+/// requires an authenticated user but imposes no policy or role requirement.
 /// </para>
 /// </remarks>
 public class TrainAuthorizationService(
@@ -79,15 +80,15 @@ public class TrainAuthorizationService(
                 );
         }
 
-        if (registration.RequiredRoles.Count > 0)
+        // Exact, case-sensitive comparison, as ASP.NET Core's RequireRole and @authorize make
+        // it: IsInRole matches each identity's role claim type ordinally. See Trax.Docs
+        // adr/0026-train-roles-match-exactly-like-authorize.md.
+        foreach (var roles in TrainRoleRequirements.For(registration))
         {
-            // Exact, case-sensitive comparison, as ASP.NET Core's RequireRole and @authorize make
-            // it: IsInRole matches each identity's role claim type ordinally. See Trax.Docs
-            // adr/0026-train-roles-match-exactly-like-authorize.md.
-            if (!registration.RequiredRoles.Any(user.IsInRole))
+            if (!roles.Any(user.IsInRole))
                 throw new TrainAuthorizationException(
                     registration.ServiceTypeName,
-                    $"User lacks required role. Required one of: {string.Join(", ", registration.RequiredRoles)}"
+                    $"User lacks required role. Required one of: {string.Join(", ", roles)}"
                 );
         }
     }

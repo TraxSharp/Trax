@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;
 
 namespace Trax.Api.Tests.AuthE2E;

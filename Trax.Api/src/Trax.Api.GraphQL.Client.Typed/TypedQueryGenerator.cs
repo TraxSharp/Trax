@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Trax.Api.GraphQL.Client.Typed;
@@ -198,7 +199,8 @@ internal static class TypedQueryGenerator
     {
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (IsNeverRead(prop))
+            // An indexer is no member System.Text.Json reads, so it has no field to select.
+            if (IsNeverRead(prop) || prop.GetIndexParameters().Length > 0)
                 continue;
 
             var responseKey =
@@ -286,13 +288,22 @@ internal static class TypedQueryGenerator
         return true;
     }
 
+    // An object type gets a subselection; anything else is a leaf. A type marked [GraphQLType] is
+    // an object type. Otherwise a primitive, string, enum or struct is a leaf, and so is every
+    // BCL class (Uri, Version, JsonObject, ...): those map to scalars (URL, String, JSON) on the
+    // server, and selecting their CLR properties would ask for fields no schema has.
     private static bool HasGraphQLType(Type t)
     {
-        if (t.IsPrimitive || t == typeof(string) || t.IsEnum || t == typeof(decimal))
+        if (t.GetCustomAttribute<GraphQLTypeAttribute>() is not null)
+            return true;
+        if (!t.IsClass || t == typeof(string) || t == typeof(object) || IsBclType(t))
             return false;
-        return t.GetCustomAttribute<GraphQLTypeAttribute>() is not null
-            || (t.IsClass && t != typeof(object) && t.GetProperties().Length > 0);
+        return t.GetProperties().Any(p => p.GetIndexParameters().Length == 0);
     }
+
+    private static bool IsBclType(Type t) =>
+        t.Namespace is { } ns
+        && (ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal));
 
     private static Type? UnwrapEnumerable(Type t)
     {
@@ -308,12 +319,9 @@ internal static class TypedQueryGenerator
         return null;
     }
 
-    private static string CamelCase(string name)
-    {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
-            return name;
-        return char.ToLowerInvariant(name[0]) + name[1..];
-    }
+    // The naming HotChocolate gives a C# member and System.Text.Json's camel case agree: a leading
+    // acronym is lowered as a whole (ID -> id, URLPath -> urlPath), not just its first letter.
+    private static string CamelCase(string name) => JsonNamingPolicy.CamelCase.ConvertName(name);
 
     private static string StripRequestSuffix(string name) =>
         name.EndsWith("Request", StringComparison.Ordinal) ? name[..^"Request".Length] : name;

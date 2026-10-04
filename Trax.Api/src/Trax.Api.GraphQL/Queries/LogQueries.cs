@@ -21,7 +21,7 @@ public class LogQueries
     /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="skip">How many records to skip (negative is treated as 0).</param>
+    /// <param name="skip">How many records to skip (negative is treated as 0; above 10,000 is refused with <c>TRAX_SKIP_TOO_DEEP</c>, so page deeper with <c>afterId</c>).</param>
     /// <param name="take">The page size, clamped to 1 through 500.</param>
     /// <param name="metadataId">Only records written by this execution.</param>
     /// <param name="minimumLevel">Only records at this level or above.</param>

@@ -1,11 +1,11 @@
 using System.Text.Json;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -45,27 +45,33 @@ public class SensitiveInputCopiesTests
         _discovery
             .DiscoverTrains()
             .Returns([
-                new TrainRegistration
-                {
-                    ServiceType = typeof(IPaymentTrain),
-                    ImplementationType = typeof(PaymentTrain),
-                    InputType = typeof(PaymentInput),
-                    OutputType = typeof(Unit),
-                    Lifetime = ServiceLifetime.Scoped,
-                    ServiceTypeName = nameof(IPaymentTrain),
-                    ImplementationTypeName = nameof(PaymentTrain),
-                    InputTypeName = nameof(PaymentInput),
-                    OutputTypeName = nameof(Unit),
-                    RequiredPolicies = [],
-                    RequiredRoles = [],
-                    IsQuery = false,
-                    IsMutation = false,
-                    IsRemote = false,
-                    IsBroadcastEnabled = false,
-                    GraphQLOperations = GraphQLOperation.Run,
-                },
+                Registration(typeof(PaymentInput)),
+                Registration(typeof(UntypedPaymentInput)),
+                Registration(typeof(OpenEndedInput)),
+                Registration(typeof(NestedUntypedInput)),
             ]);
     }
+
+    private static TrainRegistration Registration(Type inputType) =>
+        new()
+        {
+            ServiceType = typeof(IPaymentTrain),
+            ImplementationType = typeof(PaymentTrain),
+            InputType = inputType,
+            OutputType = typeof(Unit),
+            Lifetime = ServiceLifetime.Scoped,
+            ServiceTypeName = nameof(IPaymentTrain),
+            ImplementationTypeName = nameof(PaymentTrain),
+            InputTypeName = inputType.Name,
+            OutputTypeName = nameof(Unit),
+            RequiredPolicies = [],
+            RequiredRoles = [],
+            IsQuery = false,
+            IsMutation = false,
+            IsRemote = false,
+            IsBroadcastEnabled = false,
+            GraphQLOperations = GraphQLOperation.Run,
+        };
 
     private static JsonElement Parse(string? json) => JsonDocument.Parse(json!).RootElement;
 
@@ -197,6 +203,265 @@ public class SensitiveInputCopiesTests
         IsMarker(Parse(detail!.Input)).Should().BeTrue(detail.Input);
         detail.Input.Should().NotContain("s3cr3t");
     }
+
+    private async Task<string?> ReadWorkQueueInput(
+        string json,
+        Type inputType,
+        string? typeName = null
+    )
+    {
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = typeof(IPaymentTrain).FullName!,
+                    Input = json,
+                    InputTypeName = typeName ?? inputType.FullName,
+                }
+            );
+            await db.Track(entry);
+            await db.SaveChanges(default);
+            id = entry.Id;
+        }
+
+        return (await new WorkQueueQueries().GetDetail(id, _factory, _discovery, default))!.Input;
+    }
+
+    private async Task<string?> ReadManifestProperties(string json, Type inputType)
+    {
+        long id;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var group = new ManifestGroup
+            {
+                Name = "payments-" + Guid.NewGuid().ToString("N"),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.Track(group);
+            await db.SaveChanges(default);
+            var manifest = Manifest.Create(new CreateManifest { Name = typeof(PaymentTrain) });
+            manifest.ManifestGroupId = group.Id;
+            manifest.PropertyTypeName = inputType.FullName;
+            manifest.Properties = json;
+            await db.Track(manifest);
+            await db.SaveChanges(default);
+            id = manifest.Id;
+        }
+
+        return (
+            await new OperationsQueries().GetManifestDetail(id, _factory, _discovery, default)
+        )!.Properties;
+    }
+
+    /// <summary>
+    /// What the mediator stores for <c>new UntypedPaymentInput("acct-3", new Card("4111..."))</c>:
+    /// it writes the runtime type, so the card number is in the stored copy.
+    /// </summary>
+    private static readonly string UntypedPaymentJson = JsonSerializer.Serialize(
+        new UntypedPaymentInput("acct-3", new Card("4111111111111111", "Visa")),
+        typeof(UntypedPaymentInput),
+        Trax.Effect.Utils.TraxJsonSerializationOptions.ManifestProperties
+    );
+
+    [Test]
+    public async Task A_member_typed_as_object_reads_masked_on_a_work_queue_entry()
+    {
+        UntypedPaymentJson.Should().Contain("4111", "the stored copy keeps the runtime value");
+
+        var input = await ReadWorkQueueInput(UntypedPaymentJson, typeof(UntypedPaymentInput));
+
+        var parsed = Parse(input);
+        parsed.GetProperty("accountId").GetString().Should().Be("acct-3");
+        IsMarker(parsed.GetProperty("details")).Should().BeTrue(input);
+        input.Should().NotContain("4111").And.NotContain("Visa");
+    }
+
+    [Test]
+    public async Task A_member_typed_as_object_reads_masked_on_a_manifest()
+    {
+        var properties = await ReadManifestProperties(
+            UntypedPaymentJson,
+            typeof(UntypedPaymentInput)
+        );
+
+        var parsed = Parse(properties);
+        parsed.GetProperty("accountId").GetString().Should().Be("acct-3");
+        IsMarker(parsed.GetProperty("details")).Should().BeTrue(properties);
+        properties.Should().NotContain("4111");
+    }
+
+    [Test]
+    public async Task Every_open_ended_member_reads_masked_and_typed_members_read_as_stored()
+    {
+        const string json = """
+            {
+              "name": "visible",
+              "tags": ["a", "b"],
+              "element": {"number": "4111111111111111"},
+              "node": {"number": "4222222222222222"},
+              "bag": {"card": {"number": "4333333333333333"}},
+              "items": [{"number": "4444444444444444"}],
+              "elements": {"k": {"number": "4555555555555555"}},
+              "maybe": {"number": "4666666666666666"}
+            }
+            """;
+
+        var input = await ReadWorkQueueInput(json, typeof(OpenEndedInput));
+
+        var parsed = Parse(input);
+        parsed.GetProperty("name").GetString().Should().Be("visible");
+        parsed.GetProperty("tags").GetArrayLength().Should().Be(2);
+        foreach (var member in new[] { "element", "node", "bag", "items", "elements", "maybe" })
+            IsMarker(parsed.GetProperty(member)).Should().BeTrue($"{member} in {input}");
+        input.Should().NotContainAny("4111", "4222", "4333", "4444", "4555", "4666");
+    }
+
+    [Test]
+    public async Task An_open_ended_member_of_a_nested_type_reads_masked()
+    {
+        const string json = """
+            {"holders": [{"label": "first", "payload": {"number": "4777777777777777"}}]}
+            """;
+
+        var input = await ReadManifestProperties(json, typeof(NestedUntypedInput));
+
+        var holder = Parse(input).GetProperty("holders")[0];
+        holder.GetProperty("label").GetString().Should().Be("first");
+        IsMarker(holder.GetProperty("payload")).Should().BeTrue(input);
+        input.Should().NotContain("4777");
+    }
+
+    [Test]
+    public async Task An_assembly_qualified_type_name_reads_with_its_sensitive_member_masked()
+    {
+        var input = await ReadWorkQueueInput(
+            """{"accountId":"acct-4","cardNumber":"4888888888888888"}""",
+            typeof(PaymentInput),
+            typeof(PaymentInput).AssemblyQualifiedName
+        );
+
+        IsMarker(Parse(input).GetProperty("cardNumber")).Should().BeTrue(input);
+        Parse(input).GetProperty("accountId").GetString().Should().Be("acct-4");
+    }
+
+    [TestCase("Other.Assembly")]
+    [TestCase("")]
+    public async Task A_type_name_qualified_by_another_assembly_is_masked_whole(string assembly)
+    {
+        var input = await ReadWorkQueueInput(
+            """{"accountId":"acct-5","cardNumber":"4999999999999999"}""",
+            typeof(PaymentInput),
+            $"{typeof(PaymentInput).FullName}, {assembly}"
+        );
+
+        IsMarker(Parse(input)).Should().BeTrue(input);
+        input.Should().NotContain("acct-5");
+    }
+
+    [TestCase("X")]
+    public async Task A_type_name_that_only_starts_with_a_registered_name_is_masked_whole(
+        string suffix
+    )
+    {
+        var input = await ReadWorkQueueInput(
+            """{"accountId":"acct-6","cardNumber":"4000000000000002"}""",
+            typeof(PaymentInput),
+            typeof(PaymentInput).FullName + suffix
+        );
+
+        IsMarker(Parse(input)).Should().BeTrue(input);
+    }
+
+    [TestCase("null")]
+    [TestCase("{not json")]
+    [TestCase("""{"accountId": 12, "cardNumber": []}""")]
+    public async Task A_stored_copy_that_does_not_read_as_its_type_is_masked_whole(string json)
+    {
+        var input = await ReadWorkQueueInput(json, typeof(PaymentInput));
+
+        IsMarker(Parse(input)).Should().BeTrue(input);
+    }
+
+    [Test]
+    public async Task A_stored_copy_with_no_type_name_is_masked_whole()
+    {
+        var input = await ReadWorkQueueInput(
+            """{"accountId":"acct-7"}""",
+            typeof(PaymentInput),
+            typeName: ""
+        );
+
+        IsMarker(Parse(input)).Should().BeTrue(input);
+    }
+
+    [Test]
+    public void A_masked_open_ended_member_is_never_read_back_as_a_value()
+    {
+        var read = () =>
+            JsonSerializer.Deserialize<UntypedPaymentInput>(
+                """{"accountId":"acct-8","details":{"_redacted":true}}""",
+                TransportInputRedaction.WriteOptions
+            );
+
+        read.Should().Throw<NotSupportedException>();
+    }
+
+    [Test]
+    public void A_registration_whose_input_type_has_no_full_name_matches_no_stored_name()
+    {
+        var openParameter = typeof(List<>).GetGenericArguments()[0];
+        var discovery = Substitute.For<ITrainDiscoveryService>();
+        discovery.DiscoverTrains().Returns([Registration(openParameter)]);
+
+        TransportInputRedaction.FindInputType(discovery, "T").Should().BeNull();
+    }
+
+    [TestCase(typeof(object), true)]
+    [TestCase(typeof(JsonElement?), true)]
+    [TestCase(typeof(System.Text.Json.Nodes.JsonArray), true)]
+    [TestCase(typeof(JsonDocument), true)]
+    [TestCase(typeof(System.Collections.ArrayList), true)]
+    [TestCase(typeof(List<List<object>>), true)]
+    [TestCase(typeof(IEnumerable<KeyValuePair<string, JsonElement>>), true)]
+    [TestCase(typeof(string), false)]
+    [TestCase(typeof(int?), false)]
+    [TestCase(typeof(Card), false)]
+    [TestCase(typeof(Dictionary<string, List<Card>>), false)]
+    [TestCase(typeof(SelfNested), false)]
+    public void Whether_a_member_type_can_hold_undeclared_members(Type type, bool openEnded) =>
+        TransportInputRedaction.IsOpenEnded(type, depth: 0).Should().Be(openEnded);
+
+    /// <summary>A collection whose element is itself: looked through a bounded number of times.</summary>
+    internal sealed class SelfNested : IEnumerable<SelfNested>
+    {
+        public IEnumerator<SelfNested> GetEnumerator() =>
+            Enumerable.Empty<SelfNested>().GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
+            GetEnumerator();
+    }
+
+    internal sealed record Card([property: TraxSensitive] string Number, string Brand);
+
+    internal sealed record UntypedPaymentInput(string AccountId, object Details);
+
+    internal sealed record OpenEndedInput(
+        string Name,
+        List<string> Tags,
+        JsonElement Element,
+        System.Text.Json.Nodes.JsonNode Node,
+        Dictionary<string, object> Bag,
+        List<object> Items,
+        IReadOnlyDictionary<string, JsonElement> Elements,
+        JsonElement? Maybe
+    );
+
+    internal sealed record Holder(string Label, object Payload);
+
+    internal sealed record NestedUntypedInput(IReadOnlyList<Holder> Holders);
 
     internal interface IPaymentTrain;
 

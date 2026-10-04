@@ -66,8 +66,10 @@ token lives is closed at `exp` and must reconnect with a fresh token. `connectio
 the credential on every reconnect, so a client that already reconnects on close needs nothing
 new.
 
-**Revocation mid-connection is still bounded only by `exp`.** Revoking a user or a key does not
-close a socket already open; keeping access tokens short-lived is what bounds it.
+**Revocation mid-connection is bounded by `exp` and the connection's maximum lifetime.** Revoking
+a user does not close a JWT socket already open; keeping access tokens short-lived is what bounds
+it, and every socket also closes at its maximum lifetime
+([0033](./0033-a-socket-connection-has-a-maximum-lifetime-and-re-checks-its-key.md)).
 
 **The public interceptors' constructors are unchanged**, and the `IOptionsMonitor<JwtBearerOptions>`
 they take is no longer read. A host that constructs one directly now needs the scheme registered
@@ -86,4 +88,6 @@ to its token's expiry.
 
 ## Changelog
 
+- **2026-10-01**: A JWT socket also closes at the connection's maximum lifetime when that comes
+  before `exp` (0033).
 - **2026-09-27**: Recorded.

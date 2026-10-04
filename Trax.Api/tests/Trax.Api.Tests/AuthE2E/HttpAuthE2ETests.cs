@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.IdentityModel.Tokens;
 using static Trax.Api.Tests.AuthE2E.AuthE2EHost;

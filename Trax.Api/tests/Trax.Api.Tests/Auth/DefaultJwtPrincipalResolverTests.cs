@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth;
 using Trax.Api.Auth.Jwt;

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate;
 using HotChocolate.Data;
 using HotChocolate.Data.Filters;
@@ -192,50 +192,56 @@ public class ListElementFilterTests
     }
 
     [Test]
-    public async Task Schema_NullableElement_KeepsStockInputAndIsNotRestricted()
+    public async Task Schema_NullableElement_SharesItsUnderlyingTypesRestrictedInput()
     {
-        // Nullable<T> cannot close ComparableOperationFilterInputType<T> (the `struct`
-        // constraint excludes it), so these keep HotChocolate's stock element input,
-        // `neq` included. Binding one used to throw at startup.
+        // As in stock HotChocolate, an int?[] filters its elements through the int input, and
+        // its `neq` lowers to the same untranslatable Any(x => x != value), so it gets the same
+        // restricted input as int[]. NullableElementFilterTests runs every remaining operation
+        // on Postgres.
         var schema = await BuildSchemaAsync<AllScalarKindsDbContext>();
 
-        var listType = schema
-            .Types.GetType<InputObjectType>("AllScalarKindsRowFilterInput")
-            .Fields.Single(f => f.Name == "optionalScores")
-            .Type.NamedType()
-            .Name;
+        string ListInput(string field) =>
+            schema
+                .Types.GetType<InputObjectType>("AllScalarKindsRowFilterInput")
+                .Fields.Single(f => f.Name == field)
+                .Type.NamedType()
+                .Name;
+
+        ListInput("optionalScores").Should().Be(ListInput("scores"));
 
         var element = schema
-            .Types.GetType<InputObjectType>(listType)
+            .Types.GetType<InputObjectType>(ListInput("optionalScores"))
             .Fields.Single(f => f.Name == "some")
             .Type.NamedType()
             .Name;
 
-        element.Should().NotEndWith("ElementFilterInput");
+        element.Should().EndWith("ElementFilterInput");
         schema
             .Types.GetType<InputObjectType>(element)
             .Fields.Select(f => f.Name)
             .Should()
-            .Contain("neq");
+            .NotContain("neq")
+            .And.Contain("eq");
     }
 
     [Test]
-    public void Discover_NullableElement_IsNotBound()
+    public void Discover_NullableElement_IsBoundToItsUnderlyingTypesInput()
     {
         var bindings = ListElementFilterBinding.Discover([typeof(AllScalarKindsRow)]);
 
-        bindings.Should().NotContain(b => b.Key == typeof(int?[]));
-        // The non-nullable twin on the same entity still binds.
-        bindings.Should().Contain(b => b.Key == typeof(int[]));
+        bindings
+            .Single(b => b.Key == typeof(int?[]))
+            .Value.Should()
+            .Be(bindings.Single(b => b.Key == typeof(int[])).Value);
     }
 
     [Test]
     public async Task Schema_RestrictedTypes_DoNotReuseHotChocolateStockNames()
     {
-        // A collection whose element cannot be restricted keeps the stock types, so a
-        // restricted type must never claim a stock name. int[] (restricted) and int?[]
-        // (stock) coexisting used to fail with "The name `ListIntOperationFilterInput`
-        // was already registered by another type".
+        // A collection whose element is not restricted keeps the stock types, so a
+        // restricted type must never claim a stock name. A restricted int[] and a stock
+        // int?[] coexisting once failed with "The name `ListIntOperationFilterInput` was
+        // already registered by another type".
         var schema = await BuildSchemaAsync<AllScalarKindsDbContext>();
 
         var restricted = schema

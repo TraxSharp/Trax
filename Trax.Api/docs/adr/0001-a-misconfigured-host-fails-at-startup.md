@@ -78,11 +78,17 @@ design, so it is the one place Trax cannot control.
 - `QueryModelAuthorizeSchemaValidatorTests` drives the schema validator directly: it asserts
   the host throws naming the entity, the type or the entry field when a directive is stripped
   in each of the three ways, and does not throw when they are intact.
+- `FieldNameCollisionTests` pins the refusal when two surfaces claim one name: a query train and
+  a query model on one field, one entity from two `DbContext`s, a namespace and a model, two
+  trains generating one response type, and a type extension's field on a name Trax or another
+  extension already uses, each naming both sides.
 - [Registration Order](/docs/reference/registration-order) is the user-facing statement of
   what order matters and what happens when it is wrong.
 
 Not covered:
 
+- A field a type extension builds from a lambda, with no member behind it, that takes the name
+  of one of Trax's own fields is indistinguishable from Trax's field and is not refused.
 - Nothing checks that a new piece of host configuration *has* a validator. Adding a surface
   that can be half-wired and forgetting the check is invisible to the build, and that is the
   failure mode this ADR is about.
@@ -98,6 +104,8 @@ Not covered:
 
 ## Changelog
 
+- **2026-10-01**: Two surfaces claiming one field or generated type name refuse the host, naming
+  both, where HotChocolate would merge the fields and keep whichever it built last.
 - **2026-09-30**: The validators check in `StartingAsync`, so a refusal precedes Kestrel and the
   host's workers under concurrent start; `TrainRegistrationOrderValidator` added; the count
   corrected to seven, with `TypeExtensionExposureValidator`, which was missing.

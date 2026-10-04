@@ -1,7 +1,9 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
+using HotChocolate;
+using HotChocolate.Execution;
 using HotChocolate.Language;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -87,8 +89,7 @@ public class PersistedOperationIdBindingTests
                                 .AllowAnonymousOperations()
                                 .AddTypeExtension<GraphQLFixture.HelloQuery>()
                                 .UsePersistedOperations(po =>
-                                    po.UseDatabase(PostgresFixture.ConnectionString)
-                                        .SingleNode()
+                                    po.SingleNode()
                                         .RequirePersisted(requirePersisted)
                                         .LogNonPersistedRequests()
                                 )
@@ -125,26 +126,26 @@ public class PersistedOperationIdBindingTests
     public async Task SetUp() => await PostgresFixture.ClearAsync();
 
     [Test]
-    public async Task AnIdTheStoreDoesNotHold_DoesNotRunADocumentAnotherCallerSentWithIt()
+    public async Task AnIdTheStoreDoesNotHold_IsRefusedOnEveryLaterRequest()
     {
-        // One caller sends a document of its own together with an id nobody uploaded.
+        // A request carries a document together with an id the store does not hold.
         await PostAsync(new { id = "GetGreeting", query = "query Unknown { version }" });
 
-        // The next caller asks for that id, as a client built against it does.
+        // A later request for the id alone.
         var reply = await PostAsync(new { id = "GetGreeting" });
 
         reply
             .TryGetProperty("data", out var data)
             .Should()
             .BeFalse(
-                "an id the store does not hold must be refused, not run another caller's document (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
+                "an id runs only the document the store holds for it, so an id the store does not hold is refused (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
                 reply
             );
         data.ValueKind.Should().NotBe(JsonValueKind.Object);
     }
 
     [Test]
-    public async Task ADeactivatedId_DoesNotRunADocumentAnotherCallerSentWithIt()
+    public async Task ADeactivatedId_StaysRefusedAfterARequestCarryingADocument()
     {
         await _store.UpsertAsync(
             "RetiredGreeting",
@@ -161,34 +162,33 @@ public class PersistedOperationIdBindingTests
             .TryGetProperty("data", out var data)
             .Should()
             .BeFalse(
-                "a deactivated id must stay refused, not run another caller's document (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
+                "an id runs only the document the store holds for it, so a deactivated id stays refused (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
                 reply
             );
         data.ValueKind.Should().NotBe(JsonValueKind.Object);
     }
 
     [Test]
-    public async Task UnderEnforcement_AnIdTheStoreDoesNotHold_DoesNotRunADocumentSentWithItOverGet()
+    public async Task UnderEnforcement_AnIdTheStoreDoesNotHold_StaysRefusedAfterAGetCarryingADocument()
     {
         var (host, client, _) = await StartAsync(requirePersisted: true);
         using (host)
         using (client)
         {
-            // Sent over GET, with the document next to an id nobody uploaded.
+            // A GET carrying a document next to an id the store does not hold.
             await client.GetAsync(
                 "/trax/graphql?id=NextGreeting&query="
                     + Uri.EscapeDataString("query Next { version }")
             );
 
-            // A client asks for the id over POST, which enforcement inspects and lets through
-            // because it carries no inline document.
+            // A later POST for the id alone.
             var reply = await PostAsync(client, new { id = "NextGreeting" });
 
             reply
                 .TryGetProperty("data", out var data)
                 .Should()
                 .BeFalse(
-                    "an id the store does not hold must be refused, not run another caller's document (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
+                    "an id runs only the document the store holds for it, so an id the store does not hold is refused (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
                     reply
                 );
             data.ValueKind.Should().NotBe(JsonValueKind.Object);
@@ -238,6 +238,33 @@ public class PersistedOperationIdBindingTests
                 "an id runs only its stored document (Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md): {0}",
                 reply
             );
+    }
+
+    [Test]
+    public async Task InProcess_AnIdThatIsTheDocumentsOwnHash_RunsIt_AndAnyOtherIdIsRefused()
+    {
+        // A request built in process carries no hash of its own; the binding computes one.
+        const string document = "query Greet { hello }";
+        var ownHash = new MD5DocumentHashProvider(HashFormat.Hex)
+            .ComputeHash(System.Text.Encoding.UTF8.GetBytes(document))
+            .Value;
+        var executor = await GraphQLFixture.GetExecutorAsync(_host.Services);
+
+        async Task<string> RunAsync(string id) =>
+            (
+                (HotChocolate.Execution.OperationResult)
+                    await executor.ExecuteAsync(
+                        OperationRequestBuilder
+                            .New()
+                            .SetDocumentId(new OperationDocumentId(id))
+                            .SetDocument(document)
+                            .AllowNonPersistedOperation()
+                            .Build()
+                    )
+            ).ToJson();
+
+        (await RunAsync(ownHash)).Should().Contain("\"hello\"");
+        (await RunAsync("someOtherId")).Should().Contain("PERSISTED_OPERATION_ID_MISMATCH");
     }
 
     [Test]

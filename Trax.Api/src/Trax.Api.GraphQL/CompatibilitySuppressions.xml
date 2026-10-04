@@ -6,6 +6,27 @@
 >
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.DeadLetterMutations.RequeueAllDeadLetters(Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.DeadLetterMutations.RequeueDeadLetter(System.Int64,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.DeadLetterMutations.RequeueDeadLetters(System.Int64[],Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.CancelExecution(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
     <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
@@ -13,14 +34,28 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:Trax.Api.GraphQL.Mutations.WorkQueueMutations.CancelWorkQueueEntries(System.Int64[],Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,Trax.Effect.Services.ChangeSignal.ITraxChangeSignal,System.Threading.CancellationToken)</Target>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.RequeueExecution(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,Trax.Scheduler.Services.Operations.IOperationsService,System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
     <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.RequeueExecution(System.Int64,Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,Trax.Scheduler.Services.Operations.IOperationsService,System.Threading.CancellationToken)</Target>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.TriggerManifest(System.String,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.TriggerManifestDelayed(System.String,System.TimeSpan,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.WorkQueueMutations.CancelWorkQueueEntries(System.Int64[],Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,Trax.Effect.Services.ChangeSignal.ITraxChangeSignal,System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
     <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -84,6 +119,48 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:Trax.Api.GraphQL.Queries.WorkQueueQueries.GetWorkQueues(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory,System.Threading.CancellationToken,System.Int32,System.Int32,System.Nullable{Trax.Effect.Enums.WorkQueueStatus},System.String,System.Nullable{System.Int64})</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.DeadLetterMutations.RequeueAllDeadLetters(Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.CancelManifest(System.String,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.DisableManifest(System.String,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.EnableManifest(System.String,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.TriggerManifest(System.String,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
+    <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.GraphQL.Mutations.OperationsMutations.TriggerManifestDelayed(System.String,System.TimeSpan,Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,System.Threading.CancellationToken)</Target>
     <Left>lib/net10.0/Trax.Api.GraphQL.dll</Left>
     <Right>lib/net10.0/Trax.Api.GraphQL.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

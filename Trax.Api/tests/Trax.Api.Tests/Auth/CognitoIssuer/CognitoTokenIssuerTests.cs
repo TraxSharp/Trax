@@ -1,7 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.IdentityModel.Tokens;
 using Trax.Api.Auth.Jwt.Cognito;
 using Trax.Api.Auth.Jwt.Cognito.Issuer;

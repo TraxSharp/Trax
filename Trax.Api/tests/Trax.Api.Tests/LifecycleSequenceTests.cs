@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Execution;
 using HotChocolate.Subscriptions;
 using Trax.Api.DTOs;

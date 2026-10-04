@@ -1,0 +1,73 @@
+namespace Trax.Api.GraphQL.Audit
+{
+    public sealed class DefaultAuditRedactor : Trax.Api.GraphQL.Audit.ITraxAuditRedactor
+    {
+        public DefaultAuditRedactor() { }
+        public System.Text.Json.Nodes.JsonObject? Redact(System.Text.Json.Nodes.JsonObject? variables) { }
+    }
+    public interface ITraxAuditRedactor
+    {
+        System.Text.Json.Nodes.JsonObject? Redact(System.Text.Json.Nodes.JsonObject? variables);
+    }
+    public interface ITraxAuditSink
+    {
+        System.Threading.Tasks.Task WriteAsync(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Audit.TraxAuditEntry> batch, System.Threading.CancellationToken ct);
+    }
+    public sealed class TraxAuditChannel : System.IDisposable
+    {
+        public const string DroppedCounterName = "trax.audit.dropped";
+        public const string MeterName = "Trax.Audit";
+        public TraxAuditChannel(Microsoft.Extensions.Options.IOptions<Trax.Api.GraphQL.Audit.TraxAuditOptions> options, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Audit.TraxAuditChannel> logger) { }
+        public long TotalDropped { get; }
+        public void Dispose() { }
+    }
+    public sealed class TraxAuditEntry : System.IEquatable<Trax.Api.GraphQL.Audit.TraxAuditEntry>
+    {
+        public TraxAuditEntry(string PrincipalId, string? PrincipalType, string? OperationName, string Document, System.Text.Json.Nodes.JsonObject? Variables, long DurationMs, System.DateTimeOffset Timestamp, bool Success, string? ErrorText, System.Collections.Generic.IReadOnlyDictionary<string, string>? Metadata = null) { }
+        public string Document { get; init; }
+        public long DurationMs { get; init; }
+        public string? ErrorText { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string>? Metadata { get; init; }
+        public string? OperationName { get; init; }
+        public string PrincipalId { get; init; }
+        public string? PrincipalType { get; init; }
+        public bool Success { get; init; }
+        public System.DateTimeOffset Timestamp { get; init; }
+        public System.Text.Json.Nodes.JsonObject? Variables { get; init; }
+    }
+    public sealed class TraxAuditOptions
+    {
+        public TraxAuditOptions() { }
+        public int BatchSize { get; set; }
+        public int ChannelCapacity { get; set; }
+        public string DefaultPrincipalId { get; set; }
+        public System.TimeSpan FlushInterval { get; set; }
+        public int MaxDocumentLength { get; set; }
+        public int MaxErrorTextLength { get; set; }
+        public int MaxOperationNameLength { get; set; }
+        public int MaxRetries { get; set; }
+        public System.TimeSpan MaxRetryBackoff { get; set; }
+        public bool RecordErrorMessages { get; set; }
+        public System.TimeSpan RetryBackoff { get; set; }
+        public bool SkipIntrospection { get; set; }
+        public bool SkipSubscriptions { get; set; }
+    }
+    public sealed class TraxAuditWriter : Microsoft.Extensions.Hosting.BackgroundService
+    {
+        public TraxAuditWriter(Trax.Api.GraphQL.Audit.TraxAuditChannel channel, System.IServiceProvider serviceProvider, Microsoft.Extensions.Options.IOptions<Trax.Api.GraphQL.Audit.TraxAuditOptions> options, System.TimeProvider timeProvider, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Audit.TraxAuditWriter> logger) { }
+        public override void Dispose() { }
+        protected override System.Threading.Tasks.Task ExecuteAsync(System.Threading.CancellationToken stoppingToken) { }
+        public override System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken) { }
+    }
+    public sealed class TraxGraphQLAuditListener : HotChocolate.Execution.Instrumentation.ExecutionDiagnosticEventListener
+    {
+        public TraxGraphQLAuditListener(Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor, Trax.Api.GraphQL.Audit.TraxAuditChannel channel, Microsoft.Extensions.Options.IOptions<Trax.Api.GraphQL.Audit.TraxAuditOptions> options, Trax.Api.GraphQL.Audit.ITraxAuditRedactor redactor, System.TimeProvider timeProvider, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Audit.TraxGraphQLAuditListener> logger) { }
+        public override System.IDisposable ExecuteRequest(HotChocolate.Execution.RequestContext context) { }
+        public override void RequestError(HotChocolate.Execution.RequestContext context, System.Exception exception) { }
+    }
+    public static class TraxGraphQLBuilderAuditExtensions
+    {
+        public static Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder AddAudit<TSink>(this Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder.TraxGraphQLBuilder builder, System.Action<Trax.Api.GraphQL.Audit.TraxAuditOptions>? configure = null)
+            where TSink :  class, Trax.Api.GraphQL.Audit.ITraxAuditSink { }
+    }
+}

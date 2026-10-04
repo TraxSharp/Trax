@@ -1,7 +1,12 @@
 using System.ComponentModel.DataAnnotations.Schema;
-using FluentAssertions;
+using System.Security.Claims;
+using System.Text.Json;
+using AwesomeAssertions;
 using HotChocolate;
+using HotChocolate.Authorization;
+using HotChocolate.Configuration;
 using HotChocolate.Execution;
+using HotChocolate.Types.Descriptors.Configurations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,32 +72,64 @@ public class QueryModelNavigationPostureTests
         json.Should().NotContain("\"errors\"").And.Contain("ann");
     }
 
-    [Test]
-    public async Task A_target_gated_on_its_class_refuses_an_anonymous_read_through_the_navigation()
+    private const string GatedRead =
+        "{ discover { gatedPosts { nodes { title owner { apiToken } } } } }";
+
+    private const string GatedFilter =
+        "{ discover { gatedPosts(where: { owner: { apiToken: { startsWith: \"tok_live\" } } }) { nodes { title } } } }";
+
+    private const string GatedSort =
+        "{ discover { gatedPosts(order: [{ owner: { apiToken: ASC } }]) { nodes { title } } } }";
+
+    [TestCase(GatedRead, "tok_live")]
+    [TestCase(GatedFilter, "hello")]
+    [TestCase(GatedSort, "hello")]
+    public async Task A_target_gated_on_its_class_refuses_an_anonymous_caller_through_the_navigation(
+        string query,
+        string gatedValue
+    )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
         await using var _ = provider;
 
-        var json = await RunAsync(
-            executor,
-            "{ discover { gatedPosts { nodes { title owner { apiToken } } } } }"
-        );
+        var json = await RunAsync(executor, query, Anonymous());
 
-        json.Should().Contain("\"errors\"", Adr).And.NotContain("tok_live", Adr);
+        ErrorCodes(json).Should().Contain("TRAX_AUTHORIZATION", Adr);
+        json.Should().NotContain(gatedValue, Adr);
     }
 
-    [Test]
-    public async Task A_target_gated_on_its_class_refuses_an_anonymous_filter_through_the_navigation()
+    [TestCase(GatedRead, "tok_live")]
+    [TestCase(GatedFilter, "hello")]
+    [TestCase(GatedSort, "hello")]
+    public async Task A_target_gated_on_its_class_refuses_a_caller_without_its_role(
+        string query,
+        string gatedValue
+    )
     {
         var (provider, executor) = await StartAsync<GatedTargetContext>();
         await using var _ = provider;
 
-        var json = await RunAsync(
-            executor,
-            "{ discover { gatedPosts(where: { owner: { apiToken: { startsWith: \"tok_live\" } } }) { nodes { title } } } }"
-        );
+        var json = await RunAsync(executor, query, InRole("Player"));
 
-        json.Should().Contain("\"errors\"", Adr).And.NotContain("hello", Adr);
+        ErrorCodes(json).Should().Contain("TRAX_AUTHORIZATION", Adr);
+        json.Should().NotContain(gatedValue, Adr);
+    }
+
+    [TestCase(GatedRead, "tok_live")]
+    [TestCase(GatedFilter, "hello")]
+    [TestCase(GatedSort, "hello")]
+    public async Task A_target_gated_on_its_class_serves_a_caller_in_its_role(
+        string query,
+        string gatedValue
+    )
+    {
+        var (provider, executor) = await StartAsync<GatedTargetContext>();
+        await using var _ = provider;
+
+        var json = await RunAsync(executor, query, InRole("Admin"));
+
+        ErrorCodes(json).Should().BeEmpty();
+        json.Should().Contain(gatedValue);
     }
 
     [Test]
@@ -108,29 +145,13 @@ public class QueryModelNavigationPostureTests
                     "query($p: String) { discover { gatedPosts(where: { owner: { apiToken: { startsWith: $p } } }) { nodes { title } } } }"
                 )
                 .SetVariableValues(new Dictionary<string, object?> { ["p"] = "tok_live" })
+                .SetUser(Anonymous())
                 .Build()
         );
 
-        result
-            .ExpectOperationResult()
-            .ToJson()
-            .Should()
-            .Contain("\"errors\"")
-            .And.NotContain("hello");
-    }
-
-    [Test]
-    public async Task A_target_gated_on_its_class_refuses_an_anonymous_sort_through_the_navigation()
-    {
-        var (provider, executor) = await StartAsync<GatedTargetContext>();
-        await using var _ = provider;
-
-        var json = await RunAsync(
-            executor,
-            "{ discover { gatedPosts(order: [{ owner: { apiToken: ASC } }]) { nodes { title } } } }"
-        );
-
-        json.Should().Contain("\"errors\"", Adr).And.NotContain("hello", Adr);
+        var json = result.ExpectOperationResult().ToJson();
+        ErrorCodes(json).Should().Contain("TRAX_AUTHORIZATION", Adr);
+        json.Should().NotContain("hello");
     }
 
     [Test]
@@ -167,8 +188,180 @@ public class QueryModelNavigationPostureTests
         json.Should().NotContain("\"errors\"");
     }
 
+    /// <summary>
+    /// HotChocolate binds a public method of the entity as a field as readily as a property, so an
+    /// entity a method returns is reached exactly as a navigation's target is.
+    /// </summary>
+    [Test]
+    public async Task An_entity_reached_through_a_method_must_declare_its_posture()
+    {
+        var act = () => StartAsync<MethodUndeclaredContext>();
+
+        var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+        ex.Message.Should()
+            .Contain(typeof(NavAccount).FullName!, Adr)
+            .And.Contain("'MethodPost.primaryAccount'");
+    }
+
+    [Test]
+    public async Task A_gated_entity_reached_through_a_method_refuses_an_anonymous_read()
+    {
+        var (provider, executor) = await StartAsync<MethodGatedContext>();
+        await using var _ = provider;
+
+        var json = await RunAsync(
+            executor,
+            "{ discover { methodGatedPosts { nodes { title owner { apiToken } } } } }"
+        );
+
+        json.Should().Contain("\"errors\"", Adr).And.NotContain("tok_method", Adr);
+    }
+
+    [Test]
+    public async Task Every_undeclared_entity_is_named_in_one_refusal()
+    {
+        var act = () => StartAsync<TwoUndeclaredContext>();
+
+        var ex = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+        ex.Message.Should()
+            .StartWith("2 entities", Adr)
+            .And.Contain(typeof(NavAccount).FullName!)
+            .And.Contain(typeof(SecondAccount).FullName!);
+    }
+
+    /// <summary>
+    /// Without the model's <c>DbContext</c> the check cannot tell an owned value from an entity,
+    /// so it treats every class reached as an entity, and the owned value that passes above is
+    /// asked to declare.
+    /// </summary>
+    [Test]
+    public async Task A_context_that_cannot_be_resolved_fails_closed()
+    {
+        var (provider, _) = await StartAsync<OwnedValueContext>();
+        await using var _p = provider;
+        var validator = new Trax.Api.GraphQL.Startup.QueryModelReachValidator(
+            provider.GetRequiredService<Trax.Api.GraphQL.Configuration.GraphQLConfiguration>(),
+            new WithoutService(provider, typeof(OwnedValueContext))
+        );
+
+        var act = () => validator.StartAsync(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain(typeof(Place).FullName!, Adr);
+    }
+
+    [Test]
+    public async Task A_gated_target_whose_gate_a_callback_strips_is_refused()
+    {
+        var act = () =>
+            StartAsync<GatedTargetContext>(g =>
+                g.ConfigureSchema(b => b.TryAddTypeInterceptor(new StripGate(typeof(GatedOwner))))
+            );
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain(typeof(GatedOwner).FullName!, Adr)
+            .And.Contain("carries no @authorize directive");
+    }
+
+    [Test]
+    public async Task A_gated_targets_unregistered_policy_is_refused_at_startup()
+    {
+        var act = () => StartAsync<UnknownPolicyTargetContext>();
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should()
+            .Contain("NoSuchPostureTargetPolicy", Adr)
+            .And.Contain(typeof(UnknownPolicyOwner).FullName!);
+    }
+
+    /// <summary>A provider, and every scope it creates, that cannot resolve one service.</summary>
+    private sealed class WithoutService(IServiceProvider inner, Type hidden) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == hidden ? null
+            : serviceType == typeof(IServiceScopeFactory)
+                ? new ScopeFactory(inner.GetRequiredService<IServiceScopeFactory>(), hidden)
+            : inner.GetService(serviceType);
+
+        private sealed class ScopeFactory(IServiceScopeFactory inner, Type hidden)
+            : IServiceScopeFactory
+        {
+            public IServiceScope CreateScope() => new Scope(inner.CreateScope(), hidden);
+        }
+
+        private sealed class Scope(IServiceScope inner, Type hidden) : IServiceScope
+        {
+            public IServiceProvider ServiceProvider { get; } =
+                new WithoutService(inner.ServiceProvider, hidden);
+
+            public void Dispose() => inner.Dispose();
+        }
+    }
+
+    /// <summary>A schema callback that takes the gate off one object type.</summary>
+    private sealed class StripGate(Type runtimeType) : TypeInterceptor
+    {
+        public override void OnBeforeCompleteType(
+            ITypeCompletionContext completionContext,
+            TypeSystemConfiguration configuration
+        )
+        {
+            if (configuration is not ObjectTypeConfiguration objectType)
+                return;
+            if (objectType.RuntimeType != runtimeType)
+                return;
+
+            foreach (
+                var directive in objectType
+                    .Directives.Where(d => d.Value is AuthorizeDirective)
+                    .ToList()
+            )
+                objectType.Directives.Remove(directive);
+        }
+    }
+
     private static async Task<string> RunAsync(IRequestExecutor executor, string query) =>
         (await executor.ExecuteAsync(query)).ExpectOperationResult().ToJson();
+
+    private static async Task<string> RunAsync(
+        IRequestExecutor executor,
+        string query,
+        ClaimsPrincipal user
+    ) =>
+        (
+            await executor.ExecuteAsync(
+                OperationRequestBuilder.New().SetDocument(query).SetUser(user).Build()
+            )
+        )
+            .ExpectOperationResult()
+            .ToJson();
+
+    private static ClaimsPrincipal Anonymous() => new(new ClaimsIdentity());
+
+    private static ClaimsPrincipal InRole(string role) =>
+        new(
+            new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, role), new Claim(ClaimTypes.Role, role)],
+                "Test"
+            )
+        );
+
+    private static List<string?> ErrorCodes(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("errors", out var errors))
+            return [];
+        return errors
+            .EnumerateArray()
+            .Select(e =>
+                e.TryGetProperty("extensions", out var x) && x.TryGetProperty("code", out var c)
+                    ? c.GetString()
+                    : null
+            )
+            .ToList();
+    }
 
     private static async Task<(ServiceProvider, IRequestExecutor)> StartAsync<TContext>(
         Action<TraxGraphQLBuilder>? configure = null
@@ -323,7 +516,103 @@ public class QueryModelNavigationPostureTests
         public Place Place { get; set; } = new();
     }
 
+    [TraxQueryModel]
+    [TraxAllowAnonymous]
+    public class MethodPost
+    {
+        public long Id { get; set; }
+        public string Title { get; set; } = "";
+
+        public NavAccount? GetPrimaryAccount() => null;
+    }
+
+    [TraxAuthorize(Roles = "Admin")]
+    public class MethodOwner
+    {
+        public long Id { get; set; }
+        public string ApiToken { get; set; } = "";
+    }
+
+    [TraxQueryModel]
+    [TraxAllowAnonymous]
+    public class MethodGatedPost
+    {
+        public long Id { get; set; }
+        public string Title { get; set; } = "";
+
+        public MethodOwner GetOwner() => new() { Id = 7, ApiToken = "tok_method" };
+    }
+
+    public class SecondAccount
+    {
+        public long Id { get; set; }
+    }
+
+    [TraxQueryModel]
+    [TraxAllowAnonymous]
+    public class TwoNavPost
+    {
+        public long Id { get; set; }
+        public NavAccount? Account { get; set; }
+        public SecondAccount? Second { get; set; }
+    }
+
+    [TraxAuthorize(Policy = "NoSuchPostureTargetPolicy")]
+    public class UnknownPolicyOwner
+    {
+        public long Id { get; set; }
+    }
+
+    [TraxQueryModel]
+    [TraxAllowAnonymous]
+    public class UnknownPolicyPost
+    {
+        public long Id { get; set; }
+        public UnknownPolicyOwner? Owner { get; set; }
+    }
+
     // ── Contexts ──────────────────────────────────────────────────────────
+
+    public class TwoUndeclaredContext(DbContextOptions<TwoUndeclaredContext> options)
+        : NavContextBase(options)
+    {
+        public DbSet<TwoNavPost> Posts { get; set; } = null!;
+        public DbSet<NavAccount> Accounts { get; set; } = null!;
+        public DbSet<SecondAccount> Seconds { get; set; } = null!;
+
+        public override Task SeedAsync() => Task.CompletedTask;
+    }
+
+    public class UnknownPolicyTargetContext(DbContextOptions<UnknownPolicyTargetContext> options)
+        : NavContextBase(options)
+    {
+        public DbSet<UnknownPolicyPost> Posts { get; set; } = null!;
+        public DbSet<UnknownPolicyOwner> Owners { get; set; } = null!;
+
+        public override Task SeedAsync() => Task.CompletedTask;
+    }
+
+    public class MethodUndeclaredContext(DbContextOptions<MethodUndeclaredContext> options)
+        : NavContextBase(options)
+    {
+        public DbSet<MethodPost> Posts { get; set; } = null!;
+        public DbSet<NavAccount> Accounts { get; set; } = null!;
+
+        public override Task SeedAsync() => Task.CompletedTask;
+    }
+
+    public class MethodGatedContext(DbContextOptions<MethodGatedContext> options)
+        : NavContextBase(options)
+    {
+        public DbSet<MethodGatedPost> Posts { get; set; } = null!;
+        public DbSet<MethodOwner> Owners { get; set; } = null!;
+
+        public override async Task SeedAsync()
+        {
+            Posts.Add(new MethodGatedPost { Id = 1, Title = "hello" });
+            await SaveChangesAsync();
+        }
+    }
 
     public abstract class NavContextBase(DbContextOptions options) : DbContext(options)
     {

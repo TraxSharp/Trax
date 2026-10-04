@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
@@ -34,7 +34,9 @@ public class PersistedOperationCacheTests
         private static InMemoryPersistedOperationCache Build(TimeSpan? ttl = null) =>
             new(
                 new MemoryCache(new MemoryCacheOptions()),
-                new PersistedOperationsOptions { CacheTtl = ttl ?? TimeSpan.FromMinutes(15) }
+                new PersistedOperationsOptions { CacheTtl = ttl ?? TimeSpan.FromMinutes(15) },
+                new PersistedOperationCacheGeneration(),
+                TimeProvider.System
             );
 
         [Test]
@@ -108,7 +110,9 @@ public class PersistedOperationCacheTests
             );
             var cache = new InMemoryPersistedOperationCache(
                 memCache,
-                new PersistedOperationsOptions { CacheTtl = TimeSpan.FromMinutes(15) }
+                new PersistedOperationsOptions { CacheTtl = TimeSpan.FromMinutes(15) },
+                new PersistedOperationCacheGeneration(),
+                TimeProvider.System
             );
 
             cache.Set(null, "id1", "doc");
@@ -118,6 +122,67 @@ public class PersistedOperationCacheTests
             clock.Advance(TimeSpan.FromMinutes(15) + TimeSpan.FromSeconds(1));
 
             cache.TryGet(null, "id1").Should().BeNull("entry should have expired by TTL");
+        }
+
+        [Test]
+        public void AnEntryReadBeforeAChange_IsNeverFound()
+        {
+            var generation = new PersistedOperationCacheGeneration();
+            var cache = new InMemoryPersistedOperationCache(
+                new MemoryCache(new MemoryCacheOptions()),
+                new PersistedOperationsOptions(),
+                generation,
+                TimeProvider.System
+            );
+            var readIn = generation.Current;
+            generation.Advance();
+
+            cache.Set(null, "id1", "old", readIn, TimeProvider.System.GetTimestamp());
+
+            cache.TryGet(null, "id1").Should().BeNull();
+        }
+
+        [Test]
+        public void AnEntry_ExpiresByItsReadTime_NotItsWriteTime()
+        {
+            var clock = new Trax.Api.Tests.PersistedOperations.Fixtures.ManualClock();
+            var generation = new PersistedOperationCacheGeneration();
+            var cache = new InMemoryPersistedOperationCache(
+                new MemoryCache(new MemoryCacheOptions()),
+                new PersistedOperationsOptions { CacheTtl = TimeSpan.FromMinutes(5) },
+                generation,
+                clock
+            );
+            var readAt = clock.GetTimestamp();
+            clock.Advance(TimeSpan.FromMinutes(4));
+            cache.Set(null, "id1", "doc", generation.Current, readAt);
+
+            cache.TryGet(null, "id1", out _, out var seenReadAt).Should().BeTrue();
+            seenReadAt.Should().Be(readAt);
+
+            clock.Advance(TimeSpan.FromMinutes(1));
+            cache.TryGet(null, "id1").Should().BeNull();
+        }
+
+        [Test]
+        public void Constructor_NullGenerationOrClock_Throws()
+        {
+            Action nullGeneration = () =>
+                _ = new InMemoryPersistedOperationCache(
+                    new MemoryCache(new MemoryCacheOptions()),
+                    new PersistedOperationsOptions(),
+                    null!,
+                    TimeProvider.System
+                );
+            Action nullClock = () =>
+                _ = new InMemoryPersistedOperationCache(
+                    new MemoryCache(new MemoryCacheOptions()),
+                    new PersistedOperationsOptions(),
+                    new PersistedOperationCacheGeneration(),
+                    null!
+                );
+            nullGeneration.Should().Throw<ArgumentNullException>();
+            nullClock.Should().Throw<ArgumentNullException>();
         }
 
         private sealed class TestClock : Microsoft.Extensions.Internal.ISystemClock
@@ -133,7 +198,12 @@ public class PersistedOperationCacheTests
         public void Constructor_NullCache_Throws()
         {
             Action act = () =>
-                _ = new InMemoryPersistedOperationCache(null!, new PersistedOperationsOptions());
+                _ = new InMemoryPersistedOperationCache(
+                    null!,
+                    new PersistedOperationsOptions(),
+                    new PersistedOperationCacheGeneration(),
+                    TimeProvider.System
+                );
             act.Should().Throw<ArgumentNullException>();
         }
 
@@ -143,7 +213,9 @@ public class PersistedOperationCacheTests
             Action act = () =>
                 _ = new InMemoryPersistedOperationCache(
                     new MemoryCache(new MemoryCacheOptions()),
-                    null!
+                    null!,
+                    new PersistedOperationCacheGeneration(),
+                    TimeProvider.System
                 );
             act.Should().Throw<ArgumentNullException>();
         }

@@ -21,10 +21,13 @@ public partial class TraxGraphQLBuilder
     /// client sends, is accepted. Plain HTTP requests are not affected; CORS governs those.
     /// </para>
     /// <para>
-    /// Without this call the allowed origins are those of the host's CORS default policy
-    /// (<c>AddCors(o =&gt; o.AddDefaultPolicy(...))</c>), including <c>AllowAnyOrigin()</c>. With
-    /// it, exactly these origins are allowed and the CORS default policy is not consulted, so
-    /// calling it with no arguments allows the endpoint's own origin only.
+    /// Without this call the allowed origins are those the host's CORS default policy
+    /// (<c>AddCors(o =&gt; o.AddDefaultPolicy(...))</c>) names with <c>WithOrigins(...)</c> or
+    /// admits with <c>SetIsOriginAllowed(...)</c>. A default policy built with
+    /// <c>AllowAnyOrigin()</c> allows no origin besides the endpoint's own: a browser sends its
+    /// cookies with every upgrade, and CORS never lets <c>AllowAnyOrigin()</c> carry credentials.
+    /// With this call, exactly these origins are allowed and the CORS default policy is not
+    /// consulted, so calling it with no arguments allows the endpoint's own origin only.
     /// </para>
     /// <para>
     /// Each value is an origin: a scheme and a host, with a port when it is not the scheme's

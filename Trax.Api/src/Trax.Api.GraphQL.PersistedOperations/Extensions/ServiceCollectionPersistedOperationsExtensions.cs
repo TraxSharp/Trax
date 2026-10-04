@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
@@ -18,61 +19,81 @@ namespace Trax.Api.GraphQL.PersistedOperations.Extensions;
 public static class ServiceCollectionPersistedOperationsExtensions
 {
     /// <summary>
-    /// Registers <see cref="IPersistedOperationStore"/> backed by the
-    /// existing Trax data context. Use this in admin tools and CI manifest
-    /// uploaders that do not host a GraphQL server.
+    /// Registers <see cref="IPersistedOperationStore"/> backed by the Trax data context. Use this
+    /// in admin tools and CI manifest uploaders that do not host a GraphQL server.
     /// </summary>
     /// <remarks>
-    /// A change written through this store is not broadcast, so a GraphQL node keeps serving what
-    /// it cached until it restarts. When the nodes use <c>UseRabbitMqInvalidation</c>, use the
-    /// overload that takes the broker's connection string, so a change made here reaches them.
+    /// The store refuses to start until <paramref name="configure"/> says how a change made
+    /// through it reaches the GraphQL nodes: <c>UseRabbitMqInvalidation(...)</c> with the broker
+    /// they use, or <c>SingleNode()</c> when no other process caches these operations.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.AddPersistedOperationStore(store =&gt; store.UseRabbitMqInvalidation(rabbitMq));
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddPersistedOperationStore(
+        this IServiceCollection services,
+        Action<PersistedOperationStoreBuilder> configure
+    )
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var storeBuilder = new PersistedOperationStoreBuilder();
+        configure(storeBuilder);
+        return AddStore(services, storeBuilder.Build());
+    }
+
+    /// <summary>
+    /// Refuses to start: a store registered this way has no way to reach the GraphQL nodes.
+    /// Use <c>AddPersistedOperationStore(store =&gt; ...)</c>.
+    /// </summary>
+    [Obsolete(
+        "A persisted-operation store must say how a change reaches the GraphQL nodes. Use "
+            + "AddPersistedOperationStore(store => store.UseRabbitMqInvalidation(...)) or "
+            + "AddPersistedOperationStore(store => store.SingleNode()).",
+        error: true
+    )]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static IServiceCollection AddPersistedOperationStore(
         this IServiceCollection services,
         string databaseConnectionString
-    ) => AddStore(services, databaseConnectionString, rabbitMqInvalidationConnectionString: null);
+    ) => AddPersistedOperationStore(services, _ => { });
 
     /// <summary>
-    /// Registers <see cref="IPersistedOperationStore"/> backed by the existing Trax data context,
-    /// and broadcasts every change it makes over RabbitMQ to the GraphQL nodes that call
-    /// <c>UseRabbitMqInvalidation</c> with the same broker, so each of them empties its caches.
+    /// Kept for hosts built against it. The database connection string is not used: the store
+    /// reads and writes through the Trax data context.
     /// </summary>
+    [Obsolete(
+        "The database connection string is not used: the store reads and writes through the Trax "
+            + "data context. Use AddPersistedOperationStore(store => store.UseRabbitMqInvalidation(...))."
+    )]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public static IServiceCollection AddPersistedOperationStore(
         this IServiceCollection services,
         string databaseConnectionString,
         string rabbitMqInvalidationConnectionString
-    )
-    {
-        if (string.IsNullOrWhiteSpace(rabbitMqInvalidationConnectionString))
-            throw new ArgumentException(
-                "AddPersistedOperationStore requires a RabbitMQ connection string in this overload.",
-                nameof(rabbitMqInvalidationConnectionString)
-            );
-
-        return AddStore(services, databaseConnectionString, rabbitMqInvalidationConnectionString);
-    }
+    ) =>
+        AddPersistedOperationStore(
+            services,
+            store => store.UseRabbitMqInvalidation(rabbitMqInvalidationConnectionString)
+        );
 
     private static IServiceCollection AddStore(
         IServiceCollection services,
-        string databaseConnectionString,
         string? rabbitMqInvalidationConnectionString
     )
     {
-        ArgumentNullException.ThrowIfNull(services);
-        if (string.IsNullOrWhiteSpace(databaseConnectionString))
-            throw new ArgumentException(
-                "AddPersistedOperationStore requires a connection string.",
-                nameof(databaseConnectionString)
-            );
-
-        var builder = new PersistedOperationsBuilder().UseDatabase(databaseConnectionString);
-        if (rabbitMqInvalidationConnectionString is not null)
+        var builder = new PersistedOperationsBuilder();
+        if (rabbitMqInvalidationConnectionString is null)
+            builder.SingleNode();
+        else
             builder.UseRabbitMqInvalidation(rabbitMqInvalidationConnectionString);
 
-        // This process serves no requests, so it has no caches of its own to keep consistent.
-        var options = builder.Build(requireNodeTopology: false);
-        services.AddSingleton(options);
+        services.AddSingleton(builder.Build());
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<PersistedOperationCacheGeneration>();
 
         services.TryAddSingleton<IPersistedOperationCache, NoOpPersistedOperationCache>();
         if (rabbitMqInvalidationConnectionString is not null)

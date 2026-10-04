@@ -19,6 +19,9 @@ namespace Trax.Api.GraphQL.Audit;
 /// <paramref name="Document"/> is the request's document with every string and numeric literal
 /// replaced by a placeholder (<c>""</c> or <c>0</c>). <paramref name="Variables"/> is what the
 /// registered <see cref="ITraxAuditRedactor"/> returned, which by default is <c>null</c>.
+/// <paramref name="ErrorText"/> is each error's code and path (<c>CODE at path</c>, joined with
+/// <c>; </c>) unless <see cref="TraxAuditOptions.RecordErrorMessages"/> is set, because an error
+/// message can quote what the caller sent.
 /// </para>
 /// </remarks>
 public sealed record TraxAuditEntry(

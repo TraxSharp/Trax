@@ -6,7 +6,7 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.GraphQL.Testing</AssemblyName>
     <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Architecture-guard checkers for Trax GraphQL: cross-schema edge manifest validity and edge-resolver placement / loader use. Framework-agnostic: returns offender lists you assert on.</PackageDescription>
+    <PackageDescription>Architecture-guard checkers for Trax .NET GraphQL: cross-schema edge manifest validity and edge-resolver placement / loader use. Framework-agnostic: returns offender lists you assert on.</PackageDescription>
     <PackageTags>trax;testing;architecture;guards;graphql;hotchocolate</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Trax.Core.Testing" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="NUnit" />
   </ItemGroup>
 </Project>

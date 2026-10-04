@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,7 +51,7 @@ public class TrainAuthorizationServiceTests
     /// Asserts the call throws <see cref="TrainAuthorizationException"/> with the
     /// canonical public message. The caller's <paramref name="reasonPattern"/> is matched
     /// against <see cref="TrainAuthorizationException.Reason"/> (which the filter strips
-    /// before forwarding). Supports FluentAssertions wildcard syntax.
+    /// before forwarding). Supports AwesomeAssertions wildcard syntax.
     /// </summary>
     private static async Task AssertDeniedWithReason(Func<Task> act, string reasonPattern)
     {
@@ -89,13 +89,14 @@ public class TrainAuthorizationServiceTests
         bool hasAuthorize = false,
         IReadOnlyList<string>? policies = null,
         IReadOnlyList<string>? roles = null,
-        string serviceTypeName = "Test.ITestTrain"
+        string serviceTypeName = "Test.ITestTrain",
+        Type? implementationType = null
     )
     {
         return new TrainRegistration
         {
             ServiceType = typeof(object),
-            ImplementationType = typeof(object),
+            ImplementationType = implementationType ?? typeof(object),
             InputType = typeof(object),
             OutputType = typeof(object),
             Lifetime = ServiceLifetime.Transient,
@@ -578,6 +579,104 @@ public class TrainAuthorizationServiceTests
         ex.Message.Should().Be(TrainAuthorizationException.PublicMessage);
         ex.Message.Should().NotContain("MyNamespace.IDangerousTrain");
     }
+
+    #endregion
+
+    #region Role lists from separate attributes
+
+    /// <summary>
+    /// Two attributes naming roles are two requirements, as two <c>[Authorize]</c> attributes are
+    /// in ASP.NET Core; the comma list inside one attribute is any of.
+    /// </summary>
+    [Test]
+    public async Task TwoRoleAttributes_UserHoldingOne_Denies()
+    {
+        var service = CreateService(AuthenticatedContext(roles: ["Support"]));
+        var reg = Registration(
+            hasAuthorize: true,
+            roles: ["Admin", "Support"],
+            implementationType: typeof(TwoRoleAttributeTrain)
+        );
+
+        await AssertDeniedWithReason(() => service.AuthorizeAsync(reg), "*Admin*");
+    }
+
+    [Test]
+    public async Task TwoRoleAttributes_UserHoldingBoth_Allows()
+    {
+        var service = CreateService(AuthenticatedContext(roles: ["Admin", "Support"]));
+        var reg = Registration(
+            hasAuthorize: true,
+            roles: ["Admin", "Support"],
+            implementationType: typeof(TwoRoleAttributeTrain)
+        );
+
+        await service.AuthorizeAsync(reg);
+    }
+
+    /// <summary>An attribute on the train's interface is a requirement too.</summary>
+    [Test]
+    public async Task InterfaceAndClassRoleAttributes_UserHoldingOne_Denies()
+    {
+        var service = CreateService(AuthenticatedContext(roles: ["Admin"]));
+        var reg = Registration(
+            hasAuthorize: true,
+            roles: ["Admin", "Support"],
+            implementationType: typeof(InterfaceAndClassRoleTrain)
+        );
+
+        await AssertDeniedWithReason(() => service.AuthorizeAsync(reg), "*Support*");
+    }
+
+    [Test]
+    public async Task OneAttributesRoleList_UserHoldingOne_Allows()
+    {
+        var service = CreateService(AuthenticatedContext(roles: ["Support"]));
+        var reg = Registration(
+            hasAuthorize: true,
+            roles: ["Admin", "Support"],
+            implementationType: typeof(OneRoleListTrain)
+        );
+
+        await service.AuthorizeAsync(reg);
+    }
+
+    /// <summary>
+    /// A bare attribute adds no role list, and the same list declared twice, on the class and
+    /// on its interface, is one requirement.
+    /// </summary>
+    [Test]
+    public async Task ABareAttributeAndARepeatedRoleList_AddNoRequirement()
+    {
+        var service = CreateService(AuthenticatedContext(roles: ["Admin"]));
+        var reg = Registration(
+            hasAuthorize: true,
+            roles: ["Admin"],
+            implementationType: typeof(BareAndRepeatedRoleTrain)
+        );
+
+        await service.AuthorizeAsync(reg);
+    }
+
+    [TraxAuthorize(Roles = "Admin")]
+    [TraxAuthorize(Roles = "Support")]
+    private sealed class TwoRoleAttributeTrain;
+
+    [TraxAuthorize(Roles = "Admin")]
+    private interface IAdminGatedTrain;
+
+    [TraxAuthorize]
+    [TraxAuthorize(Roles = "Admin")]
+    private sealed class BareAndRepeatedRoleTrain : IAdminGatedTrain;
+
+    [TraxAuthorize(Roles = "Support")]
+    private interface ISupportGatedTrain;
+
+    [TraxAuthorize(Roles = "Admin")]
+    private sealed class InterfaceAndClassRoleTrain : ISupportGatedTrain;
+
+    [TraxAuthorize(Roles = "Admin, Support")]
+    private sealed class OneRoleListTrain;
 
     #endregion
 }

@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentAssertions;
+using AwesomeAssertions;
 using GraphQLParser.AST;
 using Trax.Api.GraphQL.Client;
 using Trax.Api.Tests.GraphQLClient.Fixtures;
