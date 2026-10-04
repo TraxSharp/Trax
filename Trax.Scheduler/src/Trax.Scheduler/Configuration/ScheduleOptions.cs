@@ -45,6 +45,7 @@ public class ScheduleOptions
     internal List<Exclusion> _exclusions = [];
     internal TimeSpan? _variance;
     internal TimeSpan? _failureWindow;
+    internal bool? _replayDecisionsOnRetry;
 
     // Group-level state
     internal string? _groupId;
@@ -220,6 +221,26 @@ public class ScheduleOptions
         return this;
     }
 
+    /// <summary>
+    /// Sets whether a retry of this manifest's failed run replays the decisions that run recorded.
+    /// </summary>
+    /// <remarks>
+    /// On by default: a retry, made by the scheduler or by requeueing the manifest's dead letter,
+    /// takes the tracks the failed run's deciders chose instead of asking them again, when the
+    /// failed run recorded its decisions and was given the same input (scheduler/0017). Pass false
+    /// for a manifest whose retries should always ask afresh. Ordinary junctions re-run either way.
+    /// <para>
+    /// Stated, it is written on every seed. Left unstated, a new manifest replays and an existing
+    /// one keeps the value it has.
+    /// </para>
+    /// </remarks>
+    /// <param name="replay">Whether retries replay the failed run's decisions.</param>
+    public ScheduleOptions ReplayDecisionsOnRetry(bool replay)
+    {
+        _replayDecisionsOnRetry = replay;
+        return this;
+    }
+
     // ── Group-level fluent methods ────────────────────────────────────
 
     /// <summary>
@@ -287,6 +308,7 @@ public class ScheduleOptions
             Exclusions = [.. _exclusions],
             Variance = _variance,
             FailureWindow = _failureWindow,
+            ReplayDecisionsOnRetry = _replayDecisionsOnRetry,
         };
 
     /// <summary>

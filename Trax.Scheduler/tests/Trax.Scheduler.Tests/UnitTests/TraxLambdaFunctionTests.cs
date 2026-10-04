@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Amazon.Lambda.TestUtilities;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;

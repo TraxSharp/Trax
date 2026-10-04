@@ -1,8 +1,8 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Trax.Core.Functional;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Trains.ManifestManager;

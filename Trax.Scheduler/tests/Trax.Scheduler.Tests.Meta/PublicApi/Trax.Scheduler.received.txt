@@ -47,6 +47,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Effect.Enums.MisfirePolicy? MisfirePolicy { get; set; }
         public System.TimeSpan? MisfireThreshold { get; set; }
         public int Priority { get; set; }
+        public bool? ReplayDecisionsOnRetry { get; set; }
         public System.TimeSpan? Timeout { get; set; }
         public System.TimeSpan? Variance { get; set; }
     }
@@ -104,6 +105,7 @@ namespace Trax.Scheduler.Configuration
         public Trax.Scheduler.Configuration.ScheduleOptions OnMisfire(Trax.Effect.Enums.MisfirePolicy policy) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Priority(int priority) { }
         public Trax.Scheduler.Configuration.ScheduleOptions PrunePrefix(string prefix) { }
+        public Trax.Scheduler.Configuration.ScheduleOptions ReplayDecisionsOnRetry(bool replay) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Timeout(System.TimeSpan timeout) { }
         public Trax.Scheduler.Configuration.ScheduleOptions Variance(System.TimeSpan variance) { }
     }
@@ -439,10 +441,12 @@ namespace Trax.Scheduler.Services.Operations
         Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics();
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RunTrainAsync(Trax.Scheduler.Services.Operations.RunTrainInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestGroupsEnabledAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool enabled, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestsEnabledAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool enabled, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestsReplayDecisionsOnRetryAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool replay, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct);
     }
@@ -540,10 +544,12 @@ namespace Trax.Scheduler.Services.Operations
         public Trax.Scheduler.Services.Operations.ServerMetrics GetServerMetrics() { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> QueueTrainAsync(Trax.Scheduler.Services.Operations.QueueTrainInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> RunTrainAsync(Trax.Scheduler.Services.Operations.RunTrainInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestGroupsEnabledAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool enabled, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestsEnabledAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool enabled, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> SetManifestsReplayDecisionsOnRetryAsync(System.Collections.Generic.IReadOnlyCollection<long> ids, bool replay, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct) { }
     }
@@ -842,8 +848,11 @@ namespace Trax.Scheduler.Services.TraxScheduler
         System.Threading.Tasks.Task DisableAsync(string externalId, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task EnableAsync(string externalId, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueAllDeadLettersAsync(System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueAllDeadLettersAsync(bool askAfresh, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, bool askAfresh, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, bool askAfresh, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleAsync<TTrain, TInput, TOutput>(string externalId, TInput input, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
             where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
@@ -868,7 +877,18 @@ namespace Trax.Scheduler.Services.TraxScheduler
             where TInput : Trax.Effect.Models.Manifest.IManifestProperties;
         System.Threading.Tasks.Task TriggerAsync(string externalId, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task TriggerAsync(string externalId, System.TimeSpan delay, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.ManifestTriggerResult> TriggerAsync(string externalId, bool askAfresh, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.ManifestTriggerResult> TriggerAsync(string externalId, System.TimeSpan delay, bool askAfresh, System.Threading.CancellationToken ct = default);
         System.Threading.Tasks.Task<int> TriggerGroupAsync(long groupId, System.Threading.CancellationToken ct = default);
+    }
+    public class ManifestTriggerResult : System.IEquatable<Trax.Scheduler.Services.TraxScheduler.ManifestTriggerResult>
+    {
+        public ManifestTriggerResult(long WorkQueueId, bool Created, System.DateTime? ScheduledAt, bool AlreadyDispatched, long? ReplayDecisionsOf) { }
+        public bool AlreadyDispatched { get; init; }
+        public bool Created { get; init; }
+        public long? ReplayDecisionsOf { get; init; }
+        public System.DateTime? ScheduledAt { get; init; }
+        public long WorkQueueId { get; init; }
     }
     public class TraxScheduler : Trax.Scheduler.Services.TraxScheduler.ITraxScheduler
     {
@@ -882,8 +902,11 @@ namespace Trax.Scheduler.Services.TraxScheduler
         public System.Threading.Tasks.Task DisableAsync(string externalId, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task EnableAsync(string externalId, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueAllDeadLettersAsync(System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueAllDeadLettersAsync(bool askAfresh, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, bool askAfresh, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, bool askAfresh, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.Models.Manifest.Manifest> ScheduleAsync<TTrain, TInput, TOutput>(string externalId, TInput input, Trax.Scheduler.Services.Scheduling.Schedule schedule, System.Action<Trax.Scheduler.Configuration.ScheduleOptions>? options = null, System.Threading.CancellationToken ct = default)
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
             where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
@@ -908,20 +931,22 @@ namespace Trax.Scheduler.Services.TraxScheduler
             where TInput : Trax.Effect.Models.Manifest.IManifestProperties { }
         public System.Threading.Tasks.Task TriggerAsync(string externalId, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task TriggerAsync(string externalId, System.TimeSpan delay, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.ManifestTriggerResult> TriggerAsync(string externalId, bool askAfresh, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Scheduler.Services.TraxScheduler.ManifestTriggerResult> TriggerAsync(string externalId, System.TimeSpan delay, bool askAfresh, System.Threading.CancellationToken ct = default) { }
         public System.Threading.Tasks.Task<int> TriggerGroupAsync(long groupId, System.Threading.CancellationToken ct = default) { }
     }
 }
 namespace Trax.Scheduler.Trains.JobDispatcher
 {
-    public interface IJobDispatcherTrain : System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit> { }
+    public interface IJobDispatcherTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit> { }
 }
 namespace Trax.Scheduler.Trains.JobRunner
 {
-    public interface IJobRunnerTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit> { }
-    public class JobRunnerTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, LanguageExt.Unit>, Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain
+    public interface IJobRunnerTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.JobRunner.RunJobRequest, Trax.Core.Functional.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, Trax.Core.Functional.Unit> { }
+    public class JobRunnerTrain : Trax.Effect.Services.ServiceTrain.ServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, Trax.Core.Functional.Unit>, System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.JobRunner.RunJobRequest, Trax.Core.Functional.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.JobRunner.RunJobRequest, Trax.Core.Functional.Unit>, Trax.Scheduler.Trains.JobRunner.IJobRunnerTrain
     {
         public JobRunnerTrain() { }
-        protected override System.Threading.Tasks.Task<LanguageExt.Either<System.Exception, LanguageExt.Unit>> Junctions() { }
+        protected override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, Trax.Core.Functional.Unit>> Junctions() { }
     }
     public class RunJobRequest : System.IEquatable<Trax.Scheduler.Trains.JobRunner.RunJobRequest>
     {
@@ -932,11 +957,11 @@ namespace Trax.Scheduler.Trains.JobRunner
 }
 namespace Trax.Scheduler.Trains.ManifestManager
 {
-    public interface IManifestManagerTrain : System.IDisposable, Trax.Core.Route.IRoute<LanguageExt.Unit, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<LanguageExt.Unit, LanguageExt.Unit> { }
+    public interface IManifestManagerTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit> { }
 }
 namespace Trax.Scheduler.Trains.MetadataCleanup
 {
-    public interface IMetadataCleanupTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, LanguageExt.Unit> { }
+    public interface IMetadataCleanupTrain : System.IDisposable, Trax.Core.Route.IRoute<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, Trax.Core.Functional.Unit>, Trax.Effect.Services.ServiceTrain.IServiceTrain<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest, Trax.Core.Functional.Unit> { }
     public class MetadataCleanupRequest : System.IEquatable<Trax.Scheduler.Trains.MetadataCleanup.MetadataCleanupRequest>
     {
         public MetadataCleanupRequest() { }

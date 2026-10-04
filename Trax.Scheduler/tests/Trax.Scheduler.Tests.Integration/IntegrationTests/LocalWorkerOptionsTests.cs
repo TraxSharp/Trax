@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Scheduler.Configuration;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;

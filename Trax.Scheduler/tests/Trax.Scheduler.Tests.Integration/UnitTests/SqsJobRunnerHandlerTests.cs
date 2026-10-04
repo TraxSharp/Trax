@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Amazon.Lambda.SQSEvents;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;

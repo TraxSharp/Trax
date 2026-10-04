@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Utilities;
 

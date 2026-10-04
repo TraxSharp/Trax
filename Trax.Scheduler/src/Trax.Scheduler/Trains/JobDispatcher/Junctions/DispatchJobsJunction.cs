@@ -1,9 +1,9 @@
 using System.Text.Json;
-using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -225,6 +225,9 @@ internal class DispatchJobsJunction(
             }
         }
 
+        await DropReplayLinkIfManifestOptedOutAsync(dataContext, claimed);
+        await DropReplayLinkIfAlreadyReplayedAsync(dataContext, claimed);
+
         // Create a new Metadata record for this execution.
         // Propagate the WorkQueue's ExternalId so clients can correlate the queue
         // mutation response with subscription events (both use the same externalId).
@@ -309,6 +312,102 @@ internal class DispatchJobsJunction(
     }
 
     /// <summary>
+    /// Drops the replay link of a manifest's entry when the manifest no longer replays decisions
+    /// on retry. The link was set when the retry was queued; the flag may have been turned off
+    /// while it waited out its backoff, and the run then asks afresh (docs/adr/0017).
+    /// </summary>
+    private async Task DropReplayLinkIfManifestOptedOutAsync(
+        IDataContext dataContext,
+        WorkQueue claimed
+    )
+    {
+        if (claimed.ReplayDecisionsOf is null || claimed.ManifestId is not { } manifestId)
+            return;
+
+        var replays = await dataContext
+            .Manifests.AsNoTracking()
+            .Where(m => m.Id == manifestId)
+            .Select(m => (bool?)m.ReplayDecisionsOnRetry)
+            .FirstOrDefaultAsync(CancellationToken);
+
+        if (replays != false)
+            return;
+
+        logger.LogInformation(
+            "Work queue entry {WorkQueueId} no longer replays run {ReplayDecisionsOf}: manifest "
+                + "{ManifestId} stopped replaying decisions on retry after it was queued",
+            claimed.Id,
+            claimed.ReplayDecisionsOf,
+            manifestId
+        );
+        claimed.ReplayDecisionsOf = null;
+    }
+
+    /// <summary>
+    /// Drops the replay link of an entry whose source run's answers a run already replays, so the
+    /// entry's run asks afresh: a run's answers are replayed at most once (docs/adr/0017).
+    /// </summary>
+    /// <remarks>
+    /// The checks made when an entry is queued read the runs and the queued entries, and the
+    /// database's unique index holds one <em>queued</em> replay per run. Neither sees a replay that
+    /// was dispatched after the check, so a second entry naming the same run can still be queued
+    /// once the first has left the queue. This is the check that holds the rule, because every
+    /// linked run is created here.
+    /// <para>
+    /// Two dispatchers can claim two such entries at once, and neither would see the other's run
+    /// until it commits. So every linked claim first writes the source run's row (setting a column
+    /// to its own value), which serializes them on that row until the claim transaction commits,
+    /// and only then looks for a run replaying it. The row lock belongs to that run alone, so it
+    /// contends with nothing but another dispatch of the same source, and it needs no
+    /// provider-specific SQL: on a single-writer provider the write takes the database's write lock
+    /// before the read, which serializes the same way. A source already deleted has no row to
+    /// lock; the run then finds nothing to replay and asks afresh anyway.
+    /// </para>
+    /// <para>
+    /// A run abandoned its replay asked afresh, and a dispatch attempt that failed and was requeued
+    /// (<see cref="DispatchFailure.Requeued"/>) never ran; the entry it belongs to is the one being
+    /// dispatched again, so neither counts as the replay.
+    /// </para>
+    /// </remarks>
+    private async Task DropReplayLinkIfAlreadyReplayedAsync(
+        IDataContext dataContext,
+        WorkQueue claimed
+    )
+    {
+        if (claimed.ReplayDecisionsOf is not { } source)
+            return;
+
+        await dataContext
+            .Metadatas.Where(m => m.Id == source)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(m => m.ReplayAbandoned, m => m.ReplayAbandoned),
+                CancellationToken
+            );
+
+        var replayedBy = await dataContext
+            .Metadatas.AsNoTracking()
+            .Where(m =>
+                m.ReplayDecisionsOf == source
+                && !m.ReplayAbandoned
+                && m.FailureException != DispatchFailure.Requeued
+            )
+            .Select(m => (long?)m.Id)
+            .FirstOrDefaultAsync(CancellationToken);
+
+        if (replayedBy is null)
+            return;
+
+        logger.LogInformation(
+            "Work queue entry {WorkQueueId} no longer replays run {ReplayDecisionsOf}: run "
+                + "{ReplayedBy} already replays its decisions, so this run asks afresh",
+            claimed.Id,
+            source,
+            replayedBy
+        );
+        claimed.ReplayDecisionsOf = null;
+    }
+
+    /// <summary>
     /// Returns an entry whose input type this host does not register to the queue, inside the
     /// claim transaction: counts the attempt and pushes its <c>ScheduledAt</c> back by the
     /// dispatch backoff. No run is recorded, so nothing counts toward the manifest's retries.
@@ -354,6 +453,9 @@ internal class DispatchJobsJunction(
         Exception exception
     )
     {
+        await DropReplayLinkIfManifestOptedOutAsync(dataContext, claimed);
+        await DropReplayLinkIfAlreadyReplayedAsync(dataContext, claimed);
+
         var failure = new TrainException(
             $"The input of work queue entry {claimed.Id} could not be read as "
                 + $"'{claimed.InputTypeName}', so it was not dispatched: {exception.Message}"

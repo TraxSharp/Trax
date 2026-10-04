@@ -146,7 +146,9 @@ public interface IOperationsService
     /// entry names it as the run whose decisions it replays, so the new run takes the tracks the
     /// original took (central <c>docs/0041</c>); a question the run never reached is answered from
     /// the run it replayed in turn. A run with neither is re-queued exactly as an ordinary enqueue. The link is only ever set
-    /// here, to the run being re-queued, so it always points at a run of the same train.
+    /// here, to the run being re-queued, so it always points at a run of the same train. A run
+    /// whose answers a queued entry or another run already replays is re-queued to ask afresh
+    /// (scheduler/0017), and the message says so.
     /// </para>
     /// </remarks>
     /// <param name="metadataId">The id of the run (metadata row) to re-queue.</param>
@@ -172,6 +174,34 @@ public interface IOperationsService
     /// </exception>
     Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct) =>
         throw NotImplementedBy(nameof(RequeueExecutionAsync));
+
+    /// <summary>
+    /// Re-queues a run, as <see cref="RequeueExecutionAsync(long, CancellationToken)"/> does,
+    /// optionally asking its deciders afresh.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With <paramref name="askAfresh"/> false this is
+    /// <see cref="RequeueExecutionAsync(long, CancellationToken)"/>. With it true the new entry
+    /// carries no replay link, so the new run asks every question again; nothing else differs.
+    /// </para>
+    /// <para>
+    /// A run's answers are replayed once (scheduler/0017). When a queued entry (a manifest's
+    /// retry, or an earlier requeue) or a run, in any state, already replays the run being
+    /// re-queued, the requeue still queues the run but asks afresh, and says so in the result's
+    /// message.
+    /// </para>
+    /// </remarks>
+    /// <param name="metadataId">The id of the run (metadata row) to re-queue.</param>
+    /// <param name="askAfresh">True queues the run to ask its deciders afresh.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>As <see cref="RequeueExecutionAsync(long, CancellationToken)"/>.</returns>
+    /// <exception cref="NotSupportedException">The implementation predates this overload.</exception>
+    Task<OperationResult> RequeueExecutionAsync(
+        long metadataId,
+        bool askAfresh,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(RequeueExecutionAsync));
 
     /// <summary>
     /// Transitions a queued work queue entry to <c>Cancelled</c>. Only entries currently
@@ -226,6 +256,26 @@ public interface IOperationsService
         bool enabled,
         CancellationToken ct
     ) => throw NotImplementedBy(nameof(SetManifestsEnabledAsync));
+
+    /// <summary>
+    /// Sets whether retries of the given manifests replay the decisions of the run they retry
+    /// (<c>ReplayDecisionsOnRetry</c>, scheduler/0017). Only manifests whose flag differs are
+    /// written, and <c>ChangeDomain.Manifest</c> is signalled when any did. Turning it off also
+    /// clears the replay link of each manifest's queued entry, so a retry waiting out its backoff
+    /// asks afresh, and signals <c>ChangeDomain.WorkQueue</c> when it cleared any. The flag and the
+    /// links are written in one transaction.
+    /// </summary>
+    /// <returns>
+    /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number of manifests
+    /// changed, zero included; the message also counts the queued retries whose link was cleared,
+    /// which a manifest already set to ask afresh can still have. <c>OperationResult(false, ...)</c>
+    /// for an empty list or too many ids.
+    /// </returns>
+    Task<OperationResult> SetManifestsReplayDecisionsOnRetryAsync(
+        IReadOnlyCollection<long> ids,
+        bool replay,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(SetManifestsReplayDecisionsOnRetryAsync));
 
     /// <summary>
     /// Enables or disables the given manifest groups by id. Only groups whose flag differs are

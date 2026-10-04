@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
@@ -16,6 +18,7 @@ using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.JobRunner;
 using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 using Trax.Scheduler.Trains.MetadataCleanup;
 using Trax.Scheduler.Utilities;
 
@@ -64,6 +67,12 @@ public partial class SchedulerConfigurationBuilder
 
         // Register ITraxScheduler
         _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
+
+        // Chooses the run a manifest's retry replays the decisions of (docs/adr/0017).
+        _parentBuilder.ServiceCollection.TryAddScoped(sp => new RetryDecisionReplay(
+            sp.GetRequiredService<IDataContextProviderFactory>(),
+            sp.GetRequiredService<ILogger<RetryDecisionReplay>>()
+        ));
 
         // Register IOperationsService — shared between dashboard UI and GraphQL operations
         // mutations so both surfaces have identical validation and persistence behaviour.

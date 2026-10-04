@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Scheduler.Services.CancellationRegistry;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;

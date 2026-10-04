@@ -27,6 +27,7 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Services.Operations;
 
@@ -152,11 +153,20 @@ public class OperationsService : IOperationsService
     }
 
     /// <inheritdoc />
-    public async Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct)
+    public Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct) =>
+        RequeueExecutionAsync(metadataId, askAfresh: false, ct);
+
+    /// <inheritdoc />
+    public async Task<OperationResult> RequeueExecutionAsync(
+        long metadataId,
+        bool askAfresh,
+        CancellationToken ct
+    )
     {
         string trainName;
         string savedInput;
         bool hasDecisionsToReplay;
+        bool alreadyReplayed = false;
 
         using (var db = await _dataContextFactory.CreateDbContextAsync(ct))
         {
@@ -185,7 +195,16 @@ public class OperationsService : IOperationsService
             // follows the link back to the answers it did not record. A run of a train that never
             // decides, or on a host that does not record decisions, is re-queued exactly as an
             // ordinary enqueue, through the overload every ITrainExecutionService has.
-            hasDecisionsToReplay = await db.HasDecisionsToReplay(metadataId, ct);
+            hasDecisionsToReplay = !askAfresh && await db.HasDecisionsToReplay(metadataId, ct);
+
+            // The run's answers are replayed once (docs/adr/0017): when a queued entry (a
+            // manifest's retry, an earlier requeue) or a run already replays them, this requeue
+            // asks afresh rather than queueing a second replay of the same answers.
+            if (hasDecisionsToReplay)
+            {
+                alreadyReplayed = await db.IsReplayedAsync(metadataId, ct);
+                hasDecisionsToReplay = !alreadyReplayed;
+            }
         }
 
         // The same lookup as QueueTrainAsync. The caller named a run, not a train, so the miss is
@@ -231,7 +250,10 @@ public class OperationsService : IOperationsService
 
         // The replay link is set here and nowhere a caller can reach, and only to the run being
         // re-queued, so the new run replays decisions of a run of the same train (docs/0041).
-        return await EnqueueAsync(
+        if (hasDecisionsToReplay && BeforeReplayEnqueue is { } beforeEnqueue)
+            await beforeEnqueue(ct);
+
+        var result = await EnqueueAsync(
             registration,
             requeuedInput,
             priority: 0,
@@ -240,10 +262,28 @@ public class OperationsService : IOperationsService
             ct,
             requeueOf: metadataId
         );
+
+        return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
     }
 
+    /// <summary>A requeue's result, saying it asks afresh because its run is already replayed.</summary>
+    private static OperationResult AskedAfresh(OperationResult result, long metadataId) =>
+        result with
+        {
+            Message =
+                $"{result.Message} It asks its deciders afresh: the decisions of "
+                + $"execution {metadataId} are already replayed by another run or queued "
+                + "entry, and are replayed once.",
+        };
+
     /// <summary>
-    /// The enqueue <see cref="QueueTrainAsync"/> and <see cref="RequeueExecutionAsync"/> share,
+    /// Test seam: awaited between a requeue's "already replayed?" check and its insert, when the
+    /// requeue would link.
+    /// </summary>
+    internal Func<CancellationToken, Task>? BeforeReplayEnqueue { get; set; }
+
+    /// <summary>
+    /// The enqueue <see cref="QueueTrainAsync"/> and <see cref="RequeueExecutionAsync(long, bool, CancellationToken)"/> share,
     /// for a train already found by name: through the mediator, with refusals and failures split
     /// as scheduler/0004 says.
     /// </summary>
@@ -289,6 +329,28 @@ public class OperationsService : IOperationsService
                     },
                     ct
                 );
+        }
+        catch (Exception ex)
+            when (replayDecisionsOf is { } replayed
+                && RetryReplayLinks.IsQueuedReplayConflict(ex, _services?.GetService<ISqlDialect>())
+            )
+        {
+            // A queued entry came to replay the same run between the check and this insert, and
+            // the index refused a second (docs/adr/0017). The run is queued to ask afresh instead.
+            _logger?.LogInformation(
+                "A queued entry already replays run {ReplayDecisionsOf}; the requeue asks afresh",
+                replayed
+            );
+            var afresh = await EnqueueAsync(
+                registration,
+                inputJson,
+                priority,
+                scheduledAt,
+                replayDecisionsOf: null,
+                ct,
+                requeueOf
+            );
+            return afresh.Success ? AskedAfresh(afresh, replayed) : afresh;
         }
         catch (JsonException ex)
         {
@@ -962,6 +1024,72 @@ public class OperationsService : IOperationsService
             Count: changed,
             Message: $"{changed} of {distinct.Count} manifest(s) {(enabled ? "enabled" : "disabled")}."
         );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> SetManifestsReplayDecisionsOnRetryAsync(
+        IReadOnlyCollection<long> ids,
+        bool replay,
+        CancellationToken ct
+    )
+    {
+        if (RefuseBatch(ids) is { } refused)
+            return refused;
+
+        var distinct = ids.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        // The flag and the queued links change together or not at all: an opt-out that wrote the
+        // flag and failed to clear a link would leave a retry replaying for a manifest that says
+        // it does not.
+        int changed;
+        var cleared = 0;
+        using (await db.BeginTransaction(ct))
+        {
+            try
+            {
+                var differing = db.Manifests.Where(m =>
+                    distinct.Contains(m.Id) && m.ReplayDecisionsOnRetry != replay
+                );
+                changed = db.SupportsSetUpdates()
+                    ? await differing.ExecuteUpdateAsync(
+                        s => s.SetProperty(m => m.ReplayDecisionsOnRetry, replay),
+                        ct
+                    )
+                    : await db.UpdateEachAsync(
+                        differing,
+                        m => m.ReplayDecisionsOnRetry = replay,
+                        ct
+                    );
+
+                // Turned off, a retry already queued to replay asks afresh too (docs/adr/0017).
+                // The dispatcher checks the flag again when it claims the entry, for one queued
+                // meanwhile.
+                if (!replay)
+                    cleared = await RetryReplayLinks.ClearQueuedAsync(db, distinct, ct);
+
+                await db.CommitTransaction();
+            }
+            catch
+            {
+                await db.RollbackTransaction();
+                throw;
+            }
+        }
+
+        if (changed > 0)
+            _changeSignal?.Notify(ChangeDomain.Manifest);
+        if (cleared > 0)
+            _changeSignal?.Notify(ChangeDomain.WorkQueue);
+
+        var message =
+            $"{changed} of {distinct.Count} manifest(s) set to "
+            + $"{(replay ? "replay decisions" : "ask afresh")} on retry.";
+        if (cleared > 0)
+            message += $" {cleared} queued retry(s) no longer replay a failed run's decisions.";
+
+        return new OperationResult(true, Count: changed, Message: message);
     }
 
     /// <inheritdoc />

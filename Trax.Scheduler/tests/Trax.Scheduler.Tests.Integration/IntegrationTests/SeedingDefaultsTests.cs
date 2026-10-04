@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
@@ -71,7 +71,7 @@ public class SeedingDefaultsTests
         await fx.Scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["plain", "own"],

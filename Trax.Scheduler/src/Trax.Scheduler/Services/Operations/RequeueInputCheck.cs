@@ -9,7 +9,7 @@ namespace Trax.Scheduler.Services.Operations;
 /// saved JSON back as the train's input type, so anything that is not that input (nothing saved,
 /// a placeholder the parameter effect wrote instead, or an input with masked members) would run
 /// the train with defaults in place of the real values.
-/// <see cref="OperationsService.RequeueExecutionAsync"/> applies it for both the GraphQL
+/// <see cref="OperationsService.RequeueExecutionAsync(long, bool, CancellationToken)"/> applies it for both the GraphQL
 /// <c>requeueExecution</c> mutation and the dashboard's Re-queue button, so the two refuse the
 /// same runs with the same messages, and it holds the wording of every refusal particular to a
 /// re-queue.

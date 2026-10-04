@@ -1,8 +1,8 @@
-using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Configuration;
@@ -54,7 +54,11 @@ internal class ManifestManagerPollingService(
         logger.LogInformation("ManifestManagerPollingService stopping");
     }
 
-    private async Task RunManifestManager(CancellationToken cancellationToken)
+    /// <summary>
+    /// One polling cycle: takes the leader lock in a transaction, runs the ManifestManager inside
+    /// it, and commits. Internal so a test can drive the real leader path.
+    /// </summary>
+    internal async Task RunManifestManager(CancellationToken cancellationToken)
     {
         if (!configuration.ManifestManagerEnabled)
         {

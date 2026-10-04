@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Trains.JobRunner;
 
@@ -99,7 +99,7 @@ public class InMemoryJobSubmitterTests
 
         public Trax.Effect.Models.Metadata.Metadata? Metadata => null;
 
-        public Task<LanguageExt.Unit> Run(
+        public Task<Trax.Core.Functional.Unit> Run(
             RunJobRequest input,
             CancellationToken cancellationToken = default
         )
@@ -107,7 +107,7 @@ public class InMemoryJobSubmitterTests
             Calls.Add((input.MetadataId, input.Input, cancellationToken));
             if (Throw is not null)
                 throw Throw;
-            return Task.FromResult(LanguageExt.Unit.Default);
+            return Task.FromResult(Trax.Core.Functional.Unit.Default);
         }
 
         public void Dispose() { }

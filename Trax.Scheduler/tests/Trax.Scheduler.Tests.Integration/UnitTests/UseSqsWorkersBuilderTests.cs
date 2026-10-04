@@ -1,5 +1,5 @@
 using Amazon.SQS;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;

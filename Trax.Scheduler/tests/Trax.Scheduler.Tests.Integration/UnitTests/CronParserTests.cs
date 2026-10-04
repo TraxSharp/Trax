@@ -1,5 +1,5 @@
+using AwesomeAssertions;
 using Cronos;
-using FluentAssertions;
 using Trax.Scheduler.Services.Scheduling;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;

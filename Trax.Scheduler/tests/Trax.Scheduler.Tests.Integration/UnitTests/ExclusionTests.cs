@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Models.Manifest;
 
 namespace Trax.Scheduler.Tests.Integration.UnitTests;

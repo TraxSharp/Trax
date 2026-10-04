@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -603,7 +603,7 @@ public class QueryPerformanceTests : TestSetup
                 var results = await scheduler.ScheduleManyAsync<
                     IStressTestTrain,
                     StressTestInput,
-                    LanguageExt.Unit,
+                    Trax.Core.Functional.Unit,
                     int
                 >(
                     Enumerable.Range(0, 5000),
@@ -633,7 +633,12 @@ public class QueryPerformanceTests : TestSetup
         var scheduler = Scope.ServiceProvider.GetRequiredService<ITraxScheduler>();
 
         // First run
-        await scheduler.ScheduleManyAsync<IStressTestTrain, StressTestInput, LanguageExt.Unit, int>(
+        await scheduler.ScheduleManyAsync<
+            IStressTestTrain,
+            StressTestInput,
+            Trax.Core.Functional.Unit,
+            int
+        >(
             Enumerable.Range(0, 1000),
             i => ($"evolve-{i}", new StressTestInput { Value = $"v1-{i}" }),
             Every.Minutes(5),
@@ -647,7 +652,7 @@ public class QueryPerformanceTests : TestSetup
                 await scheduler.ScheduleManyAsync<
                     IStressTestTrain,
                     StressTestInput,
-                    LanguageExt.Unit,
+                    Trax.Core.Functional.Unit,
                     int
                 >(
                     Enumerable.Range(0, 900),

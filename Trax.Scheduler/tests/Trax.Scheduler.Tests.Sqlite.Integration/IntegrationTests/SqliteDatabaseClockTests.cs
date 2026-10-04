@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Scheduler.Tests.Sqlite.Integration.Fixtures;
 using Trax.Scheduler.Utilities;

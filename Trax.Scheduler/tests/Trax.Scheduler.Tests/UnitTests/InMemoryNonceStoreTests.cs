@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Scheduler.Services.RequestSigning;
 
 namespace Trax.Scheduler.Tests.UnitTests;

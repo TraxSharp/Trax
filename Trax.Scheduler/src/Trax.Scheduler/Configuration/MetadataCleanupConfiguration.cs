@@ -41,12 +41,25 @@ public class MetadataCleanupConfiguration
 
     /// <summary>
     /// Maximum number of metadata rows deleted per batch. Limits row-level lock duration
-    /// during cleanup. Set to null for single-statement deletes (pre-batch behavior). Must be at
-    /// least 1 when set; the scheduler refuses to build otherwise.
+    /// during cleanup. Must be between 1 and 10,000 when set; the scheduler refuses to build
+    /// otherwise. Null sweeps in batches of 10,000.
     /// </summary>
     /// <remarks>
     /// The limit is per batch, and trains sharing a retention are swept as one group, so a
-    /// cleanup cycle deletes up to this many rows per group rather than in total.
+    /// cleanup cycle deletes up to this many rows per group rather than in total. Each batch is
+    /// deleted all or nothing in one transaction, with every log, work queue entry and recorded
+    /// decision its runs own, which is why there is no unbounded setting: null once meant one
+    /// statement for the whole expired backlog, a transaction as large as the backlog.
+    /// A batch can exceed the limit by the runs it must be deleted together with: a run that
+    /// replays another goes in the same batch as the run it replays.
+    /// <para>
+    /// The transaction also clears the batch's back-references: the parent link of every child
+    /// run, which may still be running, and the retry link of every dead letter. Those rows stay
+    /// locked until the batch commits, so a running child's own status writes wait for it. Clearing
+    /// them first, outside the transaction, would shorten the wait but leave a batch that rolls back
+    /// (a run linked for replay while it was deleted) with its children and dead letters already
+    /// detached, and a kept run keeps everything it owns. A larger batch holds those locks longer.
+    /// </para>
     /// </remarks>
     public int? DeleteBatchSize { get; set; } = 1000;
 

@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Scheduling;
 

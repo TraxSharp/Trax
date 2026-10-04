@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
@@ -46,7 +46,7 @@ public class PruneSafeTests : TestSetup
         var results = await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["item-1", "item-2"],
@@ -79,7 +79,7 @@ public class PruneSafeTests : TestSetup
         var results = await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["new"],
@@ -122,7 +122,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["other"],
@@ -149,7 +149,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["new"],
@@ -174,7 +174,7 @@ public class PruneSafeTests : TestSetup
         var results = await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["a", "b"],
@@ -204,7 +204,7 @@ public class PruneSafeTests : TestSetup
         var results = await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["x", "y", "z"],
@@ -235,7 +235,7 @@ public class PruneSafeTests : TestSetup
         var parents = await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["p1", "p2"],
@@ -251,7 +251,7 @@ public class PruneSafeTests : TestSetup
         var results = await _scheduler.ScheduleManyDependentAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["p1", "p2"],
@@ -284,7 +284,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["a"],
@@ -296,7 +296,7 @@ public class PruneSafeTests : TestSetup
         var results = await _scheduler.ScheduleManyDependentAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["a"],
@@ -336,7 +336,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["1", "2"],
@@ -348,7 +348,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["a", "b"],
@@ -374,7 +374,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["1", "2", "3"],
@@ -387,7 +387,7 @@ public class PruneSafeTests : TestSetup
         await _scheduler.ScheduleManyAsync<
             ISchedulerTestTrain,
             SchedulerTestInput,
-            LanguageExt.Unit,
+            Trax.Core.Functional.Unit,
             string
         >(
             ["1", "2", "4"],
@@ -421,7 +421,7 @@ public class PruneSafeTests : TestSetup
             await _scheduler.ScheduleManyAsync<
                 ISchedulerTestTrain,
                 SchedulerTestInput,
-                LanguageExt.Unit,
+                Trax.Core.Functional.Unit,
                 string
             >(
                 items,

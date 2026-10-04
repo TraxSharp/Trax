@@ -1,7 +1,7 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
+using Trax.Core.Functional;
 using Trax.Effect.Models.Manifest;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;

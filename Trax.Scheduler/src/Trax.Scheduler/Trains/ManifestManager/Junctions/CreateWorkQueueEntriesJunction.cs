@@ -1,6 +1,6 @@
-using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -8,6 +8,7 @@ using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
@@ -23,6 +24,7 @@ internal class CreateWorkQueueEntriesJunction(
     IDataContext dataContext,
     SchedulerConfiguration schedulerConfiguration,
     ILogger<CreateWorkQueueEntriesJunction> logger,
+    RetryDecisionReplay retryReplay,
     ITraxChangeSignal? changeSignal = null
 ) : EffectJunction<List<ManifestDispatchView>, Unit>
 {
@@ -46,6 +48,21 @@ internal class CreateWorkQueueEntriesJunction(
             );
             views = SelectGroupFair(views, limit.Value);
         }
+
+        // A retry replays the decisions its failed run recorded, when that is sound, so it takes
+        // the tracks the failed run took instead of asking the model again (docs/adr/0017). The
+        // sources are read in one pass, from the database, never supplied; a failed lookup asks
+        // afresh rather than holding up the cycle.
+        var replaySources = await retryReplay.SourcesForRetriesAsync(
+            // Exactly the runs the backoff below treats as retries: the latest run failed and
+            // its failure still counts. A failure an acknowledged dead letter or the failure
+            // window has set aside is not retried, so the next occurrence asks afresh.
+            views
+                .Where(v => v.LatestFinishedRunFailed && v.FailedCount > 0)
+                .Select(v => v.Manifest)
+                .ToList(),
+            CancellationToken
+        );
 
         foreach (var view in views)
         {
@@ -96,11 +113,24 @@ internal class CreateWorkQueueEntriesJunction(
                         ManifestId = view.Manifest.Id,
                         Priority = effectivePriority,
                         ScheduledAt = scheduledAt,
+                        ReplayDecisionsOf = replaySources.TryGetValue(
+                            view.Manifest.Id,
+                            out var source
+                        )
+                            ? source
+                            : null,
                     }
                 );
 
                 await dataContext.Track(entry);
-                await dataContext.SaveChanges(CancellationToken);
+                // Another host, or a requeue, may have queued a replay of the same run since the
+                // lookup: the index refuses a second one and this retry asks afresh instead.
+                await RetryReplayLinks.SaveAskingAfreshOnConflictAsync(
+                    dataContext,
+                    [entry],
+                    logger,
+                    CancellationToken
+                );
 
                 logger.LogDebug(
                     "Created WorkQueue entry {WorkQueueId} for manifest {ManifestId} (name: {ManifestName})",

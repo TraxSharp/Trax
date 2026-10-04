@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;

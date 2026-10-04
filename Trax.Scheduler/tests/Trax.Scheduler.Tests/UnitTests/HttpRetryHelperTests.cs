@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Http;

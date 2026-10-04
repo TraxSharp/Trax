@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Utilities;
 

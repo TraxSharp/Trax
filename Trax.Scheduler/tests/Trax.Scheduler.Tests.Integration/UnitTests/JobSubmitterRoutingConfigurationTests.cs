@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
 

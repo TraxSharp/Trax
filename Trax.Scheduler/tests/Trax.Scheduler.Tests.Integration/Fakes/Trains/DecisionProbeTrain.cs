@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using LanguageExt;
 using Trax.Core.Decisions;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
@@ -12,8 +12,8 @@ namespace Trax.Scheduler.Tests.Integration.Fakes.Trains;
 /// takes, so a test can tell a replayed run from one that asked afresh.
 /// </summary>
 /// <remarks>
-/// Its chain can be made to fail before the first question or between the two
-/// (<see cref="DecisionProbe.FailAt"/>), to leave a run that recorded none or only one of its
+/// Its chain can be made to fail before the first question, between the two, or after both
+/// (<see cref="DecisionProbe.FailAt"/>), to leave a run that recorded none, one or both of its
 /// decisions. Every host built over this test assembly registers it, so a host that starts with
 /// chain verification on also needs an <see cref="IDecider"/>.
 /// </remarks>
@@ -62,6 +62,9 @@ public enum ProbeFailure
     None,
     BeforeFirstQuestion,
     BetweenQuestions,
+
+    /// <summary>After both questions are answered and both tracks taken.</summary>
+    AfterQuestions,
 }
 
 /// <summary>What the probe train's runs did, shared because the scheduler builds the junctions.</summary>
@@ -128,7 +131,9 @@ public class ProbeSmall : Junction<DecisionProbeInput, string>
     public override Task<string> Run(DecisionProbeInput input)
     {
         DecisionProbe.Taken.Enqueue((input.Value, nameof(ProbeSize.Small)));
-        return Task.FromResult(nameof(ProbeSize.Small));
+        return DecisionProbe.FailAt == ProbeFailure.AfterQuestions
+            ? throw new InvalidOperationException("The probe failed after its questions.")
+            : Task.FromResult(nameof(ProbeSize.Small));
     }
 }
 
@@ -137,6 +142,8 @@ public class ProbeLarge : Junction<DecisionProbeInput, string>
     public override Task<string> Run(DecisionProbeInput input)
     {
         DecisionProbe.Taken.Enqueue((input.Value, nameof(ProbeSize.Large)));
-        return Task.FromResult(nameof(ProbeSize.Large));
+        return DecisionProbe.FailAt == ProbeFailure.AfterQuestions
+            ? throw new InvalidOperationException("The probe failed after its questions.")
+            : Task.FromResult(nameof(ProbeSize.Large));
     }
 }

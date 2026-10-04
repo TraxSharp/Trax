@@ -1,6 +1,6 @@
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Core.Monad;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;

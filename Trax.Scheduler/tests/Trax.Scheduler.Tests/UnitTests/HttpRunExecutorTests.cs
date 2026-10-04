@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
@@ -151,7 +151,7 @@ public class HttpRunExecutorTests
         var result = await executor.ExecuteAsync(
             "My.UnitTrain",
             new TestInput { Name = "unit" },
-            typeof(LanguageExt.Unit)
+            typeof(Trax.Core.Functional.Unit)
         );
 
         result.MetadataId.Should().Be(10);

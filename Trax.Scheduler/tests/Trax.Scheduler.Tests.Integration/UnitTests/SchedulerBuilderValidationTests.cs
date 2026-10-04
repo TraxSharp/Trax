@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -378,8 +378,14 @@ public class SchedulerBuilderValidationTests
             (Action<SchedulerConfigurationBuilder>)(
                 b => b.AddMetadataCleanup(c => c.DeleteBatchSize = 0)
             ),
-            "AddMetadataCleanup: DeleteBatchSize must be at least 1"
+            "AddMetadataCleanup: DeleteBatchSize must be between 1 and 10000"
         ).SetName("Metadata cleanup DeleteBatchSize zero"),
+        new TestCaseData(
+            (Action<SchedulerConfigurationBuilder>)(
+                b => b.AddMetadataCleanup(c => c.DeleteBatchSize = 10_001)
+            ),
+            "AddMetadataCleanup: DeleteBatchSize must be between 1 and 10000"
+        ).SetName("Metadata cleanup DeleteBatchSize over the cap"),
         new TestCaseData(
             (Action<SchedulerConfigurationBuilder>)(
                 b =>

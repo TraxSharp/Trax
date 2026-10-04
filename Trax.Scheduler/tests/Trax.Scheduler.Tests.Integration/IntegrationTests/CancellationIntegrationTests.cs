@@ -1,8 +1,8 @@
 using System.Reflection;
-using FluentAssertions;
-using LanguageExt;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;

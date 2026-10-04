@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Services.ServiceTrain;
@@ -184,6 +184,34 @@ public interface ITraxScheduler
     Task TriggerAsync(string externalId, CancellationToken ct = default);
 
     /// <summary>
+    /// Triggers immediate execution of a scheduled job, as
+    /// <see cref="TriggerAsync(string, CancellationToken)"/> does, optionally asking its deciders
+    /// afresh.
+    /// </summary>
+    /// <param name="externalId">The external ID of the manifest to trigger.</param>
+    /// <param name="askAfresh">
+    /// When true and the trigger releases a queued entry that would replay a failed run's
+    /// decisions (a retry waiting out its backoff), the entry no longer replays them: the run asks
+    /// its deciders afresh. A new entry never replays, so it changes nothing there.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no manifest with the specified ExternalId exists.
+    /// </exception>
+    /// <returns>
+    /// What the trigger did. When the dispatcher claimed the manifest's queued entry before the
+    /// trigger reached it, <see cref="ManifestTriggerResult.AlreadyDispatched"/> is true and the
+    /// entry is unchanged, so a run asked afresh may still replay:
+    /// <see cref="ManifestTriggerResult.ReplayDecisionsOf"/> says whether it does.
+    /// </returns>
+    /// <exception cref="NotSupportedException">The implementation predates this overload.</exception>
+    Task<ManifestTriggerResult> TriggerAsync(
+        string externalId,
+        bool askAfresh,
+        CancellationToken ct = default
+    ) => throw NotImplementedBy(nameof(TriggerAsync));
+
+    /// <summary>
     /// Triggers a delayed execution of a scheduled job. The job will be dispatched
     /// after the specified delay, independent of its normal schedule.
     /// </summary>
@@ -203,6 +231,33 @@ public interface ITraxScheduler
     /// Thrown when no manifest with the specified ExternalId exists.
     /// </exception>
     Task TriggerAsync(string externalId, TimeSpan delay, CancellationToken ct = default);
+
+    /// <summary>
+    /// Triggers a delayed execution of a scheduled job, as
+    /// <see cref="TriggerAsync(string, TimeSpan, CancellationToken)"/> does, optionally asking its
+    /// deciders afresh.
+    /// </summary>
+    /// <param name="externalId">The external ID of the manifest to trigger.</param>
+    /// <param name="delay">The delay before the job should be dispatched.</param>
+    /// <param name="askAfresh">
+    /// When true and the trigger releases a queued entry that would replay a failed run's
+    /// decisions, the entry no longer replays them.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no manifest with the specified ExternalId exists.
+    /// </exception>
+    /// <returns>
+    /// What the trigger did, as <see cref="TriggerAsync(string, bool, CancellationToken)"/>
+    /// describes.
+    /// </returns>
+    /// <exception cref="NotSupportedException">The implementation predates this overload.</exception>
+    Task<ManifestTriggerResult> TriggerAsync(
+        string externalId,
+        TimeSpan delay,
+        bool askAfresh,
+        CancellationToken ct = default
+    ) => throw NotImplementedBy(nameof(TriggerAsync));
 
     /// <summary>
     /// Creates a one-off manifest that fires once after the specified delay, then auto-disables.
@@ -322,6 +377,23 @@ public interface ITraxScheduler
     );
 
     /// <summary>
+    /// Requeues a single dead letter, as <see cref="RequeueDeadLetterAsync(long, CancellationToken)"/>
+    /// does, optionally asking the manifest's deciders afresh.
+    /// </summary>
+    /// <param name="deadLetterId">The ID of the dead letter to requeue.</param>
+    /// <param name="askAfresh">
+    /// False replays the decisions of the manifest's failed run when that is sound, as a retry
+    /// does; true queues the run to ask its deciders afresh.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="NotSupportedException">The implementation predates this overload.</exception>
+    Task<DeadLetterOperationResult> RequeueDeadLetterAsync(
+        long deadLetterId,
+        bool askAfresh,
+        CancellationToken ct = default
+    ) => throw NotImplementedBy(nameof(RequeueDeadLetterAsync));
+
+    /// <summary>
     /// Acknowledges a single dead letter without retrying.
     /// </summary>
     /// <param name="deadLetterId">The ID of the dead letter to acknowledge.</param>
@@ -353,6 +425,21 @@ public interface ITraxScheduler
     );
 
     /// <summary>
+    /// Requeues multiple dead letters by ID, as
+    /// <see cref="RequeueDeadLettersAsync(long[], CancellationToken)"/> does, optionally asking
+    /// the manifests' deciders afresh.
+    /// </summary>
+    /// <param name="deadLetterIds">The IDs of the dead letters to requeue.</param>
+    /// <param name="askAfresh">True queues every run to ask its deciders afresh.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="NotSupportedException">The implementation predates this overload.</exception>
+    Task<BatchDeadLetterResult> RequeueDeadLettersAsync(
+        long[] deadLetterIds,
+        bool askAfresh,
+        CancellationToken ct = default
+    ) => throw NotImplementedBy(nameof(RequeueDeadLettersAsync));
+
+    /// <summary>
     /// Acknowledges multiple dead letters by ID.
     /// </summary>
     /// <param name="deadLetterIds">The IDs of the dead letters to acknowledge.</param>
@@ -375,11 +462,24 @@ public interface ITraxScheduler
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of dead letters resolved, and a message that also counts the folded and skipped ones.</returns>
     /// <remarks>
-    /// Creates at most one entry per manifest, as <see cref="RequeueDeadLettersAsync"/> does. The
+    /// Creates at most one entry per manifest, as <see cref="RequeueDeadLettersAsync(long[], CancellationToken)"/> does. The
     /// dead letters are read and requeued a page of manifests at a time, so a large backlog is
     /// never loaded at once; every dead letter for one manifest is in the same page.
     /// </remarks>
     Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Requeues all dead letters in AwaitingIntervention status, as
+    /// <see cref="RequeueAllDeadLettersAsync(CancellationToken)"/> does, optionally asking the
+    /// manifests' deciders afresh.
+    /// </summary>
+    /// <param name="askAfresh">True queues every run to ask its deciders afresh.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="NotSupportedException">The implementation predates this overload.</exception>
+    Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(
+        bool askAfresh,
+        CancellationToken ct = default
+    ) => throw NotImplementedBy(nameof(RequeueAllDeadLettersAsync));
 
     /// <summary>
     /// Acknowledges all dead letters in AwaitingIntervention status.
@@ -393,4 +493,14 @@ public interface ITraxScheduler
     );
 
     #endregion
+
+    /// <summary>
+    /// What an overload added after an implementation was written throws, so an option it
+    /// cannot honour is refused rather than ignored.
+    /// </summary>
+    private NotSupportedException NotImplementedBy(string member) =>
+        new(
+            $"{GetType().FullName} does not implement ITraxScheduler.{member} with this "
+                + "overload's options."
+        );
 }

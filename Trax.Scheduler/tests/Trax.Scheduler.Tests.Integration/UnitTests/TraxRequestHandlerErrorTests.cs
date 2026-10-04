@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using NUnit.Framework;
 using Trax.Core.Exceptions;
 using Trax.Scheduler.Services.RequestHandler;

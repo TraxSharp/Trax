@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.SchedulerLiveness;

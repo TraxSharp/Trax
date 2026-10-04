@@ -3,7 +3,7 @@ using System.Text.Json;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
 using Trax.Scheduler.Lambda.Configuration;

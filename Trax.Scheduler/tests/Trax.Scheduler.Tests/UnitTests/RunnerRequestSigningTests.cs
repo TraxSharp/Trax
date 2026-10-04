@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Http;
@@ -353,7 +353,11 @@ public class RunnerRequestSigningTests
             NullLogger<HttpRunExecutor>.Instance
         );
 
-        await executor.ExecuteAsync("My.Train", new { Name = "x" }, typeof(LanguageExt.Unit));
+        await executor.ExecuteAsync(
+            "My.Train",
+            new { Name = "x" },
+            typeof(Trax.Core.Functional.Unit)
+        );
 
         var (body, signature) = handler.Requests.Single();
         (

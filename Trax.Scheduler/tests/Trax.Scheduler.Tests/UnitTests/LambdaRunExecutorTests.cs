@@ -4,7 +4,7 @@ using System.Text.Json;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Utils;
@@ -179,7 +179,7 @@ public class LambdaRunExecutorTests
         var result = await executor.ExecuteAsync(
             "My.UnitTrain",
             new TestRunInput { Name = "unit" },
-            typeof(LanguageExt.Unit)
+            typeof(Trax.Core.Functional.Unit)
         );
 
         // Assert

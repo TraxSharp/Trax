@@ -97,7 +97,7 @@ public partial class SchedulerConfigurationBuilder
             cleanup.CleanupInterval,
             $"{method}: {nameof(MetadataCleanupConfiguration.CleanupInterval)}"
         );
-        yield return SchedulerConfigLimits.AtLeastOne(
+        yield return SchedulerConfigLimits.DeleteBatchSize(
             cleanup.DeleteBatchSize,
             $"{method}: {nameof(MetadataCleanupConfiguration.DeleteBatchSize)}"
         );

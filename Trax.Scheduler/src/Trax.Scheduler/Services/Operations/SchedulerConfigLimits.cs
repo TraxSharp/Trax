@@ -32,6 +32,13 @@ internal static class SchedulerConfigLimits
     /// <summary>The most local workers one host may run.</summary>
     public const int MaxLocalWorkerCount = 256;
 
+    /// <summary>
+    /// The most runs metadata cleanup deletes in one batch, and the batch it uses when
+    /// <c>DeleteBatchSize</c> is null. A batch is one transaction holding the runs' logs, entries
+    /// and decisions, so an unbounded one would hold the whole expired backlog's locks at once.
+    /// </summary>
+    public const int MaxDeleteBatchSize = 10_000;
+
     internal static string? TimerInterval(TimeSpan? value, string name) =>
         value is { } v && (v < MinTimerInterval || v > MaxTimerInterval)
             ? $"{name} must be between {MinTimerInterval} and {MaxTimerInterval}."
@@ -64,6 +71,11 @@ internal static class SchedulerConfigLimits
 
     internal static string? AtLeastOne(int? value, string name) =>
         value is < 1 ? $"{name} must be at least 1." : null;
+
+    internal static string? DeleteBatchSize(int? value, string name) =>
+        value is { } v && (v < 1 || v > MaxDeleteBatchSize)
+            ? $"{name} must be between 1 and {MaxDeleteBatchSize}."
+            : null;
 
     internal static string? NotNegative(int? value, string name) =>
         value is < 0 ? $"{name} must not be negative." : null;

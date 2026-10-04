@@ -135,7 +135,7 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     public Task RunManifestManagerAsync(CancellationToken ct = default)
     {
         var train = _scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
-        return train.Run(LanguageExt.Unit.Default, ct);
+        return train.Run(Trax.Core.Functional.Unit.Default, ct);
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     public Task RunJobDispatcherAsync(CancellationToken ct = default)
     {
         var train = _scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>();
-        return train.Run(LanguageExt.Unit.Default, ct);
+        return train.Run(Trax.Core.Functional.Unit.Default, ct);
     }
 
     /// <summary>
