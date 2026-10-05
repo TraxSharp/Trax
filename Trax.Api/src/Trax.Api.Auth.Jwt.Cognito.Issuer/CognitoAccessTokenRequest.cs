@@ -43,6 +43,23 @@ public sealed record CognitoAccessTokenRequest
     public IReadOnlyList<string> Groups { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// The <c>email</c> claim. Real Cognito access tokens carry no profile claims unless a
+    /// PreTokenGeneration trigger adds them; set this to mint the token such a trigger produces.
+    /// Omitted from the token when null; an empty or whitespace value is refused with an
+    /// <see cref="ArgumentException"/>, as it is for an ID token.
+    /// </summary>
+    public string? Email { get; init; }
+
+    /// <summary>The <c>email_verified</c> claim. Omitted from the token when null.</summary>
+    public bool? EmailVerified { get; init; }
+
+    /// <summary>The <c>given_name</c> claim. Omitted from the token when null or empty.</summary>
+    public string? GivenName { get; init; }
+
+    /// <summary>The <c>family_name</c> claim. Omitted from the token when null or empty.</summary>
+    public string? FamilyName { get; init; }
+
+    /// <summary>
     /// When the user authenticated. Cognito refresh-token grants reuse the
     /// original authentication's <c>auth_time</c>, which can differ from the
     /// new token's <c>iat</c>. Defaults to the issuer's clock when null.

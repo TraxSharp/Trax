@@ -65,6 +65,35 @@ public class CognitoIssuerRoundTripTests
     }
 
     [Test]
+    public async Task AccessToken_WithProfileClaims_RoundTripsEmail()
+    {
+        await using var server = await TestJwksServer.StartAsync();
+
+        var issuer = server.CreateCognitoIssuer();
+        var token = issuer.MintAccessToken(
+            new CognitoAccessTokenRequest
+            {
+                Sub = Guid.NewGuid(),
+                ClientId = ClientId,
+                Lifetime = TimeSpan.FromHours(1),
+                Email = "alice@example.com",
+                EmailVerified = true,
+            }
+        );
+
+        using var host = await BuildCognitoHost(server, CognitoTokenUse.Access);
+        var client = host.GetTestClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.GetAsync("/protected");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var ctx = await ReadPrincipalSnapshot(resp);
+        ctx.Email.Should().Be("alice@example.com");
+        ctx.EmailVerified.Should().Be("true");
+    }
+
+    [Test]
     public async Task IdToken_RoundTripsToTraxPrincipal_WithEmail()
     {
         await using var server = await TestJwksServer.StartAsync();
@@ -332,6 +361,9 @@ public class CognitoIssuerRoundTripTests
             DisplayName = root.GetProperty("displayName").GetString() ?? "",
             PrincipalType = root.GetProperty("principalType").GetString() ?? "",
             Email = root.TryGetProperty("email", out var e) ? e.GetString() : null,
+            EmailVerified = root.TryGetProperty("emailVerified", out var ev)
+                ? ev.GetString()
+                : null,
             IdentityProvider = root.TryGetProperty("identityProvider", out var ip)
                 ? ip.GetString()
                 : null,
@@ -390,6 +422,7 @@ public class CognitoIssuerRoundTripTests
                                         var email =
                                             user.FindFirst("email")?.Value
                                             ?? user.FindFirst(ClaimTypes.Email)?.Value;
+                                        var emailVerified = user.FindFirst("email_verified")?.Value;
                                         var idp = user.FindFirst(
                                             CognitoDefaults.IdentityProvider
                                         )?.Value;
@@ -403,6 +436,7 @@ public class CognitoIssuerRoundTripTests
                                                 displayName = name,
                                                 principalType = type,
                                                 email,
+                                                emailVerified,
                                                 identityProvider = idp,
                                                 roles,
                                             }
@@ -424,6 +458,7 @@ public class CognitoIssuerRoundTripTests
         public string DisplayName { get; init; } = "";
         public string PrincipalType { get; init; } = "";
         public string? Email { get; init; }
+        public string? EmailVerified { get; init; }
         public string? IdentityProvider { get; init; }
         public string[] Roles { get; init; } = Array.Empty<string>();
     }

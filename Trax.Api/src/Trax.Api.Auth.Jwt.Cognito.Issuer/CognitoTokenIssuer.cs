@@ -30,8 +30,10 @@ namespace Trax.Api.Auth.Jwt.Cognito.Issuer;
 /// configured <c>CognitoTokenUse</c>.
 /// </item>
 /// <item>
-/// Profile claims: only ID tokens carry <c>email</c>, <c>given_name</c>,
-/// <c>family_name</c>, and the <c>identities</c> federation array.
+/// Profile claims: ID tokens always carry <c>email</c> and <c>email_verified</c>,
+/// and may carry <c>given_name</c>, <c>family_name</c> and the <c>identities</c>
+/// federation array. Access tokens carry the first four only when the request sets
+/// them, which models a pool whose PreTokenGeneration trigger adds them.
 /// </item>
 /// </list>
 /// <para>
@@ -130,13 +132,17 @@ public sealed class CognitoTokenIssuer
     /// Mints a Cognito access token. Sets <c>token_use=access</c>,
     /// <c>client_id</c>, <c>iss</c>, <c>sub</c>, <c>auth_time</c>, <c>iat</c>,
     /// <c>exp</c>, <c>jti</c>, <c>scope</c>, <c>username</c>, and a repeated
-    /// <c>cognito:groups</c> claim per group. Does not set <c>aud</c>: real
-    /// Cognito access tokens carry the audience in <c>client_id</c> instead.
+    /// <c>cognito:groups</c> claim per group, plus <c>email</c>,
+    /// <c>email_verified</c>, <c>given_name</c> and <c>family_name</c> for each
+    /// one the request sets. Does not set <c>aud</c>: real Cognito access
+    /// tokens carry the audience in <c>client_id</c> instead.
     /// </summary>
     public string MintAccessToken(CognitoAccessTokenRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.ClientId);
+        if (request.Email is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(request.Email);
         if (request.Lifetime <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(request), "Lifetime must be positive.");
 
@@ -160,6 +166,21 @@ public sealed class CognitoTokenIssuer
 
         foreach (var group in request.Groups)
             claims.Add(new Claim(CognitoDefaults.CognitoGroups, group));
+
+        if (request.Email is not null)
+            claims.Add(new Claim(CognitoDefaults.Email, request.Email));
+        if (request.EmailVerified is { } emailVerified)
+            claims.Add(
+                new Claim(
+                    CognitoDefaults.EmailVerified,
+                    emailVerified ? "true" : "false",
+                    ClaimValueTypes.Boolean
+                )
+            );
+        if (!string.IsNullOrEmpty(request.GivenName))
+            claims.Add(new Claim("given_name", request.GivenName));
+        if (!string.IsNullOrEmpty(request.FamilyName))
+            claims.Add(new Claim("family_name", request.FamilyName));
 
         AddAdditionalClaims(claims, request.AdditionalClaims);
 

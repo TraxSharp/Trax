@@ -262,6 +262,90 @@ public class CognitoTokenIssuerTests
         jwt.Claims.Single(c => c.Type == "device_id").Value.Should().Be("device-42");
     }
 
+    [Test]
+    public void MintAccessToken_ProfileClaims_WrittenWhenSet()
+    {
+        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var token = issuer.MintAccessToken(
+            new CognitoAccessTokenRequest
+            {
+                Sub = Guid.NewGuid(),
+                ClientId = ClientId,
+                Lifetime = TimeSpan.FromMinutes(5),
+                Email = "a@b.c",
+                EmailVerified = true,
+                GivenName = "Ada",
+                FamilyName = "Lovelace",
+            }
+        );
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        jwt.Claims.Should().ContainSingle(c => c.Type == "email" && c.Value == "a@b.c");
+        jwt.Claims.Should().ContainSingle(c => c.Type == "email_verified" && c.Value == "true");
+        jwt.Claims.Should().ContainSingle(c => c.Type == "given_name" && c.Value == "Ada");
+        jwt.Claims.Should().ContainSingle(c => c.Type == "family_name" && c.Value == "Lovelace");
+    }
+
+    [Test]
+    public void MintAccessToken_EmailVerifiedFalse_WrittenAsFalse()
+    {
+        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var token = issuer.MintAccessToken(
+            new CognitoAccessTokenRequest
+            {
+                Sub = Guid.NewGuid(),
+                ClientId = ClientId,
+                Lifetime = TimeSpan.FromMinutes(5),
+                EmailVerified = false,
+            }
+        );
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        jwt.Claims.Should().ContainSingle(c => c.Type == "email_verified" && c.Value == "false");
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public void MintAccessToken_BlankEmail_Throws(string email)
+    {
+        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        Action act = () =>
+            issuer.MintAccessToken(
+                new CognitoAccessTokenRequest
+                {
+                    Sub = Guid.NewGuid(),
+                    ClientId = ClientId,
+                    Lifetime = TimeSpan.FromMinutes(5),
+                    Email = email,
+                }
+            );
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Test]
+    public void MintAccessToken_NoProfileClaims_OmitsThem()
+    {
+        var issuer = new CognitoTokenIssuer(Issuer, _key);
+        var token = issuer.MintAccessToken(
+            new CognitoAccessTokenRequest
+            {
+                Sub = Guid.NewGuid(),
+                ClientId = ClientId,
+                Lifetime = TimeSpan.FromMinutes(5),
+            }
+        );
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+        jwt.Claims.Should()
+            .NotContain(c =>
+                c.Type == "email"
+                || c.Type == "email_verified"
+                || c.Type == "given_name"
+                || c.Type == "family_name"
+            );
+    }
+
     // Every claim the issuer sets itself, and every claim the Cognito resolver reads an
     // identity, a name or a role from. An additional claim with one of these names would
     // duplicate or shadow it, so the issuer refuses it rather than minting the token.
