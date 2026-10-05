@@ -14,27 +14,10 @@ namespace Trax.Samples.Bookworm.E2E.ApiTests;
 [TestFixture]
 public class ReturnBookTests : ApiTestFixture
 {
-    // Borrows a fresh loan and returns its server-assigned id, so each test owns the loan it returns
-    // and never depends on a seeded id another fixture may have already returned.
-    private async Task<int> BorrowLoanAsync(int bookId)
-    {
-        var doc = await GraphQL.PostAsync(
-            $"mutation {{ dispatch {{ lending {{ borrowBook(input: {{ memberId: 1, bookId: {bookId} }}) "
-                + "{ output { loanId } } } } }",
-            ApiKeyDefaults.MemberKey
-        );
-
-        GraphQLClient.HasErrors(doc).Should().BeFalse("borrowing should succeed for a member");
-
-        return doc
-            .RootElement.GetProperty("data")
-            .GetProperty("dispatch")
-            .GetProperty("lending")
-            .GetProperty("borrowBook")
-            .GetProperty("output")
-            .GetProperty("loanId")
-            .GetInt32();
-    }
+    // Borrows a book no other test has on loan and returns the loan id, so each test owns the loan
+    // it returns.
+    private async Task<int> BorrowLoanAsync() =>
+        await BorrowAsync(await NewBookAsync(), ApiKeyDefaults.MemberKey);
 
     private static string ReturnMutation(int loanId) =>
         $"mutation {{ dispatch {{ lending {{ returnBook(input: {{ loanId: {loanId} }}) "
@@ -43,7 +26,7 @@ public class ReturnBookTests : ApiTestFixture
     [Test]
     public async Task ReturnBook_AuthenticatedMember_StampsReturnedAtAndPersists()
     {
-        var loanId = await BorrowLoanAsync(bookId: 1);
+        var loanId = await BorrowLoanAsync();
 
         var doc = await GraphQL.PostAsync(ReturnMutation(loanId), ApiKeyDefaults.MemberKey);
 
@@ -83,7 +66,7 @@ public class ReturnBookTests : ApiTestFixture
     [Test]
     public async Task ReturnBook_AlreadyReturned_ReturnsError()
     {
-        var loanId = await BorrowLoanAsync(bookId: 2);
+        var loanId = await BorrowLoanAsync();
 
         var first = await GraphQL.PostAsync(ReturnMutation(loanId), ApiKeyDefaults.MemberKey);
         GraphQLClient.HasErrors(first).Should().BeFalse("the first return should succeed");
@@ -112,13 +95,13 @@ public class ReturnBookTests : ApiTestFixture
     [Test]
     public async Task ReturnBook_Anonymous_IsRejected()
     {
-        var loanId = await BorrowLoanAsync(bookId: 1);
+        var loanId = await BorrowLoanAsync();
 
         var doc = await GraphQL.PostAsync(ReturnMutation(loanId)); // no API key
 
         GraphQLClient
-            .HasErrors(doc)
+            .FirstError(doc)
             .Should()
-            .BeTrue("an unauthenticated caller must not be able to return a book");
+            .Be("Not authorized.", "an unauthenticated caller must not be able to return a book");
     }
 }

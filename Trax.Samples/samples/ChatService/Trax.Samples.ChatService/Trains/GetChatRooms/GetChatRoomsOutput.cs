@@ -11,5 +11,4 @@ public record ChatRoomSummary
     public required string Name { get; init; }
     public int ParticipantCount { get; init; }
     public DateTime? LastMessageAt { get; init; }
-    public int UnreadCount { get; init; }
 }

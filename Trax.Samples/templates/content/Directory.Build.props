@@ -1,3 +1,9 @@
 <Project>
-  <!-- Block root Directory.Build.props from applying to template content -->
+  <!-- Block root Directory.Build.props from applying to template content. This file sits above the
+       template folders, so it is never scaffolded: what it sets applies only inside this repo. -->
+  <PropertyGroup>
+    <!-- Restore the template projects against their committed lockfiles, as every other project
+         here does. See the root Directory.Build.props. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
 </Project>

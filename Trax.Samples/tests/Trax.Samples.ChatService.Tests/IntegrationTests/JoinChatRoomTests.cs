@@ -1,7 +1,6 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Trax.Samples.ChatService.Data;
-using Trax.Samples.ChatService.Data.Entities;
+using Trax.Core.Exceptions;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.JoinChatRoom;
 using Trax.Samples.ChatService.Trains.JoinChatRoom.Junctions;
@@ -11,123 +10,57 @@ namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 [TestFixture]
 public class JoinChatRoomTests
 {
-    #region ValidateJoinJunction
-
     [Test]
-    public void ValidateJoin_RoomDoesNotExist_Throws()
+    public async Task ValidateJoin_RoomDoesNotExist_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var junction = new ValidateJoinJunction(db, NullLogger<ValidateJoinJunction>.Instance);
-        var input = new JoinChatRoomInput
-        {
-            ChatRoomId = Guid.NewGuid(),
-            UserId = "alice",
-            DisplayName = "Alice",
-        };
+        var junction = new ValidateJoinJunction(db, ChatUsers.Bob);
 
-        var act = () => junction.Run(input);
+        var act = () => junction.Run(new JoinChatRoomInput { ChatRoomId = Guid.NewGuid() });
 
-        act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*does not exist*");
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*does not exist*");
     }
 
     [Test]
-    public async Task ValidateJoin_AlreadyParticipant_Throws()
+    public async Task ValidateJoin_CallerAlreadyParticipant_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId = await SeedRoom(db, "alice");
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var junction = new ValidateJoinJunction(db, ChatUsers.Alice);
 
-        db.ChatParticipants.Add(
-            new ChatParticipant
-            {
-                Id = Guid.NewGuid(),
-                ChatRoomId = roomId,
-                UserId = "alice",
-                DisplayName = "Alice",
-                JoinedAt = DateTime.UtcNow,
-            }
-        );
-        await db.SaveChangesAsync();
+        var act = () => junction.Run(new JoinChatRoomInput { ChatRoomId = roomId });
 
-        var junction = new ValidateJoinJunction(db, NullLogger<ValidateJoinJunction>.Instance);
-        var input = new JoinChatRoomInput
-        {
-            ChatRoomId = roomId,
-            UserId = "alice",
-            DisplayName = "Alice",
-        };
-
-        var act = () => junction.Run(input);
-
-        await act.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*already a participant*");
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*already a participant*");
     }
 
     [Test]
-    public async Task ValidateJoin_ValidNewParticipant_ReturnsInput()
+    public async Task ValidateJoin_NewParticipant_ReturnsInput()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId = await SeedRoom(db, "alice");
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var input = new JoinChatRoomInput { ChatRoomId = roomId };
 
-        var junction = new ValidateJoinJunction(db, NullLogger<ValidateJoinJunction>.Instance);
-        var input = new JoinChatRoomInput
-        {
-            ChatRoomId = roomId,
-            UserId = "bob",
-            DisplayName = "Bob",
-        };
-
-        var result = await junction.Run(input);
+        var result = await new ValidateJoinJunction(db, ChatUsers.Bob).Run(input);
 
         result.Should().Be(input);
     }
 
-    #endregion
-
-    #region AddParticipantJunction
-
     [Test]
-    public async Task AddParticipant_PersistsParticipant()
+    public async Task AddParticipant_AddsTheCaller()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId = await SeedRoom(db, "alice");
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var junction = new AddParticipantJunction(
+            db,
+            ChatUsers.Bob,
+            NullLogger<AddParticipantJunction>.Instance
+        );
 
-        var junction = new AddParticipantJunction(db, NullLogger<AddParticipantJunction>.Instance);
-        var input = new JoinChatRoomInput
-        {
-            ChatRoomId = roomId,
-            UserId = "bob",
-            DisplayName = "Bob",
-        };
+        var result = await junction.Run(new JoinChatRoomInput { ChatRoomId = roomId });
 
-        var result = await junction.Run(input);
-
-        result.ChatRoomId.Should().Be(roomId);
-        result.UserId.Should().Be("bob");
+        result.UserId.Should().Be("TraxApiKey:bob");
         result.DisplayName.Should().Be("Bob");
-        result.JoinedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
-
         db.ChatParticipants.Should()
-            .ContainSingle(p => p.ChatRoomId == roomId && p.UserId == "bob");
+            .ContainSingle(p => p.ChatRoomId == roomId && p.UserId == "TraxApiKey:bob");
     }
-
-    #endregion
-
-    #region Helpers
-
-    private static async Task<Guid> SeedRoom(ChatDbContext db, string creatorId)
-    {
-        var room = new ChatRoom
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Room",
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = creatorId,
-        };
-        db.ChatRooms.Add(room);
-        await db.SaveChangesAsync();
-        return room.Id;
-    }
-
-    #endregion
 }

@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
@@ -29,7 +29,13 @@ public class AdditionalCoverageTests : ApiTestBase
             .Should()
             .BeTrue("deactivated id should produce a GraphQL errors array");
         errors.GetArrayLength().Should().BeGreaterThan(0);
-        errors[0].TryGetProperty("message", out _).Should().BeTrue();
+        GraphQLErrors.FirstCode(doc).Should().Be(GraphQLErrors.UnknownPersistedOperation);
+        errors[0]
+            .GetProperty("extensions")
+            .GetProperty("requestedKey")
+            .GetString()
+            .Should()
+            .Be("deactivated_v1");
     }
 
     // ----- Tenant scoping isolation (storage layer) -----
@@ -128,15 +134,11 @@ public class AdditionalCoverageTests : ApiTestBase
     // ----- Batched requests through real HC -----
 
     [Test]
-    public async Task BatchedRequest_AllPersisted_PassesThroughMiddlewareToHC()
+    public async Task BatchedRequest_OfPersistedIds_IsRefusedByTheEndpoint()
     {
-        // HC v15's standard `/graphql` endpoint does not execute JSON-array
-        // batches; it returns HC0009 "Invalid GraphQL Request". The behavior
-        // under our control is the persisted-operations middleware: when
-        // every entry has a persisted id (no inline `query`), the middleware
-        // must NOT reject and must NOT short-circuit — it must pass the body
-        // through to HC. We assert that here by checking HC's parser error
-        // is reached, not the middleware's rejection error.
+        // The Trax endpoint does not execute JSON-array batches: HotChocolate answers HC0009
+        // "Invalid GraphQL Request" before enforcement runs. Enforcement lives inside the
+        // execution pipeline now, so no batch reaches it, and none executes.
         await Store.UpsertAsync("batch_a_v1", GreetDoc, null, CancellationToken.None);
         await Store.UpsertAsync("batch_b_v1", GreetDoc, null, CancellationToken.None);
 
@@ -147,31 +149,28 @@ public class AdditionalCoverageTests : ApiTestBase
         var resp = await Http.PostAsync("/trax/graphql/", content);
         var body = await resp.Content.ReadAsStringAsync();
 
-        body.Should()
-            .NotContain(
-                "PERSISTED_OPERATION_REQUIRED",
-                "the middleware must not reject batches whose entries are all persisted"
-            );
-        // HC's parser error code (HC0009) means the request reached HC's
-        // parser — i.e. our middleware passed it through. If the request had
-        // been rejected by the middleware, the body would carry our typed
-        // PERSISTED_OPERATION_REQUIRED code instead.
-        body.Should().Contain("HC0009", "request must reach HC, not be short-circuited by us");
+        ((int)resp.StatusCode).Should().Be(400);
+        body.Should().Contain("HC0009");
+        body.Should().NotContain("Hello, Anna.", "a refused batch runs none of its entries");
     }
 
     [Test]
-    public async Task BatchedRequest_OneInlineQuery_RejectsWholeBatch()
+    public async Task BatchedRequest_WithAnInlineQuery_RunsNothing()
     {
+        // The point of enforcement: an inline document smuggled into a batch beside a persisted
+        // id must not execute. Whichever layer refuses it, nothing in the batch runs.
         await Store.UpsertAsync("batch_persisted_v1", GreetDoc, null, CancellationToken.None);
 
         var json =
-            "[{\"id\":\"batch_persisted_v1\"},"
+            "[{\"id\":\"batch_persisted_v1\",\"variables\":{\"input\":{\"name\":\"x\"}}},"
             + "{\"query\":\"{ discover { greeting { greet(input: { name: \\\"y\\\" }) { greeting } } } }\"}]";
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var resp = await Http.PostAsync("/trax/graphql/", content);
-        ((int)resp.StatusCode).Should().Be(400);
         var body = await resp.Content.ReadAsStringAsync();
-        body.Should().Contain("PERSISTED_OPERATION_REQUIRED");
+
+        ((int)resp.StatusCode).Should().Be(400);
+        body.Should().NotContain("Hello, y.", "the inline document in the batch must not run");
+        body.Should().NotContain("Hello, x.", "the batch is refused as a whole");
     }
 
     // ----- Multiple inputs proves correct execution -----

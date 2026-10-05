@@ -8,8 +8,9 @@ status: accepted
 
 The `trax-hub` and `trax-scheduler` templates mount the dashboard, and the `trax-hub` and
 `trax-api` templates register the plaintext demo API key, only when
-`IHostEnvironment.IsDevelopment()`. Every train and query model in the `trax-hub` and
-`trax-api` templates carries `[TraxAuthorize(Roles = "User")]`, the role the demo key holds,
+`IHostEnvironment.IsDevelopment()`, and declare the dashboard's posture as
+`AllowAnonymousDashboard()` inside that check and nowhere else. Every train and query model in
+the `trax-hub` and `trax-api` templates carries `[TraxAuthorize(Roles = "User")]`, the role the demo key holds,
 and none is anonymous. `dotnet run` starts in Development through each template's
 `launchSettings.json`, so the out-of-the-box experience is unchanged once the demo key is
 sent; a scaffold started any other way has no dashboard and no credential until its author
@@ -33,7 +34,15 @@ templates stay minimal and say in `Program.cs` where the gate goes.
 (dashboard/0002). That covers the dashboard once the templates move to that release, not the
 demo key, and not the templates already published against earlier Trax.Dashboard versions.
 The environment check works against every Trax.Dashboard version, so it does not wait for a
-release.
+release. Since that release the templates need a posture anyway, and declaring
+`AllowAnonymousDashboard()` only inside the Development check keeps the dashboard closed
+everywhere else.
+
+**Declare a posture in every environment** (`AllowAnonymousDashboard()` in Development,
+`RequirePolicy` elsewhere), as the getting-started page does. The template would then mount a
+dashboard in Production gated by a policy no scaffold can satisfy: with no authentication
+scheme registered, every request to it is a 500, which invites deleting the gate to make it
+work.
 
 **Keep the template operations anonymous, since the demo key already goes away.** Removing
 a credential gates nothing when the operations never asked for one: a scaffold run in
@@ -56,17 +65,23 @@ Production, and `/trax` is a 404 there. That is the intended surprise: the fix i
 
 ## Exemplars
 
+- `ScaffoldedTemplateTests` packs the templates, scaffolds each one outside the repo, builds
+  it, and starts the built application through `dotnet run` in Development and with
+  `ASPNETCORE_ENVIRONMENT=Production`, pinning that `/trax` is served only in Development.
 - `TemplateEnvironmentTests` starts each template host in Production and in Development, and
   pins that `/trax` is served only in Development, that the demo key's scheme is registered
   only there, that an anonymous `dispatch.helloWorld`, `discover.lookup` or notes query is
   refused, and that the demo key runs them in Development.
 
-Not covered: the tests build the templates from this repository against its central package
-pins, not a project scaffolded from the published `Trax.Samples.Templates` package. Nothing
-fails when a new template operation is added with `[TraxAllowAnonymous]` or with no attribute;
+Not covered: the tests scaffold from a package packed in this repository, not from the
+published `Trax.Samples.Templates`. Nothing fails when a new template operation is added with `[TraxAllowAnonymous]` or with no attribute;
 only the three operations named above are pinned.
 
 ## Changelog
+
+- **2026-10-03**: Amended: the templates declare `AllowAnonymousDashboard()` inside the
+  Development check, because Trax.Dashboard 1.16 refuses to start a dashboard with no posture.
+  `ScaffoldedTemplateTests` added as an exemplar.
 
 - **2026-09-27**: Amended: the template operations carry `[TraxAuthorize]`. The first version
   claimed every `[TraxAuthorize]` operation was refused outside Development while every

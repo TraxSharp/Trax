@@ -6,19 +6,14 @@ namespace Trax.Samples.ChatService.E2E.ChatApiTests;
 [TestFixture]
 public class ChatQueryTests : ChatApiTestFixture
 {
-    private async Task<string> CreateRoomAndSendMessages(
-        string roomName,
-        int messageCount,
-        string userId = "alice",
-        string displayName = "Alice"
-    )
+    private async Task<string> CreateRoomAndSendMessages(string roomName, int messageCount)
     {
         var createResult = await GraphQL.SendAsync(
             $$"""
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "{{roomName}}", userId: "{{userId}}", displayName: "{{displayName}}" }
+                        input: { name: "{{roomName}}" }
                     ) {
                         output { chatRoomId }
                     }
@@ -41,7 +36,7 @@ public class ChatQueryTests : ChatApiTestFixture
                 mutation {
                     dispatch {
                         sendMessage(
-                            input: { chatRoomId: "{{chatRoomId}}", senderUserId: "{{userId}}", content: "Message {{i}}" }
+                            input: { chatRoomId: "{{chatRoomId}}", content: "Message {{i}}" }
                         ) {
                             externalId
                         }
@@ -97,7 +92,7 @@ public class ChatQueryTests : ChatApiTestFixture
             """
             {
                 discover {
-                    getChatRooms(input: { userId: "alice" }) {
+                    getChatRooms {
                         rooms {
                             name
                         }
@@ -126,7 +121,7 @@ public class ChatQueryTests : ChatApiTestFixture
             """
             {
                 discover {
-                    getChatRooms(input: { userId: "bob" }) {
+                    getChatRooms {
                         rooms {
                             name
                         }
@@ -144,53 +139,31 @@ public class ChatQueryTests : ChatApiTestFixture
     }
 
     [Test]
-    public async Task MarkChatAsRead_UpdatesTimestamp()
+    public async Task GetChatHistory_ClampsTakeToTheMaximum()
     {
-        var chatRoomId = await CreateRoomAndSendMessages("Read Test", 1);
+        var chatRoomId = await CreateRoomAndSendMessages("Busy Room", 3);
 
-        // Join Bob
-        var joinResult = await GraphQL.SendAsync(
+        var result = await GraphQL.SendAsync(
             $$"""
-            mutation {
-                dispatch {
-                    joinChatRoom(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "bob", displayName: "Bob" }
-                    ) {
-                        externalId
+            {
+                discover {
+                    getChatHistory(input: { chatRoomId: "{{chatRoomId}}", take: 100000 }) {
+                        messages { content }
                     }
                 }
             }
             """,
-            apiKey: BobKey
+            apiKey: AliceKey
         );
 
-        joinResult.HasErrors.Should().BeFalse();
-
-        // Mark as read
-        var markResult = await GraphQL.SendAsync(
-            $$"""
-            mutation {
-                dispatch {
-                    markChatAsRead(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "bob" }
-                    ) {
-                        externalId
-                    }
-                }
-            }
-            """,
-            apiKey: BobKey
-        );
-
-        markResult.HasErrors.Should().BeFalse();
-
-        // Verify in database
-        var participant = await ChatDb
-            .ChatParticipants.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ChatRoomId == Guid.Parse(chatRoomId) && p.UserId == "bob");
-
-        participant.Should().NotBeNull();
-        participant!.LastReadAt.Should().NotBeNull();
+        // A huge take is clamped, not refused: the caller gets the room's three messages.
+        result.HasErrors.Should().BeFalse(result.FirstErrorMessage);
+        result
+            .GetData("discover", "getChatHistory")
+            .GetProperty("messages")
+            .GetArrayLength()
+            .Should()
+            .Be(3);
     }
 
     [Test]
@@ -201,7 +174,7 @@ public class ChatQueryTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Empty Room", userId: "alice", displayName: "Alice" }
+                        input: { name: "Empty Room" }
                     ) {
                         output { chatRoomId }
                     }

@@ -1,6 +1,6 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Trax.Samples.ChatService.Data.Entities;
+using Trax.Core.Exceptions;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.SendMessage;
 using Trax.Samples.ChatService.Trains.SendMessage.Junctions;
@@ -10,128 +10,62 @@ namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 [TestFixture]
 public class SendMessageTests
 {
-    #region ValidateSenderJunction
-
     [Test]
-    public async Task ValidateSender_UserIsParticipant_ReturnsInput()
+    public async Task ValidateSender_CallerIsParticipant_ReturnsInput()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId = await SeedRoomWithParticipant(db, "alice", "Alice");
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var input = new SendMessageInput { ChatRoomId = roomId, Content = "Hello!" };
 
-        var junction = new ValidateSenderJunction(db, NullLogger<ValidateSenderJunction>.Instance);
-        var input = new SendMessageInput
-        {
-            ChatRoomId = roomId,
-            SenderUserId = "alice",
-            Content = "Hello!",
-        };
-
-        var result = await junction.Run(input);
+        var result = await new ValidateSenderJunction(db, ChatUsers.Alice).Run(input);
 
         result.Should().Be(input);
     }
 
     [Test]
-    public void ValidateSender_UserNotParticipant_Throws()
+    public async Task ValidateSender_CallerNotParticipant_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var junction = new ValidateSenderJunction(db, NullLogger<ValidateSenderJunction>.Instance);
-        var input = new SendMessageInput
-        {
-            ChatRoomId = Guid.NewGuid(),
-            SenderUserId = "unknown",
-            Content = "Hello!",
-        };
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var junction = new ValidateSenderJunction(db, ChatUsers.Bob);
 
-        var act = () => junction.Run(input);
+        var act = () => junction.Run(new SendMessageInput { ChatRoomId = roomId, Content = "Hi" });
 
-        act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not a participant*");
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*not a participant*");
     }
 
     [Test]
-    public void ValidateSender_EmptyContent_Throws()
+    public async Task ValidateSender_EmptyContent_Throws()
     {
         using var db = ChatDbContextFixture.Create();
-        var junction = new ValidateSenderJunction(db, NullLogger<ValidateSenderJunction>.Instance);
-        var input = new SendMessageInput
-        {
-            ChatRoomId = Guid.NewGuid(),
-            SenderUserId = "alice",
-            Content = "",
-        };
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var junction = new ValidateSenderJunction(db, ChatUsers.Alice);
 
-        var act = () => junction.Run(input);
+        var act = () => junction.Run(new SendMessageInput { ChatRoomId = roomId, Content = "" });
 
-        act.Should().ThrowAsync<ArgumentException>().WithMessage("*empty*");
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*empty*");
     }
 
-    #endregion
-
-    #region PersistMessageJunction
-
     [Test]
-    public async Task PersistMessage_SavesMessageAndUpdatesLastRead()
+    public async Task PersistMessage_StoresTheMessageAsTheCallers()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId = await SeedRoomWithParticipant(db, "alice", "Alice");
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        var junction = new PersistMessageJunction(
+            db,
+            ChatUsers.Alice,
+            NullLogger<PersistMessageJunction>.Instance
+        );
 
-        var junction = new PersistMessageJunction(db, NullLogger<PersistMessageJunction>.Instance);
-        var input = new SendMessageInput
-        {
-            ChatRoomId = roomId,
-            SenderUserId = "alice",
-            Content = "Test message",
-        };
-
-        var result = await junction.Run(input);
+        var result = await junction.Run(
+            new SendMessageInput { ChatRoomId = roomId, Content = "Test message" }
+        );
 
         result.MessageId.Should().NotBeEmpty();
         result.ChatRoomId.Should().Be(roomId);
-        result.SenderUserId.Should().Be("alice");
+        result.SenderUserId.Should().Be("TraxApiKey:alice");
         result.SenderDisplayName.Should().Be("Alice");
         result.Content.Should().Be("Test message");
-
         db.ChatMessages.Should().ContainSingle(m => m.Id == result.MessageId);
-
-        var participant = db.ChatParticipants.First(p =>
-            p.ChatRoomId == roomId && p.UserId == "alice"
-        );
-        participant.LastReadAt.Should().NotBeNull();
     }
-
-    #endregion
-
-    #region Helpers
-
-    private static async Task<Guid> SeedRoomWithParticipant(
-        Data.ChatDbContext db,
-        string userId,
-        string displayName
-    )
-    {
-        var room = new ChatRoom
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Room",
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = userId,
-        };
-        db.ChatRooms.Add(room);
-
-        db.ChatParticipants.Add(
-            new ChatParticipant
-            {
-                Id = Guid.NewGuid(),
-                ChatRoomId = room.Id,
-                UserId = userId,
-                DisplayName = displayName,
-                JoinedAt = DateTime.UtcNow,
-            }
-        );
-
-        await db.SaveChangesAsync();
-        return room.Id;
-    }
-
-    #endregion
 }

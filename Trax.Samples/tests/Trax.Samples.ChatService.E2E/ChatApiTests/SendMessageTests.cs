@@ -14,7 +14,7 @@ public class SendMessageTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Message Test Room", userId: "alice", displayName: "Alice" }
+                        input: { name: "Message Test Room" }
                     ) {
                         output { chatRoomId }
                     }
@@ -41,7 +41,7 @@ public class SendMessageTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     sendMessage(
-                        input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "Hello E2E!" }
+                        input: { chatRoomId: "{{chatRoomId}}", content: "Hello E2E!" }
                     ) {
                         externalId
                         output {
@@ -76,7 +76,7 @@ public class SendMessageTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     sendMessage(
-                        input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "Persisted!" }
+                        input: { chatRoomId: "{{chatRoomId}}", content: "Persisted!" }
                     ) {
                         externalId
                     }
@@ -93,7 +93,7 @@ public class SendMessageTests : ChatApiTestFixture
             );
 
         message.Should().NotBeNull();
-        message!.SenderUserId.Should().Be("alice");
+        message!.SenderUserId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -109,7 +109,7 @@ public class SendMessageTests : ChatApiTestFixture
                 mutation {
                     dispatch {
                         sendMessage(
-                            input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "{{content}}" }
+                            input: { chatRoomId: "{{chatRoomId}}", content: "{{content}}" }
                         ) {
                             externalId
                         }
@@ -147,7 +147,7 @@ public class SendMessageTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     sendMessage(
-                        input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "Meta test" }
+                        input: { chatRoomId: "{{chatRoomId}}", content: "Meta test" }
                     ) {
                         externalId
                     }

@@ -1,32 +1,25 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+using Trax.Api.Auth;
+using Trax.Core.Exceptions;
 using Trax.Core.Junction;
 using Trax.Samples.ChatService.Data;
 
 namespace Trax.Samples.ChatService.Trains.JoinChatRoom.Junctions;
 
-public class ValidateJoinJunction(ChatDbContext db, ILogger<ValidateJoinJunction> logger)
+public class ValidateJoinJunction(ChatDbContext db, TraxPrincipal caller)
     : Junction<JoinChatRoomInput, JoinChatRoomInput>
 {
     public override async Task<JoinChatRoomInput> Run(JoinChatRoomInput input)
     {
-        var roomExists = await db.ChatRooms.AnyAsync(r => r.Id == input.ChatRoomId);
-        if (!roomExists)
-            throw new InvalidOperationException($"Chat room {input.ChatRoomId} does not exist.");
+        if (!await db.ChatRooms.AnyAsync(r => r.Id == input.ChatRoomId))
+            throw new TrainException($"Chat room {input.ChatRoomId} does not exist.");
 
-        var alreadyJoined = await db.ChatParticipants.AnyAsync(p =>
-            p.ChatRoomId == input.ChatRoomId && p.UserId == input.UserId
-        );
-        if (alreadyJoined)
-            throw new InvalidOperationException(
-                $"User {input.UserId} is already a participant in room {input.ChatRoomId}."
-            );
-
-        logger.LogInformation(
-            "Validated join: user {UserId} can join room {ChatRoomId}",
-            input.UserId,
-            input.ChatRoomId
-        );
+        if (
+            await db.ChatParticipants.AnyAsync(p =>
+                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+            )
+        )
+            throw new TrainException($"You are already a participant in room {input.ChatRoomId}.");
 
         return input;
     }

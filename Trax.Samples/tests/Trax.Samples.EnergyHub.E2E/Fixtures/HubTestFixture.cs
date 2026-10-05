@@ -12,7 +12,12 @@ namespace Trax.Samples.EnergyHub.E2E.Fixtures;
 [TestFixture]
 public abstract class HubTestFixture
 {
+    /// <summary>The operator demo key the hub registers in Development.</summary>
+    protected const string OperatorKey = Hub.DemoKeys.OperatorKey;
+
     protected IServiceScope Scope { get; private set; } = null!;
+
+    protected IServiceScope WorkerScope { get; private set; } = null!;
 
     protected ITrainBus TrainBus { get; private set; } = null!;
 
@@ -21,9 +26,11 @@ public abstract class HubTestFixture
     [SetUp]
     public virtual async Task SetUp()
     {
-        var services = SharedHubSetup.Factory.Services;
-        Scope = services.CreateScope();
-        TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
+        Scope = SharedHubSetup.Factory.Services.CreateScope();
+
+        // Trains run on the worker, so a test that runs one directly does it there.
+        WorkerScope = SharedHubSetup.Worker.Services.CreateScope();
+        TrainBus = WorkerScope.ServiceProvider.GetRequiredService<ITrainBus>();
 
         var dataContextFactory =
             Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
@@ -38,6 +45,7 @@ public abstract class HubTestFixture
         if (DataContext is IDisposable disposable)
             disposable.Dispose();
 
+        WorkerScope.Dispose();
         Scope.Dispose();
     }
 

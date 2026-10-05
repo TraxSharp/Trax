@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Trax.Effect.Enums;
 using Trax.Samples.EnergyHub.E2E.Fixtures;
+using Trax.Samples.EnergyHub.E2E.Utilities;
 
 namespace Trax.Samples.EnergyHub.E2E.HubTests;
 
@@ -7,28 +9,26 @@ namespace Trax.Samples.EnergyHub.E2E.HubTests;
 public class GraphQLTests : HubTestFixture
 {
     [Test]
-    public async Task MonitorSolarProduction_Query()
+    public async Task MonitorSolarProduction_query_is_answered_anonymously()
     {
-        using var client = GetHttpClient();
-        var graphql = new Utilities.GraphQLClient(client);
-
-        var result = await graphql.SendAsync(
-            """
-            {
-                discover {
-                    solar {
-                        monitorSolarProduction(
-                            input: { arrayId: "SPA-001", region: "somerset" }
-                        ) {
-                            arrayId
-                            totalKwh
-                            efficiency
+        var result = await GetGraphQLClient()
+            .SendAsync(
+                """
+                {
+                    discover {
+                        solar {
+                            monitorSolarProduction(
+                                input: { arrayId: "SPA-001", region: "somerset" }
+                            ) {
+                                arrayId
+                                totalKwh
+                                efficiency
+                            }
                         }
                     }
                 }
-            }
-            """
-        );
+                """
+            );
 
         result
             .HasErrors.Should()
@@ -40,105 +40,109 @@ public class GraphQLTests : HubTestFixture
     }
 
     [Test]
-    public async Task GenerateSustainabilityReport_RunMutation()
+    public async Task Queued_report_from_an_operator_completes_on_the_worker()
     {
-        using var client = GetHttpClient();
-        var graphql = new Utilities.GraphQLClient(client);
-
-        var result = await graphql.SendAsync(
-            """
-            mutation {
-                dispatch {
-                    sustainability {
-                        generateSustainabilityReport(
-                            input: { reportPeriod: "Daily" }
-                            mode: RUN
-                        ) {
-                            externalId
-                            output {
-                                reportPeriod
-                                carbonOffsetTons
-                                renewablePercent
+        var result = await GetGraphQLClient()
+            .SendAsync(
+                """
+                mutation {
+                    dispatch {
+                        sustainability {
+                            generateSustainabilityReport(input: { reportPeriod: "Daily" }) {
+                                externalId
+                                workQueueId
                             }
                         }
                     }
                 }
-            }
-            """
-        );
+                """,
+                apiKey: OperatorKey
+            );
 
         result
             .HasErrors.Should()
             .BeFalse($"GraphQL error: {result.FirstErrorMessage} (HTTP {result.StatusCode})");
 
-        var output = result
-            .GetData("dispatch", "sustainability", "generateSustainabilityReport")
-            .GetProperty("output");
+        var queued = result.GetData("dispatch", "sustainability", "generateSustainabilityReport");
+        queued.GetProperty("workQueueId").GetInt64().Should().BeGreaterThan(0);
 
-        output.GetProperty("reportPeriod").GetString().Should().Be("Daily");
+        var metadata = await TrainStatePoller.WaitForMetadataByTrainName(
+            DataContext,
+            "GenerateSustainabilityReport",
+            TrainState.Completed
+        );
+        metadata.Output.Should().Contain("Daily");
     }
 
     [Test]
-    public async Task Operations_GetTrains()
+    public async Task Anonymous_caller_cannot_queue_a_trade()
     {
-        using var client = GetHttpClient();
-        var graphql = new Utilities.GraphQLClient(client);
-
-        var result = await graphql.SendAsync(
-            """
-            {
-                operations {
-                    trains {
-                        serviceTypeName
-                        isQuery
-                        isMutation
+        var result = await GetGraphQLClient()
+            .SendAsync(
+                """
+                mutation {
+                    dispatch {
+                        tradeGridEnergy(input: { ratePerKwh: 0.14, maxSellPercent: 80 }) {
+                            externalId
+                        }
                     }
                 }
-            }
-            """
-        );
+                """
+            );
+
+        result.HasErrors.Should().BeTrue("a trade moves money, so only an operator may queue one");
+        result.FirstErrorMessage.Should().Be("Not authorized.");
+    }
+
+    [Test]
+    public async Task Operator_can_list_the_trains()
+    {
+        var result = await GetGraphQLClient()
+            .SendAsync(
+                """
+                {
+                    operations {
+                        trains {
+                            serviceTypeName
+                            isQuery
+                            isMutation
+                        }
+                    }
+                }
+                """,
+                apiKey: OperatorKey
+            );
 
         result
             .HasErrors.Should()
             .BeFalse($"GraphQL error: {result.FirstErrorMessage} (HTTP {result.StatusCode})");
 
         var trains = result.GetData("operations", "trains");
-        trains.GetArrayLength().Should().BeGreaterThan(0);
-
-        // MonitorSolarProduction should be a query
-        var solar = trains
+        trains
             .EnumerateArray()
             .Any(t =>
                 t.GetProperty("serviceTypeName").GetString()?.Contains("MonitorSolarProduction")
                     == true
                 && t.GetProperty("isQuery").GetBoolean()
-            );
-
-        solar.Should().BeTrue("MonitorSolarProduction should be registered as a query");
+            )
+            .Should()
+            .BeTrue("MonitorSolarProduction should be registered as a query");
     }
 
     [Test]
-    public async Task Operations_GetHealth()
+    public async Task Operator_can_read_health()
     {
-        using var client = GetHttpClient();
-        var graphql = new Utilities.GraphQLClient(client);
-
-        var result = await graphql.SendAsync(
-            """
-            {
-                operations {
-                    health {
-                        status
-                    }
-                }
-            }
-            """
-        );
+        var result = await GetGraphQLClient()
+            .SendAsync("{ operations { health { status } } }", apiKey: OperatorKey);
 
         result
             .HasErrors.Should()
             .BeFalse($"GraphQL error: {result.FirstErrorMessage} (HTTP {result.StatusCode})");
 
-        result.GetData("operations", "health").TryGetProperty("status", out _).Should().BeTrue();
+        result
+            .GetData("operations", "health")
+            .GetProperty("status")
+            .ValueKind.Should()
+            .Be(JsonValueKind.String);
     }
 }

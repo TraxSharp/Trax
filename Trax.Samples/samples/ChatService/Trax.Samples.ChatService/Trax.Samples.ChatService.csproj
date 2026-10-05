@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="Trax.Api.Auth" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Effect.Data.Sqlite" />
     <!-- Override the vulnerable native SQLite lib EF Core Sqlite pulls transitively (CVE-2025-6965). -->

@@ -2,39 +2,45 @@
 
 A GraphQL host over two portable snapshot state machines, authored with the fluent API and driven through
 the four generic `stateMachine` mutations. It shows the whole feature end to end: fluent authoring,
-one-line discovery, server-side authority, and an exactly-once effect.
+one-line discovery, server-side authority (the server, not the browser, decides what a valid draft is,
+down to the checkout total), and an exactly-once effect.
+
+![The StateMachine page: the checkout is Paid, a second Pay charged nothing, and the payment provider lists one charge](screenshot.png)
 
 | Machine | Shape | Notes |
 |---|---|---|
 | `turnstile` | `Locked ⇄ Unlocked` | No effect, no committed state. The structure proof. |
-| `checkout` | `Cart → Review → Paid` (v2) | `Paid` is committed; `Pay` runs one irreversible charge exactly once. v2 adds a `total`, backfilled from v1 drafts by a forward migration (see below). |
+| `checkout` | `Cart → Review → Paid` (v2) | `Paid` is committed; `Pay` runs one irreversible charge exactly once. v2 adds a `total` that every state requires to equal 999 cents per item, backfilled from v1 drafts by a forward migration (see below). |
 
 Both live in `Trax.Samples.StateMachine` as `Machine<TState, TTrigger>` subclasses. The host
 (`Trax.Samples.StateMachine.Api`) wires them with one line:
 
 ```csharp
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(e => e.UsePostgres(cs).AddJson())
-        .AddMediator(typeof(TurnstileMachine).Assembly, StateMachineMutations.Assembly));
-builder.Services.AddTraxStateMachines(typeof(TurnstileMachine).Assembly);
+    trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
+        .AddStateMachines(typeof(TurnstileMachine).Assembly)   // before AddMediator
+        .AddMediator(typeof(TurnstileMachine).Assembly));
 
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
+builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
 ```
 
-`AddTraxStateMachines` discovers the machines and wires the store, the effect-claim ledger, the
-exactly-once runner, and the registry. The host supplies only the two things a machine can't know: how to
-map its auth to a user key (`ISnapshotPrincipal`) and the charge implementation.
+`AddStateMachines` discovers the machines and wires the store, the effect-claim ledger, the
+exactly-once runner, the registry and the four mutations. It must come before `AddMediator`. The host
+supplies only the two things a machine can't know: how to map its auth to a user key
+(`ISnapshotPrincipal`) and the charge implementation.
 
 ## Run it
 
+From `Trax.Samples/`:
+
 ```bash
-cd Trax.Samples && docker compose up -d          # Postgres
-./pack-local.sh                                  # local Trax packages
+docker compose up -d                             # Postgres 5432, database trax_statemachine
 dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api
 ```
 
-Open http://localhost:5220/trax/graphql and send `X-Api-Key: alice-key-do-not-use-in-production`.
+Open http://localhost:5280/trax/graphql and send `X-Api-Key: alice-key-do-not-use-in-production`.
 
 ```graphql
 # What machines are available?
@@ -56,7 +62,10 @@ mutation {
 }
 ```
 
-The second `sendSnapshot` returns the same `Paid` snapshot and does not charge again.
+The second `sendSnapshot` returns the same `Paid` snapshot and does not charge again. Save the same draft
+with `"items":["book","pen"]` and `"total":1` and the answer is `problem { code: "invalid-context" }`:
+the total is the amount a real `ICharge` would take, so the machine refuses a total that is not 999 cents
+per item, and the charge reads the amount from the server's stored copy (`CheckoutMachine.AmountCents`).
 
 ## Schema evolution (v1 → v2)
 
@@ -74,9 +83,9 @@ m.Id("checkout").Version(2).StartsAt(CheckoutState.Cart, Fresh)
     });
 ```
 
-Load a stored v1 draft and the server returns it at v2 with `total` filled in; there is no manual step. That
-migration is guarded by tests in `Trax.Samples.StateMachine.Tests` (a v1 draft loads as v2, and a v2 context
-missing `total` is rejected, which is what makes the migration load-bearing).
+Load a stored v1 draft and the server returns it at v2 with `total` filled in; there is no manual step. A v1
+snapshot an old client saves is stored as v2 the same way. `ForwardMigrationTests` in the E2E suite proves both
+over GraphQL, and that a v2 context missing `total` is refused, which is what makes the migration load-bearing.
 
 ## Web frontend
 
@@ -84,9 +93,37 @@ A React app in [web/](web/) drives both machines through these mutations with a 
 and a `useMachine` hook. Start this host, then `cd web && npm install && npm run dev` and open
 http://localhost:5173.
 
+The page teaches the machine before the example. Each machine has a tab: the turnstile first, as the simplest
+machine, then the checkout, a machine with an effect. A state diagram follows every move and marks the moves out of
+the current state, and every trigger can be sent from any state, so pressing one with no arrow shows the server's
+`no-transition`. **What the server just did** lists the checks the server made for the last request, in the order
+it makes them, and where it stopped (`guard-failed` for a penny, `invalid-context` for a $0.01 total). On the
+checkout, **Side effect: the charge** shows the `RunsOnce<ICharge>` binding, the whole request the page sends to pay
+(only the draft's id), and the payment provider's own list of charges, which grows by one on Pay and not at all on
+a second Pay. **Show the raw requests** opens every GraphQL request the page sends.
+
+The charge is the one place a payment happens: `LoggingCharge` takes it from `SimulatedPaymentProvider`, an in-memory
+stand-in for a payment gateway, and `payments.listCharges` returns the caller's own charges for the page to show.
+
+## Tests
+
+```bash
+dotnet test tests/Trax.Samples.StateMachine.Tests                         # the machines, no database
+dotnet test tests/Trax.Samples.StateMachine.E2E                           # the real host over GraphQL
+```
+
+`Trax.Samples.StateMachine.E2E` starts this host with `WebApplicationFactory` against the
+`statemachine_e2e_tests` database (`docker compose up -d` creates it on a fresh volume) and drives everything
+above over `/trax/graphql`: both machines, the refused transitions, the charge running once however often
+`sendSnapshot` is repeated, the v1 to v2 migration, the server-checked total, and auth (anonymous refused, the
+demo keys only in Development). Set `TRAX_TEST_PG_PORT` when your Postgres is not on 5432. Without a database it
+fails; it never skips.
+
 ## Notes
 
 - Anonymous requests get a `TRAX_AUTHORIZATION` error at HTTP 200, not a crash. The four mutations carry
   `[TraxAuthorize]`; `listMachines` is anonymous so you can inspect the machines without a key.
-- The host creates its database and the `snapshot_draft` + `effect_claim` tables on startup
-  (see `SnapshotSchema`). A production host ships those as a migration instead.
+- The `snapshot_draft` and `effect_claim` tables are created by the Trax Postgres provider's own
+  migrations when the host starts; the sample writes no schema of its own.
+
+Docs: <https://traxsharp.net/docs/samples/state-machine>

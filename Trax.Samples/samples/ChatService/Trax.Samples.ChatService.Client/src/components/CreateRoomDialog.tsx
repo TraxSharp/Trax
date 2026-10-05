@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMutation } from "@apollo/client";
 import { CREATE_CHAT_ROOM } from "../graphql/mutations";
 import { GET_CHAT_ROOMS } from "../graphql/queries";
-import { useUser } from "../context/UserContext";
 
 interface CreateRoomDialogProps {
   onClose: () => void;
@@ -10,7 +9,6 @@ interface CreateRoomDialogProps {
 }
 
 export function CreateRoomDialog({ onClose, onCreated }: CreateRoomDialogProps) {
-  const { user } = useUser();
   const [name, setName] = useState("");
 
   const [createRoom, { loading }] = useMutation(CREATE_CHAT_ROOM, {
@@ -23,11 +21,7 @@ export function CreateRoomDialog({ onClose, onCreated }: CreateRoomDialogProps) 
 
     const result = await createRoom({
       variables: {
-        input: {
-          name: name.trim(),
-          userId: user.userId,
-          displayName: user.displayName,
-        },
+        input: { name: name.trim() },
       },
     });
 
@@ -43,7 +37,8 @@ export function CreateRoomDialog({ onClose, onCreated }: CreateRoomDialogProps) 
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
-        <h3>Create Chat Room</h3>
+        <h3>New room</h3>
+        <p className="dialog-hint">You join it as its first member. Share its ID so others can join.</p>
         <input
           type="text"
           placeholder="Room name"
@@ -56,7 +51,7 @@ export function CreateRoomDialog({ onClose, onCreated }: CreateRoomDialogProps) 
             Cancel
           </button>
           <button type="submit" disabled={loading || !name.trim()}>
-            Create
+            Create room
           </button>
         </div>
       </form>

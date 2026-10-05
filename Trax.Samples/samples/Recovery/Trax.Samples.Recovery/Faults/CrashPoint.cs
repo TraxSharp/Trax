@@ -1,0 +1,20 @@
+namespace Trax.Samples.Recovery.Faults;
+
+/// <summary>Where an armed fault fires.</summary>
+public enum CrashPoint
+{
+    /// <summary>No crash: the run completes on its first attempt.</summary>
+    None,
+
+    /// <summary>
+    /// The research run's last step, writing the report. It comes after both model calls and every
+    /// track reaches it, so a crash armed here fires whatever the model answered.
+    /// </summary>
+    Report,
+
+    /// <summary>
+    /// The step the refund's approval decision routes to: paying, declining or queueing for review.
+    /// Every order reaches one of the three, so a crash armed here fires whatever the model answers.
+    /// </summary>
+    RefundTrack,
+}

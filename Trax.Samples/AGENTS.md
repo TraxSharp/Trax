@@ -1,7 +1,7 @@
 # Trax.Samples
 
-Runnable sample applications and project templates, one per deployment topology. It sits
-last in the dependency order and references everything. Bookworm is the flagship.
+Runnable sample applications and project templates, one sample per major Trax feature (ADR
+0006). It sits last in the dependency order and references everything.
 
 This file is the entry point. It routes; it does not restate the rules.
 
@@ -18,6 +18,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | a guard fixture, here or upstream | [0002](./docs/adr/0002-the-samples-adopt-the-guards-as-a-consumer-would.md), Bookworm is the only place the fixtures are adopted across a real PackageReference |
 | a template's `Program.cs` or its dashboard | [0003](./docs/adr/0003-templates-serve-the-dashboard-only-in-development.md), the dashboard and the demo key exist only in Development |
 | a template's package versions | [0004](./docs/adr/0004-the-template-package-carries-its-package-versions.md), versions are generated at pack from the central pins |
+| the README's feature-coverage table, or a new or retired sample | [0006](./docs/adr/0006-one-sample-per-major-feature-proven-end-to-end.md), one sample per major feature, each proven by E2E tests; a feature without a sample is proven upstream and listed in the table |
 | `docker-compose.yml` | [0005](./docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md), every published port binds `127.0.0.1` because the credentials sit beside it |
 
 Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
@@ -52,8 +53,8 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Samples.Tests.Meta/` holds fifteen convention guards. Eleven are shared with other
-repos, and four are this repo's own. `E2EDatabaseProvisioningTests` reads the CI workflow,
+`tests/Trax.Samples.Tests.Meta/` holds twenty-one convention guards. Twelve are shared with other
+repos, and nine are this repo's own. `E2EDatabaseProvisioningTests` reads the CI workflow,
 checking every sample factory's *default* connection string against the ports and databases
 CI actually creates; a factory that declares none, because its sample runs on SQLite or the
 in-memory provider or reads the connection from configuration, gives it nothing to check.
@@ -61,6 +62,14 @@ in-memory provider or reads the connection from configuration, gives it nothing 
 repository out. `ComposePortsBindLoopbackTests` checks that every port `docker-compose.yml`
 publishes is bound to `127.0.0.1`. `DemoKeysCarryTheMarkerTests` checks that every demo
 credential a sample registers carries the `do-not-use-in-production` marker.
+`RabbitMqCredentialsMatchComposeTests` keeps the samples' RabbitMQ credentials in step with the
+user `docker-compose.yml` creates. `FeatureCoverageTableTests` checks the README's feature-coverage
+table: every class it names in this repo exists in the file its row links, and every E2E project
+is named by a row. Rows naming another repo's class are checked for shape only.
+`SampleDatabasesAreSeparateTests` keeps every sample on a database of its own that
+`docker-compose.yml` creates, since a scheduler fails another sample's manifests in a shared one.
+`RabbitMqExchangePerSampleTests` requires every RabbitMQ sample to name an exchange no other sample
+uses. `SamplePortsTests` keeps every sample port in 5200-5299 or 5310-5319 and owned by one sample.
 
 This repo has no `PublicApiSurfaceTests`, which is right: the samples are applications, and
 the one package it does ship, `Trax.Samples.Templates`, is template content with no API

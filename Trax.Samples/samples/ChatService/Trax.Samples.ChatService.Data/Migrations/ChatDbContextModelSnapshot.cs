@@ -64,9 +64,6 @@ namespace Trax.Samples.ChatService.Data.Migrations
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("LastReadAt")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("TEXT");

@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid.Junctions;
@@ -11,7 +11,7 @@ namespace Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid;
 /// data centers, and EV charging stations.
 /// Scheduled every 15 minutes.
 /// </summary>
-[TraxAllowAnonymous]
+[TraxAuthorize(Roles = EnergyHubRoles.Operator)]
 [TraxMutation(
     GraphQLOperation.Queue,
     Description = "Optimizes energy distribution across the microgrid"

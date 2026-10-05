@@ -17,7 +17,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Persistence Test", userId: "alice", displayName: "Alice" }
+                        input: { name: "Persistence Test" }
                     ) {
                         externalId
                         output {
@@ -51,7 +51,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
 
         room.Should().NotBeNull();
         room!.Name.Should().Be("Persistence Test");
-        room.CreatedByUserId.Should().Be("alice");
+        room.CreatedByUserId.Should().Be("TraxApiKey:alice");
 
         // Verify Trax metadata persisted to SQLite with Completed state
         DataContext.Reset();
@@ -72,7 +72,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Participant Test", userId: "alice", displayName: "Alice" }
+                        input: { name: "Participant Test" }
                     ) {
                         output { chatRoomId }
                     }
@@ -92,7 +92,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
 
         var participant = await ChatDb
             .ChatParticipants.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ChatRoomId == chatRoomId && p.UserId == "alice");
+            .FirstOrDefaultAsync(p => p.ChatRoomId == chatRoomId && p.UserId == "TraxApiKey:alice");
 
         participant.Should().NotBeNull();
         participant!.DisplayName.Should().Be("Alice");
@@ -112,7 +112,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     joinChatRoom(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "bob", displayName: "Bob" }
+                        input: { chatRoomId: "{{chatRoomId}}" }
                     ) {
                         externalId
                         output {
@@ -132,13 +132,15 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             .BeFalse($"GraphQL error: {result.FirstErrorMessage} (HTTP {result.StatusCode})");
 
         var output = result.GetData("dispatch", "joinChatRoom").GetProperty("output");
-        output.GetProperty("userId").GetString().Should().Be("bob");
+        output.GetProperty("userId").GetString().Should().Be("TraxApiKey:bob");
         output.GetProperty("joinedAt").GetString().Should().NotBeNullOrEmpty();
 
         // Verify participant persisted to SQLite chat database
         var participant = await ChatDb
             .ChatParticipants.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ChatRoomId == Guid.Parse(chatRoomId) && p.UserId == "bob");
+            .FirstOrDefaultAsync(p =>
+                p.ChatRoomId == Guid.Parse(chatRoomId) && p.UserId == "TraxApiKey:bob"
+            );
 
         participant.Should().NotBeNull();
         participant!.DisplayName.Should().Be("Bob");
@@ -168,7 +170,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     sendMessage(
-                        input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "Hello from E2E!" }
+                        input: { chatRoomId: "{{chatRoomId}}", content: "Hello from E2E!" }
                     ) {
                         externalId
                         output {
@@ -197,7 +199,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             );
 
         message.Should().NotBeNull();
-        message!.SenderUserId.Should().Be("alice");
+        message!.SenderUserId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -215,7 +217,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     sendMessage(
-                        input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "Metadata check" }
+                        input: { chatRoomId: "{{chatRoomId}}", content: "Metadata check" }
                     ) {
                         externalId
                     }
@@ -257,7 +259,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
                 mutation {
                     dispatch {
                         sendMessage(
-                            input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "{{content}}" }
+                            input: { chatRoomId: "{{chatRoomId}}", content: "{{content}}" }
                         ) {
                             externalId
                         }
@@ -314,7 +316,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     joinChatRoom(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "bob", displayName: "Bob" }
+                        input: { chatRoomId: "{{chatRoomId}}" }
                     ) {
                         externalId
                     }
@@ -332,7 +334,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     sendMessage(
-                        input: { chatRoomId: "{{chatRoomId}}", senderUserId: "alice", content: "All ops test" }
+                        input: { chatRoomId: "{{chatRoomId}}", content: "All ops test" }
                     ) {
                         externalId
                     }
@@ -367,7 +369,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     joinChatRoom(
-                        input: { chatRoomId: "{{nonExistentRoomId}}", userId: "bob", displayName: "Bob" }
+                        input: { chatRoomId: "{{nonExistentRoomId}}" }
                     ) {
                         externalId
                         output {
@@ -418,7 +420,7 @@ public class ChatServiceE2ETests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "{{name}}", userId: "alice", displayName: "Alice" }
+                        input: { name: "{{name}}" }
                     ) {
                         output { chatRoomId }
                     }

@@ -3,7 +3,7 @@
     <PackageId>Trax.Samples.Templates</PackageId>
     <PackageType>Template</PackageType>
     <Authors>Theauxm,mark-keaton</Authors>
-    <PackageDescription>Project templates for Trax - GraphQL API and Scheduler with Dashboard for .NET</PackageDescription>
+    <PackageDescription>Project templates for Trax .NET - GraphQL API and Scheduler with Dashboard for .NET</PackageDescription>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/TraxSharp/Trax.Samples</RepositoryUrl>
     <PackageTags>dotnet-new;templates;trax;workflows;railway-oriented-programming;graphql;api;scheduler;dashboard</PackageTags>
@@ -26,13 +26,23 @@
   <!--
     The template projects carry no versions: in this repo they take them from the root
     Directory.Packages.props, which a scaffolded project never sees. At pack time each template
-    gets its own Directory.Packages.props, holding the pin of every package it references and
-    nothing else, so the package ships exactly the versions this repo builds and tests against.
+    gets its own Directory.Packages.props, holding the pin of every package its projects (the
+    application and its tests/ project) reference and of every Trax package their committed
+    lockfiles resolve, with transitive pinning on. Pinning only the direct references let a
+    transitive Trax package float to whatever version a referenced package was built against,
+    which is not the version this repo tests. The package ships exactly the versions this repo
+    builds and tests against, and nothing else.
     It is generated into obj/ rather than kept beside the template, where it would shadow the
     root pins inside the repo. docs/adr/0004-the-template-package-carries-its-package-versions.md
   -->
   <ItemGroup>
-    <_TraxTemplateProject Include="content/*/*.csproj" />
+    <_TraxTemplateProject
+      Include="content/**/*.csproj"
+      Exclude="content/**/bin/**;content/**/obj/**"
+    >
+      <!-- content/<template>/..., so the first directory under content/ names the template. -->
+      <TemplateName>$([System.String]::Copy('%(RecursiveDir)').Replace('\', '/').Split('/')[0])</TemplateName>
+    </_TraxTemplateProject>
   </ItemGroup>
 
   <Target Name="PackTemplatePackageVersions" DependsOnTargets="_WriteTemplatePackageVersions">
@@ -44,9 +54,9 @@
     </ItemGroup>
   </Target>
 
-  <Target Name="_WriteTemplatePackageVersions" Outputs="%(_TraxTemplateProject.Identity)">
+  <Target Name="_WriteTemplatePackageVersions" Outputs="%(_TraxTemplateProject.TemplateName)">
     <PropertyGroup>
-      <_TemplateName>%(_TraxTemplateProject.Filename)</_TemplateName>
+      <_TemplateName>%(_TraxTemplateProject.TemplateName)</_TemplateName>
       <_TemplateVersionsFile>$(IntermediateOutputPath)template-versions/$(_TemplateName)/Directory.Packages.props</_TemplateVersionsFile>
     </PropertyGroup>
 
@@ -54,12 +64,26 @@
       XmlInputPath="%(_TraxTemplateProject.FullPath)"
       Query="/Project/ItemGroup/PackageReference/@Include"
     >
-      <Output TaskParameter="Result" ItemName="_TemplateReference" />
+      <Output TaskParameter="Result" ItemName="_TemplateReferenceRaw" />
     </XmlPeek>
 
+    <!-- Every Trax package the template's restore resolves, direct or transitive. Each top-level
+         entry in packages.lock.json is a line of the form `"Id": {`; the ids nested under an
+         entry's dependencies end in a version string instead, so they are not matched. Only the
+         ids are read here: the versions still come from the root pins below. -->
+    <ReadLinesFromFile File="%(_TraxTemplateProject.RootDir)%(_TraxTemplateProject.Directory)packages.lock.json">
+      <Output TaskParameter="Lines" ItemName="_TemplateLockLine" />
+    </ReadLinesFromFile>
+
     <ItemGroup>
-      <_TemplateUnpinned Include="@(_TemplateReference)" Exclude="@(PackageVersion)" />
-      <_TemplateUnreferenced Include="@(PackageVersion)" Exclude="@(_TemplateReference)" />
+      <_TemplateReference Include="@(_TemplateReferenceRaw->Distinct())" />
+      <_TemplateLockedTrax
+        Include="$([System.Text.RegularExpressions.Regex]::Replace('%(_TemplateLockLine.Identity)', '^\s*&quot;([^&quot;]+)&quot;:\s*\{\s*$', '$1'))"
+        Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(_TemplateLockLine.Identity)', '^\s*&quot;Trax\.[^&quot;]+&quot;:\s*\{\s*$'))"
+      />
+      <_TemplateNeeded Include="@(_TemplateReference);@(_TemplateLockedTrax)" />
+      <_TemplateUnpinned Include="@(_TemplateNeeded)" Exclude="@(PackageVersion)" />
+      <_TemplateUnreferenced Include="@(PackageVersion)" Exclude="@(_TemplateNeeded)" />
       <_TemplatePin Include="@(PackageVersion)" Exclude="@(_TemplateUnreferenced)" />
     </ItemGroup>
 
@@ -67,6 +91,7 @@
       <_TemplateVersionsText>&lt;Project&gt;
   &lt;PropertyGroup&gt;
     &lt;ManagePackageVersionsCentrally&gt;true&lt;/ManagePackageVersionsCentrally&gt;
+    &lt;CentralPackageTransitivePinningEnabled&gt;true&lt;/CentralPackageTransitivePinningEnabled&gt;
   &lt;/PropertyGroup&gt;
   &lt;ItemGroup&gt;
 @(_TemplatePin->'    &lt;PackageVersion Include=&quot;%(Identity)&quot; Version=&quot;%(Version)&quot; /&gt;', '%0A')
@@ -75,8 +100,13 @@
     </PropertyGroup>
 
     <Error
+      Condition="!Exists('%(_TraxTemplateProject.RootDir)%(_TraxTemplateProject.Directory)packages.lock.json')"
+      Text="$(_TemplateName) has no packages.lock.json, so the Trax packages it resolves transitively cannot be pinned. Restore it and commit the lockfile."
+    />
+
+    <Error
       Condition="'@(_TemplateUnpinned)' != ''"
-      Text="$(_TemplateName) references @(_TemplateUnpinned) with no PackageVersion in Directory.Packages.props, so the packed template could not restore."
+      Text="$(_TemplateName) resolves @(_TemplateUnpinned) with no PackageVersion in Directory.Packages.props, so the packed template could not pin it. Pin it there, and reference it from the template if it is a transitive Trax package."
     />
 
     <WriteLinesToFile
@@ -91,7 +121,11 @@
         Include="$(_TemplateVersionsFile)"
         TemplateName="$(_TemplateName)"
       />
+      <_TemplateReferenceRaw Remove="@(_TemplateReferenceRaw)" />
       <_TemplateReference Remove="@(_TemplateReference)" />
+      <_TemplateLockLine Remove="@(_TemplateLockLine)" />
+      <_TemplateLockedTrax Remove="@(_TemplateLockedTrax)" />
+      <_TemplateNeeded Remove="@(_TemplateNeeded)" />
       <_TemplateUnpinned Remove="@(_TemplateUnpinned)" />
       <_TemplateUnreferenced Remove="@(_TemplateUnreferenced)" />
       <_TemplatePin Remove="@(_TemplatePin)" />

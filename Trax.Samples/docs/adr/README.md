@@ -39,8 +39,8 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | Area | ADRs |
 | --- | --- |
 | `ci` | [0001](./0001-a-sample-e2e-database-must-be-one-ci-provisions.md) |
-| `samples` | [0002](./0002-the-samples-adopt-the-guards-as-a-consumer-would.md), [0003](./0003-templates-serve-the-dashboard-only-in-development.md), [0004](./0004-the-template-package-carries-its-package-versions.md), [0005](./0005-sample-infrastructure-listens-on-loopback-only.md) |
-| `testing` | [0001](./0001-a-sample-e2e-database-must-be-one-ci-provisions.md), [0002](./0002-the-samples-adopt-the-guards-as-a-consumer-would.md) |
+| `samples` | [0002](./0002-the-samples-adopt-the-guards-as-a-consumer-would.md), [0003](./0003-templates-serve-the-dashboard-only-in-development.md), [0004](./0004-the-template-package-carries-its-package-versions.md), [0005](./0005-sample-infrastructure-listens-on-loopback-only.md), [0006](./0006-one-sample-per-major-feature-proven-end-to-end.md) |
+| `testing` | [0001](./0001-a-sample-e2e-database-must-be-one-ci-provisions.md), [0002](./0002-the-samples-adopt-the-guards-as-a-consumer-would.md), [0006](./0006-one-sample-per-major-feature-proven-end-to-end.md) |
 
 ## All of them
 
@@ -51,3 +51,4 @@ The format is `.claude/skills/recording-decisions/ADR-FORMAT.md`.
 | [0003](./0003-templates-serve-the-dashboard-only-in-development.md) | The templates serve the dashboard and the demo key only in Development | samples |
 | [0004](./0004-the-template-package-carries-its-package-versions.md) | The template package carries its package versions, generated at pack from the central pins | samples |
 | [0005](./0005-sample-infrastructure-listens-on-loopback-only.md) | Sample infrastructure listens on loopback only | samples |
+| [0006](./0006-one-sample-per-major-feature-proven-end-to-end.md) | One sample per major feature, each proven end to end | samples, testing |

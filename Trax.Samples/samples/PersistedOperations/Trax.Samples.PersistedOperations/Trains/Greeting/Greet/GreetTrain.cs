@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.PersistedOperations.Trains.Greeting.Greet.Junctions;

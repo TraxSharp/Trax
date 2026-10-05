@@ -14,6 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Trax.Api.Auth" />
     <PackageReference Include="Trax.Effect" />
     <PackageReference Include="Trax.Mediator" />
   </ItemGroup>

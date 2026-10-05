@@ -23,6 +23,12 @@ public sealed class GraphQLClient(HttpClient httpClient)
         return JsonDocument.Parse(body);
     }
 
+    /// <summary>The first error's message, or <c>null</c> when the response has no errors.</summary>
+    public static string? FirstError(JsonDocument doc) =>
+        HasErrors(doc)
+            ? doc.RootElement.GetProperty("errors")[0].GetProperty("message").GetString()
+            : null;
+
     /// <summary>True if the response carries a non-empty <c>errors</c> array.</summary>
     public static bool HasErrors(JsonDocument doc) =>
         doc.RootElement.TryGetProperty("errors", out var errors)

@@ -1,5 +1,5 @@
-using LanguageExt;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
 using Trax.Core.Junction;
 
 namespace Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid.Junctions;

@@ -13,13 +13,37 @@ public class GraphQLClient(HttpClient httpClient)
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public async Task<GraphQLResponse> SendAsync(string query, object? variables = null)
+    public async Task<GraphQLResponse> SendAsync(
+        string query,
+        object? variables = null,
+        string? apiKey = null
+    )
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query, variables }, options: JsonOptions),
         };
+        if (apiKey is not null)
+            request.Headers.Add("X-Api-Key", apiKey);
 
+        return await ReadAsync(request);
+    }
+
+    /// <summary>Posts a request body exactly as written, the way <c>curl -d</c> sends it.</summary>
+    public async Task<GraphQLResponse> SendRawAsync(string json, string? apiKey = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
+        {
+            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+        };
+        if (apiKey is not null)
+            request.Headers.Add("X-Api-Key", apiKey);
+
+        return await ReadAsync(request);
+    }
+
+    private async Task<GraphQLResponse> ReadAsync(HttpRequestMessage request)
+    {
         var response = await httpClient.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
 

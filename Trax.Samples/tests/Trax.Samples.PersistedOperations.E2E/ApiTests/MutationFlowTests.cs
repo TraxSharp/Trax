@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
@@ -122,7 +122,7 @@ public class MutationFlowTests : ApiTestBase
             new { id = "mut_deact_v1", variables = new { input = new { name = "Alice" } } }
         );
         // Deactivated id no longer resolves; HC returns a top-level error.
-        resp.RootElement.TryGetProperty("errors", out _).Should().BeTrue();
+        GraphQLErrors.FirstCode(resp).Should().Be(GraphQLErrors.UnknownPersistedOperation);
     }
 
     private async Task UploadAsync(string id, string document, bool bypassShapeDiff = false)

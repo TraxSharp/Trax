@@ -3,6 +3,10 @@ updates:
   - package-ecosystem: "nuget"
     directory: "/"
     schedule: { interval: "weekly" }
+    # A release gets a week on nuget.org/npm before a bot proposes it, so a
+    # hijacked version is usually caught and pulled first. Security updates are
+    # not delayed by this.
+    cooldown: { default-days: 7 }
     # Three at a time. A bump that needs a human costs a review either way, and
     # ten open at once only made the pile deeper than the week's attention span.
     open-pull-requests-limit: 3
@@ -43,10 +47,25 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }
     groups:
       actions: { patterns: ["*"] }
   - package-ecosystem: "npm"
-    directory: "/"
+    # The release tooling at the root, each sample's frontend, and the scripts that record and
+    # photograph the samples for traxsharp.net.
+    directories:
+      - "/"
+      - "/samples/ChatService/Trax.Samples.ChatService.Client"
+      - "/samples/Recovery/Trax.Samples.Recovery.Client"
+      - "/samples/StateMachine/web"
+      - "/scripts/recordings"
+      - "/scripts/screenshots"
     schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }
     groups:
       npm-dependencies: { patterns: ["*"] }
+  # The images docker-compose.yml runs for local development, pinned by digest.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    cooldown: { default-days: 7 }

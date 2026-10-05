@@ -31,21 +31,9 @@ public class NoFixedTaskDelayTests
         int
     >(StringComparer.Ordinal)
     {
-        ["tests/Trax.Samples.GameServer.E2E/Utilities/TrainStatePoller.cs"] = 7,
-        ["tests/Trax.Samples.GameServer.E2E/SchedulerTests/CleanupConcurrencyTests.cs"] = 5,
-        ["tests/Trax.Samples.GameServer.E2E/SchedulerTests/EffectTests.cs"] = 3,
         ["tests/Trax.Samples.EnergyHub.E2E/Utilities/TrainStatePoller.cs"] = 2,
-        ["tests/Trax.Samples.JobHunt.Tests/UnitTests/Providers/Llm/OllamaLlmProviderTests.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/SchedulerTests/ScheduleOnceTests.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/SchedulerTests/DeadLetterOperationsTests.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/SchedulerTests/DataIntegrityTests.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/Fixtures/SharedSchedulerSetup.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/ApiTests/SubscriptionTests.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/ApiTests/MatchRecordQueryModelTests.cs"] = 1,
-        ["tests/Trax.Samples.GameServer.E2E/ApiTests/AllowAnonymousTests.cs"] = 1,
         ["tests/Trax.Samples.EnergyHub.E2E/Fixtures/SharedHubSetup.cs"] = 1,
         ["tests/Trax.Samples.ChatService.E2E/E2ETests/ChatServiceE2ETests.cs"] = 1,
-        ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/SubscriptionTests.cs"] = 1,
         ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/SendMessageTests.cs"] = 1,
         ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/JoinChatRoomTests.cs"] = 1,
         ["tests/Trax.Samples.ChatService.E2E/ChatApiTests/CreateChatRoomTests.cs"] = 1,

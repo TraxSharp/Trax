@@ -1,10 +1,15 @@
 using Microsoft.Extensions.Logging;
-using Trax.Core.Junction;
+using Trax.Effect.Services.EffectJunction;
 
 namespace Trax.Samples.Api.Trains.Lookup.Junctions;
 
+/// <summary>
+/// EffectJunction rather than Junction: junction effect providers such as AddJunctionProgress
+/// (the running junction, cancellation between junctions) only see EffectJunction. Plain
+/// Junction&lt;TIn, TOut&gt; works when no provider needs to.
+/// </summary>
 public class FetchDataJunction(ILogger<FetchDataJunction> logger)
-    : Junction<LookupInput, LookupOutput>
+    : EffectJunction<LookupInput, LookupOutput>
 {
     public override async Task<LookupOutput> Run(LookupInput input)
     {

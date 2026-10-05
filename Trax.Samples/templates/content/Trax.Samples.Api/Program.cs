@@ -1,34 +1,27 @@
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 // Trax GraphQL API
 //
-// A GraphQL API powered by HotChocolate. Handles lightweight operations
-// directly via mutations and can queue heavy work for a separate scheduler
-// process by passing mode: QUEUE. Uses an in-memory data provider by default
-// so you can run it immediately without any external dependencies.
+// Serves your trains as GraphQL queries and mutations. Runs with no database:
+// the in-memory provider keeps every run in this process and loses it on restart.
+// README.md says how to switch to Postgres, add a train and run the tests;
+// https://traxsharp.net/docs/reference/templates describes every file.
 //
-// To switch providers, replace UseInMemory() with UseSqlite(connectionString) or
-// UsePostgres(connectionString) and add the corresponding Trax.Effect.Data package.
-//
-// Try it:
+// Try it (Development, which `dotnet run` starts through launchSettings.json):
 //   dotnet run
-//   Open http://localhost:5002/trax/graphql in a browser for Banana Cake Pop IDE
+//   http://localhost:5402/trax/graphql   the GraphQL IDE
+//   http://localhost:5402/trax/health    the health check
 //
-//   Every operation needs the demo key: send the header X-Api-Key: demo-key-do-not-use-in-production
+//   Send the header X-Api-Key: demo-key-do-not-use-in-production with every operation:
+//     query    { discover { lookup(input: { id: "42" }) { id name createdAt } } }
+//     mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }
 //
-//   # Query a train directly (typed query from [TraxQuery])
-//   query { discover { lookup(input: { id: "42" }) { id name createdAt } } }
+// This host has no scheduler, so it runs every mutation itself. Queueing work for a
+// separate scheduler process (mode: QUEUE) needs a database both processes share; use
+// trax-hub for API and scheduler in one process.
 //
-//   # Run a mutation (from [TraxMutation])
-//   mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }
-//
-//   # Health check
-//   curl http://localhost:5002/trax/health
-//
-// Third-party packages used by this project (via Trax dependencies):
-//   HotChocolate    — GraphQL server (MIT, https://github.com/ChilliCream/graphql-platform)
-//   LanguageExt     — Functional programming primitives (MIT, https://github.com/louthy/language-ext)
-//   EF Core InMemory — In-memory database provider (MIT, https://github.com/dotnet/efcore)
-// ─────────────────────────────────────────────────────────────────────────────
+// Outside Development there is no demo key, so every operation is refused until you
+// add real credentials. See "Before deploying" in README.md.
+// ---------------------------------------------------------------------------
 
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth.ApiKey;
@@ -36,7 +29,6 @@ using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
-using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Api.Auth;
@@ -44,39 +36,57 @@ using Trax.Samples.Api.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddLogging(logging => logging.AddConsole());
-
-// ── Authentication (NO WARRANTY, demo key only) ─────────────────────────
-// Send the key as the X-Api-Key header. Every train and query model in this template carries
-// [TraxAuthorize(Roles = "User")], and the demo key holds that role. The demo key is registered
-// only in Development, where `dotnet run` starts (see Properties/launchSettings.json). Anywhere
-// else there is no credential until you register real ones, so every operation is refused.
-// Mark an operation [TraxAllowAnonymous] only when anyone on the internet may call it.
+// -- 1. Authentication and authorization --------------------------------------
+// Every train and query model in this project carries [TraxAuthorize(Roles = "User")], so
+// a caller needs a credential holding the User role. The demo key holds it, and it exists
+// only in Development: Trax.Api refuses to start a host outside Development with a key
+// containing "do-not-use-in-production" registered. Anywhere else, register real
+// credentials (AddHashed keys from a secret store, or AddTraxJwtAuth) before removing the
+// IsDevelopment() check: https://traxsharp.net/docs/api-security.
+// AddAuthentication() stays outside the check. AddTraxApiKeyAuth registers authentication
+// itself, so without this line a start outside Development fails in UseAuthentication()
+// with "Unable to resolve service for type IAuthenticationSchemeProvider". AddAuthorization()
+// is where your own policies go: AddAuthorization(o => o.AddPolicy(...)).
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys => keys.Add(DemoKeys.DemoKey, id: "demo", "User"));
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
-// ── Register Trax Effect + Mediator ─────────────────────────────────────
+// -- 2. Trax: the effect system and the mediator --------------------------------
+// AddTrax comes before AddTraxGraphQL, which throws without it.
+//   UseInMemory()          where runs are recorded. Swap for UsePostgres(connectionString)
+//                          (package Trax.Effect.Data.Postgres) to keep them across restarts.
+//   SaveTrainParameters()  stores each run's input and output with its record.
+//   AddMediator(...)       registers every train in the assemblies named, under its
+//                          interface. A train in an assembly not named here does not exist,
+//                          and its GraphQL field is missing.
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UseInMemory()).AddMediator(typeof(Program).Assembly)
+    trax.AddEffects(effects => effects.UseInMemory().SaveTrainParameters())
+        .AddMediator(typeof(Program).Assembly)
 );
 
-// ── Register the application data context (one project : one schema : one context) ──
-// Swap UseInMemoryDatabase for UseNpgsql(connectionString) (and add Trax.Effect.Data.Postgres)
-// to get real schema isolation.
+// -- 3. Your application's own data -------------------------------------------
+// A plain EF Core context, separate from Trax's own tables. Swap UseInMemoryDatabase for
+// UseNpgsql(connectionString) (package Npgsql.EntityFrameworkCore.PostgreSQL) to store it in
+// Postgres under its own schema (Data/AppSchema.cs).
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseInMemoryDatabase("app"));
 builder.Services.AddScoped<IAppDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext()
 );
 
-// ── Register GraphQL API and expose the data context's query models ─────
+// -- 4. GraphQL -----------------------------------------------------------------
+// Builds the schema from the trains AddMediator registered: [TraxQuery] trains under
+// query { discover }, [TraxMutation] trains under mutation { dispatch }, and the
+// [TraxQueryModel] entities of AppDbContext under query { discover { app } }. It refuses to
+// start when an exposed train or query model carries neither [TraxAuthorize] nor
+// [TraxAllowAnonymous], and when the schema would have no query at all.
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-// ── Ensure the application tables exist (demo bootstrap) ────────────────
+// -- Create the application tables (demo bootstrap) ----------------------------
+// Fine for the in-memory database. With Postgres, use EF Core migrations instead.
 using (var scope = app.Services.CreateScope())
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
@@ -84,7 +94,7 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 }
 
-// ── Map endpoints ───────────────────────────────────────────────────────
+// -- Middleware and endpoints ------------------------------------------------
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();

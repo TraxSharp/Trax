@@ -59,7 +59,6 @@ namespace Trax.Samples.ChatService.Data.Migrations
                     UserId = table.Column<string>(type: "TEXT", nullable: false),
                     DisplayName = table.Column<string>(type: "TEXT", nullable: false),
                     JoinedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastReadAt = table.Column<DateTime>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {

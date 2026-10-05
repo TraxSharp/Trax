@@ -14,7 +14,7 @@ public class JoinChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Join Test Room", userId: "alice", displayName: "Alice" }
+                        input: { name: "Join Test Room" }
                     ) {
                         output { chatRoomId }
                     }
@@ -41,7 +41,7 @@ public class JoinChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     joinChatRoom(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "bob", displayName: "Bob" }
+                        input: { chatRoomId: "{{chatRoomId}}" }
                     ) {
                         externalId
                         output {
@@ -61,7 +61,7 @@ public class JoinChatRoomTests : ChatApiTestFixture
             .BeFalse($"GraphQL error: {result.FirstErrorMessage} (HTTP {result.StatusCode})");
 
         var output = result.GetData("dispatch", "joinChatRoom").GetProperty("output");
-        output.GetProperty("userId").GetString().Should().Be("bob");
+        output.GetProperty("userId").GetString().Should().Be("TraxApiKey:bob");
     }
 
     [Test]
@@ -74,7 +74,7 @@ public class JoinChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     joinChatRoom(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "bob", displayName: "Bob" }
+                        input: { chatRoomId: "{{chatRoomId}}" }
                     ) {
                         externalId
                     }
@@ -88,7 +88,9 @@ public class JoinChatRoomTests : ChatApiTestFixture
 
         var participant = await ChatDb
             .ChatParticipants.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ChatRoomId == Guid.Parse(chatRoomId) && p.UserId == "bob");
+            .FirstOrDefaultAsync(p =>
+                p.ChatRoomId == Guid.Parse(chatRoomId) && p.UserId == "TraxApiKey:bob"
+            );
 
         participant.Should().NotBeNull();
         participant!.DisplayName.Should().Be("Bob");
@@ -109,7 +111,7 @@ public class JoinChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     joinChatRoom(
-                        input: { chatRoomId: "{{chatRoomId}}", userId: "charlie", displayName: "Charlie" }
+                        input: { chatRoomId: "{{chatRoomId}}" }
                     ) {
                         externalId
                     }

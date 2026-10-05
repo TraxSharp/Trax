@@ -48,3 +48,19 @@ export const SEND_MESSAGE = gql`
     }
   }
 `;
+
+export const INVITE_TO_CHAT_ROOM = gql`
+  mutation InviteToChatRoom($input: InviteToChatRoomInput!) {
+    dispatch {
+      inviteToChatRoom(input: $input) {
+        externalId
+        output {
+          chatRoomId
+          userId
+          displayName
+          invitedByDisplayName
+        }
+      }
+    }
+  }
+`;

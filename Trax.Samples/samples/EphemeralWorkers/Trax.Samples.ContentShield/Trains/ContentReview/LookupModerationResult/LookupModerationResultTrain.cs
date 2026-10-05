@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.ContentShield.Trains.ContentReview.LookupModerationResult.Junctions;
@@ -6,12 +6,15 @@ using Trax.Samples.ContentShield.Trains.ContentReview.LookupModerationResult.Jun
 namespace Trax.Samples.ContentShield.Trains.ContentReview.LookupModerationResult;
 
 /// <summary>
-/// Lightweight lookup of a content moderation result. Runs synchronously on the
-/// API process — does not go through the scheduler or ephemeral Runner.
+/// Lightweight lookup of a content moderation result. Runs synchronously, and like
+/// every query it is sent to the Runner (UseRemoteRun); it does not go through the
+/// scheduler.
+///
+/// Not [TraxBroadcast]: a query needs no lifecycle events, and an anonymous train's would carry
+/// every lookup's result to every subscriber.
 /// </summary>
 [TraxAllowAnonymous]
 [TraxQuery(Namespace = "moderation", Description = "Looks up a content moderation result")]
-[TraxBroadcast]
 public class LookupModerationResultTrain
     : ServiceTrain<LookupModerationResultInput, ModerationResult>,
         ILookupModerationResultTrain

@@ -37,7 +37,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 var connectionString =
     builder.Configuration.GetConnectionString("TraxDatabase")
-    ?? "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123";
+    ?? "Host=localhost;Port=5432;Database=trax_persisted_operations;Username=trax;Password=trax123";
 
 var isDevelopment = builder.Environment.IsDevelopment();
 
@@ -81,7 +81,12 @@ builder.Services.AddTraxGraphQL(graphql =>
         .AddDbContext<UserNotesDbContext>()
         .UsePersistedOperations(opts =>
         {
-            opts.UseDatabase(connectionString).RequirePersisted(true).LogNonPersistedRequests(true);
+            opts.RequirePersisted(true)
+                .LogNonPersistedRequests(true)
+                // One process serves this endpoint and writes the store, so an upload reaches
+                // every cached copy without a broadcast. A second node needs
+                // UseRabbitMqInvalidation(...) instead; the host refuses to start with neither.
+                .SingleNode();
 
             // Dev-prefixed operations bypass enforcement so developers can iterate on a query
             // without round-tripping through the manifest uploader. The operation name is chosen
@@ -96,12 +101,13 @@ builder.Services.AddTraxGraphQL(graphql =>
 );
 
 // Dashboard: mounts the operations control room (including the Persisted
-// Operations management page) under /trax. The page only shows up because
-// IPersistedOperationsCapability is in DI thanks to UsePersistedOperations
-// above. This sample puts no authorization in front of it, so it is served only
-// in Development; gate it before serving it anywhere else.
+// Operations management page) under /trax. The page shows up because
+// UsePersistedOperations above registers IPersistedOperationsService. The
+// dashboard refuses to start without a posture; this sample serves it only in
+// Development and opens it there. Anywhere else, register it with
+// RequirePolicy(...) or RequireRoles(...) instead.
 if (isDevelopment)
-    builder.AddTraxDashboard();
+    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 var app = builder.Build();
 
@@ -132,16 +138,11 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Persisted-op enforcement only applies to the GraphQL endpoint. Scoping
-// with UseWhen keeps it off Blazor's SignalR circuit (/_blazor/*) and the
-// dashboard's static asset endpoints, so dashboard interactivity is not
-// affected by the middleware's body buffering.
-app.UseWhen(
-    ctx => ctx.Request.Path.StartsWithSegments("/trax/graphql"),
-    branch => branch.UsePersistedOperationsEnforcement()
-);
+// Enforcement runs inside HotChocolate's pipeline (registered by
+// UsePersistedOperations), so it covers HTTP and WebSocket alike and needs no
+// middleware here.
 app.UseTraxGraphQL();
-if (app.Environment.IsDevelopment())
+if (isDevelopment)
     app.UseTraxDashboard();
 
 app.Run();

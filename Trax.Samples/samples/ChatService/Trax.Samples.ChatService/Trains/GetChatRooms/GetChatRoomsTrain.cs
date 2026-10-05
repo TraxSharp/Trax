@@ -1,12 +1,13 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Samples.ChatService.Auth;
 using Trax.Samples.ChatService.Trains.GetChatRooms.Junctions;
 
 namespace Trax.Samples.ChatService.Trains.GetChatRooms;
 
-[TraxAllowAnonymous]
-[TraxQuery(Description = "Lists chat rooms the user participates in")]
+[TraxAuthorize(Roles = nameof(ChatRole.User))]
+[TraxQuery(Description = "Lists the chat rooms the caller participates in")]
 public class GetChatRoomsTrain
     : ServiceTrain<GetChatRoomsInput, GetChatRoomsOutput>,
         IGetChatRoomsTrain

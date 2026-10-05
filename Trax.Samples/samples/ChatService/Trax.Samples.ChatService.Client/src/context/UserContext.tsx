@@ -19,7 +19,7 @@ export function useUser(): UserContextValue {
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User>(USERS[0]);
 
-  const client = useMemo(() => createApolloClient(user.key), [user.key]);
+  const client = useMemo(() => createApolloClient(user.key, user.displayName), [user.key, user.displayName]);
 
   return (
     <UserContext.Provider value={{ user, setUser }}>

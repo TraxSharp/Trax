@@ -1,13 +1,13 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using HotChocolate.Subscriptions;
 using Moq;
 using Trax.Effect.Models.Metadata;
 using Trax.Samples.ChatService.Hooks;
 using Trax.Samples.ChatService.Subscriptions;
 using Trax.Samples.ChatService.Trains.CreateChatRoom;
+using Trax.Samples.ChatService.Trains.InviteToChatRoom;
 using Trax.Samples.ChatService.Trains.JoinChatRoom;
-using Trax.Samples.ChatService.Trains.MarkChatAsRead;
 using Trax.Samples.ChatService.Trains.SendMessage;
 
 namespace Trax.Samples.ChatService.Tests.UnitTests;
@@ -155,6 +155,34 @@ public class ChatLifecycleHookTests
         );
     }
 
+    [Test]
+    public async Task OnCompleted_InviteToChatRoomTrain_PublishesUserJoinedEvent()
+    {
+        var chatRoomId = Guid.NewGuid();
+        var output = new InviteToChatRoomOutput
+        {
+            ChatRoomId = chatRoomId,
+            UserId = "TraxApiKey:bob",
+            DisplayName = "Bob",
+            InvitedByDisplayName = "Alice",
+            JoinedAt = DateTime.UtcNow,
+        };
+
+        var metadata = CreateMetadata(typeof(IInviteToChatRoomTrain), output);
+
+        await _hook.OnCompleted(metadata, CancellationToken.None);
+
+        _eventSender.Verify(
+            s =>
+                s.SendAsync(
+                    $"ChatRoom:{chatRoomId}",
+                    It.Is<ChatSubscriptionEvent>(e => e.EventType == "UserJoined"),
+                    It.IsAny<CancellationToken>()
+                ),
+            Times.Once
+        );
+    }
+
     #endregion
 
     #region OnCompleted — Non-Chat Trains
@@ -167,30 +195,6 @@ public class ChatLifecycleHookTests
             Name = "SomeOther.Namespace.IUnrelatedTrain",
             ExternalId = Guid.NewGuid().ToString(),
             Output = """{"someField": "value"}""",
-            EndTime = DateTime.UtcNow,
-        };
-
-        await _hook.OnCompleted(metadata, CancellationToken.None);
-
-        _eventSender.Verify(
-            s =>
-                s.SendAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<ChatSubscriptionEvent>(),
-                    It.IsAny<CancellationToken>()
-                ),
-            Times.Never
-        );
-    }
-
-    [Test]
-    public async Task OnCompleted_MarkChatAsReadTrain_DoesNotPublish()
-    {
-        var metadata = new Metadata
-        {
-            Name = typeof(IMarkChatAsReadTrain).FullName!,
-            ExternalId = Guid.NewGuid().ToString(),
-            Output = """{"chatRoomId": "00000000-0000-0000-0000-000000000001"}""",
             EndTime = DateTime.UtcNow,
         };
 

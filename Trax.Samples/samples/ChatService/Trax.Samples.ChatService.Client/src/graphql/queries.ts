@@ -1,15 +1,14 @@
 import { gql } from "@apollo/client";
 
 export const GET_CHAT_ROOMS = gql`
-  query GetChatRooms($input: GetChatRoomsInput!) {
+  query GetChatRooms {
     discover {
-      getChatRooms(input: $input) {
+      getChatRooms {
         rooms {
           id
           name
           participantCount
           lastMessageAt
-          unreadCount
         }
       }
     }
@@ -26,6 +25,20 @@ export const GET_CHAT_HISTORY = gql`
           senderDisplayName
           content
           sentAt
+        }
+      }
+    }
+  }
+`;
+
+export const GET_CHAT_ROOM_PEOPLE = gql`
+  query GetChatRoomPeople($input: GetChatRoomPeopleInput!) {
+    discover {
+      getChatRoomPeople(input: $input) {
+        people {
+          userId
+          displayName
+          isMember
         }
       }
     }

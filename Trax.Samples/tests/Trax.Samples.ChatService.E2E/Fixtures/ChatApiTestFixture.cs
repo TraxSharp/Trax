@@ -63,6 +63,47 @@ public abstract class ChatApiTestFixture
     protected static string BobKey => ApiKeyDefaults.BobKey;
     protected static string CharlieKey => ApiKeyDefaults.CharlieKey;
 
+    /// <summary>Creates a room as the caller holding <paramref name="apiKey"/> and returns its id.</summary>
+    protected async Task<string> CreateRoomAsAsync(string apiKey, string name = "Room")
+    {
+        var created = await GraphQL.SendAsync(
+            $$"""
+            mutation { dispatch { createChatRoom(input: { name: "{{name}}" }) { output { chatRoomId } } } }
+            """,
+            apiKey: apiKey
+        );
+        created.HasErrors.Should().BeFalse(created.FirstErrorMessage);
+        return created
+            .GetData("dispatch", "createChatRoom", "output")
+            .GetProperty("chatRoomId")
+            .GetString()!;
+    }
+
+    /// <summary>Joins a room as the caller holding <paramref name="apiKey"/>.</summary>
+    protected async Task JoinRoomAsAsync(string apiKey, string chatRoomId)
+    {
+        var joined = await GraphQL.SendAsync(
+            $$"""
+            mutation { dispatch { joinChatRoom(input: { chatRoomId: "{{chatRoomId}}" }) { output { joinedAt } } } }
+            """,
+            apiKey: apiKey
+        );
+        joined.HasErrors.Should().BeFalse(joined.FirstErrorMessage);
+    }
+
+    /// <summary>Sends a message as the caller holding <paramref name="apiKey"/>; returns the response.</summary>
+    protected Task<GraphQLResponse> SendMessageAsAsync(
+        string apiKey,
+        string chatRoomId,
+        string content
+    ) =>
+        GraphQL.SendAsync(
+            $$"""
+            mutation { dispatch { sendMessage(input: { chatRoomId: "{{chatRoomId}}", content: "{{content}}" }) { output { messageId senderUserId } } } }
+            """,
+            apiKey: apiKey
+        );
+
     private async Task CleanData()
     {
         // Clean chat domain data (FK order: messages → participants → rooms)

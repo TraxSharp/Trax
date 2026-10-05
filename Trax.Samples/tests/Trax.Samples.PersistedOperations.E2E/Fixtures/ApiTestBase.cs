@@ -18,9 +18,6 @@ public abstract class ApiTestBase
     [SetUp]
     public async Task BaseSetUpAsync()
     {
-        if (SharedApiSetup.Skipped || SharedApiSetup.Factory is null)
-            Assert.Ignore("Postgres / API factory not reachable. Run docker compose up -d.");
-
         // Each test starts with empty persisted-operation tables so id reuse
         // across cases does not trigger the shape-diff guardrail against
         // stale state.

@@ -1,50 +1,53 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Somerset Energy Hub — Combined Hub (GraphQL API + Scheduler + Dashboard)
+// Somerset Energy Hub: the hub (GraphQL API + scheduler + dashboard)
 //
-// A single process that serves the GraphQL API, manages scheduling, and hosts
-// the Trax dashboard — but does NOT execute trains. All scheduled and queued
-// jobs are written to the background_job table via PostgresJobSubmitter. A
-// separate Worker process polls the table and runs the trains.
+// The hub schedules work and serves the API; it does not run scheduled or queued
+// jobs. OverrideSubmitter registers PostgresJobSubmitter on its own, so every job
+// the scheduler dispatches is written to trax.background_job and no local worker
+// starts. A separate Worker process (Trax.Samples.EnergyHub.Worker) claims those
+// rows and runs the trains. Both processes publish and receive lifecycle events
+// over RabbitMQ, so a subscription on the hub sees runs that happened on a worker.
 //
-// This demonstrates Model #3 (Standalone Workers) with a combined API surface:
-// operators can query live solar/battery data, queue ad-hoc jobs via GraphQL,
-// AND rely on automatic scheduling — all from one lightweight process. The
-// heavy lifting is offloaded to the Worker.
+// What still runs on the hub: the one [TraxQuery] (monitorSolarProduction), which
+// answers a GraphQL request synchronously, in this process. Every mutation is
+// Queue-only, so dispatched work always lands on a worker.
 //
-// GraphQL schema (auto-generated from train attributes):
-//   Queries:    monitorSolarProduction  — [TraxQuery]  (live sensor read)
-//   Mutations:  manageBatteryStorage(Queue), processChargingSession(Run+Queue),
-//               optimizeMicrogrid(Queue), tradeGridEnergy(Queue),
-//               generateSustainabilityReport(Run+Queue)
-//   Subscriptions: onTrainStarted, onTrainCompleted, onTrainFailed
+// GraphQL schema (generated from the train attributes):
+//   Queries:       discover { solar { monitorSolarProduction } }   anonymous
+//   Mutations:     dispatch { tradeGridEnergy, optimizeMicrogrid, processChargingSession,
+//                  battery { manageBatteryStorage },
+//                  sustainability { generateSustainabilityReport } }   Operator role, queue only
+//   Operations:    operations { manifests, executions, ... }        Operator role
+//   Subscriptions: onTrainStarted, onTrainCompleted, onTrainFailed, ...
 //
-// Prerequisites:
-//   1. Start Postgres:  cd Trax.Samples && docker compose up -d
-//   2. Pack local:      ./pack-local.sh
-//   3. Start hub:       dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub
-//   4. Start worker:    dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
+// Run it (from Trax.Samples/):
+//   1. docker compose up -d        Postgres on 5432, RabbitMQ on 5672 (user trax / trax123)
+//   2. dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub
+//   3. dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
 //
-// Endpoints:
+// Endpoints (Development):
 //   Dashboard:   http://localhost:5202/trax
-//   GraphQL IDE: http://localhost:5202/trax/graphql  (Banana Cake Pop)
+//   GraphQL IDE: http://localhost:5202/trax/graphql
 //
 // Try it:
-//   # Query live solar production
-//   curl -X POST http://localhost:5202/trax/graphql \
-//        -H "Content-Type: application/json" \
-//        -d '{"query":"{ discover { monitorSolarProduction(input: {arrayId: \"SPA-001\", region: \"somerset\"}) { currentOutputKw peakOutputKw efficiencyPercent } } }"}'
+//   # Live solar read, answered by the hub itself (anonymous)
+//   curl -s http://localhost:5202/trax/graphql -H "Content-Type: application/json" \
+//     -d '{"query":"{ discover { solar { monitorSolarProduction(input: {arrayId: \"SPA-001\", region: \"somerset\"}) { arrayId totalKwh efficiency } } } }"}'
 //
-//   # Queue a grid energy trade
-//   curl -X POST http://localhost:5202/trax/graphql \
-//        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { tradeGridEnergy(input: {ratePerKwh: 0.14, maxSellPercent: 80}) { externalId workQueueId } } }"}'
+//   # Queue a grid trade; the worker runs it (Operator key, Development only)
+//   curl -s http://localhost:5202/trax/graphql -H "Content-Type: application/json" \
+//     -H "X-Api-Key: energyhub-operator-key-do-not-use-in-production" \
+//     -d '{"query":"mutation { dispatch { tradeGridEnergy(input: {ratePerKwh: 0.14, maxSellPercent: 80}) { externalId workQueueId } } }"}'
 //
-//   # Generate a sustainability report (runs synchronously on the hub)
-//   curl -X POST http://localhost:5202/trax/graphql \
-//        -H "Content-Type: application/json" \
-//        -d '{"query":"mutation { dispatch { generateSustainabilityReport(input: {reportPeriod: \"Daily\"}) { externalId metadataId output { carbonOffsetKg renewablePercent totalGenerationKwh revenueUsd } } } }"}'
+//   # Read the scheduler's manifests (Operator key)
+//   curl -s http://localhost:5202/trax/graphql -H "Content-Type: application/json" \
+//     -H "X-Api-Key: energyhub-operator-key-do-not-use-in-production" \
+//     -d '{"query":"{ operations { manifests(take: 5) { items { externalId scheduleType } } } }"}'
+//
+// Docs: https://traxsharp.net/docs/samples/energy-hub
 // ─────────────────────────────────────────────────────────────────────────────
 
+using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Dashboard.Extensions;
@@ -58,6 +61,7 @@ using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.EnergyHub;
+using Trax.Samples.EnergyHub.Hub;
 using Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage;
 using Trax.Samples.EnergyHub.Trains.ChargingSessions.ProcessChargingSession;
 using Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy;
@@ -66,6 +70,7 @@ using Trax.Samples.EnergyHub.Trains.SolarProduction.MonitorSolarProduction;
 using Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityReport;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Scheduling;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -80,6 +85,18 @@ var rabbitMqConnectionString =
 
 builder.Services.AddLogging(logging => logging.AddConsole());
 
+// ── Who may operate the hub ─────────────────────────────────────────────
+// Mutations and the operations namespace require the Operator role. The only key that carries it
+// is a published demo key, registered in Development alone (`dotnet run` starts in Development
+// through Properties/launchSettings.json). Anywhere else no key is registered, so those surfaces
+// refuse every caller until you register real credentials.
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxApiKeyAuth(keys =>
+        keys.Add(DemoKeys.OperatorKey, id: "operator", EnergyHubRoles.Operator)
+    );
+builder.Services.AddAuthentication();
+builder.Services.AddAuthorization();
+
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
@@ -88,14 +105,24 @@ builder.Services.AddTrax(trax =>
                 .AddJson()
                 .SaveTrainParameters()
                 .AddJunctionProgress()
-                .UseBroadcaster(b => b.UseRabbitMq(rabbitMqConnectionString))
+                .UseBroadcaster(b =>
+                    b.UseRabbitMq(
+                        rabbitMqConnectionString,
+                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                    )
+                )
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
             scheduler
-                // ── Key: scheduling only, no local execution ──────────────────
-                // PostgresJobSubmitter is the default — omit UseLocalWorkers() to schedule without executing locally
-                // Jobs accumulate until the Worker process picks them up.
+                // ── Schedule here, execute on the workers ─────────────────────
+                // Without this line a scheduler on Postgres registers PostgresJobSubmitter
+                // AND starts LocalWorkerService, so the hub would run jobs itself. Naming
+                // the submitter registers it alone: jobs are written to background_job and
+                // wait there until a Worker process claims them.
+                .OverrideSubmitter(services =>
+                    services.AddScoped<IJobSubmitter, PostgresJobSubmitter>()
+                )
                 .AddMetadataCleanup(cleanup =>
                 {
                     cleanup.AddTrainType<IMonitorSolarProductionTrain>();
@@ -177,10 +204,18 @@ builder.Services.AddTrax(trax =>
         )
 );
 
+// ── Dashboard: Development only ────────────────────────────────────────
+// The dashboard can queue, run and cancel trains and change scheduler settings. This sample puts
+// no login in front of it, so it is served only in Development, where it is open to anyone who
+// can reach localhost. Gate it (RequirePolicy / RequireRoles) before serving it anywhere else.
+if (builder.Environment.IsDevelopment())
+    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
+
 // ── Register GraphQL API ────────────────────────────────────────────────
 // Trains annotated with [TraxQuery] or [TraxMutation] get typed GraphQL
-// fields auto-generated. [TraxBroadcast] trains emit subscription events.
-builder.AddTraxDashboard();
+// fields generated. [TraxBroadcast] trains emit subscription events, and
+// because UseBroadcaster is registered, AddTraxGraphQL also forwards the
+// events workers publish over RabbitMQ to this hub's subscribers.
 
 // Depth 6 accommodates the dispatch → mutation → output → nested type →
 // field → scalar query chain. The Trax default of 4 is the conservative
@@ -188,19 +223,21 @@ builder.AddTraxDashboard();
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .MaxExecutionDepth(6)
-        // The hub exposes operational queries and scheduler-control mutations
-        // so the EnergyHub web UI can render the manifest dashboard and
-        // trigger jobs. Both surfaces are off by default; opt in here.
+        // The operations namespace lists manifests and executions and triggers, disables and
+        // cancels scheduled work. Both halves are off by default; exposing them requires a gate.
+        // GateOperations gates that namespace alone, so the anonymous solar query keeps working.
         .ExposeOperationQueries()
         .ExposeOperationMutations()
-        // Demo hub with no endpoint auth; acknowledge the ops surface is intentionally open.
-        .AllowAnonymousOperations()
+        .GateOperations(roles: EnergyHubRoles.Operator)
 );
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
 
-app.UseTraxDashboard();
+app.UseAuthentication();
+app.UseAuthorization();
+if (app.Environment.IsDevelopment())
+    app.UseTraxDashboard();
 app.UseTraxGraphQL();
 app.MapHealthChecks("/trax/health");
 

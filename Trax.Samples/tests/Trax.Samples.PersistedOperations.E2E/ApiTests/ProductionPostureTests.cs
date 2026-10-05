@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
@@ -33,9 +33,6 @@ public class ProductionPostureTests
     [OneTimeSetUp]
     public void StartProduction()
     {
-        if (SharedApiSetup.Skipped || SharedApiSetup.Factory is null)
-            Assert.Ignore("Postgres / API factory not reachable. Run docker compose up -d.");
-
         _production = new PersistedOperationsApiFactory
         {
             Configure = b => b.UseEnvironment("Production"),
@@ -73,15 +70,17 @@ public class ProductionPostureTests
     {
         var body = await PostUploadAsync(_production.CreateClient(), "anon_prod_v1");
 
-        body.Should().NotContain("\"success\":true").And.Contain("errors");
+        body.Should().NotContain("\"success\":true");
+        GraphQLErrors.FirstCode(body).Should().Be("TRAX_AUTHORIZATION", body);
     }
 
     [Test]
     public async Task An_anonymous_upload_is_refused_in_Development()
     {
-        var body = await PostUploadAsync(SharedApiSetup.Factory!.CreateClient(), "anon_dev_v1");
+        var body = await PostUploadAsync(SharedApiSetup.Factory.CreateClient(), "anon_dev_v1");
 
-        body.Should().NotContain("\"success\":true").And.Contain("errors");
+        body.Should().NotContain("\"success\":true");
+        GraphQLErrors.FirstCode(body).Should().Be("TRAX_AUTHORIZATION", body);
     }
 
     [Test]
@@ -92,6 +91,18 @@ public class ProductionPostureTests
         var resp = await http.GetAsync("/trax");
 
         ((int)resp.StatusCode).Should().Be(404);
+    }
+
+    [Test]
+    public async Task Development_serves_the_dashboard()
+    {
+        // The dashboard refuses to start without a posture. The sample opens it with
+        // AllowAnonymousDashboard() inside its Development block, so it is served there.
+        using var http = SharedApiSetup.Factory.CreateClient();
+
+        var resp = await http.GetAsync("/trax");
+
+        ((int)resp.StatusCode).Should().Be(200);
     }
 
     private static async Task<string> PostUploadAsync(HttpClient http, string id)

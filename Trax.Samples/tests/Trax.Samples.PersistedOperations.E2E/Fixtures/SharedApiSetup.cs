@@ -13,38 +13,24 @@ namespace Trax.Samples.PersistedOperations.E2E;
 [SetUpFixture]
 public class SharedApiSetup
 {
-    public static PersistedOperationsApiFactory? Factory { get; private set; }
+    public static PersistedOperationsApiFactory Factory { get; private set; } = null!;
 
-    public static bool Skipped { get; private set; }
-
+    /// <summary>
+    /// Starts the host. An unreachable database fails the whole suite rather than skipping it: a
+    /// suite that reports green while testing nothing is the trap
+    /// <c>docs/adr/0001-a-sample-e2e-database-must-be-one-ci-provisions.md</c> exists to prevent.
+    /// </summary>
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
-        try
-        {
-            Factory = new PersistedOperationsApiFactory();
-            _ = Factory.Services;
-            await ClearAsync(Factory.Services);
-        }
-        catch (Exception ex)
-        {
-            Skipped = true;
-            await (Factory?.DisposeAsync().AsTask() ?? Task.CompletedTask);
-            Factory = null;
-            if (
-                ex is not Npgsql.NpgsqlException
-                && ex.InnerException is not Npgsql.NpgsqlException
-                && ex is not System.Net.Sockets.SocketException
-            )
-                throw;
-        }
+        Factory = new PersistedOperationsApiFactory();
+        _ = Factory.Services;
+        await ClearAsync(Factory.Services);
     }
 
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
-        if (Factory is null)
-            return;
         try
         {
             await ClearAsync(Factory.Services);

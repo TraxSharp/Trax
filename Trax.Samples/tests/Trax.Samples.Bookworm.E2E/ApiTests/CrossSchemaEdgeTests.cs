@@ -42,13 +42,9 @@ public class CrossSchemaEdgeTests : ApiTestFixture
     [Test]
     public async Task Loan_book_edge_ResolvesConsistentlyAcrossEveryLoan()
     {
-        // Borrow the second catalog book so more than one loan exists, then confirm every loan's
-        // cross-schema book resolves to a non-null catalog row (the batched loader keys correctly).
-        await GraphQL.PostAsync(
-            "mutation { dispatch { lending { borrowBook(input: { memberId: 1, bookId: 2 }) "
-                + "{ externalId } } } }",
-            ApiKeyDefaults.MemberKey
-        );
+        // Borrow another book so more than one loan exists, then confirm every loan's cross-schema
+        // book resolves to a non-null catalog row (the batched loader keys correctly).
+        await BorrowAsync(await NewBookAsync(), ApiKeyDefaults.MemberKey);
 
         var doc = await GraphQL.PostAsync(
             "{ discover { lending { loans { nodes { bookId book { id title } } } } } }",

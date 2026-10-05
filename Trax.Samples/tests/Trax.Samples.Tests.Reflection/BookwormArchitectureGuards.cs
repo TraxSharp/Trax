@@ -1,4 +1,6 @@
 using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using NUnit.Framework;
 using Trax.Api.GraphQL.DataLoaders.CrossSchema;
 using Trax.Api.GraphQL.Testing;
@@ -8,6 +10,7 @@ using Trax.Mediator.Testing;
 using Trax.Samples.Bookworm.Catalog.Context;
 using Trax.Samples.Bookworm.CrossSchema;
 using Trax.Samples.Bookworm.Lending.Context;
+using Trax.Samples.Bookworm.Lending.Models.Members;
 
 namespace Trax.Samples.Tests.Reflection;
 
@@ -33,6 +36,35 @@ public sealed class BookwormDataLayerGuards : DomainDataLayerGuardFixture
 
     protected override IReadOnlyList<Type> DomainContexts =>
         [typeof(CatalogDbContext), typeof(LendingDbContext)];
+
+    // The lending model, built offline (no database, no caller), for the owner-scope census.
+    protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
+    {
+        get
+        {
+            var options = new DbContextOptionsBuilder<LendingDbContext>()
+                .UseNpgsql("Host=localhost;Database=model_only")
+                .Options;
+            using var context = new LendingDbContext(options, NoLendingCaller.Instance);
+            return [context.Model];
+        }
+    }
+
+    protected override OwnerScopeCensusOptions OwnerScope =>
+        new()
+        {
+            OwnerType = typeof(Member),
+            PrincipalAccessorType = typeof(ILendingCaller),
+            FilterBypassAllowlist = new Dictionary<string, string>
+            {
+                [
+                    "samples/Bookworm/Trax.Samples.Bookworm/Trains/Lending/BorrowBook/Junctions/BorrowBookJunction.cs"
+                ] =
+                    "a book's availability depends on every member's open loans; the read returns a yes or no, no row",
+                ["samples/Bookworm/Trax.Samples.Bookworm.Api/Program.cs"] =
+                    "startup seeding runs with no caller, so it checks for existing members past the filter",
+            },
+        };
 }
 
 [TestFixture]

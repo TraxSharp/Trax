@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy.Junctions;
@@ -11,7 +11,7 @@ namespace Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy;
 /// then submits a sell order at the configured rate ($0.14/kWh).
 /// Up to 80% of battery capacity can be sold.
 /// </summary>
-[TraxAllowAnonymous]
+[TraxAuthorize(Roles = EnergyHubRoles.Operator)]
 [TraxMutation(
     GraphQLOperation.Queue,
     Description = "Submits a grid energy sell order via PTC UBOSS"

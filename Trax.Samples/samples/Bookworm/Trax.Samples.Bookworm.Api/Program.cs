@@ -1,30 +1,35 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Trax Bookworm — GraphQL API (flagship multi-schema sample)
+// Trax Bookworm: cross-schema GraphQL over two domain contexts
 //
-// Demonstrates the opinionated Trax data/service/train/auth stack:
 //   - Two domains, each its own project + PostgreSQL schema + DbContext (1:1:1):
 //       catalog  (books, authors)   lending (members, loans)
 //   - A cross-schema GraphQL edge: loan.book resolves a catalog Book from a lending
 //     Loan via a batched DataLoader living in the separate .CrossSchema project.
-//   - Shared base data context, shared API-key auth, folder-per-feature trains.
+//   - Owner-scoped lending data: a member reads only their own member row and
+//     loans, a librarian reads all of them, an anonymous caller reads none.
+//   - The architecture guards adopted as a consumer would
+//     (tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs).
 //
-// Auth (NO WARRANTY, demo keys only):
-//   Member key:    member-key-do-not-use-in-production    (role: Member)
-//   Librarian key: librarian-key-do-not-use-in-production (roles: Librarian, Member)
+// Auth (NO WARRANTY, demo keys, registered only in Development):
+//   member-key-do-not-use-in-production        member Ada Reader  (role Member)
+//   other-member-key-do-not-use-in-production  member Grace Hopper (role Member)
+//   librarian-key-do-not-use-in-production     a librarian         (role Librarian)
 //   Send as header  X-Api-Key: <key>
 //
-// Prerequisites:
-//   1. Start Postgres:  cd Trax.Samples && docker compose up -d
-//   2. Pack local:      ./pack-local.sh
-//   3. Run:             dotnet run --project samples/Bookworm/Trax.Samples.Bookworm.Api
+// Run:
+//   1. Postgres:  docker compose up -d        (from the Trax.Samples root)
+//   2. API:       dotnet run --project samples/Bookworm/Trax.Samples.Bookworm.Api
+//                 (Development, http://localhost:5250)
 //
 // Try the cross-schema edge (one batched catalog query resolves every loan.book):
-//   curl -H "X-Api-Key: member-key-do-not-use-in-production" \
-//        -X POST http://localhost:5210/trax/graphql -H "Content-Type: application/json" \
-//        -d '{"query":"{ lending { loans { nodes { id bookId book { title isbn } } } } }"}'
+//   curl -s http://localhost:5250/trax/graphql -H "Content-Type: application/json" \
+//        -H "X-Api-Key: member-key-do-not-use-in-production" \
+//        -d '{"query":"{ discover { lending { loans { nodes { id bookId book { title isbn } } } } } }"}'
+// More in samples/Bookworm/README.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using Microsoft.EntityFrameworkCore;
+using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
@@ -48,6 +53,7 @@ using Trax.Samples.Bookworm.Lending.Models.Members;
 using Trax.Samples.Bookworm.Services;
 using CrossSchemaMarker = Trax.Samples.Bookworm.CrossSchema.Extensions.BookwormCrossSchemaServiceCollectionExtensions;
 using SampleKeys = Trax.Samples.Bookworm.Auth.ApiKeyDefaults;
+using TraxApiKey = Trax.Api.Auth.ApiKey.ApiKeyDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,13 +70,13 @@ builder.Services.AddLogging(logging => logging.AddConsole());
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys =>
         keys.Add(SampleKeys.MemberKey, id: "member", BookwormRoles.Member)
-            .Add(
-                SampleKeys.LibrarianKey,
-                id: "librarian",
-                BookwormRoles.Librarian,
-                BookwormRoles.Member
-            )
+            .Add(SampleKeys.OtherMemberKey, id: "other-member", BookwormRoles.Member)
+            .Add(SampleKeys.LibrarianKey, id: "librarian", BookwormRoles.Librarian)
     );
+
+// TraxCaller, which the lending filters read through TraxLendingCaller, is registered by every
+// Trax auth scheme. Outside Development no scheme is registered above, so register it directly.
+builder.Services.AddTraxPrincipalAccessor();
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
@@ -84,7 +90,7 @@ builder.Services.AddTrax(trax =>
 
 // ── Domain data contexts (one per schema, via the shared registration) ───
 builder.Services.AddCatalogDataContext(connectionString);
-builder.Services.AddLendingDataContext(connectionString);
+builder.Services.AddLendingDataContext<TraxLendingCaller>(connectionString);
 
 // ── Lending services ─────────────────────────────────────────────────────
 builder.Services.AddSingleton<ILoanPolicy, LoanPolicy>();
@@ -148,10 +154,22 @@ static async Task SeedAsync(IServiceProvider services)
         await catalog.SaveChangesAsync();
     }
 
-    if (!await lending.Members.AnyAsync())
+    // Startup has no caller, so the owner filter would hide every member: seeding reads past it.
+    if (!await lending.Members.IgnoreQueryFilters().AnyAsync())
     {
-        var member = new Member { Name = "Ada Reader", Email = "ada@example.com" };
-        lending.Members.Add(member);
+        var member = new Member
+        {
+            Name = "Ada Reader",
+            Email = "ada@example.com",
+            PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "member"),
+        };
+        var otherMember = new Member
+        {
+            Name = "Grace Hopper",
+            Email = "grace@example.com",
+            PrincipalId = TraxPrincipalId.Qualify(TraxApiKey.SchemeName, "other-member"),
+        };
+        lending.Members.AddRange(member, otherMember);
         await lending.SaveChangesAsync();
 
         var firstBookId = await catalog.Books.OrderBy(b => b.Id).Select(b => b.Id).FirstAsync();

@@ -89,6 +89,13 @@ public class GraphQLWebSocketClient : IAsyncDisposable
         );
     }
 
+    /// <summary>
+    /// The next protocol message for a subscription, of any type (<c>next</c>, <c>error</c> or
+    /// <c>complete</c>), for tests that assert how a subscription was refused.
+    /// </summary>
+    public Task<JsonElement> ReceiveAnyAsync(TimeSpan? timeout = null) =>
+        ReceiveMessageAsync(timeout ?? TimeSpan.FromSeconds(10));
+
     public async Task<bool> TryReceiveNextAsync(TimeSpan timeout)
     {
         try
@@ -130,7 +137,10 @@ public class GraphQLWebSocketClient : IAsyncDisposable
             } while (!result.EndOfMessage);
 
             if (result.MessageType == WebSocketMessageType.Close)
-                throw new InvalidOperationException("WebSocket closed by server");
+                throw new WebSocketClosedException(
+                    result.CloseStatus,
+                    result.CloseStatusDescription
+                );
 
             ms.Position = 0;
             return JsonSerializer.Deserialize<JsonElement>(ms.ToArray(), JsonOptions);
@@ -163,4 +173,13 @@ public class GraphQLWebSocketClient : IAsyncDisposable
 
         _webSocket.Dispose();
     }
+}
+
+/// <summary>The server closed the socket; carries the close code and reason it sent.</summary>
+public sealed class WebSocketClosedException(WebSocketCloseStatus? status, string? description)
+    : InvalidOperationException($"WebSocket closed by server: {(int?)status} {description}")
+{
+    public WebSocketCloseStatus? Status { get; } = status;
+
+    public string? Description { get; } = description;
 }

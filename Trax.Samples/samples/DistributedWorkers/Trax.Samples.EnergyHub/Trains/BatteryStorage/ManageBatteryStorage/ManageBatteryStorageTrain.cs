@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage.Junctions;
@@ -10,7 +10,7 @@ namespace Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage;
 /// Depends on MonitorSolarProduction via ThenInclude — runs after
 /// solar data is collected to make informed charge decisions.
 /// </summary>
-[TraxAllowAnonymous]
+[TraxAuthorize(Roles = EnergyHubRoles.Operator)]
 [TraxMutation(
     GraphQLOperation.Queue,
     Namespace = "battery",

@@ -12,11 +12,17 @@ public class SharedHubSetup
 {
     public static EnergyHubFactory Factory { get; private set; } = null!;
 
+    public static EnergyWorkerFactory Worker { get; private set; } = null!;
+
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
     {
         Factory = new EnergyHubFactory();
         _ = Factory.Services;
+
+        // The hub migrates the database and seeds the manifests; start the worker after it.
+        Worker = new EnergyWorkerFactory();
+        _ = Worker.Services;
 
         await WaitForManifestsSeeded();
 
@@ -27,14 +33,18 @@ public class SharedHubSetup
     [OneTimeTearDown]
     public async Task OneTimeTearDown()
     {
+        // The broker may close a connection first during shutdown; that is safe to ignore.
+        try
+        {
+            await Worker.DisposeAsync();
+        }
+        catch (RabbitMQ.Client.Exceptions.AlreadyClosedException) { }
+
         try
         {
             await Factory.DisposeAsync();
         }
-        catch (RabbitMQ.Client.Exceptions.AlreadyClosedException)
-        {
-            // RabbitMQ connection may already be closed during shutdown — safe to ignore.
-        }
+        catch (RabbitMQ.Client.Exceptions.AlreadyClosedException) { }
 
         Npgsql.NpgsqlConnection.ClearAllPools();
     }

@@ -9,8 +9,10 @@ namespace Trax.Samples.Bookworm.Lending.Models.Loans;
 /// catalog domain (a different schema and context), so it is a plain integer here, never an EF
 /// navigation: the lending domain stays isolated from the catalog domain. The GraphQL <c>book</c>
 /// field that resolves the referenced book is added by the cross-schema edge project, not here.
+/// A member reads only their own loans and a librarian reads every loan: the gate is a bare
+/// <c>[TraxAuthorize]</c>, and <see cref="Context.LendingDbContext"/>'s query filter decides which rows.
 /// </summary>
-[TraxAllowAnonymous]
+[TraxAuthorize]
 [TraxQueryModel(Namespace = GraphQLNamespaces.Lending, Description = "Book loans")]
 [Table("loans")]
 public class Loan

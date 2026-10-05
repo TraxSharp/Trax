@@ -1,11 +1,16 @@
-using LanguageExt;
 using Microsoft.Extensions.Logging;
-using Trax.Core.Junction;
+using Trax.Core.Functional;
+using Trax.Effect.Services.EffectJunction;
 
 namespace Trax.Samples.Scheduler.Trains.HelloWorld.Junctions;
 
+/// <summary>
+/// EffectJunction rather than Junction: junction effect providers such as AddJunctionProgress
+/// (the running junction, cancellation between junctions) only see EffectJunction. Plain
+/// Junction&lt;TIn, TOut&gt; works when no provider needs to.
+/// </summary>
 public class LogGreetingJunction(ILogger<LogGreetingJunction> logger)
-    : Junction<HelloWorldInput, Unit>
+    : EffectJunction<HelloWorldInput, Unit>
 {
     public override async Task<Unit> Run(HelloWorldInput input)
     {

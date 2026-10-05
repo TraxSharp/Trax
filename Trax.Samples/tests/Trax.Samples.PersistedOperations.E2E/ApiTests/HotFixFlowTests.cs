@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
@@ -147,7 +147,7 @@ public class HotFixFlowTests : ApiTestBase
             new { id = "lifecycle_v1", variables = new { input = new { name = "X" } } }
         );
         var body = await resp.Content.ReadAsStringAsync();
-        body.Should().Contain("errors");
+        GraphQLErrors.FirstCode(body).Should().Be(GraphQLErrors.UnknownPersistedOperation, body);
 
         await Store.RestoreAsync("lifecycle_v1", null, CancellationToken.None);
 

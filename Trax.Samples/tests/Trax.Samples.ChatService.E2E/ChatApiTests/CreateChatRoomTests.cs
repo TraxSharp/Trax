@@ -15,7 +15,7 @@ public class CreateChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "General", userId: "alice", displayName: "Alice" }
+                        input: { name: "General" }
                     ) {
                         externalId
                         output {
@@ -50,7 +50,7 @@ public class CreateChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Dev Chat", userId: "alice", displayName: "Alice" }
+                        input: { name: "Dev Chat" }
                     ) {
                         output { chatRoomId }
                     }
@@ -73,7 +73,7 @@ public class CreateChatRoomTests : ChatApiTestFixture
             .FirstOrDefaultAsync(r => r.Id == chatRoomId);
         room.Should().NotBeNull();
         room!.Name.Should().Be("Dev Chat");
-        room.CreatedByUserId.Should().Be("alice");
+        room.CreatedByUserId.Should().Be("TraxApiKey:alice");
     }
 
     [Test]
@@ -84,7 +84,7 @@ public class CreateChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Team", userId: "alice", displayName: "Alice" }
+                        input: { name: "Team" }
                     ) {
                         output { chatRoomId }
                     }
@@ -104,7 +104,7 @@ public class CreateChatRoomTests : ChatApiTestFixture
 
         var participant = await ChatDb
             .ChatParticipants.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.ChatRoomId == chatRoomId && p.UserId == "alice");
+            .FirstOrDefaultAsync(p => p.ChatRoomId == chatRoomId && p.UserId == "TraxApiKey:alice");
 
         participant.Should().NotBeNull();
         participant!.DisplayName.Should().Be("Alice");
@@ -118,7 +118,7 @@ public class CreateChatRoomTests : ChatApiTestFixture
             mutation {
                 dispatch {
                     createChatRoom(
-                        input: { name: "Metadata Test", userId: "alice", displayName: "Alice" }
+                        input: { name: "Metadata Test" }
                     ) {
                         externalId
                     }

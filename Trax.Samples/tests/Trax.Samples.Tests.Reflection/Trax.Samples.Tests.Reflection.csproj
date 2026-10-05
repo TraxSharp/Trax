@@ -21,7 +21,7 @@
     <PackageReference Include="Trax.Effect.Data.Testing" />
     <PackageReference Include="Trax.Api.GraphQL.Testing" />
     <PackageReference Include="Trax.Mediator.Testing" />
-    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />

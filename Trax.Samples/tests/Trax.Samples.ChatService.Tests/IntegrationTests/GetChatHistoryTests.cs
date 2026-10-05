@@ -1,5 +1,5 @@
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
+using AwesomeAssertions;
+using Trax.Core.Exceptions;
 using Trax.Samples.ChatService.Data;
 using Trax.Samples.ChatService.Data.Entities;
 using Trax.Samples.ChatService.Tests.Fixtures;
@@ -11,7 +11,7 @@ namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 [TestFixture]
 public class GetChatHistoryTests
 {
-    #region FetchMessagesJunction
+    private static readonly DateTime BaseTime = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
     [Test]
     public async Task FetchMessages_ReturnsMessagesInChronologicalOrder()
@@ -19,70 +19,69 @@ public class GetChatHistoryTests
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 5);
 
-        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
-        var input = new GetChatHistoryInput { ChatRoomId = roomId, Take = 50 };
-
-        var result = await junction.Run(input);
+        var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId });
 
         result.Messages.Should().HaveCount(5);
         result.Messages.Should().BeInAscendingOrder(m => m.SentAt);
     }
 
     [Test]
-    public async Task FetchMessages_RespectsPageSize()
+    public async Task FetchMessages_RespectsTake()
     {
         using var db = ChatDbContextFixture.Create();
         var roomId = await SeedRoomWithMessages(db, 10);
 
-        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
-        var input = new GetChatHistoryInput { ChatRoomId = roomId, Take = 3 };
-
-        var result = await junction.Run(input);
+        var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId, Take = 3 });
 
         result.Messages.Should().HaveCount(3);
+    }
+
+    [Test]
+    public async Task FetchMessages_DefaultsTake_WhenOmitted()
+    {
+        using var db = ChatDbContextFixture.Create();
+        var roomId = await SeedRoomWithMessages(db, GetChatHistoryInput.DefaultTake + 5);
+
+        var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId });
+
+        result.Messages.Should().HaveCount(GetChatHistoryInput.DefaultTake);
+    }
+
+    [Test]
+    public async Task FetchMessages_ClampsTakeToTheMaximum()
+    {
+        using var db = ChatDbContextFixture.Create();
+        var roomId = await SeedRoomWithMessages(db, GetChatHistoryInput.MaxTake + 5);
+
+        var result = await Fetch(
+            db,
+            new GetChatHistoryInput { ChatRoomId = roomId, Take = 100_000 }
+        );
+
+        result.Messages.Should().HaveCount(GetChatHistoryInput.MaxTake);
     }
 
     [Test]
     public async Task FetchMessages_BeforeFilter_ReturnsOlderMessages()
     {
         using var db = ChatDbContextFixture.Create();
-        var baseTime = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-        var roomId = await SeedRoomWithTimedMessages(db, baseTime, 5);
+        var roomId = await SeedRoomWithMessages(db, 5);
 
-        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
-        var input = new GetChatHistoryInput
-        {
-            ChatRoomId = roomId,
-            Take = 50,
-            Before = baseTime.AddMinutes(3),
-        };
-
-        var result = await junction.Run(input);
+        var result = await Fetch(
+            db,
+            new GetChatHistoryInput { ChatRoomId = roomId, Before = BaseTime.AddMinutes(3) }
+        );
 
         result.Messages.Should().HaveCount(3);
-        result
-            .Messages.Should()
-            .AllSatisfy(m => m.SentAt.Should().BeBefore(baseTime.AddMinutes(3)));
     }
 
     [Test]
     public async Task FetchMessages_EmptyRoom_ReturnsEmpty()
     {
         using var db = ChatDbContextFixture.Create();
-        var room = new ChatRoom
-        {
-            Id = Guid.NewGuid(),
-            Name = "Empty",
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = "alice",
-        };
-        db.ChatRooms.Add(room);
-        await db.SaveChangesAsync();
+        var roomId = await SeedRoomWithMessages(db, 0);
 
-        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
-        var input = new GetChatHistoryInput { ChatRoomId = room.Id, Take = 50 };
-
-        var result = await junction.Run(input);
+        var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomId });
 
         result.Messages.Should().BeEmpty();
     }
@@ -91,60 +90,45 @@ public class GetChatHistoryTests
     public async Task FetchMessages_DifferentRoom_DoesNotCrossContaminate()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId1 = await SeedRoomWithMessages(db, 3);
-        var roomId2 = await SeedRoomWithMessages(db, 5);
+        var roomA = await SeedRoomWithMessages(db, 3);
+        await SeedRoomWithMessages(db, 4);
 
-        var junction = new FetchMessagesJunction(db, NullLogger<FetchMessagesJunction>.Instance);
-        var input = new GetChatHistoryInput { ChatRoomId = roomId1, Take = 50 };
-
-        var result = await junction.Run(input);
+        var result = await Fetch(db, new GetChatHistoryInput { ChatRoomId = roomA });
 
         result.Messages.Should().HaveCount(3);
     }
 
-    #endregion
+    [Test]
+    public async Task FetchMessages_CallerNotParticipant_Throws()
+    {
+        using var db = ChatDbContextFixture.Create();
+        var roomId = await SeedRoomWithMessages(db, 2);
+        var junction = new FetchMessagesJunction(db, ChatUsers.Bob);
 
-    #region Helpers
+        var act = () => junction.Run(new GetChatHistoryInput { ChatRoomId = roomId });
+
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*not a participant*");
+    }
+
+    private static Task<GetChatHistoryOutput> Fetch(ChatDbContext db, GetChatHistoryInput input) =>
+        new FetchMessagesJunction(db, ChatUsers.Alice).Run(input);
 
     private static async Task<Guid> SeedRoomWithMessages(ChatDbContext db, int count)
     {
-        var baseTime = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-        return await SeedRoomWithTimedMessages(db, baseTime, count);
-    }
-
-    private static async Task<Guid> SeedRoomWithTimedMessages(
-        ChatDbContext db,
-        DateTime baseTime,
-        int count
-    )
-    {
-        var room = new ChatRoom
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Room",
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = "alice",
-        };
-        db.ChatRooms.Add(room);
-
+        var roomId = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
         for (var i = 0; i < count; i++)
-        {
             db.ChatMessages.Add(
                 new ChatMessage
                 {
                     Id = Guid.NewGuid(),
-                    ChatRoomId = room.Id,
-                    SenderUserId = "alice",
+                    ChatRoomId = roomId,
+                    SenderUserId = ChatUsers.Alice.Id,
                     SenderDisplayName = "Alice",
                     Content = $"Message {i}",
-                    SentAt = baseTime.AddMinutes(i),
+                    SentAt = BaseTime.AddMinutes(i),
                 }
             );
-        }
-
         await db.SaveChangesAsync();
-        return room.Id;
+        return roomId;
     }
-
-    #endregion
 }

@@ -1,7 +1,4 @@
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Trax.Samples.ChatService.Data;
-using Trax.Samples.ChatService.Data.Entities;
+using AwesomeAssertions;
 using Trax.Samples.ChatService.Tests.Fixtures;
 using Trax.Samples.ChatService.Trains.GetChatRooms;
 using Trax.Samples.ChatService.Trains.GetChatRooms.Junctions;
@@ -11,49 +8,27 @@ namespace Trax.Samples.ChatService.Tests.IntegrationTests;
 [TestFixture]
 public class GetChatRoomsTests
 {
-    #region FetchRoomsJunction
-
     [Test]
-    public async Task FetchRooms_ReturnsOnlyRoomsUserIsIn()
+    public async Task FetchRooms_ReturnsOnlyTheCallersRooms()
     {
         using var db = ChatDbContextFixture.Create();
-        var aliceRoomId = await SeedRoomWithParticipant(db, "alice", "Room A");
-        await SeedRoomWithParticipant(db, "bob", "Room B");
+        var mine = await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice);
+        await ChatUsers.SeedRoomAsync(db, ChatUsers.Bob);
 
-        var junction = new FetchRoomsJunction(db, NullLogger<FetchRoomsJunction>.Instance);
-        var input = new GetChatRoomsInput { UserId = "alice" };
+        var result = await new FetchRoomsJunction(db, ChatUsers.Alice).Run(new GetChatRoomsInput());
 
-        var result = await junction.Run(input);
-
-        result.Rooms.Should().ContainSingle();
-        result.Rooms[0].Id.Should().Be(aliceRoomId);
-        result.Rooms[0].Name.Should().Be("Room A");
+        result.Rooms.Select(r => r.Id).Should().Equal(mine);
     }
 
     [Test]
     public async Task FetchRooms_IncludesParticipantCount()
     {
         using var db = ChatDbContextFixture.Create();
-        var roomId = await SeedRoomWithParticipant(db, "alice", "Room A");
-        db.ChatParticipants.Add(
-            new ChatParticipant
-            {
-                Id = Guid.NewGuid(),
-                ChatRoomId = roomId,
-                UserId = "bob",
-                DisplayName = "Bob",
-                JoinedAt = DateTime.UtcNow,
-            }
-        );
-        await db.SaveChangesAsync();
+        await ChatUsers.SeedRoomAsync(db, ChatUsers.Alice, ChatUsers.Bob);
 
-        var junction = new FetchRoomsJunction(db, NullLogger<FetchRoomsJunction>.Instance);
-        var input = new GetChatRoomsInput { UserId = "alice" };
+        var result = await new FetchRoomsJunction(db, ChatUsers.Alice).Run(new GetChatRoomsInput());
 
-        var result = await junction.Run(input);
-
-        result.Rooms.Should().ContainSingle();
-        result.Rooms[0].ParticipantCount.Should().Be(2);
+        result.Rooms.Should().ContainSingle().Which.ParticipantCount.Should().Be(2);
     }
 
     [Test]
@@ -61,47 +36,8 @@ public class GetChatRoomsTests
     {
         using var db = ChatDbContextFixture.Create();
 
-        var junction = new FetchRoomsJunction(db, NullLogger<FetchRoomsJunction>.Instance);
-        var input = new GetChatRoomsInput { UserId = "nobody" };
-
-        var result = await junction.Run(input);
+        var result = await new FetchRoomsJunction(db, ChatUsers.Alice).Run(new GetChatRoomsInput());
 
         result.Rooms.Should().BeEmpty();
     }
-
-    #endregion
-
-    #region Helpers
-
-    private static async Task<Guid> SeedRoomWithParticipant(
-        ChatDbContext db,
-        string userId,
-        string roomName
-    )
-    {
-        var room = new ChatRoom
-        {
-            Id = Guid.NewGuid(),
-            Name = roomName,
-            CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = userId,
-        };
-        db.ChatRooms.Add(room);
-
-        db.ChatParticipants.Add(
-            new ChatParticipant
-            {
-                Id = Guid.NewGuid(),
-                ChatRoomId = room.Id,
-                UserId = userId,
-                DisplayName = userId,
-                JoinedAt = DateTime.UtcNow,
-            }
-        );
-
-        await db.SaveChangesAsync();
-        return room.Id;
-    }
-
-    #endregion
 }

@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Samples.Scheduler.Trains.HelloWorld.Junctions;
 

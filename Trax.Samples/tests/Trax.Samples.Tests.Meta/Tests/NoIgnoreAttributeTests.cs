@@ -17,12 +17,7 @@ public class NoIgnoreAttributeTests
     /// <summary>
     /// Files where [Ignore] is explicitly accepted. Each entry must justify why.
     /// </summary>
-    private static readonly HashSet<string> KnownExceptions = new(StringComparer.Ordinal)
-    {
-        // GameServer group-fair-batching tests depend on Trax.Scheduler#44 which is not yet
-        // merged. The placeholder tests are intentionally [Ignore]'d until the feature lands.
-        "tests/Trax.Samples.GameServer.E2E/SchedulerTests/GroupFairBatchingE2ETests.cs",
-    };
+    private static readonly HashSet<string> KnownExceptions = new(StringComparer.Ordinal) { };
 
     [Test]
     public void TestSources_DoNotUse_IgnoreAttribute()

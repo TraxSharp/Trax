@@ -1,5 +1,5 @@
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
@@ -52,7 +52,7 @@ public class EnforcementTests : ApiTestBase
             new { id = "nonexistent_v1", variables = new { input = new { name = "X" } } }
         );
         var body = await resp.Content.ReadAsStringAsync();
-        body.Should().Contain("errors");
+        GraphQLErrors.FirstCode(body).Should().Be(GraphQLErrors.UnknownPersistedOperation, body);
     }
 
     [Test]
@@ -70,5 +70,8 @@ public class EnforcementTests : ApiTestBase
             }
         );
         ((int)resp.StatusCode).Should().Be(200);
+        (await resp.Content.ReadAsStringAsync())
+            .Should()
+            .Contain("Hello, Dev.", "the inline document ran");
     }
 }

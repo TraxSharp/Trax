@@ -1,35 +1,24 @@
 // ---------------------------------------------------------------------------
-// Trax Hub (API + Scheduler + Dashboard)
+// Trax Hub: GraphQL API + Scheduler + Dashboard in one process
 //
-// A single process that serves a GraphQL API, runs scheduled trains, and
-// hosts the Trax Dashboard. Uses an in-memory data provider by default so
-// you can run it immediately without any external dependencies.
+// Runs with no database: the in-memory provider keeps every run in this process
+// and loses it on restart. README.md says how to switch to Postgres, add a
+// train and run the tests; https://traxsharp.net/docs/reference/templates
+// describes every file.
 //
-// To switch providers, replace UseInMemory() with UseSqlite(connectionString) or
-// UsePostgres(connectionString) and add the corresponding Trax.Effect.Data package.
-//
-// Try it:
+// Try it (Development, which `dotnet run` starts through launchSettings.json):
 //   dotnet run
-//   Open http://localhost:5000/trax/graphql for the GraphQL IDE
-//   Open http://localhost:5000/trax for the Dashboard (Development only)
+//   http://localhost:5400/trax/graphql   the GraphQL IDE
+//   http://localhost:5400/trax           the dashboard
+//   http://localhost:5400/trax/health    the health check
 //
-//   Every operation needs the demo key: send the header X-Api-Key: demo-key-do-not-use-in-production
+//   Send the header X-Api-Key: demo-key-do-not-use-in-production with every operation:
+//     query    { discover { lookup(input: { id: "42" }) { id name createdAt } } }
+//     mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }
 //
-//   # Query a train directly
-//   query { discover { lookup(input: { id: "42" }) { id name createdAt } } }
-//
-//   # Run a mutation
-//   mutation { dispatch { helloWorld(input: { name: "Trax" }) { externalId metadataId } } }
-//
-//   # Health check
-//   curl http://localhost:5000/trax/health
-//
-// Third-party packages used by this project (via Trax dependencies):
-//   HotChocolate    — GraphQL server (MIT, https://github.com/ChilliCream/graphql-platform)
-//   Radzen.Blazor   — Dashboard UI components (MIT, https://github.com/radzenhq/radzen-blazor)
-//   LanguageExt     — Functional programming primitives (MIT, https://github.com/louthy/language-ext)
-//   Cronos          — Cron expression parser (MIT, https://github.com/HangfireIO/Cronos)
-//   EF Core InMemory — In-memory database provider (MIT, https://github.com/dotnet/efcore)
+// Outside Development there is no demo key and no dashboard, so every operation is
+// refused and /trax is a 404 until you add real credentials. See "Before deploying" in
+// README.md.
 // ---------------------------------------------------------------------------
 
 using Microsoft.EntityFrameworkCore;
@@ -40,7 +29,6 @@ using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
-using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Hub.Auth;
@@ -51,22 +39,37 @@ using Trax.Scheduler.Services.Scheduling;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddLogging(logging => logging.AddConsole());
-
-// -- Authentication (NO WARRANTY, demo key only) -----------------------------
-// Send the key as the X-Api-Key header. Every train and query model in this template carries
-// [TraxAuthorize(Roles = "User")], and the demo key holds that role. The demo key is registered
-// only in Development, where `dotnet run` starts (see Properties/launchSettings.json). Anywhere
-// else there is no credential until you register real ones, so every operation is refused.
-// Mark an operation [TraxAllowAnonymous] only when anyone on the internet may call it.
+// -- 1. Authentication and authorization --------------------------------------
+// Every train and query model in this project carries [TraxAuthorize(Roles = "User")], so
+// a caller needs a credential holding the User role. The demo key holds it, and it exists
+// only in Development: Trax.Api refuses to start a host outside Development with a key
+// containing "do-not-use-in-production" registered. Anywhere else, register real
+// credentials (AddHashed keys from a secret store, or AddTraxJwtAuth) before removing the
+// IsDevelopment() check: https://traxsharp.net/docs/api-security.
+// AddAuthentication() stays outside the check. AddTraxApiKeyAuth registers authentication
+// itself, so without this line a start outside Development fails in UseAuthentication()
+// with "Unable to resolve service for type IAuthenticationSchemeProvider". AddAuthorization()
+// is where your own policies go: AddAuthorization(o => o.AddPolicy(...)).
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys => keys.Add(DemoKeys.DemoKey, id: "demo", "User"));
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
-// -- Trax Effect + Mediator + Scheduler --------------------------------------
+// -- 2. Trax: the effect system, the mediator and the scheduler -----------------
+// AddTrax comes before AddTraxGraphQL and AddTraxDashboard, which throw without it.
+//   UseInMemory()          where runs are recorded. Swap for UsePostgres(connectionString)
+//                          (package Trax.Effect.Data.Postgres) to keep them across restarts
+//                          and share them between processes.
+//   SaveTrainParameters()  stores each run's input and output, which the dashboard shows.
+//   AddJunctionProgress()  records the running junction and lets the dashboard cancel a run
+//                          between junctions.
+//   AddMediator(...)       registers every train in the assemblies named, under its
+//                          interface. A train in an assembly not named here does not exist:
+//                          its GraphQL field is missing and Schedule<T> refuses to start.
+//   AddScheduler(...)      runs manifests. The dashboard needs it: UseTraxDashboard() refuses
+//                          to start without it.
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UseInMemory())
+    trax.AddEffects(effects => effects.UseInMemory().SaveTrainParameters().AddJunctionProgress())
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler =>
             scheduler.Schedule<IHelloWorldTrain>(
@@ -77,28 +80,38 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// -- Application data context (one project : one schema : one context) -------
-// Swap UseInMemoryDatabase for UseNpgsql(connectionString) (and add Trax.Effect.Data.Postgres)
-// to get real schema isolation.
+// -- 3. Your application's own data -------------------------------------------
+// A plain EF Core context, separate from Trax's own tables. Swap UseInMemoryDatabase for
+// UseNpgsql(connectionString) (package Npgsql.EntityFrameworkCore.PostgreSQL) to store it in
+// Postgres under its own schema (Data/AppSchema.cs).
 builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseInMemoryDatabase("app"));
 builder.Services.AddScoped<IAppDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext()
 );
 
-// -- Dashboard ---------------------------------------------------------------
-// The dashboard can queue, run and cancel trains and change scheduler settings, and this
-// template puts no authorization in front of it, so it is served only in Development. Gate it
-// before serving it anywhere else: see https://traxsharp.net/docs/dashboard.
-if (builder.Environment.IsDevelopment())
-    builder.AddTraxDashboard();
-
-// -- GraphQL API -------------------------------------------------------------
+// -- 4. GraphQL -----------------------------------------------------------------
+// Builds the schema from the trains AddMediator registered: [TraxQuery] trains under
+// query { discover }, [TraxMutation] trains under mutation { dispatch }, and the
+// [TraxQueryModel] entities of AppDbContext under query { discover { app } }. It refuses to
+// start when an exposed train or query model carries neither [TraxAuthorize] nor
+// [TraxAllowAnonymous], and when the schema would have no query at all.
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
+// -- 5. Dashboard (Development only) ------------------------------------------
+// The dashboard can queue, run and cancel trains and change scheduler settings.
+// UseTraxDashboard() refuses to start until AddTraxDashboard says who may use it.
+// AllowAnonymousDashboard() lets anyone who can reach the port use it, so it is declared
+// only here, and the dashboard is not served outside Development. To serve it elsewhere,
+// choose RequirePolicy("<policy>") or RequireRoles("<role>") instead and drop the
+// IsDevelopment() checks: https://traxsharp.net/docs/dashboard.
+if (builder.Environment.IsDevelopment())
+    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
+
 var app = builder.Build();
 
-// -- Ensure the application tables exist (demo bootstrap) --------------------
+// -- Create the application tables (demo bootstrap) ----------------------------
+// Fine for the in-memory database. With Postgres, use EF Core migrations instead.
 using (var scope = app.Services.CreateScope())
 {
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
@@ -106,7 +119,7 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
 }
 
-// -- Map endpoints -----------------------------------------------------------
+// -- Middleware and endpoints ------------------------------------------------
 app.UseAuthentication();
 app.UseAuthorization();
 if (app.Environment.IsDevelopment())

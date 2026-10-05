@@ -6,17 +6,21 @@ and machine-specific UI on top.
 
 | File | Role |
 |---|---|
-| `src/traxTransport.ts` | Machine-agnostic GraphQL client for `save` / `advance` / `load` / `send` (+ `listMachines`). Knows no machine. |
-| `src/useMachine.ts` | Hook that resumes a draft on mount, drives it, and re-renders on every change including a rejection. |
-| `src/App.tsx` | The UI: a user switcher, a turnstile widget, a checkout wizard, and a live snapshot panel. |
+| `src/traxTransport.ts` | Machine-agnostic GraphQL client for `save` / `advance` / `load` / `send` (+ `listMachines`, `listCharges`). Knows no machine. |
+| `src/useMachine.ts` | Hook that resumes a draft on mount, drives it, re-renders on every change including a rejection, and remembers the last request for the walkthrough. |
+| `src/machines.ts` | How the page describes the two machines: states, the rule each must hold, moves, guards and the effect. Display only; the server decides. |
+| `src/App.tsx` | The page: the sidebar, one tab per machine, the triggers and the draft editor. |
+| `src/Diagram.tsx` | A machine's states and moves: the current state glows, the moves out of it are marked, and the last move lights up. |
+| `src/Walkthrough.tsx` | **What the server just did**: the server's checks for the last request, in order, and where it stopped. |
+| `src/SideEffect.tsx` | **Side effect: the charge**: the binding, the request the page sends to pay, and the payment provider's charges. |
+| `src/Inspector.tsx`, `src/inspectorLog.ts` | **Show the raw requests**: every GraphQL request the page sends and what came back. |
 
 ## Run it
 
-Start the backend first (it must be on `http://localhost:5220`, which this app expects):
+Start the backend first (it must be on `http://localhost:5280`, which this app expects):
 
 ```bash
 cd Trax.Samples && docker compose up -d
-./pack-local.sh
 dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api
 ```
 
@@ -32,8 +36,12 @@ Open http://localhost:5173.
 
 ## What to try
 
-- **Turnstile**: insert a coin, then push. Push while locked is rejected and the reason shows in the panel.
-- **Checkout**: add items, go to Review, then Pay. The state advances to Paid with a receipt. Hit
-  **Charge again** and the same receipt comes back, no second charge, which is the exactly-once effect.
-- **Switch user** (Alice / Bob): each user sees their own draft for the same instance id, because the server
-  scopes drafts to the caller.
+- **A simple machine (turnstile)**: fire **Coin** with a quarter, then **Push**. Fire **Push** while Locked and the
+  server answers `no-transition`: there is no Push arrow out of Locked. A penny is refused by the Coin move's guard
+  (`guard-failed`). The walkthrough shows each check and where the server stopped.
+- **A machine with an effect (checkout)**: save two items, fire **Next**, then **Pay**. The walkthrough shows the page
+  sent only the draft's id, and the payment provider lists one charge for the server's total. Press **Pay** again: the
+  same receipt comes back and the provider still lists one charge.
+- **Save with a $0.01 total**: the page writes the whole draft, but the server refuses a total that disagrees with the
+  items (`invalid-context`), so the charge always takes the server's total.
+- **Switch user** (Alice / Bob): each user has their own draft of each machine, and their own charges.

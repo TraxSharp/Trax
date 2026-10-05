@@ -25,19 +25,19 @@ builder.Services.AddRouting();
 var app = builder.Build();
 app.MapGraphQL("/graphql");
 
-var port = 5099;
-app.Urls.Add($"http://localhost:{port}");
+// 5312: the GraphQLClient sample's range is 5310-5319 (the Gateway's servers take 5310 and 5311).
+const string url = "http://localhost:5312";
+app.Urls.Add(url);
 
-_ = app.RunAsync();
-
-await Task.Delay(500);
+// StartAsync returns once Kestrel is listening, so the client below never races the server.
+await app.StartAsync();
 
 // Now build a client pointed at our own /graphql endpoint. AssemblySchemaProvider uses
 // the same PlayerSchemaConfiguration.Configure delegate the server runs, so the client
 // validates queries against the exact schema the server will execute.
 var clientServices = new ServiceCollection();
 clientServices
-    .AddTraxGraphQLClient(new Uri($"http://localhost:{port}/graphql"))
+    .AddTraxGraphQLClient(new Uri($"{url}/graphql"))
     .UseAssemblySchema(PlayerSchemaConfiguration.Configure);
 
 // Sample uses a separate DI container for the client to keep the example self-contained;
@@ -82,7 +82,12 @@ Console.WriteLine($"  A == E (raw vs resource) : {aeMatch}");
 Console.WriteLine($"  A ~ D (raw vs typed)     : {adMatch}");
 
 await app.StopAsync();
-return 0;
+
+// The point of the sample is that the modes agree, so a disagreement fails the run.
+if (aeMatch && adMatch)
+    return 0;
+Console.Error.WriteLine("The modes returned different players.");
+return 1;
 
 static void Print(string label, PlayerProfile p) =>
     Console.WriteLine(

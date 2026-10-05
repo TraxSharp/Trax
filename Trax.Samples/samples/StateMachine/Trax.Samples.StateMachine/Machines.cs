@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,7 @@ using Trax.Effect.StateMachine.Persistence;
 namespace Trax.Samples.StateMachine;
 
 // Two worked-example machines, authored with the fluent API. A host discovers them with one line
-// (AddStateMachines) and drives them through the four generic `stateMachine` GraphQL mutations. The
+// (trax.AddStateMachines(...) in the AddTrax chain) and drives them through the four generic `stateMachine` GraphQL mutations. The
 // turnstile is the pure-structure proof (no effect); the checkout is the effectful proof (a committed state
 // and one irreversible charge, fired exactly once).
 
@@ -80,18 +81,33 @@ public enum CheckoutTrigger
 /// <summary>The irreversible effect on <c>Pay</c>: charge the order. Bound inline via <c>RunsOnce&lt;ICharge&gt;</c>.</summary>
 public interface ICharge : ISnapshotEffect { }
 
-/// <summary>A demo charge that logs and returns a receipt. A real host swaps in a payment gateway.</summary>
-public sealed class LoggingCharge(ILogger<LoggingCharge> logger) : ICharge
+/// <summary>
+/// The charge: it takes the payment from the <see cref="SimulatedPaymentProvider"/> for
+/// <see cref="CheckoutMachine.AmountCents"/> of the snapshot it is handed, which is the server's stored copy,
+/// whose total the machine has already checked against the items. A real host swaps in a payment gateway.
+/// The machine runs it on <c>Pay</c>, exactly once; nothing else calls it.
+/// </summary>
+public sealed class LoggingCharge(
+    SimulatedPaymentProvider provider,
+    ISnapshotPrincipal principal,
+    ILogger<LoggingCharge> logger
+) : ICharge
 {
     public Task<string> Run(Snapshot snapshot, CancellationToken cancellationToken = default)
     {
-        var receipt = $"rcpt_{Guid.NewGuid():N}";
+        // A send is refused before its effect runs when the request carries no user, so there is one here.
+        var customer =
+            principal.CurrentUserKey
+            ?? throw new InvalidOperationException("A charge needs the customer it is for.");
+        var items = snapshot.Context["items"] is JsonArray a ? a.Count : 0;
+        var charge = provider.Charge(customer, CheckoutMachine.AmountCents(snapshot), items);
         logger.LogInformation(
-            "Charged checkout {State} -> receipt {Receipt}",
+            "Charged {AmountCents} cents for checkout {State} -> receipt {Receipt}",
+            charge.AmountCents,
             snapshot.State,
-            receipt
+            charge.Receipt
         );
-        return Task.FromResult(receipt);
+        return Task.FromResult(charge.Receipt);
     }
 }
 
@@ -104,19 +120,32 @@ public sealed class LoggingCharge(ILogger<LoggingCharge> logger) : ICharge
 /// a number, which makes the forward migration load-bearing: a stored v1 draft (no <c>total</c>) would fail
 /// v2 validation, so <see cref="Configure"/> registers a <c>MigrateFrom(1)</c> that backfills it from the
 /// item count on rehydrate. That is the schema-evolution path a real persisted flow needs.</para>
+///
+/// <para><b>The server owns the total.</b> The client writes the whole snapshot when it autosaves, total
+/// included, and <c>total</c> is the amount a real <see cref="ICharge"/> would take. So every state holds
+/// <c>total == items.Count * 999</c>: a draft that says two items cost one cent is refused like any other
+/// invalid draft, and the charge can trust the total it reads.</para>
 /// </summary>
 public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 {
     // Demo unit price in cents; the real total would come from a catalog. Kept integer so the canonical wire
     // stays exact and readable.
-    private const int UnitPriceCents = 999;
+    public const int UnitPriceCents = 999;
+
+    /// <summary>The amount to charge for a checkout snapshot, in cents.</summary>
+    public static long AmountCents(Snapshot snapshot) =>
+        long.Parse(snapshot.Context["total"]!.ToJsonString(), CultureInfo.InvariantCulture);
 
     private static int ItemsCount(JsonObject ctx) => ctx["items"] is JsonArray a ? a.Count : 0;
 
     private static bool ItemsIsArray(JsonObject ctx) => ctx["items"] is JsonArray;
 
-    private static bool TotalIsNumber(JsonObject ctx) =>
-        ctx["total"]?.GetValueKind() == JsonValueKind.Number;
+    // The total must be the server's price for the items, not whatever the client wrote.
+    private static bool TotalMatchesItems(JsonObject ctx) =>
+        ctx["total"] is JsonValue total
+        && total.GetValueKind() == JsonValueKind.Number
+        && total.ToJsonString()
+            == ((long)ItemsCount(ctx) * UnitPriceCents).ToString(CultureInfo.InvariantCulture);
 
     private static bool ReceiptEmpty(JsonObject ctx) =>
         ctx["receipt"] is null || ctx["receipt"]!.GetValueKind() == JsonValueKind.Null;
@@ -156,18 +185,18 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
 
         m.In(CheckoutState.Cart)
             .Holds(ctx =>
-                ItemsIsArray(ctx) && ReceiptEmpty(ctx) && TotalIsNumber(ctx)
+                ItemsIsArray(ctx) && ReceiptEmpty(ctx) && TotalMatchesItems(ctx)
                     ? null
-                    : "Cart: items[], no receipt, numeric total."
+                    : "Cart: items[], no receipt, total = 999 cents per item."
             )
             .On(CheckoutTrigger.Next)
             .To(CheckoutState.Review);
 
         m.In(CheckoutState.Review)
             .Holds(ctx =>
-                ItemsCount(ctx) > 0 && ReceiptEmpty(ctx) && TotalIsNumber(ctx)
+                ItemsCount(ctx) > 0 && ReceiptEmpty(ctx) && TotalMatchesItems(ctx)
                     ? null
-                    : "Review: non-empty items, no receipt, numeric total."
+                    : "Review: non-empty items, no receipt, total = 999 cents per item."
             )
             .On(CheckoutTrigger.Back)
             .To(CheckoutState.Cart)
@@ -188,9 +217,9 @@ public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger>
         m.In(CheckoutState.Paid)
             .Committed()
             .Holds(ctx =>
-                ItemsCount(ctx) > 0 && ReceiptPresent(ctx) && TotalIsNumber(ctx)
+                ItemsCount(ctx) > 0 && ReceiptPresent(ctx) && TotalMatchesItems(ctx)
                     ? null
-                    : "Paid: non-empty items, a receipt, numeric total."
+                    : "Paid: non-empty items, a receipt, total = 999 cents per item."
             )
             .On(CheckoutTrigger.Reset)
             .Reduce((_, _) => Fresh())
