@@ -105,19 +105,40 @@ internal class SchedulerConfigBootstrapHostedService : IHostedService, IDisposab
         _refreshLoop = RefreshLoopAsync(configuration, _stopping.Token);
     }
 
-    /// <summary>Stops the refresh.</summary>
+    /// <summary>
+    /// Stops the refresh. Safe to call more than once, and after <see cref="Dispose"/>: a host can
+    /// dispose its services before or while it stops them, and stopping must not throw then.
+    /// </summary>
     /// <param name="cancellationToken">Bounds the wait for the refresh to finish.</param>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_stopping is null || _refreshLoop is null)
+        var stopping = Volatile.Read(ref _stopping);
+        var refreshLoop = _refreshLoop;
+        if (stopping is null || refreshLoop is null)
             return;
 
-        await _stopping.CancelAsync();
-        await _refreshLoop.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await stopping.CancelAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Disposed meanwhile; Dispose cancelled the refresh before releasing the source.
+        }
+
+        await refreshLoop.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Releases the refresh's cancellation source.</summary>
-    public void Dispose() => _stopping?.Dispose();
+    /// <summary>Cancels the refresh, then releases its cancellation source. Safe to call more than once.</summary>
+    public void Dispose()
+    {
+        var stopping = Interlocked.Exchange(ref _stopping, null);
+        if (stopping is null)
+            return;
+
+        stopping.Cancel();
+        stopping.Dispose();
+    }
 
     private async Task RefreshLoopAsync(
         SchedulerConfiguration configuration,

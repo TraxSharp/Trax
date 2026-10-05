@@ -176,6 +176,31 @@ public class OperationsServiceLocalWorkerTests
         }
     }
 
+    [Test]
+    public async Task BootstrapHostedService_StoppedAfterItWasDisposed_DoesNotThrow()
+    {
+        var (hosted, _, _, _) = await BootstrapWithStoredWorkerCount(null);
+
+        // A host can dispose its services before or while it stops them.
+        hosted.Dispose();
+        var stop = () => hosted.StopAsync(CancellationToken.None);
+
+        await stop.Should().NotThrowAsync("stopping a disposed settings service is a no-op");
+        await stop.Should().NotThrowAsync("and so is stopping it twice");
+        hosted.Invoking(h => h.Dispose()).Should().NotThrow("disposing twice is harmless too");
+    }
+
+    [Test]
+    public async Task BootstrapHostedService_StoppedTwice_DoesNotThrow()
+    {
+        var (hosted, _, _, _) = await BootstrapWithStoredWorkerCount(null);
+        var stop = () => hosted.StopAsync(CancellationToken.None);
+
+        await stop.Should().NotThrowAsync();
+        await stop.Should().NotThrowAsync("a host may stop a service twice");
+        hosted.Dispose();
+    }
+
     /// <summary>
     /// Stores a settings row with <paramref name="workerCount"/> and starts the settings service
     /// on a host that runs four local workers.
