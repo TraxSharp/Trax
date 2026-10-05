@@ -40,10 +40,14 @@ per-request price.
 
 `AddNimbleDecider` talks to a Nimble server you run, started from Nimble's own serving code
 (`nimble/serving/server.py` in `bespokelabsai/nimble`), which answers `POST /v1/systemone`. There
-is no default endpoint. Nimble's documentation describes no production hosted API, and the public
-demo it links to is unauthenticated and runs on one GPU, so it is not somewhere to send a train's
-state and Trax does not point at it. A host that registers Nimble without an `Endpoint` fails to
-start.
+is no default endpoint. Nimble's documentation describes no production hosted API, and the demo
+it links to runs on one GPU and now refuses requests without Modal credentials, so it is not
+somewhere to send a train's state and Trax does not point at it. A host that registers Nimble
+without an `Endpoint` fails to start.
+
+That server runs SGLang and needs an NVIDIA GPU. On a Mac with Apple Silicon, the Recovery sample
+serves the same model through Nimble's MLX scorer instead; see
+[Nimble on a Mac](/docs/samples/recovery#nimble-on-a-mac).
 
 | Setting | Default | Why |
 |---|---|---|

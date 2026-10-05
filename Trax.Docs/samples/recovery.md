@@ -9,12 +9,11 @@ nav_order: 3
 # Recovery
 
 A train asks a model which track to take, a later step crashes, and the retry takes the same tracks
-without paying for the model again. The Recovery sample makes that visible. Its page shows the case
-the model is asked about, and a **Decisions** table with one row per question and one column per
-attempt: each answer, where it came from, how long it took and the hash of the state it was about.
-Attempt 2's answers read **replayed, model not called**, in milliseconds instead of the model's
-second or so. Below it, the **Route taken** by each attempt lights the tracks it took, and tabs show
-the train's real C# with the running step highlighted and the raw junction events.
+without paying for the model again. The Recovery sample makes that visible. Its page shows the
+train's real C# with the running step highlighted, a console that narrates every junction event as
+it arrives, and a timeline with one lane per attempt. Attempt 2's lane reads **replayed: model not
+asked** for each question, and its question bars take milliseconds instead of the model's second or
+so. Progress pills follow the run through **Runs**, **Breaks** and **Recovers**.
 
 It proves three features working together, against Postgres, in one process:
 
@@ -51,29 +50,26 @@ on 5432, start the host with
 
 ## What you'll see
 
-1. **Refund approval, A-1001, crash the first attempt, Run.** Attempt 1 runs `LoadRefundCase`,
-   asks the model `ApproveRefund` (yes at 0.93) and crashes in `IssuePayment`. While the retry
-   counts down, the page says how many recorded answers it will reuse. A few seconds later the
-   manifest's retry starts as a new execution: `LoadRefundCase` runs again, but the question arrives
-   with `replayed: true` in a few milliseconds, the retry takes the same `Yes` track, and the run
-   completes.
-2. **Change the case during the backoff.** **Add an earlier refund to the order** records an earlier
-   refund. The retry is still queued to replay attempt 1, but the refund case it reads no longer
-   hashes the same, so the replay is refused, the model is asked again (0.58, between the bars), and
-   the refund takes the `Unsure` track to a person instead of being paid. The cell reads **asked
-   again: the case changed**, and the state hash differs from attempt 1's.
-3. **Ask the model again during the backoff.** **Ask the model again** calls
-   `triggerManifest(externalId, askAfresh: true)`, so the retry starts at once and asks afresh; the
-   cell reads **asked again, on purpose**.
-4. **Another track.** Orders A-1002 and A-1003 crash too: the model is unsure about A-1002 and
+1. **Research, crash once, Run.** Attempt 1 runs `PlanResearch`, asks `Source` (where to look) and
+   `Depth` (how far to dig), runs a step on each chosen track, and crashes in `Summarize` while
+   writing the report. The sidebar counts down to the retry. A few seconds later the manifest's
+   retry starts as a new execution: `PlanResearch` runs again, but both questions arrive with
+   `replayed: true` in a few milliseconds, the retry takes the same tracks, and the run completes.
+2. **Refund, A-1001, Run.** Attempt 1 runs `LoadRefundCase`, asks `ApproveRefund` (yes at 0.93) and
+   crashes in `IssuePayment`. The retry replays the answer and takes the same `Yes` track.
+3. **Change the data during the backoff.** Pressed while the retry counts down, it records an
+   earlier refund on the order. The retry is still queued to replay attempt 1, but the refund case
+   it reads no longer hashes the same, so the replay is refused, the model is asked again (0.58,
+   between the bars), and the refund takes the `Unsure` track to a person instead of being paid.
+   The lane reads **asked afresh: state changed**.
+4. **Ask afresh during the backoff.** It calls `triggerManifest(externalId, askAfresh: true)`, so
+   the retry starts at once and asks afresh; the lane reads **asked afresh: on purpose**.
+5. **Another track.** Orders A-1002 and A-1003 crash too: the model is unsure about A-1002 and
    declines A-1003, so their runs take the review and decline tracks, the step on that track crashes
    the same way, and the retry reuses the answer and takes the same track.
-5. **Research brief.** The train asks `Source` (where to look) and `Depth` (how far to dig), runs a
-   step on each chosen track, and crashes in `Summarize` while writing the report. The retry reuses
-   both answers.
-6. **Re-run after a run.** Once a run has completed, **Re-run, asking afresh** calls
+6. **Ask afresh after a run.** Once a run has completed, **Ask afresh** calls
    `requeueExecution(id, askAfresh: true)` on its last execution, a run of its own outside the
-   manifest.
+   manifest, shown as a `[requeue]` lane.
 
 Case files and armed crashes live in memory. A run started before the host restarts has lost its
 case file, so every retry fails and the manifest dead-letters. A requeue would fail the same way, so
@@ -273,6 +269,30 @@ public async Task<DecisionResult> Decide(DecisionRequest request, CancellationTo
 Set `Recovery:Model` to `Nimble` and `Recovery:Nimble:Endpoint` to a Nimble server you run, and the
 host calls `AddNimbleDecider` instead. See [Nimble](/docs/effect/decisions#nimble).
 
+### Nimble on a Mac
+
+Nimble's own server, `nimble/serving/server.py`, runs SGLang and needs an NVIDIA GPU. On Apple
+Silicon the sample's `nimble-mac/serve.py` serves the same model through Nimble's MLX scorer,
+answering `POST /v1/systemone` on `http://127.0.0.1:8000` in the shape `AddNimbleDecider` reads, and
+`nimble-mac/prepare.py` downloads the adapter and the Qwen3.5-9B base it pins and merges them once.
+Both run from a checkout of `bespokelabsai/nimble`, with Python 3.12, about 40 GB of disk and room
+for an 18 GB model; the README in `samples/Recovery` has the commands. Then start the host with:
+
+```bash
+Recovery__Model=Nimble Recovery__Nimble__Endpoint=http://127.0.0.1:8000/v1/systemone \
+  dotnet run --project samples/Recovery/Trax.Samples.Recovery.Api
+```
+
+`AddNimbleDecider` accepts plain HTTP only to a loopback address, so this needs no certificate. The
+server answers one request at a time, about a second a question on an M3 Pro, and nothing leaves the
+machine.
+
+A real model reads the case. Nimble paid A-1001 (0.99) and, once **Change the data during the
+backoff** had added an earlier refund, was asked again and declined it (0.13), where the demo
+decider sends it to review. Nimble's latest release ships no fitted probability temperature and is
+served at 1.0, and the gate's bars were chosen for the demo decider, so check them against your own
+cases before trusting them.
+
 ### Starting a run as a one-off manifest
 
 Decisions are replayed only by a manifest's automatic retry, a requeue of its dead letter, or
@@ -343,19 +363,19 @@ For each attempt it:
 
 Junction events say whether an answer was `replayed`, not why one was not. The sample adds a small
 `[TraxQuery]` train, `decisionJournal(metadataId)`, that reads `IDataContext.RecordedDecisions` and
-the run's `ReplayDecisionsOf` and `ReplayAbandoned`, so the page can tell **asked again: the case
-changed** (a `replay_refused` reason) from **asked again, on purpose** (no replay link). The journal
-also carries each answer's `stateHash`, which the Decisions table shows.
+the run's `ReplayDecisionsOf` and `ReplayAbandoned`, so the page can tell **asked afresh: state
+changed** (a `replay_refused` reason) from **asked afresh: on purpose** (no replay link). The journal
+also carries each answer's `stateHash`.
 
 A `ROUTE` step carries `replayed: false` even when the decision it routes on was replayed; the
-table reads the question's step.
+timeline's badges read the question's step.
 
 The code panel imports the trains' `.cs` files raw at build time and highlights the line of the
 running step: `Chain<Name>` for a junction, the routing step for a question, and the track's
 `.When(...)`, `.AtLeast(...)` or `.Yes(...)` for a route. It shows the chain, from `Junctions()` to
 `Resolve()`, and sizes its font so the longest line fits unwrapped, so the code stays still while the
-highlight moves, and it shows the train the picker selects. The route map draws each train's chain
-from a small table of its stops and tracks, so it can show the tracks a run did not take.
+highlight moves, and it shows the train the picker selects. The timeline gives each attempt a lane on
+one time axis: a junction's bar spans its run, a question's bar the time the answer took to arrive.
 
 ## The tests
 
