@@ -1,7 +1,7 @@
 // Plays back the Recovery sample's recorded runs (src/data/recovery-recordings.json, written by Trax.Samples'
 // scripts/recordings). A recording is what the sample's own page received from the host, with the time each
 // thing arrived: the manifest's attempts, every junction event, each attempt's decision journal. Applying the
-// events in order rebuilds what that page showed.
+// events in order rebuilds what that page showed, and narrates it the same way.
 //
 // A crashing run forks during its backoff (ask afresh, or change the data) and every run forks once it is over
 // (ask afresh again, as a requeue). Each fork was recorded as a run of its own, marked where it forked, and the
@@ -39,7 +39,7 @@ export interface Row {
 export interface Journal {
   replayDecisionsOf?: number;
   replayAbandoned?: boolean;
-  decisions: { questionKey: string; replayed?: boolean; replayRefused?: string; model?: string; stateHash?: string }[];
+  decisions: { questionKey: string; replayed?: boolean; replayRefused?: string; model?: string }[];
 }
 
 export interface RunInfo {
@@ -106,7 +106,7 @@ export interface Playback {
   finished: boolean;
 }
 
-export type Phase = "idle" | "starting" | "running" | "backoff" | "retrying" | "done" | "requeue";
+export type Phase = "idle" | "starting" | "runs" | "breaks" | "recovers" | "done" | "requeue";
 
 const RANK: Record<StepState, number> = { IN_PROGRESS: 0, COMPLETED: 1, FAILED: 1, CANCELLED: 1 };
 
@@ -166,7 +166,7 @@ export function takeFork(
   recordings: Recording[],
   fork: Exclude<Fork, "none">,
 ): { playback: Playback; shift: number } | null {
-  if (phaseOf(playback) !== "backoff" || playback.forkTaken !== "none") return null;
+  if (phaseOf(playback) !== "breaks" || playback.forkTaken !== "none") return null;
   const from = playback.recording;
   const target = recordings.find(
     (r) => r.scenario === from.scenario && r.topic === from.topic && r.orderId === from.orderId && r.crashOnce && r.fork === fork,
@@ -202,40 +202,31 @@ export function phaseOf(playback: Playback | null): Phase {
   const requeued = playback.attempts.find((a) => a.origin === "requeue");
   if (requeued) return requeued.journal ? "done" : "requeue";
   if (!last) return "starting";
-  if (last.trainState === "COMPLETED") return last.journal ? "done" : "retrying";
-  if (last.trainState === "FAILED") return "backoff";
-  return manifest.length > 1 ? "retrying" : "running";
+  if (last.trainState === "COMPLETED") return last.journal ? "done" : "recovers";
+  if (last.trainState === "FAILED") return "breaks";
+  return manifest.length > 1 ? "recovers" : "runs";
 }
 
-/** What the page calls an attempt. */
+/** The label the console and the timeline give an attempt. */
 export function labelOf(playback: Playback, attempt: Attempt): string {
-  if (attempt.origin === "requeue") return "Re-run";
+  if (attempt.origin === "requeue") return "[requeue]";
   const index = playback.attempts.filter((a) => a.origin === "manifest").findIndex((a) => a.id === attempt.id);
-  return `Attempt ${index + 1}`;
+  return `[attempt ${index + 1}]`;
 }
 
-/** Where a question's answer came from, from the event and the attempt's decision journal. */
-export function badgeOf(playback: Playback, attempt: Attempt, step: Step): { text: string; tone: "model" | "replay" | "afresh" } | null {
+/** Why a question's answer was or was not replayed, from the event and the attempt's decision journal. */
+export function badgeOf(playback: Playback, attempt: Attempt, step: Step): { text: string; tone: string } | null {
   if (step.kind === "JUNCTION" || step.kind === "ROUTE") return null;
-  if (step.replayed) return { text: "replayed, model not called", tone: "replay" };
+  if (step.replayed) return { text: "replayed: model not asked", tone: "replay" };
   const entry = attempt.journal?.decisions.find((d) => d.questionKey === step.questionKey);
-  if (entry?.replayRefused) return { text: "asked again: the case changed", tone: "afresh" };
-  if (attempt.journal?.replayAbandoned) return { text: "asked again: replay abandoned", tone: "afresh" };
+  if (entry?.replayRefused) return { text: "asked afresh: state changed", tone: "afresh" };
+  if (attempt.journal?.replayAbandoned) return { text: "asked afresh: replay abandoned", tone: "afresh" };
   const first = playback.attempts[0]?.id === attempt.id;
   if (!first)
     return attempt.journal && attempt.journal.replayDecisionsOf == null
-      ? { text: "asked again, on purpose", tone: "afresh" }
-      : { text: "asked again", tone: "afresh" };
-  return { text: "asked the model", tone: "model" };
-}
-
-/** How long a question's answer took to arrive: from the end of the step before it to the answer. */
-export function answerMs(attempt: Attempt, step: Step): number | null {
-  const before = Object.values(attempt.steps)
-    .filter((s) => s.position < step.position && s.end != null)
-    .sort((a, b) => b.position - a.position)[0];
-  const from = before?.end ?? attempt.start;
-  return from == null || step.start == null ? null : Math.max(0, step.start - from);
+      ? { text: "asked afresh: on purpose", tone: "afresh" }
+      : { text: "asked afresh", tone: "afresh" };
+  return { text: "model asked", tone: "model" };
 }
 
 /** The step the code panel follows: the running one, else the latest step of the latest attempt. */
@@ -277,8 +268,13 @@ function apply(p: Playback, event: ReplayEvent): void {
   switch (event.type) {
     case "started": {
       p.run = event.run;
-      const crash = event.run.armedCrash !== "NONE" ? ", with a crash armed in its first attempt" : "";
-      say("start", event.t, "system", `Scheduled a one-off manifest (MaxRetries ${event.run.maxRetries})${crash}`);
+      const crash =
+        event.run.armedCrash === "REPORT"
+          ? ", with a crash armed in the report step of the first attempt"
+          : event.run.armedCrash === "REFUND_TRACK"
+            ? ", with a crash armed in the step after the approval, on the first attempt"
+            : "";
+      say("start", event.t, "system", `# Scheduled a one-off manifest (MaxRetries ${event.run.maxRetries})${crash}`);
       return;
     }
     case "attempt": {
@@ -291,21 +287,26 @@ function apply(p: Playback, event: ReplayEvent): void {
       const index = p.attempts.filter((x) => x.origin === "manifest").length - 1;
       const text =
         startedBy === "requeue"
-          ? `started as execution ${a.id}, by the requeue`
+          ? `RUN execution ${a.id} started by the requeue`
           : startedBy === "askAfresh"
-            ? `started as execution ${a.id}, by the trigger, without waiting out the backoff`
+            ? `RUN execution ${a.id} started by the trigger, without waiting out the backoff`
             : index === 0
-              ? `started as execution ${a.id}`
-              : `started as execution ${a.id}: the manifest's retry ${index}/${p.run?.maxRetries ?? 2}`;
-      say(`${a.id}:start`, event.t, "system", `${label} ${text}`);
+              ? `RUN execution ${a.id} started`
+              : `RETRY ${index}/${p.run?.maxRetries ?? 2}: the manifest's retry started as execution ${a.id}`;
+      say(`${a.id}:start`, event.t, "system", `${label} # ${text}`);
       return;
     }
     case "row": {
       const a = attempt(event.row.id);
       if (!a) return;
       Object.assign(a, event.row);
-      if (a.trainState === "FAILED")
-        say(`${a.id}:end`, event.t, "error", `${labelOf(p, a)} failed in ${a.failureJunction ?? "a junction"}`);
+      if (a.trainState === "FAILED" && a.origin === "manifest")
+        say(
+          `${a.id}:end`,
+          event.t,
+          "system",
+          `${labelOf(p, a)} # FAILED. The scheduler retries after its backoff (a few seconds here), naming execution ${a.id} as the run to replay.`,
+        );
       return;
     }
     case "step": {
@@ -314,6 +315,7 @@ function apply(p: Playback, event: ReplayEvent): void {
       const known = a.steps[event.step.position];
       if (known && RANK[known.state] >= RANK[event.step.state]) return;
       a.steps[event.step.position] = event.step;
+      narrate(p, a, event.step, event.t, say);
       return;
     }
     case "journal": {
@@ -321,19 +323,59 @@ function apply(p: Playback, event: ReplayEvent): void {
       if (!a) return;
       a.journal = event.journal;
       if (a.trainState === "COMPLETED")
-        say(`${a.id}:end`, event.t, "success", `${labelOf(p, a)} completed. ${describeJournal(event.journal)}`);
+        say(`${a.id}:end`, event.t, "success", `${labelOf(p, a)} # COMPLETED. ${describeJournal(event.journal)}`);
       return;
     }
     case "action": {
       const text =
         event.action === "changeData"
-          ? `Case changed during the backoff: ${event.change}`
+          ? `# DATA CHANGED during the backoff: ${event.change}`
           : event.action === "askAfresh"
-            ? `triggerManifest(askAfresh: true): ${event.message}`
-            : `requeueExecution(${event.sourceId}, askAfresh: true): ${event.message}`;
+            ? `# ASK AFRESH: triggerManifest(askAfresh: true) says "${event.message}"`
+            : `# ASK AFRESH: requeueExecution(${event.sourceId}, askAfresh: true) says "${event.message}"`;
       say(`action:${event.action}`, event.t, "system", text);
       return;
     }
+  }
+}
+
+function narrate(
+  p: Playback,
+  a: Attempt,
+  step: Step,
+  t: number,
+  say: (key: string, t: number, tone: Tone, text: string) => void,
+): void {
+  const label = labelOf(p, a);
+  const key = `${a.id}:${step.position}:${step.state}`;
+  if (step.kind === "JUNCTION") {
+    if (step.state === "IN_PROGRESS") say(key, t, "info", `${label} # JUNCTION ${step.name} is running...`);
+    else if (step.state === "COMPLETED")
+      say(key, t, "info", `${label} # JUNCTION ${step.name} completed in ${step.durationMs ?? 0} ms`);
+    else
+      say(
+        key,
+        t,
+        "error",
+        `${label} # JUNCTION ${step.name} failed with ${step.failureException ?? "an exception"}. The run has crashed: Trax records the failure and the manifest will retry it.`,
+      );
+  } else if (step.kind === "ROUTE") {
+    say(key, t, "info", `${label} # ROUTE took the ${step.answer} track of ${step.questionKey ?? step.name}`);
+  } else if (step.replayed) {
+    say(
+      key,
+      t,
+      "replay",
+      `${label} # MODEL not asked: ${step.questionKey} = ${step.answer} replayed from the failed attempt, because the state hashes the same.`,
+    );
+  } else {
+    const confidence = step.confidence != null ? ` (confidence ${step.confidence.toFixed(2)})` : "";
+    say(
+      key,
+      t,
+      "model",
+      `${label} # MODEL asked: ${step.questionKey} = ${step.answer}${confidence}. Trax recorded the answer before acting on it.`,
+    );
   }
 }
 

@@ -69,7 +69,7 @@ test("a crash pauses in the backoff, and the retry replays every answer", () => 
     const r = recording(key);
     const fork = r.events.find((e) => e.type === "fork" && e.at === "backoff")!;
     const inBackoff = advance(begin(r), fork.t);
-    assert.equal(phaseOf(inBackoff), "backoff", key);
+    assert.equal(phaseOf(inBackoff), "breaks", key);
     assert.equal(inBackoff.attempts[0].trainState, "FAILED", key);
 
     const done = advance(begin(r), Infinity);
@@ -77,13 +77,14 @@ test("a crash pauses in the backoff, and the retry replays every answer", () => 
     assert.equal(done.attempts[1].trainState, "COMPLETED", key);
     const replayed = badges(done, 1);
     assert.ok(replayed.length > 0, key);
-    assert.ok(replayed.every((b) => b === "replayed, model not called"), `${key}: ${replayed}`);
+    assert.ok(replayed.every((b) => b === "replayed: model not asked"), `${key}: ${replayed}`);
+    assert.ok(done.lines.some((l) => l.tone === "replay"), key);
   }
 });
 
 test("changing the data during the backoff refuses the replay and asks the model afresh", () => {
   const research = advance(begin(recording("research-papers-crash-changeData")), Infinity);
-  assert.deepEqual(badges(research, 1), ["asked again: the case changed", "asked again: the case changed"]);
+  assert.deepEqual(badges(research, 1), ["asked afresh: state changed", "asked afresh: state changed"]);
   // The research is now for executives, so the model sends it down another track.
   const route = Object.values(research.attempts[1].steps).find((s) => s.kind === "ROUTE" && s.questionKey === "Source");
   assert.equal(route?.answer, "Web");
@@ -97,7 +98,7 @@ test("asking afresh after the run asks the model every question again, on purpos
   const p = playOut(begin(recording("research-papers-crash-none")));
   const afresh = badges(p, p.attempts.length - 1);
   assert.ok(afresh.length > 0);
-  assert.ok(afresh.every((b) => b === "asked again, on purpose"), String(afresh));
+  assert.ok(afresh.every((b) => b === "asked afresh: on purpose"), String(afresh));
 });
 
 test("a fork taken in the backoff keeps what is on screen and continues in the forked recording", () => {
@@ -114,8 +115,8 @@ test("a fork taken in the backoff keeps what is on screen and continues in the f
 
   const after = advance(taken.playback, Infinity);
   assert.deepEqual(after.attempts.map((a) => a.id), [1041, 1042]);
-  assert.deepEqual(badges(after, 1), ["asked again: the case changed", "asked again: the case changed"]);
-  assert.ok(after.lines.some((l) => l.text.startsWith("Case changed during the backoff")));
+  assert.deepEqual(badges(after, 1), ["asked afresh: state changed", "asked afresh: state changed"]);
+  assert.ok(after.lines.some((l) => l.text.startsWith("# DATA CHANGED")));
 });
 
 test("the trigger asks afresh at once instead of waiting out the backoff", () => {
@@ -125,7 +126,7 @@ test("the trigger asks afresh at once instead of waiting out the backoff", () =>
   assert.ok(taken);
   const after = advance(taken.playback, Infinity);
   assert.equal(after.attempts[1].startedBy, "askAfresh");
-  assert.deepEqual(badges(after, 1), ["asked again, on purpose"]);
+  assert.deepEqual(badges(after, 1), ["asked afresh: on purpose"]);
 });
 
 test("the code panel finds every step a recording shows in its train's source", () => {

@@ -23,9 +23,9 @@ interface Sample {
 const samples: Sample[] = [
   {
     tab: "Recovery",
-    title: "A crashed run retries without paying for the model's answers twice",
-    body: "A train asks a decision model which track to take, and Trax records each answer with a hash of what it was about. A later step crashes, and the scheduler's retry reuses the answers while that hash still matches. Change the case during the backoff and the model is asked again.",
-    shows: ["Gate, Switch and Scale tracks", "Retries that reuse recorded answers while the state is unchanged", "Junction events over a GraphQL subscription"],
+    title: "A run that recovers without asking the model again",
+    body: "A train asks a decision model which track to take, a later step crashes, and the manifest's retry takes the same tracks by replaying the recorded answers. Every junction, question and track reaches the page as a junction event.",
+    shows: ["Switch, Scale and Gate tracks", "Retries that replay recorded decisions", "Junction events over a GraphQL subscription"],
     href: "/docs/samples/recovery",
     source: {
       folder: "Recovery",
