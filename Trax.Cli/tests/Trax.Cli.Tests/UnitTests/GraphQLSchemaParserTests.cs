@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Models;
 using Trax.Cli.Schema.GraphQL;
 

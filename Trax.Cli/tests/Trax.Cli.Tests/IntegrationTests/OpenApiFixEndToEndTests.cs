@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Generator;
 using Trax.Cli.Schema.OpenApi;
 
@@ -348,7 +348,7 @@ public class OpenApiFixEndToEndTests
                 "DeleteUsersJunction.cs"
             )
         );
-        deleteJunction.Should().Contain("global::LanguageExt.Unit");
+        deleteJunction.Should().Contain("global::Trax.Core.Functional.Unit");
         deleteJunction.Should().Contain("Unit");
     }
 
@@ -377,7 +377,7 @@ public class OpenApiFixEndToEndTests
             var content = File.ReadAllText(junctionPath);
             // Empty input uses the typed record name, not Unit
             content.Should().Contain("Junction<ListNotificationsInput,");
-            content.Should().NotContain("using LanguageExt;");
+            content.Should().NotContain("using Trax.Core.Functional;");
         }
     }
 

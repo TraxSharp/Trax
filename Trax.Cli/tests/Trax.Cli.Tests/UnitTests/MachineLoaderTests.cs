@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
 using Trax.Effect.StateMachine.Persistence;

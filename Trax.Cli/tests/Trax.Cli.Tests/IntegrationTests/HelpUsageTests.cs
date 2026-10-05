@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Commands;
 
 namespace Trax.Cli.Tests.IntegrationTests;

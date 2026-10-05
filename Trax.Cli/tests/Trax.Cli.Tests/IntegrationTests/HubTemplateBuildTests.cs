@@ -1,6 +1,5 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Generator;
 using Trax.Cli.Schema.GraphQL;
 
@@ -16,7 +15,7 @@ namespace Trax.Cli.Tests.IntegrationTests;
 /// <c>dotnet new</c>, because <c>Generate</c> always uses the machine's templates.</para>
 /// </summary>
 [TestFixture]
-public partial class HubTemplateBuildTests
+public class HubTemplateBuildTests
 {
     private static readonly TimeSpan InstallTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(8);
@@ -77,42 +76,10 @@ public partial class HubTemplateBuildTests
         );
         TraxProjectGenerator.AddProjectReference(hubDir, "Demo.Hub", "Demo.Trains");
         TraxProjectGenerator.PatchProgramCs(hubDir, "Demo");
-        SupplyTheTemplatesPackageVersions(output, hubDir);
 
         var build = Dotnet(output, BuildTimeout, "build", hubDir, "-nologo");
 
         build.ExitCode.Should().Be(0, $"the generated hub compiles:\n{Errors(build.Output)}");
-    }
-
-    // The published template's csproj names its Trax packages without a Version (it relies on the Samples
-    // repo's central package management), so outside that repo it fails restore with NU1015, which is
-    // tracked separately in Trax.Samples. Until the template ships versions, float them here so the build
-    // reaches the compiler, which is what this test is about. Directory.Build.targets is evaluated after
-    // the project's items, so Update applies to them.
-    private static void SupplyTheTemplatesPackageVersions(string output, string hubDir)
-    {
-        var csproj = File.ReadAllText(Path.Combine(hubDir, "Demo.Hub.csproj"));
-        var unversioned = UnversionedReference()
-            .Matches(csproj)
-            .Select(m => m.Groups["id"].Value)
-            .ToList();
-        if (unversioned.Count == 0)
-            return;
-
-        var updates = string.Join(
-            "\n",
-            unversioned.Select(id => $"    <PackageReference Update=\"{id}\" Version=\"1.*\" />")
-        );
-        File.WriteAllText(
-            Path.Combine(output, "Directory.Build.targets"),
-            $"""
-            <Project>
-              <ItemGroup Condition="'$(MSBuildProjectName)' == 'Demo.Hub'">
-            {updates}
-              </ItemGroup>
-            </Project>
-            """
-        );
     }
 
     private static string Errors(string output) =>
@@ -155,7 +122,4 @@ public partial class HubTemplateBuildTests
 
     private static string FixturePath(string name) =>
         Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "Schemas", name);
-
-    [GeneratedRegex("<PackageReference\\s+Include=\"(?<id>[^\"]+)\"\\s*/>")]
-    private static partial Regex UnversionedReference();
 }

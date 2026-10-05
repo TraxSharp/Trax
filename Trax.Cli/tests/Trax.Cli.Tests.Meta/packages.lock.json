@@ -2,6 +2,12 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "AwesomeAssertions": {
+        "type": "Direct",
+        "requested": "[9.6.0, )",
+        "resolved": "9.6.0",
+        "contentHash": "8kdtgI+tZIgP46ncnk650/dU4JSrn+n2Dkic8FvjIFn72P6Nv1Afyr5F8F3PsokHg1GBSBVo1/Z+eZOrU5esSA=="
+      },
       "coverlet.collector": {
         "type": "Direct",
         "requested": "[10.1.0, )",
@@ -13,12 +19,6 @@
         "requested": "[2.0.5, )",
         "resolved": "2.0.5",
         "contentHash": "8LrlvI1KpjjJ4VGSqZ16yoOCKlQnYS+Y8rYNifNrscmVh5anJcF9E4e0NiDP30BHBMUbkoJ5KdcxoRWM7Pz9Aw=="
-      },
-      "FluentAssertions": {
-        "type": "Direct",
-        "requested": "[8.11.0, )",
-        "resolved": "8.11.0",
-        "contentHash": "dZqOxys9uY/0vO5BAwFtDECkFNSr9vWGwHa1fwZyuM1xAMbI4wiPTUBR2nH5e6R2/bQkXegxFY1B/oU1yqNNOw=="
       },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "Direct",
@@ -73,23 +73,10 @@
           "System.CodeDom": "6.0.0"
         }
       },
-      "LanguageExt.Core": {
-        "type": "Transitive",
-        "resolved": "4.4.9",
-        "contentHash": "K9VGWkThJkaomifa3zcmwysw1BaSqIZZPZc6trBnJN8u9mpmA/cMMwCWEa/v7bPv/+NnG6PbyIDB7HtxBX7yCQ==",
-        "dependencies": {
-          "Microsoft.Bcl.AsyncInterfaces": "7.0.0"
-        }
-      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
         "contentHash": "nWArUZTdU7iqZLycLKWe0TDms48KKGE6pONH2terYNa8REXiqixrMOkf1sk5DHGMaUTqONU2YkS4SAXBhLStgw=="
-      },
-      "Microsoft.Bcl.AsyncInterfaces": {
-        "type": "Transitive",
-        "resolved": "7.0.0",
-        "contentHash": "3aeMZ1N0lJoSyzqiP03hqemtb1BijhsJADdobn/4nsMJ8V1H+CrpuduUe4hlRdx+ikBQju1VGjMD1GJ3Sk05Eg=="
       },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "Transitive",
@@ -348,28 +335,27 @@
       },
       "Trax.Core": {
         "type": "Transitive",
-        "resolved": "1.8.0",
-        "contentHash": "db0WwVDsb2cWP5ypIVOZCnoVtdmXiQn90Q9kDRmhgUdIOkh2kdpM2EqhVNWKeEsH+xtym/tG4Xs8UWuKg5ZLKg==",
+        "resolved": "1.9.1",
+        "contentHash": "vfy1XHECvF/O6QP6i+8dBpZMnC+FqtxQpUo/ihjW5Bbd28hMGul7PdqnYHnGsdiJBLRGlDV25PgwmwJ7F/fHZA==",
         "dependencies": {
-          "LanguageExt.Core": "4.4.9",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.3",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.3"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.12"
         }
       },
       "Trax.Effect": {
         "type": "Transitive",
-        "resolved": "1.57.4",
-        "contentHash": "AK5rRmSxaevCLYJXGMRqwI4FLX4zGMDdOIHX4p9kelTeuYjwdqEeiRcTzZK32neFgttpHx91lHwDVfAtQVsqhQ==",
+        "resolved": "1.59.0",
+        "contentHash": "jEzteaAWERyOzLuHzpI8Y88KY/dLS87QVOXwMvkHlLepmUlf0ZftNmQt+SDCL7vi1rjbun8ZIaSnU95Qp/49mw==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
-          "Trax.Core": "1.8.0"
+          "Trax.Core": "1.9.1"
         }
       },
       "Trax.Effect.Data": {
         "type": "Transitive",
-        "resolved": "1.57.4",
-        "contentHash": "wR2N7gU9gc3DMjed8tk5ecHaKy3nyPbeHTvIM7nOXBhndYZbJDRtyJg1/qMscTqi/xRVetffBRDbr0Z5Zrx9VQ==",
+        "resolved": "1.59.0",
+        "contentHash": "lLL1Ir+eo62lBp0tR1ozGSPwtwsHafS3PsNZPY8/xUlQa2L/gYJg59Yl1f4ChcHsUmlLeEfknRiXzrw2kRHLBw==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
@@ -378,14 +364,14 @@
           "Microsoft.Extensions.Logging": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
           "Npgsql": "10.0.3",
-          "Trax.Core": "1.8.0",
-          "Trax.Effect": "1.57.4"
+          "Trax.Core": "1.9.1",
+          "Trax.Effect": "1.59.0"
         }
       },
       "Trax.Effect.StateMachine": {
         "type": "Transitive",
-        "resolved": "1.57.4",
-        "contentHash": "eEMBoMLMyPIHuHFK7Tr8cY+3PyWLS9voHaasZFNcC7PM2Hy2clG31x7kZw2MWg6nJNnIdD+z88JcN1nB7GXg6g=="
+        "resolved": "1.59.0",
+        "contentHash": "K2t70im/7ypqfYIFGgHxmmyU5DAQDBO95W5le9pu5adhZwBNP4TGrfaNpy7fM3uQvBbmX9VxeC3EZkliYEDImA=="
       },
       "trax.cli": {
         "type": "Project",
@@ -394,7 +380,7 @@
           "Microsoft.OpenApi.Readers": "[1.6.31, )",
           "Scriban": "[7.5.0, )",
           "System.CommandLine": "[2.0.12, )",
-          "Trax.Effect.StateMachine.Persistence": "[1.57.4, )"
+          "Trax.Effect.StateMachine.Persistence": "[1.59.0, )"
         }
       },
       "GraphQL-Parser": {
@@ -427,9 +413,9 @@
       },
       "Trax.Effect.StateMachine.Persistence": {
         "type": "CentralTransitive",
-        "requested": "[1.57.4, )",
-        "resolved": "1.57.4",
-        "contentHash": "BmP3lkQ6DoVL+bQz3D04f4oGofEFglzQ2C1IAeOht/PZWHG68wlbQTbp3+Pz7k6h8O5S9LIygKOhPmc8eVqCug==",
+        "requested": "[1.59.0, )",
+        "resolved": "1.59.0",
+        "contentHash": "X6vpC0X8Y3d0fOmwQ/1vQ7ACfIaHCI04+23AWby/6ku4LPruItyX3s0UTWDyBG4lJrWAJvQNnBwPAoBMmwRYJA==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
@@ -439,10 +425,10 @@
           "Microsoft.Extensions.Logging": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
           "Npgsql": "10.0.3",
-          "Trax.Core": "1.8.0",
-          "Trax.Effect": "1.57.4",
-          "Trax.Effect.Data": "1.57.4",
-          "Trax.Effect.StateMachine": "1.57.4"
+          "Trax.Core": "1.9.1",
+          "Trax.Effect": "1.59.0",
+          "Trax.Effect.Data": "1.59.0",
+          "Trax.Effect.StateMachine": "1.59.0"
         }
       }
     }

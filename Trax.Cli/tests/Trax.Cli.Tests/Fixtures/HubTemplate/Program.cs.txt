@@ -25,7 +25,6 @@
 // Third-party packages used by this project (via Trax dependencies):
 //   HotChocolate    — GraphQL server (MIT, https://github.com/ChilliCream/graphql-platform)
 //   Radzen.Blazor   — Dashboard UI components (MIT, https://github.com/radzenhq/radzen-blazor)
-//   LanguageExt     — Functional programming primitives (MIT, https://github.com/louthy/language-ext)
 //   Cronos          — Cron expression parser (MIT, https://github.com/HangfireIO/Cronos)
 //   EF Core InMemory — In-memory database provider (MIT, https://github.com/dotnet/efcore)
 // ---------------------------------------------------------------------------

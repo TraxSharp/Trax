@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
 
@@ -6,7 +6,7 @@ namespace Trax.Cli.Tests.UnitTests;
 
 /// <summary>
 /// Tests for CodeRenderer fixes:
-/// - Junction template includes "using LanguageExt" when input is Unit (not just output)
+/// - Junction template qualifies Unit as global::Trax.Core.Functional.Unit when input is Unit (not just output)
 /// - Input template includes Models namespace when fields reference enum types
 /// </summary>
 [TestFixture]
@@ -79,7 +79,7 @@ public class CodeRendererFixTests
     #region RenderJunction_EmptyInput
 
     [Test]
-    public void RenderJunction_EmptyInput_NoLanguageExtUsing()
+    public void RenderJunction_EmptyInput_NoFunctionalUsing()
     {
         var op = MakeOperation(
             "ListAll",
@@ -91,8 +91,8 @@ public class CodeRendererFixTests
 
         var result = _renderer.RenderJunction(op, "MyApi");
 
-        // Empty input records don't need LanguageExt — they use the record name directly
-        result.Should().NotContain("using LanguageExt;");
+        // Empty input records don't need the Unit namespace: they use the record name directly
+        result.Should().NotContain("using Trax.Core.Functional;");
     }
 
     [Test]
@@ -107,7 +107,7 @@ public class CodeRendererFixTests
     }
 
     [Test]
-    public void RenderJunction_UnitOutput_QualifiesLanguageExtUnit()
+    public void RenderJunction_UnitOutput_QualifiesTraxUnit()
     {
         var op = MakeOperation(
             "DeletePlayer",
@@ -119,11 +119,11 @@ public class CodeRendererFixTests
 
         var result = _renderer.RenderJunction(op, "MyApi");
 
-        result.Should().Contain("global::LanguageExt.Unit");
+        result.Should().Contain("global::Trax.Core.Functional.Unit");
     }
 
     [Test]
-    public void RenderJunction_EmptyInputAndUnitOutput_QualifiesLanguageExtUnit()
+    public void RenderJunction_EmptyInputAndUnitOutput_QualifiesTraxUnit()
     {
         var op = MakeOperation(
             "Ping",
@@ -136,18 +136,18 @@ public class CodeRendererFixTests
 
         var result = _renderer.RenderJunction(op, "MyApi");
 
-        // The input is the operation's own empty record; the output is LanguageExt's Unit
-        result.Should().Contain("Junction<Unit, global::LanguageExt.Unit>");
+        // The input is the operation's own empty record; the output is Trax's Unit
+        result.Should().Contain("Junction<Unit, global::Trax.Core.Functional.Unit>");
     }
 
     [Test]
-    public void RenderJunction_NeitherInputNorOutputUnit_NoLanguageExtUsing()
+    public void RenderJunction_NeitherInputNorOutputUnit_NoFunctionalUsing()
     {
         var op = MakeOperation("GetPlayer", OperationKind.Query);
 
         var result = _renderer.RenderJunction(op, "MyApi");
 
-        result.Should().NotContain("using LanguageExt;");
+        result.Should().NotContain("using Trax.Core.Functional;");
     }
 
     #endregion
@@ -155,34 +155,34 @@ public class CodeRendererFixTests
     #region RenderTrainInterface_EmptyInput
 
     [Test]
-    public void RenderTrainInterface_EmptyInput_NoLanguageExtUsing()
+    public void RenderTrainInterface_EmptyInput_NoFunctionalUsing()
     {
         var op = MakeOperation("ListAll", OperationKind.Query, input: UnitType);
 
         var result = _renderer.RenderTrainInterface(op, "MyApi");
 
-        // Empty input records don't need LanguageExt
-        result.Should().NotContain("using LanguageExt;");
+        // Empty input records don't need the Unit namespace
+        result.Should().NotContain("using Trax.Core.Functional;");
     }
 
     [Test]
-    public void RenderTrainInterface_UnitOutput_QualifiesLanguageExtUnit()
+    public void RenderTrainInterface_UnitOutput_QualifiesTraxUnit()
     {
         var op = MakeOperation("DeletePlayer", OperationKind.Mutation, output: UnitType);
 
         var result = _renderer.RenderTrainInterface(op, "MyApi");
 
-        result.Should().Contain("global::LanguageExt.Unit");
+        result.Should().Contain("global::Trax.Core.Functional.Unit");
     }
 
     [Test]
-    public void RenderTrainInterface_NeitherUnit_NoLanguageExtUsing()
+    public void RenderTrainInterface_NeitherUnit_NoFunctionalUsing()
     {
         var op = MakeOperation("GetPlayer", OperationKind.Query);
 
         var result = _renderer.RenderTrainInterface(op, "MyApi");
 
-        result.Should().NotContain("using LanguageExt;");
+        result.Should().NotContain("using Trax.Core.Functional;");
     }
 
     #endregion

@@ -1,5 +1,5 @@
 using System.CommandLine;
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Commands;
 using Trax.Cli.Tests.Fakes;
 

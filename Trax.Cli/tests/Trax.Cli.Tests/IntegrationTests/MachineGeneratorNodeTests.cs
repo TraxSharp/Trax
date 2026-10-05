@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Machines;
 using Trax.Cli.Tests.Fakes;
 using Trax.Effect.StateMachine.Persistence;
@@ -60,7 +60,7 @@ public class MachineGeneratorNodeTests
         var machine = Path.Combine(_out, "a", "twin", "turnstile.machine.g.ts");
         var corpus = Path.Combine(_out, "a", "corpus", "differential.json");
         File.ReadAllText(contexts).Should().Contain("export type TurnstileState");
-        File.ReadAllText(machine).Should().Contain("machineFromIr");
+        File.ReadAllText(machine).Should().Contain("typedMachineFromIr");
         File.ReadAllText(corpus).Should().Contain("\"cases\"");
 
         // Idempotent: a second run against the same source is byte-identical, which is what makes check sound.

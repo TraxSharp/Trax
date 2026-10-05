@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
 
@@ -77,7 +77,7 @@ public class CodeRendererTests
     }
 
     [Test]
-    public void RenderTrainInterface_UnitOutput_QualifiesLanguageExtUnit()
+    public void RenderTrainInterface_UnitOutput_QualifiesTraxUnit()
     {
         var unitOutput = new ApiType
         {
@@ -89,7 +89,7 @@ public class CodeRendererTests
 
         var result = _renderer.RenderTrainInterface(op, "MyApi");
 
-        result.Should().Contain("global::LanguageExt.Unit");
+        result.Should().Contain("global::Trax.Core.Functional.Unit");
     }
 
     #endregion

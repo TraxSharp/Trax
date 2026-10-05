@@ -19,7 +19,7 @@ public class {{ TrainName }}Train
         I{{ TrainName }}Train
 {
     protected override global::System.Threading.Tasks.Task<
-        global::LanguageExt.Either<global::System.Exception, {{ OutputTypeName }}>
+        global::Trax.Core.Functional.Either<global::System.Exception, {{ OutputTypeName }}>
     > Junctions() =>
         Chain<{{ TrainName }}Junction>().Resolve();
 }

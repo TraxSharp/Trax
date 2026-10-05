@@ -10,7 +10,7 @@ public partial class CodeRenderer
     private readonly Dictionary<string, Template> _templates = new();
     private string? _modelsNamespace;
     private HashSet<string> _modelNames = new(StringComparer.Ordinal);
-    private const string UnitType = "global::LanguageExt.Unit";
+    private const string UnitType = "global::Trax.Core.Functional.Unit";
 
     public CodeRenderer()
     {

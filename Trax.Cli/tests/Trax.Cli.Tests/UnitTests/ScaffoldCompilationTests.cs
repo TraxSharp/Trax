@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Trax.Cli.Generator;
@@ -74,7 +74,7 @@ public class ScaffoldCompilationTests
     }
 
     /// <summary>
-    /// An operation that returns nothing scaffolds a train whose output is LanguageExt's
+    /// An operation that returns nothing scaffolds a train whose output is Trax's
     /// <c>Unit</c>, which the train, interface and junction templates import only on that
     /// branch. No output record is written for it.
     /// </summary>
@@ -107,7 +107,7 @@ public class ScaffoldCompilationTests
             .RenderJunction(op, "MyApi")
             .Should()
             .Contain(
-                "Junction<DeletePlayerInput, global::LanguageExt.Unit>",
+                "Junction<DeletePlayerInput, global::Trax.Core.Functional.Unit>",
                 "the premise is the Unit branch"
             );
 
