@@ -12,16 +12,7 @@ import {
   TRIGGER_ASK_AFRESH,
   WORK_QUEUE_ENTRY,
 } from "./graphql";
-import type {
-  Attempt,
-  ConsoleLine,
-  Journal,
-  Phase,
-  RunInfo,
-  Scenario,
-  Step,
-  Tone,
-} from "./types";
+import { shownAnswer, type Attempt, type ConsoleLine, type Fork, type Journal, type Phase, type RunInfo, type Scenario, type Step, type Tone } from "./types";
 
 const POLL_MS = 500;
 const RANK = { IN_PROGRESS: 0, COMPLETED: 1, FAILED: 1, CANCELLED: 1 } as const;
@@ -46,21 +37,78 @@ export function useRecoveryRun() {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [starting, setStarting] = useState(false);
-  // Whether the case was changed during this run's backoff, so the page can show the new value.
-  const [changed, setChanged] = useState(false);
+  const [forkTaken, setForkTaken] = useState<Fork>("none");
 
+  // When Run was pressed: console times and the timeline count from here.
+  const base = useRef(Date.now());
   const narrated = useRef(new Set<string>());
   const subscriptions = useRef(new Map<number, { unsubscribe(): void }>());
   const journaled = useRef(new Set<number>());
+  // The attempts in the order they were found, kept outside React state so narration can label them at once.
+  const order = useRef<{ id: number; origin: Attempt["origin"] }[]>([]);
+  const stepRank = useRef(new Map<string, number>());
+  const runRef = useRef<RunInfo | null>(null);
+  const forkRef = useRef<Fork>("none");
 
-  const say = useCallback((key: string, at: string, tone: Tone, text: string) => {
+  const say = useCallback((key: string, tone: Tone, text: string) => {
     if (narrated.current.has(key)) return;
     narrated.current.add(key);
-    setLines((all) => [...all, { key, at, tone, text }]);
+    setLines((all) => [...all, { key, t: Date.now() - base.current, tone, text }]);
   }, []);
+
+  const labelOf = useCallback((attempt: Pick<Attempt, "id" | "origin">) => {
+    if (attempt.origin === "requeue") return "[requeue]";
+    const index = order.current.filter((a) => a.origin === "manifest").findIndex((a) => a.id === attempt.id);
+    return `[attempt ${index + 1}]`;
+  }, []);
+
+  const narrate = useCallback(
+    (attemptId: number, step: Step) => {
+      const known = order.current.find((a) => a.id === attemptId);
+      if (!known) return;
+      const label = labelOf(known);
+      const key = `${attemptId}:${step.position}:${step.state}`;
+      const name = step.nameWithheld ? "(withheld)" : step.name;
+      if (step.kind === "JUNCTION") {
+        if (step.state === "IN_PROGRESS") say(key, "info", `${label} # JUNCTION ${name} is running...`);
+        else if (step.state === "COMPLETED")
+          say(key, "info", `${label} # JUNCTION ${name} completed in ${Math.round(step.durationMs ?? 0)} ms`);
+        else
+          say(
+            key,
+            "error",
+            `${label} # JUNCTION ${name} failed with ${step.failureException ?? "an exception"}. The run has crashed: Trax records the failure and the manifest will retry it.`,
+          );
+      } else if (step.kind === "ROUTE") {
+        say(key, "info", `${label} # ROUTE took the ${step.answer} track of ${step.questionKey ?? name}`);
+      } else if (step.replayed) {
+        say(
+          key,
+          "replay",
+          `${label} # MODEL not asked: ${step.questionKey} = ${shownAnswer(step.answer)} replayed from the failed attempt, because the state hashes the same.`,
+        );
+      } else {
+        const confidence = step.confidence != null ? ` (confidence ${step.confidence.toFixed(2)})` : "";
+        say(
+          key,
+          "model",
+          `${label} # MODEL asked: ${step.questionKey} = ${shownAnswer(step.answer)}${confidence}. Trax recorded the answer before acting on it.`,
+        );
+      }
+    },
+    [labelOf, say],
+  );
 
   const mergeSteps = useCallback(
     (attemptId: number, incoming: Step[]) => {
+      // Narrate each step state once, and never a state older than one already seen.
+      for (const step of [...incoming].sort((a, b) => a.position - b.position)) {
+        const key = `${attemptId}:${step.position}`;
+        const known = stepRank.current.get(key);
+        if (known != null && known >= RANK[step.state]) continue;
+        stepRank.current.set(key, RANK[step.state]);
+        narrate(attemptId, step);
+      }
       setAttempts((all) =>
         all.map((a) => {
           if (a.id !== attemptId) return a;
@@ -73,11 +121,8 @@ export function useRecoveryRun() {
         }),
       );
     },
-    [],
+    [narrate],
   );
-
-  const labelOf = useCallback((attempt: Attempt, index: number) =>
-    attempt.origin === "requeue" ? "Re-run" : `Attempt ${index + 1}`, []);
 
   const readStored = useCallback(
     async (attemptId: number) => {
@@ -88,13 +133,27 @@ export function useRecoveryRun() {
   );
 
   const follow = useCallback(
-    (row: ExecutionRow, origin: Attempt["origin"], askedAfresh = false) => {
+    (row: ExecutionRow, origin: Attempt["origin"]) => {
       if (subscriptions.current.has(row.id)) return;
+      const startedBy: Attempt["startedBy"] =
+        origin === "requeue" ? "requeue" : forkRef.current === "askAfresh" && order.current.length > 0 ? "askAfresh" : null;
+      order.current.push({ id: row.id, origin });
       setAttempts((all) =>
-        all.some((a) => a.id === row.id)
-          ? all
-          : [...all, { ...row, origin, askedAfresh, steps: {}, journal: null }],
+        all.some((a) => a.id === row.id) ? all : [...all, { ...row, origin, startedBy, steps: {}, journal: null }],
       );
+
+      const label = labelOf({ id: row.id, origin });
+      const index = order.current.filter((a) => a.origin === "manifest").length - 1;
+      const text =
+        startedBy === "requeue"
+          ? `RUN execution ${row.id} started by the requeue`
+          : startedBy === "askAfresh"
+            ? `RUN execution ${row.id} started by the trigger, without waiting out the backoff`
+            : index === 0
+              ? `RUN execution ${row.id} started`
+              : `RETRY ${index}/${runRef.current?.maxRetries ?? 2}: the manifest's retry started as execution ${row.id}`;
+      say(`${row.id}:start`, "system", `${label} # ${text}`);
+
       const sub = client
         .subscribe({ query: ON_JUNCTION_EVENT, variables: { metadataId: row.id } })
         .subscribe({
@@ -106,12 +165,27 @@ export function useRecoveryRun() {
       // Subscribe first, then read what was stored before the subscription started.
       void readStored(row.id);
     },
-    [client, mergeSteps, readStored],
+    [client, labelOf, mergeSteps, readStored, say],
   );
 
-  const updateRow = useCallback((row: ExecutionRow) => {
-    setAttempts((all) => all.map((a) => (a.id === row.id ? { ...a, ...row } : a)));
-  }, []);
+  const updateRow = useCallback(
+    (row: ExecutionRow) => {
+      const known = order.current.find((a) => a.id === row.id);
+      if (known?.origin === "manifest" && row.trainState === "FAILED") {
+        const index = order.current.filter((a) => a.origin === "manifest").findIndex((a) => a.id === row.id);
+        const max = runRef.current?.maxRetries ?? 2;
+        say(
+          `${row.id}:end`,
+          "system",
+          index < max
+            ? `${labelOf(known)} # FAILED. The scheduler retries after its backoff (a few seconds here), naming execution ${row.id} as the run to replay.`
+            : `${labelOf(known)} # FAILED. Every retry is spent, so the manifest is dead-lettered.`,
+        );
+      }
+      setAttempts((all) => all.map((a) => (a.id === row.id ? { ...a, ...row } : a)));
+    },
+    [labelOf, say],
+  );
 
   // Poll the manifest's executions for new attempts and each attempt's state.
   useEffect(() => {
@@ -121,13 +195,13 @@ export function useRecoveryRun() {
       try {
         const { data } = await client.query({ query: EXECUTIONS, variables: { manifestId: run.manifestId } });
         if (cancelled) return;
-        for (const row of data.operations.executions.items as ExecutionRow[]) {
+        const rows = data.operations.executions.items as ExecutionRow[];
+        for (const row of rows) {
           follow(row, "manifest");
           updateRow(row);
         }
         for (const id of [...subscriptions.current.keys()]) {
-          const known = (data.operations.executions.items as ExecutionRow[]).some((r) => r.id === id);
-          if (!known) {
+          if (!rows.some((r) => r.id === id)) {
             const one = await client.query({ query: EXECUTION, variables: { id } });
             if (one.data.operations.execution) updateRow(one.data.operations.execution as ExecutionRow);
           }
@@ -147,41 +221,32 @@ export function useRecoveryRun() {
   // Once an attempt ends: read its steps one last time and its decision journal.
   useEffect(() => {
     for (const a of attempts) {
-      if (a.trainState === "COMPLETED" || a.trainState === "FAILED" || a.trainState === "CANCELLED") {
-        if (journaled.current.has(a.id)) continue;
-        journaled.current.add(a.id);
-        void (async () => {
-          await readStored(a.id);
-          const { data } = await client.query({ query: DECISION_JOURNAL, variables: { metadataId: a.id } });
-          const journal = data.discover.decisionJournal as Journal;
-          setAttempts((all) => all.map((x) => (x.id === a.id ? { ...x, journal } : x)));
-        })();
-      }
+      if (a.trainState !== "COMPLETED" && a.trainState !== "FAILED" && a.trainState !== "CANCELLED") continue;
+      if (journaled.current.has(a.id)) continue;
+      journaled.current.add(a.id);
+      void (async () => {
+        await readStored(a.id);
+        const { data } = await client.query({ query: DECISION_JOURNAL, variables: { metadataId: a.id } });
+        const journal = data.discover.decisionJournal as Journal;
+        setAttempts((all) => all.map((x) => (x.id === a.id ? { ...x, journal } : x)));
+        if (a.trainState === "COMPLETED") say(`${a.id}:end`, "success", `${labelOf(a)} # COMPLETED. ${describeJournal(journal)}`);
+      })();
     }
-  }, [attempts, client, readStored]);
-
-  // Say once when each attempt starts and how it ended. The steps themselves are shown as events.
-  useEffect(() => {
-    attempts.forEach((a, index) => {
-      const label = labelOf(a, index);
-      if (index === 0 || a.origin === "requeue") say(`${a.id}:start`, a.startTime, "system", `${label} started as execution ${a.id}`);
-      else say(`${a.id}:start`, a.startTime, "system", `${label}: the manifest's retry ${index}/${run?.maxRetries ?? 2} started as execution ${a.id}`);
-      if (a.trainState === "COMPLETED" && a.journal)
-        say(`${a.id}:end`, a.endTime ?? a.startTime, "success", `${label} completed. ${describeJournal(a.journal)}`);
-      if (a.trainState === "FAILED")
-        say(`${a.id}:end`, a.endTime ?? a.startTime, "error", `${label} failed in ${a.failureJunction ?? "a junction"}: ${a.failureReason ?? "an exception"}`);
-    });
-  }, [attempts, labelOf, run, say]);
+  }, [attempts, client, labelOf, readStored, say]);
 
   const reset = useCallback(() => {
     subscriptions.current.forEach((s) => s.unsubscribe());
     subscriptions.current.clear();
     narrated.current.clear();
     journaled.current.clear();
+    stepRank.current.clear();
+    order.current = [];
+    runRef.current = null;
+    forkRef.current = "none";
     setAttempts([]);
     setLines([]);
     setRun(null);
-    setChanged(false);
+    setForkTaken("none");
   }, []);
 
   useEffect(() => {
@@ -192,6 +257,7 @@ export function useRecoveryRun() {
   const start = useCallback(
     async (scenario: Scenario, crashOnce: boolean, orderId: string, topic: string) => {
       reset();
+      base.current = Date.now();
       setStarting(true);
       try {
         const { data } = await client.mutate({
@@ -201,15 +267,18 @@ export function useRecoveryRun() {
           },
         });
         const output = data.dispatch.startRun.output;
-        setRun({ ...output, scenario });
-        say(
-          "start",
-          new Date().toISOString(),
-          "system",
-          `Scheduled one-off manifest ${output.manifestExternalId} (MaxRetries ${output.maxRetries})${output.armedCrash !== "NONE" ? `, with a crash armed in its first attempt` : ""}`,
-        );
+        const info: RunInfo = { ...output, scenario };
+        runRef.current = info;
+        setRun(info);
+        const crash =
+          output.armedCrash === "REPORT"
+            ? ", with a crash armed in the report step of the first attempt"
+            : output.armedCrash === "REFUND_TRACK"
+              ? ", with a crash armed in the step after the approval, on the first attempt"
+              : "";
+        say("start", "system", `# Scheduled a one-off manifest (MaxRetries ${output.maxRetries})${crash}`);
       } catch (error) {
-        say(`start-error-${Date.now()}`, new Date().toISOString(), "error", `Could not start: ${(error as Error).message}`);
+        say(`start-error-${Date.now()}`, "error", `# Could not start: ${(error as Error).message}`);
       } finally {
         setStarting(false);
       }
@@ -220,35 +289,37 @@ export function useRecoveryRun() {
   const phase: Phase = useMemo(() => {
     if (starting) return "starting";
     if (!run) return "idle";
+    const requeued = [...attempts].reverse().find((a) => a.origin === "requeue");
+    if (requeued) return requeued.trainState === "IN_PROGRESS" || requeued.trainState === "PENDING" ? "requeue" : "done";
     const manifestRuns = attempts.filter((a) => a.origin === "manifest");
     const last = manifestRuns[manifestRuns.length - 1];
     if (!last) return "starting";
     if (last.trainState === "COMPLETED") return "done";
-    if (last.trainState === "FAILED")
-      return manifestRuns.length > (run.maxRetries ?? 2) ? "dead" : "backoff";
+    if (last.trainState === "FAILED") return manifestRuns.length > (run.maxRetries ?? 2) ? "dead" : "backoff";
     return manifestRuns.length > 1 ? "retrying" : "running";
   }, [attempts, run, starting]);
 
   const askAfresh = useCallback(async () => {
     if (!run) return;
-    const now = new Date().toISOString();
     if (phase === "backoff") {
+      forkRef.current = "askAfresh";
+      setForkTaken("askAfresh");
       const { data } = await client.mutate({ mutation: TRIGGER_ASK_AFRESH, variables: { externalId: run.manifestExternalId } });
-      say(`afresh-${Date.now()}`, now, "system", `triggerManifest(askAfresh: true): ${data.operations.triggerManifest.message}`);
+      say("action:askAfresh", "system", `# ASK AFRESH: triggerManifest(askAfresh: true) says "${data.operations.triggerManifest.message}"`);
       return;
     }
     const last = attempts[attempts.length - 1];
     if (!last) return;
     const { data } = await client.mutate({ mutation: REQUEUE, variables: { id: last.id, askAfresh: true } });
     const result = data.operations.requeueExecution;
-    say(`requeue-${Date.now()}`, now, "system", `requeueExecution(${last.id}, askAfresh: true): ${result.message}`);
+    say(`action:requeue:${last.id}`, "system", `# ASK AFRESH: requeueExecution(${last.id}, askAfresh: true) says "${result.message}"`);
     if (!result.success || result.id == null) return;
     for (let i = 0; i < 60; i++) {
       const entry = await client.query({ query: WORK_QUEUE_ENTRY, variables: { id: result.id } });
       const metadataId = entry.data.operations.workQueue.workQueue?.metadataId;
       if (metadataId) {
         const one = await client.query({ query: EXECUTION, variables: { id: metadataId } });
-        follow(one.data.operations.execution as ExecutionRow, "requeue", true);
+        follow(one.data.operations.execution as ExecutionRow, "requeue");
         return;
       }
       await new Promise((r) => setTimeout(r, 250));
@@ -257,12 +328,16 @@ export function useRecoveryRun() {
 
   const changeData = useCallback(async () => {
     if (!run) return;
-    setChanged(true);
+    forkRef.current = "changeData";
+    setForkTaken("changeData");
     const { data } = await client.mutate({ mutation: CHANGE_CASE_DATA, variables: { runId: run.runId } });
-    say(`change-${Date.now()}`, new Date().toISOString(), "system", `Case changed during the backoff: ${data.dispatch.changeCaseData.output.change}`);
+    say("action:changeData", "system", `# DATA CHANGED during the backoff: ${data.dispatch.changeCaseData.output.change}`);
   }, [client, run, say]);
 
-  return { run, attempts, lines, phase, changed, start, reset, askAfresh, changeData, labelOf };
+  /** Milliseconds since Run was pressed, for a timestamp the host sent. */
+  const sinceStart = useCallback((iso: string | null | undefined) => (iso ? Date.parse(iso) - base.current : undefined), []);
+
+  return { run, attempts, lines, phase, forkTaken, start, reset, askAfresh, changeData, labelOf, sinceStart };
 }
 
 function describeJournal(journal: Journal): string {
@@ -275,4 +350,3 @@ function describeJournal(journal: Journal): string {
   if (refused) parts.push(`${refused} replay(s) refused because the state changed`);
   return parts.join(", ") + ".";
 }
-

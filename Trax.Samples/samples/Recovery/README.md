@@ -1,12 +1,12 @@
 # Trax Recovery Sample
 
 A live demo of a crashed run retrying without paying for its model's answers twice. A train asks a
-decider (a stand-in model) which track to take, and Trax records each answer with a hash of the state
+decider (a stand-in model, or [Nimble](#using-nimble) running on your machine) which track to take, and Trax records each answer with a hash of the state
 it was about. A later step crashes, and the manifest's automatic retry reuses the recorded answers
 while that hash still matches, so it takes the same tracks. Every junction, question and track
 reaches the page as it happens, through junction events.
 
-![The Recovery demo: a refund's payment step crashes, and the retry reuses the model's recorded answer](screenshot.png)
+![The Recovery demo: the research run crashes while it writes its report, and the retry replays the model's two answers](screenshot.png)
 
 It proves three Trax features working together: [train decisions](https://traxsharp.net/docs/core/decisions),
 [retries that replay decisions](https://traxsharp.net/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)
@@ -44,28 +44,27 @@ Development only. When your Postgres is not on 5432, start the host with
 
 ## Try it
 
-The page shows the case the model is asked about, a **Decisions** table (one row per question, one
-column per attempt: the answer, where it came from, how long it took, the state hash), the **Route
-taken** by each attempt, and the train's source and raw junction events in tabs.
+The page has the controls on the left, the train's real C# with the running step highlighted, a console that
+narrates every junction event as it arrives, and a timeline with one lane per attempt. The **Progress** pills
+follow the run: **Runs**, **Breaks** when an attempt crashes, **Recovers** when the retry runs.
 
-1. Leave **Refund approval**, order **A-1001** and **Crash the first attempt** selected and press
-   **Run**. Attempt 1 loads the case, asks the model whether to pay it (`ApproveRefund`), and crashes
-   in `IssuePayment`. A few seconds later the manifest retries: attempt 2's answer reads
-   **replayed, model not called**, in milliseconds rather than the model's second or so, and the
-   retry takes the same `Yes` track.
-2. Press **Run** again and, while the retry counts down, press **Add an earlier refund to the order**.
-   The case the model sees now shows one more earlier refund, so the retry's state no longer hashes
-   the same: the replay is refused, the model is asked again (**asked again: the case changed**) and
-   the refund goes to a person (the `Unsure` track) instead of being paid.
-3. Press **Run** again and, during the countdown, press **Ask the model again**. The retry starts at
-   once and asks afresh (**asked again, on purpose**).
-4. Try orders A-1002 and A-1003. The model is unsure about A-1002 and declines A-1003, so their runs
-   take the review and decline tracks; the step on that track crashes the same way, and the retry
-   reuses the answer and takes the same track.
-5. Pick **Research brief** and press **Run**. The train asks two questions (`Source`, `Depth`) and
-   crashes while writing the report; the retry reuses both answers.
-6. After a run completes, **Re-run, asking afresh** re-queues its last execution with
-   `requeueExecution(id, askAfresh: true)`, as a run of its own.
+1. Leave **Research**, the first topic and **Crash once** selected and press **Run**. Attempt 1 runs
+   `PlanResearch`, asks the model `Source` and `Depth`, takes the tracks they pick and crashes in `Summarize`
+   while it writes the report. The sidebar counts down to the retry. A few seconds later the manifest's retry
+   runs the train again: its lane reads **replayed: model not asked** for both questions, the console says
+   `MODEL not asked`, and the retry takes the same tracks.
+2. Pick **Refund**, order **A-1001**, and press **Run**. Attempt 1 asks `ApproveRefund` and crashes in
+   `IssuePayment`. While the retry counts down, press **Change the data during the backoff**: it adds an
+   earlier refund to the order, so the retry's state no longer hashes the same. The replay is refused, the
+   model is asked again (**asked afresh: state changed**) and the refund goes to a person (the `Unsure` track)
+   instead of being paid.
+3. Press **Run** again and, during the countdown, press **Ask afresh**. The retry starts at once and asks the
+   model again (**asked afresh: on purpose**).
+4. Try orders A-1002 and A-1003. The model is unsure about A-1002 and declines A-1003, so their runs take the
+   review and decline tracks; the step on that track crashes the same way, and the retry reuses the answer and
+   takes the same track.
+5. After a run completes, **Ask afresh** re-queues its last execution with
+   `requeueExecution(id, askAfresh: true)`, as a run of its own: a lane labelled `[requeue]`.
 
 The same over plain GraphQL, with header `X-Api-Key: recovery-operator-key-do-not-use-in-production`:
 
@@ -102,7 +101,47 @@ so the page offers no re-run once a run is dead.
 ## Using Nimble
 
 Set `Recovery:Model` to `Nimble` and `Recovery:Nimble:Endpoint` to the full URL of a Nimble server's
-`POST /v1/systemone` (one you run; Trax has no default). The demo decider is then not registered.
+`POST /v1/systemone` (one you run; Trax has no default). The demo decider is then not registered:
+
+```bash
+Recovery__Model=Nimble Recovery__Nimble__Endpoint=http://127.0.0.1:8000/v1/systemone \
+  dotnet run --project samples/Recovery/Trax.Samples.Recovery.Api
+```
+
+### On a Mac
+
+Nimble's own server (`nimble/serving/server.py`) runs SGLang and needs an NVIDIA GPU. On Apple Silicon,
+[`nimble-mac/serve.py`](nimble-mac/serve.py) serves the same model through Nimble's MLX scorer on
+`http://127.0.0.1:8000/v1/systemone`, answering in the shape `AddNimbleDecider` reads. It needs Python 3.12,
+about 40 GB of disk, and enough memory for an 18 GB model (it was run on an M3 Pro with 36 GB). From a
+folder beside `Trax.Samples`:
+
+```bash
+git clone https://github.com/bespokelabsai/nimble.git
+cd nimble
+
+# Download the model and merge it, once.
+python3.12 -m venv .cache/venvs/nimble
+.cache/venvs/nimble/bin/python -m pip install torch==2.8.0 -r requirements/training.txt huggingface_hub
+.cache/venvs/nimble/bin/python ../Trax.Samples/samples/Recovery/nimble-mac/prepare.py
+
+# Serve it.
+python3.12 -m venv .venv-mlx
+.venv-mlx/bin/python -m pip install -r requirements/mlx.txt fastapi uvicorn
+.venv-mlx/bin/python ../Trax.Samples/samples/Recovery/nimble-mac/serve.py
+```
+
+[`prepare.py`](nimble-mac/prepare.py) is the "Download the model" step of Nimble's README: it downloads
+`bespokelabs/Bespoke-Nimble-9B`, a LoRA adapter, and the Qwen3.5-9B base revision the adapter pins (about
+18 GB) from Hugging Face, merges them once on the CPU, and writes the merged weights to `.cache/models/`. The
+server then answers one request at a time, about a second a question on an M3 Pro, and logs each answer.
+Nothing leaves the machine.
+
+A real model reads the case, so its answers differ from the demo decider's. Nimble paid A-1001 (0.99), and
+after **Change the data during the backoff** added an earlier refund it was asked again and declined (0.13)
+where the demo decider sends the refund to review. Its latest release ships no fitted probability
+temperature, so it is served at 1.0; the gate's bars (pay at 0.8 or above, decline below 0.3) were chosen for
+the demo decider, not checked against Nimble.
 
 ## Tests
 

@@ -1,23 +1,12 @@
-// What each run's model call is about, as the host's CaseFiles holds it. The page shows it so the reader
-// can see what the replay check hashes, and what "change the case" changes.
-
-export interface OrderCase {
-  orderId: string;
-  amount: string;
-  reason: string;
-  priorRefunds: number;
-}
-
-export const ORDERS: OrderCase[] = [
-  { orderId: "A-1001", amount: "$89.00", reason: "Arrived broken", priorRefunds: 0 },
-  { orderId: "A-1002", amount: "$420.00", reason: "Never arrived", priorRefunds: 0 },
-  { orderId: "A-1003", amount: "$35.50", reason: "Changed my mind", priorRefunds: 2 },
-];
+// What each run's model call is about, as the host's CaseFiles holds it.
 
 export const TOPICS = [
-  "What the papers say about cold-weather battery wear",
-  "History of the telegraph",
+  { key: "papers", label: "What the papers say about cold-weather battery wear" },
+  { key: "wiki", label: "History of the telegraph" },
 ];
 
-/** The audience every research run starts with, and the one "change the case" switches it to. */
-export const AUDIENCE = { before: "engineers", after: "executives" };
+export const ORDERS = [
+  { key: "A-1001", label: "A-1001: $89, arrived broken" },
+  { key: "A-1002", label: "A-1002: $420, never arrived" },
+  { key: "A-1003", label: "A-1003: $35.50, changed my mind, 2 earlier refunds" },
+];

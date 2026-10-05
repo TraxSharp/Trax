@@ -41,8 +41,8 @@ export interface Attempt {
   id: number;
   /** "retry" for the manifest's runs, "requeue" for a requeueExecution. */
   origin: "manifest" | "requeue";
-  /** Set when the requeue asked afresh on purpose. */
-  askedAfresh: boolean;
+  /** What started it, when it was not the first run or the manifest's own retry. */
+  startedBy: "askAfresh" | "requeue" | null;
   trainState: string;
   startTime: string;
   endTime: string | null;
@@ -66,9 +66,17 @@ export type Tone = "info" | "model" | "replay" | "error" | "success" | "system";
 
 export interface ConsoleLine {
   key: string;
-  at: string;
+  /** Milliseconds since Run was pressed. */
+  t: number;
   tone: Tone;
   text: string;
 }
 
-export type Phase = "idle" | "starting" | "running" | "backoff" | "retrying" | "done" | "dead";
+export type Phase = "idle" | "starting" | "running" | "backoff" | "retrying" | "done" | "requeue" | "dead";
+
+/** What the reader did during the backoff, if anything. */
+export type Fork = "none" | "askAfresh" | "changeData";
+
+/** An answer as the page shows it: a probability or score to two places, a choice as it is. */
+export const shownAnswer = (answer: string | null) =>
+  answer != null && /^-?\d+\.\d{3,}$/.test(answer) ? Number(answer).toFixed(2) : answer;

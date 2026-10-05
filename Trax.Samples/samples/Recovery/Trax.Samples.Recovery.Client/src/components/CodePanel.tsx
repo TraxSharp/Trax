@@ -9,13 +9,34 @@ interface Props {
 
 // The range the code's font size may take.
 const MIN_PX = 10;
-const MAX_PX = 15;
+const MAX_PX = 12;
+
+// The words that declare a decision and its tracks, picked out in the code.
+const TOKEN =
+  /(\.(?:Switch|Scale|Gate|When|AtLeast|Yes|No|Unsure)\b)|(\[Trax[A-Za-z]*)|("[^"]*")|(\b(?:public|class|protected|override)\b)/g;
+
+function highlight(line: string) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of line.matchAll(TOKEN)) {
+    if (m.index > last) parts.push(line.slice(last, m.index));
+    const tone = m[1] ? "tk-track" : m[2] ? "tk-attr" : m[3] ? "tk-string" : "tk-keyword";
+    parts.push(
+      <span key={m.index} className={tone}>
+        {m[0]}
+      </span>,
+    );
+    last = m.index + m[0].length;
+  }
+  parts.push(line.slice(last));
+  return parts;
+}
 
 export function CodePanel({ source, current }: Props) {
   const code = useMemo(() => source.code.replace(/\r/g, ""), [source.code]);
   const lines = useMemo(() => code.split("\n"), [code]);
-  // Show the chain itself, from Junctions() to Resolve(), dedented, so it fits the panel unwrapped and never
-  // has to scroll to follow a run: the highlight moves, the code stays put. Line numbers stay the file's.
+  // Only the chain, from Junctions() to Resolve(), so it stays on screen while the highlight moves. The line
+  // numbers stay the file's.
   const [first, last, indent] = useMemo(() => {
     const at = lines.findIndex((l) => l.includes("Junctions()"));
     const end = lines.findIndex((l, i) => i > at && l.includes(".Resolve()"));
@@ -26,53 +47,44 @@ export function CodePanel({ source, current }: Props) {
   const highlighted = current ? lineOf(code, current) : -1;
   const tone = current?.state === "FAILED" ? "failed" : current?.state === "IN_PROGRESS" ? "running" : "ran";
 
-  // Size the font so the whole train fits the panel without wrapping or scrolling: the largest size in range
-  // at which nothing overflows. Below the smallest size, the panel scrolls instead.
+  // Keep each line whole, the way an editor shows it: size the font so the longest line fits the panel's width.
+  // Below the smallest size the panel scrolls sideways instead of wrapping.
   const pane = useRef<HTMLPreElement>(null);
-  const body = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
+    const el = pane.current;
+    if (!el) return;
     const fit = () => {
-      const p = pane.current;
-      const b = body.current;
-      if (!p || !b) return;
-      const style = getComputedStyle(p);
-      const width = p.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      const height = p.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-      const fits = (px: number) => {
-        b.style.fontSize = `${px}px`;
-        return b.scrollHeight <= height && b.scrollWidth <= width + 1;
-      };
-      let low = MIN_PX;
-      let high = MAX_PX;
-      if (fits(high)) low = high;
-      else for (let i = 0; i < 7; i++) {
-        const mid = (low + high) / 2;
-        if (fits(mid)) low = mid;
-        else high = mid;
+      let size = MAX_PX;
+      // Two passes: the padding and the line-number gutter do not all scale with the font.
+      for (let pass = 0; pass < 2; pass++) {
+        el.style.fontSize = `${size}px`;
+        const ratio = el.clientWidth / el.scrollWidth;
+        if (ratio >= 1) break;
+        size = Math.max(MIN_PX, Math.floor(size * ratio * 10) / 10);
       }
-      b.style.fontSize = `${Math.floor(low * 10) / 10}px`;
+      el.style.fontSize = `${size}px`;
     };
     fit();
     const observer = new ResizeObserver(fit);
-    if (pane.current) observer.observe(pane.current);
+    observer.observe(el);
     return () => observer.disconnect();
-  }, [first, last, code]);
+  }, [source.file]);
 
   return (
-    <div className="code-panel">
-      <div className="file">{source.file}</div>
-      <pre ref={pane}>
-        <div ref={body} className="code-body">
-          {lines.slice(first, last).map((line, offset) => {
-            const i = first + offset;
-            return (
-              <div key={i} className={i === highlighted ? `line highlight ${tone}` : "line"}>
-                <span className="gutter">{i + 1}</span>
-                <span className="text">{line.slice(indent) || " "}</span>
-              </div>
-            );
-          })}
-        </div>
+    <div className="panel code-panel">
+      <div className="panel-title">
+        Code <span className="file">{source.file}</span>
+      </div>
+      <pre ref={pane} className="code">
+        {lines.slice(first, last).map((line, offset) => {
+          const i = first + offset;
+          return (
+            <div key={i} className={i === highlighted ? `line highlight ${tone}` : "line"}>
+              <span className="gutter">{i + 1}</span>
+              <span className="text">{highlight(line.slice(indent))}</span>
+            </div>
+          );
+        })}
       </pre>
     </div>
   );

@@ -1,24 +1,57 @@
 import { useEffect, useMemo, useState } from "react";
+import { ORDERS, TOPICS } from "../cases";
 import { SOURCES } from "../sources";
-import type { Attempt, Scenario, Step } from "../types";
+import type { Phase, Scenario, Step } from "../types";
 import { useRecoveryRun } from "../useRecoveryRun";
-import { questionsOf, questionStep } from "../routes";
-import { CasePanel } from "./CasePanel";
 import { CodePanel } from "./CodePanel";
-import { EventFeed } from "./EventFeed";
-import { Ledger } from "./Ledger";
-import { RouteMap } from "./RouteMap";
+import { ConsolePanel } from "./ConsolePanel";
+import { TimelinePanel } from "./TimelinePanel";
 
 // The host retries a failed run after four seconds and polls every second (see the README's demo-only
 // settings), so the retry starts four to five seconds after the failure.
 const RETRY_AFTER_MS = 4500;
 
+const PHASES: { phases: Phase[]; label: string }[] = [
+  { phases: ["starting", "running"], label: "Runs" },
+  { phases: ["backoff", "dead"], label: "Breaks" },
+  { phases: ["retrying", "requeue"], label: "Recovers" },
+];
+
 export function App() {
-  const [scenario, setScenario] = useState<Scenario>("REFUND");
-  const [tab, setTab] = useState<"source" | "events">("source");
+  const [scenario, setScenario] = useState<Scenario>("RESEARCH");
+  const [topic, setTopic] = useState(TOPICS[0].key);
+  const [order, setOrder] = useState(ORDERS[0].key);
+  const [crash, setCrash] = useState(true);
   const recovery = useRecoveryRun();
-  const showsRun = recovery.run?.scenario === scenario;
-  const attempts = showsRun ? recovery.attempts : [];
+  const { phase, attempts, run, forkTaken } = recovery;
+
+  const locked = phase === "starting" || phase === "running" || phase === "backoff" || phase === "retrying" || phase === "requeue";
+
+  // A clock for the countdown and the timeline's running bars.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!locked) return;
+    const timer = setInterval(() => setNow(Date.now()), 50);
+    return () => clearInterval(timer);
+  }, [locked]);
+
+  const runIt = () => {
+    const subject = TOPICS.find((t) => t.key === topic)?.label ?? TOPICS[0].label;
+    void recovery.start(scenario, crash, order, subject);
+  };
+
+  // Changing what to run clears the last run.
+  const choose = (change: () => void) => {
+    change();
+    recovery.reset();
+  };
+
+  const retryIn = useMemo(() => {
+    if (phase !== "backoff") return null;
+    const failed = [...attempts].reverse().find((a) => a.trainState === "FAILED");
+    const ended = failed?.endTime ? Date.parse(failed.endTime) : now;
+    return Math.max(0, (ended + RETRY_AFTER_MS - now) / 1000);
+  }, [phase, attempts, now]);
 
   // The step the source highlights: the running junction, else the latest step of the latest attempt.
   const current: Step | null = useMemo(() => {
@@ -28,133 +61,127 @@ export function App() {
     return steps.find((s) => s.state === "IN_PROGRESS") ?? steps[steps.length - 1] ?? null;
   }, [attempts]);
 
+  const shown = run?.scenario ?? scenario;
+  const reached = PHASES.findIndex((p) => p.phases.includes(phase));
+  const crashed = attempts.some((a) => a.trainState === "FAILED");
+  const canAskAfresh = (phase === "backoff" && forkTaken === "none") || phase === "done";
+
   return (
     <div className="app">
-      <header className="top">
-        <div className="brand">
-          <span className="mark">T</span>
-          <span>Trax · Recovery sample</span>
-        </div>
-        <h1>A crashed run retries without paying for the model's answers twice</h1>
-        <p className="subtitle">
-          Trax records every answer with a hash of what it was about. The scheduler's retry reuses an answer only
-          while that hash still matches; change the case and the model is asked again.
-        </p>
-        <a className="dashboard-link" href="http://localhost:5260/trax" target="_blank" rel="noreferrer">
-          Dashboard ↗
-        </a>
-      </header>
-
       <aside className="sidebar">
-        <CasePanel
-          scenario={scenario}
-          onScenario={setScenario}
-          phase={recovery.phase}
-          changed={showsRun && recovery.changed}
-          onRun={recovery.start}
-          onReset={recovery.reset}
-        />
+        <div className="intro">
+          <span className="eyebrow">
+            <span className="mark">T</span>
+            Trax · Recovery
+          </span>
+          <h1>A crashed run retries without paying for the model twice</h1>
+          <p className="subtitle">
+            Trax records every answer with a hash of what it was about. The scheduler&apos;s retry reuses an answer only
+            while that hash still matches; change the data during the backoff and the model is asked again.
+          </p>
+        </div>
+
+        <Group label="Scenario">
+          <div role="tablist" className="segmented">
+            {(["RESEARCH", "REFUND"] as const).map((s) => (
+              <button
+                key={s}
+                role="tab"
+                aria-selected={scenario === s}
+                disabled={locked}
+                onClick={() => choose(() => setScenario(s))}
+                className={scenario === s ? "active" : ""}
+              >
+                {s === "RESEARCH" ? "Research" : "Refund"}
+              </button>
+            ))}
+          </div>
+          <label className="field">
+            {scenario === "RESEARCH" ? "Topic" : "Order"}
+            <select
+              value={scenario === "RESEARCH" ? topic : order}
+              disabled={locked}
+              onChange={(e) => choose(() => (scenario === "RESEARCH" ? setTopic : setOrder)(e.target.value))}
+            >
+              {(scenario === "RESEARCH" ? TOPICS : ORDERS).map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={crash} disabled={locked} onChange={(e) => choose(() => setCrash(e.target.checked))} />
+            Crash once ({scenario === "RESEARCH" ? "while it writes the report" : "in the step after the approval"})
+          </label>
+        </Group>
+
+        <Group label="Actions">
+          <button className="primary" onClick={runIt} disabled={locked}>
+            Run
+          </button>
+          <button className="action" onClick={recovery.changeData} disabled={phase !== "backoff" || forkTaken !== "none"}>
+            Change the data during the backoff
+          </button>
+          <div className="action-pair">
+            <button className="action" onClick={recovery.askAfresh} disabled={!canAskAfresh}>
+              Ask afresh
+            </button>
+            <button className="action" onClick={recovery.reset} disabled={!run || locked}>
+              Reset
+            </button>
+          </div>
+          <p className="hint">
+            {retryIn != null && forkTaken === "none" ? (
+              <span className="signal">
+                In the backoff: the retry starts in {retryIn.toFixed(1)} s. Change the data or ask afresh before it does.
+              </span>
+            ) : phase === "done" ? (
+              "The run is over. Ask afresh to run it again with every question put to the model."
+            ) : phase === "dead" ? (
+              "Every retry failed, so the manifest is dead-lettered."
+            ) : null}
+          </p>
+        </Group>
+
+        <Group label="Progress">
+          <ol className="progress">
+            {PHASES.map((p, i) => {
+              // A run that never crashed skips Breaks and Recovers.
+              const done = phase === "done" ? i === 0 || crashed : i < reached;
+              const tone = done ? "done" : i === reached ? (i === 1 ? "broken" : "current") : "";
+              return (
+                <li key={p.label} className={tone}>
+                  {p.label}
+                </li>
+              );
+            })}
+          </ol>
+        </Group>
+
+        <a className="dashboard-link" href="http://localhost:5260/trax" target="_blank" rel="noreferrer">
+          Open the Trax dashboard ↗
+        </a>
       </aside>
 
-      <main className="main">
-        <Moment recovery={recovery} scenario={scenario} />
-        <Ledger scenario={scenario} attempts={attempts} labelOf={recovery.labelOf} />
-        <RouteMap scenario={scenario} attempts={attempts} maxRetries={recovery.run?.maxRetries ?? 2} labelOf={recovery.labelOf} />
-      </main>
-
-      <section className="panel side">
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "source"} className={tab === "source" ? "active" : ""} onClick={() => setTab("source")}>
-            Train source
-          </button>
-          <button role="tab" aria-selected={tab === "events"} className={tab === "events" ? "active" : ""} onClick={() => setTab("events")}>
-            Junction events
-          </button>
-        </div>
-        {tab === "source" ? (
-          <CodePanel source={SOURCES[scenario]} current={showsRun ? current : null} />
-        ) : (
-          <EventFeed attempts={attempts} lines={showsRun ? recovery.lines : []} labelOf={recovery.labelOf} />
-        )}
-      </section>
+      <CodePanel source={SOURCES[shown]} current={run?.scenario === shown ? current : null} />
+      <ConsolePanel lines={recovery.lines} />
+      <TimelinePanel
+        attempts={attempts}
+        maxRetries={run?.maxRetries ?? 2}
+        labelOf={recovery.labelOf}
+        sinceStart={recovery.sinceStart}
+        elapsed={recovery.sinceStart(new Date(now).toISOString()) ?? 0}
+      />
     </div>
   );
 }
 
-type Recovery = ReturnType<typeof useRecoveryRun>;
-
-/** The one sentence that says where the run is, and during the backoff, the choice the reader has. */
-function Moment({ recovery, scenario }: { recovery: Recovery; scenario: Scenario }) {
-  const { phase, attempts, run } = recovery;
-  const failed = [...attempts].reverse().find((a) => a.trainState === "FAILED");
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    if (phase !== "backoff") return;
-    const timer = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(timer);
-  }, [phase]);
-
-  if (run && run.scenario !== scenario)
-    return <div className="moment quiet">Showing the {scenario === "REFUND" ? "refund" : "research"} train. The last run was the other one.</div>;
-
-  if (phase === "backoff" && failed) {
-    const ended = failed.endTime ? new Date(failed.endTime).getTime() : now;
-    const left = Math.max(0, ended + RETRY_AFTER_MS - now);
-    const recorded = countAnswers(failed, scenario);
-    return (
-      <div className="moment choice">
-        <div className="moment-text">
-          <strong>
-            {failed.failureJunction ?? "A junction"} crashed. The retry starts in {(left / 1000).toFixed(1)} s and
-            will reuse {recorded} recorded answer{recorded === 1 ? "" : "s"}.
-          </strong>
-          <span>Before it does, you can change what the model would see, or ask it again on purpose. Or do nothing.</span>
-        </div>
-        <div className="moment-actions">
-          <button onClick={recovery.changeData} disabled={recovery.changed}>
-            {scenario === "REFUND" ? "Add an earlier refund to the order" : "Make the brief for executives"}
-          </button>
-          <button onClick={recovery.askAfresh}>Ask the model again</button>
-        </div>
-        <div className="countdown" style={{ width: `${(left / RETRY_AFTER_MS) * 100}%` }} />
-      </div>
-    );
-  }
-
-  if (phase === "done") {
-    const last = attempts[attempts.length - 1];
-    const replayed = attempts.flatMap((a) => questionsOf(scenario).map((q) => questionStep(a, q.key))).filter((s) => s?.replayed).length;
-    return (
-      <div className="moment done">
-        <div className="moment-text">
-          <strong>
-            {attempts.filter((a) => a.origin === "manifest").length > 1
-              ? replayed > 0
-                ? `Recovered. The retry reused ${replayed} answer${replayed === 1 ? "" : "s"} and took the same tracks.`
-                : "Recovered. The retry asked the model again, so its tracks follow the new answers."
-              : "Completed on the first attempt."}
-          </strong>
-          <span>Re-run the last execution with every question put to the model, to compare.</span>
-        </div>
-        <div className="moment-actions">
-          <button onClick={recovery.askAfresh} disabled={last?.origin === "requeue" && last.trainState !== "COMPLETED"}>
-            Re-run, asking afresh
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const text: Record<string, string> = {
-    idle: "Pick a case and run it. With the crash on, the first attempt fails after the model has answered.",
-    starting: "Scheduling a one-off manifest…",
-    running: "The first attempt is running. Each answer is recorded before the train acts on it.",
-    retrying: "The scheduler's retry is running the train again from the top.",
-    dead: "Every retry failed, so the manifest is dead-lettered.",
-  };
-  return <div className={`moment ${phase === "dead" ? "dead" : "quiet"}`}>{text[phase] ?? ""}</div>;
-}
-
-function countAnswers(attempt: Attempt, scenario: Scenario) {
-  return questionsOf(scenario).filter((q) => questionStep(attempt, q.key)).length;
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="group">
+      <span className="group-label">{label}</span>
+      {children}
+    </div>
+  );
 }
