@@ -66,8 +66,8 @@ The signing key must have `KeyId` set; the same value lands in the JWT header `k
 | Audience | `client_id` claim (no `aud`) | `aud` claim |
 | `username` | always | (uses `cognito:username`) |
 | `cognito:username` | omitted | always |
-| `email`, `email_verified` | omitted | required |
-| `given_name`, `family_name` | omitted | optional |
+| `email`, `email_verified` | only when set on the request | required |
+| `given_name`, `family_name` | only when set on the request | optional |
 | `identities` | omitted | optional, JSON-array string |
 | `scope` | space-delimited from `Scopes` | omitted |
 | `cognito:groups` | repeated per entry | repeated per entry |
@@ -87,6 +87,7 @@ The signing key must have `KeyId` set; the same value lands in the JWT header `k
 | `Scopes` | no | Joined into a space-delimited `scope` claim; omitted when empty. |
 | `Groups` | no | Each entry becomes a repeated `cognito:groups` claim. |
 | `AuthTime` | no | Original authentication time; defaults to the issuer clock. |
+| `Email`, `EmailVerified`, `GivenName`, `FamilyName` | no | Written as `email`, `email_verified`, `given_name` and `family_name` when set, omitted when null. An empty or whitespace `Email` throws. A real pool puts these on access tokens only through a PreTokenGeneration trigger, so leave them unset to mint the token a pool without one issues. |
 | `AdditionalClaims` | no | String-valued claims appended verbatim (use for `custom:*` attributes). A reserved name throws; see below. |
 
 ### `CognitoIdTokenRequest`
@@ -112,6 +113,8 @@ The signing key must have `KeyId` set; the same value lands in the JWT header `k
 `sub`, `iss`, `aud`, `exp`, `nbf`, `iat`, `jti`, `auth_time`, `token_use`, `client_id`, `scope`, `username`, `cognito:username`, `cognito:groups`, `identities`, `email`, `email_verified`, `given_name`, `family_name`, `name`, `preferred_username`, `role`, `roles`, the `ClaimTypes.Role`, `ClaimTypes.Name` and `ClaimTypes.NameIdentifier` URIs, `trax:principal-id` and `trax:principal-type`.
 
 Set those through the request's own properties (`Groups` for roles, `Username`, `Email`, and so on). A host that forwards user-editable attributes into `AdditionalClaims` therefore cannot be made to mint a token carrying an extra group or a different subject.
+
+An access token has no way to carry `aud`, because real Cognito access tokens never do. A host that validates the standard `aud` claim (`UseAuthority`, rather than `UseCognito`) should be given ID tokens, which carry the client id in `aud`.
 
 ### `FederatedIdentity`
 
