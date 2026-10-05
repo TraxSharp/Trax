@@ -32,8 +32,17 @@
                           ButtonStyle="ButtonStyle.Primary"
                           Variant="Variant.Outlined"
                           Size="ButtonSize.Small"
-                          Click="@RequeueManifest"
-                          IsBusy="@_requeueing"
+                          Click="@(() => RequeueManifest(askAfresh: false))"
+                          IsBusy="@(_requeueing && !_requeueingAskAfresh)"
+                          Disabled="@(_requeueing || _acknowledging)" />
+            <RadzenButton Text="Re-queue, Ask Afresh"
+                          Icon="psychology_alt"
+                          ButtonStyle="ButtonStyle.Primary"
+                          Variant="Variant.Text"
+                          Size="ButtonSize.Small"
+                          title="Re-queue; the run asks the model afresh instead of replaying the failed run's decisions."
+                          Click="@(() => RequeueManifest(askAfresh: true))"
+                          IsBusy="@(_requeueing && _requeueingAskAfresh)"
                           Disabled="@(_requeueing || _acknowledging)" />
             @if (_deadLetter.Status == DeadLetterStatus.AwaitingIntervention)
             {

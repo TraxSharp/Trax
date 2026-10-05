@@ -1,4 +1,4 @@
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 
 #pragma warning disable CS8766 // Nullability mismatch on Metadata property inherited from EffectTrain

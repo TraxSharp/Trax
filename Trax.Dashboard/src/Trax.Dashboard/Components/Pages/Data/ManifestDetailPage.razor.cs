@@ -57,7 +57,16 @@ public partial class ManifestDetailPage
     private long _inProgressRuns;
     private List<Exclusion> _exclusions = [];
     private bool _triggering;
+
+    // Which of the two run buttons is busy while _triggering.
+    private bool _triggeringAskAfresh;
     private string? _triggerError;
+    private bool _settingReplay;
+    private string? _replayError;
+
+    // Bumped when a replay-on-retry change is not saved, so the switch is rebuilt showing the
+    // stored value rather than the one it flipped to.
+    private int _replaySwitchVersion;
 
     /// <summary>
     /// Loads the manifest with its group and exclusions, counts its runs by state over all time,
@@ -132,17 +141,44 @@ public partial class ManifestDetailPage
         };
     }
 
-    private async Task TriggerManifest()
+    // The default trigger keeps its own overload; asking afresh is the overload the API's
+    // triggerManifest takes when askAfresh is set, so a queued retry it releases stops replaying.
+    private async Task TriggerManifest(bool askAfresh)
     {
         if (_manifest is null)
             return;
 
         _triggerError = null;
         _triggering = true;
+        _triggeringAskAfresh = askAfresh;
 
         try
         {
-            await TraxScheduler.TriggerAsync(_manifest.ExternalId);
+            if (askAfresh)
+            {
+                var result = await TraxScheduler.TriggerAsync(
+                    _manifest.ExternalId,
+                    askAfresh: true,
+                    DisposalToken
+                );
+
+                // The dispatcher claimed the queued retry before the trigger could change it, so
+                // that run still replays: say so rather than report an ask-afresh that did not
+                // happen.
+                if (result.ReplayDecisionsOf is { } replays)
+                {
+                    NotificationService.Notify(
+                        NotificationSeverity.Warning,
+                        "Train Queued, Still Replaying",
+                        $"{ShortName(_manifest.Name)} was already being dispatched (WorkQueue ID {result.WorkQueueId}), "
+                            + $"so its run replays the decisions of run {replays} rather than asking afresh.",
+                        duration: 10000
+                    );
+                    return;
+                }
+            }
+            else
+                await TraxScheduler.TriggerAsync(_manifest.ExternalId);
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
@@ -158,6 +194,52 @@ public partial class ManifestDetailPage
         finally
         {
             _triggering = false;
+        }
+    }
+
+    // Through the operations service, as the API's setManifestsReplayDecisionsOnRetry is, and
+    // reported as the enable and disable actions report theirs: the service's message on success,
+    // its refusal or the exception as an alert.
+    private async Task SetReplayDecisionsOnRetry(bool replay)
+    {
+        if (_manifest is null)
+            return;
+
+        _replayError = null;
+        _settingReplay = true;
+
+        try
+        {
+            var result = await OperationsService.SetManifestsReplayDecisionsOnRetryAsync(
+                [_manifest.Id],
+                replay,
+                DisposalToken
+            );
+
+            if (!result.Success)
+            {
+                _replayError = result.Message;
+                _replaySwitchVersion++;
+                return;
+            }
+
+            _manifest.ReplayDecisionsOnRetry = replay;
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                replay ? "Retries Replay Decisions" : "Retries Ask Afresh",
+                result.Message ?? "",
+                duration: 4000
+            );
+            await LoadDataAsync(DisposalToken);
+        }
+        catch (Exception ex)
+        {
+            _replayError = ex.Message;
+            _replaySwitchVersion++;
+        }
+        finally
+        {
+            _settingReplay = false;
         }
     }
 }

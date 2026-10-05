@@ -76,6 +76,9 @@ public partial class DeadLetterDetailPage
     private Metadata? _latestFailedRun;
 
     private bool _requeueing;
+
+    // Which of the two re-queue buttons is busy while _requeueing.
+    private bool _requeueingAskAfresh;
     private bool _acknowledging;
     private bool _showAcknowledgeInput;
     private string _acknowledgeNote = "";
@@ -145,17 +148,26 @@ public partial class DeadLetterDetailPage
         }
     }
 
-    private async Task RequeueManifest()
+    // Asking afresh uses the scheduler's askAfresh overload, as the API's requeueDeadLetter does
+    // with askAfresh set; the default re-queue keeps its own overload.
+    private async Task RequeueManifest(bool askAfresh)
     {
         if (_deadLetter is null)
             return;
 
         _actionError = null;
         _requeueing = true;
+        _requeueingAskAfresh = askAfresh;
 
         try
         {
-            var result = await Scheduler.RequeueDeadLetterAsync(DeadLetterId, DisposalToken);
+            var result = askAfresh
+                ? await Scheduler.RequeueDeadLetterAsync(
+                    DeadLetterId,
+                    askAfresh: true,
+                    DisposalToken
+                )
+                : await Scheduler.RequeueDeadLetterAsync(DeadLetterId, DisposalToken);
 
             if (!result.Success)
             {

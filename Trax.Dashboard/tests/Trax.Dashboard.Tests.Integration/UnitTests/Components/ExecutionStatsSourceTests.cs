@@ -1,6 +1,6 @@
 using System.Reflection;
+using AwesomeAssertions;
 using Bunit;
-using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Dashboard.Components.Pages.Data;

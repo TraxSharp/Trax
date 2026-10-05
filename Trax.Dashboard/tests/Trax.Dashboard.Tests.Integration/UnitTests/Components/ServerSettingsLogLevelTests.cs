@@ -1,5 +1,5 @@
+using AwesomeAssertions;
 using Bunit;
-using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

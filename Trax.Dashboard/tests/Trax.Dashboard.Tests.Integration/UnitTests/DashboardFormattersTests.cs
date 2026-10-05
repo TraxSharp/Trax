@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Radzen;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;

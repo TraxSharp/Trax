@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
 

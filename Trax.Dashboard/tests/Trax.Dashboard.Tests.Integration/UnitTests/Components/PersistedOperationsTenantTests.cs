@@ -1,6 +1,6 @@
+using AwesomeAssertions;
 using Bunit;
 using Bunit.TestDoubles;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
@@ -61,7 +61,7 @@ public class PersistedOperationsTenantTests
 
         var services = _ctx.Services;
         services.AddLogging();
-        services.AddPersistedOperationStore("Host=unused");
+        services.AddPersistedOperationStore(store => store.SingleNode());
         // Wrap the package's own service, so a test can see that the pages called it.
         var registered = services.Single(d => d.ServiceType == typeof(IPersistedOperationsService));
         services.Remove(registered);
@@ -151,12 +151,10 @@ public class PersistedOperationsTenantTests
         var page = RenderDetail(tenant: null);
         var deactivate = page.WaitForElement("button:contains('Deactivate')", Wait);
 
-        // Another writer deactivates the row after the page loaded it.
+        // Another writer removes the row after the page loaded it. (Deactivating it twice is not a
+        // refusal: the API deactivates again and sends the change to every node again.)
+        await DeleteRowsAsync();
         var service = _ctx.Services.GetRequiredService<IPersistedOperationsService>();
-        await service.DeactivateAsync(
-            new DeactivatePersistedOperationInput(SharedId, "elsewhere"),
-            CancellationToken.None
-        );
         var api = await new PersistedOperationMutations().DeactivatePersistedOperation(
             new DeactivatePersistedOperationInput(SharedId, "retired"),
             service,
@@ -271,6 +269,13 @@ public class PersistedOperationsTenantTests
     {
         using var ctx = await _data.CreateDbContextAsync(CancellationToken.None);
         ctx.PersistedOperations.AddRange(rows);
+        await ctx.SaveChanges(CancellationToken.None);
+    }
+
+    private async Task DeleteRowsAsync()
+    {
+        using var ctx = await _data.CreateDbContextAsync(CancellationToken.None);
+        ctx.PersistedOperations.RemoveRange(await ctx.PersistedOperations.ToListAsync());
         await ctx.SaveChanges(CancellationToken.None);
     }
 

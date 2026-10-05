@@ -1,5 +1,5 @@
+using AwesomeAssertions;
 using Bunit;
-using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
@@ -114,7 +114,7 @@ public class PersistedOperationDetailPageTests
     private ScriptedPersistedOperationsService UseScriptedService()
     {
         var services = _ctx.Services;
-        services.AddPersistedOperationStore("Host=unused");
+        services.AddPersistedOperationStore(store => store.SingleNode());
         var registered = services.Single(d => d.ServiceType == typeof(IPersistedOperationsService));
         services.Remove(registered);
         services.AddSingleton(sp => new ScriptedPersistedOperationsService(

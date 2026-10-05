@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Extensions;

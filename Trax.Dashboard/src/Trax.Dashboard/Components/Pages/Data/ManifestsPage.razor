@@ -20,7 +20,15 @@
                       ButtonStyle="ButtonStyle.Primary"
                       Size="ButtonSize.Small"
                       Disabled="@(BatchOperating)"
-                      Click="@TriggerSelected" />
+                      Click="@(() => TriggerSelected(askAfresh: false))" />
+        <RadzenButton Text="@($"Trigger Selected, Ask Afresh ({_selectedManifests.Count})")"
+                      Icon="psychology_alt"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Variant="Variant.Text"
+                      Size="ButtonSize.Small"
+                      title="Trigger; a queued retry this releases asks the model afresh instead of replaying the failed run's decisions."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => TriggerSelected(askAfresh: true))" />
         <RadzenButton Text="@($"Enable Selected ({_selectedManifests.Count})")"
                       Icon="check_circle"
                       ButtonStyle="ButtonStyle.Success"
@@ -35,6 +43,22 @@
                       Size="ButtonSize.Small"
                       Disabled="@(BatchOperating)"
                       Click="@(() => SetSelectedEnabled(false))" />
+        <RadzenButton Text="@($"Replay On Retry ({_selectedManifests.Count})")"
+                      Icon="replay"
+                      ButtonStyle="ButtonStyle.Secondary"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      title="Retries of the selected manifests replay the decisions the failed run recorded."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedReplay(true))" />
+        <RadzenButton Text="@($"Ask Afresh On Retry ({_selectedManifests.Count})")"
+                      Icon="psychology_alt"
+                      ButtonStyle="ButtonStyle.Secondary"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      title="Retries of the selected manifests ask the model afresh instead of replaying the failed run's decisions."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedReplay(false))" />
     }
 </RadzenStack>
 
@@ -159,7 +183,9 @@
     // turn, so one that fails does not stop the rest. A manifest that already has a queued entry
     // gets nothing more queued: the scheduler marks that entry as the triggered run instead, so
     // it is reported apart from the manifests that were queued.
-    private Task TriggerSelected() => RunEachAsync("Batch Trigger", async () =>
+    // Asking afresh uses the scheduler's askAfresh overload, as the API's triggerManifest does
+    // with askAfresh set; the default trigger keeps its own overload.
+    private Task TriggerSelected(bool askAfresh) => RunEachAsync("Batch Trigger", async () =>
     {
         var selected = _selectedManifests.Values.ToList();
         var ids = selected.Select(m => m.Id).ToList();
@@ -175,12 +201,26 @@
 
         var queued = 0;
         var alreadyQueued = 0;
+        var failed = 0;
+        var stillReplaying = 0;
         var failures = new List<string>();
         foreach (var manifest in selected)
         {
             try
             {
-                await Scheduler.TriggerAsync(manifest.ExternalId, DisposalToken);
+                if (askAfresh)
+                {
+                    var result = await Scheduler.TriggerAsync(manifest.ExternalId, askAfresh: true, DisposalToken);
+                    // The dispatcher claimed the queued retry first, so its run still replays.
+                    if (result.ReplayDecisionsOf is { } replays)
+                    {
+                        stillReplaying++;
+                        failures.Add($"{ShortName(manifest.Name)} ({manifest.ExternalId}) was already being dispatched, so its run replays the decisions of run {replays} rather than asking afresh.");
+                        continue;
+                    }
+                }
+                else
+                    await Scheduler.TriggerAsync(manifest.ExternalId, DisposalToken);
                 if (hadEntry.Contains(manifest.Id))
                     alreadyQueued++;
                 else
@@ -188,6 +228,7 @@
             }
             catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
             {
+                failed++;
                 failures.Add($"{ShortName(manifest.Name)} ({manifest.ExternalId}) was not triggered: {ex.Message}");
             }
         }
@@ -195,8 +236,10 @@
         var message = $"{queued} queued";
         if (alreadyQueued > 0)
             message += $", {alreadyQueued} already queued (that entry now runs as the trigger)";
-        if (failures.Count > 0)
-            message += $", {failures.Count} failed";
+        if (stillReplaying > 0)
+            message += $", {stillReplaying} already dispatched and still replaying";
+        if (failed > 0)
+            message += $", {failed} failed";
         return new EachOutcome(message + ".", failures);
     }, () => _selectedManifests.Clear());
 
@@ -205,5 +248,12 @@
     private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(
         enabled ? "Manifests Enabled" : "Manifests Disabled",
         () => OperationsService.SetManifestsEnabledAsync(_selectedManifests.Keys.ToList(), enabled, DisposalToken),
+        () => _selectedManifests.Clear());
+
+    // Through the operations service, as the API's setManifestsReplayDecisionsOnRetry is, and
+    // reported as enable and disable are. Off, retries ask the model afresh.
+    private Task SetSelectedReplay(bool replay) => RunBatchOperationAsync(
+        replay ? "Retries Replay Decisions" : "Retries Ask Afresh",
+        () => OperationsService.SetManifestsReplayDecisionsOnRetryAsync(_selectedManifests.Keys.ToList(), replay, DisposalToken),
         () => _selectedManifests.Clear());
 }

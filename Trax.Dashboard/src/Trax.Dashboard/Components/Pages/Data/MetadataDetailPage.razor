@@ -42,8 +42,17 @@
                               ButtonStyle="ButtonStyle.Secondary"
                               Variant="Variant.Outlined"
                               Size="ButtonSize.Small"
-                              Click="@RequeueTrain"
-                              IsBusy="@_rerunning"
+                              Click="@(() => RequeueTrain(askAfresh: false))"
+                              IsBusy="@(_rerunning && !_rerunningAskAfresh)"
+                              Disabled="@_rerunning" />
+                <RadzenButton Text="Re-queue, Ask Afresh"
+                              Icon="psychology_alt"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              title="Re-queue; the new run asks the model afresh instead of replaying this run's decisions."
+                              Click="@(() => RequeueTrain(askAfresh: true))"
+                              IsBusy="@(_rerunning && _rerunningAskAfresh)"
                               Disabled="@_rerunning" />
             }
         </RadzenStack>
@@ -129,6 +138,12 @@
                     <FieldDisplay Label="Parent ID" Value="—" />
                 }
                 <FieldDisplay Label="Executor" Value="@(_metadata.Executor ?? "—")" />
+                @if (_metadata.ReplayDecisionsOf.HasValue)
+                {
+                    <FieldDisplay Label="Replays Decisions Of">
+                        <RadzenLink Path="@($"trax/data/metadata/{_metadata.ReplayDecisionsOf}")" Text="@_metadata.ReplayDecisionsOf.ToString()" />
+                    </FieldDisplay>
+                }
             </RadzenStack>
         </RadzenColumn>
     </RadzenRow>
@@ -176,6 +191,9 @@
         </RadzenStack>
     </RadzenCard>
 }
+
+@* ── Junction Timeline (the run's steps, as AddJunctionEvents recorded them) ── *@
+<JunctionTimeline Metadata="@_metadata" Steps="@_junctionRuns" HasMoreSteps="@_moreJunctionSteps" />
 
 @* ── Failure Details (only if failed) ── *@
 @if (_metadata.TrainState == TrainState.Failed)

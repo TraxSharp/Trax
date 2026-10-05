@@ -19,7 +19,15 @@
                   Variant="Variant.Outlined"
                   Size="ButtonSize.Small"
                   Disabled="@(BatchOperating)"
-                  Click="@RequeueAll" />
+                  Click="@(() => RequeueAll(askAfresh: false))" />
+    <RadzenButton Text="Requeue All, Ask Afresh"
+                  Icon="psychology_alt"
+                  ButtonStyle="ButtonStyle.Primary"
+                  Variant="Variant.Text"
+                  Size="ButtonSize.Small"
+                  title="Requeue every dead letter; each run asks the model afresh instead of replaying the failed run's decisions."
+                  Disabled="@(BatchOperating)"
+                  Click="@(() => RequeueAll(askAfresh: true))" />
     <RadzenButton Text="Acknowledge All"
                   Icon="check_circle"
                   ButtonStyle="ButtonStyle.Success"
@@ -34,7 +42,15 @@
                       ButtonStyle="ButtonStyle.Primary"
                       Size="ButtonSize.Small"
                       Disabled="@(BatchOperating)"
-                      Click="@RequeueSelected" />
+                      Click="@(() => RequeueSelected(askAfresh: false))" />
+        <RadzenButton Text="@($"Requeue Selected, Ask Afresh ({_selectedDeadLetters.Count})")"
+                      Icon="psychology_alt"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Variant="Variant.Text"
+                      Size="ButtonSize.Small"
+                      title="Requeue the selected dead letters; each run asks the model afresh instead of replaying the failed run's decisions."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => RequeueSelected(askAfresh: true))" />
         <RadzenButton Text="@($"Acknowledge Selected ({_selectedDeadLetters.Count})")"
                       Icon="check_circle"
                       ButtonStyle="ButtonStyle.Success"
@@ -189,16 +205,22 @@
             ct
         );
 
-    private Task RequeueAll() => RunBatchOperationAsync(async () =>
+    // Asking afresh uses the scheduler's askAfresh overloads, as the API's requeue mutations do
+    // with askAfresh set; the default requeue keeps its own overloads.
+    private Task RequeueAll(bool askAfresh) => RunBatchOperationAsync(async () =>
     {
-        var result = await Scheduler.RequeueAllDeadLettersAsync();
+        var result = askAfresh
+            ? await Scheduler.RequeueAllDeadLettersAsync(askAfresh: true)
+            : await Scheduler.RequeueAllDeadLettersAsync();
         NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
     }, ClearSelection);
 
-    private Task RequeueSelected() => RunBatchOperationAsync(async () =>
+    private Task RequeueSelected(bool askAfresh) => RunBatchOperationAsync(async () =>
     {
         var ids = _selectedDeadLetters.ToArray();
-        var result = await Scheduler.RequeueDeadLettersAsync(ids);
+        var result = askAfresh
+            ? await Scheduler.RequeueDeadLettersAsync(ids, askAfresh: true)
+            : await Scheduler.RequeueDeadLettersAsync(ids);
         NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
     }, ClearSelection);
 

@@ -1,11 +1,15 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
+using Trax.Api.DTOs;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Utilities;
+using Trax.Effect.Data.JunctionEvents;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.JunctionRun;
 using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Metadata;
 using Trax.Mediator.Services.TrustedExecution;
@@ -16,7 +20,8 @@ namespace Trax.Dashboard.Components.Pages.Data;
 
 /// <summary>
 /// The page for one run (metadata row), at <c>/trax/data/metadata/{id}</c>: its state, input,
-/// output, failure details and a paged grid of its logs. The user can cancel it while it is pending or in
+/// output, failure details, its junction timeline (when the host records junction events) and a
+/// paged grid of its logs. The user can cancel it while it is pending or in
 /// progress, or queue the train again with the run's saved input. Part of the dashboard UI, routed by the package; not intended to be used directly.
 /// </summary>
 public partial class MetadataDetailPage
@@ -40,7 +45,18 @@ public partial class MetadataDetailPage
     [Parameter]
     public long MetadataId { get; set; }
 
+    // The API's largest junctionRuns page, so the page never reads more steps per poll than one
+    // API call returns.
+    private const int MaxJunctionSteps = 500;
+
     private Metadata? _metadata;
+    private IReadOnlyList<JunctionStep> _junctionRuns = [];
+    private bool _moreJunctionSteps;
+
+    // How many loads have read the timeline since the run was first seen finished. A finished
+    // run's steps are read in full twice, once when it is first seen finished and once more for a
+    // step the writer stored a moment after the run ended, and then not again.
+    private int _finishedTimelineReads;
     private int _logCount;
     private TraxDataGrid<LogRow>? _logsGrid;
     private readonly GridCount _logsCount = new();
@@ -64,6 +80,9 @@ public partial class MetadataDetailPage
         );
 
     private bool _rerunning;
+
+    // Which of the two re-queue buttons is busy while _rerunning.
+    private bool _rerunningAskAfresh;
     private string? _rerunError;
     private bool _cancelling;
     private string? _cancelError;
@@ -77,6 +96,9 @@ public partial class MetadataDetailPage
     private protected override void OnRouteKeyChanged()
     {
         _metadata = null;
+        _junctionRuns = [];
+        _moreJunctionSteps = false;
+        _finishedTimelineReads = 0;
         _rerunError = null;
     }
 
@@ -101,9 +123,81 @@ public partial class MetadataDetailPage
                 .Logs.AsNoTracking()
                 .CountAsync(l => l.MetadataId == MetadataId, cancellationToken);
 
+            await LoadJunctionStepsAsync(context, _metadata.TrainState, cancellationToken);
+
             if (_logsGrid is not null)
                 await _logsGrid.ReloadAsync();
         }
+    }
+
+    /// <summary>
+    /// Reads the run's steps, through the query and the mapping the API's junctionRuns uses, so
+    /// the two show the same rows with the same fields, and at most the API's page of them. Empty
+    /// when the host did not call AddJunctionEvents().
+    /// </summary>
+    /// <remarks>
+    /// <para>While the run is going, a poll reads only what can have changed: the steps after the
+    /// last one held, and every step from the first one still in progress, whose row is updated in
+    /// place when it ends. Once the run has finished, its steps are read in full on the load that
+    /// first sees it finished and on the one after, and are then held as they are, so polling a
+    /// finished run reads no steps and leaves the timeline unrendered.</para>
+    /// <para>One more step than the page is read, so a run with more steps says so rather than
+    /// ending its timeline silently.</para>
+    /// </remarks>
+    private async Task LoadJunctionStepsAsync(
+        IDataContext context,
+        TrainState runState,
+        CancellationToken cancellationToken
+    )
+    {
+        var finished =
+            runState is TrainState.Completed or TrainState.Failed or TrainState.Cancelled;
+        if (!finished)
+            _finishedTimelineReads = 0;
+        else if (_finishedTimelineReads >= 2)
+            return;
+
+        // Held steps before the first one still in progress cannot change; everything from there
+        // on is read again. A finished run is read in full.
+        var firstInProgress = _junctionRuns
+            .Where(s => s.State == JunctionRunState.InProgress)
+            .Select(s => (int?)s.Position)
+            .FirstOrDefault();
+        var kept = finished
+            ? []
+            : _junctionRuns
+                .Where(s => firstInProgress is null || s.Position < firstInProgress)
+                .ToList();
+
+        // Every held step has ended and the run already says it has more than the page: nothing
+        // the timeline shows can change until the run finishes.
+        if (!finished && _moreJunctionSteps && kept.Count == _junctionRuns.Count)
+            return;
+
+        IQueryable<JunctionRun> query = context.JunctionRuns.AsNoTracking().ForRun(MetadataId);
+        if (firstInProgress is { } from && !finished)
+            query = query.Where(r => r.Position >= from);
+        else if (kept.Count > 0)
+        {
+            var after = kept[^1].Position;
+            query = query.Where(r => r.Position > after);
+        }
+
+        var rows = await query
+            .Take(MaxJunctionSteps + 1 - kept.Count)
+            .ToListAsync(cancellationToken);
+        var steps = kept.Concat(rows.Select(JunctionStep.From)).ToList();
+
+        _moreJunctionSteps = steps.Count > MaxJunctionSteps;
+        if (_moreJunctionSteps)
+            steps.RemoveRange(MaxJunctionSteps, steps.Count - MaxJunctionSteps);
+
+        // The same list is kept when nothing changed, so the timeline can skip rendering it again.
+        if (!steps.SequenceEqual(_junctionRuns))
+            _junctionRuns = steps;
+
+        if (finished)
+            _finishedTimelineReads++;
     }
 
     // Through the operations service, as the API's cancelExecution is: a Pending or InProgress
@@ -151,13 +245,16 @@ public partial class MetadataDetailPage
         }
     }
 
-    private async Task RequeueTrain()
+    private async Task RequeueTrain(bool askAfresh)
     {
-        if (_metadata is null)
+        // Disabled on the buttons is not enough: a click the browser sent before it applied that
+        // render still arrives, and each call queues a new run. Either button, either mode.
+        if (_metadata is null || _rerunning)
             return;
 
         _rerunError = null;
         _rerunning = true;
+        _rerunningAskAfresh = askAfresh;
 
         try
         {
@@ -166,14 +263,22 @@ public partial class MetadataDetailPage
             // way: the saved input is checked (nothing saved, a placeholder saved in its place, or
             // masked [TraxSensitive] members would read back as defaults), then queued through the
             // mediator, so the train's OnQueue hook, subject key and input cap apply. When the run
-            // recorded decisions, the new run replays them and takes the tracks this one took.
+            // recorded decisions, the new run replays them and takes the tracks this one took,
+            // unless the operator asked afresh, the API's requeueExecution with askAfresh set:
+            // then the new entry carries no replay link and the run asks every question again.
             OperationResult result;
             // The dashboard is the admin surface, gated as a whole by its host, so it enqueues as
             // trusted infrastructure rather than as a user a train's [TraxAuthorize] can check: a
             // Blazor circuit has no request to carry one. OnQueue, the subject key and the input
             // cap still apply. See docs/0017.
             using (TrustedScope.BeginTrusted("dashboard"))
-                result = await OperationsService.RequeueExecutionAsync(_metadata.Id, DisposalToken);
+                result = askAfresh
+                    ? await OperationsService.RequeueExecutionAsync(
+                        _metadata.Id,
+                        askAfresh: true,
+                        DisposalToken
+                    )
+                    : await OperationsService.RequeueExecutionAsync(_metadata.Id, DisposalToken);
 
             if (!result.Success || result.Id is not { } entryId)
             {
@@ -181,11 +286,15 @@ public partial class MetadataDetailPage
                 return;
             }
 
+            // The service's message as the API returns it, which also says when a re-queue asks
+            // afresh because this run's decisions are already replayed elsewhere.
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Train Queued",
-                $"{ShortName(_metadata.Name)} has been re-queued (ID {entryId}).",
-                duration: 4000
+                string.IsNullOrWhiteSpace(result.Message)
+                    ? $"{ShortName(_metadata.Name)} has been re-queued (ID {entryId})."
+                    : $"{ShortName(_metadata.Name)} has been re-queued. {result.Message}",
+                duration: 8000
             );
 
             Navigation.NavigateTo($"trax/data/work-queue/{entryId}");

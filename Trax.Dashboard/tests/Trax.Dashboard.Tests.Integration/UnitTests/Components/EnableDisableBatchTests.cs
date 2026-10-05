@@ -1,5 +1,5 @@
+using AwesomeAssertions;
 using Bunit;
-using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;

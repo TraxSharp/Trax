@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;

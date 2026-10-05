@@ -22,15 +22,25 @@
 
     @if (_manifest is not null)
     {
-        <RadzenButton Text="Run Now"
-                      Icon="play_arrow"
-                      ButtonStyle="ButtonStyle.Secondary"
-                      Variant="Variant.Outlined"
-                      Size="ButtonSize.Small"
-                      Click="@TriggerManifest"
-                      IsBusy="@_triggering"
-                      Disabled="@_triggering"
-                      Style="margin-left: auto;" />
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            <RadzenButton Text="Run Now"
+                          Icon="play_arrow"
+                          ButtonStyle="ButtonStyle.Secondary"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@(() => TriggerManifest(askAfresh: false))"
+                          IsBusy="@(_triggering && !_triggeringAskAfresh)"
+                          Disabled="@_triggering" />
+            <RadzenButton Text="Run Now, Ask Afresh"
+                          Icon="psychology_alt"
+                          ButtonStyle="ButtonStyle.Secondary"
+                          Variant="Variant.Text"
+                          Size="ButtonSize.Small"
+                          title="Run now; if this releases a queued retry, it asks the model afresh instead of replaying the failed run's decisions."
+                          Click="@(() => TriggerManifest(askAfresh: true))"
+                          IsBusy="@(_triggering && _triggeringAskAfresh)"
+                          Disabled="@_triggering" />
+        </RadzenStack>
     }
 </RadzenStack>
 
@@ -51,6 +61,13 @@
     }
     <RadzenText TextStyle="TextStyle.Body1">No manifest found with ID @ManifestId.</RadzenText>
     return;
+}
+
+@if (_replayError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_replayError
+    </RadzenAlert>
 }
 
 @if (_triggerError is not null)
@@ -93,6 +110,21 @@
         <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
             <RadzenStack Gap="0.75rem">
                 <FieldDisplay Label="Max Retries" Value="@_manifest.MaxRetries.ToString()" />
+                <FieldDisplay Label="Replay decisions on retry">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center"
+                                 title="On: a retry of a failed run replays the decisions that run recorded. Off: retries ask the model afresh.">
+                        @* Keyed so a refused or failed change rebuilds the switch from the stored value:
+                           it flips itself on click, and the unchanged value it is handed back is not
+                           passed to it again. *@
+                        <RadzenSwitch @key="_replaySwitchVersion"
+                                      class="cs-replay-toggle"
+                                      Value="@_manifest.ReplayDecisionsOnRetry"
+                                      TValue="bool"
+                                      Disabled="@_settingReplay"
+                                      Change="@SetReplayDecisionsOnRetry" />
+                        <RadzenText TextStyle="TextStyle.Body1" class="cs-replay-value" Style="margin: 0;">@(_manifest.ReplayDecisionsOnRetry ? "Yes" : "No (retries ask afresh)")</RadzenText>
+                    </RadzenStack>
+                </FieldDisplay>
                 <FieldDisplay Label="Timeout (s)" Value="@(_manifest.TimeoutSeconds?.ToString() ?? "—")" />
                 <FieldDisplay Label="Last Successful Run" Value="@(_manifest.LastSuccessfulRun?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Never")" />
             </RadzenStack>

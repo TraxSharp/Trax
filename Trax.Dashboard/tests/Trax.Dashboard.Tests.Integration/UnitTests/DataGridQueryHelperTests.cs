@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Radzen;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;

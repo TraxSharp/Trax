@@ -1,6 +1,6 @@
 using AngleSharp.Dom;
+using AwesomeAssertions;
 using Bunit;
-using FluentAssertions;
 
 namespace Trax.Dashboard.Tests.Integration.Utils;
 

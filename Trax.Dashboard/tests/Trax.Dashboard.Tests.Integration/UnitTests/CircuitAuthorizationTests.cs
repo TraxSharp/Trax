@@ -1,7 +1,7 @@
 using System.Security.Claims;
+using AwesomeAssertions;
 using Bunit;
 using Bunit.TestDoubles;
-using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.Circuits;

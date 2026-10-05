@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Dashboard/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs/dashboard)
 
-> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
 > run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
 Trax.Dashboard is a Blazor Server dashboard for Trax runs, schedules, dead letters and the work queue. It mounts at
@@ -70,5 +70,5 @@ vulnerabilities privately as described in [SECURITY.md](https://github.com/TraxS
 
 MIT. There is no commercial edition, and there will not be one.
 
-Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+Trax .NET is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
 other organization using the Trax name.
