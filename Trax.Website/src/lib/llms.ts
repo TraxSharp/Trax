@@ -172,7 +172,7 @@ function describeBundle(bundle: Bundle): string {
 /** The /llms.txt index. */
 export function buildLlmsTxt(): string {
   const lines: string[] = [
-    "# Trax",
+    "# Trax .NET",
     "",
     `> ${SITE_DESCRIPTION} Logic is written as typed pipelines ("trains") of single-purpose steps ("junctions") in which a failure short-circuits the rest; Core, Effect, Mediator, Scheduler, API and Dashboard are separate NuGet packages, each adding one layer.`,
     "",

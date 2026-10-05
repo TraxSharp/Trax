@@ -2,6 +2,7 @@ import Hero from "@/components/landing/Hero";
 import StepShape from "@/components/landing/StepShape";
 import FourWays from "@/components/landing/FourWays";
 import RunRecord from "@/components/landing/RunRecord";
+import SeeItRunning from "@/components/landing/SeeItRunning";
 import LayerDiagram from "@/components/landing/LayerDiagram";
 import DeploymentArchitectures from "@/components/landing/DeploymentArchitectures";
 import WhereTraxStops from "@/components/landing/WhereTraxStops";
@@ -13,6 +14,7 @@ export default function Home() {
     <main>
       <Hero />
       <StepShape />
+      <SeeItRunning />
       <FourWays />
       <RunRecord />
       <LayerDiagram />

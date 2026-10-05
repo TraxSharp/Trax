@@ -1,7 +1,7 @@
 const limits = [
   {
     title: "A crash restarts the train",
-    body: "If a process dies halfway through a run, the run is marked failed and a scheduled train is retried from its first junction. Junctions that call other systems should be safe to repeat. Resuming at the step that failed is being built.",
+    body: "If a process dies halfway through a run, the run is marked failed and a scheduled train is retried from its first junction. A decider's recorded answers are replayed rather than asked again, unless the state they were about has changed, but every junction runs again, so junctions that call other systems should be safe to repeat.",
   },
   {
     title: "Postgres in production",

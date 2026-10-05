@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Website/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
-> Part of [Trax](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
+> Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
 > run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
 Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landing page, and the docs site rendered from
@@ -43,7 +43,8 @@ line in `llms.txt`; without it the first prose paragraph is used.
 
 Before committing, run `npm run lint`, `npm test` and `npm run build`. `npm test` syncs the docs, renders Markdown
 through the site's pipeline and checks what reaches the HTML (`tests/render.test.ts`), and renders every published page
-(`tests/pages.test.ts`). It needs Node 22.18 or later.
+(`tests/pages.test.ts`), and plays every recorded sample run through its player
+(`tests/*-replay.test.ts`). It needs Node 22.18 or later.
 
 ## Project structure
 
@@ -58,27 +59,44 @@ src/
 │   ├── robots.ts, sitemap.ts
 │   └── layout.tsx, not-found.tsx
 ├── components/
-│   ├── landing/                  # landing page sections
+│   ├── landing/                  # landing page sections; SeeItRunning.tsx tabs the samples, *Replay.tsx play them
 │   ├── docs/                     # docs layout, sidebar, breadcrumb, table of contents
 │   ├── layout/                   # header, footer, mobile nav
 │   └── mdx/                      # element overrides for rendered docs
+├── data/
+│   └── *-recordings.json         # recorded runs of the samples, which the landing page plays back
 └── lib/
     ├── docs.ts                   # reads .docs-cache, front matter, page summaries
     ├── nav-tree.ts               # sidebar tree
     ├── llms.ts                   # llms.txt and the full-text bundles
     ├── mdx-options.ts            # docs rendering: CommonMark, raw HTML allow-list, sanitizer, ADR links, highlighting
+    ├── *-replay.ts               # one player per sample: recorded events in, what its page shows out
     └── site.ts                   # site URL and description
 scripts/
 ├── sync-docs.sh                  # copies Trax.Docs into .docs-cache
 └── adr-index.mjs                 # lists the ADR files that citations link to
 tests/
 ├── render.test.ts                # what the docs pipeline lets through to the HTML
-└── pages.test.ts                 # renders every published page through the pipeline
+├── pages.test.ts                 # renders every published page through the pipeline
+└── *-replay.test.ts              # plays every recording through its sample's player
 ```
+
+## See it running
+
+The **See it running** section has a tab per sample: Recovery, State machine, Chat over WebSockets, SignalR and
+Persisted operations. Each tab plays the real sample in the browser, and the reader can drive it: crash a Recovery
+run, fire the checkout's triggers in any order, pick the next chat line, start pings, call and hot-fix persisted
+operations. Nothing runs a server. Each `src/data/<sample>-recordings.json` holds what the sample's host actually
+sent, recorded by Trax.Samples' `scripts/recordings` with every request, response and pushed event; where a sample
+takes free input, presets were recorded instead. Under each demo, `SampleSource` links the real C# on GitHub and
+gives the commands to start it.
+
+Re-record a sample with its script's `--copy-to ../../../Trax.Website/src/data`, from a sibling Trax.Samples
+checkout, when the sample changes; `npm test` plays every recording through its player.
 
 ## License
 
 MIT. There is no commercial edition, and there will not be one.
 
-Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+Trax .NET is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
 other organization using the Trax name.

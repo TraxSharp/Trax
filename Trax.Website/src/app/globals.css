@@ -26,6 +26,9 @@
   --derail: #c45c5c;
   --derail-muted: #2e1616;
 
+  /* Asked afresh: a decision put to the model again */
+  --afresh: #d9874a;
+
   --border: #2a2a28;
   --border-hover: #3a3a37;
 
@@ -52,6 +55,7 @@
   --color-signal-muted: var(--signal-muted);
   --color-derail: var(--derail);
   --color-derail-muted: var(--derail-muted);
+  --color-afresh: var(--afresh);
   --color-border: var(--border);
   --color-border-hover: var(--border-hover);
   --color-success: var(--success);
