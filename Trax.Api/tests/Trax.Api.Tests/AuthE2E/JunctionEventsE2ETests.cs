@@ -580,6 +580,10 @@ public class JunctionEventsE2ETests
         private readonly StringBuilder _received = new();
         private Task<JsonElement>? _pending;
 
+        // Real steps that arrived while waiting for the first probe: the run starts before the
+        // subscription, so on a slow machine its first junction can reach the socket before a probe.
+        private readonly Queue<Step> _early = new();
+
         private Subscriber(WebSocket socket) => _socket = socket;
 
         /// <summary>Every frame received, raw, for checks that nothing leaked.</summary>
@@ -638,13 +642,26 @@ public class JunctionEventsE2ETests
             return true;
         }
 
-        /// <summary>Publishes probes until this subscriber receives one.</summary>
+        /// <summary>
+        /// Publishes probes until this subscriber receives one. A real step that arrives first is
+        /// kept for <see cref="ReadUntilAsync"/>.
+        /// </summary>
         public async Task WaitUntilListeningAsync(Action probe)
         {
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-            var next = NextStepAsync();
-            while (!next.IsCompleted && DateTime.UtcNow < deadline)
+            var next = ReceiveStepAsync();
+            while (DateTime.UtcNow < deadline)
             {
+                if (next.IsCompleted)
+                {
+                    var step = await next;
+                    if (step.Name == "probe")
+                        return;
+                    _early.Enqueue(step);
+                    next = ReceiveStepAsync();
+                    continue;
+                }
+
                 probe();
                 // allowed-delay: re-probe interval, bounded by the deadline; WhenAny wakes on receipt.
                 await Task.WhenAny(next, Task.Delay(100));
@@ -670,7 +687,11 @@ public class JunctionEventsE2ETests
             }
         }
 
-        public async Task<Step> NextStepAsync()
+        /// <summary>The next step: one kept while waiting for the first probe, else the next to arrive.</summary>
+        public Task<Step> NextStepAsync() =>
+            _early.Count > 0 ? Task.FromResult(_early.Dequeue()) : ReceiveStepAsync();
+
+        private async Task<Step> ReceiveStepAsync()
         {
             while (true)
             {
