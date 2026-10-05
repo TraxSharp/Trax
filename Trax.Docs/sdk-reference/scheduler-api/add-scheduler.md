@@ -85,7 +85,7 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers) | Routes specific trains to a remote HTTP endpoint for execution |
 | [UseSqsWorkers](/docs/sdk-reference/scheduler-api/use-sqs-workers) | Routes specific trains to an Amazon SQS queue for execution (`Trax.Scheduler.Sqs`) |
 | [UseRemoteRun](/docs/sdk-reference/scheduler-api/use-remote-run) | Offloads synchronous `run` execution to a remote endpoint (blocks until complete) |
-| `OverrideSubmitter(Action<IServiceCollection>)` | Registers a custom job submitter implementation |
+| `OverrideSubmitter(Action<IServiceCollection>)` | Registers the job submitter yourself, in place of the default. With it no `LocalWorkerService` starts, so `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())` (both in `Trax.Scheduler.Services.JobSubmitter`) gives a scheduler that writes jobs to `background_job` for [standalone workers](/docs/sdk-reference/scheduler-api/add-trax-worker) and runs none itself |
 
 ### Global Options
 
@@ -131,7 +131,8 @@ These methods are available on the `SchedulerConfigurationBuilder` passed to the
 | `DefaultJobTimeout`, `StalePendingTimeout`, `StaleInProgressTimeout`, `StaleStagedEntryTimeout`, `SchedulerLivenessThreshold`, metadata cleanup `RetentionPeriod` and each per-train retention, local worker `VisibilityTimeout` | 1 second to 10 years |
 | `DeadLetterRetentionPeriod`, `DefaultRetryDelay`, `MaxRetryDelay`, `DefaultMisfireThreshold` | 0 to 10 years |
 | `DefaultMaxRetries` | 0 or more |
-| `MaxActiveJobs`, metadata cleanup `DeleteBatchSize`, local worker `BatchSize` | at least 1 when set |
+| `MaxActiveJobs`, local worker `BatchSize` | at least 1 when set |
+| metadata cleanup `DeleteBatchSize` | 1 to 10,000 when set; null sweeps in batches of 10,000 |
 | `RetryBackoffMultiplier` | a finite number, at least 1 |
 | local worker `WorkerCount` | 1 to 256 |
 | local worker `PollingInterval` | greater than zero, up to 30 days |
@@ -145,14 +146,15 @@ The polling services never wait less than one second between cycles, whatever in
 |--------|-------------|
 | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | Schedules a single recurring train (seeded on startup) |
 | [ScheduleMany](/docs/sdk-reference/scheduler-api/schedule-many) | Batch-schedules manifests from a collection |
-| [Then / ThenMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Schedules dependent trains |
+| [ScheduleOnce](/docs/scheduler/delayed-jobs#startup-configuration-builder-pattern) | Schedules a one-off that runs once after a delay from startup, then disables itself |
+| [ThenInclude / Include / ThenIncludeMany / IncludeMany](/docs/sdk-reference/scheduler-api/dependent-scheduling) | Schedules dependent trains: `ThenInclude` parents from the previous call, `Include` from the last `Schedule`; `.Dormant()` makes one that runs only when its parent activates it |
 | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic metadata purging |
 
 ## Remarks
 
 - The settings the dashboard's Server Settings page and the [`updateScheduler`](/docs/sdk-reference/graphql-api/mutations#config-nested-namespace) mutation edit (the enable switches, polling intervals, `MaxActiveJobs`, retry, timeout, failure-count window and dead-letter settings, the local worker count and the metadata cleanup interval and retention) are stored in `trax.scheduler_config`. A save stores only the settings it names (a scheduler host leaves out a field equal to the value it runs with; a host that does not run the scheduler stores every field it sends; the dashboard sends only the fields the operator changed), and any host can make one, the first included, including an API-only one. Every running scheduler applies the stored values over these builder values at startup and re-reads the row every few seconds, so a saved change reaches all of them without a restart; the local worker count is the exception and applies when the worker pool next starts. A setting no save has named is not stored, so each host keeps its builder value for it. A stored value takes precedence over the builder value until it is changed or the row is deleted, and the scheduler logs a warning when one replaces a different builder value; `AutoPurgeDeadLetters` and `DeadLetterRetentionPeriod` fail closed instead (see their rows). A scheduler that cannot read the row at startup runs with the builder values and applies the row at its first successful read. See [scheduler ADR 0010](https://github.com/TraxSharp/Trax.Scheduler/blob/main/docs/adr/0010-a-settings-save-writes-only-what-it-names-and-every-scheduler-applies-it.md).
 - `AddScheduler` requires `AddEffects()` and `AddMediator()` to be called first. This is enforced at compile time -- `AddScheduler` is only available on `TraxBuilderWithMediator`, which is the return type of `AddMediator()`.
-- `AddScheduler` requires a data provider (`UsePostgres()` or `UseInMemory()`). If no data provider is configured, `AddScheduler` throws `InvalidOperationException` at build time with a helpful error message showing the required configuration.
+- `AddScheduler` requires a data provider (`UsePostgres()`, `UseSqlite()` or `UseInMemory()`). If none is configured, `AddScheduler` throws `InvalidOperationException` at build time: `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).`
 - Internal scheduler trains (`ManifestManager`, `InMemoryManifestManager`, `JobDispatcher`, `JobRunner`, `MetadataCleanup`, `DeadLetterCleanup`) are automatically excluded from `MaxActiveJobs`.
 - With `UseInMemory()`, `JobDispatcherPollingService` and `MetadataCleanupPollingService` are not registered. The `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that dispatches jobs inline through the in-memory job submitter.
 - The host refuses to start, with an `InvalidOperationException` naming the trains whose chains ask a decider, when it does not register `AddDecisionRecording()`. Such a host could not replay a requeue's recorded decisions, so a requeue that landed on it would fail, `Permanent`; Trax refuses at startup rather than leave that to be found by the first requeue. The check runs before any worker claims work. See [A host that does not record](/docs/effect/decisions#a-host-that-does-not-record).

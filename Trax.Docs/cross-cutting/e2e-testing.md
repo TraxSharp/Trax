@@ -1,7 +1,7 @@
 ---
 layout: default
 title: E2E Testing
-description: "End-to-end testing a Trax host with WebApplicationFactory: test database, scheduler settings, fixtures, work queue entries, polling for state and API tests."
+description: "End-to-end testing a Trax host with WebApplicationFactory: test database, scheduler settings, cron retries, reading Trax tables, GraphQL and subscriptions."
 parent: Cross-Cutting
 nav_order: 4
 ---
@@ -19,17 +19,16 @@ public class MySchedulerFactory : WebApplicationFactory<Scheduler.Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:TraxDatabase", TestConnectionString);
-
-        builder.ConfigureTestServices(services =>
-        {
-            services.AddHostedService<ConfigureSchedulerForTestsService>();
-        });
     }
 }
 ```
 
-Both the Scheduler and API entry points need a `WebApplicationFactory<T>` marker class appended after `app.Run()`:
+On .NET 10 the `Program` class that top-level statements generate is public, so a test project
+that references one host writes `WebApplicationFactory<Program>` with no marker. A test project
+that references **two** hosts (a scheduler and an API, say) sees two global `Program` types and
+cannot name either. Give each host a marker in its own namespace, after `app.Run()`:
 
 ```csharp
 // At the end of Program.cs, after app.Run();
@@ -38,6 +37,12 @@ namespace MyApp.Scheduler
     public partial class Program;
 }
 ```
+
+`MyApp.Scheduler.Program` is a separate type from the generated entry point, and that is fine:
+`WebApplicationFactory<T>` uses `T` only to find the host's assembly. The samples do this
+(`samples/Scheduling/Trax.Samples.Scheduling.Host/Program.cs` in
+[Trax.Samples](https://github.com/TraxSharp/Trax.Samples)), so the factory reads
+`WebApplicationFactory<Host.Program>`.
 
 ### Test Database
 
@@ -50,29 +55,130 @@ environment:
 
 This isolates test data from development data and prevents cross-contamination.
 
-## Scheduler Configuration for Tests
-
-The scheduler's `SchedulerConfiguration` is a mutable singleton. Override polling intervals and limits via a hosted service registered in `ConfigureTestServices`:
+Start each suite on an empty `trax` schema, so every run sees the host's first start (migrations,
+manifest seeding) and nothing a previous run left. Drop it, and your domain schemas, before the
+factory starts the host, and clear Npgsql's pools when the suite ends:
 
 ```csharp
-private sealed class ConfigureSchedulerForTestsService(SchedulerConfiguration config)
-    : IHostedService
+[SetUpFixture]
+public class SuiteSetup
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public static MyHostFactory Factory { get; private set; } = null!;
+
+    [OneTimeSetUp]
+    public async Task StartHost()
     {
-        config.ManifestManagerPollingInterval = TimeSpan.FromSeconds(1);
-        config.JobDispatcherPollingInterval = TimeSpan.FromSeconds(1);
-        config.DefaultRetryDelay = TimeSpan.FromSeconds(2);
-        config.DefaultJobTimeout = TimeSpan.FromSeconds(30);
-        config.MaxActiveJobs = 100;
-        return Task.CompletedTask;
+        await using (var connection = new NpgsqlConnection(MyHostFactory.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var drop = new NpgsqlCommand(
+                "DROP SCHEMA IF EXISTS trax CASCADE; DROP SCHEMA IF EXISTS shop CASCADE;", connection);
+            await drop.ExecuteNonQueryAsync();
+        }
+
+        Factory = new MyHostFactory();
+        _ = Factory.Services; // starts the host: Trax migrations, your schema, manifest seeding
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    [OneTimeTearDown]
+    public async Task StopHost()
+    {
+        await Factory.DisposeAsync();
+        NpgsqlConnection.ClearAllPools();
+    }
 }
 ```
 
-Fast polling (1s) keeps tests responsive. Reduced retry delays prevent slow dead-letter tests. High `MaxActiveJobs` avoids capacity-related dispatch blocking.
+`tests/Trax.Samples.Scheduling.E2E/Fixtures/SharedSchedulingSetup.cs` is the same setup, waiting
+for the seeded manifests before any test runs.
+
+## Two ways to drive the scheduler
+
+| | Keep the scheduler running | Disable the ManifestManager, insert work queue rows |
+|---|---|---|
+| What runs | The host exactly as in production: the ManifestManager queues manifest runs and retries, the JobDispatcher dispatches them | Only the JobDispatcher. Work exists only when a test writes a `WorkQueue` row |
+| How a test acts | Through the public surface: GraphQL mutations, `ITrainBus`, `ITraxScheduler.TriggerAsync`, a fake dependency it flips (a feed that starts failing) | `WorkQueue.Create` plus `SaveChanges`, with the input it wants |
+| How a test isolates itself | Marks the newest `metadata.id` before it acts and reads only rows after it; nothing is cleaned between tests | Cleans execution tables in `[SetUp]`, keeps manifests |
+| Use it for | Behaviour a user or operator sees: retries and backoff, dead letters and requeue, dependents, authorization, subscriptions | Dispatch of a specific input in isolation: dormant dependents activated inside a scheduled run, subject serialization, a deferred (staged) entry |
+
+Start with the first. It tests what ships, and it is what the
+[Scheduling sample](/docs/samples/scheduling) does (`tests/Trax.Samples.Scheduling.E2E`, whose
+`SchedulingTestFixture` marks the latest metadata id). Reach for the second only when the
+ManifestManager's own timing gets in the way of what the test asserts.
+
+## Scheduler Configuration for Tests
+
+Production settings (a 5-minute `DefaultRetryDelay`, a nightly cron) make a test wait for hours.
+Make them configuration in `Program.cs`, with the production value as the default, and override
+them from the factory with `UseSetting`:
+
+```csharp
+// Program.cs
+var retryDelay = builder.Configuration.GetValue<TimeSpan?>("Shop:RetryDelay") ?? TimeSpan.FromMinutes(5);
+var pollInterval = builder.Configuration.GetValue<TimeSpan?>("Shop:PollingInterval") ?? TimeSpan.FromSeconds(5);
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(typeof(Program).Assembly)
+    .AddScheduler(scheduler => scheduler
+        .ManifestManagerPollingInterval(pollInterval)
+        .JobDispatcherPollingInterval(pollInterval)
+        .DefaultRetryDelay(retryDelay)));
+```
+
+```csharp
+// The test factory
+protected override void ConfigureWebHost(IWebHostBuilder builder)
+{
+    builder.UseEnvironment("Development");
+    builder.UseSetting("ConnectionStrings:TraxDatabase", ConnectionString);
+    builder.UseSetting("Shop:RetryDelay", "00:00:01");
+    builder.UseSetting("Shop:PollingInterval", "00:00:01");
+}
+```
+
+The Scheduling sample takes the other route: its Development settings in `Program.cs` are already
+demo speed (1-second polling, 2-second retry delay), and its factory changes only the connection
+string.
+
+`SchedulerConfiguration` is also a singleton whose `ManifestManagerEnabled`, polling intervals,
+`DefaultRetryDelay`, `DefaultMaxRetries`, `DefaultJobTimeout` and `MaxActiveJobs` can be set at
+runtime (their setters are hidden from IntelliSense but public), for example from a hosted service
+registered in `ConfigureTestServices`. It holds scheduler-wide defaults only: it cannot change a
+manifest's schedule, or a retry count or delay the manifest set for itself. For those, use
+configuration as above.
+
+## Testing a cron manifest's retries
+
+A failed run is retried when its manifest is next due ([When a retry runs](/docs/scheduler/dead-letters-and-cleanup#when-a-retry-runs)).
+A run you start with `TriggerAsync` or `triggerManifest` while the cron is not due is retried only
+at the cron's next occurrence, so triggering a nightly job in a test and waiting for its retries
+waits until tomorrow.
+
+Test the two halves separately:
+
+- **The retry and dead-letter behaviour.** Make the schedule configuration, and give the test host
+  a short interval. Retries, backoff, `MaxRetries` and the dead letter do not depend on whether the
+  schedule is a cron or an interval:
+
+  ```csharp
+  // Program.cs: nightly at 02:00 UTC, every few seconds under test
+  var everySeconds = builder.Configuration.GetValue<int?>("Shop:ResendEverySeconds");
+  Schedule resendSchedule = everySeconds is { } seconds ? Every.Seconds(seconds) : Cron.Daily(hour: 2);
+
+  scheduler.Schedule<IResendUnsentInvoicesTrain>(
+      "resend-unsent-invoices", new ResendUnsentInvoicesInput(), resendSchedule,
+      options => options.MaxRetries(3));
+  ```
+
+  With `UseSetting("Shop:ResendEverySeconds", "2")` and a 1-second retry delay, a resend that keeps
+  failing runs four times and is dead-lettered within about 20 seconds.
+- **The cron itself.** Assert the manifest's `NextScheduledRun` against the occurrence you expect,
+  without running it. `tests/Trax.Samples.Scheduling.E2E/SchedulingTests/CronScheduleTests.cs`
+  does this for a daily 07:00 UTC cron.
+
+`SupplierOutage.cs` in the same folder's `Utilities` drives a manifest to its dead letter and
+requeues it, and `RetryAndDeadLetterTests.cs` asserts the backoff between the failed runs.
 
 ## Test Fixture Pattern
 
@@ -108,6 +214,39 @@ public abstract class SchedulerTestFixture
     }
 }
 ```
+
+The fixture's `IDataContext` comes from the host's `IDataContextProviderFactory`. Create one per
+read, in a scope, and dispose it, so each read sees what the scheduler committed rather than an
+entity a long-lived context cached:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+
+public sealed class Db(IServiceProvider services)
+{
+    public async Task<T> Query<T>(Func<IDataContext, Task<T>> query, CancellationToken ct = default)
+    {
+        using var scope = services.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var dataContext = await factory.CreateDbContextAsync(ct);
+        try
+        {
+            return await query(dataContext);
+        }
+        finally
+        {
+            (dataContext as IDisposable)?.Dispose();
+        }
+    }
+}
+
+// var runs = await db.Query(dc => dc.Metadatas.AsNoTracking().Where(m => m.ExternalId == id).ToListAsync());
+```
+
+Pass `Factory.Services`. `tests/Trax.Samples.Scheduling.E2E/Utilities/Db.cs` is this class with
+waits for runs and dead letters built on it.
 
 Disabling the ManifestManager after startup prevents automatic work queue creation that would interfere with manually-created test entries. The JobDispatcher stays enabled to dispatch those entries.
 
@@ -212,7 +351,49 @@ public abstract class ApiTestFixture
 }
 ```
 
-Send GraphQL queries as JSON POST requests to `/trax/graphql`. Remember that HotChocolate returns HTTP 400 for GraphQL errors, so read the response body regardless of status code.
+A host that serves both the scheduler and the API needs only one factory, and its `HttpClient`.
+
+Send GraphQL queries as JSON POST requests to `/trax/graphql`, with the credential in the header
+the auth scheme reads (`X-Api-Key` for API keys). The HTTP status depends on where the request
+failed, so read the body regardless of status:
+
+| Failure | HTTP status | Body |
+|---|---|---|
+| The document does not validate: an unknown field, a missing or misnamed input field | `400` | `errors`, no `data` |
+| A field refused while executing, such as `TRAX_AUTHORIZATION` (`"Not authorized."`) on a train or the operations namespace | `200` | `errors` with `extensions.code`, and `data` with the refused field `null` |
+
+So assert on `errors[0].extensions.code`, not on the status. A small client that returns the parsed
+body and the status together is `tests/Trax.Samples.Scheduling.E2E/Utilities/GraphQLClient.cs`.
+
+## Testing subscriptions
+
+`WebApplicationFactory` serves WebSockets through its test server. Open a socket with
+`Factory.Server.CreateWebSocketClient()`, ask for the `graphql-transport-ws` subprotocol, send
+`connection_init` with the credential in its payload (`apiKey`, `authToken` or `bearer`, not the
+HTTP header's name), wait for `connection_ack`, then send `subscribe` and read `next` messages:
+
+```csharp
+var ws = Factory.Server.CreateWebSocketClient();
+ws.ConfigureRequest = request => request.Headers["Sec-WebSocket-Protocol"] = "graphql-transport-ws";
+var socket = await ws.ConnectAsync(new Uri("ws://localhost/trax/graphql"), CancellationToken.None);
+
+await Send(socket, new { type = "connection_init", payload = new { apiKey = BillingKey } });
+// expect { "type": "connection_ack" }
+await Send(socket, new { id = "1", type = "subscribe",
+    payload = new { query = "subscription { onTrainStateChanged { externalId trainState output } }" } });
+// then send the mutation over HTTP and read { "type": "next", "payload": { "data": ... } }
+```
+
+Subscribe before you trigger the run: there is no replay, and `graphql-transport-ws` sends no
+acknowledgement of a `subscribe`. Filter events by `externalId`
+([Watching a queued run](/docs/sdk-reference/graphql-api/subscriptions#watching-a-queued-run)), give
+every receive a timeout, and expect a refused subscription as a message of type `error` whose payload
+holds `TRAX_AUTHORIZATION`, not as a closed socket. The subscriber receives a train's events only if
+the train is `[TraxBroadcast]` and admits it, or the key satisfies the operations gate.
+
+`tests/Trax.Samples.ChatService.E2E/Utilities/GraphQLWebSocketClient.cs` is a complete client
+(connect, subscribe, receive with a timeout, the close code of a refused connection), and
+`ChatApiTests/LifecycleSubscriptionTests.cs` next to it uses it.
 
 ## Test Parallelism
 
@@ -229,6 +410,7 @@ All E2E tests share one database. Add `[assembly: NonParallelizable]` to prevent
 | Dormant dependents activate on condition | E2E test |
 | Failures dead-letter after retries | E2E test |
 | GraphQL authorization enforcement | E2E test |
+| Subscription delivery and refusal | E2E test |
 | EF graph traversal doesn't cascade UPDATEs | E2E test |
 
 ## SDK Reference

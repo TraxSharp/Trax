@@ -81,7 +81,7 @@ public static class SnippetCompiler
     [
         "nunit.",
         "NUnit3.",
-        "FluentAssertions",
+        "AwesomeAssertions",
         "Microsoft.CodeAnalysis",
         "Microsoft.TestPlatform",
         "Microsoft.VisualStudio.TestPlatform",

@@ -112,12 +112,14 @@ input BadgeElementFilterInput {
 `all: { neq: X }` is the only filter this removes. `none: { eq: X }` means the same thing
 and is still available. Scalar properties keep the full operation set including `neq`.
 
+A collection of a nullable scalar (`int?[]`, `Badge?[]`) shares the input of its underlying
+type, as it does in stock HotChocolate, so it loses `neq` the same way: on Postgres,
+`some: { neq: 1 }` over an `int?[]` failed at execution. `eq: null` is still available, to
+match an element that is null.
+
 The restricted types are named `{Scalar}ElementFilterInput` rather than reusing
-HotChocolate's `{Scalar}OperationFilterInput`. A collection whose element cannot be
-restricted keeps the stock types, so a restricted type sharing a stock name would collide
-with it at schema build. Collections of a nullable scalar (`int?[]`) are that case: the
-`struct` constraint on HotChocolate's comparable filter input excludes `Nullable<T>`, so
-they keep the stock element input, `neq` included.
+HotChocolate's `{Scalar}OperationFilterInput`, so a restricted type never collides with a
+stock input of the same scalar that another part of the schema still uses.
 
 The restriction applies to the auto-generated filter input, to
 [`ExposeAs`](/docs/sdk-reference/graphql-api/query-models#exposeas)-projected inputs, and

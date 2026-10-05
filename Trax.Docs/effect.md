@@ -40,7 +40,7 @@ Everything in [Core](/docs/core), plus:
 - `IServiceProvider` access for junction instantiation
 
 ```csharp
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 
 public class CreateUserTrain : ServiceTrain<CreateUserRequest, User>, ICreateUserTrain

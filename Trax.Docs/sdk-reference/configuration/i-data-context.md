@@ -31,6 +31,8 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable  // IEffectPro
     DbSet<PersistedOperation> PersistedOperations { get; }
     DbSet<PersistedOperationHistory> PersistedOperationHistories { get; }
     DbSet<RunnerNonce> RunnerNonces { get; }
+    DbSet<RecordedDecision> RecordedDecisions { get; }
+    DbSet<JunctionRun> JunctionRuns { get; }
     DbSet<SnapshotDraft> SnapshotDrafts { get; }
     DbSet<EffectClaim> EffectClaims { get; }
 
@@ -71,10 +73,12 @@ From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveCh
 | `SchedulerConfigs` | `trax.scheduler_config` | The persisted, dashboard-editable scheduler settings; zero or one row |
 | `PersistedOperations`, `PersistedOperationHistories` | `trax.persisted_operation`, `trax.persisted_operation_history` | Persisted GraphQL operations and their audit history |
 | `RunnerNonces` | `trax.runner_nonce` | Nonces a runner accepted on signed requests |
+| `RecordedDecisions` | `trax.decision` | Each decision a run made, written by [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) |
+| `JunctionRuns` | `trax.junction_run` | Each step of a run, written by [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events). Read one run's steps in order with `ForRun(metadataId)`. |
 | `SnapshotDrafts` | `trax.snapshot_draft` | State-machine drafts, one per user and draft id |
 | `EffectClaims` | `trax.effect_claim` | Exactly-once state-machine effect intents |
 
-`RunnerNonces`, `SnapshotDrafts` and `EffectClaims` have default implementations on the interface, so an implementation written before they existed still loads.
+`RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts` and `EffectClaims` have default implementations on the interface, so an implementation written before they existed still loads.
 
 ## Members
 

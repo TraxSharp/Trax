@@ -111,7 +111,7 @@ Resolving the concrete class instead of the interface skips the property injecti
 ## Example
 
 ```csharp
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
 

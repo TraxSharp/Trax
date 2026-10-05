@@ -36,7 +36,15 @@ adds the *key* of a query model to the projection on its own; a foreign key has 
 See [query models](/docs/sdk-reference/graphql-api/query-models#projection-and-hand-written-resolvers).
 
 The `ExtensionResolversDeclareParentRequirements` guard fails the build when an edge resolver
-omits it.
+omits it. It parses each source file and checks each resolver on its own: the reads are the
+member accesses on that resolver's `[Parent]` parameter (`loan.BookId`, `loan?.BookId`,
+`loan!.BookId`; a method call is not a read), and the declaration is that parameter's `requires:`,
+written as `nameof(Loan.BookId)` or as a string naming the field (`"bookId"`). A type extension is
+found in any form: `[ExtendObjectType]` anywhere in an attribute list, with its namespace or a
+type argument, or HotChocolate's source-generated `[ObjectType<Loan>] static partial class`.
+`EdgeResolversUseLoader` checks each public, non-`[GraphQLIgnore]` resolver of a type extension in
+a `.CrossSchema` project for a `CrossSchemaLoader<,>`, so one batched resolver does not cover an
+ad-hoc query beside it.
 
 ## CrossSchemaEdge and registration
 

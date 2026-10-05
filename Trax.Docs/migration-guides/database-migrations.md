@@ -192,3 +192,63 @@ the same content; see [effects](/docs/sdk-reference/statemachine-api/effects#exa
 Nothing is backfilled. A claim written before the upgrade has no fingerprint and replays as it did, and a host still
 on the previous version reads and writes the table unchanged, so a rolling deploy is safe. Adding a nullable column
 is a catalog change on both providers, not a rewrite of the table.
+
+## Junction runs (055, 057, 058 and 060; SQLite 020, 022, 023 and 025)
+
+`055_junction_run.sql` (SQLite `020_junction_run.sql`) creates `trax.junction_run`, one row per step
+of a run, written only by a host that calls
+[`AddJunctionEvents()`](/docs/sdk-reference/configuration/add-junction-events). Its `metadata_id`
+foreign key cascades, so every delete of metadata (cleanup, manifest pruning) removes a run's steps
+with it. On Postgres it also creates the `trax.junction_run_kind` and `trax.junction_run_state`
+enum types. `057_junction_run_attempt.sql` (SQLite `022`) adds the nullable `attempt` column, and
+`060_junction_run_track.sql` (SQLite `025`) adds `name_withheld`, true for a step whose name is
+withheld after a `[TraxSensitive]` route, and the nullable `track_position`, the route a step ran
+after.
+
+`058_metadata_manifest_id_id_index.sql` (SQLite `023`) adds `ix_metadata_manifest_id_id` on
+`trax.metadata (manifest_id, id DESC)` for rows with a manifest, so a run reads its attempt from
+the manifest's latest runs instead of sorting all of them. On Postgres it is built `CONCURRENTLY`,
+so it does not block writes to metadata, but on a large table it takes a while to build.
+
+A host on the previous version never writes the table, so a rolling deploy is safe.
+
+## Manifest replay on retry (056, SQLite 021)
+
+`056_manifest_replay_decisions_on_retry.sql` (SQLite `021`) adds
+`trax.manifest.replay_decisions_on_retry`, a boolean that defaults to true. Every existing manifest
+therefore replays the failed run's decisions on its retries and dead-letter requeues, under the
+checks in [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+Set it false with [`ReplayDecisionsOnRetry(false)`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions)
+for a manifest whose retries should ask afresh.
+
+## Decision state hash (059, SQLite 024)
+
+`059_decision_state_hash.sql` (SQLite `024`) adds the nullable `state_hash` column to
+`trax.decision`: the hash of the state each recorded question was asked about. A replay hands it
+back, and a recorded answer is replayed only into a state that hashes the same. The value is `k1:`
+and the hex of an HMAC-SHA256 when a [state hash key](/docs/effect/decisions#keying-the-state-hash)
+is configured, or `s1:` and the hex of a SHA-256 without one. It is null when the state could not be
+encoded or, without a key, when the state can hold a `[TraxSensitive]` value.
+
+Nothing is backfilled. An answer recorded before the upgrade has no hash, so it is not replayed:
+the first requeue or retry of a run recorded before the upgrade asks its deciders afresh. Adding a
+nullable column is a catalog change on both providers, not a rewrite of the table.
+
+## Abandoned replays and one queued replay per run (061 and 062, SQLite 026 and 027)
+
+`061_metadata_replay_abandoned.sql` (SQLite `026`) adds `trax.metadata.replay_abandoned`, a boolean
+that defaults to false. It marks a manifest's retry that named a run to replay and asked its deciders
+afresh because the replay could not be honoured, so a later replay of that run stops there; see
+[A requeue of a requeue](/docs/effect/decisions#a-requeue-of-a-requeue).
+
+`062_work_queue_unique_queued_replay.sql` (SQLite `027`) adds the unique partial index
+`ix_work_queue_unique_queued_replay` on `trax.work_queue (replay_decisions_of)` for queued entries
+that name a run to replay, so at most one queued entry replays a given run. Before building it, the
+migration clears `replay_decisions_of` on every queued entry that duplicates an older one's, keeping
+the oldest: those entries still run, and ask their deciders afresh. On Postgres the index is built
+`CONCURRENTLY`, so enqueue and dispatch keep writing while it builds. When a duplicate written
+meanwhile fails the build, the migrator drops the invalid index and runs `062` again, so its
+clean-up resolves the duplicate before the next build.
+
+Nothing is backfilled in `061`, and a host on the previous version never reads the column, so a
+rolling deploy is safe.

@@ -41,6 +41,7 @@ In Development, navigate to the endpoint URL in a browser to open Nitro, HotChoc
 | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | Real-time WebSocket events for train lifecycle transitions (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`) |
 | [TraxBroadcast Attribute](/docs/sdk-reference/graphql-api/trax-broadcast-attribute) | Opt trains into subscription events with `[TraxBroadcast]` |
 | [AddTraxHealthCheck](/docs/sdk-reference/graphql-api/add-trax-health-check) | ASP.NET Core health check over queue depth, running executions, recent failures and dead letters |
+| [Error Codes](/docs/sdk-reference/graphql-api/error-codes) | Every `TRAX_*` and `PERSISTED_OPERATION_*` code the endpoint returns, and what raises it |
 
 ## Package
 

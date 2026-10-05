@@ -16,7 +16,7 @@ treat a code it does not recognise as a refusal, so that a code added later does
 
 | Code | Returned by | Meaning |
 | --- | --- | --- |
-| `no-transition` | advance | no edge matches the `(state, trigger)` pair |
+| `no-transition` | advance, send | no edge matches the `(state, trigger)` pair. On a send, the stored draft is not in the state the effect's transition leaves (for the sample's checkout, a draft still at `Cart`), so nothing was run or written |
 | `guard-failed` | advance | an edge matched but its guard rejected the trigger; the detail is the `Because(...)` message |
 | `invalid-context` | advance, rehydrate | the resulting (advance) or stored (rehydrate) context failed the target state's rule |
 | `malformed` | rehydrate, advance (persisted) | the snapshot JSON could not be parsed, or its context holds a value no store can keep: a number outside the range of a double (`1e400`) or a NUL character in a string or key. On a persisted advance, the trigger input is not valid JSON, or the result held such a value; nothing was written |

@@ -65,6 +65,19 @@ services.AddTrax(trax => trax
 
 Like `Schedule`, the builder captures the manifest and seeds it on startup with upsert semantics. If a manifest with the same `externalId` already exists, it is updated rather than duplicated, so restarting the application doesn't create duplicate jobs.
 
+Every start re-seeds the one-off, and the seed sets `ScheduledAt` to that start plus the delay:
+
+| State at restart | After the restart |
+|---|---|
+| Not run yet | Its time moves to the new start plus the delay. A host that restarts more often than the delay never reaches it, so keep the delay short or schedule it at runtime with `ScheduleOnceAsync` |
+| Succeeded | It stays disabled and has a `LastSuccessfulRun`, so it does not run again. Only the stored `ScheduledAt` changes |
+| Failed and dead-lettered | It waits for the dead letter to be resolved, as before |
+
+A one-off that has succeeded never runs on its own again, even if someone re-enables it: the
+ManifestManager skips a `Once` manifest with a `LastSuccessfulRun`. To run the same work again,
+trigger it (`TriggerAsync`, or **Trigger** on the dashboard) or schedule a one-off under a new
+`externalId`, such as `post-deploy-v2.6`.
+
 ## Auto-Disable Behavior
 
 When a `ScheduleType.Once` manifest completes successfully, the JobRunner's `RunScheduledTrainJunction` sets `IsEnabled = false` on the manifest. The manifest stays in the database for audit purposes, you can see its execution history in the dashboard, but the ManifestManager skips it on subsequent polling cycles.

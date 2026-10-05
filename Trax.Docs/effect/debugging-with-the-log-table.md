@@ -127,6 +127,8 @@ it creates. It never reaches `trax.log`.
 |---|---|
 | `trax.metadata` | train execution state, inputs, outputs, failure fields, timing, host |
 | `trax.work_queue` | queued work, by `external_id` and `train_name`, before a run exists |
+| `trax.junction_run` | each step a run took, by `metadata_id` and `position`, when the host calls [`AddJunctionEvents()`](/docs/effect/junction-events): which junction failed, with its failure class and exception type, and each question's answer |
+| `trax.decision` | each decision a run made, by `metadata_id`, when the host calls [`AddDecisionRecording()`](/docs/effect/decisions#recording-decisions) |
 
 ## What the log table does not survive
 

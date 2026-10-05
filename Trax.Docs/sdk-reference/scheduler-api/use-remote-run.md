@@ -11,6 +11,8 @@ nav_order: 9.1
 
 Configures the scheduler to offload synchronous `run` execution to a remote HTTP endpoint instead of executing in-process. The call blocks until the remote train completes and returns the output.
 
+"Synchronous run" means every run that answers its caller with the output: a GraphQL mutation in `RUN` mode, a `[TraxQuery]` query, and `ITrainExecutionService.RunAsync`. All of them go through the replaced run executor, so with `UseRemoteRun` a query is executed on the runner too, not on the API process.
+
 ## Signature
 
 ```csharp
@@ -127,7 +129,7 @@ app.Run();
 
 ## How It Works
 
-When a GraphQL `run*` mutation is called, the `IRunExecutor` registered by `UseRemoteRun()`:
+When a GraphQL `run*` mutation or a `[TraxQuery]` query is called, the `IRunExecutor` registered by `UseRemoteRun()`:
 
 1. Serializes a `RemoteRunRequest` containing the train name, input JSON, and input type
 2. POSTs the JSON payload to `BaseUrl`
@@ -141,7 +143,7 @@ The remote endpoint (`UseTraxRunEndpoint`) calls `ITrainExecutionService.RunAsyn
 
 | | UseRemoteRun | UseRemoteWorkers |
 |---|---|---|
-| **Execution path** | `run*` mutations | `queue*` mutations |
+| **Execution path** | `run*` mutations and `[TraxQuery]` queries | `queue*` mutations |
 | **Blocking** | Yes, blocks until train completes | No, returns immediately with WorkQueueId |
 | **Returns** | Train output (deserialized from response) | WorkQueueId + ExternalId |
 | **Remote endpoint** | `UseTraxRunEndpoint()` (`/trax/run`) | `UseTraxJobRunner()` (`/trax/execute`) |

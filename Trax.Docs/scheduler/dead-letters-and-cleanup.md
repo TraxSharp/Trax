@@ -20,7 +20,8 @@ Navigate to **Data > Dead Letters** and click the visibility icon on any row. Th
 
 Two actions are available while the dead letter is in `AwaitingIntervention` status:
 
-- **Re-queue**: Creates a new WorkQueue entry from the manifest's properties and marks the dead letter as `Retried`
+- **Re-queue**: Creates a new WorkQueue entry from the manifest's properties and marks the dead letter as `Retried`. The run [replays the failed run's decisions](#retries-replay-decisions) when that is sound.
+- **Re-queue, Ask Afresh**: The same, except the run asks its deciders afresh
 - **Acknowledge**: Prompts for a resolution note and marks the dead letter as `Acknowledged`
 
 #### Batch Operations
@@ -29,6 +30,7 @@ The dead letters list page supports batch operations for resolving multiple dead
 
 - **Requeue All / Acknowledge All**: Resolves every `AwaitingIntervention` dead letter in a single operation
 - **Requeue Selected / Acknowledge Selected**: Use the checkboxes to select specific dead letters, then resolve just those
+- **Requeue All, Ask Afresh / Requeue Selected, Ask Afresh**: Requeue as above, with each run asking its deciders afresh
 
 ### Via GraphQL
 
@@ -72,12 +74,38 @@ mutation {
   }
 }
 
-# Requeue all awaiting dead letters
+# Requeue all awaiting dead letters: starts a background job and returns it at once
 mutation {
   operations {
     deadLetters {
       requeueAllDeadLetters {
+        id
+        status
+        awaitingAtStart
+      }
+    }
+  }
+}
+
+# Read the job until status is no longer RUNNING (on the node that started it)
+query {
+  operations {
+    deadLetters {
+      requeueAllJob(id: "6f1c2a7e-0d4b-4f53-9a3e-2b8f1c0d9e11") {
+        status
         count
+        message
+      }
+    }
+  }
+}
+
+# Requeue so the run asks its deciders afresh
+mutation {
+  operations {
+    deadLetters {
+      requeueDeadLetter(id: 42, askAfresh: true) {
+        success
         message
       }
     }
@@ -85,26 +113,55 @@ mutation {
 }
 ```
 
-Query dead letters with optional status filtering:
+`requeueDeadLetter`, `requeueDeadLetters` and `requeueAllDeadLetters` take `askAfresh` (default
+`false`), as `triggerManifest` and `triggerManifestDelayed` do; see
+[Retries replay decisions](#retries-replay-decisions).
+
+`requeueDeadLetter` and `acknowledgeDeadLetter` return `DeadLetterOperationResult`
+(`success: Boolean!`, `workQueueId: Long`, `message: String!`); `workQueueId` is the entry a
+requeue queued and `null` otherwise. The batch variants return `BatchDeadLetterResult`
+(`count: Int!`, `message: String!`). A requeue that cannot be done (the dead letter is already
+resolved, or its manifest already has a queued entry) is not a GraphQL error: it returns
+`success: false` with the reason in `message`.
+
+Over GraphQL, requeue-all runs as a background job so a large backlog never outlasts the request:
+the request that starts it answers at once with the job, and the requeue finishes even if the
+client goes away. A job that stops part-way (a server failure, a shutdown) leaves the dead letters
+it reached requeued; starting another requeues the rest. The fields are on
+[Mutations](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace). An
+acknowledgement note is at most 1,000 characters over GraphQL; a longer one is refused.
+
+Read dead letters with `operations.deadLetters.deadLetters` (a page, optionally filtered by status)
+and `operations.deadLetters.deadLetter(id:)`:
 
 ```graphql
 query {
   operations {
     deadLetters {
-      getDeadLetters(status: AWAITING_INTERVENTION, take: 10) {
+      deadLetters(status: AWAITING_INTERVENTION, take: 10) {
         items {
           id
+          manifestId
           manifestName
           status
           reason
+          retryCountAtDeadLetter
           deadLetteredAt
         }
         totalCount
+      }
+      deadLetter(id: 42) {
+        status
+        resolvedAt
+        resolutionNote
+        retryMetadataId
       }
     }
   }
 }
 ```
+
+The fields and arguments are listed in [Queries: deadLetters](/docs/sdk-reference/graphql-api/queries#deadletters-nested-under-operations).
 
 ### Via ITraxScheduler
 
@@ -122,7 +179,16 @@ var result = await scheduler.AcknowledgeDeadLettersAsync(new long[] { 1, 2, 3 },
 // Resolve all
 var result = await scheduler.RequeueAllDeadLettersAsync();
 var result = await scheduler.AcknowledgeAllDeadLettersAsync("Mass acknowledge");
+
+// Requeue so the run asks its deciders afresh instead of replaying the failed run's decisions
+var result = await scheduler.RequeueDeadLetterAsync(deadLetterId, askAfresh: true);
+var result = await scheduler.RequeueDeadLettersAsync(new long[] { 1, 2, 3 }, askAfresh: true);
+var result = await scheduler.RequeueAllDeadLettersAsync(askAfresh: true);
 ```
+
+A requeue [replays the decisions](#retries-replay-decisions) of the manifest's failed run when that
+is sound, as an automatic retry does. Pass `askAfresh: true` to queue the run to ask its deciders
+again instead.
 
 The batch methods take 1 to `OperationsService.MaxBatchSize` (1000) ids, the limit every operations-surface batch has. An empty list or a longer one is refused: the result counts nothing and its message says why. `RequeueAllDeadLettersAsync` reads and requeues a page of manifests at a time and sums the counts, so a large backlog is never loaded at once; every dead letter of one manifest is in the same page, so they still fold into one entry.
 
@@ -173,6 +239,24 @@ Only a retry waits. Once a run succeeds or is cancelled, the next occurrence run
 
 The delay is implemented by setting `ScheduledAt` on the WorkQueue entry. The JobDispatcher skips entries where `ScheduledAt > now`, so the retry won't be dispatched until the delay has elapsed.
 
+### When a retry runs
+
+A retry is not a timer of its own. It is the manifest's next due run, queued with that delay. A
+failed run does not move the point a schedule counts from (an interval counts from the last
+success, a cron from its last success's occurrence), so a manifest that failed while it was due is
+still due, and the ManifestManager queues the retry on its next cycle, `delay` from then:
+
+| The failed run was | Its retry is queued |
+|---|---|
+| A due interval or cron run | On the next ManifestManager cycle, dispatched once the delay passes |
+| A dependent's run | On the next cycle: the parent's success it was started for has still not been consumed |
+| A one-off's run | On the next cycle, while the one-off has not succeeded |
+| Started off-schedule by a trigger, with the manifest not due | Only once the manifest is next due by its schedule; then after the delay |
+
+So with `MaxRetries(2)`, `DefaultRetryDelay(2 s)` and the default multiplier, a due manifest that
+keeps failing runs three times within about ten seconds and is dead-lettered on the next cycle.
+The [Scheduling sample](/docs/samples/scheduling) runs exactly that.
+
 Configure via the scheduler builder:
 
 ```csharp
@@ -182,6 +266,121 @@ Configure via the scheduler builder:
     .MaxRetryDelay(TimeSpan.FromHours(1))
 )
 ```
+
+## Retries replay decisions
+
+A retry exists because something after a decision failed: a tool step threw, a database timed out.
+Trax has no per-junction retry, so a retry runs the chain from its first junction, and asking a
+model again costs a call per question and can be answered differently. Only a manifest's run is retried this
+way: a train run directly, queued through the operations `queueTrain` mutation, or queued by a
+`[TraxMutation]` dispatch mutation with `mode: QUEUE` (or `GraphQLOperation.Queue`) has no retry
+and never replays, and never becomes a dead letter, so a train
+meant to recover runs from a manifest (`Schedule`, or `ScheduleOnceAsync` for a single run).
+[Building a train that recovers](/docs/effect/decisions#building-a-train-that-recovers) lists every
+piece it needs. So when a manifest's run
+fails, its retry, queued by the ManifestManager, and a requeue of its dead letter replay the
+[decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) the failed
+run recorded: the retry takes the tracks the failed run's deciders chose instead of asking them
+again. Only the answers are replayed. Every ordinary junction runs again, side effects included.
+
+The scheduler reads the run to replay from the database, never from a caller: it is the manifest's
+latest finished run, and only when the next run is a retry of it, that is, the run failed and its
+failure still counts toward the retries (the same test that applies the backoff). A failure that an
+acknowledged dead letter or the failure window has set aside is not retried, so the next
+occurrence asks afresh. It links the retry only when all of these hold:
+
+| Check | Otherwise |
+|---|---|
+| The manifest replays decisions on retry (`ReplayDecisionsOnRetry`, on by default) | Asked afresh |
+| The failed run asked its deciders itself, rather than replaying another run's answers | Asked afresh |
+| Nothing else replays the failed run: no run in any state (queued, running or finished) and no queued entry | Asked afresh |
+| For a dependent manifest, its parent has not succeeded again since the failed run was dispatched; a new parent success fires a new run, not a retry | Asked afresh |
+| The failed run is a run of the manifest's train, recorded its decisions and acted on at least one | Asked afresh |
+| The failed run was queued by this manifest, with no subject key, and with exactly the input and input type the retry is queued with | Asked afresh |
+
+So a retry replays at most once in a row: answers that were replayed into a failure are not
+replayed again, and the next retry asks afresh. A run's answers are replayed at most once, and that
+is enforced when an entry is dispatched: an entry naming a run that another run already replays is
+dispatched with its link dropped, so it runs asking afresh, and the dispatcher logs it at
+`Information`. A manifest edited between the failure and the retry
+asks afresh, because the answers were given about the old input. Asking afresh is never an error,
+and a lookup that fails is logged and asks afresh rather than holding up the retry. A dependent's
+failed run is dated by when its work queue entry was dispatched (`work_queue.dispatched_at`), which
+the database stamps as it stamps the parent's last success; a run with no dispatched entry falls
+back to its start time.
+
+A replay that never started still counts as the one replay. A retry queued to replay that never
+ran (its dispatch ran out of attempts, its stored input could not be read, the stale pending reaper
+failed it) keeps its link, so as the manifest's latest failed run it makes the next retry ask
+afresh. Those answers are not offered to a later retry: a replay can be lost, but never applied
+twice. A requeue of such a run follows the kept link to the answers it never replayed.
+
+A run whose replay could not be honoured, and which asked its deciders afresh instead (its metadata
+marked `replay_abandoned`), is different: its answers are its own. It counts as a run that asked
+its deciders itself, so the next retry may replay its answers once, and it does not use up the
+replay of the run it names.
+
+The "nothing else replays the failed run" check reads the run history, so
+[metadata cleanup](#metadata-cleanup) keeps that history whole on every host: it never deletes a
+run that replays another while it keeps the run replayed. Both expired, they are deleted in the
+same transaction; a replay whose source is kept stays with it.
+
+A link can still become impossible to honour after it is written: the failed run can be deleted
+before the retry runs, or the retry can land on a host that does not record decisions. A manifest's
+run then logs a warning and asks afresh, rather than failing as a manual requeue would.
+
+Within the replay, each answer is still checked one by one: it replays only into a question asked
+the same way, about a state that hashes the same, and only while it is younger than
+[`ReplayAnswersFor`](/docs/sdk-reference/configuration/add-decision-recording#decisionrecordingoptions)
+(24 hours by default). An answer that fails any of these is asked afresh. The InMemory provider
+does not replay retries, because its ManifestManager dispatches without work queue entries to
+compare inputs against. Replay needs [`AddDecisionRecording()`](/docs/sdk-reference/configuration/add-decision-recording)
+on the hosts that run the manifest's train.
+
+### Asking afresh on purpose
+
+A manifest whose questions should always be answered on current information turns replay off:
+
+```csharp
+scheduler.Schedule<IScoreLeadsTrain>(
+    "score-leads",
+    new ScoreLeadsInput(),
+    Every.Minutes(30),
+    options => options.ReplayDecisionsOnRetry(false));
+```
+
+The flag is stored on the manifest as `replay_decisions_on_retry`, so every scheduler host reads the
+same value. Stated in code, it is written on every seed, so `ReplayDecisionsOnRetry(true)` in code
+turns replay back on at each restart over an operator's runtime opt-out, as every stated setting
+does. Where operators manage the flag at runtime, leave it out of code. Left unstated, a new
+manifest replays and an existing one keeps its value. [`IOperationsService.SetManifestsReplayDecisionsOnRetryAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#batch-actions)
+sets it at runtime. Turning it off reaches a retry already queued: the write clears the link on the
+manifest's queued entry in the same transaction as the flag, its message counts the retries it
+cleared (`"2 queued retry(s) no longer replay a failed run's decisions."`), and the dispatcher
+checks the flag again when it claims an entry. An
+opt-out committed in the instant between that check and the run's start still lets that one run
+replay.
+
+For a single occasion, the dead-letter requeues, `TriggerAsync` and
+[`RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync)
+take `askAfresh`. A requeue asked afresh queues no link, and a trigger asked afresh clears the link
+of the queued retry it releases. The trigger clears it only while the entry is still queued: when
+the dispatcher claimed the entry first, the run replays anyway, and the trigger says so. Its
+[`ManifestTriggerResult`](/docs/sdk-reference/scheduler-api/manifest-management#manifesttriggerresult)
+has `AlreadyDispatched` set and `ReplayDecisionsOf` naming the run whose decisions it replays, and
+a warning is logged.
+
+A requeue of an execution keeps the replay-once rule too. When a queued entry or a run, in any
+state, already replays the run being re-queued, `RequeueExecutionAsync` still queues it but asks
+afresh, and its message ends `"It asks its deciders afresh: the decisions of execution 42 are
+already replayed by another run or queued entry, and are replayed once."` A manifest's retry does
+not link a run a requeue replays, and a requeue does not link a run a retry replays. The database
+holds one queued entry per replayed run (the unique index `ix_work_queue_unique_queued_replay`), so
+when two hosts, two operators, or a requeue and a retry queue a replay of the same run in the same
+instant, the one that loses is queued again without the link and asks afresh. That holds for a
+retry, a dead-letter requeue, a requeue-all and `RequeueExecutionAsync`; nothing fails, and a
+requeue's message says it asked afresh.
+`Trax.Scheduler/docs/adr/0017` records why retries replay, and why only once.
 
 ## Monitoring
 
@@ -227,7 +426,7 @@ System trains like `ManifestManagerTrain` run frequently (every 5 seconds by def
 
 The cleanup only targets metadata in **terminal states** (Completed, Failed, or Cancelled). Pending and InProgress metadata is never deleted, regardless of age. Associated work queue entries and log entries are deleted first to avoid foreign key constraint violations.
 
-Deletion uses EF Core's `ExecuteDeleteAsync` for efficient single-statement SQL. No entities are loaded into memory.
+Deletion is set-based (`ExecuteDeleteAsync`), in batches of up to `DeleteBatchSize` runs, each batch one transaction. No entities are loaded into memory.
 
 ### Enabling Cleanup
 
@@ -244,6 +443,14 @@ A metadata row is deleted when **all** of these conditions are true:
 3. Its `TrainState` is `Completed`, `Failed`, or `Cancelled`
 
 Any work queue entries and log entries associated with deleted metadata are also removed.
+
+Decision replay adds three conditions. A run is kept while a queued work queue entry, or a run that
+is itself kept, names it in `replay_decisions_of`, because something still replays it. A run that
+replays another is never deleted while the run it replays is kept: both expired, they are deleted
+together in one transaction, so a batch can hold more rows than `DeleteBatchSize`. A replay whose
+source stays is kept with it. Each batch is deleted all or nothing; when a run in it is linked for
+replay during the delete, the batch rolls back, is rechecked and tried again without that run, and
+after three such attempts it is logged as a warning and left for a later sweep.
 
 Cancelled trains are treated as terminal, they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure. A run that stopped because something inside it gave up, such as an `HttpClient` timeout, was not cancelled: it is recorded `Failed` and classified `Transient`, so it counts toward `MaxRetries` like any other failure.
 
@@ -290,8 +497,12 @@ services.AddTrax(trax => trax
 );
 ```
 
-Jobs execute inline, so tests are fast and don't need database infrastructure.
+Jobs execute inline, so tests are fast and don't need database infrastructure. The in-memory
+provider has no work queue, though, so it does not show retry delays as Postgres runs them, nor
+replay decisions. To test retries, dead letters and requeues as they run in production, start the
+real host against a test Postgres and wait on the `trax.metadata` and `trax.dead_letter` rows, as
+the [Scheduling sample's E2E suite](/docs/samples/scheduling#testing-it) does.
 
 ## SDK Reference
 
-> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ManifestManagement](/docs/sdk-reference/scheduler-api/manifest-management) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler#dead-letters)
+> [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [ManifestManagement](/docs/sdk-reference/scheduler-api/manifest-management) | [ITraxScheduler](/docs/sdk-reference/scheduler-api/i-trax-scheduler#dead-letters)

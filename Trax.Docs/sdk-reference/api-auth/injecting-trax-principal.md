@@ -28,7 +28,7 @@ That's the whole surface. No `IHttpContextAccessor`, no null checks, no claim lo
 
 ## How it works
 
-`AddTraxPrincipalAccessor()` (called automatically by `AddTraxApiKeyAuth()` and every future Trax auth scheme) registers `TraxPrincipal` as a scoped service with this factory:
+`AddTraxPrincipalAccessor()` (called automatically by `AddTraxApiKeyAuth()`, `AddTraxJwtAuth()` and the other Trax auth schemes) registers `TraxPrincipal` as a scoped service with this factory:
 
 1. Resolve `IHttpContextAccessor` from DI
 2. Read `HttpContext.User` (the `ClaimsPrincipal` populated by the scheme handler)
@@ -67,9 +67,16 @@ public class AddJobJunction : Junction<AddJobInput, Job>
 
 The API-side resolver populates `InitiatorUserId` from the authenticated `TraxPrincipal`; the scheduler replays whatever was persisted on the work queue.
 
+### Ask `TraxCaller`
+
+For code that needs to know *whether* a user is present, inject [`TraxCaller`](/docs/sdk-reference/api-auth/trax-caller).
+It never throws: `Principal` is `null` for an anonymous caller, and `IsTrusted` says whether the
+scheduler or a runner is executing. It is also the right dependency for an EF query filter or a
+subscription resolver.
+
 ### Probe via `IHttpContextAccessor`
 
-For junctions that need to know *whether* a user is present:
+The same check by hand:
 
 ```csharp
 public class DualPathJunction(IHttpContextAccessor accessor) : Junction<MyInput, MyOutput>
@@ -98,12 +105,48 @@ services.AddScoped(_ => new TraxPrincipal("test-user", "Test User", ["Admin"]));
 
 This overrides the scheme-provided factory because DI picks the last registration. No `HttpContext` mocking required.
 
-## Signature
+## When no scheme is registered
 
-Registered by [AddTraxPrincipalAccessor](https://github.com/TraxSharp/Trax.Api/blob/main/src/Trax.Api.Auth/TraxAuthServiceCollectionExtensions.cs), called automatically from every Trax auth scheme's setup:
+The mediator checks at startup that every junction's constructor arguments can be resolved, and
+`TraxPrincipal` resolves only once something has registered it. A host whose auth calls are
+conditional (demo keys in Development, configured credentials elsewhere) can end up with no
+`AddTrax*Auth` call at all, and then refuses to start:
 
-```csharp
-public static IServiceCollection AddTraxPrincipalAccessor(this IServiceCollection services);
+```
+2 of 8 registered trains cannot run:
+  - IWhoAmITrain: step 1 (DescribeCallerJunction) needs 'Trax.Api.Auth.TraxPrincipal' as a
+    constructor argument; nothing before it puts one in Memory and the container does not
+    register it. Register it or chain a junction that produces it first.
 ```
 
-Idempotent. Safe to call from multiple schemes in the same host.
+Register the accessor yourself, unconditionally. The host then starts, and every gated train
+refuses every caller until a scheme is configured:
+
+```csharp
+using Trax.Api.Auth;
+
+builder.Services.AddAuthentication();          // UseAuthentication() needs it when no scheme ran
+builder.Services.AddTraxPrincipalAccessor();
+```
+
+## Signature
+
+```csharp
+namespace Trax.Api.Auth;
+
+public static class TraxAuthServiceCollectionExtensions
+{
+    public static IServiceCollection AddTraxPrincipalAccessor(this IServiceCollection services);
+}
+```
+
+Idempotent. Safe to call from multiple schemes in the same host, and alongside them.
+
+## Package
+
+```
+dotnet add package Trax.Api.Auth
+```
+
+`Trax.Api.Auth.ApiKey` and `Trax.Api.Auth.Jwt` depend on it, so a host that references either
+already has it.

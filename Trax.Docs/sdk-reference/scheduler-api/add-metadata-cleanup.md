@@ -35,7 +35,7 @@ public SchedulerConfigurationBuilder AddMetadataCleanup(
 |----------|------|---------|-------------|
 | `CleanupInterval` | `TimeSpan` | 1 minute | How often the cleanup background service runs. 1 second to 30 days |
 | `RetentionPeriod` | `TimeSpan` | 30 minutes | How old metadata must be (in a terminal state) before eligible for deletion, for every train not given a retention of its own. This is the value the persisted runtime override replaces |
-| `DeleteBatchSize` | `int?` | 1000 | Max rows deleted per batch, per retention group. Set to `null` for single-statement deletes; at least 1 when set |
+| `DeleteBatchSize` | `int?` | 1000 | Max runs selected per batch, per retention group, 1 to 10,000. `null` sweeps in batches of 10,000. A batch is one transaction, and can exceed the limit by the runs it must be deleted with: a run that replays another goes in the same batch as the run it replays. The transaction holds row locks on the batch's child runs and dead letters until it commits, so a larger batch delays a running child's status writes longer |
 
 ### Methods
 
@@ -52,7 +52,7 @@ The two-argument overloads throw:
 - `InvalidOperationException` when the train is an internal scheduler train, which is always swept at `RetentionPeriod`.
 - `InvalidOperationException` when the same name was already added with a different retention. The same retention twice is accepted and is not counted twice.
 
-`RetentionPeriod` and every per-train retention must be between one second and ten years, `CleanupInterval` between one second and 30 days, and `DeleteBatchSize` at least 1 when set. `AddScheduler` checks them when the scheduler is built and fails with an `InvalidOperationException` naming each value out of range (see [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges)). To keep a train's metadata as long as possible, give it ten years.
+`RetentionPeriod` and every per-train retention must be between one second and ten years, `CleanupInterval` between one second and 30 days, and `DeleteBatchSize` between 1 and 10,000 when set. `AddScheduler` checks them when the scheduler is built and fails with an `InvalidOperationException` naming each value out of range (see [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges)). To keep a train's metadata as long as possible, give it ten years.
 
 A train declared once under its interface name and again under its class name with different retentions cannot be caught here, because those are unrelated strings until the train registry relates them. The host refuses to start instead.
 
@@ -98,7 +98,7 @@ Trains sharing a cutoff are swept together, so the batched delete runs once per 
 ## Remarks
 
 - Only metadata in a **terminal state** (`Completed`, `Failed`, or `Cancelled`) older than `RetentionPeriod` is deleted. `Pending` and `InProgress` metadata is never cleaned up.
-- A run is kept, whatever its age, while a `Queued` work queue entry or any metadata row names it in `replay_decisions_of`, so a [re-queue that replays its decisions](/docs/effect/decisions#a-requeue-of-a-requeue) can still read them. When the linking run has expired too, it is deleted first and the run it links to goes in a later batch or sweep.
+- A run is kept, whatever its age, while a `Queued` work queue entry or any metadata row names it in `replay_decisions_of`, so a [re-queue that replays its decisions](/docs/effect/decisions#a-requeue-of-a-requeue) can still read them. When the linking run has expired too, it is deleted first and the run it links to goes in a later batch or sweep. A batch is deleted all or nothing: the runs, and the work queue entries, logs, dead letter links and children's parent links they own, are cleared in one transaction whose delete repeats the keep test. When a run was linked after the cleanup selected it, the transaction rolls back, so the run keeps everything it owns, and the batch is rechecked and deleted without it. A batch linked for replay on three successive attempts is logged and skipped for the rest of the sweep.
 - The cleanup service runs as an `IHostedService` on the configured `CleanupInterval`.
 - The internal scheduler trains (`JobDispatcher`, `ManifestManager`, `MetadataCleanup`, `DeadLetterCleanup`, `JobRunner`) are always pruned while cleanup is enabled. You don't need to add them manually, and a consumer can never accidentally leave one out.
 - A cleanup batch that hits an unexpected foreign-key reference or other error is bisected to isolate the offending row, which is logged and skipped, so one bad row can't abort the whole sweep.

@@ -14,7 +14,6 @@ Trax is built on top of excellent open-source libraries. This page lists the thi
 
 | Package | License | Description |
 |---------|---------|-------------|
-| [LanguageExt](https://github.com/louthy/language-ext) | MIT | Functional programming primitives (`Either`, `Unit`, `Option`) used throughout the train pipeline |
 | [Microsoft.Extensions.DependencyInjection.Abstractions](https://github.com/dotnet/runtime) | MIT | DI abstractions for service registration |
 | [Microsoft.Extensions.Logging.Abstractions](https://github.com/dotnet/runtime) | MIT | Logging abstractions |
 

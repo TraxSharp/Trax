@@ -16,6 +16,7 @@ Query models expose EF Core entities directly as GraphQL queries with automatic 
 1. Mark your entity with `[TraxQueryModel]`:
 
 ```csharp
+[TraxAuthorize] // or [TraxAllowAnonymous]: without a posture the host refuses to start (see Authorization)
 [TraxQueryModel(Description = "Player profiles")]
 public class PlayerRecord
 {
@@ -44,6 +45,26 @@ builder.Services.AddDbContextFactory<GameDbContext>(options =>
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.AddDbContext<GameDbContext>());
 ```
+
+For an application's own data, the recommended base is a
+[`DomainDataContext`](/docs/effect/effect-providers/domain-data-contexts) registered with
+`AddDomainDataContext`, and it works here unchanged: `AddDbContext<T>()` names the concrete context
+type, and the pooled factory `AddDomainDataContext` registers serves it.
+
+```csharp
+public class GameDbContext(DbContextOptions<GameDbContext> options)
+    : DomainDataContext<GameDbContext>(options), IGameDbContext
+{
+    public DbSet<PlayerRecord> Players => Set<PlayerRecord>();
+    protected override string Schema => "game";
+    protected override void ConfigureModel(ModelBuilder modelBuilder) { }
+}
+
+builder.Services.AddDomainDataContext<IGameDbContext, GameDbContext>(o => o.UseNpgsql(connectionString));
+builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<GameDbContext>());
+```
+
+The [Bookworm sample](/docs/samples/bookworm) serves its catalog this way.
 
 This generates a `playerRecords` query field under `discover`:
 
@@ -279,7 +300,7 @@ Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The direc
 
 - the top-level field under `discover` (including Connection-shaped scalars like `totalCount` and `pageInfo`),
 - any other field elsewhere in the schema whose return type is this entity (e.g. a navigation property on an ungated parent),
-- a `where` or `order` on another model that filters or sorts through a navigation to this entity.
+- a `where` or `order` that filters or sorts through a navigation to this entity, on any field that takes one: another model's entry field, a type extension's `[UseFiltering]` or `[UseSorting]` resolver, or a filtered navigation.
 
 ```csharp
 [TraxQueryModel(Namespace = "library")]
@@ -293,7 +314,7 @@ The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated r
 
 An entity a query model reaches through a navigation, that is not itself a `[TraxQueryModel]`, declares its posture the same way, with `[TraxAuthorize]` or `[TraxAllowAnonymous]` on its class; the host refuses to start naming the navigation when it does not, unless the endpoint is gated with `RequireAuthorization()`. A class EF Core maps as owned is part of its owner and needs no marker. See [Authorization guide - Entities a Query Model Reaches](/docs/authorization#entities-a-query-model-reaches).
 
-See the [Authorization guide - Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (no field-level gating, no row-level filtering).
+See the [Authorization guide - Per-Model Authorization](/docs/authorization#per-model-authorization) for the full semantics table and limitations (a property cannot be gated on its own, though a resolver method can; no row-level filtering).
 
 ## Name Derivation
 
@@ -309,6 +330,10 @@ Override with `Name` for cases where the automatic pluralization is incorrect:
 public class Person { ... }
 ```
 
+
+### Name Collisions
+
+Every field under `discover`, `dispatch` and their namespaces has exactly one owner. When two surfaces would put a field of the same name in the same place, the host refuses to start and names both: a query model and a `[TraxQuery]` train (`Team` and `ITeamsTrain` both make `teams`), one entity exposed by two `DbContext`s, a namespace and a model of the same name, or a type extension that adds a field Trax or another extension already adds. HotChocolate would otherwise merge the two into one field and keep whichever resolver it built last. Give one of them its own name: `Name` on `[TraxQueryModel]`, `[TraxQuery]` or `[TraxMutation]`, a different `Namespace`, or a different method name on the extension.
 ## Custom Filter and Sort Types
 
 By default, Trax generates the filter and sort inputs from the entity's exposed field set: every public property, or the narrower set `BindFields = Explicit` or `ExposeAs` declares. When you need to hide properties, rename filter fields, or customize the generated input types, register custom overrides via the builder:
@@ -512,7 +537,7 @@ builder.Services.AddTraxGraphQL(graphql => graphql
 
 Only `DbSet<T>` properties where `T` has `[TraxQueryModel]` are exposed. Other `DbSet` properties on the same DbContext are ignored.
 
-The DbContext must be registered in DI separately (via `AddDbContext`, `AddDbContextFactory`, or `AddPooledDbContextFactory`).
+The DbContext must be registered in DI separately (via `AddDomainDataContext`, `AddDbContext`, `AddDbContextFactory`, or `AddPooledDbContextFactory`). Each request resolves the concrete type you named.
 
 ## vs TraxQuery
 

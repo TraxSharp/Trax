@@ -79,9 +79,9 @@ var payload = init.Payload?.Deserialize<MyPayload>(
 );
 ```
 
-Watch for a silent failure here: LanguageExt (a Trax dependency) supplies an unrelated
-`As<T>()` extension, so the old call still compiles and returns null at runtime. Search for
-`.As<` in your socket interceptors rather than trusting the compiler.
+Watch for a silent failure here: if any library in scope supplies an unrelated `As<T>()`
+extension, the old call still compiles and returns null at runtime. Search for `.As<` in your
+socket interceptors rather than trusting the compiler.
 
 ## Scalar renames change your SDL
 

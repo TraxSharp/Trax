@@ -101,7 +101,7 @@ Inside the `AddEffects()` callback, data provider methods return a more specific
 | Type | Returned By | Exposes |
 |------|-------------|---------|
 | `TraxEffectBuilder` | `AddEffects()` lambda | `SkipMigrations()`, `UsePostgres()`, `UseSqlite()`, `UseInMemory()`, `AddJson()`, `SaveTrainParameters()`, `AddJunctionLogger()`, `AddJunctionProgress()`, `SetEffectLogLevel()`, `UseBroadcaster()`, `AddNimbleDecider()`, `AddSystemOneDecider()` |
-| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseSqlite()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()` and `AddDecisionRecording()` |
+| `TraxEffectBuilderWithData` | `UsePostgres()`, `UseSqlite()`, `UseInMemory()` | Everything on `TraxEffectBuilder` plus `AddDataContextLogging()`, `AddDecisionRecording()` and `AddJunctionEvents()` |
 
 Generic effect methods (`AddJson`, `SaveTrainParameters`, `AddJunctionLogger`, `AddJunctionProgress`, `SetEffectLogLevel`, `UseBroadcaster`, `AddNimbleDecider`, `AddSystemOneDecider`) preserve the concrete builder type through chaining. If you start with `TraxEffectBuilderWithData`, it stays `TraxEffectBuilderWithData`.
 
@@ -187,6 +187,8 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect) | Registers custom effect provider factories |
 | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | Registers lifecycle hooks that fire on train state transitions |
 | [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the minimum log level for effect logging |
+| [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | Records every decision a run makes in `trax.decision`, and replays them into a re-queued or retried run |
+| [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | Publishes each step of a run live and records it in `trax.junction_run` |
 
 ### Services you register
 
@@ -197,4 +199,5 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [IDataContext](/docs/sdk-reference/configuration/i-data-context) | Trax's own data context: the `trax` tables, transactions, and the scoped registration a data provider adds |
 | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | The base class and registration helpers for your own schema-per-context EF data contexts |
 | [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider) | What a junction effect implements: code run before and after every `EffectJunction` |
-| [ITraxTrainEventClient](/docs/sdk-reference/configuration/i-trax-train-event-client) | The SignalR hub's client surface: the `TrainEvent` method clients subscribe to |
+| [ITraxTrainEventClient](/docs/sdk-reference/configuration/i-trax-train-event-client) | The SignalR hub's client surface: the `TrainEvent` and `JunctionEvent` methods clients subscribe to |
+| [IJunctionEventHandler](/docs/sdk-reference/configuration/add-junction-events#ijunctioneventhandler) | Receives each step of a run from a host that calls `AddJunctionEvents()` |

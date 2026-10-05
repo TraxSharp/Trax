@@ -43,18 +43,19 @@ The MetadataCleanup train uses no application-level locking. Multiple servers ca
 
 `DeleteExpiredMetadataJunction` uses EF Core's `ExecuteDeleteAsync()`, which translates to atomic `DELETE FROM ... WHERE ...` SQL statements. The database engine acquires implicit row-level locks during these deletes. If two servers execute the same `DELETE` concurrently, the first deletes the rows and the second finds no matching rows, a no-op. No errors, no side effects.
 
-Batching limits the duration of these implicit row-level locks. Without batching, a single `DELETE` matching thousands of rows holds locks on all of them for the entire statement. With batching, each batch locks at most `DeleteBatchSize` rows, reducing contention with concurrent workers calling `SaveChanges` on the same table.
+Batching limits the duration of these implicit row-level locks. A single `DELETE` matching thousands of rows would hold locks on all of them for the entire statement, so there is no unbounded setting: `DeleteBatchSize` is 1 to 10,000, and null sweeps in batches of 10,000. Each batch locks about `DeleteBatchSize` runs and what they own, which keeps contention with concurrent workers calling `SaveChanges` on the same table short.
 
 ### Deletion Order
 
 Each batch follows this process:
 
-1. **Load batch of metadata IDs**: select up to `DeleteBatchSize` IDs matching the criteria
-2. **WorkQueue entries**: delete entries whose `MetadataId` is in the batch
-3. **Log entries**: delete logs whose `MetadataId` is in the batch
-4. **Clear back-references**: null `dead_letter.retry_metadata_id` and child `metadata.parent_id` pointing at the batch, so the `ON DELETE RESTRICT` foreign keys don't block the delete (the dead letter and any still-running child are meaningful records and are kept)
-5. **Metadata rows**: delete metadata by ID
-6. **Repeat** until no more IDs match
+1. **Load batch of metadata IDs**: select up to `DeleteBatchSize` IDs matching the criteria, then add the expired runs each must be deleted with (below)
+2. **Begin a transaction**: the steps up to the metadata delete run in one transaction, all or nothing
+3. **WorkQueue entries**: delete entries whose `MetadataId` is in the batch
+4. **Log entries**: delete logs whose `MetadataId` is in the batch
+5. **Clear back-references**: null `dead_letter.retry_metadata_id` and child `metadata.parent_id` pointing at the batch, so the `ON DELETE RESTRICT` foreign keys don't block the delete (the dead letter and any still-running child are meaningful records and are kept)
+6. **Metadata rows**: delete metadata by ID, repeating the replay checks below. When a run in the batch was linked for replay after it was selected, the delete keeps it and the transaction rolls back, so the run keeps everything it owns; the batch is rechecked and tried again without it. After three attempts the batch is logged as a warning and left for a later sweep
+7. **Repeat** until no more IDs match
 
 Using ID-based deletion guarantees the statements in a batch target the exact same rows, avoiding race conditions between statements.
 
@@ -63,6 +64,13 @@ A batch that still fails (for example an unexpected foreign-key reference or a d
 ### Safety Boundary
 
 Only metadata in a **terminal state** (`Completed`, `Failed`, or `Cancelled`) is eligible for deletion. `Pending` and `InProgress` metadata is never deleted regardless of age, so cleanup cannot interfere with in-flight executions.
+
+Runs linked by [decision replay](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) (`replay_decisions_of`) are kept together:
+
+- A run is kept while a queued work queue entry, or a run that is kept, names it, because something still replays it.
+- A run that replays another is never deleted while the run it replays is kept. Both expired, they are deleted in the same batch and transaction, so a batch can hold more runs than `DeleteBatchSize`. A replay whose source stays is kept with it.
+
+So no run is ever kept while a replay of it has been deleted, and a retry's check that [nothing else replays the failed run](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) reads the same history on every host.
 
 See [Multi-Server Concurrency](/docs/scheduler/concurrency) for the full cross-service concurrency model.
 
@@ -132,7 +140,7 @@ If the startup check is somehow bypassed, the sweep keeps the longer of the two 
 |--------|---------|-------------|
 | `CleanupInterval` | 1 minute | How often the cleanup service runs |
 | `RetentionPeriod` | 30 minutes | Age threshold for deletion eligibility, for every train not given one of its own. This is the value the runtime override replaces |
-| `DeleteBatchSize` | 1000 | Max rows deleted per batch, per retention group. Set to `null` for single-statement deletes |
+| `DeleteBatchSize` | 1000 | Max runs selected per batch, per retention group, 1 to 10,000; `null` sweeps in batches of 10,000. A batch can exceed it by the replay relatives it must delete together |
 | `TrainTypeWhitelist` | (internal trains always included) | Additional consumer train names whose metadata can be deleted. The internal scheduler trains are pruned unconditionally on top of this list |
 
 ## SDK Reference

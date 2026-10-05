@@ -67,11 +67,11 @@ protected override Task<Either<Exception, ModerationOutcome>> Junctions() =>
 
 1. Skipped if the train is already on the left track; no decider is asked. A cancelled run stops here too.
 2. Takes `TState` from Memory, then the decider (`IDecider`, or the `DecidedBy` type) from Memory or the container.
-3. For each question, awaits the registered `IDecisionReplay` for an earlier run's answer and the fingerprint it was recorded with. A replayed answer whose fingerprint differs from this asking, or that no longer fits its question, is set aside, with the reason, and the question is asked afresh. Questions it answers are not sent, to the decider or to the shadows.
+3. Hashes the state (`StateHash`, keyed when the container holds a `StateHashKey`) when it is needed: to check a replayed answer that passed its fingerprint and fit checks, or, before the decider, when a decision observer is registered. For each question, awaits the registered `IDecisionReplay` for an earlier run's answer and the fingerprint and state hash it was recorded with. A replayed answer whose fingerprint differs from this asking, that no longer fits its question, or whose state hash differs from this state's or is missing, is set aside, with the reason, and the question is asked afresh. Questions it answers are not sent, to the decider or to the shadows.
 4. Asks the decider the rest in one `DecisionRequest`. The shadows are asked the same questions at the same time, each on a thread of its own, and each shadow from the container in a DI scope of its own. The live decider is handed the state in Memory itself; each shadow is handed its own copy, written to JSON once and read back for each.
 5. Once the live answer is in, waits at most `WaitForShadows` for the shadows, then cancels them; one that has not answered is recorded as not having answered.
 6. Checks every answer against its question and puts the typed decision in Memory.
-7. Awaits the registered `IDecisionObserver` for each decision, with its `Occurrence`, its `Fingerprint`, any shadows' answers and any `ReplayRefused` reason. An observer that is `Required` and fails, or that cannot be resolved, fails the step.
+7. Awaits the registered `IDecisionObserver` for each decision, with its `Occurrence`, its `Fingerprint`, its `StateHash` and `StateType`, any shadows' answers and any `ReplayRefused` reason. An observer that is `Required` and fails, or that cannot be resolved, fails the step.
 
 The run fails, naming the step and classified `Transient`, when an answer does not fit its
 question (an option that is not a member, a confidence or probability outside 0 to 1, a score off

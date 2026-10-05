@@ -79,6 +79,12 @@ app.MapTraxTrainEventHub(hub => hub.RequireAuthorization("TraxEvents"));
 
 The hub subscribes to the RabbitMQ exchange and rebroadcasts every matching event to the browsers its posture admits (see [MapTraxTrainEventHub: Authorization](/docs/sdk-reference/configuration/map-trax-train-event-hub#authorization)). The same hub also handles trains it runs locally, which fire the SignalR sink directly without a transport hop.
 
+The [SignalR Broadcaster sample](/docs/samples/signalr-broadcaster) is the single-process case: a
+browser page, a cookie sign-in, a hub mapped with `RequireRoles`, and a projection that sends a
+failure reason only for a `TrainException`. The [Energy Hub sample](/docs/samples/energy-hub) is the
+multi-process case without SignalR: workers publish over RabbitMQ and the hub's GraphQL
+subscriptions receive their events.
+
 ## When to use SignalR vs GraphQL subscriptions
 
 Both deliver lifecycle events to clients in real time. Use the one that matches the rest of your stack:

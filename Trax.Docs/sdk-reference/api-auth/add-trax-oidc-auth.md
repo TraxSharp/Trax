@@ -145,7 +145,7 @@ app.MapGet("/login", (HttpContext ctx) =>
 
 ## Subscriptions
 
-The session cookie authenticates the WebSocket upgrade for GraphQL subscriptions like any other request. The Trax schema accepts that upgrade only from origins the host serves: the endpoint's own host, or the origins allowed by `AllowSocketOrigins(...)`, which default to your CORS default policy. If your SPA is on another origin, list it in the CORS default policy or pass it to `AllowSocketOrigins(...)`. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
+The session cookie authenticates the WebSocket upgrade for GraphQL subscriptions like any other request. The Trax schema accepts that upgrade only from origins the host serves: the endpoint's own host, or the origins allowed by `AllowSocketOrigins(...)`, which default to the origins your CORS default policy names. A default policy built with `AllowAnyOrigin()` names none, so if your SPA is on another origin, list it with `WithOrigins(...)` in the CORS default policy or pass it to `AllowSocketOrigins(...)`. The socket closes when the sign-in it was opened with expires, and at the connection's maximum lifetime (one hour by default) if that comes first; see [Connection lifetime](/docs/sdk-reference/graphql-api/subscriptions#connection-lifetime). See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
 
 ## Return Semantics
 

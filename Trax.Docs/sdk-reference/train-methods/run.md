@@ -106,7 +106,7 @@ During junction execution, the train's `CancellationToken` is automatically prop
 
 ## Remarks
 
-- `RunEither` is useful when you want functional-style error handling without try/catch. It pairs naturally with LanguageExt's `Match`, `Map`, `Bind`, etc.
+- `RunEither` is useful when you want functional-style error handling without try/catch. Read it with `Either`'s `Match`, `IfRight` and `IfLeft`, or check `IsRight` and cast.
 - In most applications, trains are executed through `ITrainBus.RunAsync` (which calls `Run` internally) rather than calling `Run` directly. See [TrainBus](/docs/sdk-reference/mediator-api/train-bus).
 - The `cancellationToken` parameter stores the token before calling the train's route definition. All junctions in the chain then receive the token automatically. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) for details on how cancellation propagates through the pipeline.
 - `Run` is `virtual` on plain `Train<TInput, TReturn>`, for code that uses Trax.Core without Trax.Effect. An override that does not call `base.Run` never reaches `Junctions()`, so the chain that `DeclaredChain()` reads, and any check built on it, is not the chain that runs. Call `base.Run` from an override, or put the work in a junction. A `ServiceTrain` cannot override `Run` at all: its overloads are sealed. `Trax.Core/docs/adr/0003` records why.

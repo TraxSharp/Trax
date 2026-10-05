@@ -1,16 +1,74 @@
 ---
 layout: default
 title: Samples & Deployment
-description: The pattern the Trax samples follow, trains in a library wrapped by thin executables, the data layer pattern, and six deployment models compared.
+description: Every Trax sample, the feature each one proves and the test that proves it, the trains-library and data-layer patterns, and the deployment models.
 nav_order: 10
+has_children: true
 section: Guides
 ---
 
 # Samples & Deployment Patterns
 
-The Trax samples demonstrate a consistent architectural pattern: **put your trains in a library, then wrap them with thin executables**. Each executable is just a `Program.cs` that picks which Trax capabilities to wire up. The trains themselves stay deployment-agnostic. The same library powers a standalone scheduler, a GraphQL API, a distributed worker fleet, or all three at once.
+[Trax.Samples](https://github.com/TraxSharp/Trax.Samples) holds one sample per major Trax feature. Each is a complete,
+runnable application that shows that feature and as little else as possible, and each has an end-to-end test suite
+that runs against the real host, so what a page here tells you to copy is something CI has seen work. Start from the
+sample for the feature you need, then read its page: it lists the packages, the full `Program.cs`, what refuses
+startup and why, and a "Try it" walkthrough whose commands were run as written.
 
-This mirrors the ladder philosophy. You only add the packages you need, and you only build the executables you need. The trains don't change.
+Features without a sample of their own are proven by a test in their own repository; the
+[feature-coverage table](https://github.com/TraxSharp/Trax.Samples#feature-coverage) lists every major feature and
+the test class that proves it.
+
+Starting a new server rather than learning one feature? The [project templates](/docs/reference/templates)
+(`trax-hub`, `trax-api`, `trax-scheduler`) scaffold a runnable host with a README and a test project:
+`dotnet new install Trax.Samples.Templates && dotnet new trax-hub -n MyApp`.
+
+## Pick a Sample
+
+| Sample | The feature it proves | Run (from `Trax.Samples/`) | Port |
+|---|---|---|---|
+| [Scheduling](/docs/samples/scheduling) | Interval, cron, one-off, dependent and dormant manifests; retries with backoff, dead letters and their requeue over GraphQL | `dotnet run --project samples/Scheduling/Trax.Samples.Scheduling.Host` | 5230 |
+| [Auth](/docs/samples/auth) | Securing a Trax server end to end: API keys and JWT side by side, `[TraxAuthorize]` roles and policies, `GateOperations`, scheme-qualified principal ids, the audit trail | `dotnet run --project samples/Auth/Trax.Samples.Auth` | 5220 |
+| [Recovery](/docs/samples/recovery) | Train decisions, a manifest retry that replays them instead of asking the model again, and live junction events on a React page | `dotnet run --project samples/Recovery/Trax.Samples.Recovery.Api` | 5260 |
+| [Chat Service](/docs/samples/chat-service) | GraphQL subscriptions over WebSocket: a lifecycle hook feeding a custom `onChatEvent` field that only a room's participants may join | `dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api` | 5210 |
+| [GraphQL Client](/docs/samples/graphql-client) | Keyed Trax GraphQL clients calling two Trax servers, each request validated against its server's schema before it is sent | `dotnet run --project samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway` | 5310-5314 |
+| [Persisted Operations](/docs/samples/persisted-operations) | An API that runs only stored documents: gated management mutations, a hot-fix by id, the shape-diff guardrail | `dotnet run --project samples/PersistedOperations/Trax.Samples.PersistedOperations.Api` | 5240 |
+| [Bookworm](/docs/samples/bookworm) | Cross-schema GraphQL over two domain contexts, owner-scoped rows, and the architecture guards adopted by a consumer | `dotnet run --project samples/Bookworm/Trax.Samples.Bookworm.Api` | 5250 |
+| [State Machine](/docs/samples/state-machine) | Snapshot state machines behind the `stateMachine` mutations: an exactly-once charge, a forward migration, a server-checked total | `dotnet run --project samples/StateMachine/Trax.Samples.StateMachine.Api` | 5280 |
+| [Energy Hub](/docs/samples/energy-hub) | A hub that schedules and serves GraphQL but runs none of its jobs, and standalone workers that do, with events home over RabbitMQ | hub and worker, see the page | 5202-5203 |
+| [Content Shield](/docs/samples/content-shield) | An API that executes nothing: queued and synchronous runs go, signed, to a Lambda-style runner | runner and API, see the page | 5204-5205 |
+| [SignalR Broadcaster](/docs/samples/signalr-broadcaster) | Live train events in a browser through the SignalR sink, a hub only signed-in operators may join, a projected failure reason | `dotnet run --project samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster` | 5270 |
+
+The ports never collide, so any set of samples can run side by side. The React clients (Chat Service, Recovery,
+State Machine) use Vite's dev server on 5173; run one at a time.
+
+## Running the Samples
+
+Most samples need PostgreSQL, and the distributed ones RabbitMQ. From the `Trax.Samples/` directory:
+
+```bash
+docker compose up -d
+```
+
+The compose file publishes Postgres (`trax` / `trax123`) and RabbitMQ (`trax` / `trax123`) on
+`127.0.0.1` only, because their passwords are written in the file. Set `TRAX_PG_PORT` to move Postgres to another
+host port when something else holds 5432; the samples themselves read their connection string from their own
+`appsettings.json`, so change it there too. If you copy the compose file to a server, keep the `127.0.0.1:` prefix and
+replace the passwords.
+
+Every Postgres sample has a database of its own (`trax_auth`, `trax_bookworm`, `trax_contentshield`, `trax_energyhub`,
+`trax_persisted_operations`, `trax_recovery`, `trax_scheduling`, `trax_statemachine`), because a scheduler polls every
+manifest and job in its database and would fail another sample's. `docker compose up -d` creates them on a fresh
+volume. Its init script runs only once, so on a volume from before a database was added, create the database yourself:
+`docker exec trax_database createdb -U trax trax_scheduling`.
+
+The samples' demo API keys and JWT signing keys are published in this repository, so each sample registers them only
+in Development, and so does its dashboard. `dotnet run` starts in Development through the project's
+`Properties/launchSettings.json`; started any other way, a sample accepts none of them and serves no dashboard. Every
+demo API key contains `do-not-use-in-production`, which Trax.Api refuses to start with outside Development.
+
+The end-to-end suites run with `dotnet test` from `Trax.Samples/`. They use Postgres on port 5432 by default; set
+`TRAX_TEST_PG_PORT` to point them elsewhere. A suite whose database is missing fails rather than skipping.
 
 ## The Trains Library Pattern
 
@@ -56,10 +114,10 @@ The library references `Trax.Effect`, `Trax.Mediator`, and `Trax.Scheduler` (or 
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.57.4" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.57.4" />
-    <PackageReference Include="Trax.Mediator" Version="1.23.3" />
-    <PackageReference Include="Trax.Scheduler" Version="1.34.2" />
+    <PackageReference Include="Trax.Effect" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.59.0" />
+    <PackageReference Include="Trax.Mediator" Version="1.24.1" />
+    <PackageReference Include="Trax.Scheduler" Version="1.36.1" />
   </ItemGroup>
 </Project>
 ```
@@ -78,10 +136,10 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
     <ProjectReference Include="..\MyApp\MyApp.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.57.4" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.57.4" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.57.4" />
-    <PackageReference Include="Trax.Dashboard" Version="1.16.0" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.59.0" />
+    <PackageReference Include="Trax.Dashboard" Version="1.18.0" />
   </ItemGroup>
 </Project>
 ```
@@ -122,7 +180,7 @@ public class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
 }
 ```
 
-Each context ships a companion `I{Name}DbContext` interface; application code (junctions, services) depends on the interface, never the concrete type. Registration goes through `AddDomainDataContext<TInterface, TContext>` (from Trax.Effect.Data), which uses a pooled context factory plus a scoped resolver.
+Each context ships a companion `I{Name}DbContext` interface, in its own `I{Name}DbContext.cs` file next to the context; application code (junctions, services) depends on the interface, never the concrete type. Registration goes through `AddDomainDataContext<TInterface, TContext>` (from Trax.Effect.Data), which uses a pooled context factory plus a scoped resolver. A pooled context cannot take the caller, so a context with owner-scoped rows (Bookworm's `lending`) is registered by hand instead; the [Bookworm sample](/docs/samples/bookworm) shows how.
 
 ### Crossing schema boundaries
 
@@ -161,329 +219,85 @@ The conventions above are enforced by meta-tests so they survive future changes.
 
 ## Deployment Models
 
-The sample directories show six deployment topologies, each built on the same pattern.
+The same trains library can be wrapped by different executables. The samples cover five topologies.
 
-### Model 1: Standalone Scheduler
+### Model 1: One Host Does Everything
 
-**Sample:** `DataPipeline/`
+**Samples:** [Scheduling](/docs/samples/scheduling), [Recovery](/docs/samples/recovery)
 
-```
-Trax.Samples.Flowthru.Spaceflights/           ← library (trains)
-Trax.Samples.Flowthru.Spaceflights.Scheduler/ ← executable (scheduler + dashboard)
-```
+One ASP.NET process schedules trains, runs them on the built-in local workers (the default whenever the scheduler
+has a database provider), serves GraphQL, and hosts the dashboard in Development. The Recovery sample adds
+subscriptions on the same host: its page listens to `onJunctionEvent` for live progress.
 
-The simplest deployment - one process that schedules and executes everything. The executable adds `AddScheduler()` and `AddTraxDashboard()`. Local workers are the implicit default when `UsePostgres()` is configured.
+- **Host:** `AddScheduler()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
 
-Good for: data pipelines, ETL jobs, background processing where a single server handles the load.
+Good for: most applications, until execution needs to scale apart from the API.
 
 ### Model 2: Separate API + Scheduler
 
-**Sample:** `LocalWorkers/`
+**Sample:** none. Two processes share the trains library and the Postgres database: the scheduler runs background
+work and hosts the dashboard; the API serves GraphQL, runs lightweight trains inline, and queues heavy ones. Because
+they are separate processes, both call `UseBroadcaster(b => b.UseRabbitMq(...))`, so the API's subscriptions see the
+trains the scheduler ran.
 
-```
-Trax.Samples.GameServer/            ← library (trains)
-Trax.Samples.GameServer.Scheduler/  ← executable (scheduler + dashboard)
-Trax.Samples.GameServer.Api/        ← executable (API only)
-```
-
-Two processes share the same trains library and Postgres database. The scheduler process handles background execution and hosts the dashboard. The GraphQL process serves the API - it can run lightweight trains synchronously and queue heavy work for the scheduler.
-
-Because the two processes are separate, both call `UseBroadcaster(b => b.UseRabbitMq(...))`. The scheduler publishes train lifecycle events and coalesced data-change signals; the API subscribes and relays them to its GraphQL subscriptions. So `onTrainStateChanged` reflects trains the scheduler ran, and `onDataChanged` fires when the scheduler queues, dispatches, or dead-letters work, letting a dashboard update live without polling.
-
-The split:
 - **Scheduler:** `AddScheduler()` + `AddTraxDashboard()` + `UseBroadcaster()`
-- **API:** `AddTraxGraphQL()` + `UseBroadcaster()` - no scheduler, no executor
+- **API:** `AddTraxGraphQL()` + `UseBroadcaster()`. Queueing needs a job submitter, so give the API
+  `AddScheduler(s => s.OverrideSubmitter(...))` (it writes jobs, the scheduler process runs them). A host that calls
+  `ExposeOperationMutations()` with no `IJobSubmitter` registered refuses to start, because `runTrain` hands every run
+  to one.
 
-Good for: web applications with both an API and background jobs, where the API needs to stay responsive and offload heavy work.
+Good for: an API that must stay responsive while background jobs run elsewhere.
 
 ### Model 3: Hub + Distributed Workers
 
-**Sample:** `DistributedWorkers/`
+**Sample:** [Energy Hub](/docs/samples/energy-hub)
 
-```
-Trax.Samples.EnergyHub/         ← library (trains)
-Trax.Samples.EnergyHub.Hub/     ← executable (API + scheduler + dashboard, no execution)
-Trax.Samples.EnergyHub.Worker/  ← executable (worker only, no API)
-```
+The hub schedules and serves the API but executes nothing: `OverrideSubmitter(s => s.AddScoped<IJobSubmitter,
+PostgresJobSubmitter>())` writes jobs to `background_job` and starts no local workers (without the override, a
+scheduler on Postgres runs trains too). Separate worker processes (`AddTraxWorker()`) claim jobs with
+`FOR UPDATE SKIP LOCKED` and scale horizontally. Workers publish lifecycle events over RabbitMQ, so the hub's GraphQL
+subscriptions see remote completions.
 
-The hub process manages scheduling and serves the API. To keep it from executing trains, register `PostgresJobSubmitter` through `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())`: jobs are written to the `background_job` table and no local workers start. Without the override, a scheduler on Postgres starts local workers and the hub runs trains too. Separate worker processes poll that table and execute trains.
-
-The split:
-- **Hub:** `AddScheduler(s => s.OverrideSubmitter(...))` + `AddTraxGraphQL()` + `AddTraxDashboard()`
-- **Worker:** `AddTraxWorker()` - polls `background_job` with `FOR UPDATE SKIP LOCKED`
-
-Workers scale horizontally - run as many as you need. The hub stays lightweight.
-
-Good for: high-throughput systems, microservices, environments where you need to scale execution independently from scheduling.
+Good for: high throughput, and scaling execution independently from scheduling.
 
 ### Model 4: Ephemeral Workers (Serverless)
 
-**Sample:** `EphemeralWorkers/`
+**Sample:** [Content Shield](/docs/samples/content-shield)
 
-```
-Trax.Samples.ContentShield/            ← library (trains)
-Trax.Samples.ContentShield.Api/        ← executable (API + dashboard, HTTP dispatch)
-Trax.Samples.ContentShield.Runner/     ← executable (ephemeral runner, no scheduler)
-```
+All work is triggered by GraphQL. The API runs no trains: `UseRemoteWorkers()` POSTs queued jobs to the runner and
+`UseRemoteRun()` sends every synchronous run there too, **queries included**. The runner is a `TraxLambdaFunction`:
+in production an AWS Lambda function, in development `RunLocalAsync()` serving `/trax/execute` and `/trax/run`. Both
+sides share a signing key (the runner's [authorization posture](/docs/scheduler/remote-execution#authorization-posture));
+outside Development a missing key stops startup. No `background_job` table is involved. The runner publishes lifecycle
+events over RabbitMQ, so the API's subscriptions see completions.
 
-No scheduled jobs - all work is triggered by GraphQL mutations. The API dispatches queued mutations directly to the Runner via HTTP using `UseRemoteWorkers()`, and also offloads synchronous `run` mutations to the Runner via `UseRemoteRun()`. The Runner simulates a serverless function (AWS Lambda, Cloud Run, Azure Functions) - it receives requests over HTTP, executes the train, and returns.
+Good for: serverless deployments, on-demand workloads with zero idle cost.
 
-The split:
-- **API:** `AddScheduler()` + `UseRemoteWorkers()` + `UseRemoteRun()` + `AddTraxGraphQL()` + `AddTraxDashboard()`
-- **Runner:** a `TraxLambdaFunction` run locally with `RunLocalAsync()`, which maps `/trax/execute` and `/trax/run`, plus `UseBroadcaster()` - no scheduler, no polling, no dashboard. The Runner needs an [authorization posture](/docs/scheduler/remote-execution#authorization-posture): a `SigningKey` in `ConfigureRunner` matching the API's `SigningKey` on `UseRemoteWorkers()` and `UseRemoteRun()`
+### Model 5: Single Server with Domain Subscriptions
 
-Query trains (e.g. `LookupModerationResult`) run synchronously on the API process. Queued trains (e.g. `ReviewContent`, `SendViolationNotice`) are POSTed to the Runner by the HTTP job submitter that `UseRemoteWorkers()` registers. No `background_job` table is involved - jobs go directly over HTTP.
+**Sample:** [Chat Service](/docs/samples/chat-service)
 
-The Runner uses `UseBroadcaster(b => b.UseRabbitMq(...))` to publish lifecycle events back to RabbitMQ, so the API's GraphQL subscriptions are notified when queued trains complete.
+No scheduler and no workers. A custom `ITrainLifecycleHook`, registered through its factory, fires for every train
+that completes (custom hooks do not depend on `[TraxBroadcast]`) and publishes a domain event to a custom
+`onChatEvent` field that extends `LifecycleSubscriptions`, Trax's subscription root. Sockets authenticate in
+`connection_init`, and the field admits only a room's participants.
 
-Good for: serverless/FaaS deployments, on-demand workloads with zero idle cost, event-driven architectures where all work is API-triggered.
-
-### Model 5: Single-Server with Real-Time Subscriptions
-
-**Sample:** `ChatService/`
-
-```
-Trax.Samples.ChatService.Data/     ← data layer (EF Core entities, DbContext, migrations)
-Trax.Samples.ChatService/          ← library (trains, lifecycle hook, subscription types)
-Trax.Samples.ChatService.Api/      ← executable (single server)
-Trax.Samples.ChatService.Client/   ← React + TypeScript frontend (Apollo Client, graphql-ws)
-```
-
-A single-server chat application that demonstrates how Trax lifecycle hooks can power domain-specific real-time GraphQL subscriptions. No scheduler or workers - everything runs in one process.
-
-The key innovation is the `ChatLifecycleHook`, a custom `ITrainLifecycleHook` that intercepts completed chat mutation trains. When a `SendMessage` train completes, the hook reads `metadata.Output` (the serialized train output), extracts the `chatRoomId`, and publishes a `ChatSubscriptionEvent` to a room-scoped HotChocolate topic. Clients subscribed to that room receive the event in real time.
-
-This approach works because:
-- Chat mutation trains are decorated with `[TraxBroadcast]`, which causes lifecycle hooks to fire
-- The hook is registered via `AddLifecycleHook<ChatLifecycleHook>()` on the effect builder
-- A custom `ChatSubscriptions` type extends the "trax" GraphQL schema with `onChatEvent(chatRoomId: "...")` alongside the standard Trax lifecycle subscriptions
-
-The sample also includes its own EF Core data layer in a separate project (`ChatService.Data`) with `ChatRoom`, `ChatParticipant`, and `ChatMessage` entities. The `ChatDbContext` uses the `chat` schema to coexist with Trax's `trax` schema in the same database.
-
-A React + TypeScript frontend (`ChatService.Client`) demonstrates the full client/server GraphQL interaction. It uses Apollo Client with a split link - HTTP for queries/mutations and `graphql-ws` for subscriptions - connecting to the HotChocolate endpoint at `localhost:5210/trax/graphql`. The UI lets you switch between users (Alice, Bob, Charlie), create and join rooms, send messages, and see real-time subscription delivery in action.
-
-Good for: real-time applications, chat systems, collaboration tools, notification feeds - anywhere you need domain-specific subscriptions driven by train completion events.
-
-### Model 6: Hub with Built-In Subscriptions
-
-**Sample:** `TestRunner/`
-
-```
-Trax.Samples.TestRunner/              ← library (trains, NUnit.Engine integration)
-Trax.Samples.TestRunner.Hub/         ← executable (API + scheduler + local workers)
-Trax.Samples.TestRunner.Client/      ← React + TypeScript frontend (Apollo Client, graphql-ws)
-```
-
-A single-process hub that runs NUnit tests across the Trax monorepo on demand. This sample demonstrates the simplest way to get real-time feedback from queued trains - using `[TraxBroadcast]` with the built-in `onTrainCompleted` subscription, with no custom lifecycle hook needed.
-
-The `RunTestsTrain` is decorated with `[TraxMutation(GraphQLOperation.Queue)]` and `[TraxBroadcast]`. When a user clicks "Run" in the React frontend, a queue mutation returns an `externalId` immediately. Local workers pick up the job and execute two junctions:
-
-1. **`BuildProjectJunction`** - runs `dotnet build` via `Process.Start` to compile the test project
-2. **`ExecuteTestsJunction`** - uses NUnit.Engine (`TestEngineActivator.CreateInstance()`) to load the built DLL and run tests **in-process**, returning structured XML results parsed into a `TestResult` model
-
-When the train completes, `[TraxBroadcast]` triggers the built-in `GraphQLSubscriptionHook`, which publishes a `TrainLifecycleEvent` to the `onTrainCompleted` subscription topic. The React frontend subscribes to this topic, filters events by train name (the interface FullName), and displays pass/fail counts, durations, and error details.
-
-This differs from ChatService (Model 5) in a key way: ChatService uses a **custom** `ITrainLifecycleHook` to publish domain-specific events to custom subscription topics. TestRunner uses **no custom hook at all** - the standard `[TraxBroadcast]` attribute and built-in `onTrainCompleted` subscription handle everything. The frontend parses the train's serialized `output` from the subscription event to extract test results.
-
-A `TestProjectRegistry` singleton service scans the monorepo for `.csproj` files containing NUnit package references, exposed through a `DiscoverTestProjectsTrain` query that populates the UI.
-
-The Hub uses `ConfigureLocalWorkers(w => w.WorkerCount = 4)` for parallel test execution and `DefaultJobTimeout(TimeSpan.FromMinutes(30))` to accommodate longer-running test suites.
-
-Good for: developer tools, CI dashboards, any scenario where queued train results need to reach the frontend without writing custom subscription infrastructure.
+Good for: chat, collaboration and notification feeds driven by train results.
 
 ## Comparing the Models
 
-| Capability | Standalone | Separate API | Distributed | Ephemeral | Chat (Real-Time) | TestRunner (Hub) |
-|-----------|-----------|-------------|------------|-----------|-----------------|-----------------|
-| Processes | 1 | 2 | 2+ | 2 | 1 | 1 |
-| Scheduler | In-process | In-process (scheduler) | Hub (scheduling only) | API (dispatch only) | None | In-process |
-| Execution | In-process | In-process (scheduler) | Workers (polling) | Runner (HTTP push) | In-process | In-process (local workers) |
-| API | None | Separate process | Hub | In-process | In-process | In-process |
-| Dashboard | In-process | In scheduler | In hub | In API | None | None |
-| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) | None | `background_job` |
-| Horizontal scaling | No | No | Workers scale independently | Runner auto-scales | No | No |
-| Subscriptions | No | No | No | No | Custom lifecycle hook | Built-in `[TraxBroadcast]` |
+| Capability | One host | Separate API | Distributed | Ephemeral | Single server |
+|---|---|---|---|---|---|
+| Processes | 1 | 2 | 2+ | 2 | 1 |
+| Scheduler | In-process | Scheduler process | Hub (scheduling only) | API (dispatch only) | None |
+| Execution | Local workers | Scheduler process | Workers (polling) | Runner (HTTP push) | Inline |
+| API | In-process | Separate process | Hub | API | In-process |
+| Dashboard (Development) | In-process | In scheduler | In hub | In API | None |
+| Job table | `background_job` | `background_job` | `background_job` | None (direct HTTP) | None |
+| Horizontal scaling | No | No | Workers | Runner auto-scales | No |
+| Subscriptions | Built-in, junction events | Over RabbitMQ | Over RabbitMQ | Over RabbitMQ | Custom field from a lifecycle hook |
 
-In all models, the trains library is identical. Only the `Program.cs` files differ.
-
-## Running the Samples
-
-All samples require PostgreSQL. From the `Trax.Samples/` directory:
-
-```bash
-docker compose up -d
-```
-
-The compose file publishes Postgres and RabbitMQ on `127.0.0.1` only, because their passwords
-(`trax123`) are written in the file. Set `TRAX_PG_PORT` to move Postgres to another host port
-when something else holds 5432. If you copy the file to a server, keep the `127.0.0.1:` prefix
-and replace the passwords.
-
-The samples' demo API keys and JWT signing keys are published in this repository, so each
-sample registers them only in Development. `dotnet run` starts in Development through the
-project's `Properties/launchSettings.json`; started any other way, a sample accepts none of
-them. Every demo API key contains `do-not-use-in-production`, which Trax.Api refuses to start
-with outside Development.
-
-### DataPipeline (Standalone)
-
-```bash
-dotnet run --project samples/DataPipeline/Trax.Samples.Flowthru.Spaceflights.Scheduler
-```
-
-Dashboard at `http://localhost:5000/trax`.
-
-### LocalWorkers (Separate API + Scheduler)
-
-```bash
-# Terminal 1 - scheduler
-dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Scheduler
-
-# Terminal 2 - API
-dotnet run --project samples/LocalWorkers/Trax.Samples.GameServer.Api
-```
-
-Dashboard at `http://localhost:5201/trax`. GraphQL IDE at `http://localhost:5200/trax/graphql`.
-
-#### E2E Tests
-
-The GameServer sample includes a full E2E test suite that validates scheduler dispatch, dependency chains, dormant dependent activation, dead-letter flows, and GraphQL authorization against a real Postgres database:
-
-```bash
-cd Trax.Samples && docker compose up -d
-dotnet test --filter "FullyQualifiedName~GameServer.E2E"
-```
-
-See [E2E Testing](/docs/cross-cutting/e2e-testing) for the patterns used.
-
-### DistributedWorkers (Hub + Workers)
-
-```bash
-# Terminal 1 - hub
-dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub
-
-# Terminal 2 - worker
-dotnet run --project samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker
-```
-
-Dashboard at `http://localhost:5202/trax`. GraphQL IDE at `http://localhost:5202/trax/graphql`.
-
-#### E2E Tests
-
-```bash
-cd Trax.Samples && docker compose up -d
-dotnet test --filter "FullyQualifiedName~EnergyHub.E2E"
-```
-
-Tests cover manifest configuration (dependency chains, batch scheduling, cron), train completion via `TrainBus.RunAsync`, GraphQL queries/mutations, and the solar-to-battery dependency chain through the scheduler.
-
-### EphemeralWorkers (API + Serverless Runner)
-
-```bash
-# Terminal 1 - runner
-dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner
-
-# Terminal 2 - API
-dotnet run --project samples/EphemeralWorkers/Trax.Samples.ContentShield.Api
-```
-
-Dashboard at `http://localhost:5204/trax`. GraphQL IDE at `http://localhost:5204/trax/graphql`.
-
-### ChatService (Single-Server Real-Time)
-
-```bash
-# Terminal 1 - API
-dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api
-
-# Terminal 2 - React client (optional)
-cd samples/ChatService/Trax.Samples.ChatService.Client
-npm install && npm run dev
-```
-
-GraphQL IDE at `http://localhost:5210/trax/graphql`. React client at `http://localhost:5173`.
-
-Authentication uses `X-Api-Key` header with three users: `alice-key-do-not-use-in-production`, `bob-key-do-not-use-in-production`, `charlie-key-do-not-use-in-production`.
-The React client provides a user switcher dropdown - open multiple browser tabs to simulate different users chatting in real time.
-
-**Quick walkthrough (ChatService):**
-
-```graphql
-# 1. Create a room (as Alice)
-mutation { dispatch { createChatRoom(input: { name: "General", userId: "alice", displayName: "Alice" }) { externalId output { chatRoomId name } } } }
-
-# 2. Join the room (as Bob) - use the chatRoomId from step 1
-mutation { dispatch { joinChatRoom(input: { chatRoomId: "<id>", userId: "bob", displayName: "Bob" }) { externalId output { joinedAt } } } }
-
-# 3. Subscribe to real-time events (in a second tab)
-subscription { onChatEvent(chatRoomId: "<id>") { eventType payload timestamp } }
-
-# 4. Send a message - the subscription tab receives it
-mutation { dispatch { sendMessage(input: { chatRoomId: "<id>", senderUserId: "alice", content: "Hello Bob!" }) { externalId output { messageId content sentAt } } } }
-
-# 5. Query chat history
-{ discover { getChatHistory(input: { chatRoomId: "<id>" }) { messages { senderDisplayName content sentAt } } } }
-```
-
-#### E2E Tests
-
-```bash
-cd Trax.Samples && docker compose up -d
-dotnet test --filter "FullyQualifiedName~ChatService.E2E"
-```
-
-Tests cover chat room CRUD, message persistence, participant management, Trax metadata verification, and lifecycle subscriptions via WebSocket.
-
-### TestRunner (Hub with Built-In Subscriptions)
-
-```bash
-# Terminal 1 - Hub (API + scheduler + local workers)
-dotnet run --project samples/TestRunner/Trax.Samples.TestRunner.Hub
-
-# Terminal 2 - React client
-cd samples/TestRunner/Trax.Samples.TestRunner.Client
-npm install && npm run dev
-```
-
-GraphQL IDE at `http://localhost:5220/trax/graphql`. React client at `http://localhost:5173`.
-
-No authentication - this is a local developer tool, and it builds and runs code on your
-machine. The hub starts only in Development (which `dotnet run` sets through its
-`launchSettings.json`), listens on localhost, and answers only requests addressed to
-`localhost`. `runTests` takes a project name from `discoverTestProjects` and refuses any other,
-so it runs only the test projects already under the configured root.
-
-**Quick walkthrough (TestRunner):**
-
-```graphql
-# 1. Discover all test projects in the monorepo
-{ discover { discoverTestProjects(input: {}) { projects { name repoName projectPath requiresPostgres } } } }
-
-# 2. Subscribe to train completion events (in a second tab)
-subscription { onTrainCompleted { externalId trainName output } }
-
-# 3. Queue a test run - returns immediately with an externalId
-mutation { dispatch { runTests(input: { projectName: "Trax.Core.Tests.Unit" }) { externalId workQueueId } } }
-
-# The subscription tab receives the result when the train completes,
-# with test results in the output field (Total, Passed, Failed, FailedTests, etc.)
-```
-
-### Bookworm (Multi-Schema with Cross-Schema GraphQL)
-
-```bash
-# Start Postgres, then run the API
-cd Trax.Samples && docker compose up -d
-dotnet run --project samples/Bookworm/Trax.Samples.Bookworm.Api
-```
-
-```bash
-# Resolve every loan's catalog book across schemas in one batched query
-curl -H "X-Api-Key: member-key-do-not-use-in-production" \
-     -X POST http://localhost:5210/trax/graphql -H "Content-Type: application/json" \
-     -d '{"query":"{ discover { lending { loans { nodes { id bookId book { title isbn } } } } } }"}'
-```
-
-The `loans` query lives in the `lending` schema; the nested `book` is resolved from the `catalog` schema by the batched cross-schema loader.
+In every model the trains library is the same; only the `Program.cs` files differ.
 
 ## SDK Reference
 

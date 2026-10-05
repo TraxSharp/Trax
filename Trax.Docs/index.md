@@ -1,13 +1,13 @@
 ---
 layout: default
 title: Home
-description: "Trax documentation home: what a train and its junctions are, the vocabulary, how the packages layer so you use only what you need, and where to go next."
+description: "Trax .NET documentation home: what a train and its junctions are, the vocabulary, how the packages layer so you use only what you need, and where to go next."
 nav_order: 1
 ---
 
-# Trax
+# Trax .NET
 
-Trax is a .NET framework for business logic you can call, schedule, serve as an API, or move to workers, with every run recorded in your Postgres.
+Trax .NET is a framework for .NET business logic you can call, schedule, serve as an API, or move to workers, with every run recorded in your Postgres.
 
 You write a train: a typed pipeline of small steps called junctions, where a failing junction skips the rest and the train returns the exception. Call it from a controller, put it on a cron schedule, publish it as a GraphQL mutation, or send it to a worker on another machine or in AWS Lambda. It is the same class each time, and every run leaves a record: when it started, how it ended, which junction failed and the exception it threw. Trax is MIT licensed and targets .NET 10.
 

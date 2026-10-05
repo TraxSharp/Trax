@@ -26,7 +26,6 @@ One node:
 ```csharp
 services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts => opts
-        .UseDatabase(connectionString)
         .RequirePersisted(true)
         .SingleNode()
     )
@@ -38,9 +37,8 @@ More than one node, with the optional Trax lookup cache:
 ```csharp
 services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts => opts
-        .UseDatabase(connectionString)
         .RequirePersisted(true)
-        .WithInMemoryCache(c => c.WithTtl(TimeSpan.FromMinutes(15)))
+        .WithInMemoryCache()
         .UseRabbitMqInvalidation(rabbitConnectionString)
     )
 );
@@ -57,7 +55,7 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | `PersistedOperationsOptions` | Singleton | Resolved configuration. |
 | `IPersistedOperationCache` -> `NoOp` or `InMemory` | Singleton | Cache layer. No-op unless `WithInMemoryCache()` was called. |
 | `IPersistedOperationBroadcaster` -> `NoOp` or `RabbitMq` | Singleton | Multi-node invalidation. RabbitMQ with `UseRabbitMqInvalidation()`, no-op with `SingleNode()`. |
-| `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and empties HotChocolate's caches and the Trax cache on broadcast, on losing the broker connection, and on recovering it. |
+| `PersistedOperationReceiverService` | Hosted (when broadcaster is RabbitMQ) | Subscribes to the fanout exchange and empties the document, prepared-operation and Trax caches on broadcast, on losing the broker connection, and on recovering it. When the broker closes its channel alone it empties them, subscribes again on a new channel, and empties them once more. |
 | `IPersistedOperationStore` -> `DbPersistedOperationStorage` | Singleton | Programmatic CRUD. Reads and writes through the Effect data provider's `IDataContextProviderFactory`, so the host needs `UsePostgres` (or another data provider); the tables are sets on the Effect `DataContext`. |
 | `IPersistedOperationsService` | Singleton (TryAdd) | The management surface the GraphQL fields and the dashboard call. |
 | `IOperationDocumentStorage` -> `DbPersistedOperationStorage` | Singleton | HotChocolate hot-path lookup. |
@@ -65,7 +63,8 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | `IPersistedOperationsCapability` | Singleton | Marker meaning this process serves the management GraphQL fields. The dashboard gates its pages on `IPersistedOperationsService` instead, so they also appear on a host that registers only `AddPersistedOperationStore`. |
 | `AllowlistMatcher` | Singleton | Used by the enforcement middleware. |
 | `PersistedOperationPolicy` | Singleton | The enforcement decision, asked once per operation by the request middleware `UsePersistedOperations` adds after HotChocolate's document parser. |
-| `TimeProvider` | Singleton (TryAdd) | Default `TimeProvider.System`; override for tests. |
+| `TimeProvider` | Singleton (TryAdd) | Default `TimeProvider.System`; override for tests. The caches' maximum age is measured on it. |
+| `IDocumentCache`, `IPreparedOperationCache` | Singleton (schema services) | Replacements for HotChocolate's caches, sized from the host's `ModifyOptions` (`OperationDocumentCacheSize`, `PreparedOperationCacheSize`). Each entry carries the generation it was written in and the time its document was read; it is served only while no change has been applied since and it is younger than `WithCacheMaxAge`. The executor refuses to build if anything else replaces them. |
 
 Also extends the GraphQL schema with the [management mutations and queries](/docs/sdk-reference/persisted-operations/management-mutations), and calls `ExposeOperationQueries()` / `ExposeOperationMutations()` on the builder so `RootQuery` and `RootMutation` are emitted even when the host has not registered any train-backed queries or mutations.
 
@@ -77,7 +76,6 @@ Persisted operations and a GraphQL-exposed scheduler console are separable. `Exp
 
 ```csharp
 .UsePersistedOperations(po => po
-    .UseDatabase(connectionString)
     .RequirePersisted(true)
     .SingleNode()
     .ExposeOperationsNamespace(false)
@@ -92,9 +90,10 @@ Configuration errors throw `InvalidOperationException` at startup. Each message 
 
 | Misconfig | Behavior |
 |---|---|
-| `UseDatabase` not called | Throws: "UseDatabase(connectionString) is required." |
 | `RequirePersisted(false)` and `LogNonPersistedRequests(false)` | Throws: configuration does nothing. |
-| Neither `SingleNode()` nor `UseRabbitMqInvalidation(...)` | Throws: names both, since HotChocolate's caches do not expire and a change reaches another node only by broadcast. |
+| Neither `SingleNode()` nor `UseRabbitMqInvalidation(...)` | Throws: names both, since a change reaches another node at once only by broadcast. |
 | Both `SingleNode()` and `UseRabbitMqInvalidation(...)` | Throws: the two contradict each other. |
 | `WithInMemoryCache` called twice | Throws. |
+| `WithInMemoryCache` TTL longer than `WithCacheMaxAge` | Throws: the TTL would not take effect. |
+| `WithCacheMaxAge` not positive | Throws `ArgumentOutOfRangeException` when called. |
 | `AllowOperations` contains an empty entry | Throws. |

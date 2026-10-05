@@ -109,7 +109,7 @@ input, authorizes, and throws the same exceptions for the same reasons.
 |---|---|---|---|
 | `Priority` | `int` | `0` | Dispatch priority (0-31, higher runs first) |
 | `ScheduledAt` | `DateTime?` | `null` | Earliest dispatch time, read as `scheduledAt` above |
-| `ReplayDecisionsOf` | `long?` | `null` | The metadata id of an earlier run whose recorded [decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions) the new run replays, so it takes the tracks that run took instead of asking its deciders again. [`IOperationsService.RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync) sets it, to the run being re-queued, when that run has decisions to replay. |
+| `ReplayDecisionsOf` | `long?` | `null` | The metadata id of an earlier run whose recorded [decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) the new run replays, so it takes the tracks that run took instead of asking its deciders again. [`IOperationsService.RequeueExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#requeueexecutionasync) sets it, to the run being re-queued, when that run has decisions to replay. |
 
 An `ITrainExecutionService` written before this overload existed, a custom one or a decorator
 around the mediator's, gets a default implementation that queues through the overload above. When

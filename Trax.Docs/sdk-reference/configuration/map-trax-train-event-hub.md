@@ -41,6 +41,7 @@ public static HubEndpointConventionBuilder MapTraxTrainEventHub(
 | `RequireAuthorization` | `params string[] policies` | Admits callers the host's authorization accepts. With no arguments, a caller must satisfy the host's default policy and, when the host sets a `FallbackPolicy`, that too. With policy names, a caller must satisfy every one, and each must be registered on the host. Repeated calls add policies. |
 | `RequireRoles` | `params string[] roles` | Admits authenticated callers in at least one of the roles. Throws `ArgumentException` with no roles, or with a role name containing a comma: pass each role as its own argument. Combines with `RequireAuthorization`, and then both apply. |
 | `AllowAnonymous` | none | Opens the hub to any client that can reach it, overriding a fallback policy on the host. Logs a `Warning` at startup. For a hub reachable only from a trusted network. |
+| `AllowOrigins` | `params string[] origins` | Browser origins, besides the hub's own, allowed to reach the hub (negotiate and every transport). Each is a scheme and host, with a port if not the default (`https://app.example.com`); matching ignores case and a spelled-out default port. Repeated calls add origins. With no arguments only the hub's own origin is allowed, and the CORS default policy is not consulted. Throws `ArgumentException` for a value that is not an http(s) origin. See [Origins](#origins). |
 | `ConfigureConnection` | `Action<HttpConnectionDispatcherOptions>` | Adjusts the hub's connection options after Trax applies its defaults, so a value set here wins, except `CloseOnAuthenticationExpiration` (see [Connection lifetime](#connection-lifetime)). |
 
 `MapTraxTrainEventHub` throws `InvalidOperationException` at startup when `configure` chooses no posture, when it combines `AllowAnonymous()` with `RequireAuthorization` or `RequireRoles`, or when it names a policy the host has not registered. Each policy name is resolved through the host's `IAuthorizationPolicyProvider` where the hub is mapped, so a misspelled name stops the host rather than failing the first connection.
@@ -49,7 +50,41 @@ A bare `RequireAuthorization()` keeps the host's fallback policy. ASP.NET Core a
 
 The posture is applied to the hub's endpoints (the negotiate request and the connection), so the host's `UseAuthentication()` and `UseAuthorization()` decide who connects. A refused client gets `401` or `403` from the negotiate request, and a SignalR client reports it as an `HttpRequestException` from `StartAsync`. A client that skips negotiation and opens a WebSocket directly is checked on the upgrade request in the same way. Browser clients pass their credential the way the host expects it, for example `accessTokenFactory` in the JavaScript client for a bearer token, which SignalR sends as the `access_token` query parameter on WebSocket requests.
 
+A browser page served by the same host as the hub can use a cookie: the browser sends it on the
+negotiate request and on the WebSocket upgrade by itself, so `withUrl("/hubs/trax-events")` needs no
+options. Register cookie authentication, sign the user in with a role, map the hub with
+`RequireRoles(...)`, and set `SameSite=Strict` on the cookie if any cookie-authenticated endpoint
+changes state. Set `OnRedirectToLogin` to answer `401`, or a refused negotiate request is redirected
+to a login page instead. The [SignalR Broadcaster sample](/docs/samples/signalr-broadcaster) is built
+this way.
+
 The choice and its alternatives are recorded in Trax.Effect's ADR 0016.
+
+## Origins
+
+A request to the hub that carries an `Origin` header, the negotiate request or any transport's, is
+refused with `403`, whatever its credentials, unless its origin is:
+
+- on the hub's own host
+- allowed by `AllowOrigins(...)`
+- without `AllowOrigins`, allowed by the host's CORS default policy
+  (`AddCors(o => o.AddDefaultPolicy(...))`, including `AllowAnyOrigin()`)
+
+With neither `AllowOrigins` nor a CORS default policy, only the hub's own origin is allowed. A
+request with no `Origin` header, which is what a non-browser client sends, is left to the
+authorization posture. The rule applies to an `AllowAnonymous()` hub as well. The scheme is not
+compared against the hub's own origin, because TLS is commonly terminated in front of the app. It is
+the same rule Trax.Api applies to GraphQL WebSocket upgrades with
+[`AllowSocketOrigins`](/docs/sdk-reference/graphql-api/subscriptions#allowed-origins).
+
+```csharp
+app.MapTraxTrainEventHub(hub => hub
+    .RequireAuthorization("TraxEvents")
+    .AllowOrigins("https://dashboard.example.com"));
+```
+
+A browser client on another origin also needs CORS for the negotiate request, so the host's CORS
+policy admits that origin as well.
 
 ## Connection lifetime
 
@@ -162,6 +197,32 @@ connection.on("TrainEvent", (evt) => {
 
 await connection.start();
 ```
+
+### Testing the posture
+
+`Microsoft.AspNetCore.SignalR.Client` can join the hub through `WebApplicationFactory` by using the
+test server's handler and long polling. A refused connection throws from `StartAsync`:
+
+```csharp
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
+
+var connection = new HubConnectionBuilder()
+    .WithUrl(new Uri(factory.Server.BaseAddress, "/hubs/trax-events"), options =>
+    {
+        options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+        options.Transports = HttpTransportType.LongPolling;
+        options.Headers["Cookie"] = cookie;   // or an Authorization header; omit it to test refusal
+    })
+    .Build();
+
+var refused = await FluentActions.Awaiting(() => connection.StartAsync())
+    .Should().ThrowAsync<HttpRequestException>();
+refused.Which.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+```
+
+Register one handler per client method: the .NET client binds a method's arguments with the
+parameter types of the first handler registered for it.
 
 ## Payload shape
 

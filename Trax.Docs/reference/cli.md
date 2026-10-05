@@ -130,11 +130,14 @@ Given a schema with a `createPlayer` mutation and `getPlayer` query:
 MyProject/
 ├── MyProject.Hub/                    # From dotnet new trax-hub
 │   ├── MyProject.Hub.csproj          # + ProjectReference to trains library
+│   ├── Directory.Packages.props      # The hub's package versions
 │   ├── Program.cs                    # Patched: AddMediator scans trains assembly
+│   ├── README.md
 │   ├── appsettings.json
 │   ├── Auth/, Data/                  # Template demo key and application DbContext
-│   └── Trains/                       # Template sample trains (HelloWorld, Lookup)
-│       └── ...
+│   ├── Trains/                       # Template sample trains (HelloWorld, Lookup)
+│   │   └── ...
+│   └── tests/MyProject.Hub.Tests/    # Template test project
 ├── MyProject.Trains/                 # Generated from schema
 │   ├── MyProject.Trains.csproj       # Class library (not web SDK)
 │   ├── ManifestNames.cs              # Centralized manifest external IDs
@@ -229,10 +232,11 @@ emit; rename it in the schema.
 2. Run `dotnet restore`
 3. Search for `TODO` in the junction files under `MyProject.Trains/` and implement your business logic
 4. Run `dotnet run`. The hub uses the in-memory data provider, so no database is needed; switch
-   it to Postgres or SQLite as described in [Project Templates](/docs/reference/templates#running)
+   it to Postgres as described in [Project Templates](/docs/reference/templates#switching-to-postgres)
    when you need data to outlive the process
-5. Open `http://localhost:5000/trax/graphql` for the GraphQL IDE, and `http://localhost:5000/trax`
-   for the dashboard (Development only)
+5. Open `http://localhost:5400/trax/graphql` for the GraphQL IDE, and `http://localhost:5400/trax`
+   for the dashboard (Development only). Every GraphQL operation needs the header
+   `X-Api-Key: demo-key-do-not-use-in-production`
 
 ## State machines (`trax machine`)
 

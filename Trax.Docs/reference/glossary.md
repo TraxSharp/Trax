@@ -22,7 +22,7 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 | **Chain** | The sequence of junctions a train declares in `Junctions()`, written with `Chain<TJunction>()`, `ShortCircuit<TJunction>()` and `Resolve()`. See [Building Chains](/docs/core/building-chains). |
 | **Chain verification** | The check `AddMediator` registers: at host startup it replays every registered train's chain and refuses to start when one cannot run, naming the train, the step and the missing type. See [Troubleshooting](/docs/cross-cutting/troubleshooting). |
 | **Memory** | The values a running train holds, keyed by type. It starts with the train's input, and each junction's output is added to it. A junction's input, and each constructor argument Memory can supply, is taken from it by type. See [Memory](/docs/core/memory). |
-| **Right track / left track** | A chain's two outcomes, as an `Either<Exception, T>` from LanguageExt. Right carries the value on to the next junction; left carries the exception past every remaining junction to the train's result. |
+| **Right track / left track** | A chain's two outcomes, as Trax.Core's `Either<Exception, T>`. Right carries the value on to the next junction; left carries the exception past every remaining junction to the train's result. |
 | **ShortCircuit** | A chain step that ends the train early with its output when it succeeds, and lets the chain continue when it throws. See [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit). |
 
 ## Effects and recording

@@ -31,7 +31,7 @@ Payload: `{ success, operation, errors[] }`.
 
 ### `deactivatePersistedOperation`
 
-Soft-delete; subsequent requests for the id resolve to null. The reason is required and recorded in the audit log.
+Soft-delete; subsequent requests for the id resolve to null. The reason is required and recorded in the audit log. Deactivating an operation that is already deactivated succeeds, records the new reason, and sends the change to every node again.
 
 | Input field | Type | Required |
 |---|---|---|
@@ -76,14 +76,16 @@ All mutations return errors via the payload `errors[]` array; mutations never th
 
 | Field | Type | Notes |
 |---|---|---|
-| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation). |
+| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation), `CHANGE_NOT_BROADCAST` (the change is saved, but the broker did not confirm its broadcast). |
 | `message` | `String!` | Human-readable message. |
 | `locations` | `[Location!]` | 1-based line / column. Present on parse errors and most schema-validation errors. |
 | `path` | `[String!]` | Response path. Present on some schema-validation errors. |
 | `oldFingerprint` | `String` | Present only on `SHAPE_DIFF_VIOLATION`. |
 | `newFingerprint` | `String` | Present only on `SHAPE_DIFF_VIOLATION`. |
 
-See [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) for the underlying exception types and how the codes map.
+`CHANGE_NOT_BROADCAST` is the one error that comes with an `operation`: the change was saved and is in force on the node that made it, so the payload carries the saved row, and `success` is false because the other nodes were not told. They pick the change up when their cached entry reaches its maximum age (`WithCacheMaxAge`, five minutes by default). Repeating the change sends it again.
+
+See [PersistedOperationException](/docs/sdk-reference/persisted-operations/persisted-operation-exceptions) for the underlying exception types and how the codes map, and [Error Codes](/docs/sdk-reference/graphql-api/error-codes) for every code the endpoint returns.
 
 ## Example: upload
 

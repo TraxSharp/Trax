@@ -156,6 +156,7 @@ Every host start schedules its manifests again (an upsert by `ExternalId`). The 
 | Manifest `Timeout(...)` | Written at every start | New manifest: no timeout of its own (`DefaultJobTimeout` applies). Existing: keeps its value |
 | Manifest `Priority(...)` | Written at every start | New manifest: 0. Existing: keeps its value |
 | Manifest `FailureWindow(...)` | Written at every start | New manifest: none (`FailureCountWindow` applies). Existing: keeps its value |
+| Manifest `ReplayDecisionsOnRetry(...)` | Written at every start, so `true` re-enables replay over a runtime opt-out | New manifest: replays. Existing: keeps its value, including a runtime change |
 | Group `MaxActiveJobs(...)` | Written at every start | New group: no limit. Existing: keeps its value |
 | Group `Priority(...)` | Written at every start | New group: the manifest's priority. Existing: keeps its value |
 | Group `Enabled(...)` | Written at every start | New group: enabled. Existing: keeps its value |
@@ -166,7 +167,7 @@ So a manifest or group disabled from the dashboard as a kill switch stays disabl
 
 `ITraxScheduler` includes methods for runtime job control: `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync`, `ScheduleDependentAsync`, and `ScheduleOnceAsync`. Disabled jobs remain in the database but are skipped by the ManifestManager until re-enabled. Work a disabled job had already queued waits as well, a retry waiting out its backoff included, and is dispatched once the job is re-enabled; a run someone asked for by name (`TriggerAsync`, `TriggerGroupAsync`, a dead-letter requeue) runs either way. `CancelAsync` and `CancelGroupAsync` cancel all in-progress executions of a manifest or group using dual-layer cancellation (database flag + same-server CTS).
 
-`TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs) for usage patterns.
+`TriggerAsync` accepts an optional `TimeSpan delay` parameter to schedule a delayed execution of an existing manifest, and an `askAfresh` overload: when the trigger releases a queued retry that would [replay the failed run's decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions), `askAfresh: true` makes it ask its deciders again instead. That overload returns a [`ManifestTriggerResult`](/docs/sdk-reference/scheduler-api/manifest-management#manifesttriggerresult), which says when the dispatcher claimed the retry first and the run still replays. `ScheduleOnceAsync` creates a new one-off manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs) for usage patterns.
 
 ### Disabling a job
 
@@ -191,10 +192,13 @@ await scheduler.ScheduleAsync<IMyTrain, MyInput, Unit>(
         .Enabled(true)                              // Unstated: new manifests enabled, existing ones unchanged
         .MaxRetries(5)                              // Unstated: DefaultMaxRetries (3)
         .Timeout(TimeSpan.FromMinutes(30))          // Null uses global default
-        .Priority(10));                             // Default: 0
+        .Priority(10)                               // Default: 0
+        .ReplayDecisionsOnRetry(false));            // Unstated: new manifests replay, existing ones unchanged
 ```
 
 `MaxRetries(n)` is the number of retries after the first run, so a manifest runs at most n + 1 times in a row before it is dead-lettered. `MaxRetries(0)` runs the job once and dead-letters it on its first failure; the default of 3 allows four attempts. A negative value is refused. Only failures inside the manifest's failure window count, and only those after the manifest's latest resolved dead letter. The window is the scheduler's [`FailureCountWindow`](#configuration-options) unless the manifest states its own with `.FailureWindow(TimeSpan)`: a short one for a job that runs every minute, whose old failures say nothing about its health, or a long one for a daily job that should still dead-letter after failing several days in a row. Stored in whole seconds; throws `ArgumentOutOfRangeException` unless between one second and ten years. Written to an existing manifest only when stated, so a manifest that stops stating it keeps the window it has.
+
+`ReplayDecisionsOnRetry(bool)` decides whether a retry of the manifest's failed run, automatic or a requeue of its dead letter, replays the decisions that run recorded rather than asking its deciders again. On by default; pass `false` for a manifest whose retries should always ask afresh. In a batch's `configureEach`, the same setting is `ManifestOptions.ReplayDecisionsOnRetry`, a `bool?` where null means not stated. See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
 
 For dependent manifests that should only fire when explicitly activated by the parent train at runtime, add `.Dormant()`:
 

@@ -56,22 +56,22 @@ each one:
 
   <ItemGroup>
     <!-- Steps 2 and 3: trains, the effect system, the train bus. -->
-    <PackageReference Include="Trax.Effect" Version="1.57.4" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.57.4" />
-    <PackageReference Include="Trax.Mediator" Version="1.23.3" />
+    <PackageReference Include="Trax.Effect" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.59.0" />
+    <PackageReference Include="Trax.Mediator" Version="1.24.1" />
 
     <!-- Step 4: Postgres, saved inputs and outputs, a log line per junction. -->
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.57.4" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.57.4" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.57.4" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.59.0" />
 
     <!-- Step 5: the scheduler and the dashboard. -->
-    <PackageReference Include="Trax.Scheduler" Version="1.34.2" />
-    <PackageReference Include="Trax.Dashboard" Version="1.16.0" />
+    <PackageReference Include="Trax.Scheduler" Version="1.36.1" />
+    <PackageReference Include="Trax.Dashboard" Version="1.18.0" />
 
     <!-- Step 6: GraphQL, and an API key to call it with. -->
-    <PackageReference Include="Trax.Api.GraphQL" Version="1.44.2" />
-    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.44.2" />
+    <PackageReference Include="Trax.Api.GraphQL" Version="1.46.0" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.46.0" />
   </ItemGroup>
 </Project>
 ```
@@ -104,12 +104,12 @@ public record Greeting(string Message);
 `Junctions.cs`:
 
 ```csharp compile=app,postgres,schedule,graphql
-using LanguageExt;
-using Trax.Core.Junction;
+using Trax.Core.Functional;
+using Trax.Effect.Services.EffectJunction;
 
 namespace Greeter;
 
-public class ValidateNameJunction : Junction<GreetInput, Unit>
+public class ValidateNameJunction : EffectJunction<GreetInput, Unit>
 {
     public override Task<Unit> Run(GreetInput input)
     {
@@ -121,7 +121,7 @@ public class ValidateNameJunction : Junction<GreetInput, Unit>
 }
 
 public class BuildGreetingJunction(ILogger<BuildGreetingJunction> logger)
-    : Junction<GreetInput, Greeting>
+    : EffectJunction<GreetInput, Greeting>
 {
     public override Task<Greeting> Run(GreetInput input)
     {
@@ -131,10 +131,15 @@ public class BuildGreetingJunction(ILogger<BuildGreetingJunction> logger)
 }
 ```
 
+Both derive `EffectJunction<TIn, TOut>` rather than the plain `Junction<TIn, TOut>` from Trax.Core. The plain
+base runs the same way, but only an `EffectJunction` is seen by the junction effect providers this page adds in
+step 4 (`AddJunctionLogger()`, and `AddJunctionProgress()` if you add it later): on a plain `Junction` they record
+nothing, without an error.
+
 `GreetTrain.cs`:
 
 ```csharp compile=app,postgres,schedule
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Services.ServiceTrain;
 
 namespace Greeter;
@@ -199,7 +204,9 @@ dotnet run
 curl -X POST http://localhost:5000/greet -H 'Content-Type: application/json' -d '{"name":"Ada"}'
 ```
 
-Use the port `dotnet run` prints; the examples on this page use 5000. The response is `{"message":"Hello, Ada!"}`; an empty name returns
+Use the port `dotnet run` prints; the examples on this page use 5000. (On macOS the AirPlay receiver holds
+port 5000 and answers `403`; if you see that, set another port in `Properties/launchSettings.json`, such as 5080,
+and use it below.) The response is `{"message":"Hello, Ada!"}`; an empty name returns
 `400` with the junction's message: `Run` throws the exception that stopped the chain, as it was
 thrown. The run is recorded either way. See [Run / RunEither](/docs/sdk-reference/train-methods/run).
 
@@ -359,8 +366,8 @@ so it survives a restart, and changes made to it from the dashboard are kept.
 `http://localhost:5000/trax` is open to you. It shows the runs as they happen, the manifest and its
 next run time, and lets you run it now or disable it. Outside Development it asks for the
 `TraxAdmin` policy, an authenticated user with the `Admin` role, and this application cannot sign
-anyone in yet, so there the dashboard refuses every request until you add the authentication your
-application uses. See [Dashboard](/docs/dashboard) for the other ways to choose who may use it.
+anyone in yet, so there every dashboard request fails with HTTP 500 (no authentication scheme is registered to
+challenge the caller) until you register the authentication your application uses. See [Dashboard](/docs/dashboard) for the other ways to choose who may use it.
 
 ## 6. Call it over GraphQL
 
@@ -369,7 +376,7 @@ A train opts into the GraphQL schema with an attribute, and has to say who may c
 `GreetTrain.cs`:
 
 ```csharp compile=graphql
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -474,8 +481,11 @@ operation is refused until you register real credentials: see [API Security](/do
 ## Where to go next
 
 The `trax-hub` project template scaffolds this same shape (scheduler, dashboard and GraphQL in one
-process) with an in-memory provider: `dotnet new install Trax.Samples.Templates`, then
-`dotnet new trax-hub -n MyApp`. See [Project Templates](/docs/reference/templates).
+process) with an in-memory provider, a README and an NUnit test project under `tests/`:
+`dotnet new install Trax.Samples.Templates`, then `dotnet new trax-hub -n MyApp`, `dotnet run` (on
+`http://localhost:5400`) and `dotnet test tests/MyApp.Tests`. See [Project Templates](/docs/reference/templates).
+For one complete, tested application per feature (scheduling, authentication, recovering trains, subscriptions and
+more), see [Samples & Deployment](/docs/samples).
 
 - [Core](/docs/core): junctions, Memory, and the chain methods
 - [Effect](/docs/effect): metadata, effect providers, and the `ServiceTrain` lifecycle

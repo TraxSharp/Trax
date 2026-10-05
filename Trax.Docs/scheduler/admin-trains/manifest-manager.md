@@ -96,6 +96,7 @@ For each manifest identified as due, creates a `WorkQueue` entry with:
 - `Priority` set from the manifest's own `Priority`, as a manual trigger or a dead-letter requeue is (the dispatcher orders by the group's priority first)
 - `Status = Queued`
 - `ScheduledAt` delayed by the retry backoff when the manifest's latest finished run failed (see [Retry Delay & Backoff](/docs/scheduler/dead-letters-and-cleanup#retry-delay--backoff)); after a success or a cancel the entry is due at once
+- `ReplayDecisionsOf` naming the failed run, for a retry whose failed run's decisions can be replayed (see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)). Every due retry is looked up in one pass, on a short-lived context of its own outside the leader transaction; a lookup that fails is logged and the retry asks afresh.
 
 For dependent manifests, `DependentPriorityBoost` is added on top of the manifest priority.
 

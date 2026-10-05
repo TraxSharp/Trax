@@ -81,9 +81,13 @@ public enum GraphQLOperation
 
 When no operations are passed to the `TraxMutationAttribute` constructor, both `Run` and `Queue` are enabled. The generated mutation accepts an optional `mode: ExecutionMode` parameter (default `RUN`) and an optional `priority: Int`. To restrict a mutation to only one execution mode, pass just `GraphQLOperation.Run` or `GraphQLOperation.Queue` to the constructor.
 
+`QUEUE` writes the run to the scheduler's work queue and answers with its `workQueueId`; a JobDispatcher picks it up from there. Only a scheduler on a database provider (`UsePostgres()`, `UseSqlite()`) runs one. On `UseInMemory()` the mutation still answers with a `workQueueId`, and the run never happens. A host on the in-memory provider, such as the [project templates](/docs/reference/templates), should expose `GraphQLOperation.Run` alone.
+
+The mutation's `externalId` is the external id the dispatched run carries, so a client correlates the queued mutation with that run's [subscription events](/docs/sdk-reference/graphql-api/subscriptions#watching-a-queued-run) by it (see [Following a queued run](/docs/sdk-reference/graphql-api/mutations#following-a-queued-run)). A queued run has no manifest, so if it fails it is not retried and does not become a dead letter: a train that must recover is scheduled through a manifest instead (see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)).
+
 ## Input Type Requirements
 
-Every train annotated with `[TraxQuery]` or `[TraxMutation]` must have a dedicated input record. `LanguageExt.Unit` is not allowed as an input type. Attempting to register a Unit-input train will throw `InvalidOperationException` at startup.
+Every train annotated with `[TraxQuery]` or `[TraxMutation]` must have a dedicated input record. `Unit` is not allowed as an input type. Attempting to register a Unit-input train will throw `InvalidOperationException` at startup.
 
 This requirement exists because:
 
@@ -105,6 +109,37 @@ public class RefreshCacheTrain : ServiceTrain<RefreshCacheInput, Unit>, IRefresh
 ```
 
 When using `trax-cli` to generate trains from OpenAPI or GraphQL schemas, operations with no input parameters automatically get an empty input record.
+
+### Optional fields
+
+A property's nullability decides whether its GraphQL field is required. A property initializer is
+not carried into the schema as a default value, so this field is still `take: Int!`, and a request
+that leaves it out is refused with "`take` is a required field and cannot be null":
+
+```csharp
+public record GetChatHistoryInput
+{
+    public Guid ChatRoomId { get; init; }
+    public int Take { get; init; } = 50;   // still required in GraphQL
+}
+```
+
+Make the property nullable and apply the default in the junction:
+
+```csharp
+public record GetChatHistoryInput
+{
+    public Guid ChatRoomId { get; init; }
+    public int? Take { get; init; }        // optional: take: Int
+}
+
+var take = Math.Clamp(input.Take ?? 50, 1, 100);
+```
+
+Value types follow the same rule: `bool` is `Boolean!`, `bool?` is optional. Clamp a caller-supplied page size there
+as well: the value reaches your query as the caller wrote it.
+
+### The last property
 
 Adding or removing the **last** property of an input record therefore changes the field's arity: the `input` argument appears or disappears. That is a breaking schema change for clients, and it does not look like one in the diff, because the record gained or lost a single property like any other.
 

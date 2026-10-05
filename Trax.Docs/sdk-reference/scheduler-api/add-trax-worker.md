@@ -42,6 +42,11 @@ These are the same options used by [ConfigureLocalWorkers](/docs/sdk-reference/s
 ### Basic Standalone Worker
 
 ```csharp
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddTrax(trax => trax
@@ -55,6 +60,23 @@ builder.Services.AddTraxWorker();
 var app = builder.Build();
 app.Run();
 ```
+
+The scheduler that fills `background_job` must not run the jobs itself: register its submitter with `OverrideSubmitter(s => s.AddScoped<IJobSubmitter, PostgresJobSubmitter>())`, or it starts local workers that compete with this process (see [Remote Execution: Standalone Workers](/docs/scheduler/remote-execution#model-3-standalone-workers-poll-based)).
+
+### Trains gated with TraxAuthorize
+
+A worker whose assembly holds `[TraxAuthorize]` trains does not start: the mediator requires an `ITrainAuthorizationService` for them, and a worker has no API to supply one. The caller was checked when the job was queued, so tell the mediator this process takes no submissions:
+
+```csharp
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects.UsePostgres(connectionString))
+    .AddMediator(mediator => mediator
+        .ScanAssemblies(typeof(MyTrain).Assembly)
+        .AllowMissingAuthorizationService()));
+builder.Services.AddTraxWorker();
+```
+
+See [Authorization: Opting Out for Scheduler-Only Hosts](/docs/authorization#opting-out-for-scheduler-only-hosts). The [Energy Hub sample](/docs/samples/energy-hub) runs this way.
 
 ### Custom Worker Configuration
 

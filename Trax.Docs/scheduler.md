@@ -24,7 +24,7 @@ A hosted service with a timer works fine for simple recurring tasks. The Schedul
 A `Manifest` is the scheduling equivalent of a shipping manifest. It describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. The `ITraxScheduler` handles the boilerplate, so you don't need to worry about assembly-qualified names or JSON serialization:
 
 ```csharp
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Scheduler.Services.Scheduling;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -177,7 +177,11 @@ See [Administrative Trains](/docs/scheduler/admin-trains) for detailed documenta
 
 ## Sample Project
 
-A working example with the built-in PostgreSQL local workers, bulk scheduling, metadata cleanup, and the dashboard is in [`samples/Trax.Samples.GameServer.Scheduler`](https://github.com/Theauxm/Trax.Core/tree/main/samples/Trax.Samples.GameServer.Scheduler). The scheduler runs alongside a separate API process (`Trax.Samples.GameServer.Api`) that queues work for it.
+The [Scheduling sample](/docs/samples/scheduling) is a complete scheduler host on Postgres with
+the built-in local workers: interval, cron, one-off, dependent and dormant dependent manifests, a
+train that retries with backoff and is dead-lettered, the GraphQL operations surface to requeue it,
+metadata cleanup and the dashboard. Its page has the whole `Program.cs` and the startup errors each
+missing piece produces.
 
 ## Next Layer
 

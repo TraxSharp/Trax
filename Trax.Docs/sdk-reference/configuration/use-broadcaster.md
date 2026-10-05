@@ -36,13 +36,15 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 |-----------|-------------|
 | Broadcast lifecycle hook | Internal lifecycle hook that publishes events to `ITrainEventBroadcaster` |
 | Broadcast change sink | Internal sink that forwards coalesced data-change signals (`onDataChanged`) to other processes over the same transport |
-| `TrainEventReceiverService` | `BackgroundService` that consumes events from `ITrainEventReceiver` and dispatches to `ITrainEventHandler` instances |
+| `TrainEventReceiverService` | `BackgroundService` that consumes events from `ITrainEventReceiver` and dispatches train events to `ITrainEventHandler` instances, and [junction events](/docs/effect/junction-events) to `IJunctionEventHandler` instances only |
 
 The transport-specific `ITrainEventBroadcaster` and `ITrainEventReceiver` are registered by the callback (e.g., `UseRabbitMq()`). The hook and the sink are internal types: `UseBroadcaster()` is the only way to add them.
 
 ## Connection Resilience
 
 The `TrainEventReceiverService` automatically retries if the transport connection fails (e.g., RabbitMQ is unavailable at startup). It uses exponential backoff starting at 5 seconds, capping at 2 minutes. The service will not crash the host. It logs a warning and keeps retrying until the transport becomes available or the host shuts down.
+
+The same holds for a connection the broker refuses, such as a wrong user or password (`ACCESS_REFUSED`): the host starts, runs its trains, and logs a warning, and no event crosses between processes. Nothing fails, so check the startup log for `RabbitMQ receiver started on exchange trax.lifecycle` on every host, and give every host the user the broker actually has.
 
 ## De-duplication
 
@@ -80,7 +82,7 @@ public interface ITrainEventHandler
 }
 ```
 
-The `TrainLifecycleEventMessage` is a serializable record containing:
+The `TrainLifecycleEventMessage` (namespace `Trax.Effect.Services.TrainEventBroadcaster`, like the three interfaces) is a serializable record containing:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -89,7 +91,7 @@ The `TrainLifecycleEventMessage` is a serializable record containing:
 | `TrainName` | `string` | Canonical train name, the train interface's full name (empty on a `DataChanged` signal) |
 | `TrainState` | `string` | Current state (serialized as string for transport) |
 | `Timestamp` | `DateTime` | When the event occurred |
-| `FailureJunction` | `string?` | Junction that failed (if applicable) |
+| `FailureJunction` | `string?` | Junction that failed (if applicable). Always null on a junction event. |
 | `FailureReason` | `string?` | Failure message (if applicable) |
 | `EventType` | `string` | See the event types below |
 | `Executor` | `string?` | Assembly name of the process that broadcast the event, for display |
@@ -132,9 +134,10 @@ Options:
 |----------|------|---------|-------------|
 | `ConnectionString` | `string` | N/A | AMQP connection URI |
 | `ExchangeName` | `string` | `"trax.lifecycle"` | Fanout exchange name |
+| `JunctionExchangeName` | `string?` | `ExchangeName` + `".junctions"` | Fanout exchange [junction events](/docs/effect/junction-events) are published to. Must differ from `ExchangeName`, or `UseRabbitMq` throws `ArgumentException`. |
 | `PrefetchCount` | `ushort` | `64` | How many received events the receiver may hold unacknowledged at once. The broker holds the rest until the handlers acknowledge one, so a slow handler leaves events queued on the broker rather than in the receiving process. `0` (no limit) is refused: `UseRabbitMq` throws `ArgumentException`, and a directly constructed receiver throws `InvalidOperationException` from `StartAsync`. |
 
-The RabbitMQ transport uses a **fanout exchange** so all connected hub instances receive every event. Each receiver creates its own exclusive, auto-delete queue.
+The RabbitMQ transport uses a **fanout exchange** so all connected hub instances receive every event. Each receiver creates its own exclusive, auto-delete queue. Every process bound to an exchange receives every event published to it, whichever application published it, so each application on a shared broker needs its own `ExchangeName` (or its own vhost).
 
 Publishing never waits on the broker. A lifecycle hook is awaited inside the train, so the broadcaster writes each event to a bounded queue (1024 events) and returns; one background sender publishes the queue in order.
 
@@ -142,7 +145,7 @@ Each publish waits for the broker's publisher confirm, for at most 5 seconds. An
 
 While the broker is unreachable the sender retries the event it holds with a growing delay (1 second, doubling to 30), each connection attempt bounded at 5 seconds, and further events wait in the queue. An event the broker refuses, by closing the channel on it with a channel-level error (`403`, `404`, `405`, `406`) or by rejecting the publish, is tried 3 times, then dropped and logged as an `Error`, so a refusal that does not clear, such as an exchange of the same name declared with another type, does not hold up the events behind it.
 
-When the queue is full, non-terminal events give way first. A new `Started`, `StateChanged` or `DataChanged` event is dropped. A new `Completed`, `Failed` or `Cancelled` event takes the place of the oldest queued non-terminal event, and is dropped itself only when every queued event is terminal. So a run whose `Started` reached subscribers keeps its outcome, although a subscriber can see an outcome without the `Started` before it. The first drop logs a `Warning`, followed by a second one giving the count when the queue drains.
+When the queue is full, junction events give way first, then non-terminal events. A new junction event is dropped. A new `Started`, `StateChanged` or `DataChanged` event takes the place of the oldest queued junction event, or is dropped when none is queued. A new `Completed`, `Failed` or `Cancelled` event takes the place of the oldest queued junction or non-terminal event, and is dropped itself only when every queued event is terminal. So a run whose `Started` reached subscribers keeps its outcome, although a subscriber can see an outcome without the `Started` before it. The first drop logs a `Warning`, followed by a second one giving the count when the queue drains.
 
 A connection the broker closed is disposed before it is replaced. On shutdown the broadcaster waits up to 5 seconds for queued events to be sent, and does not wait at all while it is failing to reach the broker. Delivery is best effort: a consumer that must not miss an event reads it from the store.
 
@@ -155,6 +158,30 @@ effects.UseBroadcaster(b =>
     )
 )
 ```
+
+#### Junction events and rollout order
+
+On a host that calls [`AddJunctionEvents()`](/docs/sdk-reference/configuration/add-junction-events),
+each step of a run is published to the junction exchange, `trax.lifecycle.junctions` by default.
+It is used only where steps are: a publisher declares it when it first has a step to send, and a
+receiver binds it only on a host with an `IJunctionEventHandler` registered, each on a channel of
+its own. A junction exchange the broker refuses (one declared elsewhere with another type, say)
+drops steps, logged, and never closes the channel train events use. After a failure on the junction
+exchange the publisher drops steps untried for a backoff that starts at one second and doubles up to
+a minute, then tries the exchange again, so a broken junction exchange costs the sender one attempt
+per backoff rather than one per step. A receiver takes train events
+only from the train exchange and steps only from the junction exchange, and drops anything that
+arrives on the other. A receiver from a Trax version before junction events binds only the train
+exchange, so it never receives one.
+
+No upgrade order is required. Upgrade the hosts that should show steps (they bind the junction
+exchange once they have a junction event handler), then turn on `AddJunctionEvents` on the
+workers; until a host binds it, the steps a worker publishes go nowhere. Rolling a worker back
+stops its steps and nothing else.
+
+A step and its run's own events travel through different exchanges, so a subscriber can see a
+run's `Completed` before its last step. Each step carries its position and timestamps; order by
+those.
 
 ### SignalR
 
@@ -248,6 +275,12 @@ public static BroadcasterBuilder UseMyTransport(
     return builder;
 }
 ```
+
+On a host that calls [`AddJunctionEvents()`](/docs/sdk-reference/configuration/add-junction-events),
+the broadcaster is also handed every junction event, a message whose `Junction` is set
+(`TrainLifecycleEventMessage.IsJunctionEvent`), on the run's path. Queue rather than wait, and
+consider routing steps apart from train events, so a receiver that predates junction events never
+sees one.
 
 ## Packages
 

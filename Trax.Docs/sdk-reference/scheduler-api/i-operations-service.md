@@ -21,9 +21,11 @@ public interface IOperationsService
     Task<OperationResult> QueueTrainAsync(QueueTrainInput input, CancellationToken ct);
     Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
+    Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, CancellationToken ct);
     Task<OperationResult> CancelExecutionsAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntriesAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> SetManifestsEnabledAsync(IReadOnlyCollection<long> ids, bool enabled, CancellationToken ct);
+    Task<OperationResult> SetManifestsReplayDecisionsOnRetryAsync(IReadOnlyCollection<long> ids, bool replay, CancellationToken ct);
     Task<OperationResult> SetManifestGroupsEnabledAsync(IReadOnlyCollection<long> ids, bool enabled, CancellationToken ct);
     Task<OperationResult> SetAllManifestGroupsEnabledAsync(bool enabled, CancellationToken ct);
     Task<ManifestExecutionStats> GetManifestExecutionStatsAsync(long manifestId, CancellationToken ct);
@@ -43,7 +45,7 @@ public record OperationResult(bool Success, long? Id = null, int? Count = null, 
 
 | Method | What it does | `Id` on success |
 |--------|--------------|-----------------|
-| `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. The queued run asks its deciders afresh; only [`RequeueExecutionAsync`](#requeueexecutionasync) queues a run that replays an earlier one's decisions. | the work queue entry |
+| `QueueTrainAsync(QueueTrainInput(TrainName, InputJson, Priority, ScheduledAt), ct)` | Enqueues through `ITrainExecutionService.QueueAsync`, so the train's `[TraxAuthorize]` requirements, its `OnQueue` hook and its subject key apply. The entry waits for dispatch like any other. The queued run asks its deciders afresh: of the methods here, only [`RequeueExecutionAsync`](#requeueexecutionasync) queues a run that replays an earlier one's decisions. | the work queue entry |
 | `RunTrainAsync(RunTrainInput(TrainName, InputJson), ct)` | Applies the per-record checks a queue applies (below), writes a `Pending` run and submits it at once to the job submitter the train is routed to, the same routing the job dispatcher uses (`ForTrain<T>()`, then `[TraxRemote]`, then the default submitter). Nothing goes through the work queue. Once the run's row is written the submit no longer takes `ct`, so a caller that goes away does not abort the submit or cancel the run; the submitter's own timeouts bound it. When the submit throws and the run is still `Pending`, no runner started it: the run is recorded `Failed` and the exception is thrown to the caller. When a runner already started it (a remote runner that answered with the train's error, a call that timed out while the run went on, or an in-process submitter that ran a failing train), the run owns its outcome: the call succeeds with the run's id and the message `Run {id} of {train} submitted; its outcome is pending on the run.`, and the run's row records how it ended. | the run's metadata row |
 
 Both look the train up by its interface `FullName` and hand the input to the mediator: `QueueTrainAsync` through `ITrainExecutionService.QueueAsync`, `RunTrainAsync` through `ITrainExecutionService.PrepareAsync`, which authorizes the caller and reads the input without writing anything. Either way `InputJson` is read by `TrainInputReader`: property names matched whatever their case (`customerId`, `CustomerId` and `CUSTOMERID` all fill the same property), a property given twice in any casing refused as invalid input rather than resolved to its last value, JSON reference metadata (`$id`, `$ref`, `$values`) not honoured, so the input is exactly the tree the caller wrote, the mediator's input size cap, and a blank input read as `{}`, which the input type must be buildable from.
@@ -58,7 +60,13 @@ A run is otherwise a deliberate bypass of the work queue. It skips dispatch prio
 
 ```csharp
 Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
+Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, CancellationToken ct);
 ```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `metadataId` | `long` | The run (metadata row) to re-queue |
+| `askAfresh` | `bool` | When `true`, the new entry carries no replay link and the new run asks every question again; nothing else differs. The overload without it is `askAfresh: false`. |
 
 Re-queues a run: queues a fresh run of the same train with the input the run recorded. The GraphQL
 [`requeueExecution`](/docs/sdk-reference/graphql-api/mutations#requeueexecution) mutation and the
@@ -91,12 +99,27 @@ authorized. On success `Id` is the new work queue entry.
 
 When the run has decisions to replay (it recorded a decision, or was itself queued to replay
 another run), the new entry names it in `ReplayDecisionsOf`, so the new run
-[replays those decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions) and takes
+[replays those decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions) and takes
 the tracks the original took. A requeue of a requeue therefore replays too, following the chain
 back to the answers the first run recorded. A run with nothing to replay is re-queued as an
 ordinary enqueue. It asks
 [`HasDecisionsToReplay`](/docs/sdk-reference/configuration/add-decision-recording#hasdecisionstoreplay).
-This method is the only place the link is set, always to the run being re-queued. When the run has decisions to replay and the registered `ITrainExecutionService` does
+It is the only caller-facing method that sets the link, always to the run being re-queued; the
+scheduler sets it on a manifest's retry and dead-letter requeue from its own checks (see
+[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)).
+Each replayed answer is still checked against the state it is asked about now and its age, so a
+question whose state changed, or whose answer is older than `ReplayAnswersFor`, is asked afresh.
+
+A run's answers are replayed once. When a queued entry (a manifest's retry, an earlier requeue) or
+a run in any state already replays the run being re-queued, the requeue still queues it but asks
+afresh, and the success message ends
+`It asks its deciders afresh: the decisions of execution {id} are already replayed by another run or queued entry, and are replayed once.`
+The same holds when another enqueue queues a replay of the run in the same instant: the database
+allows one queued entry per replayed run, so the requeue that loses is queued without the link,
+asks afresh, and says so in the same message. With `askAfresh: true` no link is set and the message
+adds nothing.
+
+When the run has decisions to replay and the registered `ITrainExecutionService` does
 not implement the
 [`QueueAsync` overload that takes `QueueTrainOptions`](/docs/sdk-reference/mediator-api/train-execution),
 the mediator's `DecisionReplayNotSupportedException` is logged and thrown as a host
@@ -131,6 +154,7 @@ The actions a list page applies to its selected rows. Each takes up to `Operatio
 | `CancelExecutionsAsync(ids, ct)` | Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped. A `Pending` run is recorded `Cancelled` and never run when the job runner picks it up, whatever junction providers the host registers. An `InProgress` run observes the flag at its next junction boundary, when the host uses the junction progress provider. | `Execution`, when at least one run was flagged |
 | `CancelWorkQueueEntriesAsync(ids, ct)` | Entries still `Queued` become `Cancelled`, in one statement, so an entry the dispatcher claims meanwhile keeps its status | `WorkQueue` |
 | `SetManifestsEnabledAsync(ids, enabled, ct)` | Manifests whose `IsEnabled` differs | `Manifest` |
+| `SetManifestsReplayDecisionsOnRetryAsync(ids, replay, ct)` | Manifests whose `ReplayDecisionsOnRetry` differs. Turning it off also clears the replay link of each manifest's queued entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh; the message then adds `{n} queued retry(s) no longer replay a failed run's decisions.` See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions). | `Manifest`, when any changed; `WorkQueue`, when a link was cleared |
 | `SetManifestGroupsEnabledAsync(ids, enabled, ct)` | Groups whose `IsEnabled` differs, with `UpdatedAt` bumped | `ManifestGroup` |
 | `SetAllManifestGroupsEnabledAsync(enabled, ct)` | Every group whose `IsEnabled` differs; a separate method so that "all" is never what an empty list means | `ManifestGroup` |
 

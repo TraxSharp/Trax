@@ -47,7 +47,8 @@ tests with `#region {FeatureOrMethod}`.
 
 ## Assertions
 
-FluentAssertions only. The legacy NUnit forms (`Assert.That`, `Assert.AreEqual` and the rest)
+[AwesomeAssertions](https://www.nuget.org/packages/AwesomeAssertions) only (the Apache-2.0 fork of FluentAssertions 7: the same
+`.Should()` API, `using AwesomeAssertions;`). The legacy NUnit forms (`Assert.That`, `Assert.AreEqual` and the rest)
 are rejected by `NoLegacyAssertTests`. The reason is the `because` argument: it is where a
 failing test explains the rule it was protecting, and the legacy forms have nowhere to put it.
 

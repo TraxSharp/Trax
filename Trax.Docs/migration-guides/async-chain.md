@@ -65,7 +65,7 @@ public class LookupTrain : ServiceTrain<LookupInput, LookupOutput>, ILookupTrain
 }
 ```
 
-Three changes per train: wrap the return type in `Task<Either<Exception, ...>>`, append a `.Resolve()` to the chain, and add `using LanguageExt;` if the file did not already import it.
+Three changes per train: wrap the return type in `Task<Either<Exception, ...>>`, append a `.Resolve()` to the chain, and add `using Trax.Core.Functional;` if the file did not already import it.
 
 ### Pattern B: overriding `RunInternal`
 

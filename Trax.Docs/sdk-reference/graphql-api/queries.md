@@ -243,7 +243,7 @@ Execution roll-up for a single train, keyed by its interface FullName (the value
 ```graphql
 query {
   operations {
-    trainStats(trainName: "Trax.Samples.GameServer.Trains.IRecalculateLeaderboardTrain") {
+    trainStats(trainName: "MyApp.Trains.Reports.IBuildDailyReportTrain") {
       total
       completed
       failed
@@ -305,7 +305,7 @@ query {
 | `toggleable` | `Boolean!` | Whether the effect can be toggled (infrastructure effects are always on) |
 | `isConfigurable` | `Boolean!` | Whether the effect's factory exposes runtime settings (implements `IConfigurableProviderFactory`) |
 | `configurationTypeName` | `String` | FullName of the settings type. Null when not configurable |
-| `configuration` | `String` | The factory's current settings as camelCase JSON. Null when not configurable |
+| `configuration` | `String` | The factory's current settings as camelCase JSON, with each `[TraxSensitive]` member written as `{"_redacted": true}`. Null when not configurable |
 
 Settings can hold credentials. Like an execution's `input`, they are reachable only under the
 `operations` namespace, so the gate you put on it (`GateOperations` or `RequireAuthorization`)
@@ -348,8 +348,8 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `skip` | `Int` | `0` | Number of records to skip (offset pagination). A negative value reads as `0` |
-| `take` | `Int` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
+| `skip` | `Int!` | `0` | Number of records to skip (offset pagination). A negative value reads as `0` |
+| `take` | `Int!` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
 | `isEnabled` | `Boolean` | `null` | Filter by enabled/disabled |
 | `scheduleType` | `ScheduleType` | `null` | Filter by schedule type (`NONE`, `CRON`, `INTERVAL`, `ON_DEMAND`, `DEPENDENT`, `DORMANT_DEPENDENT`, `ONCE`) |
 | `nameContains` | `String` | `null` | Case-sensitive substring match on the train name |
@@ -376,6 +376,7 @@ query {
 | `dependsOnManifestId` | `Long` | ID of the manifest this one depends on |
 | `priority` | `Int!` | Dispatch priority (0-31, higher runs first) |
 | `manifestGroupName` | `String` | Name of the parent group |
+| `replayDecisionsOnRetry` | `Boolean!` | Whether a retry of the manifest's failed run, automatic or a requeue of its dead letter, replays the decisions that run recorded. Set with [`ScheduleOptions.ReplayDecisionsOnRetry`](/docs/sdk-reference/scheduler-api/schedule#scheduleoptions); see [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) |
 
 A manifest's `properties` (the train input it runs with) are not on this type. Read them from
 [`manifestDetail`](#manifestdetail), one manifest at a time.
@@ -575,8 +576,8 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `skip` | `Int` | `0` | Number of records to skip (offset pagination). A negative value reads as `0` |
-| `take` | `Int` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
+| `skip` | `Int!` | `0` | Number of records to skip (offset pagination). A negative value reads as `0` |
+| `take` | `Int!` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
 | `trainState` | `TrainState` | `null` | Filter by state (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`) |
 | `trainName` | `String` | `null` | Exact-match filter on the train interface FullName |
 | `startedAfter` | `DateTime` | `null` | Only executions with `startTime >= startedAfter` |
@@ -599,7 +600,7 @@ When any filter is supplied the count is exact (`isEstimatedCount: false`); an u
 | `id` | `Long!` | Metadata ID |
 | `externalId` | `String!` | External identifier |
 | `name` | `String!` | Train type name |
-| `trainState` | `TrainState!` | Current state (`Pending`, `InProgress`, `Completed`, `Failed`, `Cancelled`) |
+| `trainState` | `TrainState!` | Current state: `PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED` or `CANCELLED` on the wire |
 | `startTime` | `DateTime!` | When execution began |
 | `endTime` | `DateTime` | When execution finished (null if still running) |
 | `failureJunction` | `String` | Name of the junction that failed (null if no failure) |
@@ -673,6 +674,7 @@ query {
       parentId
       scheduledTime
       executor
+      replayDecisionsOf
     }
   }
 }
@@ -693,7 +695,10 @@ train dispatched from a junction included (see [Nested Trains](/docs/mediator#ne
 it is `0` unless something outside Trax writes the column. `failureClass` is the same `FailureClass` enum as
 on [`ExecutionSummary`](#executionsummary-fields). `scheduledTime` is when a scheduled run was due
 (null for one that was not scheduled), `executor` is the project name of the process that ran it,
-and `hostLabels` is the host's user-supplied labels as a JSON object.
+and `hostLabels` is the host's user-supplied labels as a JSON object. `replayDecisionsOf` (`Long`) is
+the execution whose recorded decisions this run was queued to replay, by a requeue or a manifest's
+retry that replays; it is null when the run replays nothing, a run queued to ask afresh included. The dashboard shows it as
+**Replays Decisions Of**.
 
 `input` and `output` can hold credentials. They are on this single-row read and on no list; see
 [Train inputs and the operations gate](#train-inputs-and-the-operations-gate).
@@ -721,10 +726,74 @@ query {
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `parentId` | `Long!` | none | The parent execution's metadata id |
-| `take` | `Int` | `25` | Page size, from 1 to 500. See [Page size](#page-size) |
+| `take` | `Int!` | `25` | Page size, from 1 to 500. See [Page size](#page-size) |
 | `afterId` | `Long` | `null` | Keyset cursor (`id < afterId`) |
 
 **Returns**: `PagedResult<ExecutionSummary>` (count is always exact).
+
+---
+
+### junctionRuns
+
+The steps of one execution, in the order it reached them, as
+[`AddJunctionEvents()`](/docs/sdk-reference/configuration/add-junction-events) recorded them: each
+junction that ran, each question a routing step asked and the track it took. Empty for an
+execution with none recorded, and for an id with no execution. Read through
+`JunctionRunQueries.ForRun`, the query the dashboard's timeline reads too.
+
+```graphql
+query {
+  operations {
+    junctionRuns(metadataId: 100) {
+      position
+      kind
+      name
+      state
+      startedAt
+      durationMs
+      failureClass
+      questionKey
+      answer
+      confidence
+      replayed
+      answerWithheld
+      nameWithheld
+      trackPosition
+      attempt
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metadataId` | `Long!` | none | The execution's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
+| `afterPosition` | `Int` | `null` | Only steps after this position, a keyset cursor for the next page |
+| `take` | `Int!` | `500` | Page size, from 1 to 500 |
+
+**Returns**: `[JunctionStep!]!`, the same type the [`onJunctionEvent`](/docs/sdk-reference/graphql-api/subscriptions#onjunctionevent)
+subscription carries. A step carries no input, output or failure message, and an answer to a
+question about a [`[TraxSensitive]`](/docs/sdk-reference/attributes/trax-sensitive#on-a-question-type)
+type is never present. Once a routing step's answer is withheld, every later step of the run is
+withheld too, whatever its kind: a junction, a question or a further route is named `(withheld)`,
+with `nameWithheld` true, and a question or route has `questionKey`, `answer` and `confidence` null
+and `answerWithheld` true. `trackPosition` is the position of the latest routing step before a step,
+of any kind, and null before the first. Trax cannot tell where a track rejoins the chain, so every
+step after a route counts as on its track. The recorded decider is not kept, so `decider` is always
+null here.
+
+A withheld step still records its kind, position, state and timing, and for a failed junction its
+exception type and failure class. The run's own `failureJunction`, the train's failed event, and
+a train started from a junction on the track are recorded as for any run. See
+[Junction Events](/docs/effect/junction-events).
+
+A junction whose end event was dropped stays `IN_PROGRESS` in these rows after its run has ended,
+so read a step's `state` together with the execution's.
+
+It answers to the operations gate, as [`execution`](#execution) does, so a caller refused one is
+refused the other. The rows trail the live subscription by moments: a client following a running
+execution subscribes first, then reads this, and keeps for each position whichever is further
+along.
 
 ---
 
@@ -747,6 +816,17 @@ from them, so the read masks them: it reads the stored JSON back as the input ty
 registered on this host and writes it with the mask. When the host has no registered train whose
 input type the copy names, or the JSON does not read as that type, nothing shows the copy holds no
 sensitive member, so the whole value reads as `{"_redacted": true}`.
+
+A member whose declared type does not say what it holds is masked on those two reads whether or not
+anything under it is marked: `object`, `JsonElement`, `JsonNode`, `JsonDocument`, a collection
+without an element type, and a collection or dictionary whose elements are one of those. The copy
+was stored from the runtime value, so `record Pay(object Details)` holding a `Card` with a
+`[TraxSensitive] Number` stores the number, and reading it back as `Pay` gives JSON with no member
+left to mark. Such a member reads as `{"_redacted": true}`; the members whose types are declared read
+as stored. Declare the member's real type to see it.
+
+An effect's settings on [`effects`](#effects) are written from the settings object itself, so a
+`[TraxSensitive]` member at any depth there reads as `{"_redacted": true}` too.
 
 ---
 
@@ -773,9 +853,20 @@ Paginated queries support two strategies. Both can be used interchangeably. The 
 
 Every paged read in the `operations` namespace clamps `take` to 1 through 500 and reads a negative `skip` as `0`, rather than refusing the request. A `take` above 500 returns 500 rows, and `take: 0` or a negative `take` returns one row. The `skip` and `take` on the returned page are the values that were applied, so a client can see that its request was clamped. To read more than 500 rows, page with `afterId`.
 
+`skip` is at most 10,000. A deeper one is refused rather than clamped, because there is no nearby page to serve instead: the field fails with a GraphQL error whose `extensions.code` is `TRAX_SKIP_TOO_DEEP` and whose `extensions.maxSkip` is `10000`, and the message points at `afterId`.
+
+```json
+{
+  "errors": [{
+    "message": "skip may be at most 10000. To read further, page with afterId: pass each page's nextCursor as the next request's afterId.",
+    "extensions": { "code": "TRAX_SKIP_TOO_DEEP", "maxSkip": 10000 }
+  }]
+}
+```
+
 ### Offset pagination (default)
 
-Pass `skip` and `take` as before. This uses SQL `OFFSET`/`LIMIT` under the hood. Performance degrades on deep pages (high `skip` values) because the database must scan and discard rows up to the offset.
+Pass `skip` and `take` as before. This uses SQL `OFFSET`/`LIMIT` under the hood. Performance degrades on deep pages (high `skip` values) because the database must scan and discard rows up to the offset, which is why `skip` stops at 10,000.
 
 ```graphql
 query {
@@ -820,11 +911,69 @@ The count is exact, and `isEstimatedCount` is `false`, whenever a filter is supp
 The operations queries are stress-tested against millions of rows (`Trax.Api.Tests.Stress`, run with `dotnet test --filter TestCategory=Stress`). At 3,000,000 metadata rows on laptop-class PostgreSQL:
 
 - **Keyset pagination stays flat.** A far-end page (an `afterId` near the end of the id sequence) returns in ~35ms no matter how deep it is, because it seeks through the primary key index rather than counting past skipped rows.
-- **Deep offset pagination does not.** A `skip` near the end of the table scans and discards every skipped row: ~430ms at a 3,000,000-row offset, more than 10x slower than the equivalent keyset page.
+- **Offset pagination does not.** An offset scans and discards every skipped row: ~430ms at a 3,000,000-row offset, more than 10x slower than the equivalent keyset page. The deepest offset served, 10,000, takes ~60ms; a deeper one is refused with `TRAX_SKIP_TOO_DEEP`.
 
-Build list views on keyset cursors: read the first page with `take`, then pass each response's `nextCursor` as the next request's `afterId`. Reserve `skip` for shallow, bounded jumps. Filtered reads (`status`, `trainName`, `metadataId`, `minimumLevel`, `category`) and their exact counts also stay under ~100ms at the same scale, so filter controls stay responsive.
+Build list views on keyset cursors: read the first page with `take`, then pass each response's `nextCursor` as the next request's `afterId`. Reserve `skip` for shallow jumps. Filtered reads (`status`, `trainName`, `metadataId`, `minimumLevel`, `category`) and their exact counts also stay under ~100ms at the same scale, so filter controls stay responsive.
 
-The same suite times every operations mutation against those tables (each single-row or scoped write, including the manifest and group cancels that filter the metadata table, finishes in under ~50ms), the point reads behind the detail pages, the persisted-operations list, lookups and writes over a 100,000-operation catalog, and subscription fan-out to 1,000 subscribers. `onDataChanged` coalesces a storm of 200,000 change signals into one event per changed domain per subscriber, delivered to all of them in under half a second. `onTrainStateChanged` delivers each event to every subscriber when the rate is moderate, but at 1,000 subscribers and a sustained 80 or more state changes a second, a few subscribers miss some events: a live feed can lag behind the grid until its next refetch. `requeueAllDeadLetters` and `acknowledgeAllDeadLetters` are timed over every dead letter the seed leaves awaiting intervention, 500,000 of them: acknowledging all takes about 7.5 s and requeueing all, which also writes one work queue entry per manifest, about 36 s, so treat them as rare operator actions. The batch cancels and enable/disable mutations on a full 1,000-id selection, and `runTrain`, each finish in under 20 ms.
+The same suite times every operations mutation against those tables (each single-row or scoped write, including the manifest and group cancels that filter the metadata table, finishes in under ~50ms), the point reads behind the detail pages, the persisted-operations list, lookups and writes over a 100,000-operation catalog, and subscription fan-out to 1,000 subscribers. `onDataChanged` coalesces a storm of 200,000 change signals into one event per changed domain per subscriber, delivered to all of them in under half a second. `onTrainStateChanged` delivers each event to every subscriber when the rate is moderate, but at 1,000 subscribers and a sustained 80 or more state changes a second, a few subscribers miss some events: a live feed can lag behind the grid until its next refetch. `requeueAllDeadLetters` and `acknowledgeAllDeadLetters` are timed over every dead letter the seed leaves awaiting intervention, 500,000 of them: acknowledging all takes about 7.5 s, and requeueing all, which also writes one work queue entry per manifest, about 36 s in the background while the mutation itself answers at once with a job handle (see [`requeueAllDeadLetters`](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace)), so treat them as rare operator actions. The mutations are timed through the request executor, with the operations gate, the error filter and HotChocolate's execution timeout in the path. The batch cancels and enable/disable mutations on a full 1,000-id selection, and `runTrain`, each finish in under 20 ms.
+
+## deadLetters (nested under operations)
+
+Dead letters, the manifests that failed more times than their `MaxRetries` (see
+[Dead Letters & Cleanup](/docs/scheduler/dead-letters-and-cleanup)). The requeue and acknowledge
+mutations are under `operations.deadLetters` on the mutation type
+([Mutations: deadLetters](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace)).
+
+```graphql
+query {
+  operations {
+    deadLetters {
+      deadLetters(status: AWAITING_INTERVENTION, take: 10) {
+        items { id manifestId manifestName status reason retryCountAtDeadLetter deadLetteredAt }
+        totalCount
+        nextCursor
+      }
+      deadLetter(id: 42) { status resolvedAt resolutionNote retryMetadataId }
+    }
+  }
+}
+```
+
+### deadLetters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `skip` | `Int!` | `0` | Number of records to skip (offset pagination) |
+| `take` | `Int!` | `25` | Number of records to return. See [Page size](#page-size) |
+| `status` | `DeadLetterStatus` | `null` | `AWAITING_INTERVENTION`, `RETRIED` or `ACKNOWLEDGED` |
+| `afterId` | `Long` | `null` | Keyset cursor. See [Pagination](#pagination) |
+
+**Returns**: `PagedResult<DeadLetterSummary>`
+
+### deadLetter
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The dead letter's id |
+
+**Returns**: `DeadLetterSummary`, or `null` when no dead letter has that id.
+
+#### DeadLetterSummary fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Long!` | Dead letter id |
+| `manifestId` | `Long!` | The manifest that was dead-lettered |
+| `manifestName` | `String!` | The manifest's train name (the interface FullName), not its external id |
+| `status` | `DeadLetterStatus!` | `AWAITING_INTERVENTION` until an operator requeues (`RETRIED`) or acknowledges (`ACKNOWLEDGED`) it |
+| `deadLetteredAt` | `DateTime!` | When the ManifestManager wrote it |
+| `reason` | `String!` | For example `Max retries exceeded: (3) failures > (2) max retries` |
+| `retryCountAtDeadLetter` | `Int!` | The counted failures when it was written |
+| `resolvedAt` | `DateTime` | When it was requeued or acknowledged |
+| `resolutionNote` | `String` | The note an acknowledge took, or the one a requeue wrote: `Re-queued (WorkQueue {id})`, single or batch, or `Re-queued with dead letter {id} (WorkQueue {id})` for a dead letter a batch requeue folded into another's run |
+| `retryMetadataId` | `Long` | The run a requeue started, set once that run is dispatched |
+
+---
 
 ## config (nested under operations)
 
@@ -1066,11 +1215,11 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `skip` | `Int` | `0` | Number of records to skip (offset pagination). A negative value reads as `0`. Ignored when `afterId` is provided. |
-| `take` | `Int` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
+| `skip` | `Int!` | `0` | Number of records to skip (offset pagination). A negative value reads as `0`. Ignored when `afterId` is provided. |
+| `take` | `Int!` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
 | `metadataId` | `Long` | `null` | Filter to logs for a single execution |
 | `minimumLevel` | `LogLevel` | `null` | Includes the supplied level and anything more severe. `LogLevel` follows `Microsoft.Extensions.Logging`: `TRACE`, `DEBUG`, `INFORMATION`, `WARNING`, `ERROR`, `CRITICAL`, `NONE` |
-| `category` | `String` | `null` | Exact-match filter on the logger category (e.g. `Trax.Samples.GameServer.Trains.Combat.ResolveCombatTrain`) |
+| `category` | `String` | `null` | Exact-match filter on the logger category (e.g. `MyApp.Trains.Billing.ChargeCustomerTrain`) |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId` |
 
 **Returns**: `PagedResult<LogEntry>`.
@@ -1127,8 +1276,8 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `skip` | `Int` | `0` | Number of records to skip (offset pagination). A negative value reads as `0` |
-| `take` | `Int` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
+| `skip` | `Int!` | `0` | Number of records to skip (offset pagination). A negative value reads as `0` |
+| `take` | `Int!` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
 | `nameContains` | `String` | `null` | Case-sensitive substring match on the group name |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
 
@@ -1315,10 +1464,10 @@ query {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `skip` | `Int` | `0` | Number of records to skip (offset pagination). A negative value reads as `0`. Ignored when `afterId` is provided. |
-| `take` | `Int` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
+| `skip` | `Int!` | `0` | Number of records to skip (offset pagination). A negative value reads as `0`. Ignored when `afterId` is provided. |
+| `take` | `Int!` | `25` | Number of records to return, from 1 to 500. See [Page size](#page-size) |
 | `status` | `WorkQueueStatus` | `null` | Filter by lifecycle state (`QUEUED`, `DISPATCHED`, `CANCELLED`) |
-| `trainName` | `String` | `null` | Exact-match filter on the interface FullName (e.g. `Trax.Samples.GameServer.Trains.Combat.IResolveCombatTrain`) |
+| `trainName` | `String` | `null` | Exact-match filter on the interface FullName (e.g. `MyApp.Trains.Billing.IChargeCustomerTrain`) |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
 
 **Returns**: `PagedResult<WorkQueueSummary>`
@@ -1400,4 +1549,16 @@ detail page reports the same two answers from the same predicate.
 
 ## deadLetters (nested under operations)
 
-The `operations.deadLetters` namespace exposes paginated dead-letter reads (`deadLetters`, `deadLetter`). See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for the full surface and examples.
+The `operations.deadLetters` namespace exposes paginated dead-letter reads (`deadLetters`, `deadLetter`) and `requeueAllJob(id: UUID!)`, which reads a job [`requeueAllDeadLetters`](/docs/sdk-reference/graphql-api/mutations#deadletters-nested-namespace) started. It returns the `DeadLetterRequeueJob`, or `null` when this node does not know the id: the job was started on another node, this node has restarted since, or it finished more than 24 hours ago. Read a job on the node that started it; the backlog itself is `deadLetters(status: AWAITING_INTERVENTION) { totalCount }` on any node.
+
+```graphql
+query {
+  operations {
+    deadLetters {
+      requeueAllJob(id: "6f1c2a7e-0d4b-4f53-9a3e-2b8f1c0d9e11") { status count message finishedAt }
+    }
+  }
+}
+```
+
+See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for the full surface and examples.

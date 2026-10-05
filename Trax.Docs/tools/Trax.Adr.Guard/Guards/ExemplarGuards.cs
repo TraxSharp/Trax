@@ -338,7 +338,7 @@ public static class ExemplarGuards
                 + "value an assertion uses. The attribute, a comment and the docstring do not count.";
     }
 
-    /// <summary>A call that asserts: NUnit, FluentAssertions, or a helper named for it.</summary>
+    /// <summary>A call that asserts: NUnit, a fluent assertion library, or a helper named for it.</summary>
     private static readonly Regex Assertion = new(
         @"\b\w*Assert\w*\s*\.\s*\w+\s*[<(]|\bAssert\w*\s*\(|\.\s*Should\w*\s*\(|\bFailWith\s*\("
             + @"|\bAssertionScope\b|\bthrow\s+new\s+\w*Assertion\w*Exception\b",

@@ -10,7 +10,9 @@ grand_parent: SDK Reference
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-Registers the Trax JWT bearer authentication scheme, its authorization policy (`JwtDefaults.PolicyName`), the combined `TraxAuthPolicy`, `IHttpContextAccessor`, and a one-shot startup disclaimer log.
+Registers the Trax JWT bearer authentication scheme, its authorization policy (`JwtDefaults.PolicyName`), the combined `TraxAuthPolicy`, the ASP.NET Core authentication services, the injectable [`TraxPrincipal`](/docs/sdk-reference/api-auth/injecting-trax-principal), `IHttpContextAccessor`, and a one-shot startup disclaimer log.
+
+A principal this scheme authenticates carries the id `TraxJwt:{sub}` on the default scheme, or `{schemeName}:{sub}` on a named one. See [Qualified Principal Ids](/docs/migration-guides/qualified-principal-ids).
 
 Token validation (signature, issuer, audience, lifetime) is delegated to `Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerHandler`. After validation, Trax runs an `ITraxPrincipalResolver<JwtTokenInput>` to project the validated token into a `TraxPrincipal`. A resolver that returns `null` fails authentication.
 
@@ -126,6 +128,49 @@ services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(
 
 `UseSymmetricKey` requires at least 32 bytes (HS256 minimum). For RSA or EC, use `UseSigningKey(issuer, audience, SecurityKey)` with an `RsaSecurityKey` or `ECDsaSecurityKey`.
 
+## A development signing key
+
+To try a host locally without an identity provider, register a symmetric key that lives in
+source, and mint tokens with it. Anyone who reads that key can sign a token for any user, so
+register it only in Development, inside the same `if` as any demo API keys, and register your
+real issuer everywhere else:
+
+```csharp
+using System.Security.Claims;
+using System.Text;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
+using Trax.Api.Auth.Jwt;
+
+const string DevIssuer = "my-app-dev";
+const string DevAudience = "my-app";
+var devKey = Encoding.UTF8.GetBytes("my-app-dev-signing-key-do-not-use-in-production");
+
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(DevIssuer, DevAudience, devKey));
+else
+    builder.Services.AddTraxJwtAuth(
+        builder.Configuration["Auth:Jwt:Authority"]!,
+        builder.Configuration["Auth:Jwt:Audience"]!);
+
+// Mint a token the default resolver maps: sub -> Id, name -> DisplayName, role -> Roles.
+string MintDevToken(string sub, params string[] roles) =>
+    new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+    {
+        Issuer = DevIssuer,
+        Audience = DevAudience,
+        Subject = new ClaimsIdentity(
+            [new Claim("sub", sub), new Claim("name", sub), .. roles.Select(r => new Claim("role", r))]),
+        Expires = DateTime.UtcNow.AddHours(1),
+        SigningCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(devKey), SecurityAlgorithms.HmacSha256),
+    });
+```
+
+The [Auth sample](/docs/samples/auth) serves such tokens from a Development-only
+`GET /dev/token/{user}` endpoint. In tests, `TestTokenIssuer.Symmetric` from
+[`Trax.Api.Auth.Jwt.Testing`](/docs/sdk-reference/api-auth/jwt-testing) does the minting.
+
 ## Do you actually need a custom resolver?
 
 Most apps don't. The positional overload plus the default resolver is the whole integration:
@@ -203,18 +248,26 @@ The resolver is resolved per request, so scoped dependencies (DbContext, HTTP cl
 
 ## Protecting Endpoints
 
-`AddTraxJwtAuth` does not set a default authentication scheme. Name the scheme or policy explicitly:
+`AddTraxJwtAuth` does not set a default authentication scheme. On the Trax GraphQL endpoint that
+needs no wiring: Trax authenticates each GraphQL HTTP request against every registered scheme in
+registration order and keeps the first that succeeds, so `[TraxAuthorize]`, `GateOperations(...)`
+and the builder's `RequireAuthorization()` see a bearer caller. Gate GraphQL with those:
 
 ```csharp
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization(JwtDefaults.PolicyName));
-
-// Mix with other Trax schemes:
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy));
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());                         // any Trax scheme
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(JwtDefaults.PolicyName));   // only JWT callers
 ```
 
-Combining JWT with API-key or OIDC routes credentials through whichever scheme the presented header matches.
+For your own routes, name the policy, because ASP.NET Core runs only the schemes a policy names:
+
+```csharp
+app.MapGet("/me", ...).RequireAuthorization(JwtDefaults.PolicyName);
+
+// Mix with other Trax schemes:
+app.MapGet("/me", ...).RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy);
+```
+
+Combining JWT with API-key or OIDC routes credentials through whichever scheme the presented header matches. A request that carries both an API key and a bearer token is authenticated by whichever scheme was registered first.
 
 ## Multiple issuers
 

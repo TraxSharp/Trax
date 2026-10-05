@@ -120,6 +120,12 @@ client sends a whole snapshot, the server validates it and stores it. Advance is
 client sends only a trigger, and the server re-drives the transition from the stored snapshot, never
 trusting a client-computed state.
 
+Autosave stores the context the client wrote, so any value an effect will act on must be held to its
+true value by the state's `Holds`, not just to its type. A checkout whose context carries a `total`
+holds `total == items x price` in every state; checking only that `total` is a number would let a
+browser save two items at one cent and have the charge take one cent. The
+[State Machine sample](/docs/samples/state-machine) shows the check and its test.
+
 Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource.
 Those must run exactly once per intent, even under retries, two devices, or a crash mid-flight. The core
 provides a generic exactly-once runner keyed on an intent that names the action, not its content. It claims

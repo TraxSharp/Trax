@@ -1,17 +1,52 @@
 ---
 layout: default
 title: Project Layout
-description: "Where each kind of thing lives in a Trax repo: data models, migrations, builders, sample applications and tests, and how to find a pattern to mirror."
+description: "Where things live: a Trax application's trains, data and tests, and in the Trax repos, data models, migrations, builders, samples and tests."
 parent: Reference
 nav_order: 11
 ---
 
 # Project Layout
 
-Where each kind of thing lives. Before adding one, find an existing example of the same kind
-and mirror it: the same directory depth, the same naming, the same partial-class split.
+Where each kind of thing lives. The first section is for an application built on Trax; the rest
+is for contributing to the Trax repositories themselves.
 
-## Data models
+## Your own application
+
+The [project templates](/docs/reference/templates) lay a Trax server out like this, and nothing
+in Trax depends on the folder names, so treat it as a convention rather than a requirement:
+
+```
+MyCompany.Hub/
+├── MyCompany.Hub.csproj        the web host
+├── Directory.Packages.props    every package version (Central Package Management)
+├── Program.cs                  every registration, in one file
+├── Auth/                       credentials (the Development-only demo key)
+├── Data/                       your own EF Core context, its interface and its models
+├── Trains/
+│   └── <TrainName>/
+│       ├── I<TrainName>Train.cs     the interface the train is registered and recorded under
+│       ├── <TrainName>Train.cs      the train: attributes and Junctions(), nothing else
+│       ├── <TrainName>Input.cs      its input (and Output, when it returns one)
+│       └── Junctions/
+│           └── <Step>Junction.cs    one class per step
+└── tests/
+    └── MyCompany.Hub.Tests/    UnitTests/ for junctions, IntegrationTests/ for trains and the host
+```
+
+`AddMediator(typeof(Program).Assembly)` registers every train in the assembly, wherever it sits,
+so adding a train is adding its folder. When the trains outgrow the host, move `Trains/` into a
+class library, reference it from the host, and name both assemblies in `AddMediator`; a train in
+an assembly `AddMediator` does not scan is not registered. A second process (a separate scheduler
+or worker) references the same library and points at the same database. The
+[Samples](/docs/samples) show those splits.
+
+## Contributing to Trax
+
+Before adding something to a Trax repository, find an existing example of the same kind and
+mirror it: the same directory depth, the same naming, the same partial-class split.
+
+### Data models
 
 A persisted model is a pair of files in two projects:
 
@@ -38,7 +73,7 @@ Each provider has its own `DbContext` subclass at
 sharing shape through the base `DataContext<TDbContext>` in `Trax.Effect.Data`. The providers
 are `Postgres`, `Sqlite` and `InMemory`.
 
-## Migrations
+### Migrations
 
 ```
 Trax.Effect/src/Trax.Effect.Data.Postgres/Migrations/<NNN>_<name>.sql
@@ -50,12 +85,12 @@ numbered independently. `Trax.Effect.Data.InMemory` has no `Migrations/` folder:
 in-memory provider stores objects rather than tables, so there is no DDL to run. See
 [Writing Migrations](/docs/reference/writing-migrations).
 
-## Builders
+### Builders
 
 A partial class in its own directory, one file per feature area. See
 [Builder Pattern](/docs/reference/builder-pattern).
 
-## Sample applications
+### Sample applications
 
 Most samples are three or four projects under `Trax.Samples/samples/<Topic>/`:
 
@@ -65,8 +100,8 @@ Trax.Samples.<Name>.Api        the GraphQL host (or .Hub)
 Trax.Samples.<Name>.Client     the consumer (or .Scheduler, .Worker, .Runner)
 ```
 
-A sample that demonstrates one thing is one project: `samples/ApiAudit/` and
-`samples/SignalRDashboard/` are each a single web host with its trains under `Trains/`, because
+A sample that demonstrates one thing is one project: `samples/Auth/` and
+`samples/SignalRBroadcaster/` are each a single web host with its trains under `Trains/`, because
 neither has anything to say about a second process. Split when a second process has to exist
 for the sample to make its point, not before. Bookworm goes the other way with five, because
 cross-schema edges need a project of their own.
@@ -75,14 +110,14 @@ Resolvers and `[ExtendObjectType]` classes belong in a project, not in `Program.
 project depends on what they extend: subscription extensions live in the train library
 (`Trax.Samples.ChatService/Subscriptions/`), cross-schema edges in the project that owns the
 join (`Trax.Samples.Bookworm.CrossSchema/Edges/`), and an extension over a type the host
-defines lives in the host (`Trax.Samples.GameServer.Api/TypeExtensions/`).
+defines lives in the host (`Trax.Samples.Auth/Data/ArticleExtensions.cs`).
 
-## Tests
+### Tests
 
 See [Test Conventions](/docs/reference/test-conventions) for the folder layout and the
 fixture patterns.
 
-## When you cannot find a pattern
+### When you cannot find a pattern
 
 Ask before improvising. A new pattern introduced without justification is almost always a
 missed pattern that already exists.

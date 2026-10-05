@@ -66,13 +66,15 @@ public interface IEntityReference;
 
 Registers a pooled context factory for `TContext`, and `TInterface` as a scoped service created from it. Application code injects the interface.
 
+A pooled context is constructed from its options alone, so a context whose constructor takes a scoped service (the caller an owner-scope query filter reads, for one) cannot be registered this way. Register it with `AddDbContextFactory<TContext>(..., ServiceLifetime.Scoped)` instead; see [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts).
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `configureProvider` | `Action<DbContextOptionsBuilder>` | Configures the EF provider, for example `o => o.UseNpgsql(connectionString)` |
 
 ## EnsureSchemaCreatedAsync
 
-Creates the context's schema and tables at startup, for demos and tests. On a relational provider it creates the schema if it is missing and then runs the model's create script; on the in-memory provider it calls `EnsureCreatedAsync`. The create script has no `IF NOT EXISTS`, so on every run after the first it fails on its first statement, and that `DbException` is swallowed. Use migrations in production: a table added to the model after the first run is never created by this method, and any other database error from the script is swallowed the same way.
+Creates the context's schema and tables at startup, for demos and tests. On a relational provider it creates the schema if it is missing and then runs the model's create script; on the in-memory provider it calls `EnsureCreatedAsync`. The create script has no `IF NOT EXISTS`, so on every run after the first it fails on its first statement. The method catches that `DbException` and the host starts; Trax logs nothing, but EF Core logs the failed command at `Error` (`Microsoft.EntityFrameworkCore.Database.Command[20102] Failed executing DbCommand`, with the whole script) on every such start. Use migrations in production: a table added to the model after the first run is never created by this method, and any other database error from the script is caught and logged the same way. [Moving to EF migrations](/docs/effect/effect-providers/domain-data-contexts#moving-to-ef-migrations) shows the switch.
 
 Throws `InvalidOperationException` when the schema name is not a plain identifier (letters, digits and underscores, starting with a letter or underscore).
 

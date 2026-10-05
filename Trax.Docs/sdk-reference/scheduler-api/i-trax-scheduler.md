@@ -41,6 +41,8 @@ public interface ITraxScheduler
     Task EnableAsync(string externalId, CancellationToken ct = default);
     Task TriggerAsync(string externalId, CancellationToken ct = default);
     Task TriggerAsync(string externalId, TimeSpan delay, CancellationToken ct = default);
+    Task<ManifestTriggerResult> TriggerAsync(string externalId, bool askAfresh, CancellationToken ct = default);
+    Task<ManifestTriggerResult> TriggerAsync(string externalId, TimeSpan delay, bool askAfresh, CancellationToken ct = default);
     Task<int> TriggerGroupAsync(long groupId, CancellationToken ct = default);
     Task<int> CancelAsync(string externalId, CancellationToken ct = default);
     Task<int> CancelGroupAsync(long groupId, CancellationToken ct = default);
@@ -52,6 +54,11 @@ public interface ITraxScheduler
     Task<BatchDeadLetterResult> AcknowledgeDeadLettersAsync(long[] deadLetterIds, string note, CancellationToken ct = default);
     Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(CancellationToken ct = default);
     Task<BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(string note, CancellationToken ct = default);
+
+    // Dead letters, asking the manifest's deciders afresh on request
+    Task<DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, bool askAfresh, CancellationToken ct = default);
+    Task<BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, bool askAfresh, CancellationToken ct = default);
+    Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(bool askAfresh, CancellationToken ct = default);
 }
 ```
 
@@ -66,7 +73,7 @@ Every scheduling method constrains `TTrain : IServiceTrain<TInput, TOutput>` and
 | `ScheduleDependentAsync`, `ScheduleManyDependentAsync` | [Dependent Scheduling](/docs/sdk-reference/scheduler-api/dependent-scheduling) |
 | `ScheduleOnceAsync`, `DisableAsync`, `EnableAsync`, `TriggerAsync`, `CancelAsync`, `CancelGroupAsync` | [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) |
 | `TriggerGroupAsync` | [Below](#triggergroupasync) |
-| The six dead-letter methods | [Below](#dead-letters) |
+| The dead-letter methods | [Below](#dead-letters) |
 
 ## TriggerGroupAsync
 
@@ -101,6 +108,22 @@ A manifest whose failures exceed its retry limit is dead-lettered and stops bein
 | `AcknowledgeAllDeadLettersAsync(note)` | Acknowledges every dead letter awaiting intervention |
 
 A batch call with an empty list, or more than 1000 ids, is refused: the result counts nothing and its message says why.
+
+### Replaying the failed run's decisions
+
+A requeued run replays the decisions the manifest's failed run recorded, when that is sound, as an
+automatic retry does: it takes the tracks the failed run's deciders chose instead of asking them
+again. See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)
+for the checks. Each requeue has an overload that takes `askAfresh`:
+
+| `askAfresh` | The requeued run |
+|---|---|
+| `false` | Replays the failed run's decisions when the checks pass, as the overload without it does |
+| `true` | Asks its deciders afresh |
+
+The `askAfresh` overloads, and those on `TriggerAsync`, have default implementations on the
+interface that throw `NotSupportedException`, so an implementation written before them still
+compiles and refuses the option rather than ignoring it.
 
 ### Result types
 

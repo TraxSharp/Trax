@@ -70,7 +70,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 ## Example
 
 ```csharp
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Train;
 
 public class ScoreTrain : Train<ScoreInput, ScoreResult>

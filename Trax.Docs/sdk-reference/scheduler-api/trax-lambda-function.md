@@ -76,7 +76,13 @@ Before dispatching, the function checks its posture and, with a `SigningKey`, th
 ```csharp
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
 using Trax.Runner.Lambda;
+using Trax.Scheduler.Configuration;   // TraxJobRunnerOptions
 
 [assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
 
@@ -135,8 +141,17 @@ Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. Th
 
 ```csharp
 // Program.cs
-await new Function().RunLocalAsync(args);
+await new Function().RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args]);
 ```
+
+`RunLocalAsync` builds a `WebApplication` from `args`, and that server reads `appsettings.json` (its
+Kestrel endpoints included) from its content root, which defaults to the current directory. The
+function's own configuration is read from `AppContext.BaseDirectory`, next to the binary. Run from the
+project directory the two are the same file; run with `dotnet run --project ...` from anywhere else,
+the server finds no `appsettings.json`, ignores the endpoint it names and listens on port 5000.
+Passing `--contentRoot={AppContext.BaseDirectory}`, as above, makes both read the copy next to the
+binary. `RunLocalAsync` takes no cancellation token and returns only when the server stops, on
+Ctrl+C or process exit.
 
 | Runner posture | What the local routes accept |
 |----------------|------------------------------|
@@ -178,6 +193,35 @@ private sealed class FakeFunction : TraxLambdaFunction
 }
 ```
 
+### Testing a runner from another repository
+
+`ConfigureRoutes` is internal to Trax. A consumer that wants its real function in an end-to-end test,
+with no AWS, serves it with `RunLocalAsync` on a free port from a subclass that overrides
+`BuildServiceProvider` to supply the test configuration, then points the scheduler's
+`UseRemoteWorkers` / `UseRemoteRun` URLs at it:
+
+```csharp
+internal sealed class TestRunner(IConfiguration configuration) : Function
+{
+    protected override IServiceProvider BuildServiceProvider()
+    {
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(configuration);
+        services.AddLogging();
+        ConfigureServices(services, configuration);
+        services.AddTraxJobRunner(runner => ConfigureRunner(runner, configuration));
+        return services.BuildServiceProvider();
+    }
+}
+
+var url = "http://127.0.0.1:5399";   // pick a free port
+_ = Task.Run(() => new TestRunner(testConfiguration)
+    .RunLocalAsync([$"--Kestrel:Endpoints:Http:Url={url}"]));
+```
+
+The server runs until the test process ends. The [Content Shield sample](/docs/samples/content-shield)
+tests its runner this way.
+
 ## Configuration
 
 The base class automatically builds an `IConfiguration` from:
@@ -185,7 +229,13 @@ The base class automatically builds an `IConfiguration` from:
 1. `appsettings.json` (optional, loaded from `AppContext.BaseDirectory`)
 2. Environment variables
 
-This means you can use `appsettings.json` for local development and environment variables in Lambda. Both work out of the box. The configuration is passed to `ConfigureServices` and registered in DI as `IConfiguration`.
+This means you can use `appsettings.json` for local development and environment variables in Lambda. Both work out of the box. The configuration is passed to `ConfigureServices` and `ConfigureRunner` and registered in DI as `IConfiguration`.
+
+Command-line arguments are not part of it, even under `RunLocalAsync`: they reach only the local
+Kestrel server. Nor is there an `IHostEnvironment`. A function that behaves differently in
+Development reads `DOTNET_ENVIRONMENT` (or `ASPNETCORE_ENVIRONMENT`) from the configuration itself,
+for example `configuration["DOTNET_ENVIRONMENT"] == "Development"`; set it in the runner project's
+`Properties/launchSettings.json` for `dotnet run`.
 
 ## Cold Start Optimization
 

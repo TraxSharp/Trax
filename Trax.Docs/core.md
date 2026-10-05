@@ -35,10 +35,10 @@ Right Track:    Input -> [Junction 1] -> [Junction 2] -> [Junction 3] -> Output
 Left Track:              Exception  ->   [Skip]    ->   [Skip]    -> Exception
 ```
 
-Trax.Core uses `Either<Exception, T>` from [LanguageExt](https://github.com/louthy/language-ext) to represent this. A value is either `Left` (an exception on the left track) or `Right` (successful delivery on the right track):
+Trax.Core represents this with its own `Either<Exception, T>`, in the `Trax.Core.Functional` namespace. A value is either `Left` (an exception on the left track) or `Right` (successful delivery on the right track):
 
 ```csharp
-using LanguageExt;
+using Trax.Core.Functional;
 using Trax.Core.Train;
 
 public class CreateUserTrain : Train<CreateUserRequest, User>

@@ -118,6 +118,45 @@ mutation {
 }
 ```
 
+All four live under `dispatch { stateMachine { ... } }`, `loadSnapshot` included: it is a mutation, not a
+query. Each takes one `input` argument and returns `output { snapshot problem { code message } }`, where exactly one
+of `snapshot` and `problem` is set. The snapshot crosses the wire as a **string** of canonical JSON in both
+directions, so a client `JSON.stringify`s the snapshot it saves and parses the one it gets back.
+
+| Mutation | Input type | Fields (`!` is required) |
+| --- | --- | --- |
+| `saveSnapshot` | `SaveSnapshotInput` | `machine: String!`, `id: UUID!`, `snapshot: String!` (the whole snapshot as JSON), `schemaHash: String` |
+| `advanceSnapshot` | `AdvanceSnapshotInput` | `machine: String!`, `id: UUID!`, `trigger: String!` (a trigger name, `"Coin"`), `input: String` (the trigger input as JSON, `"{\"coin\":\"quarter\"}"`), `requestId: String`, `schemaHash: String`, `clientResult: String` |
+| `loadSnapshot` | `LoadSnapshotInput` | `machine: String!`, `id: UUID!`, `schemaHash: String` |
+| `sendSnapshot` | `SendSnapshotInput` | `machine: String!`, `id: UUID!`, `requestId: String`, `schemaHash: String` |
+
+`sendSnapshot` takes no trigger: it fires the one transition the machine binds its effect to, and only from that
+transition's source state (from any other state it is `no-transition`). The receipt the effect returns reaches the
+transition's reducer as `input["receipt"]`. `schemaHash` and `clientResult` are the
+[runtime-integrity](/docs/sdk-reference/statemachine-api/runtime-integrity) checks; leave them out and nothing is
+checked.
+
+With variables, the way a browser client sends it:
+
+```graphql
+mutation Advance($i: AdvanceSnapshotInput!) {
+  dispatch { stateMachine { advanceSnapshot(input: $i) {
+    output { snapshot problem { code message } }
+  } } }
+}
+```
+
+```json
+{ "i": { "machine": "turnstile", "id": "33333333-3333-3333-3333-333333333333",
+         "trigger": "Coin", "input": "{\"coin\":\"quarter\"}" } }
+```
+
+```json
+{ "data": { "dispatch": { "stateMachine": { "advanceSnapshot": { "output": {
+  "snapshot": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}",
+  "problem": null } } } } } }
+```
+
 Every rejection comes back as a typed `problem` in the data, never a thrown error across the boundary: an
 unknown machine is `unknown-machine`, an invalid snapshot is `invalid-context`, a stale write is `conflict`.
 A snapshot, a trigger input, or an advanced snapshot larger than 64 KiB is `too-large`, and nothing is written.
@@ -130,8 +169,8 @@ An unauthenticated caller gets the opaque authorization error at HTTP 200, not a
 reaches a mutation with no user key (`ISnapshotPrincipal.CurrentUserKey` is null) is refused as
 `unauthenticated`.
 
-A complete, runnable version of this (two machines, a GraphQL host, exactly-once over the wire) lives in the
-`StateMachine` sample under `Trax.Samples`.
+A complete, runnable version of this (two machines, a GraphQL host, exactly-once over the wire, a forward
+migration and a server-checked total) is the [State Machine sample](/docs/samples/state-machine).
 
 ## Keep the two runtimes in parity
 

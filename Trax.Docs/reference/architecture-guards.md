@@ -76,7 +76,7 @@ An entity reaching its owner only through a navigation, such as an answer whose 
 
 A second entity type mapped to the same table or view as a per-user entity, such as a reporting view over the same rows, reads those rows too. The census treats it as per-user and requires its filter, whatever gate it carries.
 
-The census takes the model rather than a context type, because an owner-scoped context usually takes its principal accessor through its constructor. Building the model needs no database:
+The census takes the model rather than a context type, because an owner-scoped context usually takes its principal accessor through its constructor. A context listed in `DomainContexts` as well is also built from its options alone, so it keeps an options-only constructor beside the one that takes the accessor (see [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts)). Building the model needs no database:
 
 ```csharp
 [TestFixture]

@@ -199,6 +199,61 @@ The `Schedule` type defines when a job runs. Two static factory classes create `
 - **`Every`**: interval-based: `Every.Seconds(30)`, `Every.Minutes(5)`, `Every.Hours(1)`, `Every.Days(1)`
 - **`Cron`**: cron-based: `Cron.Minutely()`, `Cron.Daily(hour: 3)`, `Cron.Weekly(DayOfWeek.Sunday, hour: 2)`, `Cron.Expression("0 */6 * * *")`
 
+### When each manifest runs
+
+| Declared with | First run | After that |
+|---|---|---|
+| `Schedule(..., Every.X(n))` | On the first ManifestManager poll after it is seeded | `n` after its last success (or cancel). A failed run does not move that point |
+| `Schedule(..., Cron.X(...))` | At its first occurrence after it is seeded, in UTC, never at startup | The next occurrence after its last success |
+| `ScheduleOnce(..., delay)` | Once `delay` has passed since the host started (every start moves a one-off that has not run yet) | Never: it disables itself after its first success |
+| `ThenInclude` / `Include` | After its parent's next success | After each parent success since its own latest run started |
+| `Include(..., o => o.Dormant())` | Only when its parent activates it through `IDormantDependentContext` | The same |
+
+A failed run is retried when the manifest is next due, after the retry backoff; see
+[When a retry runs](/docs/scheduler/dead-letters-and-cleanup#when-a-retry-runs).
+
+## A complete host
+
+The [Scheduling sample](/docs/samples/scheduling) is a whole scheduler host, Postgres, local
+workers, the GraphQL operations surface behind a role and the dashboard, with its `Program.cs`, its
+registration order and a walkthrough you can run.
+
+### What refuses to start
+
+Trax checks its configuration when the host builds and starts, before any worker takes a job. Each
+of these throws `InvalidOperationException`:
+
+| Cause | Message starts |
+|---|---|
+| `AddScheduler()` with no data provider | `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).` |
+| A duration or count outside its range, such as `DeleteBatchSize = 20_000` | `The scheduler configuration has values it cannot run with.`, then each value, for example `AddMetadataCleanup: DeleteBatchSize must be between 1 and 10000.` See [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges) |
+| Manifest groups that depend on each other in a cycle | `Circular dependency detected among manifest groups` |
+| `UseTraxDashboard()` with no posture | `UseTraxDashboard() needs to know who may use the dashboard` |
+| `ExposeOperationQueries()` or `ExposeOperationMutations()` with no gate | `ExposeOperationMutations() exposes scheduler-control mutations (...) but the GraphQL endpoint is not gated` |
+| `GateOperations()` with no policy or roles | `GateOperations() needs a policy or roles` |
+| A `do-not-use-in-production` demo key outside Development | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production'` |
+| A train whose chain asks a decider, with no `AddDecisionRecording()` | Names the trains. See [A host that does not record](/docs/effect/decisions#a-host-that-does-not-record) |
+
+### Quieter logs
+
+The ManifestManager and JobDispatcher log each cycle at `Information`, every few seconds. To keep
+your trains' logs and drop that chatter, raise their category in `appsettings.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Trax.Scheduler.Trains": "Warning"
+    }
+  }
+}
+```
+
+Failures and dead letters are still logged: a failed job at `Error` by
+`Trax.Scheduler.Services.LocalWorkerService`, and the dead letter at `Warning` by the
+ManifestManager (`... exceeds max retries (3/2). Creating dead letter.`).
+
 ## Namespace Reference
 
 The scheduler spans multiple packages. This table lists every public type you're likely to use during integration:

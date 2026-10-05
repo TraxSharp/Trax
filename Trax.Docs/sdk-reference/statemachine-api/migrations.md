@@ -25,7 +25,13 @@ IMachineBuilder<TState, TTrigger> MigrateFrom(
 | `migrate` | given the stored state name and context, returns the upgraded `MigrationResult(string State, JsonObject Context)`. Compute a fresh context; never mutate the input. |
 
 Migration runs on rehydrate, before the target state's context rule is checked, so the upgraded context must
-satisfy the new schema. A draft whose version has no migration path to the current definition rehydrates as
+satisfy the new schema. Every path that reads a snapshot rehydrates it, so the migration runs in three places:
+
+| Path | What happens to an older snapshot |
+| --- | --- |
+| `loadSnapshot` | a stored older draft comes back at the current version. The row itself is rewritten only by the next save, advance or send |
+| `advanceSnapshot`, `sendSnapshot` | the stored older draft is upgraded first, then the trigger fires on the upgraded draft, and the result is stored at the current version |
+| `saveSnapshot` | a snapshot an older client sends at an older version is upgraded, validated, and stored at the current version; the response carries the upgraded snapshot | A draft whose version has no migration path to the current definition rehydrates as
 [`version-mismatch`](/docs/sdk-reference/statemachine-api/result-codes); the client starts fresh rather than
 misreading it.
 

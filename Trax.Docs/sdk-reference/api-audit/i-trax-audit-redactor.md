@@ -25,7 +25,7 @@ public interface ITraxAuditRedactor
 
 The default implementation, `DefaultAuditRedactor`, returns `null`: no variables are recorded.
 
-Literal values written in the document itself never reach the redactor or the entry. The listener replaces every string with `""` and every number with `0` before it records the document. See [API Security](/docs/api-security#what-an-entry-records).
+Literal values written in the document itself never reach the redactor or the entry. The listener replaces every string with `""` and every number with `0`, directive arguments included, before it records the document. Error messages are not recorded either unless `TraxAuditOptions.RecordErrorMessages` is set; the redactor never sees them. See [API Security](/docs/api-security#what-an-entry-records).
 
 ## Example
 

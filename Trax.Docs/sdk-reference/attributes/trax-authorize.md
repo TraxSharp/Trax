@@ -67,7 +67,7 @@ A train run through `ITrainBus` in-process, by the scheduler, or inside an [ITru
 
 - A train with `[TraxAuthorize]` and no `ITrainAuthorizationService` registered stops the host at startup, unless the mediator was configured with `AllowMissingAuthorizationService()`. At run time the same case throws `TrainAuthorizationNotConfiguredException` outside a trusted scope.
 - An empty or whitespace `Policy`, or a `Roles` list with no non-empty entry, fails at startup.
-- A query model naming a policy that `AddAuthorization` never registered fails at startup.
+- A query model naming a policy that `AddAuthorization` never registered fails at startup. A train naming one does not: every call to it fails at request time with a masked `"Unexpected Execution Error"`, so register every policy a train names.
 - A surface carrying both `[TraxAuthorize]` and [`[TraxAllowAnonymous]`](/docs/sdk-reference/attributes/trax-allow-anonymous) fails at startup.
 - A surface declaring its posture with HotChocolate's `[Authorize]` or `[AllowAnonymous]` instead fails at startup, naming the Trax replacement.
 
@@ -88,7 +88,7 @@ public class RefundOrderTrain : ServiceTrain<RefundInput, RefundResult>, IRefund
 
 The caller must pass `MustBeInternal` and hold `Admin` or `Manager`.
 
-See [Authorization](/docs/authorization) for the full model, including the exposure posture every GraphQL surface must declare.
+See [Authorization](/docs/authorization) for the full model, including the exposure posture every GraphQL surface must declare, and the [Auth sample](/docs/samples/auth) for each form on a running host.
 
 ## Package
 

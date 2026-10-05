@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Functional Programming
-description: "The functional programming ideas Trax.Core borrows from LanguageExt: Either for train results, Unit, effects, and the null assertion helpers."
+description: "The functional programming ideas in Trax.Core: Either for train results, Unit, effects, and the null assertion helpers."
 parent: Cross-Cutting
 nav_order: 5
 ---
@@ -10,13 +10,13 @@ nav_order: 5
 
 Trax.Core borrows a few ideas from functional programming. You don't need an FP background to use it, but knowing where these types come from makes the API click faster.
 
-## LanguageExt
+## Either and Unit
 
-Trax.Core depends on [LanguageExt](https://github.com/louthy/language-ext), a functional programming library for C#. You'll interact with two of its types: `Either` and `Unit`.
+Trax.Core has two small types of its own for this, both in the `Trax.Core.Functional` namespace: `Either` and `Unit`. Add `using Trax.Core.Functional;` to a file that names either one.
 
-## Either\<L, R\>
+## Either\<TLeft, TRight\>
 
-`Either<L, R>` represents a value that is one of two things: `Left` or `Right`. By convention, `Left` is the failure case and `Right` is the success case.
+`Either<TLeft, TRight>` represents a value that is one of two things: `Left` or `Right`. By convention, `Left` is the failure case and `Right` is the success case.
 
 Trax.Core uses `Either<Exception, T>` internally to represent train results. A train either fails with an exception or succeeds with a result:
 

@@ -24,6 +24,7 @@ Pages:
 - [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth)
 - [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal)
 - [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal)
+- [TraxCaller](/docs/sdk-reference/api-auth/trax-caller)
 - [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)
 - [ApiKeyDefaults](/docs/sdk-reference/api-auth/api-key-defaults)
 - [ApiKeyAuthenticationOptions](/docs/sdk-reference/api-auth/api-key-authentication-options)

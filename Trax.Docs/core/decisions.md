@@ -82,7 +82,7 @@ prompt), recording and replay look answers up by it, and it is part of every ask
 anything you would not show one.
 
 Moving the type to another namespace leaves the key as it was. Renaming it, or a type it is nested
-in, changes the key, so the next re-queue asks that question afresh rather than replaying an
+in, changes the key, so the next re-queue or retry asks that question afresh rather than replaying an
 answer recorded under the old one. `[Asks(..., Key = "...")]` sets the key explicitly, to keep the
 old one across a rename or to give a type a key of its own:
 
@@ -224,6 +224,66 @@ var policy = new RuleDecider().Choice<LoanApplication, Underwriting>(application
     });
 ```
 
+### Writing a decider
+
+Every type below is in `Trax.Core.Decisions` (package `Trax.Core`, which Trax.Effect brings in):
+
+```csharp
+public interface IDecider
+{
+    Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken);
+}
+
+public sealed record DecisionRequest(string Train, object State, IReadOnlyList<Question> Questions);
+
+public abstract record Question(string Key, string Instructions);
+public sealed record ChoiceQuestion(string Key, string Instructions, IReadOnlyList<Criterion> Options) : Question(Key, Instructions);
+public sealed record ScoreQuestion(string Key, string Instructions, IReadOnlyList<Criterion> Levels) : Question(Key, Instructions);
+public sealed record YesNoQuestion(string Key, string Instructions, string? Yes, string? No) : Question(Key, Instructions);
+public sealed record Criterion(string Name, string? Description);
+
+public sealed record DecisionResult(IReadOnlyDictionary<string, Answer> Answers);
+public abstract record Answer { public string? Model { get; init; } }
+public sealed record ChoiceAnswer(string Choice, double Confidence = 1.0, IReadOnlyDictionary<string, double>? Probabilities = null) : Answer;
+public sealed record ScoreAnswer(double Score, double Confidence = 1.0, IReadOnlyList<double>? Probabilities = null) : Answer;
+public sealed record YesNoAnswer(double Probability) : Answer;
+```
+
+Return one answer per question, keyed by `Question.Key`, of the kind the question asks for: a
+`ChoiceAnswer` naming one of the options' `Criterion.Name` (the enum member's name), a
+`ScoreAnswer` from 0 (the first level) to one less than the number of levels, or a `YesNoAnswer`
+with the probability of yes. Set `Model` to the model and version that answered, or leave it null
+for a decider that is not a model. `State` is the object in Memory, typed as `object`: match on its
+type. An answer that does not fit, or a question left unanswered, fails the run (see
+[When the run fails instead](#when-the-run-fails-instead)); throwing fails it with your exception.
+
+```csharp
+using Trax.Core.Decisions;
+
+public sealed class TicketRules : IDecider
+{
+    public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken cancellationToken)
+    {
+        var ticket = (Ticket)request.State;
+        var answers = request.Questions.ToDictionary(
+            q => q.Key,
+            q => q switch
+            {
+                ChoiceQuestion => (Answer)new ChoiceAnswer(ticket.MentionsRefund ? "Refund" : "SelfServe", 0.9),
+                YesNoQuestion => new YesNoAnswer(ticket.IsAngry ? 0.8 : 0.1),
+                _ => throw new InvalidOperationException($"Cannot answer {q.Key}."),
+            });
+        return Task.FromResult(new DecisionResult(answers));
+    }
+}
+
+services.AddSingleton<IDecider, TicketRules>();   // any lifetime; one serves every train
+```
+
+A decider whose runs should be replayable answers from the state alone. Replay checks the hash of
+the state and nothing else, so an answer that depended on something the decider looked up
+elsewhere is replayed even after that changed.
+
 ### Escalating what the fast decider is unsure of
 
 ```csharp
@@ -335,7 +395,7 @@ public interface IDecisionObserver
 
 `Refused` is told once for each question whose live answer the step will not act on (missing, or
 not fitting the question), before the step fails, with the question, occurrence, fingerprint, the
-answer (null when there was none), the decider and the reason. A cascade that ended with an answer
+answer (null when there was none), the decider, the reason and the `QuestionType`. A cascade that ended with an answer
 that fits is not a refusal, and a shadow's bad answer is reported in its `ShadowAnswer.Error`
 instead. A refusal is never replayed. An observer that cannot record one is logged, and never
 replaces the refusal as the reason the step failed, even when it is `Required`.
@@ -347,8 +407,9 @@ the train acts on the decision, classified as the exception says or `Transient` 
 nothing. An observer that cannot be resolved at all fails the step either way.
 
 `DecisionMade` carries the question, the answer, the decider, whether it was replayed, the
-shadows' answers, `Occurrence` (how many times the run asked that question before, from 0) and
-`Fingerprint`. The replay is asked by the same coordinates, on the run's path, once per question:
+shadows' answers, `Occurrence` (how many times the run asked that question before, from 0),
+`Fingerprint`, `StateHash`, `StateType` and `QuestionType`. The replay is asked by the same
+coordinates, on the run's path, once per question:
 
 ```csharp
 public interface IDecisionReplay
@@ -357,11 +418,14 @@ public interface IDecisionReplay
         string train, string runId, string key, int occurrence, CancellationToken cancellationToken);
 }
 
-public sealed record RecordedAnswer(Answer Answer, string Fingerprint);
+public sealed record RecordedAnswer(Answer Answer, string Fingerprint)
+{
+    public string? StateHash { get; init; }
+}
 ```
 
 It returns null to ask the decider. A host that replays stores each `DecisionMade.Answer` with its
-`Fingerprint` and hands both back exactly as stored. Whatever `Replay` throws fails the step,
+`Fingerprint` and `StateHash` and hands them back exactly as stored. Whatever `Replay` throws fails the step,
 classified as the exception says, because a replay that cannot be read cannot be told from a run
 with nothing to replay.
 
@@ -375,13 +439,109 @@ run to run by design. A replayed answer is checked before it is acted on, and is
   first
 - it no longer fits the question: an option renamed or removed from the enum, a scale with fewer
   levels, another kind of question
+- it was given about a different state: its `StateHash` differs from the hash of the state the
+  question is asked about now, or is null
 
-Either way the decider is asked afresh, and `DecisionMade.ReplayRefused` says why. A recorded
+In each case the decider is asked afresh, and `DecisionMade.ReplayRefused` says which check
+refused the answer, naming the state hash key when the key is the cause (see the table below). A recorded
 choice of a member the switch has no track for is replayed like any other and takes the
 `Otherwise` track again, as it did the first time.
 
-Trax.Effect implements both, to record decisions against the run and to make a re-queued run take
-the tracks the original took. See [Decision Recording and Models](/docs/effect/decisions).
+### A replay matches the state
+
+The fingerprint says an answer was given to the same asking; the state hash says it was given
+about the same state. A repeated run runs every step again and reads the state a question is about
+afresh, so a recorded answer is replayed only into a state that hashes exactly as the state it was
+given about did.
+
+`StateHash` is taken only when it is needed: to check a replayed answer that passed its fingerprint
+and fit checks, or before the decider is asked when a decision observer is registered, so the hash
+an observer records is of the state the decider was given. Under a [`StateHashKey`](#keying-the-state-hash)
+it is `k1:` and the lowercase hex of an HMAC-SHA256 under that key; without one it is `s1:` and
+the lowercase hex of a SHA-256. A keyed and an unkeyed hash never match. It covers every instance
+field of the state's runtime type, public or not, and every value they hold, recursively:
+auto-properties, tuple items, record members, and the members of a derived type held where a base
+type or an interface is declared all count, because an in-process decider can read all of them.
+Each value is written with its runtime type, named with its assembly, and its fields base type
+first and by name. Every element of an array, inline array or fixed buffer counts, and so do each
+array dimension's length and lower bound. A framework collection is written as its elements and
+its comparers. A wrapper (a read-only wrapper, a `Collection<T>` and so a keyed or observable
+collection, a view of a dictionary's keys) is written as what it wraps, with its own comparers, so a
+key view is written as its whole dictionary and a list of the state's own type is written by its
+fields. An enum is written with its underlying type and its members' names and values, and a local
+`DateTime` with its daylight-saving flag. A set, dictionary or bag is written with
+its elements sorted, so equal contents hash alike whatever order they were added in. The check is
+made in Trax.Core, so every replay implementation inherits it and only stores and returns the hash.
+
+The hash covers the state's value and nothing else. What a decider reads from elsewhere (a
+customer it looks up by an id the state holds, say) is not in it, so a change there is noticed only
+when the state carries the value itself.
+
+| The replayed answer's state hash | What happens |
+|---|---|
+| Equal to the hash of the state asked about now | Replayed |
+| Different, including one taken under another key or without a key | Asked afresh, with the reason in `ReplayRefused` |
+| Null (an answer recorded before states were hashed, or about a state that could not be hashed) | Asked afresh, with the reason in `ReplayRefused` |
+| The state asked about now cannot be hashed (below) | Asked afresh, with the reason in `ReplayRefused`. Hashing never fails the run. |
+
+`ReplayRefused` says which check refused the answer and never quotes the recorded answer. When the
+state hash key is the cause, it names the key: an answer recorded under a key while this run hashes
+without one, or the reverse, says so; a keyed hash that differs says the state changed "or the state
+hash key has changed since"; and a key that cannot be resolved is reported as that, not as a change
+in the state.
+
+A state has no hash, and so never replays, when it cannot be read the same way every time:
+
+- it holds a reference cycle
+- it is nested deeper than 64 levels, or its encoding passes 1,000,000 values or 16 MiB
+- it holds a delegate (an ORM's lazy-loading proxy, for instance), a pointer or native handle
+- it holds a `Type`, a `MemberInfo` or an `Assembly`
+- it holds a stream, a wait handle, a task or a thread
+- it holds a non-generic `Hashtable` or `SortedList`, a `BlockingCollection<T>`, a wrapper
+  `ArrayList` makes (`ArrayList.Adapter`, `ReadOnly`, `Synchronized`...), or a collection that
+  enumerates by its own code
+- it holds a `CultureInfo` other than the framework's shared instance (`CultureInfo.GetCultureInfo(name)`
+  or `InvariantCulture`); `CurrentCulture` and `new CultureInfo(...)` give no hash
+- reading one of its fields throws
+- enumerating one of its collections throws
+
+`StateHash` is null in those cases, and when the container's `StateHashKey` cannot be resolved.
+
+A state whose fields differ from run to run although nothing that matters changed (a timestamp, a
+cache, a counter, a generated id) is asked afresh on every repeat. Keep such values out of the
+state a question is asked about when replay matters. Only the hash leaves the run, never the
+state. `Trax.Core/docs/adr/0004` records why.
+
+`StateType` is the type of the state the hash was taken of: its runtime type, or the type the step
+declared it as when the state was null. Like `QuestionType`, it lets a host treat a decision by
+what it was about, matching with inheritance.
+
+### Keying the state hash
+
+The hash covers every value in the state, including members a host masks or withholds elsewhere,
+and a journal stores it beside the answer. Register a `StateHashKey` so it is keyed, and only a
+holder of the key can compute it:
+
+```csharp
+services.AddSingleton(new StateHashKey(stateHashKeyBytes));   // at least 32 bytes
+```
+
+| Member | Description |
+|---|---|
+| `StateHashKey(byte[] key)` | Copies `key`. Throws `ArgumentException` when it is null or shorter than 32 bytes. Draw it from a cryptographic random source and keep it as the host keeps its other secrets. |
+
+Trax.Core reads the key from the train's container. Every process that may repeat a run must use
+the same key: hashes are compared exactly, so adding or changing the key means each answer
+recorded before it is asked afresh once. Trax.Effect's
+[`AddDecisionRecording`](/docs/sdk-reference/configuration/add-decision-recording) can supply the
+key from its options or from configuration.
+
+`QuestionType` is the type the question was asked about (the enum a choice or score is between, or
+the marker type of a yes or no question), so a host can treat questions by type, with inheritance,
+where a key would match only one name. It is null only on a record built outside a run.
+
+Trax.Effect implements both, to record decisions against the run and to make a re-queued or
+retried run take the tracks the original took. See [Decision Recording and Models](/docs/effect/decisions).
 
 ## Testing a train's decisions
 

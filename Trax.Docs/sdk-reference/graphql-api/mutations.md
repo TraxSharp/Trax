@@ -103,12 +103,18 @@ type BanPlayerResponse {
 
 | Field | Type | When Populated |
 |-------|------|----------------|
-| `externalId` | `String!` | Always present. Identifies the execution or work queue entry |
+| `externalId` | `String!` | Always present. RUN: the execution's external id. QUEUE: a 32-character hex id chosen at enqueue, stamped on the work queue entry, and carried by the run the scheduler later dispatches from it (see below) |
 | `metadataId` | `Long` | RUN mode. Metadata ID of the completed execution |
 | `output` | `{OutputType}` | RUN mode, only for trains with non-`Unit` output |
 | `workQueueId` | `Long` | QUEUE mode. Database ID of the created WorkQueue entry |
 
-The wrapper is named `{TrainName}Response` by default. If the train's output CLR class is also named `{TrainName}Response` (for example `IAddressValidationTrain` returning `AddressValidationResponse`), the wrapper falls back to `{TrainName}MutationResponse` so the schema can build without a name collision. Trains whose output type follows a different naming convention are unaffected.
+#### Following a queued run
+
+A QUEUE mutation returns before any run exists, so it has no `metadataId`. Its `externalId` is the correlation key: the JobDispatcher copies it onto the execution (`trax.metadata.external_id`) it creates for the entry, so the run's lifecycle events, its `operations.executions` row and the work queue entry (`trax.work_queue.external_id`) all carry the same value. If a delivery to the runner fails and the entry is requeued (`MaxDispatchAttempts`), each attempt gets its own execution row with that same external id, and the failed attempts are recorded `Failed` by the dispatcher without a lifecycle event. Only an attempt a runner actually started emits events. To watch a queued run from a client, subscribe before you queue and filter by `externalId`: see [Watching a queued run](/docs/sdk-reference/graphql-api/subscriptions#watching-a-queued-run).
+
+A queued run that fails is not retried: retries belong to [manifests](/docs/scheduler/scheduling-options), and a work queue entry with no manifest runs once. An operator requeues a failed queued run with [`requeueExecution`](#requeueexecution) or the dashboard's Re-queue button.
+
+The wrapper is named `{TrainName}Response` by default. If the train's output CLR class is also named `{TrainName}Response` (for example `IAddressValidationTrain` returning `AddressValidationResponse`), the wrapper falls back to `{TrainName}MutationResponse` so the schema can build without a name collision. The output type's name is the one HotChocolate gives it, its `[GraphQLName]` when it has one. Trains whose output type follows a different naming convention are unaffected. If the fallback name is itself taken, by the response type of a train named `{TrainName}Mutation`, the host refuses to start naming both trains; set `Name` on one of them.
 
 ### Run + Queue Mode (Default)
 
@@ -210,9 +216,11 @@ The response type still uses the unified format, but `metadataId` and `output` w
 
 The whole namespace sits behind the operations gate (`GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations`; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). Mutations that enqueue a train and input the caller chose (`requeueExecution`, `workQueue.queueTrain`) also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) are governed by the gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
+The five mutations that take a manifest's `externalId` (`triggerManifest`, `triggerManifestDelayed`, `disableManifest`, `enableManifest`, `cancelManifest`) answer an id no manifest has with `success: false` and the message `Manifest '<externalId>' not found.`, and change nothing. It is a refusal, not a GraphQL error.
+
 ### triggerManifest
 
-Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, nothing more is queued and that entry becomes the triggered run: it runs even if the manifest is disabled, and an entry due later (a retry waiting out its backoff) is brought forward to now. The mutation still succeeds.
+Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, nothing more is queued and that entry becomes the triggered run: it runs even if the manifest is disabled, and an entry due later (a retry waiting out its backoff) is brought forward to now. The mutation still succeeds, and its message says which can have happened: `Manifest triggered: its queued run is due now (an entry it already had is brought forward rather than a second one queued).`
 
 ```graphql
 mutation {
@@ -228,21 +236,24 @@ mutation {
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `externalId` | `String!` | Yes | The manifest's external ID |
+| `askAfresh` | `Boolean!` | No | Default `false`. When `true` and the trigger releases a queued retry that would [replay the failed run's decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions), the run asks its deciders afresh instead |
 
-**Returns**: `OperationResponse`
+**Returns**: `OperationResponse`. With `askAfresh: true`, a retry the dispatcher claimed before the
+trigger reached it can no longer be changed. The mutation still succeeds, and its message says so:
+`"Manifest triggered, but the dispatcher had already claimed its queued retry, so that run replays the decisions of execution 42 rather than asking its deciders afresh"`.
 
 ---
 
 ### triggerManifestDelayed
 
-Triggers a manifest execution after a specified delay.
+Triggers a manifest execution after a specified delay. When the manifest already has a queued entry, no second one is queued: that entry keeps its time if it is due sooner, and is brought forward to now plus `delay` otherwise. The message says the run is due within `delay`.
 
 ```graphql
 mutation {
   operations {
     triggerManifestDelayed(
       externalId: "order-processing-daily"
-      delay: "00:05:00"
+      delay: "PT5M"
     ) {
       success
       message
@@ -254,7 +265,8 @@ mutation {
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `externalId` | `String!` | Yes | The manifest's external ID |
-| `delay` | `TimeSpan!` | Yes | How long to wait before triggering (e.g. `"00:05:00"` for 5 minutes) |
+| `delay` | `TimeSpan!` | Yes | How long to wait before triggering, as an ISO-8601 duration (e.g. `"PT5M"` for 5 minutes) |
+| `askAfresh` | `Boolean!` | No | Default `false`. As on `triggerManifest`, including the message when the dispatcher claimed the retry first |
 
 **Returns**: `OperationResponse`
 
@@ -443,6 +455,32 @@ mutation {
 
 ---
 
+### setManifestsReplayDecisionsOnRetry
+
+Sets whether retries of many manifests replay the decisions of the run they retry. Only manifests
+whose flag differs are written. It calls `IOperationsService.SetManifestsReplayDecisionsOnRetryAsync`,
+the call the dashboard makes. Turning it off also clears the replay link of each manifest's queued
+entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh, and the
+message counts them (`"2 queued retry(s) no longer replay a failed run's decisions."`). See
+[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions).
+
+```graphql
+mutation {
+  operations {
+    setManifestsReplayDecisionsOnRetry(ids: [3, 4], replay: false) { success count message }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 manifest database ids |
+| `replay` | `Boolean!` | Yes | The flag to set |
+
+**Returns**: `OperationResponse`. `count` is the number of manifests changed, zero included. An empty list, or more than 1000 ids, returns `success: false` and changes nothing.
+
+---
+
 ### requeueExecution
 
 Re-queues an execution: reads its train name + input from the metadata row and enqueues a
@@ -455,17 +493,28 @@ than `success: false`.
 
 The new run replays the decisions the execution recorded with
 [`AddDecisionRecording`](/docs/sdk-reference/configuration/add-decision-recording), so it takes the
-[tracks](/docs/core/decisions) the execution took instead of asking its deciders again. The replay link is set only here, to
+[tracks](/docs/core/decisions) the execution took instead of asking its deciders again. Among the API's mutations the replay link is set only here, to
 the execution being re-queued, and only when it has decisions to replay (it recorded a decision,
 or was itself a replaying requeue, so re-queueing a re-queue replays too); any other execution is
-re-queued as an ordinary enqueue. `queueTrain` has no way to set it. See
-[Re-queued runs replay their decisions](/docs/effect/decisions#re-queued-runs-replay-their-decisions).
+re-queued as an ordinary enqueue. `queueTrain` has no way to set it. A manifest's retry and a
+dead-letter requeue are linked by the scheduler from its own checks, never from a caller (see
+[Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions)).
+Each replayed answer is still checked: a question whose state hashes differently now, or whose
+answer is older than `ReplayAnswersFor`, is asked afresh. See
+[Re-queued and retried runs replay their decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions).
+
+`askAfresh: true` queues the run with no link, so it asks every question again. A run's answers are
+replayed once: when a queued entry (a manifest's retry, an earlier requeue) or another run already
+replays the execution, or queues a replay of it in the same instant, the new run is queued afresh
+either way, and the message ends
+`"It asks its deciders afresh: the decisions of execution 100 are already replayed by another run or queued entry, and are replayed once."`
 
 An execution with no saved input is refused with `success: false` and a message saying inputs are
 saved only when [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters)
-is on. So is one whose input was too large to save in full and was stored as the truncation
-placeholder (`{"_truncated": true, ...}`), one stored as the `_unserializable` or `_disposed`
-placeholder because it could not be saved, and one whose recorded input has a
+is on. So is one whose input was stored as a placeholder rather than as the input: too large to
+save in full (`{"_truncated": true, ...}`), failed to serialize (`{"_unserializable": true, ...}`), or
+holding a disposed `JsonDocument` (`{"_disposed": true, ...}`). Each would read as an input with every
+member at its default. So is one whose recorded input has a
 [`[TraxSensitive]`](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) member masked as
 `{"_redacted": true}`: re-queueing it would run the train with the mask in place of the value.
 An execution whose train is no longer registered is refused with
@@ -490,8 +539,17 @@ mutation {
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | `Long!` | Yes | The execution's metadata id |
+| `askAfresh` | `Boolean!` | No | Default `false`. When `true`, the new run asks its deciders afresh instead of replaying the execution's decisions |
 
-**Returns**: `OperationResponse`.
+**Returns**: `OperationResponse`. On success, `id` is the new **work queue entry**'s id, not the new
+run's (the message reads `"Work queue entry 7 created."`). The run's metadata id appears on the entry
+once the dispatcher has dispatched it:
+
+```graphql
+query {
+  operations { workQueue { workQueue(id: 7) { status metadataId } } }
+}
+```
 
 ---
 
@@ -499,6 +557,22 @@ mutation {
 
 Patches mutable settings on a single manifest. Each field on `input` is independent; a `null`
 value leaves it unchanged. Set `clearTimeout: true` to remove the per-execution timeout.
+
+A value the scheduler could not use is refused with `success: false`, a message naming the field,
+and nothing saved:
+
+- `timeoutSeconds` of 0 or less (a zero timeout would cancel every run at once; use `clearTimeout`),
+- `intervalSeconds` of 0 or less, and `maxRetries` below 0,
+- `scheduleType: CRON` with no `cronExpression` on the input or the manifest, or a `cronExpression`
+  that is not 5 or 6 space-separated fields,
+- `scheduleType: INTERVAL` with no `intervalSeconds` on the input or the manifest,
+- a switch to `ONCE`, `DEPENDENT` or `DORMANT_DEPENDENT`, which need a time or a parent manifest this
+  input cannot give. Schedule those from code.
+
+The schedule is checked only when the input changes it (`scheduleType`, `cronExpression` or
+`intervalSeconds`), so a manifest whose stored schedule is unusable can still be disabled. A
+`cronExpression` with the right number of fields and an invalid one (`99 * * * *`) is not caught
+here yet; the scheduler logs it and skips the manifest.
 
 ```graphql
 mutation {
@@ -524,7 +598,7 @@ mutation {
 | `cronExpression` | `String` | Cron expression |
 | `intervalSeconds` | `Int` | Interval |
 
-**Returns**: `OperationResponse` (`success: false` when the manifest id does not exist).
+**Returns**: `OperationResponse` (`success: false` when the manifest id does not exist or a value is refused).
 
 ---
 
@@ -721,7 +795,7 @@ mutation {
   operations {
     workQueue {
       queueTrain(input: {
-        trainName: "Trax.Samples.GameServer.Trains.Combat.IResolveCombatTrain"
+        trainName: "MyApp.Trains.Billing.IChargeCustomerTrain"
         inputJson: "{\"attackerId\":\"player-1\",\"defenderId\":\"player-2\"}"
         priority: 10
       }) {
@@ -758,7 +832,7 @@ mutation {
   operations {
     workQueue {
       runTrain(input: {
-        trainName: "Trax.Samples.GameServer.Trains.Combat.IResolveCombatTrain"
+        trainName: "MyApp.Trains.Billing.IChargeCustomerTrain"
         inputJson: "{\"attackerId\":\"player-1\",\"defenderId\":\"player-2\"}"
       }) {
         success
@@ -826,7 +900,53 @@ mutation {
 
 ### deadLetters (nested namespace)
 
-The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). The batch variants take 1 to 1000 ids; an empty or longer list returns `success: false` and changes nothing. See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for full details and examples.
+The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). The batch variants take 1 to 1000 ids; an empty or longer list returns a count of zero with the reason in `message` and changes nothing. An acknowledgement `note` is at most 1,000 characters; a longer one is refused (`success: false`, or `count: 0` on the batch and "all" variants) and nothing changes. The three requeues take an optional `askAfresh: Boolean!` (default `false`): left false, a requeued run [replays the failed run's decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) when that is sound; true, it asks its deciders afresh.
+
+`requeueAllDeadLetters` does not hold the request for the whole backlog. It starts the requeue as a background job on the node that received it and returns that job at once, as a `DeadLetterRequeueJob`; read it again with the `requeueAllJob(id)` query (see [Queries](/docs/sdk-reference/graphql-api/queries)) until `status` is no longer `RUNNING`. The job is not tied to the request: it finishes after the client goes away, and HotChocolate's execution timeout does not apply to it. Only the node shutting down stops it, between pages, and the job ends `CANCELED`.
+
+```graphql
+mutation {
+  operations {
+    deadLetters {
+      requeueDeadLetter(id: 42) { success workQueueId message }
+      requeueAllDeadLetters { id status awaitingAtStart started }
+    }
+  }
+}
+```
+
+| Mutation | Arguments | Returns |
+|----------|-----------|---------|
+| `requeueDeadLetter` | `id: Long!`, `askAfresh: Boolean! = false` | `DeadLetterOperationResult` |
+| `acknowledgeDeadLetter` | `id: Long!`, `note: String!` | `DeadLetterOperationResult` |
+| `requeueDeadLetters` | `ids: [Long!]!`, `askAfresh: Boolean! = false` | `BatchDeadLetterResult` |
+| `acknowledgeDeadLetters` | `ids: [Long!]!`, `note: String!` | `BatchDeadLetterResult` |
+| `requeueAllDeadLetters` | `askAfresh: Boolean! = false` | `DeadLetterRequeueJob` |
+| `acknowledgeAllDeadLetters` | `note: String!` | `BatchDeadLetterResult` |
+
+| Type | Fields |
+|------|--------|
+| `DeadLetterOperationResult` | `success: Boolean!`, `workQueueId: Long` (the entry a requeue queued; `null` for an acknowledge or a refusal), `message: String!` |
+| `BatchDeadLetterResult` | `count: Int!` (dead letters resolved), `message: String!` (also counts the folded and skipped ones) |
+| `DeadLetterRequeueJob` | The requeue-all job, below |
+
+A requeue or acknowledge that cannot be done (the dead letter is not awaiting intervention, or its manifest already has a queued entry) returns `success: false` and the reason in `message`, not a GraphQL error. These types are not `OperationResponse`.
+
+`DeadLetterRequeueJob`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `UUID!` | The job, for `requeueAllJob(id)` on the same node |
+| `status` | `DeadLetterRequeueJobStatus!` | `RUNNING`, `SUCCEEDED`, `FAILED` or `CANCELED` |
+| `awaitingAtStart` | `Int!` | Dead letters awaiting intervention when it started |
+| `startedAt` / `finishedAt` | `DateTime!` / `DateTime` | When it started, and when it stopped (`null` while running) |
+| `count` | `Int` | Dead letters it requeued, once `SUCCEEDED`; `null` before |
+| `message` | `String!` | Where it is, or how it ended. A `FAILED` job's message says only that the server failed; the detail is in the server's log |
+| `started` | `Boolean!` | `false` when a requeue-all was already running on this node: no second one was started, and this is the running one |
+
+One requeue-all runs per node at a time. A job lives in the memory of the node that started it, so another node, or the same node after a restart, answers `requeueAllJob` with `null`. Nothing is lost by that: a requeued dead letter no longer awaits intervention, so a requeue that stopped part-way left what it finished requeued, and running `requeueAllDeadLetters` again requeues the rest. A finished job can be read for 24 hours, and a node keeps at most 100.
+
+See [scheduler/dead-letters-and-cleanup](/docs/scheduler/dead-letters-and-cleanup) for full details and examples.
 
 ---
 

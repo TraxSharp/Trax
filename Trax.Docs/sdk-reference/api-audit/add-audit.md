@@ -25,6 +25,9 @@ public static TraxGraphQLBuilder AddAudit<TSink>(
 ## Usage
 
 ```csharp
+using Trax.Api.GraphQL.Audit;       // AddAudit, ITraxAuditSink, TraxAuditEntry, TraxAuditOptions
+using Trax.Api.GraphQL.Extensions;  // AddTraxGraphQL
+
 services.AddTraxGraphQL(graphql =>
     graphql.AddAudit<MyPostgresAuditSink>(opts =>
     {
@@ -42,9 +45,18 @@ services.AddTraxGraphQL(graphql =>
 | `TraxAuditChannel` | Singleton | Bounded channel between listener and writer. |
 | `TraxGraphQLAuditListener` | Singleton | HotChocolate `ExecutionDiagnosticEventListener`. |
 | `TraxAuditWriter` | Hosted service (singleton) | Drains channel, batches, calls sink with retry; on shutdown writes every accepted entry within the host's shutdown timeout. |
-| `ITraxAuditSink` -> `TSink` | Scoped | Consumer-provided destination. |
+| `ITraxAuditSink` -> `TSink` | Scoped | Consumer-provided destination. Its constructor dependencies resolve per batch, so an `IDbContextFactory<T>` or a scoped `DbContext` both work. |
 | `ITraxAuditRedactor` -> `DefaultAuditRedactor` | Singleton (TryAdd) | Records no variables. Register your own to record them. |
 | `IHttpContextAccessor` | Singleton | Listener reads `HttpContext.User`. |
 | Disclaimer hosted service | Singleton (idempotent) | One-shot startup NO-WARRANTY log. |
+| `IValidateOptions<TraxAuditOptions>` | Singleton, with `ValidateOnStart` | Refuses startup when an option is out of range, naming it. |
 
 See [TraxAuditOptions](/docs/sdk-reference/api-audit/trax-audit-options) for every knob.
+
+Every GraphQL request is recorded, including one a gate refuses: a refused train, query model or `operations` call is an entry with `Success = false`, `ErrorText = "Not authorized."` and the caller's scheme-qualified `PrincipalId`. The [Auth sample](/docs/samples/auth) stores entries in a table and serves them to auditors as a gated query model.
+
+## Package
+
+```
+dotnet add package Trax.Api.GraphQL.Audit
+```

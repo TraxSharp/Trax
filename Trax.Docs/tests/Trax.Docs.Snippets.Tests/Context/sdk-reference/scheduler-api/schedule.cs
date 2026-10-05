@@ -1,7 +1,7 @@
 // What the examples on sdk-reference/scheduler-api/schedule.md take as given: the usings, a
 // service collection, a connection string, and the train they schedule.
-global using LanguageExt;
 global using static SnippetContext;
+global using Trax.Core.Functional;
 global using Trax.Effect.Data.Postgres.Extensions;
 global using Trax.Effect.Extensions;
 global using Trax.Effect.Models.Manifest;

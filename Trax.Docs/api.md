@@ -147,17 +147,40 @@ public class SensitiveTrain : ServiceTrain<SensitiveInput, Unit>, ISensitiveTrai
 
 When the API receives a request to run or queue this train, it checks the current user against the policy before executing. A GraphQL-exposed train (`[TraxQuery]`/`[TraxMutation]`) must declare either `[TraxAuthorize]` or `[TraxAllowAnonymous]`, or the host fails at startup; `[TraxAllowAnonymous]` runs with no per-train restriction. See the [Authorization](/docs/authorization) guide for details.
 
+### Which call secures what
+
+Each surface is gated where it is declared. For the usual shape (a queued mutation behind a role, a
+query model any signed-in caller reads, an operator-only operations namespace), these are the pieces:
+
+| Concern | Where | What to write |
+|---|---|---|
+| Who can authenticate at all | `Program.cs` | `AddTraxApiKeyAuth(...)`, `AddTraxJwtAuth(...)` or `AddTraxOidcAuth(...)`, then `UseAuthentication()` and `UseAuthorization()` before `UseTraxGraphQL()` |
+| Every request must be signed in | GraphQL builder | `RequireAuthorization()` (optional; without it each surface declares its own posture) |
+| A train callable as a mutation by one role | The train class | `[TraxMutation]` (with `GraphQLOperation.Queue` for queue-only) plus `[TraxAuthorize(Roles = "Billing")]` |
+| A train callable by any signed-in caller, or by anyone | The train class | `[TraxAuthorize]`, or `[TraxAllowAnonymous]` |
+| A table any signed-in caller can read | The entity class | `[TraxQueryModel]` plus `[TraxAuthorize]`, and `AddDbContext<T>()` on the GraphQL builder |
+| Rows a caller may see | The domain context | A query filter that reads the caller. See [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts) |
+| Callers watching a train's runs | The train class | `[TraxBroadcast]`; its `[TraxAuthorize]`/`[TraxAllowAnonymous]` decides who receives the events, on every host. See [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions#who-receives-what) |
+| The operations namespace (executions, manifests, dead letters) | GraphQL builder | `ExposeOperationQueries()`, `ExposeOperationMutations()`, `GateOperations(roles: "Operator")`, and `AddScheduler(...)` on the same host |
+| The dashboard | `Program.cs` | Its own gate; `AllowAnonymousDashboard()` only inside `IsDevelopment()`. See [Dashboard](/docs/dashboard) |
+
+A role named in `[TraxAuthorize(Roles = ...)]` or `GateOperations(roles: ...)` needs no registration; a
+policy name does (`AddAuthorization(o => o.AddPolicy(...))`). A refusal is a GraphQL error with code
+`TRAX_AUTHORIZATION` and the message `"Not authorized."`. [API Security](/docs/api-security#a-secured-host-end-to-end)
+puts the pieces together in one `Program.cs`.
+
 ## Named GraphQL Schema
 
 The GraphQL API registers on a **named HotChocolate schema** (`"trax"`) rather than the default unnamed schema. This means it won't conflict with your own `AddGraphQLServer()` calls, and both can coexist in the same application at different paths.
 
 ## Sample Projects
 
-The API is demonstrated in three samples, each using a different deployment topology:
+Every sample serves the API; these show it in different deployment topologies (see [Samples & Deployment](/docs/samples) for all of them):
 
-- **LocalWorkers (GameServer)** - API and scheduler as separate processes. The GraphQL API handles lightweight trains directly and queues heavy work for the scheduler. See `samples/LocalWorkers/Trax.Samples.GameServer.Api`.
-- **DistributedWorkers (EnergyHub)** - API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but offloads execution to separate worker processes. See `samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub`.
-- **EphemeralWorkers (ContentShield)** - API with `UseRemoteWorkers()` dispatches queued mutations directly to an ephemeral Runner via HTTP. No scheduled jobs, no `background_job` table, purely on-demand, serverless-style execution. See `samples/EphemeralWorkers/Trax.Samples.ContentShield.Api`.
+- **Scheduling** - API, scheduler, local workers and dashboard in one process, with the operations surface gated to an operator role. See [Scheduling](/docs/samples/scheduling).
+- **Auth** - the API secured end to end: API keys and JWT, `[TraxAuthorize]`, `GateOperations`, the audit trail. See [Auth](/docs/samples/auth).
+- **DistributedWorkers (EnergyHub)** - API, scheduler, and dashboard in a single hub process. The hub schedules and serves GraphQL but runs no queued job: `OverrideSubmitter` leaves them in `background_job` for separate worker processes. See [Energy Hub](/docs/samples/energy-hub).
+- **EphemeralWorkers (ContentShield)** - API with `UseRemoteWorkers()` and `UseRemoteRun()` sends queued mutations, run mutations and queries to an ephemeral Runner via signed HTTP requests. No scheduled jobs, no `background_job` table, purely on-demand, serverless-style execution. See [Content Shield](/docs/samples/content-shield).
 
 All follow the [trains library pattern](/docs/samples). Trains live in a shared library, executables are thin wrappers that pick which capabilities to enable.
 
