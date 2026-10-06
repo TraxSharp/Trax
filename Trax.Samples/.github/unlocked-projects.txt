@@ -1,4 +1,0 @@
-# Projects that are deliberately outside the solution and the locked restore.
-# One repository-relative csproj path per line; text after # is ignored.
-#
-# None at the moment.

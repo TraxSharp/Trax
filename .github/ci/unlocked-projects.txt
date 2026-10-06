@@ -1,0 +1,8 @@
+# Projects that are deliberately outside their folder's solution and the locked restore.
+# One path per line, relative to the repository root; text after # is ignored.
+#
+# The Rider/ReSharper plugin is built by its own Gradle build against the
+# ReSharper SDK, on a developer's machine, and is not shipped.
+Trax.Core/plugins/rider-resharper/src/dotnet/ReSharperPlugin.Trax.Tests/ReSharperPlugin.Trax.Tests.csproj
+Trax.Core/plugins/rider-resharper/src/dotnet/ReSharperPlugin.Trax/ReSharperPlugin.Trax.Rider.csproj
+Trax.Core/plugins/rider-resharper/src/dotnet/ReSharperPlugin.Trax/ReSharperPlugin.Trax.csproj

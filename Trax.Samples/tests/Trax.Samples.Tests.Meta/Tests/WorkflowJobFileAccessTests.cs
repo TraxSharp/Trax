@@ -24,7 +24,7 @@ public class WorkflowJobFileAccessTests
 
     private static IEnumerable<string> WorkflowFiles() =>
         Directory
-            .EnumerateFiles(RepoRoot.Combine(".github", "workflows"), "*.yml")
+            .EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
             .OrderBy(p => p, StringComparer.Ordinal);
 
     [TestCaseSource(nameof(WorkflowFiles))]
@@ -47,7 +47,7 @@ public class WorkflowJobFileAccessTests
         offenders
             .Should()
             .BeEmpty(
-                $"every job in {RepoRoot.Relative(workflowPath)} that points a step at a file in "
+                $"every job in {Path.GetRelativePath(MonorepoRoot.Path, workflowPath)} that points a step at a file in "
                     + "the repository must run actions/checkout first, or the step reads a path "
                     + "that is not on the runner. A job that must not check the repository out "
                     + "(the publish job holds the NuGet credential) should pin the value inline "

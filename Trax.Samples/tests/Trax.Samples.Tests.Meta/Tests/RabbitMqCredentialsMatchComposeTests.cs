@@ -31,15 +31,24 @@ public class RabbitMqCredentialsMatchComposeTests
         var composeUser = FromEnv(compose, "RABBITMQ_DEFAULT_USER", "RABBITMQ_DEFAULT_PASS");
 
         var offenders = new List<string>();
-        foreach (var workflow in new[] { "pull_request.yml", "nuget_release.yml" })
+        // Every workflow that starts a broker, at the root of the repository Trax.Samples lives in.
+        var workflows = Directory
+            .EnumerateFiles(MonorepoRoot.Combine(".github", "workflows"), "*.yml")
+            .Where(w =>
+                File.ReadAllText(w).Contains("RABBITMQ_DEFAULT_USER", StringComparison.Ordinal)
+            )
+            .ToList();
+        workflows.Should().NotBeEmpty("CI starts a RabbitMQ broker for the samples' tests");
+        foreach (var workflow in workflows)
         {
-            var ci = File.ReadAllText(
-                Path.Combine(RepoRoot.Path, ".github", "workflows", workflow)
+            var ciUser = FromEnv(
+                File.ReadAllText(workflow),
+                "RABBITMQ_DEFAULT_USER",
+                "RABBITMQ_DEFAULT_PASS"
             );
-            var ciUser = FromEnv(ci, "RABBITMQ_DEFAULT_USER", "RABBITMQ_DEFAULT_PASS");
             if (ciUser != composeUser)
                 offenders.Add(
-                    $".github/workflows/{workflow} creates {ciUser.User}, docker-compose.yml creates {composeUser.User}"
+                    $".github/workflows/{Path.GetFileName(workflow)} creates {ciUser.User}, docker-compose.yml creates {composeUser.User}"
                 );
         }
 

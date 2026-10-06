@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Trax.Samples.Tests.Meta.Tests;
 
 /// <summary>
@@ -23,9 +25,7 @@ public class E2EDatabaseProvisioningTests
     [Test]
     public void EveryE2EFactory_TargetsACiProvisionedDatabase()
     {
-        var workflow = File.ReadAllText(
-            RepoRoot.Combine(".github", "workflows", "pull_request.yml")
-        );
+        var workflow = File.ReadAllText(MonorepoRoot.Combine(".github", "workflows", "ci.yml"));
 
         // Host ports the workflow maps onto the Postgres service container (e.g. "5432:5432").
         var hostPorts = Regex
@@ -33,20 +33,19 @@ public class E2EDatabaseProvisioningTests
             .Select(m => m.Groups["host"].Value)
             .ToHashSet(StringComparer.Ordinal);
 
-        // Databases the run can reach: the service's POSTGRES_DB plus everything the setup step
-        // creates in its `for db in ...; do` loop.
+        // Databases the run can reach: the service's POSTGRES_DB plus every database the
+        // workflow creates before the tests, both named by this folder's entry in the CI
+        // package table.
+        var package = JsonNode.Parse(
+            File.ReadAllText(MonorepoRoot.Combine(".github", "ci", "packages.json"))
+        )!["packages"]!
+            .AsArray()
+            .Single(p => (string?)p!["folder"] == "Trax.Samples")!["dotnet"]!;
         var provisioned = new HashSet<string>(StringComparer.Ordinal);
-        var defaultDb = Regex.Match(workflow, @"POSTGRES_DB:\s*(?<db>\S+)");
-        if (defaultDb.Success)
-            provisioned.Add(defaultDb.Groups["db"].Value);
-        var createLoop = Regex.Match(workflow, @"for db in (?<dbs>[^;]+);");
-        if (createLoop.Success)
-            foreach (
-                var db in createLoop
-                    .Groups["dbs"]
-                    .Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            )
-                provisioned.Add(db);
+        if ((string?)package["postgres"] is { Length: > 0 } defaultDb)
+            provisioned.Add(defaultDb);
+        foreach (var db in package["databases"]!.AsArray())
+            provisioned.Add((string)db!);
 
         hostPorts.Should().NotBeEmpty("the workflow must map at least one Postgres host port");
         provisioned.Should().NotBeEmpty("the workflow must provision at least one database");
@@ -82,7 +81,7 @@ public class E2EDatabaseProvisioningTests
             else if (!provisioned.Contains(db))
                 offenders.Add(
                     $"{rel}: database '{db}' is not provisioned in CI. Add it to the "
-                        + "create-databases loop in .github/workflows (provisioned: "
+                        + "Trax.Samples databases in .github/ci/packages.json (provisioned: "
                         + $"{string.Join(", ", provisioned.OrderBy(d => d))})."
                 );
         }

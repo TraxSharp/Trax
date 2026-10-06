@@ -1,0 +1,61 @@
+{
+  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'state-machine' installs Trax.Api.StateMachine's npm packages first, for tests that run its generators under node); 'adr' configures the ADR guard over that folder's corpus.",
+  "packages": [
+    {
+      "folder": "Trax.Core",
+      "upstream": [],
+      "dotnet": { "solution": "Trax.Core.slnx", "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "platform,testing,packaging", "census-root": "tests/Trax.Core.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Effect",
+      "upstream": ["Trax.Core", "Trax.Api.StateMachine"],
+      "dotnet": { "solution": "Trax.Effect.slnx", "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": true, "databases": [], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "migrations,providers,data-model,testing,platform,auth", "census-root": "tests/Trax.Effect.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Mediator",
+      "upstream": ["Trax.Effect"],
+      "dotnet": { "solution": "Trax.Mediator.slnx", "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "auth,platform,testing", "census-root": "tests/Trax.Mediator.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Scheduler",
+      "upstream": ["Trax.Mediator"],
+      "dotnet": { "solution": "Trax.Scheduler.slnx", "pack": true, "coverage": true, "postgres": "trax_scheduler_tests", "rabbitmq": false, "databases": ["trax_scheduler_default_submitter", "trax_scheduler_builder_validation", "trax_scheduler_builder_settings"], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "scheduling,providers,platform,testing", "census-root": "tests/Trax.Scheduler.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Api",
+      "upstream": ["Trax.Scheduler"],
+      "dotnet": { "solution": "Trax.Api.slnx", "pack": true, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["trax_api_operations", "trax_api_workqueue", "trax_api_logs", "trax_api_health"], "timeout": 20, "test-args": "--blame-hang-timeout 5m --blame-hang-dump-type none" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "graphql,auth,platform,testing", "census-root": "tests/Trax.Api.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Dashboard",
+      "upstream": ["Trax.Api"],
+      "dotnet": { "solution": "Trax.Dashboard.slnx", "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "platform,ui,testing", "census-root": "tests/Trax.Dashboard.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Cli",
+      "upstream": ["Trax.Scheduler", "Trax.Api.StateMachine"],
+      "dotnet": { "solution": "Trax.Cli.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "tooling,platform,testing", "census-root": "tests/Trax.Cli.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Samples",
+      "upstream": ["Trax.Dashboard", "Trax.Cli"],
+      "dotnet": { "solution": "Trax.Samples.slnx", "pack": false, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["chat_e2e_tests", "energyhub_e2e_tests", "bookworm_e2e_tests", "auth_e2e_tests", "persisted_operations_e2e_tests", "recovery_e2e_tests", "scheduling_e2e_tests", "contentshield_e2e_tests", "statemachine_e2e_tests"], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "docs/adr", "known-areas": "testing,ci,samples", "census-root": "tests/Trax.Samples.Tests.Meta" }
+    },
+    {
+      "folder": "Trax.Docs",
+      "upstream": ["Trax.Dashboard", "Trax.Cli"],
+      "dotnet": { "solution": "Trax.Docs.slnx", "pack": false, "coverage": false, "postgres": "", "rabbitmq": false, "databases": [], "timeout": 15, "test-args": "" },
+      "adr": { "adr-root": "adr", "known-areas": "testing,platform,packaging,ci,naming,data-model,graphql,docs,migrations,providers", "known-repos": "core,effect,mediator,scheduler,dashboard,api,cli,samples,docs,website", "require-repos-key": "true", "census-root": "tests/Trax.Docs.Tests" }
+    },
+    { "folder": "Trax.Website", "upstream": ["Trax.Docs"] },
+    { "folder": "Trax.Api.StateMachine", "upstream": [] }
+  ]
+}

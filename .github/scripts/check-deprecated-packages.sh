@@ -14,7 +14,7 @@
 # packages. A lookup that fails fails the check: an unchecked package is not a
 # clean one.
 #
-# Run after `dotnet restore --locked-mode`.
+# Run after `dotnet restore --locked-mode`, from the folder whose lockfiles to check.
 set -euo pipefail
 
 registration=https://api.nuget.org/v3/registration5-gz-semver2

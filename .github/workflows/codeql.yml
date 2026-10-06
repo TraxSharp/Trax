@@ -1,8 +1,8 @@
 name: CodeQL
 
-# Static analysis of the C# sources and of the workflows. build-mode: none reads the
-# sources without compiling them, so this runs no restore, no MSBuild targets and no
-# package code.
+# Static analysis of the C# and TypeScript sources and of the workflows. build-mode: none
+# reads the sources without compiling them, so this runs no restore, no MSBuild targets, no
+# npm install and no package code.
 on:
   pull_request:
     branches: [main]
@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [csharp, actions]
+        language: [csharp, javascript-typescript, actions]
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1

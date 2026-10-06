@@ -1,0 +1,395 @@
+name: CI
+
+# One workflow for every folder. The changes job decides which folders a pull request can
+# affect (.github/scripts/ci-changes.sh, configured by .github/ci/packages.json) and the
+# jobs below run only those. "CI result" is the one check branch protection requires: it
+# always runs, so a folder skipped by the change detection never leaves a required check
+# waiting.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Default to no permissions; each job widens only what it needs.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      folders: ${{ steps.changes.outputs.folders }}
+      dotnet: ${{ steps.changes.outputs.dotnet }}
+      adr: ${{ steps.changes.outputs.adr }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent, the base it merges into.
+          fetch-depth: 2
+      - name: Decide what runs
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: .github/scripts/ci-changes.sh "$EVENT_NAME"
+
+  dotnet:
+    needs: changes
+    if: needs.changes.outputs.dotnet != '[]'
+    name: ${{ matrix.package.folder }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.package.timeout }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.changes.outputs.dotnet) }}
+    # A service whose image is empty is not started, so a folder that needs no database or
+    # broker does not wait for one.
+    services:
+      postgres:
+        image: ${{ matrix.package.postgres != '' && 'postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527' || '' }}
+        env:
+          POSTGRES_USER: trax
+          POSTGRES_PASSWORD: trax123
+          POSTGRES_DB: ${{ matrix.package.postgres }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trax"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      rabbitmq:
+        # Default 'guest' user is restricted to localhost in RabbitMQ.
+        # GitHub Actions service containers route through port forwarding,
+        # so the broker sees connections as non-localhost and rejects
+        # 'guest'. Override with a dedicated test user.
+        image: ${{ matrix.package.rabbitmq && 'rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671' || '' }}
+        env:
+          RABBITMQ_DEFAULT_USER: trax
+          RABBITMQ_DEFAULT_PASS: trax123
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      FOLDER: ${{ matrix.package.folder }}
+      SOLUTION: ${{ matrix.package.solution }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Guard against local-dev lockfile versions
+        run: |
+          if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json "$FOLDER" ; then
+            echo "::error::A packages.lock.json contains the local-dev version 1.99.99. Regenerate lockfiles in CI mode (remove trax-local.props) before committing."
+            exit 1
+          fi
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore tools
+        working-directory: ${{ matrix.package.folder }}
+        run: dotnet tool restore
+      - name: Check formatting
+        working-directory: ${{ matrix.package.folder }}
+        run: dotnet csharpier check .
+      - name: Restore (locked)
+        working-directory: ${{ matrix.package.folder }}
+        run: dotnet restore "$SOLUTION" --locked-mode
+      - name: Every project is locked
+        run: .github/scripts/check-project-locks.sh "$FOLDER" "$SOLUTION"
+      - name: No deprecated packages
+        working-directory: ${{ matrix.package.folder }}
+        run: ../.github/scripts/check-deprecated-packages.sh
+      - name: Build
+        working-directory: ${{ matrix.package.folder }}
+        run: dotnet build "$SOLUTION" --configuration Release --no-restore -warnaserror
+      - name: Pack (package validation)
+        # Package validation runs on pack, not build. Packing here compares every package with
+        # its baseline release before a merge, instead of at release time, after
+        # semantic-release has already tagged the version.
+        if: matrix.package.pack
+        working-directory: ${{ matrix.package.folder }}
+        run: dotnet pack "$SOLUTION" --configuration Release --no-build --output "$RUNNER_TEMP/nupkg"
+      - name: Setup Node
+        # Tests that drive Trax.Api.StateMachine's generators run them under node.
+        if: matrix.package['state-machine']
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install Trax.Api.StateMachine (locked, no install scripts)
+        if: matrix.package['state-machine']
+        working-directory: Trax.Api.StateMachine
+        run: npm ci --ignore-scripts
+      - name: Create test databases
+        if: matrix.package.databases[0] != null
+        env:
+          PGPASSWORD: trax123
+          POSTGRES_DB: ${{ matrix.package.postgres }}
+          DATABASES: ${{ join(matrix.package.databases, ' ') }}
+        run: |
+          for db in $DATABASES; do
+            psql -h localhost -U trax -d "$POSTGRES_DB" -c "CREATE DATABASE \"$db\";"
+          done
+      - name: Test
+        working-directory: ${{ matrix.package.folder }}
+        env:
+          COVERAGE: ${{ matrix.package.coverage }}
+          TEST_ARGS: ${{ matrix.package['test-args'] }}
+        run: |
+          args=(--configuration Release --no-build)
+          if [ "$COVERAGE" = true ]; then
+            args+=(--collect:"XPlat Code Coverage" --results-directory ./TestResults)
+          fi
+          # Word splitting is the point: TEST_ARGS is a list of flags from packages.json.
+          # shellcheck disable=SC2206
+          args+=($TEST_ARGS)
+          dotnet test "$SOLUTION" "${args[@]}"
+      - name: Upload coverage results
+        if: matrix.package.coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-${{ matrix.package.folder }}
+          path: ${{ matrix.package.folder }}/TestResults/**/coverage.cobertura.xml
+          if-no-files-found: warn
+          retention-days: 1
+
+  # The Codecov token is kept out of the jobs that run restore, build and tests, so
+  # nothing those leave running can read it. This job runs no project code.
+  coverage:
+    needs: [changes, dotnet]
+    if: needs.changes.outputs.dotnet != '[]'
+    name: coverage ${{ matrix.package.folder }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.changes.outputs.dotnet) }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        # Codecov maps the report's file paths onto the repository's tracked files.
+        if: matrix.package.coverage
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download coverage results
+        if: matrix.package.coverage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: coverage-${{ matrix.package.folder }}
+          path: ${{ runner.temp }}/coverage
+      - name: Upload coverage to Codecov
+        if: matrix.package.coverage
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          directory: ${{ runner.temp }}/coverage
+          flags: ${{ matrix.package.folder }}
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Each folder's ADRs are checked against that folder alone, by the guard built from
+  # Trax.Docs/tools/Trax.Adr.Guard in this same checkout.
+  adr-guard:
+    needs: changes
+    if: needs.changes.outputs.adr != '[]'
+    name: adr-guard ${{ matrix.package.folder }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.changes.outputs.adr) }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check ADRs
+        # The local path is the point: this runs the action as the pull request changes it.
+        uses: ./.github/actions/adr-guard  # zizmor: ignore[self-repository]
+        with:
+          folder: ${{ matrix.package.folder }}
+          adr-root: ${{ matrix.package['adr-root'] }}
+          known-areas: ${{ matrix.package['known-areas'] }}
+          known-repos: ${{ matrix.package['known-repos'] || '' }}
+          require-repos-key: ${{ matrix.package['require-repos-key'] || 'false' }}
+          census-root: ${{ matrix.package['census-root'] }}
+
+  website:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Website')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: Trax.Website
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install (locked, no install scripts)
+        # Nothing the site builds with needs an install script: sharp and the Next.js
+        # compiler ship prebuilt binaries as optional packages. If one ever does, run
+        # `npm rebuild <package>` for it here rather than dropping --ignore-scripts.
+        run: npm ci --ignore-scripts
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        # scripts/sync-docs.sh reads the docs from ../Trax.Docs in this checkout.
+        run: npm run build
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  # The operations dashboard (Trax.Website/dashboard/) is its own npm project with its own
+  # lockfile. The site's build above builds its demo; this job runs its lint, its tests (every
+  # story, and the demo's strict check that every page is answered by a recording) and both its
+  # production builds.
+  website-dashboard:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Website')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: Trax.Website/dashboard
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install (locked, no install scripts)
+        # esbuild and rolldown ship their binaries as platform optional packages, so nothing
+        # here needs an install script.
+        run: npm ci --ignore-scripts
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build
+        # Also checks the bundle carries none of the mock or the demo.
+        run: npm run build
+      - name: Build the demo
+        # Also checks the demo carries its recordings and not the auto-mock schema.
+        run: npm run build:demo
+      - name: Build Storybook
+        run: npm run build-storybook
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  # The TypeScript twin of Trax.Effect.StateMachine. Its machines/ corpus is also read by the
+  # Trax.Effect conformance tests and the Trax.Cli byte-parity tests, which is why those
+  # folders list it upstream.
+  state-machine:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Api.StateMachine')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: Trax.Api.StateMachine
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install (locked, no install scripts)
+        run: npm ci --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  # The only check branch protection requires. It runs whatever happened above, and fails
+  # when any job that ran failed or was cancelled; a job skipped by change detection passes.
+  result:
+    name: CI result
+    needs: [changes, dotnet, coverage, adr-guard, website, website-dashboard, state-machine]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Check the jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" = failure ] || [ "$result" = cancelled ]; then
+              exit 1
+            fi
+          done

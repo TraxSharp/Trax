@@ -1,16 +1,19 @@
 name: 'Trax ADR Guard'
 description: >-
-  Validates the calling repository's architecture decision records: frontmatter, index
-  agreement, lifecycle, exemplars and hygiene. The checks read only the calling repo, so
-  no other Trax repository needs to be present.
+  Validates one folder's architecture decision records: frontmatter, index agreement,
+  lifecycle, exemplars and hygiene. The checks read only that folder; the guard itself is
+  built from Trax.Docs/tools/Trax.Adr.Guard in the same checkout.
 
 inputs:
+  folder:
+    description: 'The folder whose corpus is checked, relative to the repository root (e.g. Trax.Core).'
+    required: true
   adr-root:
-    description: 'ADR directory, relative to the repository root.'
+    description: 'ADR directory, relative to the folder.'
     required: false
     default: 'docs/adr'
   test-roots:
-    description: 'Comma-separated folders scanned for the guard classes an ADR names as exemplars.'
+    description: 'Comma-separated folders, relative to the folder, scanned for the guard classes an ADR names as exemplars.'
     required: false
     default: 'tests'
   known-areas:
@@ -41,28 +44,25 @@ runs:
     - name: Setup .NET
       uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
       with:
-        # The guard builds against Trax.Docs' pinned SDK, not the calling repo's.
-        global-json-file: ${{ github.action_path }}/../../../global.json
+        global-json-file: global.json
 
     - name: Check ADRs
       shell: bash
       # Inputs are bound through the environment rather than interpolated into the script,
       # so nothing a caller passes can reach the shell as code.
       env:
+        FOLDER: ${{ inputs.folder }}
         ADR_ROOT: ${{ inputs.adr-root }}
         TEST_ROOTS: ${{ inputs.test-roots }}
         KNOWN_AREAS: ${{ inputs.known-areas }}
         KNOWN_REPOS: ${{ inputs.known-repos }}
         REQUIRE_REPOS_KEY: ${{ inputs.require-repos-key }}
         CENSUS_ROOT: ${{ inputs.census-root }}
-        ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
 
-        guard_repo="$(cd "${ACTION_PATH}/../../.." && pwd)"
-
         args=(
-          --repo "${GITHUB_WORKSPACE}"
+          --repo "${GITHUB_WORKSPACE}/${FOLDER}"
           --adr-root "${ADR_ROOT}"
           --test-roots "${TEST_ROOTS}"
           --known-areas "${KNOWN_AREAS}"
@@ -82,9 +82,9 @@ runs:
           args+=(--require-repos-key)
         fi
 
-        # Run from the guard's own repository so its global.json, Directory.Build.props and
-        # Directory.Packages.props apply, not the calling repository's. The restore is locked
-        # against the guard's committed lockfile, and the run does not restore again.
-        cd "${guard_repo}"
+        # Run from Trax.Docs so its Directory.Build.props and Directory.Packages.props apply,
+        # not the checked folder's. The restore is locked against the guard's committed
+        # lockfile, and the run does not restore again.
+        cd "${GITHUB_WORKSPACE}/Trax.Docs"
         dotnet restore tools/Trax.Adr.Guard --locked-mode
         dotnet run --project tools/Trax.Adr.Guard --configuration Release --no-restore -- "${args[@]}"
