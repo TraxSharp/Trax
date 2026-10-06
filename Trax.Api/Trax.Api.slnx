@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Api/Trax.Api.csproj" />
+    <Project Path="src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <Project Path="src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <Project Path="src/Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+    <Project Path="src/Trax.Api.Auth.Jwt.Cognito/Trax.Api.Auth.Jwt.Cognito.csproj" />
+    <Project Path="src/Trax.Api.Auth.Jwt.Cognito.Issuer/Trax.Api.Auth.Jwt.Cognito.Issuer.csproj" />
+    <Project Path="src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
+    <Project Path="src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
+    <Project Path="src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Testing/Trax.Api.GraphQL.Testing.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Client.Trax/Trax.Api.GraphQL.Client.Trax.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.Client.Typed/Trax.Api.GraphQL.Client.Typed.csproj" />
+    <Project Path="src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Api.Tests/Trax.Api.Tests.csproj" />
+    <Project Path="tests/Trax.Api.Tests.Meta/Trax.Api.Tests.Meta.csproj" />
+    <Project Path="tests/Trax.Api.GraphQL.Testing.Tests/Trax.Api.GraphQL.Testing.Tests.csproj" />
+    <Project Path="tests/Trax.Api.Tests.StateMachine.E2E/Trax.Api.Tests.StateMachine.E2E.csproj" />
+    <Project Path="tests/Trax.Api.Tests.Stress/Trax.Api.Tests.Stress.csproj" />
+  </Folder>
+</Solution>

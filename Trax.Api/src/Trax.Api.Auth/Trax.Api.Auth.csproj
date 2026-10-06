@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.Auth</AssemblyName>
+    <PackageDescription>Core principal abstraction (TraxPrincipal, ITraxPrincipalResolver) and claim-type constants shared by the Trax .NET auth schemes. The scheme packages bring it in; reference it directly to write a resolver or inject TraxPrincipal. NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageDescription>
+    <PackageReleaseNotes>NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See SECURITY-DISCLAIMER.md.</PackageReleaseNotes>
+    <PackageTags>trax;auth;security</PackageTags>
+    <!-- The package README leads with the security disclaimer, then shows usage. -->
+    <TraxPackageReadme>$(MSBuildThisFileDirectory)..\AUTH-PACKAGE-README.md</TraxPackageReadme>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Mediator" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The scheme policies each auth package registers carry TraxSchemeRequirement. -->
+    <InternalsVisibleTo Include="Trax.Api.Auth.ApiKey" />
+    <InternalsVisibleTo Include="Trax.Api.Auth.Jwt" />
+    <InternalsVisibleTo Include="Trax.Api.Auth.Oidc" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\SECURITY-DISCLAIMER.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

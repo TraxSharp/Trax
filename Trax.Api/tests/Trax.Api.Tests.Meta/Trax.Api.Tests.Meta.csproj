@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="PublicApiGenerator" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="PublicApi/**/*.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

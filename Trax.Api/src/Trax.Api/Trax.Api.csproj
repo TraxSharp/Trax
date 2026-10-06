@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api</AssemblyName>
+    <PackageDescription>Core services behind the Trax .NET GraphQL API: health checks, per-train authorization, the HTTP principal provider and the shared DTOs. Trax.Api.GraphQL brings it in; reference it directly only to use those services without the GraphQL schema.</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Scheduler" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Exposes the ProcessCpuSampler test seam (internal ctor + ComputePercent) for deterministic
+         unit tests without widening the public API. -->
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <!-- The GraphQL subscriptions number lifecycle events through TrainLifecycleEvent.PublishSequence. -->
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+  </ItemGroup>
+</Project>

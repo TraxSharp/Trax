@@ -1,0 +1,151 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using HotChocolate.AspNetCore;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Npgsql;
+using Trax.Api.Auth.ApiKey;
+using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Provider.Json.Extensions;
+using Trax.Effect.StateMachine.Persistence;
+using Trax.Mediator.Extensions;
+
+namespace Trax.Api.StateMachine.E2E;
+
+/// <summary>
+/// Builds a live in-process Trax GraphQL server (ASP.NET Core via <see cref="TestServer"/>) over a real
+/// throwaway Postgres, with the full stack wired the way a real host would: <c>AddTrax</c> +
+/// <c>AddStateMachines</c> + <c>AddTraxGraphQL</c> + API-key auth, and <see cref="ISnapshotPrincipal"/>
+/// bound over Trax's own <see cref="Trax.Api.Auth.TraxCaller"/>. The four generic <c>stateMachine</c>
+/// mutations are driven over HTTP against this host.
+/// </summary>
+public static class E2EHost
+{
+    public const string AdminApiKey = "sm-e2e-admin-key";
+
+    // The always-present `postgres` maintenance database (local docker-compose and CI differ on app dbs).
+    private static readonly string Maintenance =
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
+
+    public static string ConnectionString(string database) =>
+        $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={database};"
+        + "Include Error Detail=true;Maximum Pool Size=20";
+
+    /// <summary>
+    /// Drop and recreate a throwaway database. The snapshot tables come with the rest of the Trax schema from
+    /// <c>UsePostgres</c>'s migrations when the host builds.
+    /// </summary>
+    public static async Task RecreateDatabaseAsync(string database)
+    {
+        await using var admin = new NpgsqlConnection(Maintenance);
+        await admin.OpenAsync();
+        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+        await Exec(admin, $"CREATE DATABASE {database}");
+    }
+
+    public static async Task DropDatabaseAsync(string database)
+    {
+        NpgsqlConnection.ClearAllPools();
+        await using var admin = new NpgsqlConnection(Maintenance);
+        await admin.OpenAsync();
+        await Exec(admin, $"DROP DATABASE IF EXISTS {database} WITH (FORCE)");
+    }
+
+    /// <summary>
+    /// Builds and starts the host. The passed <paramref name="charge"/> is registered as the singleton
+    /// <see cref="IOrderCharge"/> so a test can read its delivery count and prove exactly-once.
+    /// </summary>
+    public static async Task<IHost> StartAsync(string database, IOrderCharge charge)
+    {
+        var connectionString = ConnectionString(database);
+        var host = new HostBuilder()
+            .ConfigureWebHost(web =>
+                web.UseTestServer()
+                    .ConfigureServices(services =>
+                    {
+                        services.AddLogging();
+                        services.AddRouting();
+
+                        services.AddTraxApiKeyAuth(keys =>
+                            keys.Add(AdminApiKey, id: "admin", "Admin")
+                        );
+                        services.AddAuthorization();
+
+                        // Trax core + state machines + mediator in one chain. AddStateMachines discovers the
+                        // machines, wires the store / claim ledger / exactly-once runner / registry,
+                        // and contributes
+                        // the four generic mutation trains to the mediator scan (they ship in the persistence
+                        // package, not this one) so Trax routes them by input type. The host names neither the
+                        // snapshot tables nor the mutations' assembly. AddStateMachines precedes AddMediator.
+                        services.AddTrax(trax =>
+                            trax.AddEffects(effects =>
+                                    effects.UsePostgres(connectionString).AddJson()
+                                )
+                                .AddStateMachines(typeof(E2EHost).Assembly)
+                                .AddMediator(typeof(E2EHost).Assembly)
+                        );
+
+                        // The two things a machine can't know: map auth to a user key, and the effect impl.
+                        services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
+                        services.AddSingleton(charge);
+
+                        services.AddTraxApi();
+                        // The four stateMachine trains are all mutations; the Ping query train (this
+                        // assembly) keeps the root Query type non-empty so HotChocolate can build.
+                        services.AddTraxGraphQL(graphql => graphql);
+                    })
+                    .Configure(app =>
+                    {
+                        app.UseRouting();
+                        app.UseAuthentication();
+                        app.UseAuthorization();
+                        app.UseEndpoints(endpoints =>
+                            endpoints.MapGraphQL("/trax/graphql", "trax")
+                        );
+                    })
+            )
+            .Build();
+
+        await host.StartAsync();
+        return host;
+    }
+
+    /// <summary>
+    /// POST a GraphQL operation (optionally with variables and an API key). Returns the parsed response
+    /// (data + errors, if any). Passing the snapshot as a variable keeps the raw JSON off the query string.
+    /// </summary>
+    public static async Task<JsonDocument> PostAsync(
+        this IHost host,
+        string query,
+        object? variables = null,
+        string? apiKey = null
+    )
+    {
+        var client = host.GetTestServer().CreateClient();
+        using var req = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
+        {
+            Content = variables is null
+                ? JsonContent.Create(new { query })
+                : JsonContent.Create(new { query, variables }),
+        };
+        if (apiKey is not null)
+            req.Headers.Add("X-Api-Key", apiKey);
+
+        var res = await client.SendAsync(req);
+        var body = await res.Content.ReadAsStringAsync();
+        return JsonDocument.Parse(body);
+    }
+
+    private static async Task Exec(NpgsqlConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
+    }
+}

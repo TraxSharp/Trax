@@ -1,0 +1,160 @@
+using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using Trax.Api.GraphQL.Startup;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.TraxScheduler;
+
+namespace Trax.Api.Tests;
+
+/// <summary>
+/// The startup guard that fails fast when the operations surface is exposed without the services
+/// its resolvers depend on, instead of masking a per-request "Unexpected Execution Error".
+///
+/// <para>Enforces <c>docs/adr/0001-a-misconfigured-host-fails-at-startup.md</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-a-misconfigured-host-fails-at-startup.md")]
+[TestFixture]
+public class TraxOperationsServiceValidatorTests
+{
+    private static IServiceProviderIsService IsService(Action<IServiceCollection> configure)
+    {
+        var services = new ServiceCollection();
+        configure(services);
+        return services.BuildServiceProvider().GetRequiredService<IServiceProviderIsService>();
+    }
+
+    [Test]
+    public async Task Throws_WhenIOperationsServiceMissing()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(_ => { }),
+            mutationsExposed: false
+        );
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .ThrowAsync<InvalidOperationException>(
+                "a half-wired operations surface must fail at startup, not as a masked error "
+                    + "on the first request. See docs/adr/0001-a-misconfigured-host-fails-at-startup.md."
+            )
+            .WithMessage("*IOperationsService*");
+    }
+
+    [Test]
+    public async Task Throws_WhenMutationsExposedButITraxSchedulerMissing()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+            }),
+            mutationsExposed: true
+        );
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .ThrowAsync<InvalidOperationException>()
+            .WithMessage("*ITraxScheduler*");
+    }
+
+    [Test]
+    public async Task Throws_WhenTheMediatorIsMissing()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s => s.AddScoped(_ => Substitute.For<IOperationsService>())),
+            mutationsExposed: false
+        );
+
+        var act = async () => await validator.StartAsync(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*ITrainExecutionService*",
+            "OperationsService enqueues through the mediator, so queueTrain would fail at request time"
+        );
+    }
+
+    [Test]
+    public async Task Throws_WhenMutationsExposedButNoJobSubmitterIsRegistered()
+    {
+        // runTrain hands a run straight to a job submitter. AddTraxJobRunner() registers
+        // ITraxScheduler and no submitter, so an API-only host passes every other check.
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+                s.AddScoped(_ => Substitute.For<ITraxScheduler>());
+            }),
+            mutationsExposed: true
+        );
+
+        var act = async () => await validator.StartAsync(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*IJobSubmitter*PostgresJobSubmitter*",
+            "runTrain would fail every request, and the message names what to register"
+        );
+    }
+
+    [Test]
+    public async Task QueriesOnly_DoesNotRequireAJobSubmitter()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+            }),
+            mutationsExposed: false
+        );
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .NotThrowAsync("runTrain is a mutation");
+    }
+
+    [Test]
+    public async Task DoesNotThrow_WhenBothRegistered()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+                s.AddScoped(_ => Substitute.For<ITraxScheduler>());
+                s.AddScoped(_ => Substitute.For<IJobSubmitter>());
+            }),
+            mutationsExposed: true
+        );
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .NotThrowAsync();
+    }
+
+    [Test]
+    public async Task QueriesOnly_WithIOperationsService_DoesNotRequireScheduler()
+    {
+        var validator = new TraxOperationsServiceValidator(
+            IsService(s =>
+            {
+                s.AddScoped(_ => Substitute.For<IOperationsService>());
+                s.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+            }),
+            mutationsExposed: false
+        );
+
+        await validator
+            .Invoking(v => v.StartAsync(CancellationToken.None))
+            .Should()
+            .NotThrowAsync();
+    }
+}

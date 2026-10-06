@@ -1,0 +1,670 @@
+using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using NUnit.Framework;
+using Trax.Api.GraphQL.Mutations;
+using Trax.Api.GraphQL.Queries;
+using Trax.Api.Tests.Fakes;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
+using Trax.Effect.Extensions;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.Services.ChangeSignal;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Operations;
+
+namespace Trax.Api.Tests;
+
+/// <summary>
+/// Tests for the GraphQL <c>operations.workQueue</c> namespace.
+/// <para>
+/// Queries (<see cref="WorkQueueQueries"/>) are exercised against a real Postgres
+/// instance because they're SQL-bound. Mutations (<see cref="WorkQueueMutations"/>)
+/// are thin wrappers around <see cref="IOperationsService"/>; their behaviour is
+/// tested deeply in <c>Trax.Scheduler.Tests.Integration.OperationsServiceTests</c>,
+/// so here we only verify the GraphQL layer correctly forwards calls and translates
+/// <see cref="OperationResult"/> into <see cref="Trax.Api.DTOs.OperationResponse"/>.
+/// </para>
+/// </summary>
+[TestFixture]
+public class WorkQueueOperationsTests
+{
+    // Pool tuning copied from the AuthE2E hardening (PR #41) after the same
+    // class of CI flake. Dropping Connection Pruning Interval=1 + Idle Lifetime=1
+    // lets the pool reuse connections across tests instead of paying TCP+auth
+    // every SetUp, which is what was timing out under CI Postgres contention.
+    private static readonly string ConnectionString =
+        $"Host=localhost;Port={TestPostgres.Port};Database=trax_api_workqueue;Username=trax;Password=trax123;"
+        + "Maximum Pool Size=8;Minimum Pool Size=0;Connection Idle Lifetime=30;"
+        + "Timeout=30;Tcp Keepalive=true";
+
+    private ServiceProvider _provider = null!;
+    private IDataContextProviderFactory _factory = null!;
+
+    // No train is registered, so a stored input can't be read as its type and shows masked.
+    private static ITrainDiscoveryService Discovery => Substitute.For<ITrainDiscoveryService>();
+
+    // The detail resolver reads through the operations service, as a host registers it.
+    private IOperationsService Operations =>
+        new OperationsService(
+            Discovery,
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>()
+        );
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(t => t.AddEffects(e => e.UsePostgres(ConnectionString)));
+        _provider = services.BuildServiceProvider();
+        _factory = _provider.GetRequiredService<IDataContextProviderFactory>();
+    }
+
+    [OneTimeTearDown]
+    public async Task OneTimeTearDown()
+    {
+        await _provider.DisposeAsync();
+        Npgsql.NpgsqlConnection.ClearAllPools();
+    }
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var ctx = (Microsoft.EntityFrameworkCore.DbContext)db;
+        await ctx.Database.ExecuteSqlRawAsync(
+            "TRUNCATE TABLE trax.work_queue, trax.dead_letter, trax.metadata, trax.manifest, trax.manifest_group RESTART IDENTITY CASCADE"
+        );
+    }
+
+    private async Task SeedWorkQueues(
+        int count,
+        WorkQueueStatus status = WorkQueueStatus.Queued,
+        string? trainName = null
+    )
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        for (var i = 0; i < count; i++)
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = trainName ?? $"Trax.Tests.IFakeTrain{i}",
+                    Priority = i % 4,
+                }
+            );
+            entry.Status = status;
+            await db.Track(entry);
+        }
+        await db.SaveChanges(default);
+    }
+
+    #region CancelWorkQueueEntries (batch)
+
+    [Test]
+    public async Task CancelWorkQueueEntries_CancelsOnlyQueuedInSet()
+    {
+        await SeedWorkQueues(3, WorkQueueStatus.Queued);
+        await SeedWorkQueues(1, WorkQueueStatus.Dispatched);
+
+        long[] ids;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+            ids = await db.WorkQueues.Select(q => q.Id).ToArrayAsync();
+
+        var signal = new RecordingChangeSignal();
+        var resp = await new WorkQueueMutations().CancelWorkQueueEntries(
+            ids,
+            OperationsSignalling(signal),
+            default
+        );
+
+        resp.Success.Should().BeTrue();
+        resp.Count.Should().Be(3); // only the 3 queued; the dispatched one is skipped
+        signal.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var cancelled = await db.WorkQueues.CountAsync(q =>
+                q.Status == WorkQueueStatus.Cancelled
+            );
+            cancelled.Should().Be(3);
+        }
+    }
+
+    [Test]
+    public async Task CancelWorkQueueEntries_EmptyIds_IsRefusedAndSignalsNothing()
+    {
+        var signal = new RecordingChangeSignal();
+        var resp = await new WorkQueueMutations().CancelWorkQueueEntries(
+            [],
+            OperationsSignalling(signal),
+            default
+        );
+
+        // The dashboard's batch cancel refuses an empty selection; the API answers the same.
+        resp.Success.Should().BeFalse();
+        resp.Count.Should().Be(0);
+        resp.Message.Should().Be("No ids were given.");
+        signal.Domains.Should().BeEmpty("nothing was cancelled, so no work-queue change fired");
+    }
+
+    private IOperationsService OperationsSignalling(ITraxChangeSignal signal) =>
+        new OperationsService(
+            Substitute.For<ITrainDiscoveryService>(),
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>(),
+            changeSignal: signal
+        );
+
+    #endregion
+
+    #region GetWorkQueues
+
+    [Test]
+    public async Task GetWorkQueues_NoData_ReturnsEmpty()
+    {
+        var queries = new WorkQueueQueries();
+
+        var result = await queries.GetWorkQueues(_factory, default);
+
+        result.Items.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
+        result.NextCursor.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetWorkQueues_PaginatesAndExposesCursor()
+    {
+        await SeedWorkQueues(5);
+        var queries = new WorkQueueQueries();
+
+        var result = await queries.GetWorkQueues(_factory, default, take: 2);
+
+        result.Items.Should().HaveCount(2);
+        result.NextCursor.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task GetWorkQueues_AfterIdCursor_FiltersByCursorAndUsesExactCount()
+    {
+        await SeedWorkQueues(5);
+        var queries = new WorkQueueQueries();
+        var first = await queries.GetWorkQueues(_factory, default, take: 2);
+
+        var page2 = await queries.GetWorkQueues(
+            _factory,
+            default,
+            take: 2,
+            afterId: first.NextCursor
+        );
+
+        page2.Items.Should().HaveCount(2);
+        page2
+            .Items.Select(q => q.Id)
+            .Should()
+            .AllSatisfy(id => id.Should().BeLessThan(first.NextCursor!.Value));
+        page2.IsEstimatedCount.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetWorkQueues_SkipPagination_HonorsSkip()
+    {
+        await SeedWorkQueues(5);
+        var queries = new WorkQueueQueries();
+
+        var result = await queries.GetWorkQueues(_factory, default, skip: 2, take: 2);
+
+        result.Items.Should().HaveCount(2);
+        result.Skip.Should().Be(2);
+    }
+
+    [Test]
+    public async Task GetWorkQueues_StatusFilter_OnlyMatchingEntries()
+    {
+        await SeedWorkQueues(2, WorkQueueStatus.Queued);
+        await SeedWorkQueues(3, WorkQueueStatus.Cancelled);
+        var queries = new WorkQueueQueries();
+
+        var queued = await queries.GetWorkQueues(_factory, default, status: WorkQueueStatus.Queued);
+        var cancelled = await queries.GetWorkQueues(
+            _factory,
+            default,
+            status: WorkQueueStatus.Cancelled
+        );
+
+        queued.Items.Should().HaveCount(2);
+        queued.Items.Should().OnlyContain(q => q.Status == WorkQueueStatus.Queued);
+        cancelled.Items.Should().HaveCount(3);
+        cancelled.IsEstimatedCount.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetWorkQueues_TrainNameFilter_OnlyMatchingEntries()
+    {
+        await SeedWorkQueues(2, trainName: "Trax.Tests.IAlpha");
+        await SeedWorkQueues(3, trainName: "Trax.Tests.IBeta");
+        var queries = new WorkQueueQueries();
+
+        var alpha = await queries.GetWorkQueues(_factory, default, trainName: "Trax.Tests.IAlpha");
+
+        alpha.Items.Should().HaveCount(2);
+        alpha.Items.Should().OnlyContain(q => q.TrainName == "Trax.Tests.IAlpha");
+    }
+
+    [Test]
+    public async Task GetWorkQueues_WhitespaceTrainName_TreatedAsNoFilter()
+    {
+        await SeedWorkQueues(3);
+        var queries = new WorkQueueQueries();
+
+        var result = await queries.GetWorkQueues(_factory, default, trainName: "   ");
+
+        result.Items.Should().HaveCount(3);
+    }
+
+    [Test]
+    public async Task GetWorkQueues_StatusAndAfterId_BothApplied()
+    {
+        await SeedWorkQueues(2, WorkQueueStatus.Queued);
+        await SeedWorkQueues(3, WorkQueueStatus.Cancelled);
+        var queries = new WorkQueueQueries();
+        var firstCancelled = await queries.GetWorkQueues(
+            _factory,
+            default,
+            status: WorkQueueStatus.Cancelled,
+            take: 1
+        );
+
+        var page2 = await queries.GetWorkQueues(
+            _factory,
+            default,
+            status: WorkQueueStatus.Cancelled,
+            take: 5,
+            afterId: firstCancelled.NextCursor
+        );
+
+        page2.Items.Should().OnlyContain(q => q.Status == WorkQueueStatus.Cancelled);
+        page2
+            .Items.Select(q => q.Id)
+            .Should()
+            .AllSatisfy(id => id.Should().BeLessThan(firstCancelled.NextCursor!.Value));
+    }
+
+    [Test]
+    public async Task GetWorkQueue_ById_ReturnsRow()
+    {
+        await SeedWorkQueues(2);
+        var queries = new WorkQueueQueries();
+        var first = (await queries.GetWorkQueues(_factory, default)).Items.First();
+
+        var fetched = await queries.GetWorkQueue(first.Id, _factory, default);
+
+        fetched.Should().NotBeNull();
+        fetched!.Id.Should().Be(first.Id);
+        fetched.ExternalId.Should().Be(first.ExternalId);
+    }
+
+    [Test]
+    public async Task GetWorkQueues_SaysWhichEntriesAreStagedAndWhatTheyTouch()
+    {
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            await db.Track(
+                WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName = "Trax.Tests.IStagedTrain",
+                        InputTypeName = "Trax.Tests.StagedInput",
+                        DeferPromotion = true,
+                        SubjectKey = "customer-7",
+                    }
+                )
+            );
+            await db.Track(
+                WorkQueue.Create(
+                    new CreateWorkQueue
+                    {
+                        TrainName = "Trax.Tests.IReadyTrain",
+                        InputTypeName = "Trax.Tests.ReadyInput",
+                    }
+                )
+            );
+            await db.SaveChanges(default);
+        }
+
+        var items = (await new WorkQueueQueries().GetWorkQueues(_factory, default)).Items;
+
+        var staged = items.Single(i => i.TrainName == "Trax.Tests.IStagedTrain");
+        staged
+            .ConfirmedAt.Should()
+            .BeNull("a staged entry reads as Queued, and this is what tells it apart");
+        staged.SubjectKey.Should().Be("customer-7");
+
+        var ready = items.Single(i => i.TrainName == "Trax.Tests.IReadyTrain");
+        ready.ConfirmedAt.Should().NotBeNull();
+        ready.SubjectKey.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetWorkQueue_AllSummaryFields_PopulatedFromRow()
+    {
+        var when = DateTime.UtcNow.AddMinutes(15);
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = "Trax.Tests.IRichTrain",
+                    InputTypeName = "Trax.Tests.RichInput",
+                    Priority = 7,
+                    ScheduledAt = when,
+                }
+            );
+            entry.Status = WorkQueueStatus.Dispatched;
+            entry.DispatchedAt = DateTime.UtcNow.AddMinutes(-1);
+            entry.DispatchAttempts = 2;
+            await db.Track(entry);
+            await db.SaveChanges(default);
+        }
+
+        var queries = new WorkQueueQueries();
+        var first = (await queries.GetWorkQueues(_factory, default)).Items.First();
+        var fetched = await queries.GetWorkQueue(first.Id, _factory, default);
+
+        fetched.Should().NotBeNull();
+        fetched!.Id.Should().Be(first.Id);
+        fetched.ExternalId.Should().NotBeNullOrEmpty();
+        fetched.TrainName.Should().Be("Trax.Tests.IRichTrain");
+        fetched.Status.Should().Be(WorkQueueStatus.Dispatched);
+        fetched.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        fetched.DispatchedAt.Should().NotBeNull();
+        fetched.ScheduledAt.Should().BeCloseTo(when, TimeSpan.FromSeconds(1));
+        fetched.Priority.Should().Be(7);
+        fetched.DispatchAttempts.Should().Be(2);
+        fetched.ManifestId.Should().BeNull();
+        fetched.MetadataId.Should().BeNull();
+        fetched.DeadLetterId.Should().BeNull();
+        fetched.InputTypeName.Should().Be("Trax.Tests.RichInput");
+    }
+
+    [Test]
+    public async Task GetWorkQueue_MissingId_ReturnsNull()
+    {
+        var queries = new WorkQueueQueries();
+
+        (await queries.GetWorkQueue(99999, _factory, default)).Should().BeNull();
+    }
+
+    #endregion
+
+    #region Detail
+
+    private async Task<long> AddEntry(
+        string? subject,
+        WorkQueueStatus status = WorkQueueStatus.Queued,
+        int priority = 0,
+        string? input = null,
+        long? metadataId = null,
+        DateTime? createdAt = null
+    )
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Trax.Tests.ISubjectTrain",
+                InputTypeName = "Trax.Tests.SubjectInput",
+                Input = input,
+                SubjectKey = subject,
+                Priority = priority,
+            }
+        );
+        entry.Status = status;
+        entry.MetadataId = metadataId;
+        if (createdAt is { } at)
+            entry.CreatedAt = at;
+        await db.Track(entry);
+        await db.SaveChanges(default);
+        return entry.Id;
+    }
+
+    private async Task<long> AddRun(TrainState state)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var run = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Trax.Tests.ISubjectTrain",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        run.TrainState = state;
+        await db.Track(run);
+        await db.SaveChanges(default);
+        return run.Id;
+    }
+
+    [Test]
+    public async Task GetDetail_CarriesTheInputAndEverySummaryField()
+    {
+        var id = await AddEntry(subject: "customer-1", priority: 4, input: "{\"amount\": 12}");
+
+        var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
+
+        detail.Should().NotBeNull();
+        detail!.Id.Should().Be(id);
+        // No train on this host takes Trax.Tests.SubjectInput, so nothing shows the stored copy
+        // holds no [TraxSensitive] member: the read masks it whole.
+        detail.Input.Should().Contain("_redacted").And.NotContain("amount");
+        detail.InputTypeName.Should().Be("Trax.Tests.SubjectInput");
+        detail.SubjectKey.Should().Be("customer-1");
+        detail.Priority.Should().Be(4);
+        detail.Status.Should().Be(WorkQueueStatus.Queued);
+        detail.ConfirmedAt.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task GetDetail_SubjectWithARunInFlight_NamesTheEntryHoldingIt()
+    {
+        var running = await AddRun(TrainState.InProgress);
+        var holder = await AddEntry("customer-2", WorkQueueStatus.Dispatched, metadataId: running);
+        var waiting = await AddEntry("customer-2");
+
+        var detail = await new WorkQueueQueries().GetDetail(waiting, Operations, default);
+
+        detail!.SubjectHeldBy.Should().Be(holder);
+        detail
+            .SubjectQueuedBehind.Should()
+            .BeNull("an entry held by a running sibling says so, not what is queued ahead");
+    }
+
+    [Test]
+    public async Task GetDetail_SubjectWhoseRunFinished_IsNotHeld()
+    {
+        var done = await AddRun(TrainState.Completed);
+        await AddEntry("customer-3", WorkQueueStatus.Dispatched, metadataId: done);
+        var waiting = await AddEntry("customer-3");
+
+        var detail = await new WorkQueueQueries().GetDetail(waiting, Operations, default);
+
+        detail!.SubjectHeldBy.Should().BeNull();
+        detail.SubjectQueuedBehind.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetDetail_OlderOrHigherPrioritySibling_IsWhatItQueuesBehind()
+    {
+        var older = await AddEntry("customer-4", createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var younger = await AddEntry("customer-4");
+        var urgent = await AddEntry(
+            "customer-5",
+            createdAt: DateTime.UtcNow.AddMinutes(1),
+            priority: 9
+        );
+        var ordinary = await AddEntry("customer-5");
+
+        var queries = new WorkQueueQueries();
+
+        (await queries.GetDetail(younger, Operations, default))!
+            .SubjectQueuedBehind.Should()
+            .Be(older);
+        (await queries.GetDetail(older, Operations, default))!
+            .SubjectQueuedBehind.Should()
+            .BeNull();
+        (await queries.GetDetail(ordinary, Operations, default))!
+            .SubjectQueuedBehind.Should()
+            .Be(urgent);
+    }
+
+    [Test]
+    public async Task GetDetail_SiblingNotYetDue_IsNotAheadOfIt()
+    {
+        long later;
+        await using (var db = await _factory.CreateDbContextAsync(default))
+        {
+            var entry = WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = "Trax.Tests.ISubjectTrain",
+                    SubjectKey = "customer-6",
+                    Priority = 9,
+                    ScheduledAt = DateTime.UtcNow.AddDays(1),
+                }
+            );
+            await db.Track(entry);
+            await db.SaveChanges(default);
+            later = entry.Id;
+        }
+        var dueNow = await AddEntry("customer-6");
+
+        var detail = await new WorkQueueQueries().GetDetail(dueNow, Operations, default);
+
+        later.Should().BePositive();
+        detail!
+            .SubjectQueuedBehind.Should()
+            .BeNull("dispatch does not offer an entry before it is due");
+    }
+
+    [Test]
+    public async Task GetDetail_NoSubjectOrNotQueued_NamesNothing()
+    {
+        var running = await AddRun(TrainState.InProgress);
+        await AddEntry("customer-7", WorkQueueStatus.Dispatched, metadataId: running);
+        var dispatched = await AddEntry("customer-7", WorkQueueStatus.Dispatched);
+        var noSubject = await AddEntry(subject: null);
+
+        var queries = new WorkQueueQueries();
+        var d1 = await queries.GetDetail(dispatched, Operations, default);
+        var d2 = await queries.GetDetail(noSubject, Operations, default);
+
+        d1!.SubjectHeldBy.Should().BeNull();
+        d1.SubjectQueuedBehind.Should().BeNull();
+        d2!.SubjectHeldBy.Should().BeNull();
+        d2.SubjectQueuedBehind.Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetDetail_MissingId_ReturnsNull()
+    {
+        (await new WorkQueueQueries().GetDetail(99999, Operations, default)).Should().BeNull();
+    }
+
+    #endregion
+
+    #region Mutation pass-through
+
+    // The mutations are thin wrappers around IOperationsService. We only need to verify
+    // the wrapper forwards arguments correctly and maps OperationResult -> OperationResponse.
+    // Behavioural tests live in OperationsServiceTests in Trax.Scheduler.Tests.Integration.
+
+    [Test]
+    public async Task QueueTrain_ForwardsToOperationsService_AndMapsSuccess()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(true, Id: 42, Count: 1, Message: "ok"));
+        var mutations = new WorkQueueMutations();
+        var input = new QueueTrainInput("Trax.Tests.IFake", "{}", Priority: 3);
+
+        var response = await mutations.QueueTrain(input, ops, default);
+
+        response.Success.Should().BeTrue();
+        response.Count.Should().Be(1);
+        response.Message.Should().Be("ok");
+        await ops.Received(1).QueueTrainAsync(input, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task QueueTrain_ForwardsToOperationsService_AndMapsFailure()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.QueueTrainAsync(Arg.Any<QueueTrainInput>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(false, Message: "Unknown train: nope"));
+        var mutations = new WorkQueueMutations();
+
+        var response = await mutations.QueueTrain(new QueueTrainInput("nope"), ops, default);
+
+        response.Success.Should().BeFalse();
+        response.Message.Should().Contain("Unknown train");
+    }
+
+    [Test]
+    public async Task CancelWorkQueueEntry_ForwardsToOperationsService_AndMapsSuccess()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.CancelWorkQueueEntryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(true, Id: 7, Count: 1, Message: "cancelled"));
+        var mutations = new WorkQueueMutations();
+
+        var response = await mutations.CancelWorkQueueEntry(7, ops, default);
+
+        response.Success.Should().BeTrue();
+        response.Count.Should().Be(1);
+        await ops.Received(1).CancelWorkQueueEntryAsync(7, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CancelWorkQueueEntry_ForwardsToOperationsService_AndMapsFailure()
+    {
+        var ops = Substitute.For<IOperationsService>();
+        ops.CancelWorkQueueEntryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new OperationResult(false, Message: "Work queue entry 999 not found."));
+        var mutations = new WorkQueueMutations();
+
+        var response = await mutations.CancelWorkQueueEntry(999, ops, default);
+
+        response.Success.Should().BeFalse();
+        response.Message.Should().Contain("not found");
+    }
+
+    #endregion
+
+    #region Namespace wiring
+
+    [Test]
+    public void OperationsQueries_WorkQueueNamespace_ReturnsNewInstance()
+    {
+        var queries = new OperationsQueries();
+        queries.WorkQueue().Should().NotBeNull();
+    }
+
+    [Test]
+    public void OperationsMutations_WorkQueueNamespace_ReturnsNewInstance()
+    {
+        var mutations = new OperationsMutations();
+        mutations.WorkQueue().Should().NotBeNull();
+    }
+
+    #endregion
+}

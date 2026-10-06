@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.GraphQL.Client.Trax</AssemblyName>
+    <RootNamespace>Trax.Api.GraphQL.Client.Trax</RootNamespace>
+    <PackageDescription>Trax .NET integration layer for Trax.Api.GraphQL.Client: AssemblySchemaProvider, GraphQLQueryJunction, log correlation, dashboard discovery.</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.Client.Typed" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HotChocolate" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+  </ItemGroup>
+</Project>

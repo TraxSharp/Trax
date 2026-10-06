@@ -1,0 +1,426 @@
+using AwesomeAssertions;
+using HotChocolate;
+using HotChocolate.Execution;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using Trax.Api.DTOs;
+using Trax.Api.Services.HealthCheck;
+using Trax.Core.Functional;
+using Trax.Effect.Attributes;
+using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.TraxScheduler;
+
+namespace Trax.Api.Tests;
+
+/// <summary>
+/// End-to-end tests for the Trax GraphQL operations queries and mutations.
+/// Builds a real HotChocolate request executor and executes actual GraphQL operations.
+/// </summary>
+[TestFixture]
+public class GraphQLOperationsTests
+{
+    private ITraxScheduler _scheduler = null!;
+    private Trax.Scheduler.Services.Operations.IOperationsService _operations = null!;
+    private ITraxHealthService _healthService = null!;
+    private ITrainDiscoveryService _discoveryService = null!;
+    private ServiceProvider _serviceProvider = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _scheduler = Substitute.For<ITraxScheduler>();
+        _operations = Substitute.For<Trax.Scheduler.Services.Operations.IOperationsService>();
+        _healthService = Substitute.For<ITraxHealthService>();
+        _discoveryService = Substitute.For<ITrainDiscoveryService>();
+
+        // TrainTypeModule dynamically generates DispatchMutations and DiscoverQueries fields
+        // from discovered trains. HotChocolate requires at least one field per object type,
+        // so we provide separate fake query and mutation registrations (TrainTypeModule uses
+        // if/else — a registration goes to queries OR mutations, not both).
+        _discoveryService
+            .DiscoverTrains()
+            .Returns([
+                new TrainRegistration
+                {
+                    ServiceType = typeof(IFakeQueryTrain),
+                    ImplementationType = typeof(FakeQueryTrain),
+                    InputType = typeof(FakeGraphQLInput),
+                    OutputType = typeof(Unit),
+                    Lifetime = ServiceLifetime.Scoped,
+                    ServiceTypeName = nameof(IFakeQueryTrain),
+                    ImplementationTypeName = nameof(FakeQueryTrain),
+                    HasAllowAnonymousAttribute = true,
+                    InputTypeName = nameof(FakeGraphQLInput),
+                    OutputTypeName = nameof(Unit),
+                    RequiredPolicies = [],
+                    RequiredRoles = [],
+                    IsQuery = true,
+                    IsMutation = false,
+                    IsRemote = false,
+                    IsBroadcastEnabled = false,
+                    GraphQLOperations = GraphQLOperation.Run,
+                },
+                new TrainRegistration
+                {
+                    ServiceType = typeof(IFakeMutationTrain),
+                    ImplementationType = typeof(FakeMutationTrain),
+                    InputType = typeof(FakeMutationInput),
+                    OutputType = typeof(Unit),
+                    Lifetime = ServiceLifetime.Scoped,
+                    ServiceTypeName = nameof(IFakeMutationTrain),
+                    ImplementationTypeName = nameof(FakeMutationTrain),
+                    HasAllowAnonymousAttribute = true,
+                    InputTypeName = nameof(FakeMutationInput),
+                    OutputTypeName = nameof(Unit),
+                    RequiredPolicies = [],
+                    RequiredRoles = [],
+                    IsQuery = false,
+                    IsMutation = true,
+                    IsRemote = false,
+                    IsBroadcastEnabled = false,
+                    GraphQLOperations = GraphQLOperation.Run | GraphQLOperation.Queue,
+                },
+            ]);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        if (_serviceProvider is not null)
+            await _serviceProvider.DisposeAsync();
+    }
+
+    #region Query Tests
+
+    [Test]
+    public async Task GetHealth_ReturnsHealthStatus()
+    {
+        // Arrange
+        _healthService
+            .GetHealthAsync(Arg.Any<CancellationToken>())
+            .Returns(new HealthStatus("Healthy", "All systems operational", 3, 1, 0, 0));
+
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            {
+                operations {
+                    health {
+                        status
+                        description
+                        queueDepth
+                        inProgress
+                        failedLastHour
+                        deadLetters
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+        var json = operationResult.ToJson();
+        json.Should().Contain("Healthy");
+        json.Should().Contain("All systems operational");
+    }
+
+    [Test]
+    public async Task GetTrains_ReturnsEmptyList()
+    {
+        // Arrange
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            {
+                operations {
+                    trains {
+                        serviceTypeName
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+    }
+
+    #endregion
+
+    #region Mutation Tests
+
+    [Test]
+    public async Task TriggerManifest_CallsTheOperationsService()
+    {
+        // Arrange
+        _operations
+            .TriggerManifestAsync("test-job", null, false, Arg.Any<CancellationToken>())
+            .Returns(
+                new Trax.Scheduler.Services.Operations.TriggerManifestResult(
+                    true,
+                    "Manifest 'test-job' triggered: queued a new run (work queue entry 1), due now.",
+                    new ManifestTriggerResult(1, true, null, false, null)
+                )
+            );
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            mutation {
+                operations {
+                    triggerManifest(externalId: "test-job") {
+                        success
+                        message
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+        var json = operationResult.ToJson();
+        json.Should().Contain("true");
+        json.Should().Contain("queued a new run");
+        await _operations
+            .Received(1)
+            .TriggerManifestAsync("test-job", null, false, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DisableManifest_CallsScheduler()
+    {
+        // Arrange
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            mutation {
+                operations {
+                    disableManifest(externalId: "test-job") {
+                        success
+                        message
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+        await _scheduler.Received(1).DisableAsync("test-job", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task EnableManifest_CallsScheduler()
+    {
+        // Arrange
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            mutation {
+                operations {
+                    enableManifest(externalId: "test-job") {
+                        success
+                        message
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+        await _scheduler.Received(1).EnableAsync("test-job", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CancelManifest_ReturnsCount()
+    {
+        // Arrange
+        _scheduler.CancelAsync("test-job", Arg.Any<CancellationToken>()).Returns(2);
+
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            mutation {
+                operations {
+                    cancelManifest(externalId: "test-job") {
+                        success
+                        count
+                        message
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+        var json = operationResult.ToJson();
+        json.Should().Contain("Cancellation requested");
+    }
+
+    [Test]
+    public async Task TriggerGroup_ReturnsCount()
+    {
+        // Arrange
+        _operations
+            .TriggerManifestGroupsAsync(
+                Arg.Is<IReadOnlyCollection<long>>(ids => ids != null && ids.Single() == 42L),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Trax.Scheduler.Services.Operations.BatchTriggerResult(
+                    true,
+                    1,
+                    3,
+                    0,
+                    0,
+                    0,
+                    "3 queued across 1 of 1 manifest group(s).",
+                    []
+                )
+            );
+
+        var executor = await BuildExecutor();
+
+        // Act
+        var result = await executor.ExecuteAsync(
+            """
+            mutation {
+                operations {
+                    triggerGroup(groupId: 42) {
+                        success
+                        count
+                        message
+                    }
+                }
+            }
+            """
+        );
+
+        // Assert
+        var operationResult = result as OperationResult;
+        operationResult.Should().NotBeNull();
+        operationResult!.Errors.Should().BeNullOrEmpty();
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    [Test]
+    public async Task InputSchema_ExposesEnumValues()
+    {
+        var executor = await BuildExecutor();
+
+        var result = await executor.ExecuteAsync(
+            "{ operations { trains { inputSchema { name typeName isNullable enumValues } } } }"
+        );
+
+        var operationResult = result as OperationResult;
+        operationResult!.Errors.Should().BeNullOrEmpty();
+    }
+
+    private async Task<IRequestExecutor> BuildExecutor()
+    {
+        var services = new ServiceCollection();
+
+        // Register TraxMarker (required by AddTraxGraphQL)
+        services.AddSingleton<Trax.Effect.Configuration.TraxBuilder.TraxMarker>();
+
+        // Register discovery and effect registry before AddTraxGraphQL (needed during schema build)
+        services.AddSingleton(_discoveryService);
+        services.AddSingleton(Substitute.For<IEffectRegistry>());
+
+        // The manifest mutations look the external id up before asking the scheduler.
+        var factory =
+            new Trax.Effect.Data.InMemory.Services.InMemoryContextFactory.InMemoryContextProviderFactory(
+                new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot()
+            );
+        await using (var db = await factory.CreateDbContextAsync(default))
+        {
+            var manifest = Trax.Effect.Models.Manifest.Manifest.Create(
+                new Trax.Effect.Models.Manifest.DTOs.CreateManifest { Name = typeof(object) }
+            );
+            manifest.ExternalId = "test-job";
+            await db.Track(manifest);
+            await db.SaveChanges(default);
+        }
+        services.AddSingleton<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>(
+            factory
+        );
+
+        // Register GraphQL schema (this calls AddTraxApi which registers concrete services).
+        // The operations namespace is opt-in; tests in this fixture exercise it
+        // directly so both query and mutation surfaces are exposed.
+        Trax.Api.GraphQL.Extensions.GraphQLServiceExtensions.AddTraxGraphQL(
+            services,
+            graphql =>
+                graphql
+                    .ExposeOperationQueries()
+                    .ExposeOperationMutations()
+                    .AllowAnonymousOperations()
+        );
+
+        // Register mocks AFTER AddTraxGraphQL so they override the concrete registrations
+        services.AddScoped(_ => _healthService);
+        services.AddScoped(_ => _scheduler);
+        services.AddScoped(_ => _operations);
+
+        _serviceProvider = services.BuildServiceProvider();
+
+        return await _serviceProvider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
+    }
+
+    #endregion
+
+    #region Test Types
+
+    private interface IFakeQueryTrain;
+
+    private class FakeQueryTrain;
+
+    private interface IFakeMutationTrain;
+
+    private class FakeMutationTrain;
+
+    public record FakeGraphQLInput
+    {
+        public string Value { get; init; } = "";
+    }
+
+    public record FakeMutationInput
+    {
+        public string Data { get; init; } = "";
+    }
+
+    #endregion
+}

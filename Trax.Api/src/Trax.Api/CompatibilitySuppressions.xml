@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.ExecutionDetail.#ctor(System.Int64,System.String,System.String,Trax.Effect.Enums.TrainState,System.DateTime,System.Nullable{System.DateTime},System.String,System.String,System.String,System.String,System.String,System.String,System.Nullable{System.Int64},System.Boolean,System.String,System.Nullable{System.DateTime},System.String,System.String,System.String,System.Int32,Trax.Core.Exceptions.FailureClass,System.Nullable{System.Int64},System.Nullable{System.DateTime},System.String,System.String)</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Api.DTOs.ExecutionDetail.Deconstruct(System.Int64@,System.String@,System.String@,Trax.Effect.Enums.TrainState@,System.DateTime@,System.Nullable{System.DateTime}@,System.String@,System.String@,System.String@,System.String@,System.String@,System.String@,System.Nullable{System.Int64}@,System.Boolean@,System.String@,System.Nullable{System.DateTime}@,System.String@,System.String@,System.String@,System.Int32@,Trax.Core.Exceptions.FailureClass@,System.Nullable{System.Int64}@,System.Nullable{System.DateTime}@,System.String@,System.String@)</Target>
+    <Left>lib/net10.0/Trax.Api.dll</Left>
+    <Right>lib/net10.0/Trax.Api.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

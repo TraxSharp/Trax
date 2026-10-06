@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Api.GraphQL</AssemblyName>
+    <PackageDescription>GraphQL API for Trax .NET on HotChocolate: runs and queues trains, exposes executions, manifests and the work queue, and generates queries from [TraxQueryModel] entities. Install it to give a Trax host a GraphQL endpoint (AddTraxGraphQL, UseTraxGraphQL).</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.Audit" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL.PersistedOperations" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.Stress" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <ProjectReference Include="../Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="HotChocolate.AspNetCore.Authorization" />
+    <PackageReference Include="HotChocolate.CostAnalysis" />
+    <PackageReference Include="HotChocolate.Data" />
+    <PackageReference Include="HotChocolate.Data.EntityFramework" />
+    <PackageReference Include="HotChocolate.Execution.Projections" />
+  </ItemGroup>
+</Project>
