@@ -39,6 +39,11 @@ updates:
           - "Microsoft.AspNetCore.Authentication.JwtBearer"
           - "Microsoft.IdentityModel.*"
         update-types: ["minor", "patch"]
+      # Security fixes in one PR instead of one per package. They are not delayed by the
+      # cooldown and not affected by the ignores below.
+      nuget-security:
+        applies-to: security-updates
+        patterns: ["*"]
     ignore:
       # Trax packages are projects in this repository. The only Trax PackageReferences are
       # in Trax.Samples/templates/content, which carry no version: the template pack stamps
@@ -85,17 +90,31 @@ updates:
     cooldown: { default-days: 7 }
     open-pull-requests-limit: 5
     groups:
-      # Group only minor + patch; major bumps get their own reviewable PRs.
+      # Minor and patch updates for every directory above, in one PR.
       npm-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      # Security fixes for every directory above, in one PR rather than one per directory.
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    ignore:
+      # A major (TypeScript, vitest, jsdom, @types/node, ...) is a migration across up to ten
+      # projects, taken deliberately, never one bot PR per project. Security fixes still arrive:
+      # ignore rules do not apply to security updates.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   # The images the devcontainer and the compose files run, pinned by digest, so without
   # these nothing ever moves them.
   - package-ecosystem: "docker"
     directory: "/Trax.Effect/.devcontainer"
     schedule: { interval: "weekly" }
     cooldown: { default-days: 7 }
+    groups:
+      docker: { patterns: ["*"] }
   - package-ecosystem: "docker-compose"
     directories: ["/Trax.Effect", "/Trax.Effect/.devcontainer", "/Trax.Scheduler", "/Trax.Samples"]
     schedule: { interval: "weekly" }
     cooldown: { default-days: 7 }
+    groups:
+      docker-compose: { patterns: ["*"] }

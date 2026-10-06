@@ -91,6 +91,10 @@ internal static class Dotnet
             psi.ArgumentList.Add(arg);
         // Keep the child out of the test host's MSBuild environment.
         psi.Environment.Remove("MSBuildSDKsPath");
+        // A build that runs MSBuild worker nodes would otherwise leave them alive after it
+        // exits, holding this process's output pipes open for their idle timeout, so reading
+        // the output would wait minutes for a build that had already finished.
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
         psi.Environment.Remove("MSBuildExtensionsPath");
         psi.Environment.Remove("MSBUILD_EXE_PATH");
         // The child chooses its own environment; the runner's must not leak into it.

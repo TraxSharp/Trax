@@ -166,7 +166,16 @@ internal static class ScaffoldFeed
                 )
             ).ToString()
         );
-        await Run(root, "msbuild", traversal, "-t:PackTrax", "-m", "-nologo", "-v:minimal");
+        await Run(
+            root,
+            "msbuild",
+            traversal,
+            "-t:PackTrax",
+            "-m",
+            "-nodeReuse:false",
+            "-nologo",
+            "-v:minimal"
+        );
 
         return new Packed(root, feed, templatesNupkg, version);
     }

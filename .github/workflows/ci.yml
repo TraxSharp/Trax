@@ -163,12 +163,14 @@ jobs:
           TEST_ARGS: ${{ matrix.package['test-args'] }}
         run: |
           args=(--configuration Release --no-build)
-          if [ "$COVERAGE" = true ]; then
-            args+=(--collect:"XPlat Code Coverage" --results-directory ./TestResults)
-          fi
           # Word splitting is the point: TEST_ARGS is a list of flags from packages.json.
           # shellcheck disable=SC2206
           args+=($TEST_ARGS)
+          if [ "$COVERAGE" = true ]; then
+            include=$(cd .. && .github/scripts/coverage-include.sh "$FOLDER")
+            args+=(--collect:"XPlat Code Coverage" --results-directory ./TestResults
+              -- "DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include=$include")
+          fi
           dotnet test "$SOLUTION" "${args[@]}"
       - name: Upload coverage results
         if: matrix.package.coverage

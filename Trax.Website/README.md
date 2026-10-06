@@ -47,6 +47,10 @@ release tag once the packages are on nuget.org, so the published docs describe r
 ([ADR 0043](../Trax.Docs/adr/0043-the-site-is-published-from-a-release.md)). To publish a docs fix that describes
 nothing unreleased, dispatch the Website workflow with `main`.
 
+Vercel builds nothing else: `ignoreCommand` in `vercel.json` skips every branch except `website` and `website/*`. Push
+a branch named `website/<something>` to get a preview deployment; CI builds the site on every pull request that touches
+it either way.
+
 The docs are rendered as CommonMark with GFM, not MDX: a `>` is a blockquote, and JSX and `{expressions}` are not
 available. Raw HTML is limited to a short allow-list (`<a id>` anchors and a few inline tags) and sanitized; any other
 tag renders as the text written. A page's `description:` front matter, when present, is its meta description and its

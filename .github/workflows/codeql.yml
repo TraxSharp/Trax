@@ -3,6 +3,10 @@ name: CodeQL
 # Static analysis of the C# and TypeScript sources and of the workflows. build-mode: none
 # reads the sources without compiling them, so this runs no restore, no MSBuild targets, no
 # npm install and no package code.
+#
+# A pull request scans only the languages whose files it changes: a scan of untouched code
+# cannot find anything the pull request introduced. A push to main and the weekly run scan
+# every language, so the whole codebase stays covered and new queries reach old code.
 on:
   pull_request:
     branches: [main]
@@ -14,7 +18,45 @@ on:
 permissions: {}
 
 jobs:
+  languages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      languages: ${{ steps.pick.outputs.languages }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent, the base it merges into.
+          fetch-depth: 2
+      - name: Pick the languages to scan
+        id: pick
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo 'languages=["csharp","javascript-typescript","actions"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          languages=()
+          grep -qE '\.(cs|csproj|props|targets|razor|cshtml)$' <<<"$changed" && languages+=(csharp)
+          grep -qE '\.(ts|tsx|js|jsx|mjs|cjs|html)$' <<<"$changed" && languages+=(javascript-typescript)
+          grep -qE '^\.github/' <<<"$changed" && languages+=(actions)
+          echo "Scanning: ${languages[*]:-nothing}"
+          echo "languages=$(printf '%s\n' "${languages[@]}" | jq -R . | jq -sc 'map(select(length > 0))')" >> "$GITHUB_OUTPUT"
+
   analyze:
+    needs: languages
+    if: needs.languages.outputs.languages != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -23,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [csharp, javascript-typescript, actions]
+        language: ${{ fromJSON(needs.languages.outputs.languages) }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
