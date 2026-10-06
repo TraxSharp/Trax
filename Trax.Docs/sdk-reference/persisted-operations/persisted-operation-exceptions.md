@@ -53,7 +53,7 @@ All subclasses expose a stable `Code` string that matches the `code` field on th
 | `OldFingerprint` | `string` | Fingerprint stored on the existing row. |
 | `NewFingerprint` | `string` | Fingerprint computed from the proposed new document. |
 
-Pass `UpsertOptions { BypassShapeDiff = true }` (or `bypassShapeDiff: true` on the [GraphQL mutation](/docs/sdk-reference/persisted-operations/management-mutations)) when the change is verified safe for shipped clients.
+Pass `UpsertOptions { BypassShapeDiff = true }` (or `bypassShapeDiff: true` on the [GraphQL mutation](/docs/sdk-reference/persisted-operations/management-mutations)) when the change is verified safe for shipped clients. The exception's message names the C# option; the mutation's `SHAPE_DIFF_VIOLATION` error names `bypassShapeDiff: true`, the lever a GraphQL caller has.
 
 ## PersistedOperationInputException
 

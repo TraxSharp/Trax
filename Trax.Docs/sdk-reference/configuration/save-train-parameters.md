@@ -39,7 +39,7 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 |----------|------|---------|-------------|
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
-| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter (input and output). A payload that serializes past this many UTF-8 bytes is aborted mid-serialization and stored as `{"_truncated": true, "_maxBytes": N}` instead. `null` removes the ceiling. Must be positive when set. |
+| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter (input and output). A payload that serializes past this many UTF-8 bytes is aborted mid-serialization and stored as `{"_truncated": true, "_maxBytes": N}` instead. `null` removes the ceiling. Setting `0` or a negative value throws `ArgumentOutOfRangeException`, and the property carries `[Range(1, int.MaxValue)]` so the dashboard's Configure Effect dialog refuses it too. |
 | `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate receiving the canonical train name (`Metadata.Name`); return `false` to skip serializing that train's input. Also the way to express an opt-in, which a list of exclusions cannot. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate receiving the canonical train name (`Metadata.Name`); return `false` to skip serializing that train's output. The escape hatch for cases the `ExcludeOutput` helpers can't express. |
 

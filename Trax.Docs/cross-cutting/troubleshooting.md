@@ -145,6 +145,26 @@ no public constructor is refused as `FooTrain has no public constructor. Give it
 registered through a factory that can only build inside a request (one reading `HttpContext`, say)
 is not refused: the train is skipped with a warning, "was not verified at startup".
 
+## "X: its [Inject] property 'P' needs 'Y', which is not registered"
+
+The host refused to start because one of the train's own `[Inject]` properties names a type that
+nothing registers. The container fills an `[Inject]` property with `GetService` and leaves it null
+when nothing is registered, so the train builds and then fails on the run that reads it. Register
+the type before building the host. If the train is meant to run without it, declare the property
+nullable (`IClock? Clock`): the check then logs a warning instead of refusing. A property the
+train's constructor or an initializer sets is never filled by the container and is not checked, so
+giving it a default (`= SystemClock.Instance`) also clears the refusal. A registered type
+whose own constructor needs an unregistered one is refused the same way as a constructor argument,
+with the path: `... and the train's [Inject] property 'Repository' reaches it through
+'IProbeRepository'.`
+
+## "Chain<X> builds the junction itself, which never fills [Inject] properties"
+
+A warning, not a refusal. A junction reached with `Chain<T>()` or `ShortCircuit<T>()` is built
+from its constructor, so the `[Inject]` properties it declares are null whenever it runs. Take the
+dependency as a constructor parameter, or register the junction under an interface and reach it
+with `IChain`.
+
 ## "Junction 'X' (train 'Y') needs 'Z' as a constructor argument"
 
 A junction's constructor asks for something the chain never produced and the container does not

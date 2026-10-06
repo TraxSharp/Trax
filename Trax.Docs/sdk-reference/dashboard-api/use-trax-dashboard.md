@@ -25,6 +25,17 @@ of `AddTraxDashboard`:
 
 With none of them, `UseTraxDashboard` throws `InvalidOperationException` naming the three.
 `AllowAnonymousDashboard()` together with either of the others throws as a contradiction.
+Without `AddTraxDashboard` at all, it throws naming `AddTraxDashboard()`.
+
+**It refuses to start with nobody to challenge.** A refused request is answered by challenging or
+forbidding through an authentication scheme, so `RequirePolicy` and `RequireRoles` need one: the
+schemes the policy names with `AddAuthenticationSchemes(...)`, or else the host's default (a host
+with a single scheme uses it as the default). With neither, every refused request would be a 500
+rather than a 401 or 403, so `UseTraxDashboard` throws at startup, naming `AddAuthentication`. A
+policy that names a scheme that is not registered throws too, naming the scheme, and so does a
+`DefaultForbidScheme` the host set to a scheme that is not registered, through which a signed-in
+caller the posture refuses would be forbidden. `RequireRoles` is not combined with the host's
+default authorization policy, so that policy's schemes play no part.
 
 **It refuses to start without the Scheduler.** The dashboard's pages queue, run, cancel and
 inspect work through `IOperationsService`, which only
@@ -127,6 +138,6 @@ login page.
   `HttpContext`: a policy handler that reads it as the resource gets `null`, and the policy's
   authentication schemes are not re-run. Only the posture is re-checked: conventions added to the
   returned builder, such as `RequireHost`, apply at the endpoint only.
-- Authentication is still the host's. With no scheme that can challenge, a gated request fails
-  rather than being served.
+- Authentication is still the host's: the dashboard only refuses to start when the host has no
+  scheme it could challenge or forbid with.
 - The dashboard requires the Scheduler, which in turn requires a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)).

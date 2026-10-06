@@ -312,9 +312,11 @@ public class ChatSubscriptions
 Three things in it are load-bearing:
 
 - **The target name.** Trax's subscription root is named `LifecycleSubscriptions`. An extension of
-  `OperationTypeNames.Subscription` (`"Subscription"`) targets a type that does not exist, and
-  HotChocolate drops it without an error, so the field is simply missing from the schema. The
-  sample shipped that way until an E2E test subscribed for real.
+  `OperationTypeNames.Subscription` (`"Subscription"`) targets a type that does not exist, so
+  Trax refuses to start the host, naming the extension and telling you to extend
+  `LifecycleSubscriptions` instead. HotChocolate alone would drop the extension without an error,
+  leaving the field missing from the schema; the sample shipped that way until an E2E test
+  subscribed for real.
 - **The posture.** A field added to a root type inherits no gate, so Trax refuses to start a host
   whose extension field declares neither `[TraxAuthorize]` nor `[TraxAllowAnonymous]`.
 - **The subscribe resolver.** `[TraxAuthorize]` decides who may use the field at all; which rooms

@@ -145,6 +145,8 @@ public interface ITrainLifecycleHookFactory
 
 Most users do not need to implement this interface. `AddLifecycleHook<THook>()` generates a factory automatically. Use a custom factory only if you need non-standard creation logic. The factory is a singleton; it creates a new hook instance per train execution.
 
+The run owns the hooks its factories return: when the run ends, each one that is `IDisposable` is disposed. A factory that hands every run one shared instance must return something that is not disposable, such as a forwarder that calls the shared instance, or the first run to end disposes it for every later run.
+
 Trax calls `Create(IServiceProvider)` with the service provider of the run's scope. A factory that builds hooks from services it captured itself gets the root container's, where a scoped service such as `IDataContext` is either refused (when the container validates scopes, as ASP.NET Core does in Development) or one instance shared by every run in the process. Override `Create(IServiceProvider)` and resolve from the provider it is given. A factory that implements only `Create()` keeps working, through the default.
 
 ## Error Handling

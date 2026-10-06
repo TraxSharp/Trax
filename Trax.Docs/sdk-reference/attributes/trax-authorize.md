@@ -48,10 +48,10 @@ public class TraxAuthorizeAttribute : Attribute
 | `[TraxAuthorize("P")]` | Pass policy `P` |
 | `[TraxAuthorize(Roles = "A,B")]` | Hold role `A` or role `B` |
 | `[TraxAuthorize("P1")] [TraxAuthorize("P2")]` | Pass `P1` and `P2`: policies AND across attributes |
-| `[TraxAuthorize(Roles = "A")] [TraxAuthorize(Roles = "B")]` | Hold `A` or `B`: roles union across attributes |
+| `[TraxAuthorize(Roles = "A")] [TraxAuthorize(Roles = "B")]` | Hold `A` and `B`: each attribute is a requirement of its own. List both in one attribute (`Roles = "A,B"`) for either |
 | `[TraxAuthorize("P", Roles = "A")]` | Pass `P` and hold `A` |
 
-On a train, attributes on the class, its base classes and every interface it implements are collected together, so `[TraxAuthorize("Admin")]` on `IDeleteUserTrain` gates `DeleteUserTrain` even when the class carries none.
+On a train, attributes on the class, its base classes and every interface it implements are collected together, so `[TraxAuthorize("Admin")]` on `IDeleteUserTrain` gates `DeleteUserTrain` even when the class carries none. Collected together, they still combine as above: class `Roles = "Admin"` and interface `Roles = "Support"` require both. Discovery hands the requirement over as [`TrainRegistration.RequiredRoleSets`](/docs/sdk-reference/mediator-api/train-discovery#properties), one set per attribute.
 
 ## Where it is enforced
 

@@ -74,7 +74,7 @@ services.AddTrax(trax => trax
 
 | What the model did | Retried | Run fails with | Failure class |
 |---|---|---|---|
-| 408, 429 or 5xx other than 501 and 505 (including Nimble's 529, busy), no answer in time, a connection refused, reset or timed out, or a 200 whose body is not a System One response, including one with no `answers` object | yes, until `MaxAttempts` | `DecisionServiceException` | `Transient` |
+| 408, 429 or 5xx other than 501 and 505 (including Nimble's 529, busy), no answer in time, a connection refused, reset or timed out, or a 200 whose body is not a System One response, including one with no `answers` object or one in a character set that cannot be decoded | yes, until `MaxAttempts` | `DecisionServiceException` | `Transient` |
 | A `Retry-After` longer than `MaxRetryDelay` | no | `DecisionServiceException` | `Transient` |
 | 501, 505 or any other 4xx (bad criteria, a bad key, 402 for no credit left) | no | `DecisionServiceException` | `Permanent` |
 | A 3xx. Redirects are not followed, including one handed back by an `HttpClient` you pass in; the endpoint is the one configured. | no | `DecisionServiceException` | `Permanent` |

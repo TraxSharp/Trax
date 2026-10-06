@@ -51,7 +51,7 @@ Over a socket the same error arrives as an `error` message for that operation id
 
 ## Auth ordering
 
-Enforcement runs inside HotChocolate, after ASP.NET authentication and after `TraxGraphQLAuthInterceptor` built the request, so an endpoint gated by `RequireAuthorization()` rejects an unauthenticated caller before any persisted-document lookup.
+Enforcement runs inside HotChocolate's request pipeline, after the document is parsed. Authentication happens before it: Trax's HTTP request interceptor sets `HttpContext.User` when it builds the request, and the endpoint policy of a builder gated with `RequireAuthorization(...)` is evaluated in the same pipeline ahead of the document cache. An unauthenticated caller on such an endpoint is therefore refused before enforcement decides anything about its document.
 
 ## SDK Reference
 

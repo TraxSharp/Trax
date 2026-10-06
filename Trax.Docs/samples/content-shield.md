@@ -189,10 +189,12 @@ Locally, `Program.cs` serves the function over HTTP:
 await new Function().RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args]);
 ```
 
-The `--contentRoot` argument matters. The Kestrel server `RunLocalAsync` starts reads
-`appsettings.json` from its content root, which defaults to the current directory, while the
-function reads the copy next to the binary. Started from the repository root without it, the runner
-finds no Kestrel endpoint and listens on 5000 instead of 5205, and the API's requests go nowhere.
+The Kestrel server `RunLocalAsync` starts reads `appsettings.json` from its content root, and so
+does the function, from the copy next to the binary. The `--contentRoot` argument names that
+directory explicitly. From the next Trax.Runner.Lambda release `RunLocalAsync` defaults to it, but
+the released versions default to the current directory: started from the repository root without the
+argument, that runner found no Kestrel endpoint and listened on 5000 instead of 5205, and the API's
+requests went nowhere.
 
 For production, swap `UseRemoteWorkers` and `UseRemoteRun` for `UseLambdaWorkers` and `UseLambdaRun`
 (package `Trax.Scheduler.Lambda`), which invoke the function through the AWS SDK with no public

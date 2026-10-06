@@ -108,9 +108,11 @@ type BanPlayerResponse {
 | `output` | `{OutputType}` | RUN mode, only for trains with non-`Unit` output |
 | `workQueueId` | `Long` | QUEUE mode. Database ID of the created WorkQueue entry |
 
+A QUEUE mutation needs something to dispatch the entry. On a host whose store is in memory (`UseInMemory()` and no database provider) nothing can, so the request is refused with the error code `TRAX_QUEUE_UNAVAILABLE` and nothing is enqueued; use `mode: RUN` there. The train's `[TraxAuthorize]` requirements are checked first, so a caller the train refuses gets `TRAX_AUTHORIZATION`, as on any other host. A host on a database provider queues whether or not it runs the scheduler, since a scheduler on another host can dispatch the entry.
+
 #### Following a queued run
 
-A QUEUE mutation returns before any run exists, so it has no `metadataId`. Its `externalId` is the correlation key: the JobDispatcher copies it onto the execution (`trax.metadata.external_id`) it creates for the entry, so the run's lifecycle events, its `operations.executions` row and the work queue entry (`trax.work_queue.external_id`) all carry the same value. If a delivery to the runner fails and the entry is requeued (`MaxDispatchAttempts`), each attempt gets its own execution row with that same external id, and the failed attempts are recorded `Failed` by the dispatcher without a lifecycle event. Only an attempt a runner actually started emits events. To watch a queued run from a client, subscribe before you queue and filter by `externalId`: see [Watching a queued run](/docs/sdk-reference/graphql-api/subscriptions#watching-a-queued-run).
+A QUEUE mutation returns before any run exists, so it has no `metadataId`. Its `externalId` is the correlation key: the JobDispatcher copies it onto the execution (`trax.metadata.external_id`) it creates for the entry, so the run's lifecycle events, its `operations.executions` row and the work queue entry (`trax.work_queue.external_id`) all carry the same value. If a delivery to the runner fails and the entry is requeued (`MaxDispatchAttempts`), each attempt gets its own execution row with that same external id, and the failed attempts it requeues are recorded `Failed` by the dispatcher without a lifecycle event. The attempt that fails for good (its attempts exhausted, or its stored input unreadable) is the exception: no runner started it, so the dispatcher publishes its failure (`onTrainFailed` and a `FAILED` `onTrainStateChanged`, with `failureException` `DispatchFailed` and a fixed reason; the cause stays on the row). Otherwise only an attempt a runner actually started emits events. To watch a queued run from a client, subscribe before you queue and filter by `externalId`: see [Watching a queued run](/docs/sdk-reference/graphql-api/subscriptions#watching-a-queued-run).
 
 A queued run that fails is not retried: retries belong to [manifests](/docs/scheduler/scheduling-options), and a work queue entry with no manifest runs once. An operator requeues a failed queued run with [`requeueExecution`](#requeueexecution) or the dashboard's Re-queue button.
 
@@ -220,7 +222,14 @@ The five mutations that take a manifest's `externalId` (`triggerManifest`, `trig
 
 ### triggerManifest
 
-Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, nothing more is queued and that entry becomes the triggered run: it runs even if the manifest is disabled, and an entry due later (a retry waiting out its backoff) is brought forward to now. The mutation still succeeds, and its message says which can have happened: `Manifest triggered: its queued run is due now (an entry it already had is brought forward rather than a second one queued).`
+Triggers an immediate execution of a manifest, bypassing its normal schedule. A manifest holds at most one queued work queue entry, so when it already has one, nothing more is queued and that entry becomes the triggered run: it runs even if the manifest is disabled, and an entry due later (a retry waiting out its backoff) is brought forward to now. It goes through `IOperationsService.TriggerManifestAsync`, the call the dashboard's **Run Now** makes, and its message says which happened, naming the work queue entry, whose id is the response's `id`:
+
+- `Manifest 'order-processing-daily' triggered: queued a new run (work queue entry 42), due now.`
+- `Manifest 'order-processing-daily' already had a queued run (work queue entry 42); the trigger brought it forward, now due now, and queued nothing more.`
+- `Manifest 'order-processing-daily' already had a queued run (work queue entry 42), due now; it now runs as the trigger and nothing more was queued.`
+- `Manifest 'order-processing-daily' already had a queued run (work queue entry 42) that the dispatcher claimed as the trigger reached it, so it is already running; nothing more was queued.`
+
+On a host whose store is in memory (`UseInMemory()` and no database provider) nothing dispatches the work queue, so the trigger answers `success: false` with that reason and queues nothing; the same holds for `triggerManifestDelayed`, `triggerGroup`, `triggerManifests`, `triggerGroups`, `workQueue.queueTrain`, `requeueExecution`, and the dead-letter requeues (`requeueDeadLetter`, `requeueDeadLetters`, `requeueAllDeadLetters`) ([Trax.Scheduler ADR 0019](https://github.com/TraxSharp/Trax.Scheduler/blob/main/docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md)).
 
 ```graphql
 mutation {
@@ -240,13 +249,13 @@ mutation {
 
 **Returns**: `OperationResponse`. With `askAfresh: true`, a retry the dispatcher claimed before the
 trigger reached it can no longer be changed. The mutation still succeeds, and its message says so:
-`"Manifest triggered, but the dispatcher had already claimed its queued retry, so that run replays the decisions of execution 42 rather than asking its deciders afresh"`.
+`"Manifest 'order-processing-daily' triggered, but the dispatcher had already claimed its queued retry (work queue entry 42), so that run replays the decisions of execution 41 rather than asking its deciders afresh."`.
 
 ---
 
 ### triggerManifestDelayed
 
-Triggers a manifest execution after a specified delay. When the manifest already has a queued entry, no second one is queued: that entry keeps its time if it is due sooner, and is brought forward to now plus `delay` otherwise. The message says the run is due within `delay`.
+Triggers a manifest execution after a specified delay. When the manifest already has a queued entry, no second one is queued: that entry keeps its time if it is due sooner, and is brought forward to now plus `delay` otherwise. As with `triggerManifest`, the message says which happened and when the run is due, and `id` is the work queue entry.
 
 ```graphql
 mutation {
@@ -362,7 +371,9 @@ mutation {
 |-----------|------|----------|-------------|
 | `groupId` | `Long!` | Yes | The manifest group's database ID |
 
-**Returns**: `OperationResponse` (includes `count`, the number of manifests queued, which leaves out those skipped as already queued; the server logs the skipped count)
+It goes through `IOperationsService.TriggerManifestGroupsAsync`, the call the dashboard's **Run Group** makes, with the one group.
+
+**Returns**: `OperationResponse`. `count` is the number of manifests a new run was queued for; the message also counts the members that already had a queued run, which now runs as the trigger, for example `2 queued, 1 already queued (that entry now runs as the trigger) across 1 of 1 manifest group(s).` An unknown group id is counted as not found, with `count` 0.
 
 ---
 
@@ -387,6 +398,89 @@ mutation {
 | `groupId` | `Long!` | Yes | The manifest group's database ID |
 
 **Returns**: `OperationResponse` (includes `count`, the number of executions marked for cancellation)
+
+---
+
+### triggerManifests
+
+Triggers many manifests at once by database id, each as [`triggerManifest`](#triggermanifest) triggers one: an immediate run is queued, or a manifest's queued entry is brought forward to now when it already has one. It goes through `IOperationsService.TriggerManifestsAsync`, the call the dashboard's **Trigger Selected** (and **Trigger Selected (Ask Afresh)**) makes, so both count and note the same things.
+
+```graphql
+mutation {
+  operations {
+    triggerManifests(ids: [12, 13, 99999], askAfresh: false) {
+      success
+      matched
+      queued
+      alreadyQueued
+      tooLateToAskAfresh
+      skipped
+      message
+      notes { id message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 manifest database ids (not external ids). A repeated id counts once |
+| `askAfresh` | `Boolean!` | No (default `false`) | `true` makes a queued retry the trigger releases ask its deciders again instead of replaying the failed run's decisions. One the dispatcher had already claimed still replays, and is counted in `tooLateToAskAfresh` |
+
+**Returns**: `BatchTriggerResponse`. An unknown id is skipped with a note and does not stop the rest. An empty list, or more than 1000 ids, returns `success: false` with every count `0` and triggers nothing. Each manifest is queued with its own save, so the cost grows with the batch: about 2 s for a full batch of 1000 new entries at the stress suite's scale, and 0.6 s when each already had one. A save that fails on the database is a GraphQL error rather than a `success: false`; the manifests queued before it stay queued, and sending the same batch again is safe, since a manifest holds at most one queued entry.
+
+#### BatchTriggerResponse fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `Boolean!` | `false` only when the batch was refused as given; then nothing was triggered |
+| `matched` | `Int!` | How many of the ids named a manifest (for `triggerGroups`, a group) that exists and was triggered |
+| `queued` | `Int!` | Manifests a new work queue entry was queued for |
+| `alreadyQueued` | `Int!` | Manifests that already had a queued entry, so nothing more was queued: that entry became the triggered run, brought forward to now when it was due later. Also counts an entry the dispatcher claimed first, which is already running |
+| `tooLateToAskAfresh` | `Int!` | Manifests triggered with `askAfresh: true` whose queued retry the dispatcher claimed first, so that run replays the failed run's decisions anyway. Each has a note naming the run it replays |
+| `skipped` | `Int!` | Ids that named no manifest (or group). Each has a note |
+| `message` | `String!` | One line for an operator |
+| `notes` | `[BatchTriggerNote!]!` | One `{ id, message }` per id that did not get what the trigger asked for. Empty when every id was triggered as asked |
+
+---
+
+### triggerGroups
+
+Triggers many manifest groups at once by id, each as [`triggerGroup`](#triggergroup) triggers one: every enabled member that runs on its own schedule is triggered, and `DEPENDENT` and `DORMANT_DEPENDENT` members are left to run after their parent. A disabled group is triggered too, as the single trigger triggers it, and holds its runs until it is enabled. It goes through `IOperationsService.TriggerManifestGroupsAsync`, the call the dashboard's groups page makes for **Trigger Selected**.
+
+```graphql
+mutation {
+  operations {
+    triggerGroups(ids: [1, 2]) { success matched queued alreadyQueued skipped message notes { id message } }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 manifest group ids |
+
+**Returns**: [`BatchTriggerResponse`](#batchtriggerresponse-fields). `matched` and `skipped` count group ids; `queued`, `alreadyQueued` and `tooLateToAskAfresh` count manifests. An empty list, or more than 1000 ids, returns `success: false` and triggers nothing. Its cost grows with the manifests the groups hold, one save each.
+
+---
+
+### cancelGroups
+
+Requests cancellation of every pending and running execution of every manifest in the listed groups, by the rule [`cancelGroup`](#cancelgroup) applies to one, flagged in one update. It goes through `IOperationsService.CancelManifestGroupsAsync`, the call the dashboard's groups page makes for **Cancel Running**.
+
+```graphql
+mutation {
+  operations {
+    cancelGroups(ids: [1, 2]) { success count message }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ids` | `[Long!]!` | Yes | 1 to 1000 manifest group ids |
+
+**Returns**: `OperationResponse`. `count` is the number of executions flagged, zero included, and `message` also says how many of the ids named a group. An empty list, or more than 1000 ids, returns `success: false` and flags nothing.
 
 ---
 
@@ -558,21 +652,22 @@ query {
 Patches mutable settings on a single manifest. Each field on `input` is independent; a `null`
 value leaves it unchanged. Set `clearTimeout: true` to remove the per-execution timeout.
 
-A value the scheduler could not use is refused with `success: false`, a message naming the field,
-and nothing saved:
+It goes through `IOperationsService.UpdateManifestAsync`, which runs every check before writing a
+field. A value the scheduler could not use is refused with `success: false`, a message naming the
+field, and nothing saved:
 
 - `timeoutSeconds` of 0 or less (a zero timeout would cancel every run at once; use `clearTimeout`),
-- `intervalSeconds` of 0 or less, and `maxRetries` below 0,
+- `intervalSeconds` of 0 or less, `maxRetries` below 0, and `priority` outside 0 to 31 (the work
+  queue's range),
 - `scheduleType: CRON` with no `cronExpression` on the input or the manifest, or a `cronExpression`
-  that is not 5 or 6 space-separated fields,
+  the scheduler cannot use: not 5 or 6 space-separated fields, a field out of range
+  (`99 * * * *`), or an expression that never fires (`0 0 30 2 *`),
 - `scheduleType: INTERVAL` with no `intervalSeconds` on the input or the manifest,
 - a switch to `ONCE`, `DEPENDENT` or `DORMANT_DEPENDENT`, which need a time or a parent manifest this
   input cannot give. Schedule those from code.
 
 The schedule is checked only when the input changes it (`scheduleType`, `cronExpression` or
-`intervalSeconds`), so a manifest whose stored schedule is unusable can still be disabled. A
-`cronExpression` with the right number of fields and an invalid one (`99 * * * *`) is not caught
-here yet; the scheduler logs it and skips the manifest.
+`intervalSeconds`), so a manifest whose stored schedule is unusable can still be disabled.
 
 ```graphql
 mutation {
@@ -592,19 +687,19 @@ mutation {
 |-------|------|-------------|
 | `isEnabled` | `Boolean` | Enable/disable the manifest |
 | `maxRetries` | `Int` | Retry budget |
-| `priority` | `Int` | Dispatch priority |
+| `priority` | `Int` | Dispatch priority, 0 to 31 |
 | `timeoutSeconds` / `clearTimeout` | `Int` / `Boolean` | Per-execution timeout; `clearTimeout: true` removes it |
 | `scheduleType` | `ScheduleType` | Schedule type |
 | `cronExpression` | `String` | Cron expression |
 | `intervalSeconds` | `Int` | Interval |
 
-**Returns**: `OperationResponse` (`success: false` when the manifest id does not exist or a value is refused).
+**Returns**: `OperationResponse` (`success: false` when the manifest id does not exist or a value is refused; on success `id` is the manifest's).
 
 ---
 
 ### setEffectEnabled
 
-Turns an observational effect on or off in the API process, through the effect registry, the same calls the dashboard's [Effects page](/docs/dashboard#effects-page) makes. The change is in memory: it does not reach the scheduler or worker processes where trains usually run, and a restart restores the configured state.
+Turns an observational effect on or off in the API process, through `IEffectSettingsService.SetEffectEnabled` in Trax.Scheduler, the call the dashboard's [Effects page](/docs/dashboard#effects-page) makes. The change is in memory: it does not reach the scheduler or worker processes where trains usually run, and a restart restores the configured state.
 
 ```graphql
 mutation {
@@ -626,7 +721,52 @@ mutation {
 | `fullName` | `String!` | Yes | The effect factory's full type name, as [`operations.effects`](/docs/sdk-reference/graphql-api/queries#effects) reports it in `fullName`. Matched exactly. |
 | `enabled` | `Boolean!` | Yes | `true` to turn the effect on, `false` to turn it off |
 
-**Returns**: `OperationResponse`. `success` is false, and nothing changes, when no effect has that name or the effect was registered as not toggleable. On success `count` is 1.
+**Returns**: `OperationResponse`. `success` is false, and nothing changes, when no effect has that name, the effect was registered as not toggleable, or the host registers no effect registry. On success `count` is 1.
+
+---
+
+### configureEffect
+
+Writes settings of a configurable effect in the API process, through `IEffectSettingsService.ConfigureEffect` in Trax.Scheduler, the call the dashboard's Configure dialog makes. [`effects`](/docs/sdk-reference/graphql-api/queries#effects) lists each effect's `fields`: their names, how each is edited and what to type. Send only the settings you change; a setting not listed is not written, so a change made elsewhere to it is kept.
+
+```graphql
+mutation {
+  operations {
+    configureEffect(
+      fullName: "Trax.Effect.Provider.Parameter.Services.ParameterEffectProviderFactory.ParameterEffectProviderFactory"
+      values: [
+        { name: "SaveOutputs", value: "false" }
+        { name: "MaxParameterBytes", value: null }
+      ]
+    ) {
+      success
+      count
+      message
+      errors { field message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `fullName` | `String!` | Yes | The effect factory's full type name, as `effects` reports it. Matched exactly |
+| `values` | `[EffectSettingValueInput!]!` | Yes | 1 to 1000 `{ name: String!, value: String }`, each setting at most once |
+
+Each `value` is text read as the setting's type: numbers in invariant culture with `.` for the decimal point and no thousands separators, a date or time with no offset as UTC, a boolean as `true` or `false`, an enum by member name. Null or blank is no value for a setting that accepts null, the empty string for a text setting that does not, and refused for anything else. A `SET_IN_CODE` setting cannot be written. A `[TraxSensitive]` setting can be written, though it is never read back.
+
+It is all or nothing: every value is read and checked against the setting's validation attributes before any is written, and when one is refused, or a setter throws part way, nothing is written.
+
+**Returns**: `ConfigureEffectResponse`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `Boolean!` | Whether the settings were written |
+| `count` | `Int!` | How many settings were written; `0` on failure |
+| `message` | `String!` | One line for an operator |
+| `errors` | `[EffectSettingError!]!` | `{ field, message }` for each refused setting: no such setting, set in code, given twice, not readable as its type, or failing its validation. Empty on success, and on a failure that is not one setting's, such as an unknown effect or one with no settings |
+
+The change is in memory and applies to the next run in this process. It does not reach the scheduler or worker processes where trains usually run, and a restart restores the configured settings.
 
 ---
 
@@ -662,6 +802,31 @@ mutation {
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `input` | `UpdateSchedulerConfigInput!` | Yes | Patch payload (fields below) |
+
+#### setLogLevels
+
+Sets the level each listed log category filters at in the API process, through `ILogLevelService.SetLogLevels` in Trax.Scheduler, the call the dashboard's server settings make. [`config.logLevels`](/docs/sdk-reference/graphql-api/queries#environmentname-version-and-loglevels) reads the result.
+
+```graphql
+mutation {
+  operations {
+    config {
+      setLogLevels(levels: [
+        { category: "Default", level: WARNING }
+        { category: "Trax", level: DEBUG }
+      ]) { success count notApplied message }
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `levels` | `[LogLevelSettingInput!]!` | Yes | 1 to 1000 `{ category: String!, level: LogLevel! }`. `category` is a category configured under `Logging:LogLevel` (or changed here before), case ignored; `level` is `TRACE`, `DEBUG`, `INFORMATION`, `WARNING`, `ERROR`, `CRITICAL` or `NONE`. When a category is listed twice, the last level wins |
+
+**Returns**: `SetLogLevelsResponse` with `success: Boolean!`, `count: Int!` (categories set), `notApplied: [String!]!` and `message: String!`. A list naming a category that is not configured, or an empty list, is refused whole and nothing changes. `notApplied` lists categories set whose loggers still filter at another level, which happens when the host sets the logger filter itself after Trax.
+
+The change is applied to the host's logger filter options over every configuration source and lasts until the process restarts; nothing is persisted, and it does not reach the scheduler or worker processes. A host that does not call `AddScheduler` registers no `ILogLevelService`, and there `setLogLevels` returns `success: false`.
 
 #### UpdateSchedulerConfigInput fields
 
@@ -902,7 +1067,7 @@ mutation {
 
 The `operations.deadLetters` namespace exposes dead-letter requeue and acknowledge mutations: `requeueDeadLetter`, `acknowledgeDeadLetter`, batch variants (`requeueDeadLetters`, `acknowledgeDeadLetters`), and "all" variants (`requeueAllDeadLetters`, `acknowledgeAllDeadLetters`). The batch variants take 1 to 1000 ids; an empty or longer list returns a count of zero with the reason in `message` and changes nothing. An acknowledgement `note` is at most 1,000 characters; a longer one is refused (`success: false`, or `count: 0` on the batch and "all" variants) and nothing changes. The three requeues take an optional `askAfresh: Boolean!` (default `false`): left false, a requeued run [replays the failed run's decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) when that is sound; true, it asks its deciders afresh.
 
-`requeueAllDeadLetters` does not hold the request for the whole backlog. It starts the requeue as a background job on the node that received it and returns that job at once, as a `DeadLetterRequeueJob`; read it again with the `requeueAllJob(id)` query (see [Queries](/docs/sdk-reference/graphql-api/queries)) until `status` is no longer `RUNNING`. The job is not tied to the request: it finishes after the client goes away, and HotChocolate's execution timeout does not apply to it. Only the node shutting down stops it, between pages, and the job ends `CANCELED`.
+`requeueAllDeadLetters` does not hold the request for the whole backlog. It starts the requeue as a background job on the node that received it and returns that job at once, as a `DeadLetterRequeueJob`; read it again with the `requeueAllJob(id)` query (see [Queries](/docs/sdk-reference/graphql-api/queries)) until `status` is no longer `RUNNING`. The job is not tied to the request: it finishes after the client goes away, and HotChocolate's execution timeout does not apply to it. Only the node shutting down stops it, between pages, and the job ends `CANCELED`. The job is the scheduler's [`IDeadLetterRequeueJobs`](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs), which the dashboard's **Requeue All** starts too, so a requeue-all started from either surface is the one the other sees running.
 
 ```graphql
 mutation {
@@ -941,6 +1106,7 @@ A requeue or acknowledge that cannot be done (the dead letter is not awaiting in
 | `awaitingAtStart` | `Int!` | Dead letters awaiting intervention when it started |
 | `startedAt` / `finishedAt` | `DateTime!` / `DateTime` | When it started, and when it stopped (`null` while running) |
 | `count` | `Int` | Dead letters it requeued, once `SUCCEEDED`; `null` before |
+| `processed` | `Int!` | Dead letters it has requeued so far, updated as each page commits; with `awaitingAtStart`, how far a running job has got. It can pass `awaitingAtStart` when dead letters arrive while it runs |
 | `message` | `String!` | Where it is, or how it ended. A `FAILED` job's message says only that the server failed; the detail is in the server's log |
 | `started` | `Boolean!` | `false` when a requeue-all was already running on this node: no second one was started, and this is the running one |
 

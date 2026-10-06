@@ -50,7 +50,7 @@ public interface IJunctionEffectProviderFactory
 | Call | When |
 |------|------|
 | `IJunctionEffectProviderFactory.Create()` | When a train's junction effect runner is created, for each factory the effect registry reports enabled at that moment. Toggling an effect affects runners created afterwards. |
-| `BeforeJunctionExecution` | Before each `EffectJunction` runs: after its `Metadata` is created, before its start time is set |
+| `BeforeJunctionExecution` | Before each `EffectJunction` runs, including one skipped because an earlier junction failed: after its `Metadata` is created, before its start time is set |
 | `AfterJunctionExecution` | After each `EffectJunction`, whether it succeeded, failed, or was skipped because an earlier junction failed. `Metadata` then holds the end time, the railway state and `HasRan`. |
 | `Dispose()` | When the train is disposed. An exception is logged and the other providers are still disposed. |
 
@@ -58,7 +58,7 @@ Providers run in registration order. A plain `Junction` does not trigger them.
 
 ## Failures
 
-An exception from either method is not caught. It stops the providers after it and fails the train. From `AfterJunctionExecution` that is true even when the junction succeeded, and when the junction had already failed, the provider's exception is what the train reports. Catch inside the provider anything that should not fail a run.
+An exception from either method stops the providers after it. From `BeforeJunctionExecution` before a junction that will run, and from `AfterJunctionExecution` after a junction that succeeded, it fails the train. From `BeforeJunctionExecution` before a junction that is skipped because an earlier one failed, and from `AfterJunctionExecution` after a junction that failed or was skipped, it is logged as a warning and the failure already on the railway is what the train reports. Catch inside the provider anything that should not fail a run.
 
 ## Example
 

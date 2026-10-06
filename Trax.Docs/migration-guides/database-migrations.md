@@ -151,7 +151,9 @@ on `trax.metadata (external_id)`. It is not unique: a dispatch retry adds a run 
 External id is the one key that is the same from enqueue to run, so a consumer correlating its own
 records with runs looks them up by it. Without an index each lookup read the whole table: 48 to 77 ms
 at a million rows, against 0.05 ms with it. `external_id` is `char(32)`, so compare a `char(32)` to use
-it without a cast.
+it without a cast. The data context maps the column as `character(32)`, so a LINQ comparison such as
+`Where(m => m.ExternalId == id)` sends a `char(32)` parameter and uses the index; before that mapping
+it sent text, which made Postgres cast the column and read the whole table.
 
 It is built `CREATE INDEX CONCURRENTLY`, so runs keep being written while it builds, and the build
 takes as long as the table is large. It waits for transactions already open on `metadata` to finish
@@ -252,3 +254,76 @@ clean-up resolves the duplicate before the next build.
 
 Nothing is backfilled in `061`, and a host on the previous version never reads the column, so a
 rolling deploy is safe.
+
+## Log text search (063)
+
+`063_log_text_search_trigram.sql` (Postgres only) installs the `pg_trgm` extension and adds two GIN
+trigram indexes on `trax.log`: `ix_log_message_trgm` over `lower(message)` and `ix_log_category_trgm`
+over `lower(category)`. They serve the scheduler's log text filters
+([`MessageContains` and `CategoryContains`](/docs/sdk-reference/scheduler-api/i-operations-service#logquery)),
+which the dashboard's log grids and the GraphQL `logs` query share. Without them a term almost no
+entry carries read the whole table: a page took about 390 ms at three million rows, and takes about
+3 ms through the index. A term most entries carry still reads by id, as it did, and a term shorter than
+three characters has no trigram to look up, so it still reads the table.
+
+`pg_trgm` ships with Postgres's contrib modules in every mainstream distribution and managed service,
+and since Postgres 13 it is a trusted extension, so a role with `CREATE` on the database installs it
+without being a superuser. If the role Trax migrates with cannot, run `CREATE EXTENSION pg_trgm;` once
+as one that can, before upgrading; the migration then finds it. The extension is created in the first
+schema on the session's search path (normally `public`) and the operator class is looked up through
+the same path, so a `pg_trgm` already installed in a schema off that path needs the schema added to
+the connection string's `Search Path`.
+
+The indexes are built `CREATE INDEX CONCURRENTLY`, so log writes carry on while they build, but the
+build is the cost of this upgrade on a large log table: each reads the whole table, about 23 s for the
+message index and 11 s for the category index at three million short entries, longer with longer
+messages. Startup of the upgraded host waits for it. Together they take about 60% of the table's size
+on disk, and every log write after the upgrade updates both. To build them ahead of the upgrade, run
+the script's statements by hand; the migration skips indexes that already exist under those names.
+
+SQLite has no trigram index, so on SQLite a text filter still reads the table.
+
+## Decision page index (064, SQLite 028)
+
+`064_decision_metadata_id_id_index.sql` (SQLite `028`) adds `ix_decision_metadata_id_id` on
+`trax.decision (metadata_id, id)`. A run's recorded decisions are read a page at a time in id order,
+and the only index leading on `metadata_id` (`uq_decision_run_question`) orders by question, so
+Postgres walked the primary key and skipped every other run's decisions to reach the run's first: about
+290 ms for that page at a million decisions, growing with the table, and 2 ms with the index. On
+Postgres it is built `CONCURRENTLY`, so decisions keep being recorded while it builds.
+
+## Log metadata id not null (065, SQLite 029)
+
+`065_log_metadata_id_not_null.sql` (SQLite `029`) makes `trax.log.metadata_id` `NOT NULL` with a
+default of 0, after turning any NULL already there into 0. The model has always read the column as a
+plain number and the log writer always stores 0, so a row written without it, by hand or by another
+tool, held NULL and broke every read of a log page that contained it. Now such a row reads back with
+0, like the writer's own.
+
+On Postgres the migration proves the column has no NULLs with a check constraint added `NOT VALID`
+and then validated, which reads the table without blocking log writes, so `SET NOT NULL` takes its
+exclusive lock only briefly; the check is dropped afterwards. SQLite cannot change a column in place,
+so `029` rebuilds the `log` table with the same columns, ids and index.
+
+## Failure search (066)
+
+`066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL
+[`executions`](/docs/sdk-reference/graphql-api/queries#executions) filters `failureReasonContains`
+and `failureJunction`. `ix_metadata_failure_reason_trgm` is a GIN trigram index over
+`lower(failure_reason)`, the same kind as `063`'s log indexes, and serves a search for text inside a
+run's failure reason. `ix_metadata_failure_junction` is a partial B-tree on
+`(failure_junction, id)` that holds only runs with a failure junction, and serves an exact match on
+the junction in id order. Without them a term or junction few runs carry, and the count of any
+match, read the whole run table.
+
+`pg_trgm` is installed by `063`, so this migration needs nothing more from the role Trax migrates
+with; its own `CREATE EXTENSION IF NOT EXISTS` is a no-op after `063`.
+
+Both are built `CREATE INDEX CONCURRENTLY`, so runs keep being written while they build, but each
+reads the whole run table. At three million runs, two in nine of them failed with a reason of about
+fifty characters, the trigram index took about 7 s and 50 MB, and the junction index under a second
+and 30 MB. The trigram index grows with how many runs failed and how long their reasons are. Startup
+of the upgraded host waits for the build; to build them ahead of the upgrade, run the script's
+statements by hand, and the migration skips indexes that already exist under those names.
+
+SQLite has no trigram index and gets no migration here, so on SQLite both filters read the table.

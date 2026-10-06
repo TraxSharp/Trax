@@ -40,7 +40,8 @@ Starting a new server rather than learning one feature? The [project templates](
 | [SignalR Broadcaster](/docs/samples/signalr-broadcaster) | Live train events in a browser through the SignalR sink, a hub only signed-in operators may join, a projected failure reason | `dotnet run --project samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster` | 5270 |
 
 The ports never collide, so any set of samples can run side by side. The React clients (Chat Service, Recovery,
-State Machine) use Vite's dev server on 5173; run one at a time.
+State Machine) use Vite's dev server on 5173, the one origin their hosts allow; run one at a time. A second
+client refuses to start rather than move to another port.
 
 ## Running the Samples
 

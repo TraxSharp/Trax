@@ -165,7 +165,8 @@ A `requestId` makes a retry safe: the same id with the same trigger returns the 
 firing again, and the same id with a different trigger is refused as `request-id-reused`. Advance and send
 share one id space; a send with no `requestId` uses `send:{id}`. The full rule is under
 [persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched).
-An unauthenticated caller gets the opaque authorization error at HTTP 200, not a crash, and a request that
+The four snapshot mutations carry `[TraxAuthorize]`, so an unauthenticated caller is refused before the mutation
+runs, with the `TRAX_AUTHORIZATION` GraphQL error ("Not authorized.") rather than a `problem`. A request that
 reaches a mutation with no user key (`ISnapshotPrincipal.CurrentUserKey` is null) is refused as
 `unauthenticated`.
 

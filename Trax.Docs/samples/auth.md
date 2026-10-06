@@ -331,8 +331,8 @@ public sealed class DatabaseAuditSink(IDbContextFactory<NewsroomDbContext> conte
 | `operations { health }`, Bob's key | `TraxApiKey:bob` | `apikey` | false | `Not authorized.` |
 
 The document is stored with every string and number literal blanked (`title: ""`), and variables
-are not recorded. `OperationName` is the request's `operationName` field: a client that names its
-operation only inside the document (`query Feed { ... }`) and sends no `operationName` gets null.
+are not recorded. `OperationName` is the request's `operationName` field, or, when a client sends none, the name
+the document gives its operation (`query Feed { ... }` is recorded as `Feed`).
 
 ## What the tests prove
 

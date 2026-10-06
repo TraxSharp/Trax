@@ -56,6 +56,7 @@ public class TrainRegistration
 
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
     public required IReadOnlyList<string> RequiredRoles { get; init; }
+    public IReadOnlyList<IReadOnlyList<string>> RequiredRoleSets { get; init; }
     public bool HasAuthorizeAttribute { get; init; }
     public bool HasAllowAnonymousAttribute { get; init; }
     public bool HasQueueSubjectKey { get; init; }
@@ -84,7 +85,8 @@ public class TrainRegistration
 | `InputTypeName` | `string` | Friendly display name for `InputType` |
 | `OutputTypeName` | `string` | Friendly display name for `OutputType` |
 | `RequiredPolicies` | `IReadOnlyList<string>` | Authorization policy names from `[TraxAuthorize]` attributes on the implementation class. Empty if no auth required. |
-| `RequiredRoles` | `IReadOnlyList<string>` | Role names from `[TraxAuthorize(Roles = "...")]` attributes. Empty if no roles required. |
+| `RequiredRoles` | `IReadOnlyList<string>` | Every role named by any `[TraxAuthorize(Roles = "...")]` attribute, as declared. This is the union of the attributes, not the requirement: check `RequiredRoleSets`. Empty if no roles required. |
+| `RequiredRoleSets` | `IReadOnlyList<IReadOnlyList<string>>` | The role requirement: one set per `[TraxAuthorize]` attribute that names roles, de-duplicated. The caller must hold at least one role of **every** set, so separate attributes combine with AND, as separate `[Authorize]` attributes do in ASP.NET Core. Class `Roles = "Admin"` and interface `Roles = "Support"` is two sets, and a Support-only caller is refused. Roles inside one attribute combine with OR. On a registration built by hand without it, or with it set empty while `RequiredRoles` names roles, it is `RequiredRoles` as a single set, so listed roles are never read as no requirement. Added in Trax.Mediator 1.25.0. |
 | `HasAuthorizeAttribute` | `bool` | Whether the train carries any `[TraxAuthorize]` (including the bare form). |
 | `HasAllowAnonymousAttribute` | `bool` | Whether the train carries `[TraxAllowAnonymous]`. On a GraphQL-exposed train this is the explicit "intentionally public" marker that satisfies the exposure check; it carries no runtime gate of its own. Mutually exclusive with `HasAuthorizeAttribute` on an exposed train. |
 | `HasQueueSubjectKey` | `bool` | Whether the implementation overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), directly or through a base class. Only such a train can stamp a subject key on its queue entries, so only its queued work can be serialized against other work for the same subject. The enqueue uses the same check to decide whether to ask the train for a key. True does not mean every entry has one: the override may return null for a given input. |
@@ -103,7 +105,7 @@ public class TrainRegistration
 3. Pairs each train's two registrations. `AddScopedTraxRoute` registers both `TImplementation` and `TService`, and the pair becomes one registration with the interface as `ServiceType` and the class as `ImplementationType`. The interface is the train's own (the one deriving from `IServiceTrain<,>`, as [AddMediator](/docs/sdk-reference/configuration/add-mediator#how-discovery-works) selects it), and the two are paired only when resolving the interface yields that class: the interface's descriptor names the class, or no other registered class implements the interface. A class registered with no interface of its own is listed under the class, and two different classes registered under the same class service type are refused (see **Throws** above).
 4. Extracts `InputType` and `OutputType` from the generic arguments of `ServiceType`.
 5. Lists every train, including trains that share an input type. Pairing is per train, never per input type, so a registration's requirements and attributes are always read from the class its `ServiceType` resolves to.
-6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies` and `RequiredRoles`, and sets `HasAuthorizeAttribute`. Reads `[TraxAllowAnonymous]` (across the base chain and interfaces) into `HasAllowAnonymousAttribute`. Discovery is permissive; the mutual-exclusion and exposure-posture checks run at host startup.
+6. Reads `[TraxAuthorize]` attributes from the implementation type and extracts policy and role requirements into `RequiredPolicies`, `RequiredRoles` and `RequiredRoleSets` (one set per attribute), and sets `HasAuthorizeAttribute`. Reads `[TraxAllowAnonymous]` (across the base chain and interfaces) into `HasAllowAnonymousAttribute`. Discovery is permissive; the mutual-exclusion and exposure-posture checks run at host startup.
 6b. Reads `[TraxQuery]` and `[TraxMutation]` attributes from the implementation type and populates `IsQuery`, `IsMutation`, `GraphQLName`, `GraphQLDescription`, `GraphQLDeprecationReason`, and `GraphQLOperations`.
 6c. Reads the `[TraxBroadcast]` attribute and populates `IsBroadcastEnabled`.
 6d. Checks whether the implementation type overrides `QueueSubjectKey` and sets `HasQueueSubjectKey`.

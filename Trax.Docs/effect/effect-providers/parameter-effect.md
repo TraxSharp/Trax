@@ -64,7 +64,7 @@ By default, both inputs and outputs are serialized. You can control this with th
 |----------|------|---------|-------------|
 | `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
 | `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
-| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. `null` removes the ceiling. |
+| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. `null` removes the ceiling; `0` or a negative value is refused with `ArgumentOutOfRangeException`. |
 | `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's input. |
 | `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's output. |
 

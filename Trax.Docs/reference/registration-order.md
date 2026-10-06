@@ -37,16 +37,17 @@ These are not about order: the call is missing. Each one fails at startup, with 
 | A data provider (`UseInMemory()`, `UseSqlite()`, `UsePostgres()`) in `AddEffects` on a host that calls `AddScheduler()` | `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).` |
 | The train's assembly in `AddMediator(...)`, for a train named in `Schedule<T>` | `No train implements IServiceTrain<TInput, TOut>. Add the train's assembly to AddMediator(m => m.ScanAssemblies(typeof(MyTrain).Assembly)).` |
 | `[TraxAuthorize]` or `[TraxAllowAnonymous]` on a `[TraxQuery]` or `[TraxMutation]` train | `Trax GraphQL exposure authorization check failed:` followed by one line per train |
-| `AddTraxDashboard()` on a host that calls `UseTraxDashboard()` | `No service for type 'Trax.Dashboard.Configuration.DashboardOptions' has been registered.` |
-| `AddTraxGraphQL()` on a host that calls `UseTraxGraphQL()` | `No service for type 'HotChocolate.Execution.IRequestExecutorProvider' has been registered.` |
+| `AddTraxDashboard()` on a host that calls `UseTraxDashboard()` | `UseTraxDashboard() requires AddTraxDashboard() to be called first.` |
+| `AddTraxGraphQL()` on a host that calls `UseTraxGraphQL()` | `UseTraxGraphQL() requires AddTraxGraphQL() to be called first.` |
 | `AddAuthentication()` on a host that calls `UseAuthentication()` with no auth package registered (a template outside Development, where the demo key is not registered) | `Unable to resolve service for type 'Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider'` |
 | A registered demo key outside Development: `AddTraxApiKeyAuth` with a key containing `do-not-use-in-production` | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production', which marks a published demo key, and the environment is 'Production'.` |
+| A demo signing key outside Development: `AddTraxJwtAuth` with a symmetric key containing `do-not-use-in-production` | `AddTraxJwtAuth() registered a signing key containing 'do-not-use-in-production', which marks a published demo key, and the environment is 'Production'.` |
+| An authentication scheme on a host whose dashboard uses `RequirePolicy(...)` or `RequireRoles(...)` | `The dashboard requires authorization, but the host has no authentication scheme to challenge a caller with` |
+| The type an `[ExtendObjectType("...")]` class extends, such as `Subscription` where Trax's root is `LifecycleSubscriptions` | `Type extension '...' extends 'Subscription', which is not a type in this schema` |
 
-One more fails on the first request instead: `RequirePolicy(...)` or `RequireRoles(...)` on the
-dashboard with no authentication scheme registered. The policy check has nobody to challenge, so
-every dashboard request is a 500 (`No authenticationScheme was specified, and there was no
-DefaultChallengeScheme found`), not a 401 or 403. Register the scheme your users sign in with
-before choosing a policy.
+Without an authentication scheme, a dashboard policy would have nobody to challenge, and every
+request it refused would be a 500 rather than a 401 or 403. That is why the dashboard refuses to
+start instead. Register the scheme your users sign in with before choosing a policy.
 
 A complete host that registers all of these in a working order is the
 [`trax-hub` template](/docs/reference/templates): its `Program.cs` comments each call with the

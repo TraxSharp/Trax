@@ -366,8 +366,8 @@ so it survives a restart, and changes made to it from the dashboard are kept.
 `http://localhost:5000/trax` is open to you. It shows the runs as they happen, the manifest and its
 next run time, and lets you run it now or disable it. Outside Development it asks for the
 `TraxAdmin` policy, an authenticated user with the `Admin` role, and this application cannot sign
-anyone in yet, so there every dashboard request fails with HTTP 500 (no authentication scheme is registered to
-challenge the caller) until you register the authentication your application uses. See [Dashboard](/docs/dashboard) for the other ways to choose who may use it.
+anyone in yet, so there `UseTraxDashboard()` refuses to start the host (no authentication scheme is registered
+to challenge the caller) until you register the authentication your application uses. See [Dashboard](/docs/dashboard) for the other ways to choose who may use it.
 
 ## 6. Call it over GraphQL
 

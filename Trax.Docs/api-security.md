@@ -128,11 +128,12 @@ Trax refuses to start a host whose security posture is missing or contradictory,
 | `GateOperations()` with no policy and no roles | Name a role or policy, or call `GateOperationsToAuthenticatedUsers()` deliberately |
 | The operations namespace exposed without `IOperationsService` / `ITraxScheduler` / `IJobSubmitter` | `AddScheduler(...)` on the same host |
 | A demo API key (containing `do-not-use-in-production`) registered outside Development | Register demo keys only inside `IsDevelopment()`; use `AddHashed` or a resolver elsewhere |
-| `RequireAuthorization(policy)` or a query model naming a policy that is not registered | `AddAuthorization(o => o.AddPolicy(...))` |
+| A symmetric JWT signing key containing `do-not-use-in-production` registered outside Development | Register the demo signing key only inside `IsDevelopment()`; load the real key from a secret store, or use `UseAuthority` |
+| A policy that is not registered, named by `RequireAuthorization(policy)`, `GateOperations(policy: ...)`, a query model, a train, a type extension's resolver, or any `@authorize` directive in the schema | `AddAuthorization(o => o.AddPolicy(...))`, or correct the name |
 | A `[TraxAuthorize]` train with no `ITrainAuthorizationService` | `AddTraxGraphQL()` registers one; a scheduler-only host calls `AllowMissingAuthorizationService()` |
 | A junction that injects `TraxPrincipal` on a host where no `AddTrax*Auth` ran | `services.AddTraxPrincipalAccessor()`. See [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal#when-no-scheme-is-registered) |
 
-Not refused at startup: a train's or `GateOperations`'s policy name that is not registered (every call then fails at request time), and an `AddTrax*Auth` call missing altogether (every gated surface then refuses every caller).
+Not refused at startup: an `AddTrax*Auth` call missing altogether (every gated surface then refuses every caller). A request that still meets a directive naming an unknown policy, on a host that skipped startup, is refused with `TRAX_AUTHORIZATION`, and the policy name goes to the log, never to the caller.
 
 ## API-Key Authentication
 
@@ -151,7 +152,7 @@ if (builder.Environment.IsDevelopment())
 }
 ```
 
-Cleartext keys in source are demo keys. A key containing `do-not-use-in-production` makes the host refuse to start outside Development, so a copied demo key cannot go live by accident; production keys come from a secret manager (below).
+Cleartext keys in source are demo keys. A key containing `do-not-use-in-production`, an API key or a symmetric JWT signing key, makes the host refuse to start outside Development, so a copied demo key cannot go live by accident; production keys come from a secret manager (below).
 
 Keys registered through the builder are salted and SHA-256 hashed at startup, then compared with `CryptographicOperations.FixedTimeEquals` on every request. The resolver iterates every entry without short-circuiting, so lookup cost is independent of which (if any) entry matches. Cleartext comparison is not reachable from consumer code.
 
@@ -438,7 +439,7 @@ services.AddTraxGraphQL(graphql =>
 
 The host refuses to start when an option is out of range (`BatchSize` 0, a negative length, `RetryBackoff` above `MaxRetryBackoff`, and so on), with an `OptionsValidationException` naming the option.
 
-An entry's `PrincipalId` is the scheme-qualified id (`TraxApiKey:alice`, `TraxJwt:alice`), and its `OperationName` is the request's `operationName` field, `null` when the client sends none even if the document names the operation.
+An entry's `PrincipalId` is the scheme-qualified id (`TraxApiKey:alice`, `TraxJwt:alice`), and its `OperationName` is the request's `operationName` field or, when the client sends none, the name the document gives its only operation (`null` for an anonymous operation).
 
 ### What an Entry Records
 

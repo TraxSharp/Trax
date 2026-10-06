@@ -133,7 +133,13 @@ services.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey(
 To try a host locally without an identity provider, register a symmetric key that lives in
 source, and mint tokens with it. Anyone who reads that key can sign a token for any user, so
 register it only in Development, inside the same `if` as any demo API keys, and register your
-real issuer everywhere else:
+real issuer everywhere else. A symmetric key whose bytes contain `do-not-use-in-production` makes
+the host refuse to start outside Development, as a marked API key does, wherever it is configured:
+`UseSymmetricKey`, a `SymmetricSecurityKey` passed to `UseSigningKey`, or an `IssuerSigningKey` or
+`IssuerSigningKeys` entry set through `CustomizeTokenValidation`, `CustomizeBearerOptions` or a JWT
+bearer scheme the host registered itself. The check reads each bearer scheme's final options at
+startup; keys an `IssuerSigningKeyResolver` returns, or an authority's JWKS serves, exist only when a
+token is validated and are not checked. Put the marker in every key that lives in source:
 
 ```csharp
 using System.Security.Claims;

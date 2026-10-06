@@ -183,7 +183,7 @@ The caller must pass the `MustBeInternal` policy and hold either `Admin` or `Man
 
 ## Per-Model Authorization
 
-Decorate any `[TraxQueryModel]` entity with `[TraxAuthorize]` to gate the auto-generated GraphQL query. The combinator semantics, role normalization, and inheritance behavior all match the per-train surface above. The only difference is enforcement: Trax attaches HotChocolate's native `@authorize` directive to the generated `ObjectType` *and* to the entry field under `discover`, so the gate fires in two places:
+Decorate any `[TraxQueryModel]` entity with `[TraxAuthorize]` to gate the auto-generated GraphQL query. The combinator semantics, exact case-sensitive role matching, and inheritance behavior all match the per-train surface above. The only difference is enforcement: Trax attaches HotChocolate's native `@authorize` directive to the generated `ObjectType` *and* to the entry field under `discover`, so the gate fires in two places:
 
 - **Direct entry**: a top-level `discover.<namespace>.<modelField>` request runs the field-level directive before the resolver. Connection-shaped scalars like `totalCount` and `pageInfo` are blocked too; an unauthorized caller cannot enumerate the cardinality of a gated entity.
 - **Transitive navigation**: a request that reaches the entity through a navigation property on an ungated parent (`discover.publicOwners.nodes[].privateBooks`) triggers the type-level directive when each child node is materialized. The parent's data is still selected from the database, but the unauthorized response substitutes an error for the gated branch and never returns the row payload to the client.
@@ -370,8 +370,12 @@ Trax evaluates these policies at runtime using ASP.NET Core's `IAuthorizationSer
 |---|---|
 | A `[TraxQueryModel]` entity's `[TraxAuthorize]` | at startup, naming the entity and the policy |
 | The builder's `RequireAuthorization(policy)` | at startup, naming the policy |
-| A train's `[TraxAuthorize]` | at request time: every call to the train fails with HotChocolate's masked `"Unexpected Execution Error"`, not `TRAX_AUTHORIZATION`, and the train never runs |
-| `GateOperations(policy: ...)` | at request time: every `operations` call fails |
+| A train's `[TraxAuthorize]` | at startup, naming the policy and every train that names it |
+| `GateOperations(policy: ...)`, a type extension's `[TraxAuthorize]`, or any other `@authorize` directive in the built schema | at startup, naming the policy and every field or type that names it |
+
+The startup refusal is the only place the name appears. Should a request still reach a directive whose policy does not exist (a host that never ran its startup checks), the caller gets the uniform `TRAX_AUTHORIZATION` error with no policy name, and the name is logged.
+
+A host that scans an assembly holding a train gated by a policy it never runs, a test host for example, must still register that policy: Trax cannot tell a train the host will never call from one it will.
 
 Roles need no registration: a role is matched against the caller's role claims as it is written.
 

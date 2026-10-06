@@ -49,6 +49,7 @@ services.AddTrax(trax => trax
 
 - **Requires** a data provider ([UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect), [UseSqlite](/docs/sdk-reference/configuration/use-sqlite) or [UseInMemory](/docs/sdk-reference/configuration/add-in-memory-effect)). This is enforced at compile time. `AddDataContextLogging` is only available on `TraxEffectBuilderWithData`, which is returned by the data provider methods. Called before one, it fails with CS0619 and the instruction as its text: `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLogging(...).`
 - Registers `DataContextLoggingProvider` as an `ILoggerProvider`.
+- A line logged while a train runs, on the run's own async flow (its junctions, what they await, its lifecycle hooks), stores that run's id in `metadata_id`, so `IDataContext.Logs` and the GraphQL `logs(metadataId:)` filter return one run's lines. A line logged outside any run stores `0`.
 - EF Core's command log, `Microsoft.EntityFrameworkCore.Database.Command`, is always skipped, because writing a row would log another one. Listing it in `blacklist` changes nothing.
 - When the host stops, the provider writes the entries already queued, waiting up to five seconds, before it lets go.
 - Log levels can be changed at runtime via the Dashboard's Server Settings page.

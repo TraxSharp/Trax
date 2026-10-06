@@ -34,6 +34,7 @@ public abstract class TraxLambdaFunction
     );
 
     public Task RunLocalAsync(string[] args);
+    public Task RunLocalAsync(string[] args, CancellationToken cancellationToken);
 }
 ```
 
@@ -141,17 +142,21 @@ Use `RunLocalAsync` to run the Lambda function as a local Kestrel web server. Th
 
 ```csharp
 // Program.cs
-await new Function().RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args]);
+await new Function().RunLocalAsync(args);
 ```
 
 `RunLocalAsync` builds a `WebApplication` from `args`, and that server reads `appsettings.json` (its
-Kestrel endpoints included) from its content root, which defaults to the current directory. The
-function's own configuration is read from `AppContext.BaseDirectory`, next to the binary. Run from the
-project directory the two are the same file; run with `dotnet run --project ...` from anywhere else,
-the server finds no `appsettings.json`, ignores the endpoint it names and listens on port 5000.
-Passing `--contentRoot={AppContext.BaseDirectory}`, as above, makes both read the copy next to the
-binary. `RunLocalAsync` takes no cancellation token and returns only when the server stops, on
-Ctrl+C or process exit.
+Kestrel endpoints included) from its content root. From the next Trax.Runner.Lambda release, the
+content root is `AppContext.BaseDirectory`, next to the binary, which is where the function reads its
+own configuration too, so `dotnet run --project ...` from any directory serves on the endpoint
+`appsettings.json` names. A `--contentRoot` argument, or a `DOTNET_CONTENTROOT` /
+`ASPNETCORE_CONTENTROOT` variable, still sets it. Released versions up to then use the current
+directory instead, so a runner started from anywhere but its project directory listens on port 5000;
+passing `--contentRoot={AppContext.BaseDirectory}` works on both.
+
+`RunLocalAsync(args)` returns when the server stops, on Ctrl+C or process exit.
+`RunLocalAsync(args, cancellationToken)` also stops it when the token is cancelled, and the returned
+task completes once the server has shut down, which is how a test or a host runs it in-process.
 
 | Runner posture | What the local routes accept |
 |----------------|------------------------------|
@@ -215,12 +220,18 @@ internal sealed class TestRunner(IConfiguration configuration) : Function
 }
 
 var url = "http://127.0.0.1:5399";   // pick a free port
-_ = Task.Run(() => new TestRunner(testConfiguration)
-    .RunLocalAsync([$"--Kestrel:Endpoints:Http:Url={url}"]));
+using var stop = new CancellationTokenSource();
+var runner = new TestRunner(testConfiguration)
+    .RunLocalAsync([$"--Kestrel:Endpoints:Http:Url={url}"], stop.Token);
+
+// ... the tests ...
+
+await stop.CancelAsync();
+await runner;
 ```
 
-The server runs until the test process ends. The [Content Shield sample](/docs/samples/content-shield)
-tests its runner this way.
+Cancelling the token stops the server; without one it runs until the test process ends. The
+overload that takes a token is new in the next Trax.Runner.Lambda release.
 
 ## Configuration
 

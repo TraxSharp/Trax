@@ -295,7 +295,7 @@ The single-server `AddTraxGraphQLClient` is unchanged. Use it when you talk to o
 
 ## Response Strictness
 
-Strict-extract catches "I added a field to the query but forgot to add it to the POCO" on the first response, not the hundredth bug report. Validation runs once per request type (cached) and only when the request uses the default `Extract`.
+Strict-extract catches "I added a field to the query but forgot to add it to the POCO" on the first response, not the hundredth bug report. Validation runs only when the request uses the default `Extract`, and checks the top level of the response object against the POCO. The result is cached per response type and set of JSON field names, so a shape the client has already seen is not walked again.
 
 ```csharp
 services.AddTraxGraphQLClient(uri).WithStrictness(ResponseStrictness.ThrowOnDrift);

@@ -78,6 +78,10 @@ public enum CreditTier { Prime, NearPrime, Subprime }
   is checked as well: a closed form of a marked generic type, a type nested in a marked type, and
   a type that takes a marked type as a type argument are withheld.
 - It fails closed: a question whose key shares a name with a marked type is withheld too.
+- `TraxRedaction.IsSensitiveQuestion(questionKey)` (namespace `Trax.Effect.Utils`) is the same
+  check, from a recorded key alone, for code that reads `trax.decision` or `trax.junction_run`
+  back. The scheduler's `GetRecordedDecisionsAsync` withholds answers with it. The marked type has
+  to be in an assembly the process has loaded.
 - On a type it does nothing else. It does not mask a property of that type in a train's input or
   output; mark the property for that.
 - [`trax.decision`](/docs/effect/decisions#recording-decisions) keeps the full answer either way,

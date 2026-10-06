@@ -43,6 +43,8 @@ The lifecycle subscriptions return a `TrainLifecycleEvent` payload.
 | `onTrainCancelled` | Fires when a train is cancelled via `CancellationToken` |
 | `onTrainStateChanged` | Fires on every lifecycle transition (one field drives a whole live feed) |
 
+Each field takes an optional `externalId: String` argument. With it, the subscriber receives only the run with that external id, such as the one a `QUEUE` mutation returned; without it, every run it may see. The argument narrows what the subscriber's authorization already admits and never widens it. A loss on the feed is still reported as a skip in `sequence` (see [Lost events](#lost-events)), because the lost events could have been that run's.
+
 ## TrainLifecycleEvent Payload
 
 ```graphql
@@ -224,7 +226,7 @@ A [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) mut
 
 1. Open the socket and subscribe to `onTrainStateChanged` **before** sending the mutation. There is no replay, and a short train can finish before a subscription opened afterwards is registered.
 2. Send the mutation over HTTP and keep its `externalId`. Buffer any events that arrive before the response does.
-3. Keep only events whose `externalId` matches. The lifecycle fields take no filter argument, so the client filters.
+3. Keep only events whose `externalId` matches. The subscription was opened before the `externalId` existed, so it cannot carry the filter, and the client filters.
 4. Stop at the first terminal state: `COMPLETED` (read `output`), `FAILED` (read `failureReason`) or `CANCELLED`.
 
 ```graphql
@@ -246,10 +248,26 @@ event     -> { "externalId": "66b5...a356", "metadataId": 55, "trainState": "IN_
 event     -> { "externalId": "66b5...a356", "metadataId": 55, "trainState": "COMPLETED", "sequence": 2, "output": { ... } }
 ```
 
+When the client cannot open the subscription first, it can subscribe after the mutation returns with the `externalId` as the filter, and receive only that run's events:
+
+```graphql
+subscription Follow($externalId: String) {
+  onTrainStateChanged(externalId: $externalId) {
+    metadataId
+    trainState
+    sequence
+    output
+    failureReason
+  }
+}
+```
+
+A run that starts before that subscription is registered sends its earlier events to nobody, and a short run can finish in that window. Give the wait a timeout, and read the outcome another way when it expires: `operations.executions(externalId:)` for an operator, the app's own data otherwise.
+
 What the subscriber needs and what it should expect:
 
 - The train carries `[TraxBroadcast]` and a posture that admits the caller (for example the same `[TraxAuthorize(Roles = ...)]` that lets it call the mutation), unless the caller satisfies the operations authorization. Without it the subscription is refused with `TRAX_AUTHORIZATION`, as [Who receives what](#who-receives-what) says, even on a host that exposes operations.
-- A failed delivery that the dispatcher requeues (`MaxDispatchAttempts`) creates a new execution row with the same `externalId` and emits no event; the client sees events only from the attempt a runner started. A run whose deliveries are exhausted never emits a terminal event, so give the wait a timeout.
+- A failed delivery that the dispatcher requeues (`MaxDispatchAttempts`) creates a new execution row with the same `externalId` and emits no event; the client sees events only from the attempt a runner started. A run that fails at dispatch for good, its deliveries exhausted or its stored input unreadable, emits `onTrainFailed` and a `FAILED` `onTrainStateChanged` with its `externalId` and no `IN_PROGRESS` before it, as a train's own failure does. Its `failureException` is `DispatchFailed` and its `failureReason` a fixed sentence pointing at the run's record, so a broadcast subscriber sees the masked reason; the cause is on the execution row, which the operations queries return. Still give the wait a timeout: a lost event or a host that stops mid-dispatch leaves the run to the stale-pending reaper.
 - A `sequence` that skips a number means events were lost. An operator can look the run up in `operations.executions`; a client without that access should read the outcome from the app's own data (a [query model](/docs/sdk-reference/graphql-api/query-models) over what the train wrote).
 - A queued run that fails is not retried.
 
@@ -360,11 +378,11 @@ public class ChatSubscriptions
 builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscriptions>());
 ```
 
-- **Target `"LifecycleSubscriptions"`, not `OperationTypeNames.Subscription`.** HotChocolate drops an
-  extension whose target type does not exist, with no startup error, so an extension of
-  `"Subscription"` leaves the field out of the schema and a client's subscribe fails with "The field
-  `onChatEvent` does not exist on the type `LifecycleSubscriptions`". Check the served schema with
-  `{ __schema { subscriptionType { name fields { name } } } }`.
+- **Target `"LifecycleSubscriptions"`, not `OperationTypeNames.Subscription`.** The schema has no
+  type named `Subscription`, so the host refuses to start, naming the extension class and
+  `LifecycleSubscriptions` as the root it meant. HotChocolate on its own would drop the extension
+  without an error; Trax refuses any class-declared extension whose target type is not in the
+  schema.
 - **Declare a posture on the field.** A field on a root type inherits no gate, so the host refuses
   to start when the field carries neither `[TraxAuthorize]` nor `[TraxAllowAnonymous]` (see
   [Fields Added by a Type Extension](/docs/authorization#fields-added-by-a-type-extension)).

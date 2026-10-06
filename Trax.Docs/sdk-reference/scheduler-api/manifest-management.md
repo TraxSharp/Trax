@@ -45,7 +45,7 @@ Task EnableAsync(string externalId, CancellationToken ct = default)
 
 Triggers execution of a scheduled job, independent of its normal schedule. The overload with `delay` creates a work queue entry with a future `ScheduledAt`. The JobDispatcher skips it until that time arrives.
 
-A manifest holds at most one queued work queue entry. When it already has one, both overloads queue nothing more and return normally, and the entry already there becomes the triggered run: it is marked as asked for by name, so it runs even if the manifest is disabled, and an entry due later than the trigger asks (a retry waiting out its backoff, or an earlier delayed trigger) is brought forward to now, or to now plus `delay` for the delayed overload. An entry due sooner keeps its time. The log says whether the trigger queued an entry, moved one forward, or found one already due. `ITraxScheduler.TriggerGroupAsync` does the same for each enabled member: a member with an entry already queued is not counted in the number it returns, but that entry is marked and brought forward to now.
+A manifest holds at most one queued work queue entry. When it already has one, both overloads queue nothing more and return normally, and the entry already there becomes the triggered run: it is marked as asked for by name, so it runs even if the manifest is disabled, and an entry due later than the trigger asks (a retry waiting out its backoff, or an earlier delayed trigger) is brought forward to now, or to now plus `delay` for the delayed overload. Brought forward to now, it stores no `ScheduledAt`, as a new immediate entry does, so it is due on the dispatcher's next poll whichever of the host's and the database's clocks is ahead. An entry due sooner keeps its time. The log says whether the trigger queued an entry, moved one forward, or found one already due. `ITraxScheduler.TriggerGroupAsync` does the same for each enabled member: a member with an entry already queued is not counted in the number it returns, but that entry is marked and brought forward to now.
 
 ```csharp
 Task TriggerAsync(string externalId, CancellationToken ct = default)
@@ -79,7 +79,10 @@ public record ManifestTriggerResult(
     bool Created,
     DateTime? ScheduledAt,
     bool AlreadyDispatched,
-    long? ReplayDecisionsOf);
+    long? ReplayDecisionsOf)
+{
+    public bool MovedForward { get; init; }
+}
 ```
 
 | Field | Description |
@@ -89,6 +92,9 @@ public record ManifestTriggerResult(
 | `ScheduledAt` | When the entry is due; null means immediately |
 | `AlreadyDispatched` | `true` when the dispatcher claimed the manifest's queued entry between the trigger finding it and changing it, so the trigger changed nothing about it: it was not brought forward, and a run asked afresh still replays the decisions it was queued to replay |
 | `ReplayDecisionsOf` | The run whose decisions the triggered run replays, as the trigger left the entry; null when it asks its deciders afresh. A new entry never replays. |
+| `MovedForward` | `true` when the manifest's queued entry was due later than the trigger asked, so the trigger brought it forward to `ScheduledAt`; `false` for a new entry, for an entry already due by then, and for one the dispatcher claimed |
+
+`IOperationsService.TriggerManifestAsync` returns this record inside a `TriggerManifestResult` whose message says the same thing in words; the dashboard and the API show that message.
 
 The trigger clears a queued retry's link only while the entry is still queued. With
 `AlreadyDispatched` and a `ReplayDecisionsOf`, the run was asked afresh too late and replays that

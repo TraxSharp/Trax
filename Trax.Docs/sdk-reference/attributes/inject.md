@@ -57,6 +57,21 @@ public class ChargePayment : Junction<ValidatedOrder, PaymentReceipt>
 
 `IServiceProvider.InjectProperties` is public for Trax's own registration code and hidden from completion.
 
+## Checked at startup
+
+The mediator's [startup chain check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) reads the `[Inject]` properties a train declares itself (`ServiceTrain`'s own are left out). It reads them on the train the container builds, because `InjectProperties` skips a property that already holds a value: one the constructor or an initializer sets (`[Inject] public IClock Clock { get; set; } = SystemClock.Instance;`) is never filled, needs no registration, and is not checked. For a property that is null on the built train:
+
+| Property | Startup |
+|----------|---------|
+| Type not registered, property declared non-nullable (or in a project without nullable annotations) | Refused: the property would be null on every run |
+| Type not registered, property declared nullable (`T?`) | Warning: the train is taken to cope without it |
+| Type registered, but its class can never be built | Refused, whatever the declaration: filling the property throws, so every resolution of the train fails |
+| `IEnumerable<T>` | Not checked: it is always filled, if only with nothing |
+
+When resolving the train fails, its class is built without its properties filled and read the same way, so a property whose filling throws is named. When even that fails (a constructor that needs something only a request provides), whether the constructor sets a property cannot be told, so anything found is logged as a warning and the host starts. In a trimmed app, which turns `NullabilityInfoContext` off, every property reads as of unknown nullability; that is taken as nullable, so such a property is warned about rather than refused. `SkipChainVerification()` turns this check off together with the rest of the chain check.
+
+A junction built with `Chain<T>()` or `ShortCircuit<T>()` that declares `[Inject]` properties is logged as a warning naming the train, the junction and the properties.
+
 ## Package
 
 ```

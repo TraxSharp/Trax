@@ -87,7 +87,7 @@ builder.Services.AddTrax(trax =>
                 .AllowMissingAuthorizationService()
         )
 );
-builder.Services.AddTraxGraphQL(graphql => graphql.AllowIntrospection(_ => true));
+builder.Services.AddTraxGraphQL();
 builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
 var app = builder.Build();
@@ -98,22 +98,24 @@ app.MapHealthChecks("/trax/health");
 The one train is `[TraxAllowAnonymous]` and `[TraxQuery(Namespace = "billing")]`, which serves it at
 `discover { billing { getInvoice(input: ...) } }`. The client validates against the schema it fetches
 by introspection, and a Trax server answers introspection only in Development unless the host passes
-`AllowIntrospection` a predicate. These demo servers admit everyone; a production server admits only
-the callers it trusts, or the client uses `UseFileSchema` or `UseAssemblySchema` instead. See
-[GraphQL Client: Schema Providers](/docs/api-graphql-client#schema-providers).
+`AllowIntrospection` a predicate. These servers keep that default. The Gateway's launch profile runs it,
+and so the two servers it starts in-process, in Development; started in Production, the servers refuse
+introspection and the Gateway stops with `GraphQLSchemaIntrospectionException`. Against a production
+server the client uses `UseFileSchema` or `UseAssemblySchema` instead, or the server admits only the
+callers it trusts. See [GraphQL Client: Schema Providers](/docs/api-graphql-client#schema-providers).
 
 ### Two keyed clients in one container
 
 ```csharp
 using Trax.Api.GraphQL.Client;
 
-var services = new ServiceCollection();
-services.AddKeyedTraxGraphQLClient("serverB", new Uri("http://localhost:5310/trax/graphql"));
-services.AddKeyedTraxGraphQLClient("serverC", new Uri("http://localhost:5311/trax/graphql"));
+var consumer = Host.CreateApplicationBuilder();
+consumer.Services.AddKeyedTraxGraphQLClient("serverB", new Uri("http://localhost:5310/trax/graphql"));
+consumer.Services.AddKeyedTraxGraphQLClient("serverC", new Uri("http://localhost:5311/trax/graphql"));
 
-await using var provider = services.BuildServiceProvider();
-var inventory = provider.GetRequiredKeyedService<IGraphQLClientExecutor>("serverB");
-var billing = provider.GetRequiredKeyedService<IGraphQLClientExecutor>("serverC");
+using var host = consumer.Build();
+var inventory = host.Services.GetRequiredKeyedService<IGraphQLClientExecutor>("serverB");
+var billing = host.Services.GetRequiredKeyedService<IGraphQLClientExecutor>("serverC");
 
 var product = await inventory.Run(new GetProductRequest { Input = new GetProductInput("SKU-1") });
 ```
@@ -151,8 +153,10 @@ dotnet test tests/Trax.Samples.GraphQLClient.E2E
 `KeyedClientE2ETests` boots both Trax servers with `WebApplicationFactory` and builds one container
 with two keyed clients, each handed its server's in-process `HttpClient` through
 `.ConfigureHttpClient(factory.CreateClient())`: each key queries its own server, unknown ids fall
-back, and a query sent through the wrong key fails schema validation. The modes sample
-(`Trax.Samples.GraphQLClient`) has no test of its own; it checks itself when run.
+back, and a query sent through the wrong key fails schema validation. `IntrospectionPostureE2ETests`
+checks that both servers serve their schema in Development and refuse introspection in Production.
+`ClientModesE2ETests` runs the modes sample's raw-string, resource and typed requests, flat and through
+`discover.players`, against its schema and checks that they return the same player.
 
 ## SDK Reference
 

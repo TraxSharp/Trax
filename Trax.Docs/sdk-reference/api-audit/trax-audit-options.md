@@ -22,7 +22,7 @@ Tunables for the audit pipeline, passed through `AddAudit<TSink>(opts => ...)`.
 | `MaxErrorTextLength` | `4_096` | `ErrorText` longer than this is cut to this length and marked `...[truncated]`. A request can raise one error per field it selects. |
 | `RecordErrorMessages` | `false` | Record error messages in `ErrorText`. Off, each error is recorded as `CODE at path` (`<masked>` when it has no code) and a pipeline exception as its type name, because a message can quote what the caller sent. |
 | `SkipIntrospection` | `true` | Drop introspection operations that succeeded: the executed operation's top-level selections are all `__schema`, `__type` or `__typename`. One that raised an error is recorded. |
-| `SkipSubscriptions` | `true` | Drop subscriptions that were accepted (returned a stream). A subscription refused or failed when it subscribes is always recorded. |
+| `SkipSubscriptions` | `true` | Drop subscriptions that were accepted (returned a stream). A subscription refused or failed when it subscribes is always recorded, and so is each later event of an accepted one that fails, and each socket refused at `connection_init`. |
 | `DefaultPrincipalId` | `"<anonymous>"` | Used when the request has no `trax:principal-id` claim. |
 | `MaxRetries` | `3` | Retries a failing sink gets after its first attempt before the batch is dropped, from 0 to 100, so the default makes 4 attempts in all. Each dropped entry increments `trax.audit.dropped`. |
 | `RetryBackoff` | `100ms` | Initial backoff between sink retries. Doubles on each attempt, up to `MaxRetryBackoff`; each wait is a random point between half and all of that value. |

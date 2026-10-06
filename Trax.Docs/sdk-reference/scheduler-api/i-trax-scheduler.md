@@ -59,6 +59,7 @@ public interface ITraxScheduler
     Task<DeadLetterOperationResult> RequeueDeadLetterAsync(long deadLetterId, bool askAfresh, CancellationToken ct = default);
     Task<BatchDeadLetterResult> RequeueDeadLettersAsync(long[] deadLetterIds, bool askAfresh, CancellationToken ct = default);
     Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(bool askAfresh, CancellationToken ct = default);
+    Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(bool askAfresh, IProgress<int>? progress, CancellationToken ct = default);
 }
 ```
 
@@ -105,9 +106,14 @@ A manifest whose failures exceed its retry limit is dead-lettered and stops bein
 | `RequeueDeadLettersAsync(ids)` | As the single requeue, for up to 1000 ids. At most one entry is queued per manifest: dead letters that share a manifest are folded into one entry and all resolved; one whose manifest already has a queued entry is skipped. |
 | `AcknowledgeDeadLettersAsync(ids, note)` | As the single acknowledge, for up to 1000 ids |
 | `RequeueAllDeadLettersAsync()` | Requeues every dead letter awaiting intervention, a page of manifests at a time, so a large backlog is never loaded at once |
-| `AcknowledgeAllDeadLettersAsync(note)` | Acknowledges every dead letter awaiting intervention |
+| `RequeueAllDeadLettersAsync(askAfresh, progress)` | As requeue-all, telling `progress` the running total of dead letters resolved after each page commits, on the fold's own thread. The requeue-all background job reads it to say how far it has got. An implementation that predates this overload runs the fold without reporting |
+| `AcknowledgeAllDeadLettersAsync(note)` | Acknowledges every dead letter awaiting intervention. On a relational store it acknowledges 50,000 rows per statement in id order, so no statement outlasts the command timeout however large the backlog; a failure part-way leaves the pages done acknowledged, and acknowledging all again finishes the rest |
 
 A batch call with an empty list, or more than 1000 ids, is refused: the result counts nothing and its message says why.
+
+On a host `AddScheduler()` built without a database provider (the in-memory store), the three requeues are refused with `OperationsService.NoDispatcherMessage` and change nothing: no job dispatcher runs there, so a requeued entry would never start, though the in-memory manifest manager still dead-letters. The single requeue returns a failed result; the batch and requeue-all count nothing, and the requeue-all background job finishes with that message and a count of 0. Acknowledging is unaffected. A `TraxScheduler` constructed by hand is not refused ([scheduler ADR 0019](https://github.com/TraxSharp/Trax.Scheduler/blob/main/docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md)).
+
+A note longer than `TraxScheduler.MaxAcknowledgeNoteLength` (1,000 characters) is refused by all three acknowledge methods, and nothing changes: the single acknowledge returns a failed result and the batch and all variants count nothing, each with the message `The note is {n} characters; it may be at most 1000 characters.` A note is an operator's reason, and acknowledge-all writes it onto every awaiting row. The dashboard and the API both acknowledge through these methods.
 
 ### Replaying the failed run's decisions
 

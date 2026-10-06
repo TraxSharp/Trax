@@ -77,7 +77,7 @@ All mutations return errors via the payload `errors[]` array; mutations never th
 | Field | Type | Notes |
 |---|---|---|
 | `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation), `CHANGE_NOT_BROADCAST` (the change is saved, but the broker did not confirm its broadcast). |
-| `message` | `String!` | Human-readable message. |
+| `message` | `String!` | Human-readable message. On `SHAPE_DIFF_VIOLATION` it says to upload again with `bypassShapeDiff: true` if the change is shape-safe. |
 | `locations` | `[Location!]` | 1-based line / column. Present on parse errors and most schema-validation errors. |
 | `path` | `[String!]` | Response path. Present on some schema-validation errors. |
 | `oldFingerprint` | `String` | Present only on `SHAPE_DIFF_VIOLATION`. |

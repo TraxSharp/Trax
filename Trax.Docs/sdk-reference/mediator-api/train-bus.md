@@ -81,7 +81,7 @@ object InitializeTrain(object trainInput)
 
 ## NoTrainForInputException
 
-`Trax.Mediator.Exceptions.NoTrainForInputException`, an `InvalidOperationException`, is what `RunAsync` and `InitializeTrain` throw when no registered train takes the input's type. Before Trax.Mediator 1.24.0 they threw a `TrainException` with the same message.
+`Trax.Mediator.Exceptions.NoTrainForInputException`, an `InvalidOperationException`, is what `RunAsync` and `InitializeTrain` throw when no registered train takes the input's type. Before Trax.Mediator 1.23.3 they threw a `TrainException` with the same message.
 
 ```csharp
 public class NoTrainForInputException : InvalidOperationException

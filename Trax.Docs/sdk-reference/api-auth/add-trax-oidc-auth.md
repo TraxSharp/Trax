@@ -123,16 +123,23 @@ services.AddTraxOidcAuth(oidc => oidc
 
 ## Protecting endpoints
 
-Authorize against the cookie scheme (not the OIDC scheme):
+Gate GraphQL on the builder. `OidcDefaults.PolicyName` authorizes against the cookie scheme (not the
+OIDC scheme), so a signed-in browser session passes:
 
 ```csharp
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization(OidcDefaults.PolicyName));
+// Only OIDC sessions
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization(OidcDefaults.PolicyName));
 
-// Or the combined Trax policy to allow API-key / JWT / OIDC interchangeably:
-app.UseTraxGraphQL(configure: endpoint => endpoint
-    .RequireAuthorization(TraxAuthClaimTypes.TraxAuthPolicy));
+// Or the combined Trax policy, to accept API-key / JWT / OIDC interchangeably
+services.AddTraxGraphQL(graphql => graphql.RequireAuthorization());
 ```
+
+The builder's gate applies to every operation on every transport, and it is the gate the startup
+checks for the `operations` namespace and `[TraxAllowAnonymous]` see. A convention on the route,
+`app.UseTraxGraphQL(configure: endpoint => endpoint.RequireAuthorization(OidcDefaults.PolicyName))`,
+can be added as an extra layer. On its own those checks do not count it, so a host that exposes the
+operations namespace with no `GateOperations(...)` refuses to start (see
+[Authorization](/docs/authorization#combining-with-endpoint-level-auth)).
 
 Issue a sign-in challenge by challenging the OIDC scheme:
 

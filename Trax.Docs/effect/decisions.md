@@ -115,8 +115,9 @@ The API key is optional; a blank one, such as an unset configuration value, send
 `Authorization` header.
 
 A throttled, unavailable or slow model, a connection that is refused, reset or times out, or a
-`200` whose body is not a System One response (including one with no `answers` object) is retried
-with a doubling, jittered wait that stops growing at `MaxRetryDelay` (30 seconds by default). A
+`200` whose body is not a System One response (including one with no `answers` object, or one in a
+character set that cannot be decoded) is retried with a doubling, jittered wait that stops growing
+at `MaxRetryDelay` (30 seconds by default). A
 `Retry-After` is honoured up to `MaxRetryDelay`; when the model asks for longer, or the retries run
 out, the failure is classified `Transient`.
 
@@ -458,7 +459,9 @@ To see why an answer was asked afresh, read `trax.decision` through `IDataContex
 the `Answer` JSON a `replay_refused` property with the reason. The run's
 `Metadata.ReplayDecisionsOf` and `Metadata.ReplayAbandoned` say whether it was linked and whether the
 link was abandoned. Neither GraphQL nor junction events carry these: a step says `replayed`, not why
-it was not.
+it was not. [`IOperationsService.GetRecordedDecisionsAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#recorded-decisions)
+reads a run's rows a page at a time, with an answer to a `[TraxSensitive]` question, and every
+decision on a track taken on one, left out.
 
 ```csharp
 using System.Text.Json.Nodes;

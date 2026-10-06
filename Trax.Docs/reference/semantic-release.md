@@ -30,7 +30,7 @@ type(scope): description
 | `feat:` | minor (1.4.2 → 1.5.0) |
 | `fix:` | patch (1.4.2 → 1.4.3) |
 | `perf:` | patch |
-| `revert:` | patch |
+| `revert:` | patch, but only with `This reverts commit <sha>.` in the body, which `git revert` writes. A bare `revert: ...` subject releases nothing |
 | `refactor:`, `docs:`, `test:`, `chore:`, `ci:`, `style:`, `build:` | none |
 | `feat!:`, `fix!:` | **none**. The angular preset does not read `!`: the header does not parse, so the commit releases nothing |
 | `BREAKING CHANGE:` in the body or footer | major |
@@ -103,7 +103,8 @@ Any `feat:`, `fix:`, `perf:` or `revert:` in that list is unreleased.
 ## Troubleshooting
 
 **The workflow ran and nothing was released.** No commit since the last tag has a releasing type,
-or a commit used `feat!:`/`fix!:`, which the angular preset ignores. Add an empty `fix:` or `feat:`
+a commit used `feat!:`/`fix!:`, which the angular preset ignores, or a `revert:` has no
+`This reverts commit <sha>.` line. Add an empty `fix:` or `feat:`
 commit as above.
 
 **The release job is waiting.** It needs an approval on the `release` environment.

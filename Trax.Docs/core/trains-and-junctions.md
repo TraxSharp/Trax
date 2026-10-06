@@ -333,6 +333,22 @@ instead. The `[TraxAuthorize]` enforcer check runs the same way. It refuses to s
   host.` A registration made through a factory or an instance is not followed
 - the train's class has no public constructor: `IFooTrain cannot be built: FooTrain has no public
   constructor. Give it one.`
+- one of the train's own `[Inject]` properties names a type the container does not register, so
+  the property is null on every run: `IReportTrain: its [Inject] property 'Clock' needs 'IClock',
+  which is not registered, so the property is null on every run. Register it before building the
+  host, or declare the property nullable if the train runs without it.` A property declared
+  nullable (`IClock?`) says the train copes without it, so it is logged as a warning instead.
+  `ServiceTrain`'s own framework properties are not checked
+- one of the train's `[Inject]` properties names a registered type that can never be built,
+  followed the way a constructor argument is: the container throws when it fills the property, so
+  every resolution of the train fails, and this is refused however the property is declared
+
+It also logs a warning, without refusing, for every `[Inject]` property of a junction the chain
+builds itself with `Chain<T>()` or `ShortCircuit<T>()`. Such a junction is built from its
+constructor and its properties are never filled, so each one is null whenever it runs. Whether the
+junction reads the property cannot be told from its type, and one that guards against null runs,
+so the host still starts. Take the dependency as a constructor parameter, or register the junction
+under an interface and reach it with `IChain`.
 
 Every train is checked before anything is reported, so one start tells you about all of them. Each
 fault is on its own line, prefixed with the train. Steps are numbered from one by their written

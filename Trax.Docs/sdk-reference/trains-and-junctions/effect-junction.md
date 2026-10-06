@@ -46,7 +46,7 @@ It also overrides `RailwayJunction`, and adds a `RailwayJunction` overload that 
 4. The end time and railway state are stamped.
 5. Each junction effect's `AfterJunctionExecution` runs, whether the junction succeeded, failed or was skipped.
 
-An exception from a junction effect is not caught: it stops the remaining effects and fails the train.
+An exception from a junction effect stops the remaining effects and fails the train, except when the railway already carries a failure: `BeforeJunctionExecution` throwing before a skipped junction, or `AfterJunctionExecution` throwing after the junction failed or was skipped, is logged and the failure already on the railway is what the train reports.
 
 ## Example
 

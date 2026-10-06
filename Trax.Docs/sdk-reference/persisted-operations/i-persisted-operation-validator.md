@@ -25,10 +25,10 @@ Implementations throw one of the [PersistedOperationException](/docs/sdk-referen
 
 | Implementation | Registered by | Behavior |
 |---|---|---|
-| `HotChocolateSchemaValidator` | `UsePersistedOperations(...)` on `TraxGraphQLBuilder` | Parses with `Utf8GraphQLParser`, then runs HotChocolate's `IDocumentValidator` against the live schema. Throws `PersistedOperationParseException` for syntax errors and `PersistedOperationValidationException` for schema mismatches (unknown field, wrong variable type, missing required variable, etc.). |
+| `HotChocolateSchemaValidator` | `UsePersistedOperations(...)` on `TraxGraphQLBuilder` | Parses with `Utf8GraphQLParser`, then runs HotChocolate's `DocumentValidator` against the live schema. Throws `PersistedOperationParseException` for syntax errors and `PersistedOperationValidationException` for schema mismatches (unknown field, wrong variable type, missing required variable, etc.). |
 | `NoOpPersistedOperationValidator` | `AddPersistedOperationStore(...)` (standalone admin path) | Accepts any input. Use this in hosts that do not have a HotChocolate schema in process (CI manifest uploaders, one-off scripts). The shape-diff guardrail still runs at the storage layer. |
 
-The HotChocolate-backed implementation resolves `IRequestExecutorResolver` lazily on first call so the validator can be constructed before GraphQL composition is final. The resolved executor and the schema-specific `IDocumentValidator` are cached for the lifetime of the validator.
+The HotChocolate-backed implementation resolves HotChocolate's `IRequestExecutorProvider` lazily on first call so the validator can be constructed before GraphQL composition is final. The resolved executor and the schema's own `DocumentValidator` are cached for the lifetime of the validator.
 
 ## Example
 

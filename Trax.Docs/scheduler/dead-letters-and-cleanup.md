@@ -28,7 +28,7 @@ Two actions are available while the dead letter is in `AwaitingIntervention` sta
 
 The dead letters list page supports batch operations for resolving multiple dead letters at once:
 
-- **Requeue All / Acknowledge All**: Resolves every `AwaitingIntervention` dead letter in a single operation
+- **Requeue All / Acknowledge All**: Resolves every `AwaitingIntervention` dead letter in a single operation. Requeue All starts the background job [`IDeadLetterRequeueJobs`](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs) runs, the same job the API's `requeueAllDeadLetters` starts, and shows its progress until it ends
 - **Requeue Selected / Acknowledge Selected**: Use the checkboxes to select specific dead letters, then resolve just those
 - **Requeue All, Ask Afresh / Requeue Selected, Ask Afresh**: Requeue as above, with each run asking its deciders afresh
 
@@ -237,7 +237,7 @@ With defaults (`DefaultRetryDelay: 5m`, `RetryBackoffMultiplier: 2.0`, `MaxRetry
 
 Only a retry waits. Once a run succeeds or is cancelled, the next occurrence runs on time, however many failures are still inside the window; those failures still set the length of the next retry's delay and still count toward the dead letter. A requeued dispatch attempt is not a finished run and does not count either way.
 
-The delay is implemented by setting `ScheduledAt` on the WorkQueue entry. The JobDispatcher skips entries where `ScheduledAt > now`, so the retry won't be dispatched until the delay has elapsed.
+The delay is implemented by setting `ScheduledAt` on the WorkQueue entry. The JobDispatcher skips entries where `ScheduledAt > now()`, so the retry won't be dispatched until the delay has elapsed. That comparison runs on the database's clock, so `ScheduledAt` is the database's time plus the delay, not the scheduler host's. A retry whose delay is zero (`DefaultRetryDelay(TimeSpan.Zero)`) stores no `ScheduledAt` at all and is dispatched on the next poll, however far the host's clock runs ahead of the database's.
 
 ### When a retry runs
 

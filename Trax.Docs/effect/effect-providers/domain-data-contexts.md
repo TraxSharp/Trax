@@ -48,21 +48,31 @@ To serve the context's `[TraxQueryModel]` entities over GraphQL, name the concre
 GraphQL builder: `AddTraxGraphQL(graphql => graphql.AddDbContext<CatalogDbContext>())`. The pooled
 factory above is all it needs; see [Query Models](/docs/sdk-reference/graphql-api/query-models).
 
-`EnsureSchemaCreatedAsync` creates the default schema with `IF NOT EXISTS`, then runs the model's
-whole create script and catches any `DbException` it throws. Trax logs nothing about it, but EF
-Core logs the command itself:
+`EnsureSchemaCreatedAsync` creates the default schema with `IF NOT EXISTS`, checks which of the
+model's tables already exist, and creates the rest in one transaction, each with its keys, indexes,
+foreign keys and seed rows:
 
-- **First start:** the create script appears at `Information`
+- **First start:** every table is created, and EF Core logs each statement at `Information`
   (`Microsoft.EntityFrameworkCore.Database.Command[20101] Executed DbCommand`).
-- **Every start after that:** the script fails on its first statement because the tables exist,
-  and EF Core logs it at **`Error`**, with the whole script:
-  `fail: Microsoft.EntityFrameworkCore.Database.Command[20102] Failed executing DbCommand`. The host
-  carries on. That line is the steady state, not a fault, but an alert on `Error` logs will see it.
+- **Every start after that:** every table exists, so nothing runs and nothing is logged. The
+  existence check reads no rows and is sent outside EF, so a missing table is not logged as a
+  failed command.
+- **A table added to the model later** is created on the next start; the existing ones are left
+  as they are. A sequence is checked and created the same way.
+- **Statements tied to no table or sequence** (a Postgres extension or enum the model declares)
+  run on the context's first creation only, which is decided by its own tables, the ones in its
+  schema. A table it maps from another context's schema does not count, so a context that reads
+  the catalog's `books` is still created in full the first time.
+- **Several hosts starting at once** against a fresh database do not race: on Postgres the check
+  and the creates run under a session advisory lock, so the first host creates the tables and the
+  others find them there.
 
-Catching the exception hides everything else too: a table added to the model later is never
-created (the script stops at the first table that exists), and any other DDL error, such as a
-permission failure, is logged the same way and surfaces later as a missing table. Once the model
-changes after its first deployment, move the context to migrations, below.
+A statement the database refuses (a permission failure, a name already taken by another object) is
+not caught: the transaction rolls back and the exception stops the host at startup.
+
+It compares tables by name only. A column, index or constraint added to a table that already exists
+is not applied, so once a table's shape changes after its first deployment, move the context to
+migrations, below.
 
 ## Moving to EF migrations
 

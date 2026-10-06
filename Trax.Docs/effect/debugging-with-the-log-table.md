@@ -17,17 +17,16 @@ configuration brings it back. An API host and a scheduler pointed at the same da
 write into the same table, so one `psql` session reads both instead of two console streams
 being correlated by hand.
 
-What it does not give you is per-execution correlation. Read
-[What a row holds](#what-a-row-holds) before planning a query around it: there is no
-timestamp, no train name, and the column that would tie a row to a train run is never
-written.
+Each row written while a train runs names that run in `metadata_id`, so one run's lines can be
+read on their own. Read [What a row holds](#what-a-row-holds) before planning a query around
+it: there is no timestamp and no train name, and a line written outside any run names none.
 
 ## What a row holds
 
 | Column | Type | Holds |
 |---|---|---|
 | `id` | `bigint` | Identity, and the only ordering the table has |
-| `metadata_id` | `bigint` | Intended reference to `trax.metadata.id`, never populated |
+| `metadata_id` | `bigint` | The `trax.metadata.id` of the run that wrote the line, or `0` for a line written outside any run. `NOT NULL` with a default of `0` from migration `065` |
 | `event_id` | `integer` | The `EventId.Id` passed to the logging call |
 | `level` | `trax.log_level` | `trace`, `debug`, `information`, `warning`, `error`, `critical`, `none` |
 | `message` | `varchar` | The formatted message, truncated to 4000 characters |
@@ -47,10 +46,22 @@ has, which is why every query below orders by it. The primary key on `id` was dr
 migration `004_log_pkey.sql` and restored by `021_log_performance.sql`, which also added the
 `ix_log_metadata_id` index; `018_bigint_ids.sql` widened `id` and `metadata_id` from `integer`.
 
-**`metadata_id` is always `0`.** `Log.Create` builds a row from level, message, category, event
-id and exception, and nothing on the write path sets `MetadataId`, whose setter is private. The
-index on the column, the dashboard's metadata detail page and the GraphQL `logs` query's
-`metadataId` filter are all wired for a correlation nothing produces.
+**`metadata_id` is the run on the logging call's async flow.** `ServiceTrain.Run` records its
+row on the run's own flow, and the logger reads it when the call is made, so a line logged by a
+junction, by anything the junction awaits, or by a lifecycle hook names the run. A train run
+inside a junction names its own run, and the outer run's lines name it again once the inner run
+returns. A line logged before the run's row has an id, or on a flow that is not a run's
+(startup, a hosted service's own loop, a background writer such as the log writer itself),
+stores `0`. Rows written before this was fixed store `0` too: migration `065` turns a `NULL` into
+`0` and changes no other value.
+
+The scheduler's polling is not on that list. The manifest manager and the job dispatcher are
+service trains that record a `trax.metadata` row for every poll, so the lines their junctions
+log name that internal run. Metadata cleanup deletes those rows, as it does for the scheduler's
+other internal trains, and because there is no foreign key the log lines keep the id of a run
+that no longer exists. The same holds for any run
+whose row is deleted: a `metadata_id` with no matching `trax.metadata` row is a deleted run, not
+a corrupt one. Join with `left join`, not `join`, when you want those lines too.
 
 ## Querying it
 
@@ -84,20 +95,20 @@ name finds nothing, and filtering `trax.metadata` by the class name finds nothin
 
 ## Correlating a row with a train
 
-The only link the schema offers is `metadata_id`, and since it is never written, the join
-returns nothing:
+`metadata_id` joins a row to its run, so one execution's lines come back on their own:
 
 ```sql
--- correct, and empty, until metadata_id is populated
-select l.id, l.level, l.message
+-- every line one run wrote, in order
+select l.id, l.level, l.category, l.message
 from trax.log l
 join trax.metadata m on m.id = l.metadata_id
 where m.external_id = '<external-id>'
 order by l.id;
 ```
 
-What works instead is to find the run in `trax.metadata`, which does carry the train name, the
-external id, the timing and the host, and then read the log rows on either side of it:
+`trax.metadata` carries the train name, the external id, the timing and the host. For what
+happened around a run (a hosted service's lines, or rows written before `metadata_id` was
+filled), read the log rows on either side of it by id:
 
 ```sql
 -- one train's history, from the table that actually stores the train name
@@ -119,7 +130,7 @@ order by id;
 
 `external_id` is the identifier that survives a process boundary: an API writes it into
 `trax.work_queue` when it queues work and the scheduler carries it onto the `trax.metadata` row
-it creates. It never reaches `trax.log`.
+it creates. `trax.log` reaches it through `metadata_id`.
 
 ## Related tables
 

@@ -69,7 +69,7 @@ app.UseTraxDashboard();  // the dashboard is served at /trax
 - Internal scoped services for browser local storage and the dark/light theme state. They are implementation details of the dashboard's own components and cannot be resolved by type from application code.
 - Radzen components (via `AddRadzenComponents()`)
 - Blazor Interactive Server components (via `AddRazorComponents().AddInteractiveServerComponents()`)
-- A post-configure step on `LoggerFilterOptions`, with its own change token, that applies the log levels saved on the Server Settings page. Both overloads register it, so a saved level applies over every configuration source and survives a reload of the host's configuration. Neither overload changes the host's `IConfiguration`.
+Neither overload touches the host's logging or its `IConfiguration`. The log levels saved on the Server Settings page go through [`ILogLevelService`](/docs/sdk-reference/scheduler-api/i-log-level-service), which `AddScheduler()` registers.
 
 ## Prerequisites
 

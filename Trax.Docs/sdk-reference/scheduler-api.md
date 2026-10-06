@@ -42,7 +42,10 @@ Both share the same concepts: external IDs for upsert semantics, `Schedule` obje
 | [Manifest Management](/docs/sdk-reference/scheduler-api/manifest-management) | `DisableAsync`, `EnableAsync`, `TriggerAsync`: runtime control of scheduled jobs |
 | [AddMetadataCleanup](/docs/sdk-reference/scheduler-api/add-metadata-cleanup) | Enables automatic purging of old metadata for high-frequency trains |
 | [AddTraxSchedulerLiveness](/docs/sdk-reference/scheduler-api/add-trax-scheduler-liveness) | Health check that fails when the JobDispatcher stops completing cycles |
-| [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service) | The operations the dashboard and the GraphQL API share: queue a train, run one now, cancel a queued entry, edit group and scheduler settings |
+| [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service) | The operations the dashboard and the GraphQL API share: queue a train, run one now, batch triggers and cancels, logs, recorded decisions, group and scheduler settings |
+| [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service) | Lists the effects registered in this process, turns them on and off, and edits a configurable effect's settings |
+| [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) | Reads and sets the log level of each configured category at runtime, in this process |
+| [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs) | Requeues every dead letter awaiting intervention as a background job on this node, and reads the job back by id |
 | [IWorkQueuePromotion](/docs/sdk-reference/scheduler-api/i-work-queue-promotion) | Confirms entries staged by a deferred enqueue, and cancels or promotes stale ones. Defined in Trax.Effect.Data |
 
 ### Helpers

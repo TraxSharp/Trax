@@ -308,7 +308,7 @@ Apply `[TraxAuthorize]` to a `[TraxQueryModel]` entity to gate access. The direc
 public class Article { ... }
 ```
 
-Combinator semantics, role normalization, and inheritance behavior match the per-train `[TraxAuthorize]` surface. Policy names referenced by a `[TraxQueryModel]` entity must be registered with `services.AddAuthorization(...)`; a `QueryModelAuthorizationValidator` hosted service throws at host start if any policy is missing.
+Combinator semantics, exact case-sensitive role matching, and inheritance behavior match the per-train `[TraxAuthorize]` surface. Policy names referenced by a `[TraxQueryModel]` entity must be registered with `services.AddAuthorization(...)`; a `QueryModelAuthorizationValidator` hosted service throws at host start if any policy is missing.
 
 The inverse opt-in, `[TraxAllowAnonymous]`, opens an entity to unauthenticated reads. It is mutually exclusive with `[TraxAuthorize]` and does not cascade through navigation properties to gated children. See [Authorization guide - Anonymous Access via TraxAllowAnonymous](/docs/authorization#anonymous-access-via-traxallowanonymous).
 

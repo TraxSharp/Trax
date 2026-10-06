@@ -163,6 +163,7 @@ query {
 | `outputTypeName` | `String!` | Friendly name of the output type |
 | `lifetime` | `String!` | DI lifetime (`Singleton`, `Scoped`, `Transient`) |
 | `inputSchema` | `[InputPropertySchema!]!` | Public readable properties on the input type |
+| `hasQueueSubjectKey` | `Boolean!` | Whether the train overrides [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing), so its queued runs for one subject run one at a time (an override may still return no key for a given input). A run started with [`runTrain`](/docs/sdk-reference/graphql-api/mutations#runtrain) bypasses that serialization and may run alongside queued or in-flight work for the same subject; the dashboard's Run dialog warns about it, and a client offering Run should too |
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -184,7 +185,7 @@ input with, so a client that builds its JSON from this schema writes what the re
 
 ### adminTrainNames
 
-Returns the canonical FullNames of the framework's internal scheduler trains (job dispatcher, manifest manager, job runner, cleanup). This is the same list `hideAdminTrains` filters against on the `trains` and `executions` queries and the `metrics.dashboard` query.
+Returns the canonical FullNames of the framework's internal scheduler trains (job dispatcher, manifest manager, job runner, cleanup). This is the same list `hideAdminTrains` filters against on the `trains`, `manifests` and `executions` queries and the `metrics.dashboard` query.
 
 ```graphql
 query {
@@ -273,9 +274,9 @@ query {
 
 ### effects
 
-Lists the observational effects registered in the API process, with their enabled and toggleable state and, for an effect whose factory exposes runtime settings, those settings. Backs the dashboard's effects list.
+Lists the observational effects registered in the API process, with their enabled and toggleable state and, for an effect whose factory exposes runtime settings, those settings: as JSON, and as `fields` a settings editor can be built from. It reads through `IEffectSettingsService` in Trax.Scheduler, the service the dashboard's effects page calls, so both show the same values. Empty when the host registers no effect registry.
 
-The effect registry is an in-memory, per-process singleton with no persistence or cross-process broadcast, so this reflects the API host only, not the scheduler/worker processes where effects actually run. [`setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations#seteffectenabled) toggles an effect in this same process. Changing effect state across a distributed deployment would need a shared store plus a change broadcast, which is not built.
+The effect registry and each settings object are in-memory, per-process singletons with no persistence or cross-process broadcast, so this reflects the API host only, not the scheduler/worker processes where effects actually run. [`setEffectEnabled`](/docs/sdk-reference/graphql-api/mutations#seteffectenabled) toggles an effect and [`configureEffect`](/docs/sdk-reference/graphql-api/mutations#configureeffect) changes its settings in this same process. Changing effect state across a distributed deployment would need a shared store plus a change broadcast, which is not built.
 
 ```graphql
 query {
@@ -288,6 +289,17 @@ query {
       isConfigurable
       configurationTypeName
       configuration
+      fields {
+        name
+        typeName
+        kind
+        nullable
+        enumValues
+        sensitive
+        hasValue
+        value
+        hint
+      }
     }
   }
 }
@@ -305,7 +317,22 @@ query {
 | `toggleable` | `Boolean!` | Whether the effect can be toggled (infrastructure effects are always on) |
 | `isConfigurable` | `Boolean!` | Whether the effect's factory exposes runtime settings (implements `IConfigurableProviderFactory`) |
 | `configurationTypeName` | `String` | FullName of the settings type. Null when not configurable |
-| `configuration` | `String` | The factory's current settings as camelCase JSON, with each `[TraxSensitive]` member written as `{"_redacted": true}`. Null when not configurable |
+| `configuration` | `String` | The factory's current settings as camelCase JSON, with each `[TraxSensitive]` member written as `{"_redacted": true}`. Null when not configurable, or when the settings type cannot be written as JSON |
+| `fields` | `[EffectSettingInfo!]!` | One per public read-write property of the settings type, editable ones first in declaration order. Empty when not configurable |
+
+#### EffectSettingInfo fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `String!` | The property's name, which `configureEffect` takes |
+| `typeName` | `String!` | The property's type, without `Nullable<>`, such as `Int32` or `TimeSpan` |
+| `kind` | `EffectFieldKind!` | How it is edited: `BOOLEAN` (a switch), `ENUM` (one of `enumValues`), `TEXT` (text read as the type: a number, string, date, time, duration, GUID or character) or `SET_IN_CODE` (a delegate, collection or object, which cannot be written here) |
+| `nullable` | `Boolean!` | Whether it accepts no value; a null or blank value writes null |
+| `enumValues` | `[String!]` | The member names, for an enum. Null otherwise |
+| `sensitive` | `Boolean!` | `true` for a property marked `[TraxSensitive]`: `value` is always null. It can still be written |
+| `hasValue` | `Boolean!` | Whether the setting holds a value. `true` for a sensitive setting that holds one, so a client can show it is set without showing it |
+| `value` | `String` | The current value as text, in the form `configureEffect` reads back. Null when there is none, when the setting is sensitive, and for `SET_IN_CODE` |
+| `hint` | `String!` | What to type, such as `yyyy-MM-dd HH:mm:ss (UTC)` |
 
 Settings can hold credentials. Like an execution's `input`, they are reachable only under the
 `operations` namespace, so the gate you put on it (`GateOperations` or `RequireAuthorization`)
@@ -355,6 +382,7 @@ query {
 | `nameContains` | `String` | `null` | Case-sensitive substring match on the train name |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. When provided, `skip` is ignored. See [Pagination](#pagination) |
 | `manifestGroupId` | `Long` | `null` | Only manifests belonging to this group. The dashboard uses it to list a group's manifests |
+| `hideAdminTrains` | `Boolean!` | `false` | When `true`, leaves out the manifests of the framework's internal scheduler trains, by the same `AdminTrains.FullNames` list and exact match as `executions(hideAdminTrains:)`. The dashboard's manifests page hides the same rows from its "Hide admin trains" toggle |
 
 **Returns**: `PagedResult<ManifestSummary>`
 
@@ -563,6 +591,8 @@ query {
         failureReason
         manifestId
         cancellationRequested
+        parentId
+        currentlyRunningJunction
       }
       totalCount
       isEstimatedCount
@@ -588,8 +618,15 @@ query {
 | `manifestGroupId` | `Long` | `null` | Only executions of any manifest in this group (resolved through `manifest.manifest_group_id`). The dashboard uses it for a group's recent executions |
 | `hideAdminTrains` | `Boolean` | `false` | When `true`, excludes the framework's internal scheduler trains (matches `AdminTrains.FullNames` against `metadata.Name`, which stores the interface FullName). The dashboard sets this from its "Hide admin trains" toggle |
 | `failureClass` | `FailureClass` | `null` | Only executions recorded with this [failure class](/docs/core/trains-and-junctions#classifying-failures): `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. Every run that did not fail records `UNCLASSIFIED`, so `failureClass: UNCLASSIFIED` on its own also matches every completed, pending, in-progress and cancelled run; combine it with `trainState: FAILED` for unclassified failures only |
+| `externalId` | `String` | `null` | Only the execution with this external id, matched exactly. Served by `ix_metadata_external_id` |
+| `parentId` | `Long` | `null` | Only executions started from inside this execution's run (its children), served by the partial index `ix_metadata_parent_id`. Unlike [`executionChildren`](#executionchildren) it combines with the other filters and pages in either `order` |
+| `hostName` | `String` | `null` | Only executions run on the machine with this name (`hostName` on the summary), matched exactly. Served by `ix_metadata_host_name`. Combine it with `trainState: IN_PROGRESS` for what one host is running now |
+| `failureReasonContains` | `String` | `null` | Only executions whose failure reason contains this text anywhere, ignoring case. `%`, `_` and `\` match themselves. Its count is capped; see below |
+| `failureJunction` | `String` | `null` | Only executions that failed in the junction with this name (`failureJunction` on the summary), matched exactly. Served by the partial index `ix_metadata_failure_junction`, which holds only runs that failed |
 
-When any filter is supplied the count is exact (`isEstimatedCount: false`); an unfiltered list may use the database's row estimate, on every page alike (see [Estimated counts](#estimated-counts)). `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. `failureClass` is served by `ix_metadata_failure_class` on `(failure_class, id DESC)` (Postgres). It covers every row rather than only classified ones: the class arrives as a query parameter, and a generic plan cannot prove a parameter satisfies a partial index's predicate, so a partial index would go unused. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
+When any filter is supplied the count is exact (`isEstimatedCount: false`), except under `failureReasonContains`; an unfiltered list may use the database's row estimate, on every page alike (see [Estimated counts](#estimated-counts)). With `failureReasonContains` the count stops at 10,000 matches: past that `totalCount` is `10000` and `isCountCapped` is `true`, so a client shows "10,000+" rather than waiting on a count of every failed run. A term matching 10,000 or fewer is counted exactly. `startedAfter`/`startedBefore` use the `ix_metadata_start_time_desc` index so they stay fast at scale. `manifestId` and `manifestGroupId` are served by the covering index `ix_metadata_manifest_state`, so a manifest's or group's history stays index-only even against millions of rows. `failureClass` is served by `ix_metadata_failure_class` on `(failure_class, id DESC)` (Postgres). It covers every row rather than only classified ones: the class arrives as a query parameter, and a generic plan cannot prove a parameter satisfies a partial index's predicate, so a partial index would go unused. Arbitrary-column sorting is deliberately not offered: it is incompatible with keyset pagination over millions of rows (it forces OFFSET scans or a full sort). Filter to narrow the set instead.
+
+On Postgres `failureReasonContains` is served by a trigram index on `lower(failure_reason)`, `ix_metadata_failure_reason_trgm` (migration [066](/docs/migration-guides/database-migrations#failure-search-066)). A first page or a cursor page with a text filter is read in two steps: the 10,000 ids nearest where it starts, in order, which fills the page when the term is common there, and then the rest of the matches through the index, sorted. So a term found only in old runs does not make a newest-first page walk every newer run. At 3,000,000 runs, two in nine of them failed, a page with its count takes under 10 ms for a term that matches nothing, a few dozen runs or two runs in nine, and under 100 ms for a term found in 67,000 old runs only, alone or with `hostName`. A term shorter than three characters has no trigram to look up and reads the table. SQLite has no trigram index, so there both filters read the table.
 
 **Returns**: `PagedResult<ExecutionSummary>`
 
@@ -607,6 +644,8 @@ When any filter is supplied the count is exact (`isEstimatedCount: false`); an u
 | `failureReason` | `String` | Exception message on failure |
 | `manifestId` | `Long` | Associated manifest ID (null if not scheduler-initiated) |
 | `cancellationRequested` | `Boolean!` | Whether cancellation was requested |
+| `parentId` | `Long` | The execution that started this one from inside its run, or null |
+| `currentlyRunningJunction` | `String` | The junction the execution is running now, while it is `IN_PROGRESS`; null otherwise |
 | `failureClass` | `FailureClass!` | How the failure was classified: `UNCLASSIFIED`, `TRANSIENT`, `CONFLICT`, or `PERMANENT`. `UNCLASSIFIED` when the run did not fail, no [failure classifier](/docs/core/trains-and-junctions#classifying-failures) is registered, or it did not recognise the failure. Later releases may add values to `FailureClass`; a client generated from an older schema should treat a value it does not know as `UNCLASSIFIED` rather than failing to read the response |
 
 ---
@@ -698,7 +737,10 @@ on [`ExecutionSummary`](#executionsummary-fields). `scheduledTime` is when a sch
 and `hostLabels` is the host's user-supplied labels as a JSON object. `replayDecisionsOf` (`Long`) is
 the execution whose recorded decisions this run was queued to replay, by a requeue or a manifest's
 retry that replays; it is null when the run replays nothing, a run queued to ask afresh included. The dashboard shows it as
-**Replays Decisions Of**.
+**Replays Decisions Of**. `replayAbandoned` (`Boolean!`) is `true` when the run was queued to replay
+`replayDecisionsOf` and asked its deciders afresh instead, because that replay could not be honoured;
+`false` for a run that replayed or was never queued to. The decisions themselves are on
+[`decisions`](#decisions).
 
 `input` and `output` can hold credentials. They are on this single-row read and on no list; see
 [Train inputs and the operations gate](#train-inputs-and-the-operations-gate).
@@ -797,6 +839,85 @@ along.
 
 ---
 
+### decisions
+
+One run's recorded decisions, in the order it made them: each question it asked a decider, the
+answer it acted on (or refused), and the tracks routing steps took on it. These are the rows
+[decision recording](/docs/core/decisions) writes to `trax.decision` and a
+[requeue](/docs/sdk-reference/graphql-api/mutations#requeueexecution) replays. It reads through
+`IOperationsService.GetRecordedDecisionsAsync`, the read the dashboard's run page makes.
+
+```graphql
+query {
+  operations {
+    decisions(metadataId: 1234, take: 50) {
+      items {
+        id
+        questionKey
+        occurrence
+        kind
+        answer
+        refused
+        isRefused
+        model
+        decider
+        replayed
+        replayRefused
+        routes
+        stateHash
+        decidedAt
+        answerWithheld
+        trackWithheld
+      }
+      nextCursor
+    }
+    executionDetail(id: 1234) { replayDecisionsOf replayAbandoned }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metadataId` | `Long!` | none | The run's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
+| `afterId` | `Long` | `null` | Only decisions recorded after this one: pass a page's `nextCursor` |
+| `take` | `Int!` | `50` | Page size, from 1 to 500 |
+
+**Returns**: `DecisionPage!` with `items: [DecisionRecord!]!`, `take: Int!` (after clamping) and
+`nextCursor: Long` (the last decision's id, null on an empty page). A run that recorded none, and an
+id with no run, return an empty page. At a million recorded decisions, a run with a few reads in
+about a millisecond and a page of 500 deep into a 2,000-decision run in under 10 ms.
+
+#### DecisionRecord fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Long!` | The decision's id; decisions are recorded in id order |
+| `metadataId` | `Long!` | The run that asked |
+| `questionKey` | `String` | The question's key |
+| `occurrence` | `Int!` | Which asking of the question this was in the run, from 0 |
+| `kind` | `String` | `choice`, `score` or `yes_no` |
+| `question` | `String` | The question as asked, with its instructions and criteria, as JSON |
+| `answer` | `String` | The answer the run acted on, as JSON. For a refusal, the answer it would not act on, or null when the decider gave none |
+| `refused` | `String` | Why the run would not act on the answer; null for an answer it acted on |
+| `isRefused` | `Boolean!` | `true` when the run refused the answer and its step failed on it. Kept on a withheld row, where `refused` is null |
+| `fingerprint` | `String` | Identifies the asking the answer was given to: the step, the state's type and the question's declaration |
+| `model` | `String` | The model that answered, when the decider is a model |
+| `decider` | `String` | The decider's type; null when the answer was replayed |
+| `replayed` | `Boolean!` | `true` when the answer came from an earlier run rather than a decider |
+| `replayRefused` | `String` | Why an earlier run's answer was not replayed, so the decider was asked afresh: the `replay_refused` member of `answer`. Null when there is none |
+| `shadows` | `String` | What each shadow decider answered, as JSON |
+| `routes` | `String` | The tracks routing steps took on the decision, as a JSON array of `{"track", "fallback_reason"}`; null when nothing routed on it |
+| `stateHash` | `String` | The hash of the state the question was asked about (`k1:` keyed, `s1:` unkeyed); null when none was recorded |
+| `decidedAt` | `DateTime!` | When the question was answered |
+| `answerWithheld` | `Boolean!` | `true` when the question is about a [`[TraxSensitive]`](/docs/sdk-reference/attributes/trax-sensitive#on-a-question-type) type: `answer`, `refused`, `replayRefused`, `shadows` and `routes` are null, since each states or gives away the answer |
+| `trackWithheld` | `Boolean!` | `true` once the run had taken a track on a withheld answer: every later decision keeps only `id`, `metadataId`, `occurrence`, `replayed`, `isRefused` and `decidedAt`, because which questions it asked would give the track away |
+
+The stored rows keep every value either way, because a requeue replays from them; only this read
+leaves them out, by the rule [`junctionRuns`](#junctionruns) follows. It answers to the operations
+gate like every field here.
+
+---
+
 ## Train inputs and the operations gate
 
 A train's input can carry credentials, so the admin surface reads it one row at a time. An
@@ -841,6 +962,7 @@ All paginated queries return the same wrapper type:
 | `skip` | `Int!` | The `skip` value that was applied, after a negative value was read as `0` |
 | `take` | `Int!` | The `take` value that was applied, after clamping to 1 through 500 |
 | `isEstimatedCount` | `Boolean!` | `true` when `totalCount` is a fast estimate rather than an exact count. See [Pagination](#estimated-counts) |
+| `isCountCapped` | `Boolean!` | `true` when `totalCount` stopped at its cap, so the list holds at least that many and probably more: show it as "10,000+". A lower bound, not an estimate. Only [`logs`](#logs-nested-under-operations) filtered by text and [`executions`](#executions) filtered by `failureReasonContains` cap their count; every other list returns `false` |
 | `nextCursor` | `Long` | ID of the last item in the page. Pass as `afterId` to fetch the next page via keyset pagination. `null` when no items are returned |
 
 ---
@@ -947,6 +1069,7 @@ query {
 | `take` | `Int!` | `25` | Number of records to return. See [Page size](#page-size) |
 | `status` | `DeadLetterStatus` | `null` | `AWAITING_INTERVENTION`, `RETRIED` or `ACKNOWLEDGED` |
 | `afterId` | `Long` | `null` | Keyset cursor. See [Pagination](#pagination) |
+| `manifestId` | `Long` | `null` | Only the dead letters of this manifest, served by `ix_dead_letter_manifest_id`. The dashboard's dead-letter page reads a manifest's failed runs with [`executions(manifestId:, trainState: FAILED)`](#executions) and the latest one's detail with [`executionDetail`](#executiondetail) |
 
 **Returns**: `PagedResult<DeadLetterSummary>`
 
@@ -1014,27 +1137,50 @@ query {
 
 **Returns**: `SchedulerConfigSnapshot`.
 
-### environmentName and logLevels
+### environmentName, version and logLevels
 
-The API host's environment and its `Logging:LogLevel` configuration, which the dashboard shows as
-its environment badge and on its server settings page.
+The API host's environment, the Trax version it runs, and the level each configured log category
+filters at, which the dashboard shows as its environment badge, its footer and on its server
+settings page.
 
 ```graphql
 query {
   operations {
     config {
       environmentName
-      logLevels { category level }
+      version
+      logLevels { category level configuredLevel overridden }
     }
   }
 }
 ```
 
-`environmentName` is `IHostEnvironment.EnvironmentName` (`String!`). `logLevels` is
-`[LogLevelSetting!]!`, one `{ category, level }` per key under `Logging:LogLevel`, `Default` first
-and the rest by category; empty when the host configures none. Only that section is read, so no
-other configuration value (a connection string, a secret) is reachable from here. Both describe
-the API process, not the scheduler or worker processes.
+`environmentName` is `IHostEnvironment.EnvironmentName` (`String!`).
+
+`version` (`String!`) is the version of Trax serving the API, such as `1.46.0`: the Trax.Api.GraphQL
+package's version without its build metadata. It is what the dashboard's footer shows for the
+Trax.Dashboard package. It says which Trax release the host runs, not the host application's own
+version, which Trax does not know.
+
+`logLevels` is `[LogLevelSetting!]!`, one per category configured under `Logging:LogLevel` (and per
+category changed at runtime since), `Default` first and the rest by category; empty when the host
+configures none. It reads through `ILogLevelService` in Trax.Scheduler, the service the dashboard's
+server settings call, so it includes a change made with
+[`setLogLevels`](/docs/sdk-reference/graphql-api/mutations#setloglevels) or from the dashboard. Only
+that section is read, so no other configuration value (a connection string, a secret) is reachable
+from here. All three describe the API process, not the scheduler or worker processes.
+
+#### LogLevelSetting fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `category` | `String!` | The logging category, `Default` for the level every other category falls back to |
+| `level` | `String!` | The level its loggers filter at now, by `LogLevel` name (`Trace` ... `None`): a level set at runtime when there is one, otherwise the configured one, `Information` when the configured value is not a level |
+| `configuredLevel` | `String` | The value configured under `Logging:LogLevel`, as written; null when the category is not configured there |
+| `overridden` | `Boolean!` | Whether a level was set at runtime, so `level` is not the configured one. It lasts until the process restarts |
+
+A host that does not call `AddScheduler` registers no `ILogLevelService`: there `logLevels` reads
+the configured section as written, with `overridden` always `false`, and `setLogLevels` refuses.
 
 #### SchedulerConfigSnapshot fields
 
@@ -1100,7 +1246,7 @@ query {
 | `kpis` | `DashboardKpis!` | Today's headline counts |
 | `executionsOverTime` | `[ExecutionsBucket!]!` | Per-bucket counts at the requested granularity |
 | `topFailures` | `[TrainFailureCount!]!` | Top 10 trains by failure count over the last 7 days |
-| `topAverageDurations` | `[TrainAverageDuration!]!` | Top 10 trains by average duration over the last 7 days (root-level executions only) |
+| `topAverageDurations` | `[TrainAverageDuration!]!` | Top 10 trains by average duration over the last 7 days (root-level, completed executions only). Averaged in the database on every provider, Sqlite included |
 | `throughputSeries` | `[ThroughputSeries!]!` | Top-3 trains plus an `"Other"` series, 28 6-hour buckets covering 7 days. Empty series are dropped |
 
 #### DashboardKpis fields
@@ -1149,7 +1295,7 @@ query {
 | `timestamp` | `DateTime!` | UTC start of the bucket |
 | `count` | `Int!` | Completed executions in the bucket |
 
-`dashboard` runs several aggregations over the last-24h and last-7-day windows on every call, and those windows hold hundreds of thousands to millions of rows at scale. The metadata table carries two covering indexes for them (`ix_metadata_metrics_state_time` and `ix_metadata_metrics_window`) so every aggregation is a heap-free index-only scan. At 3,000,000 metadata rows the whole block returns in ~400-525ms, against ~630-770ms without the covering indexes. It is the heaviest operations read, so poll it on an interval (a few seconds) rather than on every dashboard interaction.
+`dashboard` runs several aggregations over the last-24h and last-7-day windows on every call, and those windows hold hundreds of thousands to millions of rows at scale. The metadata table carries two covering indexes for them (`ix_metadata_metrics_state_time` and `ix_metadata_metrics_window`) so every aggregation is a heap-free index-only scan. The aggregations run at once, each on a connection of its own, so the block takes as long as the slowest of them, the 7-day throughput aggregation, rather than their sum; a call holds up to seven pooled connections while it runs. At 3,000,000 metadata rows the whole block returns in ~290-345ms, with or without `hideAdminTrains`, against ~460-700ms when they ran one after another. It is the heaviest operations read, so poll it on an interval (a few seconds) rather than on every dashboard interaction.
 
 ### server
 
@@ -1213,6 +1359,23 @@ query {
 }
 ```
 
+A run's log, oldest first as its page reads it, filtered by text:
+
+```graphql
+query {
+  operations {
+    logs {
+      logs(metadataId: 1234, order: OLDEST, messageContains: "timeout", take: 100) {
+        items { id level category message }
+        totalCount
+        isCountCapped
+        nextCursor
+      }
+    }
+  }
+}
+```
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `skip` | `Int!` | `0` | Number of records to skip (offset pagination). A negative value reads as `0`. Ignored when `afterId` is provided. |
@@ -1220,11 +1383,28 @@ query {
 | `metadataId` | `Long` | `null` | Filter to logs for a single execution |
 | `minimumLevel` | `LogLevel` | `null` | Includes the supplied level and anything more severe. `LogLevel` follows `Microsoft.Extensions.Logging`: `TRACE`, `DEBUG`, `INFORMATION`, `WARNING`, `ERROR`, `CRITICAL`, `NONE` |
 | `category` | `String` | `null` | Exact-match filter on the logger category (e.g. `MyApp.Trains.Billing.ChargeCustomerTrain`) |
-| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId` |
+| `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`, or `id > afterId` when `order: OLDEST` |
+| `messageContains` | `String` | `null` | Only records whose message contains this text anywhere, ignoring case. `%`, `_` and `\` match themselves |
+| `categoryContains` | `String` | `null` | Only records whose logger category contains this text, matched as `messageContains` is |
+| `order` | `SortOrder!` | `NEWEST` | `NEWEST` (id descending) or `OLDEST` (id ascending, as a run's log reads). `afterId` pages in the chosen direction |
 
 **Returns**: `PagedResult<LogEntry>`.
 
-When any filter or `afterId` is supplied, the count is exact (`isEstimatedCount: false`). Unfiltered first-page reads use the same `pg_class.reltuples` estimator as the other large-table queries because the log table grows quickly.
+The filters, the order and the counts go through `IOperationsService` in Trax.Scheduler, the same
+`LogQuery` the dashboard's Logs and run pages read with, so both apply one filter.
+
+The count depends on the filter. Unfiltered, it is the same `pg_class.reltuples` estimate as the
+other large-table queries (`isEstimatedCount: true`), because the log table grows quickly. With
+`messageContains` or `categoryContains` it counts at most 10,000 matches: past that `totalCount` is
+`10000` and `isCountCapped` is `true`, so a client shows "10,000+" rather than waiting on a count of
+millions of rows. Under any other filter, or a text filter matching 10,000 or fewer, it is exact.
+
+On Postgres the text filters are served by trigram indexes on `lower(message)` and
+`lower(category)`. At 3,000,000 log rows a page with its count takes a few milliseconds for a term
+that matches nothing, under 70 ms for one that matches often, and under 200 ms for one that matches a
+single row. A term that matches often but only in old rows takes under 50 ms newest first: a first
+or cursor page with a text filter reads the 10,000 ids nearest where it starts in order, then finds
+the rest of its matches through the index, so it does not walk every newer row.
 
 #### LogEntry fields
 
@@ -1469,6 +1649,8 @@ query {
 | `status` | `WorkQueueStatus` | `null` | Filter by lifecycle state (`QUEUED`, `DISPATCHED`, `CANCELLED`) |
 | `trainName` | `String` | `null` | Exact-match filter on the interface FullName (e.g. `MyApp.Trains.Billing.IChargeCustomerTrain`) |
 | `afterId` | `Long` | `null` | Keyset cursor. Returns records with `id < afterId`. See [Pagination](#pagination) |
+| `subjectKey` | `String` | `null` | Only entries serialized against this subject, matched exactly: a subject's queue, as the dashboard's subject column links to it |
+| `manifestId` | `Long` | `null` | Only entries queued for this manifest, served by `ix_work_queue_manifest_id` |
 
 **Returns**: `PagedResult<WorkQueueSummary>`
 
@@ -1493,6 +1675,7 @@ When any filter or `afterId` is supplied, the count is exact and `isEstimatedCou
 | `inputTypeName` | `String` | Fully qualified type name of the input, for deserialization |
 | `confirmedAt` | `DateTime` | When the entry became eligible for dispatch. Null while it is still being staged, and stays null on a staged entry that was cancelled (by an operator, or by the stale staged entry sweep); the dispatcher never claims an unconfirmed entry. Also null on an entry dispatched more than a day before the database was migrated to the version that added it, which the migration does not backfill |
 | `subjectKey` | `String` | The subject the entry is serialized against, from the train's [`QueueSubjectKey`](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). Null when the train does not set one. The value is computed by the consumer's train, so it may carry record identifiers |
+| `replayDecisionsOf` | `Long` | The execution whose recorded decisions the run this entry starts will replay (a requeue, or a manifest's retry that replays); null when it will ask its questions afresh. Also on `workQueue(id:)` and `detail` |
 
 ### workQueue (single)
 
@@ -1517,7 +1700,10 @@ query {
 ### detail
 
 Returns one entry with the train input it was queued with and, for a queued entry with a
-subject, what it is waiting on. Backs a work queue detail page.
+subject, what it is waiting on. Backs a work queue detail page. It reads through
+[`IOperationsService.GetWorkQueueEntryDetailAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#read-models),
+the call the dashboard's work queue entry page makes, so both mask the input and name what the
+entry waits on the same way.
 
 ```graphql
 query {

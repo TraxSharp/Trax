@@ -102,9 +102,9 @@ error its removal causes:
 | `.AddMediator(typeof(Program).Assembly)` | Registers every train in the project under its interface | The trains do not exist; `Schedule<IHelloWorldTrain>` refuses to start: `No train implements IServiceTrain<HelloWorldInput, TOut>` |
 | `.AddScheduler(...)` with `Schedule<IHelloWorldTrain>("hello-world", ..., Every.Seconds(20))` | Stores the manifest at startup and runs it every 20 seconds | `UseTraxDashboard()` refuses to start: `UseTraxDashboard() requires the Trax Scheduler` |
 | `AddDbContextFactory<AppDbContext>(...)` | Your own EF Core context, on an in-memory database | The `EnsureCreated()` bootstrap throws: `No service for type 'IDbContextFactory<AppDbContext>' has been registered` |
-| `AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>())` | The schema at `/trax/graphql`: trains under `discover` and `dispatch`, `Note` under `discover { app }` | `UseTraxGraphQL()` throws: `No service for type 'HotChocolate.Execution.IRequestExecutorProvider'` |
+| `AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>())` | The schema at `/trax/graphql`: trains under `discover` and `dispatch`, `Note` under `discover { app }` | `UseTraxGraphQL()` throws: `UseTraxGraphQL() requires AddTraxGraphQL() to be called first.` |
 | `AddHealthChecks().AddTraxHealthCheck()` | `/trax/health` | `MapHealthChecks` throws, naming `AddHealthChecks` |
-| `AddTraxDashboard(d => d.AllowAnonymousDashboard())`, Development only | The dashboard at `/trax`, open to anyone who can reach the port | Without the posture, `UseTraxDashboard()` throws naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousDashboard`; without `AddTraxDashboard` at all, it throws `No service for type 'Trax.Dashboard.Configuration.DashboardOptions'` |
+| `AddTraxDashboard(d => d.AllowAnonymousDashboard())`, Development only | The dashboard at `/trax`, open to anyone who can reach the port | Without the posture, `UseTraxDashboard()` throws naming `RequirePolicy`, `RequireRoles` and `AllowAnonymousDashboard`; without `AddTraxDashboard` at all, it throws `UseTraxDashboard() requires AddTraxDashboard() to be called first.` |
 
 `AllowAnonymousDashboard()` sits inside the `IsDevelopment()` check, and so do `AddTraxDashboard`
 and `UseTraxDashboard`: the dashboard is not served anywhere else until you choose who may use it
@@ -117,8 +117,9 @@ The two trains both carry `[TraxAuthorize(Roles = "User")]`:
 
 `HelloWorldTrain` exposes `Run` only on purpose. `[TraxMutation]` with no operation also adds a
 `mode: QUEUE` argument, which writes the run to the scheduler's work queue. Only a database-backed
-scheduler reads that queue: on the in-memory provider the mutation returns a `workQueueId` and the
-run never happens. Switch to Postgres (below) before enabling `Queue`.
+scheduler reads that queue: on the in-memory provider nothing would ever run the entry, so a
+`mode: QUEUE` request is refused with `TRAX_QUEUE_UNAVAILABLE` and the host logs a warning at
+startup. Switch to Postgres (below) before enabling `Queue`.
 
 The junctions derive `EffectJunction<TIn, TOut>`, because `AddJunctionProgress()` only sees
 junctions of that type. See [Junction Progress](/docs/effect/effect-providers/junction-progress).
@@ -350,8 +351,9 @@ The dashboard can queue, run and cancel trains and change scheduler settings, an
 register an authentication scheme, choose who may use it with `RequirePolicy("<policy>")` or
 `RequireRoles("<role>")` in place of `AllowAnonymousDashboard()` (see
 [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)), and remove the
-`IsDevelopment()` checks around `AddTraxDashboard` and `UseTraxDashboard`. A policy with no
-authentication scheme registered answers every dashboard request with a 500, not a refusal.
+`IsDevelopment()` checks around `AddTraxDashboard` and `UseTraxDashboard`. A policy or roles with
+no authentication scheme to challenge with refuses to start, naming `AddAuthentication`, because
+every request the dashboard refused would otherwise be a 500 rather than a 401 or 403.
 
 Replace the demo key with real credentials, such as `AddHashed` keys loaded from a secret store
 or [`AddTraxJwtAuth`](/docs/sdk-reference/api-auth/add-trax-jwt-auth), before removing the check

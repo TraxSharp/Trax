@@ -186,7 +186,7 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | Registers the TrainBus and discovers trains via assembly scanning. Accepts `params Assembly[]` shorthand or `Func<TraxMediatorBuilder, TraxMediatorBuilder>` for full control (custom lifetime, multiple assemblies). Called on `TraxBuilderWithEffects`, returns `TraxBuilderWithMediator` |
 | [AddEffect / AddJunctionEffect](/docs/sdk-reference/configuration/add-effect) | Registers custom effect provider factories |
 | [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook) | Registers lifecycle hooks that fire on train state transitions |
-| [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the minimum log level for effect logging |
+| [SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level) | Sets the level the junction logger and JSON effect write their entries at |
 | [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | Records every decision a run makes in `trax.decision`, and replays them into a re-queued or retried run |
 | [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | Publishes each step of a run live and records it in `trax.junction_run` |
 
@@ -201,3 +201,9 @@ These properties can be set directly on the `TraxEffectBuilder`:
 | [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider) | What a junction effect implements: code run before and after every `EffectJunction` |
 | [ITraxTrainEventClient](/docs/sdk-reference/configuration/i-trax-train-event-client) | The SignalR hub's client surface: the `TrainEvent` and `JunctionEvent` methods clients subscribe to |
 | [IJunctionEventHandler](/docs/sdk-reference/configuration/add-junction-events#ijunctioneventhandler) | Receives each step of a run from a host that calls `AddJunctionEvents()` |
+
+### Query helpers
+
+| Helper | Description |
+|--------|-------------|
+| [LikePattern](/docs/sdk-reference/configuration/like-pattern) | Builds the escaped, lowered `LIKE` pattern for a case-insensitive search inside a column, in the shape the Postgres trigram indexes serve |

@@ -9,7 +9,7 @@ nav_order: 1
 
 # AddScheduler
 
-Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the background polling service, and all scheduler infrastructure. Provides a `SchedulerConfigurationBuilder` lambda for configuring global options, execution backends, and startup schedules.
+Adds the Trax.Core scheduler subsystem. Registers `ITraxScheduler`, the background polling service, and all scheduler infrastructure, including the services the dashboard and the GraphQL API share: [IOperationsService](/docs/sdk-reference/scheduler-api/i-operations-service), [IEffectSettingsService](/docs/sdk-reference/scheduler-api/i-effect-settings-service), [ILogLevelService](/docs/sdk-reference/scheduler-api/i-log-level-service) and [IDeadLetterRequeueJobs](/docs/sdk-reference/scheduler-api/i-dead-letter-requeue-jobs). Provides a `SchedulerConfigurationBuilder` lambda for configuring global options, execution backends, and startup schedules.
 
 ## Signature
 

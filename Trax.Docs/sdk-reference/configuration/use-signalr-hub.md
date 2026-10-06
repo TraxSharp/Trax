@@ -184,7 +184,7 @@ If the hub send fails for any reason (e.g. a client disconnects mid-send, a tran
 
 The same singleton dispatcher is registered twice in DI:
 
-- As an `ITrainLifecycleHook`, so trains running in the same process fire it directly with no transport hop.
+- As an `ITrainLifecycleHook`, so trains running in the same process fire it directly with no transport hop. Each run is handed a forwarder to the dispatcher rather than the dispatcher itself, so the end of a run, which disposes its hooks, never stops the sink; only the host's shutdown does.
 - As an `ITrainEventHandler`, so events arriving via `TrainEventReceiverService` (the broadcaster's transport-side consumer) also flow through.
 
 The `TrainEventReceiverService` skips events stamped with this host's own instance id, so the dispatcher does not double-fire when both paths exist on one host, while replicas of the same app still receive each other's events. Data-change signals (`DataChanged`) arrive over the same transport but are not train events, so the event handler path does not send them to clients.
