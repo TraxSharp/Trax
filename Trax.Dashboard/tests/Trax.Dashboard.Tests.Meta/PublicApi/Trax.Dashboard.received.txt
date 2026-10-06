@@ -13,40 +13,28 @@ namespace Trax.Dashboard.Components
 }
 namespace Trax.Dashboard.Components.Dialogs
 {
-    [System.Runtime.CompilerServices.RequiredMember]
     public class ConfigureEffectDialog : Microsoft.AspNetCore.Components.ComponentBase
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public ConfigureEffectDialog() { }
         [Microsoft.AspNetCore.Components.Parameter]
-        [System.Runtime.CompilerServices.RequiredMember]
-        public string EffectFullName { get; set; }
+        public required string EffectFullName { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override void OnInitialized() { }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class QueueTrainDialog : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public QueueTrainDialog() { }
         [Microsoft.AspNetCore.Components.Parameter]
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; set; }
+        public required Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         public void Dispose() { }
         protected override void OnInitialized() { }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class RunTrainDialog : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public RunTrainDialog() { }
         [Microsoft.AspNetCore.Components.Parameter]
-        [System.Runtime.CompilerServices.RequiredMember]
-        public Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; set; }
+        public required Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         public void Dispose() { }
         protected override void OnInitialized() { }

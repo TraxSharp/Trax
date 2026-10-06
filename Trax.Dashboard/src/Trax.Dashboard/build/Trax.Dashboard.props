@@ -3,7 +3,6 @@
        (blazor.web.js) to be resolved at build time. Without this, _framework/blazor.web.js returns 404. -->
   <PropertyGroup>
     <RequiresAspNetWebAssets Condition="'$(RequiresAspNetWebAssets)' == ''"
-      >true</RequiresAspNetWebAssets
-    >
+      >true</RequiresAspNetWebAssets>
   </PropertyGroup>
 </Project>
