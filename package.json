@@ -1,8 +1,8 @@
 {
-  "name": "trax-core",
+  "name": "trax",
   "version": "0.0.0-development",
   "private": true,
-  "description": "Railway Oriented Programming library for .NET",
+  "description": "Release tooling for the Trax packages",
   "devDependencies": {
     "semantic-release": "^25.0.9",
     "@semantic-release/exec": "^7.1.0",

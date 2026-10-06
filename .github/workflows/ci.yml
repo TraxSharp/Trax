@@ -9,13 +9,20 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # release.yml runs this before it cuts a version. Any event but a pull request runs every
+  # folder, so a release always tests the whole repository.
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
 
 # Default to no permissions; each job widens only what it needs.
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A release's run must not cancel, or be cancelled by, a pull request's.
+  group: ci-${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:

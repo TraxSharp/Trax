@@ -2,7 +2,7 @@
 authors: [Theauxm]
 repos: [core, effect, mediator, scheduler, dashboard, api, cli, samples, docs]
 areas: [ci]
-status: accepted
+status: superseded-by-0042
 ---
 
 # The ADR guard is released by tag, and the code repos pin the tagged commit
@@ -15,7 +15,8 @@ the guard and to nothing else.
 
 ## Status
 
-**Accepted.**
+**Superseded by** [0042](./0042-trax-is-one-repository-and-releases-at-one-version.md): in one
+repository the guard is built from the commit it checks, so there is nothing to release or pin.
 
 ## Why this is written down
 
@@ -79,4 +80,5 @@ tagged commit, and nothing checks that the bump chosen matches what changed.
 
 ## Changelog
 
+- **2026-10-06**: Superseded by 0042.
 - **2026-10-01**: Recorded.

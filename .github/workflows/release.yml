@@ -1,11 +1,18 @@
-name: Release NuGet Package
+name: Release
 
 # Runs only when dispatched by hand from the Actions tab, to publish whatever has
 # accumulated on main. A merge to main runs nothing here: the pull request already built
-# and tested the change. build-test still runs first in every release, so nothing is
-# tagged or published from a main that does not build and pass. semantic-release reads
-# every commit since the last tag, so one run cuts one version at the highest bump those
-# commits call for.
+# and tested the change. The full CI still runs first in every release, over every folder,
+# so nothing is tagged or published from a main that does not build and pass.
+#
+# Every Trax package releases at one version
+# (Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md).
+# semantic-release reads every commit since the last v* tag and cuts one version at the
+# highest bump those commits call for; every package and the template package are packed at
+# it. The Trax.X/v* tags are the separate repositories' history and are never read.
+#
+# Trusted publishing on nuget.org matches this repository, this file's name and the
+# `release` environment. Renaming the file breaks publishing until the policy is updated.
 on:
   workflow_dispatch:
 
@@ -21,119 +28,20 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Untrusted-code zone. Restore/build/test (the bulk of third-party code
-  # execution) run here with NO release or publish credentials.
+  # Untrusted-code zone. The pull-request CI over every folder: restore, build and
+  # test (the bulk of third-party code execution) with NO release or publish
+  # credentials.
   # ---------------------------------------------------------------------------
   build-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527
-        env:
-          POSTGRES_USER: trax
-          POSTGRES_PASSWORD: trax123
-          POSTGRES_DB: trax
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U trax"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-      rabbitmq:
-        image: rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671
-        env:
-          RABBITMQ_DEFAULT_USER: trax
-          RABBITMQ_DEFAULT_PASS: trax123
-        ports:
-          - 5672:5672
-        options: >-
-          --health-cmd="rabbitmq-diagnostics -q ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
-        with:
-          # Audit first. After reviewing the audit run, switch to 'block' with a
-          # tuned allowed-endpoints list (see GITHUB_ACTIONS_HARDENING_ROLLOUT.md).
-          egress-policy: audit
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Guard against local-dev lockfile versions
-        run: |
-          if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json . ; then
-            echo "::error::A packages.lock.json contains the local-dev version 1.99.99. Regenerate lockfiles in CI mode (remove trax-local.props) before committing."
-            exit 1
-          fi
-      - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
-        with:
-          global-json-file: global.json
-      - name: Restore (locked)
-        run: dotnet restore --locked-mode
-      - name: Every project is locked
-        run: .github/scripts/check-project-locks.sh Trax.Samples.slnx
-      - name: No deprecated packages
-        run: .github/scripts/check-deprecated-packages.sh
-      - name: Build
-        run: dotnet build --configuration Release --no-restore -warnaserror
-      - name: Create test databases
-        env:
-          PGPASSWORD: trax123
-        run: |
-          for db in chat_e2e_tests energyhub_e2e_tests bookworm_e2e_tests auth_e2e_tests persisted_operations_e2e_tests recovery_e2e_tests scheduling_e2e_tests contentshield_e2e_tests statemachine_e2e_tests; do
-            psql -h localhost -U trax -d trax -c "CREATE DATABASE \"$db\";"
-          done
-      - name: Test
-        run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
-      - name: Upload coverage results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: coverage
-          path: TestResults/**/coverage.cobertura.xml
-          if-no-files-found: warn
-          retention-days: 1
-
-  # The Codecov token is kept out of the job that runs restore, build and tests, so
-  # nothing those leave running can read it. This job runs no project code.
-  coverage:
-    needs: build-test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
-        with:
-          egress-policy: audit
-      - name: Checkout
-        # Codecov maps the report's file paths onto the repository's tracked files.
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Download coverage results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
-        with:
-          name: coverage
-          path: ${{ runner.temp }}/coverage
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
-        with:
-          directory: ${{ runner.temp }}/coverage
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+    uses: ./.github/workflows/ci.yml  # zizmor: ignore[self-repository]
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Release/version zone. Holds the GitHub App token (GitHub API: tags + release)
-  # but NOT the NuGet publish key. Produces the .nupkg artifact.
+  # Release/version zone. Holds the GitHub token (tags + release) but NOT the
+  # NuGet publish key. Produces the .nupkg artifact.
   # ---------------------------------------------------------------------------
   release:
     needs: build-test
@@ -142,11 +50,11 @@ jobs:
     # reaches the approval.
     if: github.ref == 'refs/heads/main'
     # Gated on the same protected environment as publish, so a dispatch cannot cut a
-    # tag, a GitHub release or a changelog entry before an approver signs off. Without
-    # this, anyone with write access could burn a version number.
+    # tag or a GitHub release before an approver signs off. Without this, anyone with
+    # write access could burn a version number.
     environment: release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: write         # semantic-release: tags + GitHub release
       issues: write           # semantic-release github plugin: successComment
@@ -190,16 +98,32 @@ jobs:
           else
             echo "released=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Restore (locked)
-        if: steps.version.outputs.released == 'true'
-        run: dotnet restore --locked-mode
-      - name: Pack
+      - name: Pack every package
+        # One version for every package. A folder packs its solution, or the one project
+        # packages.json names under release-pack (Trax.Samples ships only its templates).
         if: steps.version.outputs.released == 'true'
         env:
           # Bind the version to env and reference the shell var (it is pipeline-
           # controlled, but this is the pattern to use for any ${{ }} value).
           PKG_VERSION: ${{ steps.version.outputs.version }}
-        run: dotnet pack templates/Trax.Samples.Templates.csproj --configuration Release --no-restore --output nupkg -p:Version="$PKG_VERSION"
+        run: |
+          jq -r '.packages[] | select(.dotnet)
+                 | .folder + "/" + (.dotnet["release-pack"] // (if .dotnet.pack then .dotnet.solution else empty end))' \
+            .github/ci/packages.json > "$RUNNER_TEMP/pack-list"
+          while IFS= read -r project; do
+            echo "::group::$project"
+            dotnet restore "$project" --locked-mode
+            dotnet pack "$project" --configuration Release --no-restore --output nupkg -p:Version="$PKG_VERSION"
+            echo "::endgroup::"
+          done < "$RUNNER_TEMP/pack-list"
+
+          # Every package carries the released version, and no id was packed twice.
+          stray=$(find nupkg -name '*.nupkg' ! -name "*.$PKG_VERSION.nupkg")
+          if [ -n "$stray" ]; then
+            echo "::error::Packages at another version: $stray"
+            exit 1
+          fi
+          echo "Packed $(find nupkg -name '*.nupkg' | wc -l | tr -d ' ') packages at $PKG_VERSION."
       - name: Record package digests
         # Handed to publish as a job output rather than inside the artifact, so publish
         # can tell whether what it downloaded is what this job built.
@@ -218,18 +142,17 @@ jobs:
   # ---------------------------------------------------------------------------
   # Publish zone. Consumes the built artifact and pushes it. Runs NO install /
   # build / test code. Holds the only credential that can publish to NuGet.
-  # Gated behind the protected `release` environment (configure reviewers + ref
-  # restriction in repo settings - see the rollout checklist).
+  # Gated behind the protected `release` environment.
   # ---------------------------------------------------------------------------
   publish:
     needs: release
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment: release
     permissions:
       contents: read
-      id-token: write       # OIDC token for keyless attestation signing (+ future NuGet OIDC)
+      id-token: write       # OIDC: keyless attestation signing and NuGet trusted publishing
       attestations: write   # write the SLSA build-provenance attestation
     steps:
       - name: Harden runner
@@ -263,13 +186,16 @@ jobs:
           dotnet-version: "10.0.301"
       # NuGet trusted publishing: exchange the GitHub OIDC token for a short-lived
       # (~1h, single-use) key. No stored NUGET_API_KEY. Requires a trusted-publishing
-      # policy on nuget.org scoped to this repo + workflow file + the `release` environment.
+      # policy on nuget.org scoped to this repo + this workflow file + the `release`
+      # environment.
       - name: NuGet login (OIDC -> short-lived key)
         id: nuget-login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841  # v1.2.0
         with:
           user: ${{ secrets.NUGET_USER }}
       - name: Push to NuGet
+        # --skip-duplicate makes a re-run safe: if some packages were pushed before a
+        # failure, re-running this job pushes only the rest.
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: dotnet nuget push "nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -17,7 +17,8 @@ Every package releases at one shared version, cut by one release run.
 **Accepted.** Supersedes [0002](./0002-cross-repo-dependencies-are-exact-pinned.md), which
 pinned each cross-repo dependency to a published release and needed a local feed, a
 `1.99.99` override and an upstream-to-downstream release sequence to make a change that
-spanned repos.
+spanned repos. Supersedes [0038](./0038-the-adr-guard-is-released-by-tag.md), which released
+the ADR guard by tag so eight repos could pin it.
 
 ## Considered options
 
@@ -45,6 +46,11 @@ trax.scheduler.
 [0003](./0003-a-repo-depends-only-on-what-is-upstream.md) sets it for repos. A
 `ProjectReference` makes a wrong-way dependency as easy to add as a right-way one, so the
 guard now reads project references as well as package references.
+
+**The ADR guard runs from the commit it checks.** CI builds it from `Trax.Docs/tools` in the
+same checkout, so a guard change and the ADRs it newly fails land in one pull request, and
+there is no guard release to pin. `v*` tags now belong to the shared package version; the
+separate repositories' tags were kept, prefixed with the folder name (`Trax.Core/v1.9.1`).
 
 **The templates are the one place a Trax package is a `PackageReference`**, because a
 scaffolded project lives outside the repository. In the repository those references are

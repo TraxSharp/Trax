@@ -1,0 +1,8 @@
+# Each folder ignores its own build output. This covers what the root itself produces.
+
+# Release tooling (npm ci at the root) and what a release run writes.
+/node_modules/
+/.release-version
+/nupkg/
+
+.DS_Store
