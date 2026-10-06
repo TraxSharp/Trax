@@ -345,18 +345,27 @@ public class RabbitMqBroadcasterTests
             var received = await WaitUntilAsync(
                 () =>
                 {
-                    publisher
-                        .PublishAsync(
-                            new PersistedOperationChangedMessage(
-                                null,
-                                id,
-                                PersistedOperationChangeType.Upsert,
-                                DateTime.UtcNow
-                            ),
-                            CancellationToken.None
-                        )
-                        .GetAwaiter()
-                        .GetResult();
+                    try
+                    {
+                        publisher
+                            .PublishAsync(
+                                new PersistedOperationChangedMessage(
+                                    null,
+                                    id,
+                                    PersistedOperationChangeType.Upsert,
+                                    DateTime.UtcNow
+                                ),
+                                CancellationToken.None
+                            )
+                            .GetAwaiter()
+                            .GetResult();
+                    }
+                    catch (RabbitMQ.Client.Exceptions.PublishException)
+                    {
+                        // The broker nacks a publish routed to the old channel's auto-delete
+                        // queue while it is being deleted. Not yet resubscribed: try again.
+                        return false;
+                    }
                     return cache.Invalidations.Any(p => p.Id == id);
                 },
                 TimeSpan.FromSeconds(15)

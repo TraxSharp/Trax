@@ -207,8 +207,11 @@ public class DeadLetterRequeueJobsTests
     public async Task A_running_job_says_how_many_it_has_requeued_so_far()
     {
         // Captured here rather than in the shared field, which a fold another test left running
-        // could still write.
+        // could still write. For the same reason the test waits on its own signal, set once the
+        // reporter is captured, rather than on _foldStarted: a fold left over from another test
+        // can complete that one first.
         IProgress<int>? progress = null;
+        var captured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _scheduler
             .RequeueAllDeadLettersAsync(
                 Arg.Any<bool>(),
@@ -218,10 +221,11 @@ public class DeadLetterRequeueJobsTests
             .Returns(call =>
             {
                 progress = call.Arg<IProgress<int>?>();
+                captured.TrySetResult();
                 return Fold(call.Arg<CancellationToken>());
             });
         var id = (await Jobs.StartAsync()).Id;
-        await _foldStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await captured.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         progress!.Report(2);
 
