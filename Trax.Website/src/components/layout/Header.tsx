@@ -8,6 +8,7 @@ import MobileNav from "./MobileNav";
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/docs", label: "Docs" },
+  { href: "/dashboard", label: "Dashboard" },
 ];
 
 export default function Header() {

@@ -33,6 +33,9 @@ yarn-error.log*
 # env files
 .env*.local
 
+# the dashboard demo (built from dashboard/ by scripts/build-dashboard-demo.sh)
+/public/dashboard/demo/
+
 # docs (synced at build time from local workspace or GitHub)
 .docs-cache/
 .docs-clone/

@@ -14,7 +14,7 @@ const repos: Repo[] = [
     repo: "Trax.Core",
     summary: "Trains, junctions and the chain",
     packages: [
-      { name: "Trax.Core", desc: "Trains, junctions and railway error handling" },
+      { name: "Trax.Core", desc: "Trains, junctions, decisions and railway error handling" },
       {
         name: "Trax.Core.Testing",
         desc: "Architecture-guard base classes and hygiene checks for NUnit",
@@ -23,7 +23,7 @@ const repos: Repo[] = [
   },
   {
     repo: "Trax.Effect",
-    summary: "Run recording, storage and state machines",
+    summary: "Run recording, storage, decisions and state machines",
     packages: [
       {
         name: "Trax.Effect",
@@ -46,6 +46,10 @@ const repos: Repo[] = [
       {
         name: "Trax.Effect.JunctionProvider.Progress",
         desc: "Records the running junction and checks for cancellation between junctions",
+      },
+      {
+        name: "Trax.Effect.Decisions.SystemOne",
+        desc: "Answers a train's decisions with Nimble or another System One model",
       },
       {
         name: "Trax.Effect.Broadcaster.RabbitMQ",

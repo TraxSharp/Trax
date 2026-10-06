@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bash scripts/sync-docs.sh && next dev",
-    "build": "bash scripts/sync-docs.sh && next build",
+    "dev": "bash scripts/sync-docs.sh && bash scripts/build-dashboard-demo.sh && next dev",
+    "build": "bash scripts/sync-docs.sh && bash scripts/build-dashboard-demo.sh && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "bash scripts/sync-docs.sh && node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON 'tests/**/*.test.ts'"

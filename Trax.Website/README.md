@@ -6,8 +6,9 @@
 > Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
 > run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
 
-Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landing page, and the docs site rendered from
-[Trax.Docs](https://github.com/TraxSharp/Trax.Docs), with raw Markdown and `llms.txt` for agents.
+Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landing page, the docs site rendered from
+[Trax.Docs](https://github.com/TraxSharp/Trax.Docs), with raw Markdown and `llms.txt` for agents, and a demo of the
+operations dashboard, whose source is in [`dashboard/`](dashboard/README.md) for now.
 
 ## Stack
 
@@ -17,6 +18,7 @@ Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landi
 | Tailwind CSS 4 | Styling, dark theme |
 | `next-mdx-remote`, `rehype-pretty-code` and Shiki | Render the docs as CommonMark (not MDX) with highlighted code; raw HTML is limited to a few tags by `rehype-sanitize` |
 | Trax.Docs | The page content, synced in at dev and build time |
+| `dashboard/` | The operations dashboard (Vite, React, urql), its own npm project; its demo build is served at `/dashboard/demo/` |
 
 ## Run it locally
 
@@ -41,7 +43,13 @@ available. Raw HTML is limited to a short allow-list (`<a id>` anchors and a few
 tag renders as the text written. A page's `description:` front matter, when present, is its meta description and its
 line in `llms.txt`; without it the first prose paragraph is used.
 
-Before committing, run `npm run lint`, `npm test` and `npm run build`. `npm test` syncs the docs, renders Markdown
+`npm run dev` and `npm run build` also run `scripts/build-dashboard-demo.sh`, which installs the dashboard's own
+dependencies from its lockfile (locked, no install scripts) when they are missing or stale, builds its demo, and copies it
+to `public/dashboard/demo` (gitignored). `/dashboard` frames it; `next.config.ts` lets only that page frame it and
+answers any path under it with its `index.html`, so the dashboard's routes reload.
+
+Before committing, run `npm run lint`, `npm test` and `npm run build`, and when `dashboard/` changed, its own
+`npm run lint`, `npm test`, `npm run build` and `npm run build:demo` in that folder. `npm test` syncs the docs, renders Markdown
 through the site's pipeline and checks what reaches the HTML (`tests/render.test.ts`), and renders every published page
 (`tests/pages.test.ts`), and plays every recorded sample run through its player
 (`tests/*-replay.test.ts`). It needs Node 22.18 or later.
@@ -52,6 +60,7 @@ through the site's pipeline and checks what reaches the HTML (`tests/render.test
 src/
 ├── app/
 │   ├── page.tsx                  # landing page
+│   ├── dashboard/                # the dashboard tab: a short intro and the demo, framed
 │   ├── docs/                     # docs home and [...slug] pages
 │   ├── docs-markdown/[...slug]/  # raw Markdown, served at /docs/<slug>.md
 │   ├── llms.txt/                 # /llms.txt index for agents
@@ -74,7 +83,9 @@ src/
     └── site.ts                   # site URL and description
 scripts/
 ├── sync-docs.sh                  # copies Trax.Docs into .docs-cache
+├── build-dashboard-demo.sh       # builds dashboard/'s demo into public/dashboard/demo
 └── adr-index.mjs                 # lists the ADR files that citations link to
+dashboard/                        # the operations dashboard, its own npm project (see dashboard/README.md)
 tests/
 ├── render.test.ts                # what the docs pipeline lets through to the HTML
 ├── pages.test.ts                 # renders every published page through the pipeline
@@ -93,6 +104,15 @@ gives the commands to start it.
 
 Re-record a sample with its script's `--copy-to ../../../Trax.Website/src/data`, from a sibling Trax.Samples
 checkout, when the sample changes; `npm test` plays every recording through its player.
+
+## The dashboard
+
+The **Dashboard** tab serves the operations dashboard on recordings of three sample hosts (Scheduling, Recovery and
+Persisted operations), made by Trax.Samples' `scripts/recordings/dashboard.mjs` into
+`dashboard/src/demo/data`. Every page, filter, row and button works; writes stay in the visitor's tab. Re-record it with
+that script's `--copy-to ../../../Trax.Website/dashboard/src/demo/data`, then run `npm test` in `dashboard/`, which
+fails on any page of the demo the recording does not answer. [dashboard/README.md](dashboard/README.md#the-demo) says
+how it answers.
 
 ## License
 

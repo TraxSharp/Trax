@@ -1,0 +1,192 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* Class-based dark mode: toggling `.dark` on <html> flips the theme (not system-only). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * The dashboard's colours, in one place. Components use these tokens (bg-surface, text-muted,
+ * bg-accent, text-danger-fg, ...) and never a palette colour, so the light and dark themes are
+ * both defined here and nowhere else. Dark is traxsharp.net's own palette (forest green on warm
+ * charcoal); light is the same hues on a warm off-white. Every *-fg text colour keeps at least
+ * 4.5:1 against the surfaces and *-soft fills it sits on.
+ */
+:root {
+  /* Surfaces, from the page back to the controls on it. */
+  --canvas: #f6f5f2;
+  --surface: #ffffff; /* cards, the sidebar, the top bar */
+  --sunken: #f3f2ee; /* table heads and panels set into a card */
+  --inset: #f3f2ee; /* code and JSON blocks */
+  --field: #ffffff; /* inputs and selects */
+  --raised: #ebe9e4; /* neutral chips, tracks, idle bars */
+  --hover: #efede8;
+
+  --line: #e3e0da;
+  --line-strong: #cfcbc3;
+
+  --fg: #1b1a18;
+  --fg-2: #4a4843;
+  --muted: #6b6862;
+  --faint: #b3afa7; /* decorative only: tree glyphs, empty-cell dashes */
+
+  /* Forest green: primary actions, links, the current page. */
+  --accent: #347c2f;
+  --accent-hover: #2b6827;
+  --on-accent: #ffffff;
+  --accent-fg: #2b6827;
+  --accent-soft: #e8f2e6;
+  --accent-line: #a8cda2;
+
+  /* Status. Success shares the brand green, as it does on the site. */
+  --ok: #3d8b37;
+  --ok-fg: #2b6827;
+  --ok-soft: #e8f2e6;
+  --ok-line: #a8cda2;
+  --info: #5b86b3;
+  --info-fg: #35618d;
+  --info-soft: #e8eff7;
+  --info-line: #b3c8de;
+  --warn: #d4a24c;
+  --warn-hover: #c08f39;
+  --on-warn: #1b1408;
+  --warn-fg: #85570f;
+  --warn-soft: #faf2e1;
+  --warn-line: #e6cd98;
+  --danger: #c45c5c;
+  --danger-fg: #ad3838;
+  --danger-soft: #fbeceb;
+  --danger-line: #ebbcbc;
+  --idle: #a8a49c;
+
+  /* Chart series (Overview). */
+  --chart-completed: #3d8b37;
+  --chart-failed: #c45c5c;
+  --chart-cancelled: #a8a49c;
+  --chart-series-1: #5b86b3;
+  --chart-series-2: #3d8b37;
+  --chart-series-3: #d4a24c;
+  --chart-series-4: #a8a49c;
+  --chart-axis: #6b6862;
+  --chart-grid: #e3e0da;
+  --chart-cursor: #efede8;
+}
+
+:root.dark {
+  --canvas: #101010;
+  --surface: #181818;
+  --sunken: #1f1f1f;
+  --inset: #121212;
+  --field: #121212;
+  --raised: #262624;
+  --hover: #232323;
+
+  --line: #2a2a28;
+  --line-strong: #3a3a37;
+
+  --fg: #e4e2de;
+  --fg-2: #a9a69f;
+  --muted: #959189;
+  --faint: #4a4844;
+
+  --accent: #347c2f;
+  --accent-hover: #2d6b29;
+  --on-accent: #ffffff;
+  --accent-fg: #5cb85c;
+  --accent-soft: #1a2e18;
+  --accent-line: #2f5a2b;
+
+  --ok: #5cb85c;
+  --ok-fg: #6cc46a;
+  --ok-soft: #1a2e18;
+  --ok-line: #2f5a2b;
+  --info: #7a9ec2;
+  --info-fg: #9dbbd9;
+  --info-soft: #18222d;
+  --info-line: #2c4157;
+  --warn: #d4a24c;
+  --warn-hover: #e0b35f;
+  --on-warn: #1b1408;
+  --warn-fg: #e0b45e;
+  --warn-soft: #332a14;
+  --warn-line: #5c4a20;
+  --danger: #c45c5c;
+  --danger-fg: #e07a7a;
+  --danger-soft: #2e1616;
+  --danger-line: #5c2a2a;
+  --idle: #6e6b65;
+
+  --chart-completed: #5cb85c;
+  --chart-failed: #d46a6a;
+  --chart-cancelled: #7d7a73;
+  --chart-series-1: #7a9ec2;
+  --chart-series-2: #5cb85c;
+  --chart-series-3: #d4a24c;
+  --chart-series-4: #7d7a73;
+  --chart-axis: #959189;
+  --chart-grid: #2a2a28;
+  --chart-cursor: #232323;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-inset: var(--inset);
+  --color-field: var(--field);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-ok: var(--ok);
+  --color-ok-fg: var(--ok-fg);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-line: var(--ok-line);
+  --color-info: var(--info);
+  --color-info-fg: var(--info-fg);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+  --color-warn: var(--warn);
+  --color-warn-hover: var(--warn-hover);
+  --color-on-warn: var(--on-warn);
+  --color-warn-fg: var(--warn-fg);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+  --color-idle: var(--idle);
+
+  /* The site's type: Geist and Geist Mono, bundled with the dashboard. */
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    /* Checkboxes, radios and range inputs take the brand green rather than the browser's blue. */
+    accent-color: var(--accent);
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-canvas text-fg font-sans antialiased;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--accent-fg);
+  }
+}

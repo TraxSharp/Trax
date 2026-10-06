@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The dashboard is its own project, with its own lint (npm run lint in dashboard/).
+    "dashboard/**",
+    "public/dashboard/**",
   ]),
 ]);
 
