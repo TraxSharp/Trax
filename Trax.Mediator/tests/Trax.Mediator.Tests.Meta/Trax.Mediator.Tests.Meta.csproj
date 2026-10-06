@@ -18,9 +18,9 @@
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="PublicApiGenerator" />
     <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Trax.Core.Testing" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" />
-    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>

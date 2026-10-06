@@ -13,10 +13,9 @@ namespace Trax.Samples.Templates.Tests.IntegrationTests;
 /// its launch profile, as `dotnet run` does) and in Production.
 ///
 /// <para>
-/// The package is packed with the versions this repository builds with: the committed pins, or
-/// the local feed's 1.99.99 where <c>trax-local.props</c> sets <c>TraxLocalVersion</c>. A
-/// scaffold restores 1.99.99 from the global packages folder, which this test project's own
-/// restore filled.
+/// The package pins every Trax package at the version it was packed with, and
+/// <see cref="ScaffoldFeed"/> packs those packages from this commit at that version, so a
+/// scaffold builds and runs against the code under test.
 /// </para>
 ///
 /// <para>Enforces <c>docs/adr/0003-templates-serve-the-dashboard-only-in-development.md</c>.</para>
@@ -35,24 +34,16 @@ public class ScaffoldedTemplateTests
     [OneTimeSetUp]
     public async Task PackAndInstallTheTemplates()
     {
-        // A directory with no Directory.Packages.props, Directory.Build.props or nuget.config
-        // above it, which is where a consumer runs `dotnet new`.
+        // A directory with no Directory.Packages.props or Directory.Build.props above it, which
+        // is where a consumer runs `dotnet new`. Its nuget.config stands in for the packages
+        // being published.
         _workDir = Path.Combine(Path.GetTempPath(), "trax-template-scaffold-" + Guid.NewGuid());
         _hive = Path.Combine(_workDir, "hive");
-        var nupkgDir = Path.Combine(_workDir, "nupkg");
         Directory.CreateDirectory(_workDir);
 
-        await Run(
-            _workDir,
-            "pack",
-            Path.Combine(RepoRoot(), "templates", "Trax.Samples.Templates.csproj"),
-            "--output",
-            nupkgDir,
-            "-p:Version=0.0.0-scaffold-test"
-        );
-
-        var nupkg = Directory.GetFiles(nupkgDir, "*.nupkg").Single();
-        await Run(_workDir, "new", "install", nupkg, "--debug:custom-hive", _hive);
+        var packed = await ScaffoldFeed.Get();
+        ScaffoldFeed.WriteNuGetConfig(_workDir, packed);
+        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive);
     }
 
     [OneTimeTearDown]

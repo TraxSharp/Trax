@@ -56,22 +56,22 @@ each one:
 
   <ItemGroup>
     <!-- Steps 2 and 3: trains, the effect system, the train bus. -->
-    <PackageReference Include="Trax.Effect" Version="1.59.0" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.59.0" />
-    <PackageReference Include="Trax.Mediator" Version="1.24.1" />
+    <PackageReference Include="Trax.Effect" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.61.0" />
+    <PackageReference Include="Trax.Mediator" Version="1.61.0" />
 
     <!-- Step 4: Postgres, saved inputs and outputs, a log line per junction. -->
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.59.0" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.59.0" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.59.0" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" Version="1.61.0" />
 
     <!-- Step 5: the scheduler and the dashboard. -->
-    <PackageReference Include="Trax.Scheduler" Version="1.36.1" />
-    <PackageReference Include="Trax.Dashboard" Version="1.18.0" />
+    <PackageReference Include="Trax.Scheduler" Version="1.61.0" />
+    <PackageReference Include="Trax.Dashboard" Version="1.61.0" />
 
     <!-- Step 6: GraphQL, and an API key to call it with. -->
-    <PackageReference Include="Trax.Api.GraphQL" Version="1.46.0" />
-    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.46.0" />
+    <PackageReference Include="Trax.Api.GraphQL" Version="1.61.0" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" Version="1.61.0" />
   </ItemGroup>
 </Project>
 ```

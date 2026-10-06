@@ -16,7 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <PackageReference Include="Trax.Api.Auth.Jwt.Testing" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />

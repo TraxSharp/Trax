@@ -1,8 +1,8 @@
 namespace Trax.Samples.Tests.Meta.Infrastructure;
 
 /// <summary>
-/// The root of the repository Trax.Samples lives in, which holds the CI configuration
-/// (<c>.github/</c>) shared by every folder. <see cref="RepoRoot"/> is the Trax.Samples folder
+/// The root of the repository this folder lives in, which holds the CI configuration
+/// (<c>.github/</c>) shared by every folder. <see cref="RepoRoot"/> is the folder
 /// itself; this is the first directory above it with a <c>.git</c> entry (a directory in a clone,
 /// a file in a worktree).
 /// </summary>

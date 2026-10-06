@@ -12,9 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
-    <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
   </ItemGroup>
 </Project>

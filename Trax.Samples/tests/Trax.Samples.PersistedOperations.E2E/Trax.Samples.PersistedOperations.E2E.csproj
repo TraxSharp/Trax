@@ -20,7 +20,7 @@
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </ItemGroup>
 
   <ItemGroup>

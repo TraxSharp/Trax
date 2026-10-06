@@ -115,10 +115,10 @@ The library references `Trax.Effect`, `Trax.Mediator`, and `Trax.Scheduler` (or 
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.59.0" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.59.0" />
-    <PackageReference Include="Trax.Mediator" Version="1.24.1" />
-    <PackageReference Include="Trax.Scheduler" Version="1.36.1" />
+    <PackageReference Include="Trax.Effect" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" Version="1.61.0" />
+    <PackageReference Include="Trax.Mediator" Version="1.61.0" />
+    <PackageReference Include="Trax.Scheduler" Version="1.61.0" />
   </ItemGroup>
 </Project>
 ```
@@ -137,10 +137,10 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
     <ProjectReference Include="..\MyApp\MyApp.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.59.0" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.59.0" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.59.0" />
-    <PackageReference Include="Trax.Dashboard" Version="1.18.0" />
+    <PackageReference Include="Trax.Effect.Provider.Json" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" Version="1.61.0" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" Version="1.61.0" />
+    <PackageReference Include="Trax.Dashboard" Version="1.61.0" />
   </ItemGroup>
 </Project>
 ```

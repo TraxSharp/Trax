@@ -18,9 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Data.Testing" />
-    <PackageReference Include="Trax.Api.GraphQL.Testing" />
-    <PackageReference Include="Trax.Mediator.Testing" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.Testing/Trax.Api.GraphQL.Testing.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator.Testing/Trax.Mediator.Testing.csproj" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit" />

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Xml.Linq;
 using AwesomeAssertions;
+using Trax.Samples.Templates.Tests.Utils;
 using static Trax.Samples.Templates.Tests.Utils.Dotnet;
 
 namespace Trax.Samples.Templates.Tests.IntegrationTests;
@@ -8,8 +9,10 @@ namespace Trax.Samples.Templates.Tests.IntegrationTests;
 /// <summary>
 /// A project scaffolded from the packed <c>Trax.Samples.Templates</c> restores on its own,
 /// outside this repository. Inside the repo the template projects take their package versions
-/// from the root <c>Directory.Packages.props</c>, which a scaffolded project never sees, so the
-/// package has to carry the versions with it.
+/// from the root <c>Directory.Packages.props</c> and build Trax from source, neither of which a
+/// scaffolded project sees, so the package has to carry the versions with it. The Trax packages
+/// come from <see cref="ScaffoldFeed"/>, packed from this commit at the version the templates
+/// were packed with.
 ///
 /// <para>Enforces <c>docs/adr/0004-the-template-package-carries-its-package-versions.md</c>.</para>
 /// </summary>
@@ -26,33 +29,16 @@ public class ScaffoldedTemplateRestoreTests
     [OneTimeSetUp]
     public async Task PackAndInstallTheTemplates()
     {
-        // A directory with no Directory.Packages.props, Directory.Build.props or nuget.config
-        // above it, which is where a consumer runs `dotnet new`.
+        // A directory with no Directory.Packages.props or Directory.Build.props above it, which
+        // is where a consumer runs `dotnet new`. Its nuget.config stands in for the packages
+        // being published.
         _workDir = Path.Combine(Path.GetTempPath(), "trax-template-restore-" + Guid.NewGuid());
         _hive = Path.Combine(_workDir, "hive");
-        var nupkgDir = Path.Combine(_workDir, "nupkg");
         Directory.CreateDirectory(_workDir);
 
-        var templatesProject = Path.Combine(
-            RepoRoot(),
-            "templates",
-            "Trax.Samples.Templates.csproj"
-        );
-
-        // An empty TraxLocalVersion packs the committed pins even in a workspace checkout
-        // where trax-local.props points every Trax package at the local feed.
-        await Run(
-            _workDir,
-            "pack",
-            templatesProject,
-            "--output",
-            nupkgDir,
-            "-p:Version=0.0.0-scaffold-test",
-            "-p:TraxLocalVersion="
-        );
-
-        var nupkg = Directory.GetFiles(nupkgDir, "*.nupkg").Single();
-        await Run(_workDir, "new", "install", nupkg, "--debug:custom-hive", _hive);
+        var packed = await ScaffoldFeed.Get();
+        ScaffoldFeed.WriteNuGetConfig(_workDir, packed);
+        await Run(_workDir, "new", "install", packed.TemplatesNupkg, "--debug:custom-hive", _hive);
     }
 
     [OneTimeTearDown]

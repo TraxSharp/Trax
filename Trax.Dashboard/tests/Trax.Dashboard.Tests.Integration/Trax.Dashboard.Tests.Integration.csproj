@@ -28,10 +28,10 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Dashboard/Trax.Dashboard.csproj" />
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </ItemGroup>
 </Project>

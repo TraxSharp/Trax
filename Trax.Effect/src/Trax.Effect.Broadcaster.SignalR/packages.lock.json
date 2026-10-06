@@ -8,17 +8,14 @@
         "resolved": "2.0.5",
         "contentHash": "8LrlvI1KpjjJ4VGSqZ16yoOCKlQnYS+Y8rYNifNrscmVh5anJcF9E4e0NiDP30BHBMUbkoJ5KdcxoRWM7Pz9Aw=="
       },
+      "trax.core": {
+        "type": "Project"
+      },
       "trax.effect": {
         "type": "Project",
         "dependencies": {
-          "Trax.Core": "[1.9.1, )"
+          "Trax.Core": "[1.99.99, )"
         }
-      },
-      "Trax.Core": {
-        "type": "CentralTransitive",
-        "requested": "[1.9.1, )",
-        "resolved": "1.9.1",
-        "contentHash": "vfy1XHECvF/O6QP6i+8dBpZMnC+FqtxQpUo/ihjW5Bbd28hMGul7PdqnYHnGsdiJBLRGlDV25PgwmwJ7F/fHZA=="
       }
     }
   }

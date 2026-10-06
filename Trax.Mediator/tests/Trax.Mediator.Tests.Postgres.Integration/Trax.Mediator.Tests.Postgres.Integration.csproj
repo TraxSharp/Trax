@@ -28,10 +28,10 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Mediator.Tests.ArrayLogger/Trax.Mediator.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
   </ItemGroup>
 
   <ItemGroup>

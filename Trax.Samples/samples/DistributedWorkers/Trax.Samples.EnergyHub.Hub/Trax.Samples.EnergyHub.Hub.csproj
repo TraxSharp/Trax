@@ -14,13 +14,13 @@
 
   <ItemGroup>
     <PackageReference Include="HotChocolate.AspNetCore" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
-    <PackageReference Include="Trax.Dashboard" />
-    <PackageReference Include="Trax.Api" />
-    <PackageReference Include="Trax.Api.Auth.ApiKey" />
-    <PackageReference Include="Trax.Api.GraphQL" />
-    <PackageReference Include="Trax.Effect.Broadcaster.RabbitMQ" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+    <ProjectReference Include="../../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
   </ItemGroup>
 </Project>

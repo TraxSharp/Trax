@@ -69,107 +69,12 @@
           "Microsoft.Testing.Platform.MSBuild": "2.3.3"
         }
       },
-      "Trax.Effect": {
-        "type": "Direct",
-        "requested": "[1.60.0, )",
-        "resolved": "1.60.0",
-        "contentHash": "XdqZJmOcYvmLp+YFWd8WYO7vuB/aN9HEJfiWo4ZzNUjgWz3PEJkVo7xf0nF3Cl9/4eFkm+QcQ28zpnLu1x4T3A==",
-        "dependencies": {
-          "Trax.Core": "1.9.1"
-        }
-      },
-      "Trax.Effect.Data.Postgres": {
-        "type": "Direct",
-        "requested": "[1.60.0, )",
-        "resolved": "1.60.0",
-        "contentHash": "eJTj/YbS+ctS78S4QQbiGStN10nWlwGYk3nAYOIPr3R6RFHK01Rqj0/X/0VFCtQ0OwbwEcqokLGAz5AXk6it9w==",
-        "dependencies": {
-          "EFCore.NamingConventions": "10.0.1",
-          "Microsoft.EntityFrameworkCore": "10.0.12",
-          "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
-          "Npgsql": "10.0.3",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.3",
-          "Trax.Core": "1.9.1",
-          "Trax.Effect.Data": "1.60.0",
-          "dbup-core": "6.1.1",
-          "dbup-postgresql": "7.0.1"
-        }
-      },
-      "Trax.Effect.Provider.Json": {
-        "type": "Direct",
-        "requested": "[1.60.0, )",
-        "resolved": "1.60.0",
-        "contentHash": "wL5sWSxBl54iwVrK8ylTclYClE0nimYG3x7UK7zrQza0mnwXNzlSV3keMLexv79b9D1nR601GiJTGXzO8pKVbw==",
-        "dependencies": {
-          "Trax.Core": "1.9.1",
-          "Trax.Effect": "1.60.0"
-        }
-      },
-      "Trax.Effect.StateMachine": {
-        "type": "Direct",
-        "requested": "[1.60.0, )",
-        "resolved": "1.60.0",
-        "contentHash": "StEwF0uG80m9pHBTIgU6GV/iFruGG0+cfYOpglu6BYnivrMng7jxWXb7kcBJnuhTWP6deZDWLvXD22wktv2Pbg=="
-      },
-      "Trax.Effect.StateMachine.Persistence": {
-        "type": "Direct",
-        "requested": "[1.60.0, )",
-        "resolved": "1.60.0",
-        "contentHash": "rlRZQ8RC56FpjNg3xn+yaWhLD4hnklcZi5AyWjUotfV60aM5b9MB/Uzuqc4EYXU6Reqya7FHIMD22TX4t7lJqg==",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "10.0.12",
-          "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
-          "Npgsql": "10.0.3",
-          "Trax.Core": "1.9.1",
-          "Trax.Effect": "1.60.0",
-          "Trax.Effect.Data": "1.60.0",
-          "Trax.Effect.StateMachine": "1.60.0"
-        }
-      },
-      "Trax.Mediator": {
-        "type": "Direct",
-        "requested": "[1.24.2, )",
-        "resolved": "1.24.2",
-        "contentHash": "VOL8EzibqqbsMOrhhYudNE3RX1T68FHQ6jEVWWb8mH+85PO81iTfP69piDbJkCspmSYbGfQzqMXk4ZP7j0bG+g==",
-        "dependencies": {
-          "Trax.Effect": "1.59.0",
-          "Trax.Effect.Data": "1.59.0"
-        }
-      },
       "ChilliCream.Nitro.App": {
         "type": "Transitive",
         "resolved": "32.0.2",
         "contentHash": "wSD2dFFraVpIsQDiy31k1vkGWYAGdzNVXOhtOIujMt/ADAzfkEbJUsPyF4qoktFspepN4VrAN7DMS8QRqkEhTg==",
         "dependencies": {
           "Yarp.ReverseProxy": "2.3.0"
-        }
-      },
-      "Cronos": {
-        "type": "Transitive",
-        "resolved": "0.13.0",
-        "contentHash": "Nkve+Yi0+ol3ntSBRHeW0ka9cJQ8vndSUvvkXqF9LVqwpoqWueyxu/HS275r98RDOmF7/mzRnZW5XXUBXob+TA=="
-      },
-      "dbup-core": {
-        "type": "Transitive",
-        "resolved": "6.1.1",
-        "contentHash": "kgpuyJVEFJHoIj/slnc994Go88aoeZqNDfGHDBr4sh7CsEWwJhOTCt/FJqO4ziUImL5L0NEY0kxxOiNgPKI2Fw=="
-      },
-      "dbup-postgresql": {
-        "type": "Transitive",
-        "resolved": "7.0.1",
-        "contentHash": "mRnmENWWPuuMZ538gOd1mZnzucx6FQk0anmw3EABjGfcbp24FDb9QdGepYrDiaM8K9s5/gd49+5cmBOlniH/lg==",
-        "dependencies": {
-          "Npgsql": "10.0.1",
-          "dbup-core": "6.1.1"
-        }
-      },
-      "EFCore.NamingConventions": {
-        "type": "Transitive",
-        "resolved": "10.0.1",
-        "contentHash": "Xs5k8XfNKPkkQSkGmZkmDI1je0prLTdxse+s8PgTFZxyBrlrTLzTBUTVJtQKSsbvu4y+luAv8DdtO5SALJE++A==",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.1, 11.0.0)",
-          "Microsoft.EntityFrameworkCore.Relational": "[10.0.1, 11.0.0)"
         }
       },
       "GreenDonut": {
@@ -577,14 +482,6 @@
         "resolved": "10.0.12",
         "contentHash": "Kd4o2oO1A6dfKxjz5LS16QyLtpCFTUiFWwmBABETAXRsSImBdRdWeKjSgbbRhAMiV3a3/nWr95ZtzClT4uaADQ=="
       },
-      "Microsoft.EntityFrameworkCore.Relational": {
-        "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "OiHmr8XzX96dbgMsYGe8qoqg4KxibdZG2r0QUVJBGktFInOp8IrABe8jvcbo5hrqeWfbwpK7fCEBiEPbY/ik4A==",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "10.0.12"
-        }
-      },
       "Microsoft.Extensions.DependencyModel": {
         "type": "Transitive",
         "resolved": "8.0.2",
@@ -690,21 +587,6 @@
           "Microsoft.TestPlatform.ObjectModel": "18.10.1"
         }
       },
-      "Npgsql": {
-        "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
-      },
-      "Npgsql.EntityFrameworkCore.PostgreSQL": {
-        "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "IPGrrZnRkuW7OlHDhUESZz4G5DLkW7Nej/O3Cx+0iTsgyU5XJxBgpsvTHLloo3WWuAKKbDHXBvWPVkX1deRh1Q==",
-        "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.4, 11.0.0)",
-          "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
-          "Npgsql": "10.0.3"
-        }
-      },
       "System.IdentityModel.Tokens.Jwt": {
         "type": "Transitive",
         "resolved": "8.0.1",
@@ -719,11 +601,6 @@
         "resolved": "8.0.0",
         "contentHash": "ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA=="
       },
-      "Trax.Core": {
-        "type": "Transitive",
-        "resolved": "1.9.1",
-        "contentHash": "vfy1XHECvF/O6QP6i+8dBpZMnC+FqtxQpUo/ihjW5Bbd28hMGul7PdqnYHnGsdiJBLRGlDV25PgwmwJ7F/fHZA=="
-      },
       "Yarp.ReverseProxy": {
         "type": "Transitive",
         "resolved": "2.3.0",
@@ -735,16 +612,16 @@
       "trax.api": {
         "type": "Project",
         "dependencies": {
-          "Trax.Effect": "[1.60.0, )",
-          "Trax.Effect.Data": "[1.60.0, )",
-          "Trax.Mediator": "[1.24.2, )",
-          "Trax.Scheduler": "[1.37.0, )"
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Mediator": "[1.99.99, )",
+          "Trax.Scheduler": "[1.99.99, )"
         }
       },
       "trax.api.auth": {
         "type": "Project",
         "dependencies": {
-          "Trax.Mediator": "[1.24.2, )"
+          "Trax.Mediator": "[1.99.99, )"
         }
       },
       "trax.api.auth.apikey": {
@@ -772,6 +649,102 @@
           "Trax.Api": "[1.99.99, )",
           "Trax.Api.Auth": "[1.99.99, )",
           "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
+      "trax.core": {
+        "type": "Project"
+      },
+      "trax.effect": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Core": "[1.99.99, )"
+        }
+      },
+      "trax.effect.data": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "Npgsql": "[10.0.3, )",
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "trax.effect.data.postgres": {
+        "type": "Project",
+        "dependencies": {
+          "EFCore.NamingConventions": "[10.0.1, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "dbup-core": "[6.1.1, )",
+          "dbup-postgresql": "[7.0.1, )"
+        }
+      },
+      "trax.effect.provider.json": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "trax.effect.statemachine": {
+        "type": "Project"
+      },
+      "trax.effect.statemachine.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Effect.StateMachine": "[1.99.99, )"
+        }
+      },
+      "trax.mediator": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )"
+        }
+      },
+      "trax.scheduler": {
+        "type": "Project",
+        "dependencies": {
+          "Cronos": "[0.13.0, )",
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Mediator": "[1.99.99, )"
+        }
+      },
+      "Cronos": {
+        "type": "CentralTransitive",
+        "requested": "[0.13.0, )",
+        "resolved": "0.13.0",
+        "contentHash": "Nkve+Yi0+ol3ntSBRHeW0ka9cJQ8vndSUvvkXqF9LVqwpoqWueyxu/HS275r98RDOmF7/mzRnZW5XXUBXob+TA=="
+      },
+      "dbup-core": {
+        "type": "CentralTransitive",
+        "requested": "[6.1.1, )",
+        "resolved": "6.1.1",
+        "contentHash": "kgpuyJVEFJHoIj/slnc994Go88aoeZqNDfGHDBr4sh7CsEWwJhOTCt/FJqO4ziUImL5L0NEY0kxxOiNgPKI2Fw=="
+      },
+      "dbup-postgresql": {
+        "type": "CentralTransitive",
+        "requested": "[7.0.1, )",
+        "resolved": "7.0.1",
+        "contentHash": "mRnmENWWPuuMZ538gOd1mZnzucx6FQk0anmw3EABjGfcbp24FDb9QdGepYrDiaM8K9s5/gd49+5cmBOlniH/lg==",
+        "dependencies": {
+          "Npgsql": "10.0.1",
+          "dbup-core": "6.1.1"
+        }
+      },
+      "EFCore.NamingConventions": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.1, )",
+        "resolved": "10.0.1",
+        "contentHash": "Xs5k8XfNKPkkQSkGmZkmDI1je0prLTdxse+s8PgTFZxyBrlrTLzTBUTVJtQKSsbvu4y+luAv8DdtO5SALJE++A==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.1, 11.0.0)",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.1, 11.0.0)"
         }
       },
       "HotChocolate": {
@@ -877,30 +850,30 @@
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.0.1"
         }
       },
-      "Trax.Effect.Data": {
+      "Microsoft.EntityFrameworkCore.Relational": {
         "type": "CentralTransitive",
-        "requested": "[1.60.0, )",
-        "resolved": "1.60.0",
-        "contentHash": "aIbMgVw00ybnPUzTK1+WHkgkeuR2Q9GIDWYs598eH9i0wtqESvYkaYm5O2SkqCI2JZs+0aVgUj2Osl94VOHSMA==",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "OiHmr8XzX96dbgMsYGe8qoqg4KxibdZG2r0QUVJBGktFInOp8IrABe8jvcbo5hrqeWfbwpK7fCEBiEPbY/ik4A==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore": "10.0.12",
-          "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
-          "Npgsql": "10.0.3",
-          "Trax.Core": "1.9.1",
-          "Trax.Effect": "1.60.0"
+          "Microsoft.EntityFrameworkCore": "10.0.12"
         }
       },
-      "Trax.Scheduler": {
+      "Npgsql": {
         "type": "CentralTransitive",
-        "requested": "[1.37.0, )",
-        "resolved": "1.37.0",
-        "contentHash": "x0Zcd8ElO34kL2jdGro//UuicRh91BFvh5qZfiZCfNtpnyw/FpEnwvQI1ZCebmwOE6n0yWMYHbXDJJ/Uj67NMQ==",
+        "requested": "[10.0.3, )",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
+      },
+      "Npgsql.EntityFrameworkCore.PostgreSQL": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.3, )",
+        "resolved": "10.0.3",
+        "contentHash": "IPGrrZnRkuW7OlHDhUESZz4G5DLkW7Nej/O3Cx+0iTsgyU5XJxBgpsvTHLloo3WWuAKKbDHXBvWPVkX1deRh1Q==",
         "dependencies": {
-          "Cronos": "0.13.0",
-          "Npgsql": "10.0.3",
-          "Trax.Effect": "1.60.0",
-          "Trax.Effect.Data": "1.60.0",
-          "Trax.Mediator": "1.24.1"
+          "Microsoft.EntityFrameworkCore": "[10.0.4, 11.0.0)",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
+          "Npgsql": "10.0.3"
         }
       }
     }

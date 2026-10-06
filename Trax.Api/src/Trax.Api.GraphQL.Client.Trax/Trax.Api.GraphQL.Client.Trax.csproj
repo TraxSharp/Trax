@@ -20,8 +20,8 @@
 
   <ItemGroup>
     <PackageReference Include="HotChocolate" />
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Mediator" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>

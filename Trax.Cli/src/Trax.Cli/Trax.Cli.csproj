@@ -23,7 +23,7 @@
     <PackageReference Include="GraphQL-Parser" />
     <PackageReference Include="Microsoft.OpenApi.Readers" />
     <PackageReference Include="Scriban" />
-    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -6,12 +6,6 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!--
-      The lockfile is what makes "compiled against the published release" true: CI restores it
-      in locked mode (GitHub Actions sets CI=true), so a restore that would resolve anything
-      else, the workspace's local 1.99.99 feed included, fails instead of passing on other bits.
-    -->
-    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,24 +19,24 @@
   </ItemGroup>
 
   <!--
-    The packages a compiled snippet is checked against. Their versions are pinned in
-    Directory.Packages.props, which says why they are exact published releases.
+    The projects a compiled snippet is checked against: the code in this same commit, so a page
+    and the API it shows change together in one pull request.
   -->
   <ItemGroup Label="Trax">
-    <PackageReference Include="Trax.Api" />
-    <PackageReference Include="Trax.Api.Auth.ApiKey" />
-    <PackageReference Include="Trax.Api.GraphQL" />
-    <PackageReference Include="Trax.Core" />
-    <PackageReference Include="Trax.Dashboard" />
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Scheduler" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core/Trax.Core.csproj" />
+    <ProjectReference Include="../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,8 @@
 namespace Trax.Mediator.Tests.Meta.Tests;
 
 /// <summary>
-/// Every <c>PackageVersion</c> in <c>Directory.Packages.props</c> names a package that some
-/// project actually references. Central Package Management lets a pin stand alone, and with
+/// Every <c>PackageVersion</c> in the repository's root <c>Directory.Packages.props</c> names a
+/// package that some project in the repository actually references. Central Package Management lets a pin stand alone, and with
 /// <c>CentralPackageTransitivePinningEnabled</c> on that looks like a clean way to force a
 /// version onto a package nothing declares.
 ///
@@ -30,9 +30,7 @@ public class NoOrphanPackageVersionTests
     [Test]
     public void EveryPinnedPackage_IsReferencedBySomeProject()
     {
-        var props = RepoRoot.Combine("Directory.Packages.props");
-        if (!File.Exists(props))
-            Assert.Ignore("this repo manages package versions per project");
+        var props = MonorepoRoot.Combine("Directory.Packages.props");
 
         var referenced = ReferencedPackages();
 
@@ -58,9 +56,7 @@ public class NoOrphanPackageVersionTests
     [Test]
     public void SanctionedStandalonePins_AreNotStale()
     {
-        var props = RepoRoot.Combine("Directory.Packages.props");
-        if (!File.Exists(props))
-            Assert.Ignore("this repo manages package versions per project");
+        var props = MonorepoRoot.Combine("Directory.Packages.props");
 
         var pinned = PinnedPackages(props).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var referenced = ReferencedPackages();
@@ -96,23 +92,29 @@ public class NoOrphanPackageVersionTests
             .ToList();
 
     /// <summary>
-    /// Every package named by a <c>PackageReference</c> anywhere in the repo. Directory.Build.props
-    /// counts: it is where the repo-wide references live, and a package declared only there is
-    /// referenced just as much as one in a csproj.
+    /// Every package named by a <c>PackageReference</c> anywhere in the repository, every folder
+    /// included, since one root file pins them all. Directory.Build.props counts: it is where a
+    /// folder's shared references live, and a package declared only there is referenced just as
+    /// much as one in a csproj.
     /// </summary>
     private static HashSet<string> ReferencedPackages()
     {
         var files = Directory
-            .EnumerateFiles(RepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
+            .EnumerateFiles(MonorepoRoot.Path, "*.csproj", SearchOption.AllDirectories)
             .Where(f =>
                 !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
             )
             .Where(f =>
                 !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
             )
+            .Where(f =>
+                !f.Contains(
+                    $"{Path.DirectorySeparatorChar}node_modules{Path.DirectorySeparatorChar}"
+                )
+            )
             .Concat(
                 Directory.EnumerateFiles(
-                    RepoRoot.Path,
+                    MonorepoRoot.Path,
                     "Directory.Build.props",
                     SearchOption.AllDirectories
                 )

@@ -23,13 +23,13 @@
     <Using Include="NUnit.Framework" />
   </ItemGroup>
 
-  <!-- Cross-repo Trax packages (resolved locally to 1.99.99 via trax-local.props). -->
+  <!-- Trax projects from the folders upstream of Trax.Api. -->
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Scheduler" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>
 
   <!-- The GraphQL resolver classes under test live here; Trax.Api gives us AddTraxApi, and the

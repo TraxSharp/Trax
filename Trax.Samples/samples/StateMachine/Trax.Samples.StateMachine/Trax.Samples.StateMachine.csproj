@@ -6,9 +6,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Effect.StateMachine" />
-    <PackageReference Include="Trax.Effect.StateMachine.Persistence" />
-    <PackageReference Include="Trax.Api.Auth" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
   </ItemGroup>
 </Project>

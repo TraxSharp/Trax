@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Effect.Data" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
 </Project>

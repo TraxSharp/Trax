@@ -9,9 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Effect.Data" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>

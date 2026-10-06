@@ -1,19 +1,14 @@
-using System.Xml.Linq;
-
 namespace Trax.Docs.Snippets.Tests.Tests;
 
 /// <summary>
-/// A Trax package version written on a page is the version the compiled snippets were checked
-/// against.
+/// Every Trax package version written on a page is one exact version, the same for every package.
 ///
-/// <para>A reader copies the csproj along with the code, so a page that compiles against one
-/// release and tells the reader to install another has checked nothing. A floating
-/// <c>Version="1.*"</c> is refused for the same reason, and for the one in
-/// <c>Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md</c>: it restores whatever was
+/// <para>Every Trax package releases at one version
+/// (<c>Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md</c>), and the
+/// site is published from a release, so a page that tells a reader to install two different
+/// versions names at least one that was never released alongside the code the snippets were
+/// compiled against. A floating <c>Version="1.*"</c> is refused too: it restores whatever was
 /// published last, which a later release has already broken once.</para>
-///
-/// <para>When Dependabot bumps a Trax pin in Directory.Packages.props, this fails until the
-/// pages show the new version, which is the point at which their snippets have been re-checked.</para>
 ///
 /// <para>Enforces <c>Trax.Docs/adr/0008-documentation-conventions-are-linted.md</c>.</para>
 /// </summary>
@@ -26,11 +21,12 @@ public class DocsPackageVersionsTests
         RegexOptions.Compiled
     );
 
+    private static readonly Regex ExactVersion = new(@"^\d+\.\d+\.\d+$", RegexOptions.Compiled);
+
     [Test]
-    public void TraxVersionsOnPages_MatchThePublishedPins()
+    public void TraxVersionsOnPages_AreOneExactVersion()
     {
-        var pins = Pins();
-        var offenders = new List<string>();
+        var found = new List<(string Where, string Id, string Version)>();
 
         foreach (var file in RepoRoot.MarkdownFiles())
         {
@@ -41,46 +37,25 @@ public class DocsPackageVersionsTests
 
             var lines = File.ReadAllText(file).Replace("\r\n", "\n").Split('\n');
             for (var i = 0; i < lines.Length; i++)
-            {
                 foreach (Match m in TraxReference.Matches(lines[i]))
-                {
-                    var id = m.Groups["id"].Value;
-                    var version = m.Groups["version"].Value;
-                    if (!pins.TryGetValue(id, out var pinned))
-                        offenders.Add(
-                            $"{page}:{i + 1}  {id} {version}: not pinned in Directory.Packages.props, so nothing checks it"
-                        );
-                    else if (version != pinned)
-                        offenders.Add($"{page}:{i + 1}  {id} {version}: the pin is {pinned}");
-                }
-            }
+                    found.Add(($"{page}:{i + 1}", m.Groups["id"].Value, m.Groups["version"].Value));
         }
+
+        var versions = found.Select(f => f.Version).Distinct(StringComparer.Ordinal).ToList();
+        var offenders = found
+            .Where(f => !ExactVersion.IsMatch(f.Version) || versions.Count > 1)
+            .Select(f => $"{f.Where}  {f.Id} {f.Version}")
+            .ToList();
 
         offenders
             .Should()
             .BeEmpty(
-                "a page names the exact Trax version its snippets are compiled against, the pin in "
-                    + "Directory.Packages.props. After a pin bump, "
-                    + "update the pages to it; for a package no snippet uses yet, add its pin. See "
-                    + "Trax.Docs/adr/0008-documentation-conventions-are-linted.md. Offenders:\n  "
+                "every Trax package releases at one version, so a page names one exact version for "
+                    + $"all of them (found: {string.Join(", ", versions)}). See "
+                    + "Trax.Docs/adr/0008-documentation-conventions-are-linted.md and "
+                    + "Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md. "
+                    + "Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
-    }
-
-    private static Dictionary<string, string> Pins()
-    {
-        var props = XDocument.Load(RepoRoot.Combine("Directory.Packages.props"));
-
-        return props
-            .Descendants("PackageVersion")
-            .Select(e =>
-                (Id: (string?)e.Attribute("Include"), Version: (string?)e.Attribute("Version"))
-            )
-            .Where(p =>
-                p.Id is not null
-                && p.Version is not null
-                && p.Id.StartsWith("Trax.", StringComparison.Ordinal)
-            )
-            .ToDictionary(p => p.Id!, p => p.Version!, StringComparer.Ordinal);
     }
 }

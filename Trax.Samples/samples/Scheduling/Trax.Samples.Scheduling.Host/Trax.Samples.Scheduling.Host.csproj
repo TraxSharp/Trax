@@ -13,10 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Api.Auth.ApiKey" />
-    <PackageReference Include="Trax.Api.GraphQL" />
-    <PackageReference Include="Trax.Dashboard" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
   </ItemGroup>
 </Project>

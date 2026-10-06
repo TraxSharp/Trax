@@ -31,8 +31,8 @@
   <ItemGroup>
     <ProjectReference Include="../Trax.Mediator.Tests.ArrayLogger/Trax.Mediator.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
   </ItemGroup>
 </Project>

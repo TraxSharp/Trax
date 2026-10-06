@@ -1,11 +1,13 @@
 namespace Trax.Api.Tests.Meta.Tests;
 
 /// <summary>
-/// The local-dev sentinel version stays put, so pack-local always produces the same build.
+/// A local build packs at the sentinel version 1.99.99, never a real one. The release passes the
+/// version it cuts with -p:Version, the same for every package, so a real version written into a
+/// folder's Directory.Build.props could only produce a local package that looks like a release.
 ///
-/// <para>Enforces <c>Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md</c>.</para>
+/// <para>Enforces <c>Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md</c>.</para>
 /// </summary>
-[Property("adr", "Trax.Docs/adr/0002-cross-repo-dependencies-are-exact-pinned.md")]
+[Property("adr", "Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md")]
 [TestFixture]
 public class DirectoryBuildPropsVersionTests
 {
@@ -16,7 +18,7 @@ public class DirectoryBuildPropsVersionTests
         File.Exists(path)
             .Should()
             .BeTrue(
-                $"every Trax repo must have a Directory.Build.props at the repo root; none found at '{path}'."
+                $"every Trax folder must have a Directory.Build.props at its root; none found at '{path}'."
             );
     }
 
@@ -31,10 +33,10 @@ public class DirectoryBuildPropsVersionTests
             .Should()
             .Be(
                 "1.99.99",
-                "Directory.Build.props <Version> is locked at 1.99.99 for local development. "
-                    + "CI overrides this via -p:Version=<semver> from semantic-release. "
-                    + "Changing it breaks the nuget.config local-feed wins-over-nuget.org guarantee. "
-                    + "See Trax.Docs/reference/semantic-release.md > How It Works."
+                "Directory.Build.props <Version> is locked at 1.99.99, the version a local build "
+                    + "packs at. The release passes the version it cuts with -p:Version, the same "
+                    + "for every package. See "
+                    + "Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md."
             );
     }
 }

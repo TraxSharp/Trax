@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Api.GraphQL.Client" />
-    <PackageReference Include="Trax.Api.GraphQL.Client.Typed" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+    <ProjectReference Include="../../../../Trax.Api/src/Trax.Api.GraphQL.Client.Typed/Trax.Api.GraphQL.Client.Typed.csproj" />
   </ItemGroup>
 </Project>

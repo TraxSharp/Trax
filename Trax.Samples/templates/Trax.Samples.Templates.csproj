@@ -5,7 +5,7 @@
     <Authors>Theauxm,mark-keaton</Authors>
     <PackageDescription>Project templates for Trax .NET - GraphQL API and Scheduler with Dashboard for .NET</PackageDescription>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Samples</RepositoryUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>dotnet-new;templates;trax;workflows;railway-oriented-programming;graphql;api;scheduler;dashboard</PackageTags>
 
@@ -26,14 +26,17 @@
   </ItemGroup>
 
   <!--
-    The template projects carry no versions: in this repo they take them from the root
-    Directory.Packages.props, which a scaffolded project never sees. At pack time each template
-    gets its own Directory.Packages.props, holding the pin of every package its projects (the
-    application and its tests/ project) reference and of every Trax package their committed
-    lockfiles resolve, with transitive pinning on. Pinning only the direct references let a
-    transitive Trax package float to whatever version a referenced package was built against,
-    which is not the version this repo tests. The package ships exactly the versions this repo
-    builds and tests against, and nothing else.
+    The template projects carry no versions: in this repo they take third-party versions from the
+    root Directory.Packages.props and build the Trax packages from source (see
+    content/Directory.Build.targets), neither of which a scaffolded project sees. At pack time each
+    template gets its own Directory.Packages.props, holding the pin of every package its projects
+    (the application and its tests/ project) reference and of every Trax package their committed
+    lockfiles resolve, with transitive pinning on. Every Trax package is pinned at the version
+    being packed, which is the version every Trax package releases at
+    (Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md). Pinning only the
+    direct references let a transitive Trax package float to whatever version a referenced package
+    was built against, which is not the version this repo tests. The package ships exactly the
+    versions this repo builds and tests against, and nothing else.
     It is generated into obj/ rather than kept beside the template, where it would shadow the
     root pins inside the repo. docs/adr/0004-the-template-package-carries-its-package-versions.md
   -->
@@ -45,6 +48,12 @@
       <!-- content/<template>/..., so the first directory under content/ names the template. -->
       <TemplateName>$([System.String]::Copy('%(RecursiveDir)').Replace('\', '/').Split('/')[0])</TemplateName>
     </_TraxTemplateProject>
+    <!-- Every Trax package this repository builds: the csproj file names under each folder's src/. -->
+    <_TraxPackageProject
+      Include="../../Trax.*/src/**/*.csproj"
+      Exclude="../../Trax.*/src/**/bin/**;../../Trax.*/src/**/obj/**"
+    />
+    <_TraxPackageId Include="@(_TraxPackageProject->'%(Filename)')" />
   </ItemGroup>
 
   <Target Name="PackTemplatePackageVersions" DependsOnTargets="_WriteTemplatePackageVersions">
@@ -71,22 +80,38 @@
 
     <!-- Every Trax package the template's restore resolves, direct or transitive. Each top-level
          entry in packages.lock.json is a line of the form `"Id": {`; the ids nested under an
-         entry's dependencies end in a version string instead, so they are not matched. Only the
-         ids are read here: the versions still come from the root pins below. -->
+         entry's dependencies end in a version string instead, so they are not matched. In this
+         repo a Trax package is a project, which the lockfile may name in lower case; the match
+         ignores case, and the id is taken from the project list so it keeps its own casing. -->
     <ReadLinesFromFile File="%(_TraxTemplateProject.RootDir)%(_TraxTemplateProject.Directory)packages.lock.json">
       <Output TaskParameter="Lines" ItemName="_TemplateLockLine" />
     </ReadLinesFromFile>
 
     <ItemGroup>
       <_TemplateReference Include="@(_TemplateReferenceRaw->Distinct())" />
-      <_TemplateLockedTrax
+      <_TemplateLockedTraxRaw
         Include="$([System.Text.RegularExpressions.Regex]::Replace('%(_TemplateLockLine.Identity)', '^\s*&quot;([^&quot;]+)&quot;:\s*\{\s*$', '$1'))"
-        Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(_TemplateLockLine.Identity)', '^\s*&quot;Trax\.[^&quot;]+&quot;:\s*\{\s*$'))"
+        Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(_TemplateLockLine.Identity)', '(?i)^\s*&quot;Trax\.[^&quot;]+&quot;:\s*\{\s*$'))"
       />
+      <!-- A lockfile also names the template's own projects (the tests project lists the
+           application it references), which are not packages; keep only the Trax packages. -->
+      <_TemplateLockedOther Include="@(_TemplateLockedTraxRaw)" Exclude="@(_TraxPackageId)" />
+      <_TemplateLockedTrax Include="@(_TemplateLockedTraxRaw)" Exclude="@(_TemplateLockedOther)" />
       <_TemplateNeeded Include="@(_TemplateReference);@(_TemplateLockedTrax)" />
-      <_TemplateUnpinned Include="@(_TemplateNeeded)" Exclude="@(PackageVersion)" />
+      <!-- Item matching ignores case, so these keep the project list's casing. -->
+      <_TemplateTraxUnneeded Include="@(_TraxPackageId)" Exclude="@(_TemplateNeeded)" />
+      <_TemplateTraxPin
+        Include="@(_TraxPackageId)"
+        Exclude="@(_TemplateTraxUnneeded)"
+        Version="$(Version)"
+      />
+      <_TemplateUnpinned
+        Include="@(_TemplateNeeded)"
+        Exclude="@(PackageVersion);@(_TraxPackageId)"
+      />
       <_TemplateUnreferenced Include="@(PackageVersion)" Exclude="@(_TemplateNeeded)" />
       <_TemplatePin Include="@(PackageVersion)" Exclude="@(_TemplateUnreferenced)" />
+      <_TemplatePin Include="@(_TemplateTraxPin)" />
     </ItemGroup>
 
     <PropertyGroup>
@@ -108,7 +133,7 @@
 
     <Error
       Condition="'@(_TemplateUnpinned)' != ''"
-      Text="$(_TemplateName) resolves @(_TemplateUnpinned) with no PackageVersion in Directory.Packages.props, so the packed template could not pin it. Pin it there, and reference it from the template if it is a transitive Trax package."
+      Text="$(_TemplateName) resolves @(_TemplateUnpinned) with no PackageVersion in Directory.Packages.props and no Trax project of that name, so the packed template could not pin it. Pin it there."
     />
 
     <WriteLinesToFile
@@ -126,8 +151,12 @@
       <_TemplateReferenceRaw Remove="@(_TemplateReferenceRaw)" />
       <_TemplateReference Remove="@(_TemplateReference)" />
       <_TemplateLockLine Remove="@(_TemplateLockLine)" />
+      <_TemplateLockedTraxRaw Remove="@(_TemplateLockedTraxRaw)" />
+      <_TemplateLockedOther Remove="@(_TemplateLockedOther)" />
       <_TemplateLockedTrax Remove="@(_TemplateLockedTrax)" />
       <_TemplateNeeded Remove="@(_TemplateNeeded)" />
+      <_TemplateTraxUnneeded Remove="@(_TemplateTraxUnneeded)" />
+      <_TemplateTraxPin Remove="@(_TemplateTraxPin)" />
       <_TemplateUnpinned Remove="@(_TemplateUnpinned)" />
       <_TemplateUnreferenced Remove="@(_TemplateUnreferenced)" />
       <_TemplatePin Remove="@(_TemplatePin)" />

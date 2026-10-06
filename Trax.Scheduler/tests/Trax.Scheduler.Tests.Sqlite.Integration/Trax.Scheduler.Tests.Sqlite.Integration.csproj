@@ -31,15 +31,15 @@
 
   <ItemGroup>
     <ProjectReference Include="../Trax.Scheduler.Tests.ArrayLogger/Trax.Scheduler.Tests.ArrayLogger.csproj" />
-    <PackageReference Include="Trax.Effect.Data.Sqlite" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
     <!-- Overrides the vulnerable native SQLite lib EF Core Sqlite pulls transitively
          (CVE-2025-6965). Direct so Dependabot keeps it current. -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>
 </Project>

@@ -37,7 +37,7 @@
     <ProjectReference Include="../../src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
     <PackageReference Include="Amazon.Lambda.Core" />
     <PackageReference Include="Amazon.Lambda.TestUtilities" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
   </ItemGroup>
 </Project>

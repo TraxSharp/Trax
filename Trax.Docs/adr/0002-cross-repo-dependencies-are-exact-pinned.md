@@ -2,7 +2,7 @@
 authors: [Theauxm]
 repos: [core, effect, mediator, scheduler, dashboard, api, cli, samples]
 areas: [packaging, ci]
-status: accepted
+status: superseded-by-0042
 ---
 
 # Cross-repo dependencies are exact-pinned and lockfiled
@@ -18,7 +18,9 @@ bumping and CI never sees the override.
 
 ## Status
 
-**Accepted.** Supersedes the floating `Version="1.*"` the repos used before, which pulled
+**Superseded by** [0042](./0042-trax-is-one-repository-and-releases-at-one-version.md): the
+repositories merged into one, where Trax packages reference each other as projects and there
+is nothing to pin. It had superseded the floating `Version="1.*"` the repos used before, which pulled
 new upstream releases automatically at the cost of builds that could not be reproduced.
 
 ## Considered options
@@ -77,6 +79,7 @@ Not covered:
 
 ## Changelog
 
+- **2026-10-06**: Superseded by 0042.
 - **2026-09-11**: Replaced the vacuous "no repo here subclasses it" (`RepoConventionGuards` is
   static) with what is actually subclassed, and recorded that `CrossRepoPackageVersions` also
   requires a central `<PackageVersion>` pin.

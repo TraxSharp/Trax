@@ -162,10 +162,13 @@
           "Microsoft.TestPlatform.ObjectModel": "18.10.1"
         }
       },
+      "trax.core": {
+        "type": "Project"
+      },
       "trax.effect": {
         "type": "Project",
         "dependencies": {
-          "Trax.Core": "[1.9.1, )"
+          "Trax.Core": "[1.99.99, )"
         }
       },
       "trax.effect.broadcaster.rabbitmq": {
@@ -186,12 +189,6 @@
         "requested": "[7.2.2, )",
         "resolved": "7.2.2",
         "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
-      },
-      "Trax.Core": {
-        "type": "CentralTransitive",
-        "requested": "[1.9.1, )",
-        "resolved": "1.9.1",
-        "contentHash": "vfy1XHECvF/O6QP6i+8dBpZMnC+FqtxQpUo/ihjW5Bbd28hMGul7PdqnYHnGsdiJBLRGlDV25PgwmwJ7F/fHZA=="
       }
     }
   }

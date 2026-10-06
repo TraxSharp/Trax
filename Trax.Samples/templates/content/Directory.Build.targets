@@ -1,0 +1,24 @@
+<Project>
+  <!--
+    The template projects reference Trax packages as packages, because a scaffolded project
+    lives outside this repository. Inside it they build against the code in the same commit,
+    like every other project here: each PackageReference to a Trax package that a folder's src/
+    builds is swapped for a ProjectReference to that csproj. This file sits above the template
+    folders, so it is never scaffolded and never packed.
+    Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md
+  -->
+  <ItemGroup>
+    <_TraxSourceProject
+      Include="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/*.csproj"
+      Exclude="$(MSBuildThisFileDirectory)../../../Trax.*/src/**/bin/**;$(MSBuildThisFileDirectory)../../../Trax.*/src/**/obj/**"
+      ProjectPath="%(FullPath)"
+    />
+    <!-- The same projects keyed by package id, which is the csproj file name. -->
+    <_TraxSourceById Include="@(_TraxSourceProject->'%(Filename)')" />
+    <_TraxNotReferenced Include="@(_TraxSourceById)" Exclude="@(PackageReference)" />
+    <_TraxReferenced Include="@(_TraxSourceById)" Exclude="@(_TraxNotReferenced)" />
+
+    <PackageReference Remove="@(_TraxReferenced)" />
+    <ProjectReference Include="@(_TraxReferenced->'%(ProjectPath)')" />
+  </ItemGroup>
+</Project>

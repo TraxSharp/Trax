@@ -11,7 +11,7 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Trax.Core" />
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core/Trax.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -30,16 +30,16 @@
 
   <ItemGroup>
     <ProjectReference Include="../Trax.Scheduler.Tests.ArrayLogger/Trax.Scheduler.Tests.ArrayLogger.csproj" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" />
-    <PackageReference Include="Trax.Effect.Provider.Json" />
-    <PackageReference Include="Trax.Mediator" />
-    <PackageReference Include="Trax.Effect.Provider.Parameter" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler/Trax.Scheduler.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
     <ProjectReference Include="../../src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
-    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
   </ItemGroup>
 
   <ItemGroup>

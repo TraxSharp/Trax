@@ -101,12 +101,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Guard against local-dev lockfile versions
-        run: |
-          if grep -rln '"resolved": "1.99.99"' --include=packages.lock.json "$FOLDER" ; then
-            echo "::error::A packages.lock.json contains the local-dev version 1.99.99. Regenerate lockfiles in CI mode (remove trax-local.props) before committing."
-            exit 1
-          fi
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:

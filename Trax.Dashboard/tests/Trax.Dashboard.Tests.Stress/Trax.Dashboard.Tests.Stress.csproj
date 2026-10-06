@@ -27,7 +27,7 @@
        they run against in a host. -->
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Dashboard/Trax.Dashboard.csproj" />
-    <PackageReference Include="Trax.Effect" />
-    <PackageReference Include="Trax.Effect.Data.Postgres" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
   </ItemGroup>
 </Project>
