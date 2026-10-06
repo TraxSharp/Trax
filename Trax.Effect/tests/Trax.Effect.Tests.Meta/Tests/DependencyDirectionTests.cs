@@ -1,11 +1,14 @@
 namespace Trax.Effect.Tests.Meta.Tests;
 
 /// <summary>
-/// Enforces the Trax dependency chain (CLAUDE.md): a repo may take a <c>Trax.*</c> <c>PackageReference</c>
-/// only on its own family or an allowed upstream family, never a downstream or parallel one. The map below
+/// Enforces the Trax dependency chain (CLAUDE.md): a repo may reference a <c>Trax.*</c> package or project
+/// only in its own family or an allowed upstream family, never a downstream or parallel one. The map below
 /// is the whole chain; the test self-detects which repo it runs in from the <c>.slnx</c> at the repo root
-/// and applies that repo's rule, so the identical file lives in every repo's Meta project. Intra-repo
-/// dependencies use <c>ProjectReference</c> and are exempt (they are not PackageReferences).
+/// and applies that repo's rule, so the identical file lives in every repo's Meta project.
+///
+/// <para>A <c>ProjectReference</c> is checked too, by the referenced project's file name. Today every one
+/// stays inside its own family, so this changes nothing; once the families share one repository and depend
+/// on each other through <c>ProjectReference</c>, it is what keeps the chain enforced.</para>
 ///
 /// <para>This catches an upstream repo pulling in a downstream one, for example a test that references
 /// Trax.Api.GraphQL from inside Trax.Effect. That only compiles against the locally-packed feed and hides a
@@ -90,13 +93,10 @@ public class DependencyDirectionTests
                 return;
             }
 
-            foreach (var pkg in doc.Descendants("PackageReference"))
+            foreach (var reference in doc.Descendants())
             {
-                var include = pkg.Attribute("Include")?.Value;
-                if (
-                    string.IsNullOrEmpty(include)
-                    || !include.StartsWith("Trax.", StringComparison.Ordinal)
-                )
+                var include = ReferencedName(reference);
+                if (include is null || !include.StartsWith("Trax.", StringComparison.Ordinal))
                     continue;
 
                 // A Trax package outside the eight core-repo families (e.g. a standalone Trax.Runner.*)
@@ -112,12 +112,27 @@ public class DependencyDirectionTests
         offenders
             .Should()
             .BeEmpty(
-                $"{repo} may PackageReference only its own family and its allowed upstream "
+                $"{repo} may reference only its own family and its allowed upstream "
                     + $"[{string.Join(", ", AllowedUpstream[repo!])}] per the Trax dependency chain. A "
-                    + "reference to any other Trax family points the wrong way (downstream or parallel); use "
-                    + "a ProjectReference for intra-repo dependencies. Offenders:\n  "
+                    + "package or project reference to any other Trax family points the wrong way "
+                    + "(downstream or parallel). Offenders:\n  "
                     + string.Join("\n  ", offenders)
             );
+    }
+
+    // The package id of a PackageReference, or the project name of a ProjectReference (its file name without
+    // the extension, which is the package id the project packs as). Any other element yields null.
+    private static string? ReferencedName(XElement reference)
+    {
+        var include = reference.Attribute("Include")?.Value;
+        if (string.IsNullOrEmpty(include))
+            return null;
+        return reference.Name.LocalName switch
+        {
+            "PackageReference" => include,
+            "ProjectReference" => Path.GetFileNameWithoutExtension(include.Replace('\\', '/')),
+            _ => null,
+        };
     }
 
     private static string? FamilyOf(string package) =>
