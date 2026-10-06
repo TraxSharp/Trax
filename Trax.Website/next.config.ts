@@ -15,9 +15,12 @@ const isDev = process.env.NODE_ENV === "development";
  * img.shields.io serves the badges on the landing page; fonts come from
  * next/font, which self-hosts them at build time.
  *
- * Framing is refused everywhere but one place: /dashboard frames the static
- * dashboard demo served under /dashboard/demo/, which may be framed only by
- * this site.
+ * Every page may frame this site's own pages (frame-src 'self'), because the
+ * policy a browser enforces is the one of the document it first loaded: a
+ * client-side navigation to /dashboard keeps the policy of the page it started
+ * from, so the dashboard's frame of /dashboard/demo/ must be allowed there too.
+ * Being framed stays refused everywhere (frame-ancestors 'none', X-Frame-Options
+ * DENY) except the demo, which may be framed only by this site.
  */
 function contentSecurityPolicy(frameSrc: string, frameAncestors: string) {
   return [
@@ -35,7 +38,7 @@ function contentSecurityPolicy(frameSrc: string, frameAncestors: string) {
   ].join("; ");
 }
 
-function securityHeaders(frameSrc = "'none'", frameAncestors = "'none'") {
+function securityHeaders(frameSrc = "'self'", frameAncestors = "'none'") {
   return [
     { key: "Content-Security-Policy", value: contentSecurityPolicy(frameSrc, frameAncestors) },
     { key: "X-Content-Type-Options", value: "nosniff" },
@@ -57,7 +60,6 @@ const nextConfig: NextConfig = {
     // A later entry's header replaces an earlier one's for the paths both match.
     return [
       { source: "/:path*", headers: securityHeaders() },
-      { source: "/dashboard", headers: securityHeaders("'self'") },
       { source: `${DASHBOARD_DEMO}/:path*`, headers: securityHeaders("'none'", "'self'") },
       { source: DASHBOARD_DEMO, headers: securityHeaders("'none'", "'self'") },
     ];
