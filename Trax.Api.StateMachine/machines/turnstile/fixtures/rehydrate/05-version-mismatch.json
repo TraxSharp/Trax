@@ -1,0 +1,5 @@
+{
+  "name": "A snapshot newer than the definition is version-mismatch",
+  "json": { "machine": "turnstile", "version": 2, "state": "Locked", "context": {} },
+  "expect": { "result": "error", "code": "version-mismatch" }
+}

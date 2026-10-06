@@ -1,0 +1,9 @@
+{
+  "name": "Unlocked + Push transitions to Locked and clears the context",
+  "given": { "machine": "turnstile", "version": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } },
+  "when": { "trigger": "Push" },
+  "expect": {
+    "outcome": "transitioned",
+    "snapshot": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} }
+  }
+}

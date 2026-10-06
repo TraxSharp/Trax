@@ -1,0 +1,6 @@
+{
+  "name": "Cart + Next with an empty cart is declined by the guard",
+  "given": { "machine": "checkout", "version": 1, "state": "Cart", "context": { "currency": "USD", "items": [], "receipt": null, "total": 0 } },
+  "when": { "trigger": "Next" },
+  "expect": { "outcome": "rejected", "reason": "guard-failed" }
+}

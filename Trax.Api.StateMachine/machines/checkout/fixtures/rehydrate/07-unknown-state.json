@@ -1,0 +1,5 @@
+{
+  "name": "A snapshot whose state is not in the machine is unknown-state",
+  "json": { "machine": "checkout", "version": 1, "state": "Nowhere", "context": { "currency": "USD", "items": [], "receipt": null, "total": 0 } },
+  "expect": { "result": "error", "code": "unknown-state" }
+}

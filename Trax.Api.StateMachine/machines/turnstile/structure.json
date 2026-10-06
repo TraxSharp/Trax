@@ -1,0 +1,12 @@
+{
+  "_comment": "DERIVED from machine.json by the codegen (SnapshotMachine.describe() must equal this). Collections are sorted ordinally.",
+  "id": "turnstile",
+  "version": 1,
+  "initialState": "Locked",
+  "states": ["Locked", "Unlocked"],
+  "triggers": ["Coin", "Push"],
+  "transitions": [
+    { "from": "Locked", "trigger": "Coin", "to": "Unlocked" },
+    { "from": "Unlocked", "trigger": "Push", "to": "Locked" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "_comment": "DERIVED from machine.json by the codegen. Collections sorted ordinally.",
+  "id": "checkout",
+  "version": 1,
+  "initialState": "Cart",
+  "states": ["Cart", "Paid", "Review"],
+  "triggers": ["Back", "Next", "Pay", "Restart"],
+  "transitions": [
+    { "from": "Cart", "trigger": "Next", "to": "Review" },
+    { "from": "Paid", "trigger": "Restart", "to": "Cart" },
+    { "from": "Review", "trigger": "Back", "to": "Cart" },
+    { "from": "Review", "trigger": "Pay", "to": "Paid" }
+  ]
+}

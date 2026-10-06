@@ -1,0 +1,5 @@
+{
+  "name": "A snapshot for a different machine is unknown-machine",
+  "json": { "machine": "other", "version": 1, "state": "Locked", "context": {} },
+  "expect": { "result": "error", "code": "unknown-machine" }
+}

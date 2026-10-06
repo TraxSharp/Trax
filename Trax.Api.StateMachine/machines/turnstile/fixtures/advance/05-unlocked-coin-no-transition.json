@@ -1,0 +1,6 @@
+{
+  "name": "Unlocked + Coin has no wired edge",
+  "given": { "machine": "turnstile", "version": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } },
+  "when": { "trigger": "Coin", "input": { "coin": "quarter" } },
+  "expect": { "outcome": "rejected", "reason": "no-transition" }
+}

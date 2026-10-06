@@ -1,0 +1,8 @@
+{
+  "name": "A well-formed Unlocked snapshot rehydrates successfully",
+  "json": { "machine": "turnstile", "version": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } },
+  "expect": {
+    "result": "ok",
+    "snapshot": { "machine": "turnstile", "version": 1, "state": "Unlocked", "context": { "paidWith": "quarter" } }
+  }
+}

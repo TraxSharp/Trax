@@ -1,0 +1,16 @@
+{
+  "_comment": "Migration golden for turnstile v1 -> v2. Each case is a stored older-version snapshot (verbatim wire, as a database holds it) and the EXACT canonical wire it must become after forward migration on rehydrate. Both the C# and TypeScript engines replay this file: a migration that drops, renames, or reorders a surviving field fails against 'expected', and any cross-language divergence fails too. The v2 turnstile keeps 'paidWith' and adds a boolean 'migrated' marker. This is the guard for migration CORRECTNESS against real stored shapes, which the differential (machine logic) does not cover.",
+  "toVersion": 2,
+  "cases": [
+    {
+      "name": "unlocked-quarter keeps paidWith and gains migrated",
+      "stored": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}",
+      "expected": "{\"machine\":\"turnstile\",\"version\":2,\"state\":\"Unlocked\",\"context\":{\"migrated\":true,\"paidWith\":\"quarter\"}}"
+    },
+    {
+      "name": "unlocked-dollar keeps paidWith and gains migrated",
+      "stored": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"dollar\"}}",
+      "expected": "{\"machine\":\"turnstile\",\"version\":2,\"state\":\"Unlocked\",\"context\":{\"migrated\":true,\"paidWith\":\"dollar\"}}"
+    }
+  ]
+}

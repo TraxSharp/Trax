@@ -1,0 +1,8 @@
+# Generated and golden artifacts. The .g.ts twins come from generateContextTypes / generateMachineFactory via
+# tools/generate-twin.mjs, the differential corpus from the differential test (serializeCorpus), the *.ir.json
+# from the C# exporter, and structure.json is a committed golden compared against describe(). A formatter must
+# not touch any of them or it will fight `trax machine check`'s byte-exact diff and the snapshot comparisons.
+machines/**/differential.json
+machines/**/structure.json
+src/machines/**/*.g.ts
+machines/**/*.ir.json

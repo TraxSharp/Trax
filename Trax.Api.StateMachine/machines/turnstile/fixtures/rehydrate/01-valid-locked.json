@@ -1,0 +1,8 @@
+{
+  "name": "A well-formed Locked snapshot rehydrates successfully",
+  "json": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} },
+  "expect": {
+    "result": "ok",
+    "snapshot": { "machine": "turnstile", "version": 1, "state": "Locked", "context": {} }
+  }
+}

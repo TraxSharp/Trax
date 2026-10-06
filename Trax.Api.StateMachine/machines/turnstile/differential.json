@@ -1,0 +1,331 @@
+{
+  "machine": "turnstile",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Locked",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Coin"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Locked",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "quarter"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"quarter\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Locked",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "dollar"
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Unlocked\",\"context\":{\"paidWith\":\"dollar\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Locked",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "penny"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Locked",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "guard-failed"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Locked",
+        "context": {}
+      },
+      "when": {
+        "trigger": "Push"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "dollar"
+        }
+      },
+      "when": {
+        "trigger": "Coin"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "dollar"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "quarter"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "dollar"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "dollar"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "dollar"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "penny"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "dollar"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "dollar"
+        }
+      },
+      "when": {
+        "trigger": "Push"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "quarter"
+        }
+      },
+      "when": {
+        "trigger": "Coin"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "quarter"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "quarter"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "quarter"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "dollar"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "quarter"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {
+          "coin": "penny"
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "quarter"
+        }
+      },
+      "when": {
+        "trigger": "Coin",
+        "input": {}
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "turnstile",
+        "version": 1,
+        "state": "Unlocked",
+        "context": {
+          "paidWith": "quarter"
+        }
+      },
+      "when": {
+        "trigger": "Push"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"turnstile\",\"version\":1,\"state\":\"Locked\",\"context\":{}}"
+      }
+    }
+  ]
+}

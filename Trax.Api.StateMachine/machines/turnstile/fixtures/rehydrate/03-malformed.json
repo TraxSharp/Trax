@@ -1,0 +1,5 @@
+{
+  "name": "Non-JSON input is malformed",
+  "raw": "this is not json",
+  "expect": { "result": "error", "code": "malformed" }
+}
