@@ -236,12 +236,47 @@ public class SavedInputRoundTripTests
     [Test]
     public void CallerJson_WithReferenceMetadataBelowTheRoot_IsNotResolved()
     {
-        // Reference metadata in a caller's input keeps meaning nothing: only a root that opens
-        // with $id, the form a saved input always has, is resolved.
+        // Reference metadata in a caller's input keeps meaning nothing: only a root that carries
+        // $id, as a saved input always does, is resolved.
         const string json = """{"home":{"$id":"1","city":"Lyon"},"billing":{"$ref":"1"}}""";
         var registration = RegistrationOf<IShapesTrain>();
 
         TrainInputReader.ResolveSavedInput(json, registration, MaxBytes).Should().Be(json);
+    }
+
+    [Test]
+    public void SavedInputAtTheCap_ReadBackFromJsonbWithSpaces_ResolvesCompactWithinTheCap()
+    {
+        // Saved at exactly the cap, then handed back the way a jsonb column prints it: a space
+        // after every colon and comma, which alone puts it over the cap.
+        var tags = string.Join(",", Enumerable.Range(0, 200).Select(i => $"\"t{i}\""));
+        var compact =
+            "{\"counts\":[1,2,3],\"tags\":[" + tags + "],\"home\":{\"city\":\"Lyon\",\"zip\":1}}";
+        var spaced =
+            "{\"counts\": [1, 2, 3], \"tags\": ["
+            + tags.Replace(",", ", ")
+            + "], \"home\": {\"city\": \"Lyon\", \"zip\": 1}}";
+        var cap = Encoding.UTF8.GetByteCount(compact);
+        Encoding.UTF8.GetByteCount(spaced).Should().BeGreaterThan(cap);
+        var registration = RegistrationOf<IShapesTrain>();
+
+        var resolved = TrainInputReader.ResolveSavedInput(spaced, registration, cap);
+
+        resolved.Should().Be(compact);
+        var read = (ShapesInput)TrainInputReader.Read(resolved, registration, cap);
+        read.Tags.Should().HaveCount(200);
+        read.Home!.City.Should().Be("Lyon");
+    }
+
+    [Test]
+    public void SavedInputThatIsNotJson_IsLeftForTheReaderToRefuse()
+    {
+        var registration = RegistrationOf<IShapesTrain>();
+
+        TrainInputReader
+            .ResolveSavedInput("not json", registration, MaxBytes)
+            .Should()
+            .Be("not json");
     }
 
     [Test]
@@ -264,6 +299,41 @@ public class SavedInputRoundTripTests
         refused.MaxBytes.Should().Be(MaxBytes);
     }
 
+    [Test]
+    public void SavedInput_WithItsMetadataAfterShorterNames_AsJsonbOrdersIt_ReadsBackExactly()
+    {
+        // The order a jsonb column hands a saved input back in: shorter names first, so $id
+        // follows "id" in every object that has one, and "$values" follows "$id".
+        const string saved = """
+            {"id": 5, "$id": "1", "home": {"id": 7, "$id": "2", "city": "Lyon"}, "work": {"$ref": "2"}, "stops": {"$id": "3", "$values": [{"id": 1, "$id": "4", "city": "Paris"}, {"$ref": "2"}]}}
+            """;
+        var registration = RegistrationOf<ISpotsTrain>();
+
+        var read = (SpotsInput)
+            TrainInputReader.Read(
+                TrainInputReader.ResolveSavedInput(saved, registration, MaxBytes),
+                registration,
+                MaxBytes
+            );
+
+        var lyon = new Spot { Id = 7, City = "Lyon" };
+        read.Id.Should().Be(5);
+        read.Home.Should().BeEquivalentTo(lyon);
+        read.Work.Should().BeEquivalentTo(lyon);
+        read.Stops.Should()
+            .BeEquivalentTo(
+                new[]
+                {
+                    new Spot { Id = 1, City = "Paris" },
+                    lyon,
+                }
+            );
+    }
+
+    [TestCase("""{"$id":"1","home":{"$values":[]}}""")]
+    [TestCase("""{"$id":"1","home":{"$id":"2","$values":[],"city":"x"}}""")]
+    [TestCase("""{"$id":"1","home":{"city":"x","$ref":"1"}}""")]
+    [TestCase("""{"$id":"1","home":{"$id":"2","$id":"3"}}""")]
     [TestCase("""{"$id":"1","nested":{"$id":"2","places":{"$ref":"2"}}}""")]
     [TestCase("""{"$id":"1","home":{"$ref":"9"}}""")]
     [TestCase("""{"$id":"1","home":{"$ref":"1","city":"x"}}""")]
@@ -317,6 +387,28 @@ public class SavedInputRoundTripTests
     public interface IPairTrain : IServiceTrain<PairInput, Unit>;
 
     public class PairTrain : ServiceTrain<PairInput, Unit>, IPairTrain
+    {
+        protected override Task<Either<Exception, Unit>> Junctions() =>
+            Task.FromResult<Either<Exception, Unit>>(Unit.Default);
+    }
+
+    public class Spot
+    {
+        public int Id { get; set; }
+        public string? City { get; set; }
+    }
+
+    public class SpotsInput
+    {
+        public int Id { get; set; }
+        public Spot? Home { get; set; }
+        public Spot? Work { get; set; }
+        public List<Spot> Stops { get; set; } = [];
+    }
+
+    public interface ISpotsTrain : IServiceTrain<SpotsInput, Unit>;
+
+    public class SpotsTrain : ServiceTrain<SpotsInput, Unit>, ISpotsTrain
     {
         protected override Task<Either<Exception, Unit>> Junctions() =>
             Task.FromResult<Either<Exception, Unit>>(Unit.Default);

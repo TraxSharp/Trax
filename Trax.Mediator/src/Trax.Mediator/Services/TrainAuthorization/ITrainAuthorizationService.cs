@@ -27,9 +27,11 @@ public interface ITrainAuthorizationService
     /// before calling, so an implementation decides itself whether trust skips its checks.
     /// </summary>
     /// <param name="registration">
-    /// The train being submitted; <see cref="TrainRegistration.RequiredPolicies"/>,
-    /// <see cref="TrainRegistration.RequiredRoles"/> and
-    /// <see cref="TrainRegistration.HasAuthorizeAttribute"/> carry its requirements.
+    /// The train being submitted; <see cref="TrainRegistration.RequiredPolicies"/> (every one must
+    /// pass), <see cref="TrainRegistration.RequiredRoleSets"/> (one role of every set must be held)
+    /// and <see cref="TrainRegistration.HasAuthorizeAttribute"/> carry its requirements.
+    /// <see cref="TrainRegistration.RequiredRoles"/> is only their union, and checking it as
+    /// any-of admits a caller one of the train's attributes refuses.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <exception cref="UnauthorizedAccessException">

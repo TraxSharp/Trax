@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxBuilder;
@@ -234,8 +235,17 @@ public static class ServiceExtensions
     }
 
     /// <summary>
-    /// Adds the train bus and registry to the service collection.
+    /// Registers what <see cref="AddMediator(TraxBuilderWithEffects, Func{TraxMediatorBuilder, TraxMediatorBuilder})"/>
+    /// registers: the train bus, registry, discovery, execution service, concurrency limiter,
+    /// trusted scope, the startup checks, and every train found in <paramref name="assemblies"/>.
     /// </summary>
+    /// <remarks>
+    /// Prefer <c>AddMediator</c>, which also takes the mediator's settings. Called on its own, this
+    /// registers a <see cref="MediatorConfiguration"/> with the defaults (authorization required,
+    /// chains verified, no concurrency limits) when none is registered yet, so the host it builds
+    /// can start. A <see cref="MediatorConfiguration"/> already registered, as <c>AddMediator</c>
+    /// registers one, is kept. Effects must still be configured with <c>AddTrax</c>.
+    /// </remarks>
     /// <exception cref="ArgumentException">
     /// <paramref name="serviceTrainLifetime"/> is Singleton: a train instance is one run.
     /// </exception>
@@ -252,6 +262,16 @@ public static class ServiceExtensions
         );
 
         var trainRegistry = new TrainRegistry(assemblies);
+
+        // The concurrency limiter, the execution service and both startup checks need one, so a
+        // collection without it cannot start. AddMediator registers its own first, which wins.
+        serviceCollection.TryAddSingleton(
+            new MediatorConfiguration
+            {
+                TrainLifetime = serviceTrainLifetime,
+                Assemblies = [.. assemblies],
+            }
+        );
 
         // Prepended, not appended, so they run before any hosted service the host registered before
         // it called into Trax. Reverse order, because each goes to the front: the chain check ends
@@ -271,10 +291,11 @@ public static class ServiceExtensions
             .AddSingleton<ICurrentPrincipalProvider, NullPrincipalProvider>()
             .AddScoped<ITrainBus, TrainBus>()
             .AddScoped<IRunExecutor, LocalRunExecutor>()
-            // Singletons, because a singleton train may inject either one and ValidateScopes is
-            // on by default in Development, so scoped would fail such a host at startup. Neither
-            // holds per-scope state: EnqueueContextAccessor keeps its value in a static
-            // AsyncLocal (it had to, or a singleton train's accessor read null), and
+            // Singletons, because a singleton the host registers may inject either one and
+            // ValidateScopes is on by default in Development, so scoped would fail such a host at
+            // startup. (Trains themselves are never singletons: the mediator refuses that
+            // lifetime.) Neither holds per-scope state: EnqueueContextAccessor keeps its value in
+            // a static AsyncLocal, so a singleton's accessor reads the current enqueue, and
             // WorkQueuePromotion creates a context per call from a singleton factory.
             .AddSingleton<IEnqueueContextAccessor, EnqueueContextAccessor>()
             .AddSingleton<IWorkQueuePromotion, WorkQueuePromotion>()

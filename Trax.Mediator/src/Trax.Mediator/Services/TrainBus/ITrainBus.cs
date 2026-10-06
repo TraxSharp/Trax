@@ -169,8 +169,9 @@ public interface ITrainBus
         );
 
     /// <summary>
-    /// Resolves and constructs a train instance for the given input type without executing it.
-    /// Used internally by the scheduler and job runner.
+    /// Resolves and constructs a train instance for the given input type without executing it,
+    /// from the bus's own scope. Nothing in Trax calls it: the scheduler and the job runner run
+    /// trains through <see cref="RunByNameAsync"/>. Kept for callers that use it.
     /// </summary>
     /// <param name="trainInput">The input object whose type determines which train to resolve.</param>
     /// <returns>The resolved train instance (unexecuted).</returns>

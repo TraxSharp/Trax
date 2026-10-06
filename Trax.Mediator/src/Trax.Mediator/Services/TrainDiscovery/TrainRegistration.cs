@@ -59,11 +59,40 @@ public class TrainRegistration
     public required IReadOnlyList<string> RequiredPolicies { get; init; }
 
     /// <summary>
-    /// The roles from every <see cref="TraxAuthorizeAttribute"/> on the train, exactly as declared:
-    /// split on <c>','</c>, trimmed, de-duplicated ordinally, and never case-folded. The caller must
-    /// hold one of them, compared ordinally against its role claims, as <c>@authorize</c> does.
+    /// Every role named by any <see cref="TraxAuthorizeAttribute"/> on the train, exactly as
+    /// declared: split on <c>','</c>, trimmed, de-duplicated ordinally, and never case-folded.
     /// </summary>
+    /// <remarks>
+    /// This is the union of the attributes' roles, so it cannot say which attribute named which
+    /// role, and it is not the requirement. Separate attributes combine with AND: check
+    /// <see cref="RequiredRoleSets"/>, where the caller must hold at least one role of every set.
+    /// Holding one role of this list admits a caller that only one of two attributes would.
+    /// </remarks>
     public required IReadOnlyList<string> RequiredRoles { get; init; }
+
+    private readonly IReadOnlyList<IReadOnlyList<string>>? _requiredRoleSets;
+
+    /// <summary>
+    /// The role requirement, one set per <see cref="TraxAuthorizeAttribute"/> that names roles. The
+    /// caller must hold at least one role of <b>every</b> set, compared ordinally against its role
+    /// claims, as <c>@authorize</c> does. Separate attributes therefore combine with AND, as
+    /// separate <c>[Authorize]</c> attributes do in ASP.NET Core, and the roles inside one
+    /// attribute's <c>Roles</c> with OR. Empty when no attribute names roles.
+    /// </summary>
+    /// <remarks>
+    /// Discovery sets this. On a registration built without it, or with it set empty while
+    /// <see cref="RequiredRoles"/> names roles, it is <see cref="RequiredRoles"/> taken as a single
+    /// set, which is what such a registration has always meant: roles that are listed are never
+    /// read as no requirement at all.
+    /// </remarks>
+    public IReadOnlyList<IReadOnlyList<string>> RequiredRoleSets
+    {
+        get =>
+            _requiredRoleSets is { Count: > 0 } sets ? sets
+            : RequiredRoles.Count == 0 ? Array.Empty<IReadOnlyList<string>>()
+            : [RequiredRoles];
+        init => _requiredRoleSets = value;
+    }
 
     /// <summary>
     /// True when the implementation, a base class or an implemented interface carries at least one

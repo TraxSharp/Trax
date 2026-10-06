@@ -36,8 +36,14 @@ internal static class SavedInputReferences
 
     /// <summary>
     /// Whether <paramref name="json"/> is in the form a writer that preserves references gives
-    /// its root: an object whose first property is <c>$id</c>.
+    /// its root: an object with an <c>$id</c> property.
     /// </summary>
+    /// <remarks>
+    /// The writer puts <c>$id</c> first, but a <c>jsonb</c> column does not keep property order:
+    /// it hands an object back with its shorter names first, so a root saved as
+    /// <c>{"$id":"1","id":5}</c> reads back as <c>{"id": 5, "$id": "1"}</c>. Where the property
+    /// sits is therefore not part of the test, only that the root carries one.
+    /// </remarks>
     public static bool Present(string json)
     {
         var reader = new Utf8JsonReader(
@@ -47,11 +53,20 @@ internal static class SavedInputReferences
 
         try
         {
-            return reader.Read()
-                && reader.TokenType == JsonTokenType.StartObject
-                && reader.Read()
-                && reader.TokenType == JsonTokenType.PropertyName
-                && reader.ValueTextEquals(IdProperty);
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return false;
+
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                if (reader.ValueTextEquals(IdProperty))
+                    return true;
+
+                // Past this property's value, nested objects and arrays included.
+                reader.Read();
+                reader.Skip();
+            }
+
+            return false;
         }
         catch (JsonException)
         {
@@ -90,6 +105,40 @@ internal static class SavedInputReferences
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
+    /// <summary>
+    /// <paramref name="json"/> written without insignificant whitespace, every member kept as it
+    /// is: reference metadata below the root is not interpreted.
+    /// </summary>
+    /// <remarks>
+    /// A saved input read back from a <c>jsonb</c> column comes with a space after every colon
+    /// and comma, so one saved at the size cap reads back larger than the cap. Writing it compact
+    /// gives back the size it was saved at.
+    /// </remarks>
+    /// <exception cref="JsonException"><paramref name="json"/> is not JSON.</exception>
+    /// <exception cref="TrainInputValidationException">
+    /// The compact form is larger than <paramref name="maxBytes"/>.
+    /// </exception>
+    public static string Compact(string json, TrainRegistration registration, int maxBytes)
+    {
+        using var document = JsonDocument.Parse(json, DocumentOptions);
+
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, WriterOptions))
+        {
+            document.RootElement.WriteTo(writer);
+            writer.Flush();
+        }
+
+        if (buffer.WrittenCount > maxBytes)
+            throw new TrainInputValidationException(
+                registration.ServiceTypeName,
+                buffer.WrittenCount,
+                maxBytes
+            );
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
     /// <summary>The kinds of object reference metadata can make.</summary>
     private enum Shape
     {
@@ -100,50 +149,64 @@ internal static class SavedInputReferences
     }
 
     /// <summary>
-    /// What <paramref name="element"/> is, refusing metadata anywhere a reference-preserving
-    /// writer would not have put it.
+    /// What <paramref name="element"/> is, refusing metadata a reference-preserving writer would
+    /// not have written.
     /// </summary>
+    /// <remarks>
+    /// The writer puts <c>$id</c> or <c>$ref</c> first and <c>$values</c> after <c>$id</c>, but
+    /// a <c>jsonb</c> column reorders an object's properties (shorter names first), so the
+    /// metadata is recognised wherever it sits. What is refused is a combination the writer never
+    /// produces: a <c>$ref</c> beside anything else, <c>$values</c> without <c>$id</c> or beside
+    /// other properties, or the same metadata property twice.
+    /// </remarks>
     private static Shape ShapeOf(JsonElement element, out string? id)
     {
         id = null;
-        var index = 0;
         var count = 0;
-        var first = default(JsonProperty);
+        JsonProperty? idProperty = null;
+        JsonProperty? refProperty = null;
         var hasValues = false;
 
         foreach (var property in element.EnumerateObject())
         {
-            if (index == 0)
-                first = property;
-            else if (property.NameEquals(IdProperty) || property.NameEquals(RefProperty))
-                throw Malformed($"{property.Name} is not the first property of its object");
+            count++;
 
-            if (property.NameEquals(ValuesProperty))
+            if (property.NameEquals(IdProperty))
             {
-                if (index != 1)
-                    throw Malformed("$values does not follow $id");
+                if (idProperty is not null)
+                    throw Malformed("$id is given twice in one object");
+                idProperty = property;
+            }
+            else if (property.NameEquals(RefProperty))
+            {
+                if (refProperty is not null)
+                    throw Malformed("$ref is given twice in one object");
+                refProperty = property;
+            }
+            else if (property.NameEquals(ValuesProperty))
+            {
+                if (hasValues)
+                    throw Malformed("$values is given twice in one object");
                 hasValues = true;
             }
-
-            index++;
-            count++;
         }
 
-        if (count == 0)
-            return Shape.Plain;
-
-        if (first.NameEquals(RefProperty))
+        if (refProperty is { } reference)
         {
             if (count != 1)
                 throw Malformed("$ref is not the only property of its object");
-            id = IdOf(first);
+            id = IdOf(reference);
             return Shape.Reference;
         }
 
-        if (!first.NameEquals(IdProperty))
+        if (idProperty is not { } identified)
+        {
+            if (hasValues)
+                throw Malformed("$values has no $id beside it");
             return Shape.Plain;
+        }
 
-        id = IdOf(first);
+        id = IdOf(identified);
 
         if (!hasValues)
             return Shape.Identified;

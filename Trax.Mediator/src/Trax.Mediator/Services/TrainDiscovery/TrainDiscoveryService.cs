@@ -247,7 +247,9 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         var inputType = genericArgs[0];
         var outputType = genericArgs[1];
 
-        var (hasAuthorize, policies, roles) = GetAuthorizationRequirements(implementationType);
+        var (hasAuthorize, policies, roles, roleSets) = GetAuthorizationRequirements(
+            implementationType
+        );
         var graphql = GetGraphQLMetadata(implementationType);
 
         return new TrainRegistration
@@ -263,6 +265,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             OutputTypeName = GetFriendlyTypeName(outputType),
             RequiredPolicies = policies,
             RequiredRoles = roles,
+            RequiredRoleSets = roleSets,
             HasAuthorizeAttribute = hasAuthorize,
             HasAllowAnonymousAttribute = HasAllowAnonymousAttribute(implementationType),
             IsQuery = graphql.IsQuery,
@@ -283,7 +286,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     private static (
         bool HasAuthorize,
         IReadOnlyList<string> Policies,
-        IReadOnlyList<string> Roles
+        IReadOnlyList<string> Roles,
+        IReadOnlyList<IReadOnlyList<string>> RoleSets
     ) GetAuthorizationRequirements(Type implementationType)
     {
         // Attributes declared on an interface do not flow to implementing types via
@@ -300,7 +304,12 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             .ToList();
 
         if (attributes.Count == 0)
-            return (false, Array.Empty<string>(), Array.Empty<string>());
+            return (
+                false,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<IReadOnlyList<string>>()
+            );
 
         // Discovery is permissive: it does not throw on malformed attribute shapes
         // (empty policy strings, whitespace-only Roles). Malformed shapes silently
@@ -318,23 +327,37 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         }
 
         var roles = new List<string>();
+        var roleSets = new List<IReadOnlyList<string>>();
         foreach (var attr in attributes.Where(a => a.Roles is not null))
         {
-            var parsed = attr.Roles!.Split(',', StringSplitOptions.TrimEntries)
-                .Where(r => r.Length > 0);
-
             // Kept exactly as declared. A role is matched against the principal's role claims
             // ordinally, the way @authorize matches them, so "Admin" and "admin" are different
             // roles. Folding case here once let a claim satisfy a role it only resembled: the
             // invariant culture upper-cases the long s to S.
+            var parsed = attr.Roles!.Split(',', StringSplitOptions.TrimEntries)
+                .Where(r => r.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
             foreach (var role in parsed)
             {
                 if (!roles.Contains(role, StringComparer.Ordinal))
                     roles.Add(role);
             }
+
+            // One set per attribute, because separate attributes combine with AND. A set another
+            // attribute already declared adds nothing to the requirement.
+            if (
+                parsed.Count > 0
+                && !roleSets.Any(set =>
+                    set.Count == parsed.Count
+                    && set.All(r => parsed.Contains(r, StringComparer.Ordinal))
+                )
+            )
+                roleSets.Add(parsed.AsReadOnly());
         }
 
-        return (true, policies.AsReadOnly(), roles.AsReadOnly());
+        return (true, policies.AsReadOnly(), roles.AsReadOnly(), roleSets.AsReadOnly());
     }
 
     private static (

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Trax.Core.Exceptions;
 using Trax.Core.Monad;
+using Trax.Effect.Attributes;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.TrainDiscovery;
 
@@ -28,9 +29,19 @@ namespace Trax.Mediator.Services.ChainVerification;
 /// like that can be found, the failure is taken to be a dependency only a request can supply, and
 /// the train is skipped with a warning.</para>
 ///
+/// <para>A train's own <c>[Inject]</c> properties are checked the same way, because the container
+/// fills them with <c>GetService</c> and leaves one null rather than failing: a property whose
+/// type is not registered is refused unless it is declared nullable, which is reported as a
+/// warning, and a registered type that can never be built is refused. They are read on the built
+/// train, because filling skips a property its constructor or an initializer already set; a train
+/// that cannot be built at boot has them reported as warnings only. A junction the chain builds
+/// itself (<c>Chain&lt;T&gt;()</c>, <c>ShortCircuit&lt;T&gt;()</c>) never has its <c>[Inject]</c>
+/// properties filled, so each one is reported as a warning.</para>
+///
 /// <para>Every train is checked before anything is reported, so one start tells you about all of
 /// them rather than one per attempt. Opt out with
-/// <c>AddMediator(m => m.SkipChainVerification())</c> for the blind spot named in
+/// <c>AddMediator(m => m.SkipChainVerification())</c>, which turns the <c>[Inject]</c> check off
+/// with the rest, for the blind spot named in
 /// <c>ChainVerification</c> (a junction asking for an interface that only a subtype of the
 /// train's declared input implements), or temporarily while a codebase whose chains do not pass
 /// yet is moved onto <c>Junctions()</c>.</para>
@@ -59,7 +70,9 @@ internal sealed class TrainChainStartupValidator(
         {
             logger?.LogWarning(
                 "Chain verification is off, so a train whose chain cannot run will not be found "
-                    + "until something runs it."
+                    + "until something runs it. The check of each train's [Inject] properties is "
+                    + "off with it, so one the container cannot fill is null on every run instead "
+                    + "of stopping the host."
             );
 
             return;
@@ -79,7 +92,11 @@ internal sealed class TrainChainStartupValidator(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var problem = Check(scope.ServiceProvider, registration, out var skipped);
+            var warnings = new List<string>();
+            var problem = Check(scope.ServiceProvider, registration, warnings, out var skipped);
+
+            foreach (var warning in warnings)
+                logger?.LogWarning("{TrainName}: {Warning}", registration.ServiceTypeName, warning);
 
             if (skipped is not null)
             {
@@ -130,6 +147,7 @@ internal sealed class TrainChainStartupValidator(
     private static IReadOnlyList<string>? Check(
         IServiceProvider services,
         TrainRegistration registration,
+        List<string> warnings,
         out string? skipped
     )
     {
@@ -148,12 +166,35 @@ internal sealed class TrainChainStartupValidator(
             if (CannotEverBeBuilt(services, registration) is { } reason)
                 return [$"{registration.ServiceTypeName} cannot be built: {reason}"];
 
+            // The class without its [Inject] properties filled. When it builds, what failed was
+            // filling them, and the instance shows which of them its constructor or initializers
+            // already set, which filling skips.
+            if (
+                UnfilledInjectProperties(
+                    services,
+                    registration,
+                    warnings,
+                    BareTrain(services, registration)
+                ) is
+                { Count: > 0 } unbuildable
+            )
+                return unbuildable.Select(r => $"{registration.ServiceTypeName}: {r}").ToList();
+
             // A train whose constructor needs something only a request provides, a current user
             // read from HttpContext say, cannot be built at boot and still runs fine. Refusing
             // to start over it would make the upgrade that adds this check break such hosts.
             skipped = $"it could not be constructed outside a request ({ex.Message})";
             return null;
         }
+
+        // An [Inject] property is filled by GetService, so a type nothing registers leaves it null
+        // on every run: the container never fails over one, so the train above built regardless.
+        // Read on the built train, because filling skips a property that already holds a value.
+        if (
+            UnfilledInjectProperties(services, registration, warnings, train) is
+            { Count: > 0 } unfilled
+        )
+            return unfilled.Select(r => $"{registration.ServiceTypeName}: {r}").ToList();
 
         // DeclaredChain is public on Train<,>, but the registration hands back the service
         // interface, so the concrete method is reached by name. A registered train need not
@@ -190,6 +231,8 @@ internal sealed class TrainChainStartupValidator(
                 $"{registration.ServiceTypeName}: its chain could not be read ({cause.Message})",
             ];
         }
+
+        warnings.AddRange(BuiltJunctionsWithInjectProperties(chain));
 
         // Asks whether the container can supply a type without building one. Resolving each
         // candidate would construct services at boot, and a factory that only works inside a
@@ -289,6 +332,227 @@ internal sealed class TrainChainStartupValidator(
         fault.Junction is { } junction ? Readable(junction) : fault.Kind.ToString();
 
     /// <summary>
+    /// The train's own <c>[Inject]</c> properties the container cannot supply, one fault each,
+    /// except an unregistered one declared nullable, which is a warning in
+    /// <paramref name="warnings"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>InjectProperties</c> fills a property with <c>GetService</c> and leaves it null when
+    /// nothing is registered, so the train still builds and fails on the run that reads it. It
+    /// skips a property that already holds a value, one its constructor or an initializer set, so
+    /// a property is judged on <paramref name="instance"/> and one holding a value is left alone.
+    /// A property declared <c>T?</c> says the train copes without it, so it is only reported; any
+    /// other declaration, including one in a project without nullable annotations, is refused, as
+    /// an unregistered constructor argument is. A type that is registered is followed through its
+    /// constructor the way a constructor argument is: one that can never be built makes
+    /// <c>GetService</c> throw, which fails every resolution of the train, so it is refused
+    /// however the property is declared. With no <paramref name="instance"/> to read, whether a
+    /// property is set cannot be told, so everything found is a warning and nothing is refused.
+    /// <c>ServiceTrain</c>'s own framework properties are left out: they are optional by design.
+    /// An <c>IEnumerable&lt;T&gt;</c> property is always filled, if only with nothing.
+    /// </remarks>
+    private static List<string> UnfilledInjectProperties(
+        IServiceProvider services,
+        TrainRegistration registration,
+        List<string> warnings,
+        object? instance
+    )
+    {
+        var faults = new List<string>();
+        var implementation = registration.ImplementationType;
+
+        if (
+            implementation.IsAbstract
+            || services.GetService<IServiceProviderIsService>() is not { } isService
+        )
+            return faults;
+
+        // A train registered through a factory may hand back something else; its properties
+        // cannot be read from the declared class.
+        if (instance is not null && !implementation.IsInstanceOfType(instance))
+            instance = null;
+
+        var nullability = new NullabilityInfoContext();
+
+        foreach (var property in InjectProperties(implementation))
+        {
+            // ServiceTrain's own properties, declared in Trax.Effect beside the attribute.
+            if (property.DeclaringType?.Assembly == typeof(InjectAttribute).Assembly)
+                continue;
+
+            var type = property.PropertyType;
+
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                continue;
+
+            if (instance is not null && HoldsValue(property, instance))
+                continue;
+
+            var optional = DeclaredNullable(nullability, property);
+            var registered = false;
+            string? reason;
+
+            try
+            {
+                registered = isService.IsService(type);
+                reason = registered
+                    ? new DependencyWalk(
+                        isService,
+                        services.GetService<IServiceCollection>(),
+                        $"the train's [Inject] property '{property.Name}'"
+                    ).WhyNotRegistered(type)
+                    : $"its [Inject] property '{property.Name}' needs '{Readable(type)}', which "
+                        + "is not registered, so the property is null on every run."
+                        + (
+                            optional
+                                ? ""
+                                : " Register it before building the host, or declare the "
+                                    + "property nullable if the train runs without it."
+                        );
+            }
+            catch (Exception)
+            {
+                // A container that cannot answer says nothing about the property.
+                continue;
+            }
+
+            if (reason is null)
+                continue;
+
+            // A registered type that cannot be built throws out of GetService, which fails the
+            // train's resolution on every run however the property is declared.
+            if (optional && !registered)
+                warnings.Add(
+                    reason + " It is declared nullable, so the train is taken to cope without it."
+                );
+            else if (instance is null)
+                warnings.Add(
+                    reason
+                        + " The train could not be built here, so whether its constructor or an "
+                        + "initializer sets the property could not be checked."
+                );
+            else
+                faults.Add(reason);
+        }
+
+        return faults;
+    }
+
+    /// <summary>
+    /// The train's class built by the container without its <c>[Inject]</c> properties filled, or
+    /// null when that fails too or the class is not registered on its own.
+    /// </summary>
+    private static object? BareTrain(IServiceProvider services, TrainRegistration registration)
+    {
+        if (registration.ImplementationType.IsAbstract)
+            return null;
+
+        try
+        {
+            return services.GetService(registration.ImplementationType);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether <paramref name="property"/> already holds a value on the train.</summary>
+    private static bool HoldsValue(PropertyInfo property, object instance)
+    {
+        try
+        {
+            return property.GetValue(instance) is not null;
+        }
+        catch (Exception)
+        {
+            // A getter that throws holds nothing filling could read either; InjectProperties
+            // would throw on it too, which the build would have shown.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="property"/> is declared nullable. A trimmed app turns nullability
+    /// metadata off (<c>NullabilityInfoContextSupport</c>), and then every property reads as
+    /// unknown; that says nothing about the declaration, so it is taken as nullable rather than
+    /// refusing a property the source declares <c>T?</c>.
+    /// </summary>
+    private static bool DeclaredNullable(NullabilityInfoContext context, PropertyInfo property) =>
+        context.Create(property).ReadState switch
+        {
+            NullabilityState.Nullable => true,
+            NullabilityState.Unknown => !NullabilityMetadataSupported,
+            _ => false,
+        };
+
+    /// <summary>
+    /// Whether <see cref="NullabilityInfoContext"/> reads nullability metadata in this process.
+    /// </summary>
+    private static bool NullabilityMetadataSupported =>
+        !AppContext.TryGetSwitch(NullabilityInfoContextSwitch, out var supported) || supported;
+
+    private const string NullabilityInfoContextSwitch =
+        "System.Reflection.NullabilityInfoContext.IsSupported";
+
+    /// <summary>
+    /// A warning for every <c>[Inject]</c> property of a junction the chain builds itself, with
+    /// <c>Chain&lt;T&gt;()</c> or <c>ShortCircuit&lt;T&gt;()</c>, including inside a routing step's
+    /// tracks.
+    /// </summary>
+    /// <remarks>
+    /// A junction built that way is constructed from Memory and the container and never has its
+    /// properties filled, so each such property is null whenever the junction runs. Only
+    /// <c>IChain&lt;TInterface&gt;()</c> resolves the junction's registration, which fills them.
+    /// It is a warning and not a refusal: whether the junction ever reads the property, or sets it
+    /// itself, cannot be told from its type, and a junction that guards against null runs fine.
+    /// </remarks>
+    private static IEnumerable<string> BuiltJunctionsWithInjectProperties(ChainRecorder chain)
+    {
+        var seen = new System.Collections.Generic.HashSet<Type>();
+
+        IEnumerable<string> Walk(ChainRecorder recorder)
+        {
+            for (var i = 0; i < recorder.Steps.Count; i++)
+            {
+                var step = recorder.Steps[i];
+
+                if (
+                    step.Kind is ChainStepKind.Chain or ChainStepKind.ShortCircuit
+                    && step.Junction is { IsInterface: false } junction
+                    && seen.Add(junction)
+                )
+                {
+                    var names = InjectProperties(junction).Select(p => $"'{p.Name}'").ToList();
+
+                    if (names.Count > 0)
+                        yield return $"{step.Kind}<{Readable(junction)}> builds the junction "
+                            + "itself, which never fills [Inject] properties, so "
+                            + string.Join(", ", names)
+                            + (names.Count == 1 ? " is" : " are")
+                            + " null whenever it runs. Take the dependency as a constructor "
+                            + "parameter, or register the junction under an interface and reach "
+                            + $"it with IChain.";
+                }
+
+                foreach (var track in recorder.TracksAt(i))
+                foreach (var warning in Walk(track.Steps))
+                    yield return warning;
+            }
+        }
+
+        return Walk(chain).ToList();
+    }
+
+    /// <summary>
+    /// The properties <c>InjectProperties</c> fills: public, instance, writable, marked
+    /// <c>[Inject]</c>.
+    /// </summary>
+    private static IEnumerable<PropertyInfo> InjectProperties(Type type) =>
+        type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.IsDefined(typeof(InjectAttribute)) && p.CanWrite);
+
+    /// <summary>
     /// Why the train <paramref name="registration"/> describes can never be built, or null when
     /// nothing proves it: its class has no public constructor, or its constructor needs a type the
     /// container does not register, directly or through the constructor of a registered
@@ -341,7 +605,8 @@ internal sealed class TrainChainStartupValidator(
     /// </summary>
     private sealed class DependencyWalk(
         IServiceProviderIsService isService,
-        IServiceCollection? descriptors
+        IServiceCollection? descriptors,
+        string reachedBy = "the train's constructor"
     )
     {
         /// <summary>How deep the walk follows dependencies before it gives up and says nothing.</summary>
@@ -351,6 +616,15 @@ internal sealed class TrainChainStartupValidator(
 
         /// <summary>Why <paramref name="implementation"/> can never be built, or null.</summary>
         public string? WhyNot(Type implementation) => WhyNot(implementation, [], 0);
+
+        /// <summary>
+        /// Why the class registered for <paramref name="serviceType"/> can never be built, or
+        /// null, including when it is registered through a factory or an instance.
+        /// </summary>
+        public string? WhyNotRegistered(Type serviceType) =>
+            ImplementationOf(serviceType) is { } implementation
+                ? WhyNot(implementation, [serviceType], 1)
+                : null;
 
         private string? WhyNot(Type implementation, List<Type> through, int depth)
         {
@@ -460,10 +734,10 @@ internal sealed class TrainChainStartupValidator(
             return null;
         }
 
-        private static string Through(List<Type> through) =>
+        private string Through(List<Type> through) =>
             through.Count == 0
                 ? ""
-                : ", and the train's constructor reaches it through "
+                : $", and {reachedBy} reaches it through "
                     + string.Join(" -> ", through.Select(t => $"'{Readable(t)}'"));
     }
 

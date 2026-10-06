@@ -5,6 +5,7 @@ using NSubstitute;
 using Trax.Core.Exceptions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
+using Trax.Effect.Attributes;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
@@ -127,6 +128,250 @@ public class TrainChainStartupValidatorTests
     [Test]
     public async Task Startup_WhenEveryChainLinesUp_Starts() =>
         (await Start<IWellFormedTrain, WellFormedTrain>()).Should().BeNull();
+
+    [Test]
+    public async Task Startup_WhenEveryChainLinesUp_WarnsAboutNothing()
+    {
+        var logger = new RecordingLogger();
+
+        (await Start<IWellFormedTrain, WellFormedTrain>(logger: logger)).Should().BeNull();
+        logger.Warnings.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Startup_WhenAnInjectPropertysTypeIsNotRegistered_RefusesNamingTheType()
+    {
+        var failure = await Start<IInjectsUnregisteredTrain, InjectsUnregisteredTrain>();
+
+        failure.Should().BeOfType<TrainException>();
+        failure!
+            .Message.Should()
+            .Contain(
+                $"{nameof(IInjectsUnregisteredTrain)}: its [Inject] property "
+                    + $"'{nameof(InjectsUnregisteredTrain.Probe)}' needs "
+                    + $"'{nameof(IUnregisteredProbeService)}', which is not registered",
+                "the property would be null on every run, which is a train that cannot run"
+            );
+    }
+
+    [Test]
+    public async Task Startup_WhenANullableInjectPropertysTypeIsNotRegistered_StartsAndWarns()
+    {
+        var logger = new RecordingLogger();
+
+        var failure = await Start<IOptionallyInjectsTrain, OptionallyInjectsTrain>(logger: logger);
+
+        failure
+            .Should()
+            .BeNull("a property declared nullable says the train runs without the dependency");
+        logger
+            .Warnings.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(nameof(IOptionallyInjectsTrain))
+            .And.Contain($"'{nameof(IUnregisteredProbeService)}', which is not registered")
+            .And.Contain("declared nullable");
+    }
+
+    [Test]
+    public async Task Startup_WhenAnInjectPropertysTypeIsRegistered_Starts()
+    {
+        var logger = new RecordingLogger();
+
+        var failure = await Start<IInjectsUnregisteredTrain, InjectsUnregisteredTrain>(
+            configure: services =>
+                services.AddScoped<IUnregisteredProbeService, UnregisteredProbeService>(),
+            logger: logger
+        );
+
+        failure.Should().BeNull();
+        logger.Warnings.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Startup_WhenAnInjectPropertysRegisteredTypeCanNeverBeBuilt_RefusesEvenIfNullable()
+    {
+        var failure = await Start<
+            IOptionallyInjectsRepositoryTrain,
+            OptionallyInjectsRepositoryTrain
+        >(configure: services => services.AddScoped<IProbeRepository, ProbeRepository>());
+
+        failure
+            .Should()
+            .BeOfType<TrainException>(
+                "GetService throws for a registered type it cannot build, so resolving the "
+                    + "train fails on every run however the property is declared"
+            );
+        failure!
+            .Message.Should()
+            .Contain(
+                $"needs '{nameof(IUnregisteredProbeService)}', which is not registered, and the "
+                    + "train's [Inject] property "
+                    + $"'{nameof(OptionallyInjectsRepositoryTrain.Repository)}' reaches it through "
+                    + $"'{nameof(IProbeRepository)}'"
+            );
+    }
+
+    [Test]
+    public async Task Startup_WhenAnInjectPropertyIsSetByItsInitializer_Starts()
+    {
+        // InjectProperties skips a property that already holds a value, so this train runs with
+        // its own clock and the container never needs to register one.
+        var logger = new RecordingLogger();
+
+        var failure = await Start<IInitializedInjectTrain, InitializedInjectTrain>(logger: logger);
+
+        failure.Should().BeNull("the property holds a value on every run, so nothing is unfilled");
+        logger.Warnings.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Startup_WhenAnInjectPropertyIsSetByTheConstructor_Starts()
+    {
+        var logger = new RecordingLogger();
+
+        var failure = await Start<IConstructorSetInjectTrain, ConstructorSetInjectTrain>(
+            logger: logger
+        );
+
+        failure.Should().BeNull("the property holds a value on every run, so nothing is unfilled");
+        logger.Warnings.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Startup_WhenAnInitializerSetsAPropertyWhoseRegisteredTypeCannotBeBuilt_Starts()
+    {
+        // Registered the way AddMediator registers a train, so the container fills its
+        // properties. Filling skips the initialized one, so GetService never builds the
+        // repository and the train resolves.
+        var failure = await Start<IInitializedRepositoryTrain, InitializedRepositoryTrain>(
+            configure: services =>
+            {
+                services.AddScoped<IProbeRepository, ProbeRepository>();
+                services.AddScopedTraxRoute<
+                    IInitializedRepositoryTrain,
+                    InitializedRepositoryTrain
+                >();
+            }
+        );
+
+        failure.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Startup_WhenFillingAnInjectPropertyFails_RefusesNamingOnlyThatProperty()
+    {
+        var failure = await Start<IFillFailsTrain, FillFailsTrain>(configure: services =>
+        {
+            services.AddScoped<IProbeRepository, ProbeRepository>();
+            services.AddScopedTraxRoute<IFillFailsTrain, FillFailsTrain>();
+        });
+
+        failure.Should().BeOfType<TrainException>();
+        failure!
+            .Message.Should()
+            .Contain($"'{nameof(FillFailsTrain.Repository)}' reaches it through")
+            .And.NotContain(
+                $"'{nameof(FillFailsTrain.Clock)}'",
+                "the clock is set by its initializer, which filling leaves alone"
+            );
+    }
+
+    [Test]
+    public async Task Startup_WhenATrainCannotBeBuiltAtBoot_ItsInjectPropertiesAreOnlyWarnedAbout()
+    {
+        // Without an instance there is no telling whether the constructor sets the property, so
+        // refusing would stop a host that may run fine.
+        var logger = new RecordingLogger();
+
+        var failure = await Start<IRequestBoundInjectingTrain, RequestBoundInjectingTrain>(
+            configure: RequestOnlyService,
+            logger: logger
+        );
+
+        failure.Should().BeNull();
+        logger
+            .Warnings.Should()
+            .Contain(w =>
+                w.Contains($"'{nameof(RequestBoundInjectingTrain.Probe)}' needs")
+                && w.Contains("could not be built here")
+            );
+    }
+
+    [Test]
+    public async Task Startup_WhenVerificationIsSkipped_TheWarningSaysTheInjectCheckIsOffToo()
+    {
+        var logger = new RecordingLogger();
+
+        (
+            await Start<IInjectsUnregisteredTrain, InjectsUnregisteredTrain>(
+                skip: true,
+                logger: logger
+            )
+        )
+            .Should()
+            .BeNull();
+        logger.Warnings.Should().ContainSingle().Which.Should().Contain("[Inject] properties");
+    }
+
+    [Test]
+    [NonParallelizable]
+    public async Task Startup_WhenNullabilityMetadataIsTurnedOff_AnUnknownPropertyIsOnlyWarnedAbout()
+    {
+        // A trimmed app sets this switch off, and then every property reads as Unknown, a T?
+        // included. Unknown is otherwise what a project without nullable annotations gives,
+        // which is refused, so the same train is checked both ways.
+        const string Switch = "System.Reflection.NullabilityInfoContext.IsSupported";
+
+        // NullabilityInfoContext reads the switch once; read it before changing it, so the
+        // change reaches only the validator.
+        _ = new System.Reflection.NullabilityInfoContext().Create(
+            typeof(ObliviousInjectTrain).GetProperty(nameof(ObliviousInjectTrain.Probe))!
+        );
+
+        (await Start<IObliviousInjectTrain, ObliviousInjectTrain>())
+            .Should()
+            .BeOfType<TrainException>("with the metadata on, Unknown means no annotations");
+
+        var logger = new RecordingLogger();
+        AppContext.SetSwitch(Switch, false);
+        try
+        {
+            (await Start<IObliviousInjectTrain, ObliviousInjectTrain>(logger: logger))
+                .Should()
+                .BeNull("with the metadata off, Unknown says nothing about the declaration");
+        }
+        finally
+        {
+            AppContext.SetSwitch(Switch, true);
+        }
+
+        logger.Warnings.Should().ContainSingle().Which.Should().Contain("declared nullable");
+    }
+
+    [Test]
+    public async Task Startup_WhenAChainBuiltJunctionDeclaresInjectProperties_StartsAndWarns()
+    {
+        var logger = new RecordingLogger();
+
+        var failure = await Start<IChainsInjectingJunctionTrain, ChainsInjectingJunctionTrain>(
+            logger: logger
+        );
+
+        failure
+            .Should()
+            .BeNull(
+                "whether the junction reads the property cannot be told from its type, and one "
+                    + "that guards against null runs fine"
+            );
+        logger
+            .Warnings.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(nameof(IChainsInjectingJunctionTrain))
+            .And.Contain($"Chain<{nameof(InjectingJunction)}>")
+            .And.Contain($"'{nameof(InjectingJunction.Probe)}' is null whenever it runs");
+    }
 
     [Test]
     public async Task Startup_WhenAJunctionsInputNeverReachesMemory_RefusesToStart()
@@ -1170,4 +1415,156 @@ public class TrainChainStartupValidatorTests
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
     }
+
+    public class UnregisteredProbeService : IUnregisteredProbeService;
+
+    public interface IInjectsUnregisteredTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class InjectsUnregisteredTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IInjectsUnregisteredTrain
+    {
+        [Inject]
+        public IUnregisteredProbeService Probe { get; set; } = null!;
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IOptionallyInjectsTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class OptionallyInjectsTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IOptionallyInjectsTrain
+    {
+        [Inject]
+        public IUnregisteredProbeService? Probe { get; set; }
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IOptionallyInjectsRepositoryTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class OptionallyInjectsRepositoryTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IOptionallyInjectsRepositoryTrain
+    {
+        [Inject]
+        public IProbeRepository? Repository { get; set; }
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    /// <summary>Built by its constructor in the chain, so its property is never filled.</summary>
+    public class InjectingJunction : Junction<ChainProbeInput, int>
+    {
+        [Inject]
+        public IUnregisteredProbeService? Probe { get; set; }
+
+        public override Task<int> Run(ChainProbeInput input) => Task.FromResult(input.Value.Length);
+    }
+
+    public interface IChainsInjectingJunctionTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class ChainsInjectingJunctionTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IChainsInjectingJunctionTrain
+    {
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<InjectingJunction>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IProbeClock;
+
+    public class ProbeClock : IProbeClock;
+
+    public interface IInitializedInjectTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class InitializedInjectTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IInitializedInjectTrain
+    {
+        [Inject]
+        public IProbeClock Clock { get; set; } = new ProbeClock();
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IConstructorSetInjectTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class ConstructorSetInjectTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IConstructorSetInjectTrain
+    {
+        public ConstructorSetInjectTrain()
+        {
+            Clock = new ProbeClock();
+        }
+
+        [Inject]
+        public IProbeClock Clock { get; set; }
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public class StandInRepository : IProbeRepository;
+
+    public interface IInitializedRepositoryTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class InitializedRepositoryTrain
+        : ServiceTrain<ChainProbeInput, bool>,
+            IInitializedRepositoryTrain
+    {
+        [Inject]
+        public IProbeRepository Repository { get; set; } = new StandInRepository();
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IFillFailsTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class FillFailsTrain : ServiceTrain<ChainProbeInput, bool>, IFillFailsTrain
+    {
+        [Inject]
+        public IProbeClock Clock { get; set; } = new ProbeClock();
+
+        [Inject]
+        public IProbeRepository? Repository { get; set; }
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IRequestBoundInjectingTrain : IServiceTrain<ChainProbeInput, bool>;
+
+    public class RequestBoundInjectingTrain(IRequestOnlyService requestOnly)
+        : ServiceTrain<ChainProbeInput, bool>,
+            IRequestBoundInjectingTrain
+    {
+        public IRequestOnlyService RequestOnly { get; } = requestOnly;
+
+        [Inject]
+        public IUnregisteredProbeService Probe { get; set; } = null!;
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+
+    public interface IObliviousInjectTrain : IServiceTrain<ChainProbeInput, bool>;
+
+#nullable disable
+    public class ObliviousInjectTrain : ServiceTrain<ChainProbeInput, bool>, IObliviousInjectTrain
+    {
+        [Inject]
+        public IUnregisteredProbeService Probe { get; set; }
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToNumber>().Chain<NumberToFlag>().Resolve();
+    }
+#nullable restore
 }

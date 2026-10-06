@@ -70,6 +70,101 @@ public class TrainDiscoveryAuthorizationTests
     }
 
     [Test]
+    public void RoleSets_OnePerAttribute_SoSeparateAttributesCombineWithAnd()
+    {
+        var reg = Discover<IMultiSurfaceTrain, MultiSurfaceTrainImpl>();
+
+        // A caller holding only RoleA satisfies the interface's attribute and not the class's.
+        reg.RequiredRoleSets.Should()
+            .BeEquivalentTo(
+                new[] { new[] { "RoleA" }, new[] { "RoleB" } },
+                "separate [TraxAuthorize] attributes combine with AND, so each keeps its own set"
+            );
+    }
+
+    [Test]
+    public void RoleSets_RolesInOneAttribute_AreOneSet()
+    {
+        var reg = Discover<IMixedCaseRolesTrain, MixedCaseRolesTrainImpl>();
+
+        reg.RequiredRoleSets.Should().ContainSingle();
+        reg.RequiredRoleSets[0].Should().Equal("admin", "Manager", "AUDITOR");
+    }
+
+    [Test]
+    public void RoleSets_AnAttributeRepeatingAnotherSet_AddsNothing()
+    {
+        var reg = Discover<IRepeatedRolesTrain, RepeatedRolesTrainImpl>();
+
+        reg.RequiredRoleSets.Should().ContainSingle();
+        reg.RequiredRoleSets[0].Should().BeEquivalentTo(["Admin", "Support"]);
+    }
+
+    [Test]
+    public void RoleSets_NoRolesAnywhere_IsEmpty() =>
+        Discover<IPlainTrain, ImplementationAuthorizedTrain>().RequiredRoleSets.Should().BeEmpty();
+
+    [Test]
+    public void RoleSets_OnARegistrationBuiltWithoutThem_AreTheRolesAsOneSet()
+    {
+        var reg = Discover<IPlainTrain, ImplementationAuthorizedTrain>();
+        var handBuilt = new TrainRegistration
+        {
+            ServiceType = reg.ServiceType,
+            ImplementationType = reg.ImplementationType,
+            InputType = reg.InputType,
+            OutputType = reg.OutputType,
+            Lifetime = reg.Lifetime,
+            ServiceTypeName = reg.ServiceTypeName,
+            ImplementationTypeName = reg.ImplementationTypeName,
+            InputTypeName = reg.InputTypeName,
+            OutputTypeName = reg.OutputTypeName,
+            RequiredPolicies = [],
+            RequiredRoles = ["A", "B"],
+            IsQuery = false,
+            IsMutation = false,
+            IsBroadcastEnabled = false,
+            IsRemote = false,
+            GraphQLOperations = 0,
+        };
+
+        handBuilt.RequiredRoleSets.Should().ContainSingle();
+        handBuilt.RequiredRoleSets[0].Should().Equal("A", "B");
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void RoleSets_SetEmptyBesideRoles_AreTheRolesAsOneSet(bool setToNull)
+    {
+        // An enforcer that reads only the sets would otherwise require nothing of a registration
+        // whose roles say Admin.
+        var reg = Discover<IPlainTrain, ImplementationAuthorizedTrain>();
+        var handBuilt = new TrainRegistration
+        {
+            ServiceType = reg.ServiceType,
+            ImplementationType = reg.ImplementationType,
+            InputType = reg.InputType,
+            OutputType = reg.OutputType,
+            Lifetime = reg.Lifetime,
+            ServiceTypeName = reg.ServiceTypeName,
+            ImplementationTypeName = reg.ImplementationTypeName,
+            InputTypeName = reg.InputTypeName,
+            OutputTypeName = reg.OutputTypeName,
+            RequiredPolicies = [],
+            RequiredRoles = ["Admin"],
+            RequiredRoleSets = setToNull ? null! : [],
+            IsQuery = false,
+            IsMutation = false,
+            IsBroadcastEnabled = false,
+            IsRemote = false,
+            GraphQLOperations = 0,
+        };
+
+        handBuilt.RequiredRoleSets.Should().ContainSingle();
+        handBuilt.RequiredRoleSets[0].Should().Equal("Admin");
+    }
+
+    [Test]
     public void NoAttribute_Anywhere_IsDiscoveredAsUnauthorized()
     {
         var reg = Discover<IUnauthTrain, UnauthTrainImpl>();
@@ -77,6 +172,7 @@ public class TrainDiscoveryAuthorizationTests
         reg.HasAuthorizeAttribute.Should().BeFalse();
         reg.RequiredPolicies.Should().BeEmpty();
         reg.RequiredRoles.Should().BeEmpty();
+        reg.RequiredRoleSets.Should().BeEmpty();
     }
 
     [Test]
@@ -175,6 +271,16 @@ public class TrainDiscoveryAuthorizationTests
 
     [TraxAuthorize("FromImpl", Roles = "RoleB")]
     public class MultiSurfaceTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IMultiSurfaceTrain
+    {
+        protected override Task<Either<Exception, EmptyOut>> Junctions() =>
+            Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());
+    }
+
+    [TraxAuthorize(Roles = "Admin, Support")]
+    public interface IRepeatedRolesTrain : IServiceTrain<EmptyIn, EmptyOut>;
+
+    [TraxAuthorize(Roles = "Support,Admin")]
+    public class RepeatedRolesTrainImpl : ServiceTrain<EmptyIn, EmptyOut>, IRepeatedRolesTrain
     {
         protected override Task<Either<Exception, EmptyOut>> Junctions() =>
             Task.FromResult<Either<Exception, EmptyOut>>(new EmptyOut());

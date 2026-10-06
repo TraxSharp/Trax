@@ -91,8 +91,9 @@ public static class TrainInputReader
     /// <c>MediatorConfiguration.MaxInputJsonBytes</c>.
     /// </param>
     /// <returns>
-    /// The input as a plain JSON tree, or <paramref name="savedInputJson"/> unchanged when it was
-    /// saved without reference metadata.
+    /// The input as a plain, compact JSON tree. One saved without reference metadata keeps every
+    /// member as it is and loses only insignificant whitespace; one that is not JSON is returned
+    /// unchanged, for <see cref="Read"/> to refuse.
     /// </returns>
     /// <remarks>
     /// <para>
@@ -105,8 +106,13 @@ public static class TrainInputReader
     /// input (a re-queue) passes it through here first.
     /// </para>
     /// <para>
-    /// Only a saved input whose root object starts with <c>$id</c>, the form a writer that
-    /// preserves references always gives it, is rewritten. Each <c>$id</c> is dropped, each
+    /// Only a saved input whose root object carries an <c>$id</c>, which a writer that preserves
+    /// references always gives it, has its metadata resolved; any other is written back compact,
+    /// members untouched, because a <c>jsonb</c> column hands it back with whitespace that can put
+    /// an input saved at the cap over it. The metadata is recognised wherever it sits in its
+    /// object: the writer puts <c>$id</c> first, but a <c>jsonb</c> column orders an object's
+    /// properties shortest name first, so an input with a property such as <c>id</c> or <c>x</c>
+    /// comes back with <c>$id</c> after it. Each <c>$id</c> is dropped, each
     /// <c>$values</c> object is written as its array, and each <c>$ref</c> is written as a full
     /// copy of the value it names, so the result is a tree: no two members of the input read from
     /// it share an object. A <c>$ref</c> to a value that contains it has no such tree and is
@@ -132,9 +138,20 @@ public static class TrainInputReader
         ArgumentNullException.ThrowIfNull(savedInputJson);
         ArgumentNullException.ThrowIfNull(registration);
 
-        return SavedInputReferences.Present(savedInputJson)
-            ? SavedInputReferences.Resolve(savedInputJson, registration, maxInputJsonBytes)
-            : savedInputJson;
+        if (SavedInputReferences.Present(savedInputJson))
+            return SavedInputReferences.Resolve(savedInputJson, registration, maxInputJsonBytes);
+
+        try
+        {
+            // Rewritten even without metadata: read back from jsonb, the saved input carries
+            // whitespace it was not saved with, which can put an input saved at the cap over it.
+            return SavedInputReferences.Compact(savedInputJson, registration, maxInputJsonBytes);
+        }
+        catch (JsonException)
+        {
+            // Not JSON at all: left for the reader to refuse with its own message.
+            return savedInputJson;
+        }
     }
 
     /// <summary>

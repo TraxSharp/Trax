@@ -45,6 +45,8 @@ public partial class TraxMediatorBuilder
     /// the train's declared input type, not the concrete one that flows, so a junction asking for
     /// an interface only a subtype of the input implements reads as a fault. The other is
     /// temporary: a codebase being moved onto <c>Junctions()</c> whose chains do not pass yet.
+    /// The same check reads each train's <c>[Inject]</c> properties, so turning it off also lets
+    /// a host start with one the container cannot fill, which is then null on every run.
     /// </remarks>
     public TraxMediatorBuilder SkipChainVerification()
     {

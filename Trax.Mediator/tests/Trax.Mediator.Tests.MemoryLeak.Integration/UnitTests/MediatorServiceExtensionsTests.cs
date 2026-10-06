@@ -244,6 +244,64 @@ public class MediatorServiceExtensionsTests
         config.TrainLifetime.Should().Be(ServiceLifetime.Scoped);
     }
 
+    [Test]
+    public void AddMediator_RegistersExactlyOneMediatorConfiguration_ItsOwn()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax =>
+            trax.AddEffects(effects => effects)
+                .AddMediator(mediator =>
+                    mediator.ScanAssemblies(typeof(ITrainBus).Assembly).SkipChainVerification()
+                )
+        );
+
+        services
+            .Where(d => d.ServiceType == typeof(MediatorConfiguration))
+            .Should()
+            .ContainSingle("AddServiceTrainBus keeps the configuration AddMediator registered");
+        using var provider = services.BuildServiceProvider();
+        provider
+            .GetRequiredService<MediatorConfiguration>()
+            .SkipChainVerification.Should()
+            .BeTrue();
+    }
+
+    /// <summary>
+    /// <c>AddServiceTrainBus</c> is public, and on its own it used to leave out the
+    /// <see cref="MediatorConfiguration"/> its own services and startup checks need, so the host
+    /// it built could not start.
+    /// </summary>
+    [Test]
+    public async Task AddServiceTrainBus_OnItsOwn_BuildsAHostThatStarts()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
+        services.AddServiceTrainBus(ServiceLifetime.Transient, typeof(ITrainBus).Assembly);
+
+        await using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
+        );
+
+        var config = provider.GetRequiredService<MediatorConfiguration>();
+        config.TrainLifetime.Should().Be(ServiceLifetime.Transient);
+        config.Assemblies.Should().Equal(typeof(ITrainBus).Assembly);
+        config
+            .AllowMissingAuthorizationService.Should()
+            .BeFalse("the defaults are the fail-closed ones");
+        config.SkipChainVerification.Should().BeFalse();
+
+        foreach (var hosted in provider.GetServices<IHostedService>())
+            await hosted.StartAsync(CancellationToken.None);
+
+        await using var scope = provider.CreateAsyncScope();
+        scope
+            .ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>()
+            .Should()
+            .NotBeNull();
+    }
+
     #endregion
 
     #region Build-Time Validation

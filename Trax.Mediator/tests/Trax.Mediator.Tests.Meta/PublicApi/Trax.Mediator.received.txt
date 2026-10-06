@@ -194,6 +194,7 @@ namespace Trax.Mediator.Services.TrainDiscovery
         public required System.Type OutputType { get; init; }
         public required string OutputTypeName { get; init; }
         public required System.Collections.Generic.IReadOnlyList<string> RequiredPolicies { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string>> RequiredRoleSets { get; init; }
         public required System.Collections.Generic.IReadOnlyList<string> RequiredRoles { get; init; }
         public required System.Type ServiceType { get; init; }
         public required string ServiceTypeName { get; init; }
