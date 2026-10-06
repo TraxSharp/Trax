@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    The Rider/ReSharper plugin lives in its own solution (ReSharperPlugin.Trax.sln)
+    and is not part of Trax.Core.slnx. Its package versions are driven by MSBuild
+    properties (SdkVersion / WaveVersion from Plugin.props), so it opts out of the
+    repo-root Central Package Management to keep its inline, property-based versions.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

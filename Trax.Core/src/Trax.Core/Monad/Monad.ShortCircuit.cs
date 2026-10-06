@@ -1,0 +1,137 @@
+using Trax.Core.Exceptions;
+using Trax.Core.Extensions;
+using Trax.Core.Functional;
+using Trax.Core.Junction;
+using Trax.Core.Train;
+using Trax.Core.Utils;
+
+namespace Trax.Core.Monad;
+
+public partial class Monad<TInput, TReturn>
+{
+    #region Internal junction execution (short-circuit)
+
+    /// <summary>
+    /// Executes a junction with short-circuit behavior, meaning that Left (exception) results
+    /// are ignored and don't stop the chain. Reflection-invoked from
+    /// <see cref="ShortCircuit{TJunction}(TJunction)"/>.
+    /// </summary>
+    internal async Task<(
+        Monad<TInput, TReturn> Monad,
+        Either<Exception, TOut> Result
+    )> ShortCircuitJunction<TJunction, TIn, TOut>(TJunction junction, TIn previousJunction)
+        where TJunction : IJunction<TIn, TOut>
+    {
+        if (Exception is not null)
+            return (this, (Exception)Exception);
+
+        var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
+
+        // We skip the Left for Short Circuiting - only process Right results
+        if (result.IsRight)
+        {
+            var outValue = result.Unwrap()!;
+
+            if (typeof(TOut).IsTuple())
+                this.AddTupleToMemory(outValue);
+            else
+                Memory[typeof(TOut)] = outValue;
+        }
+
+        return (this, result);
+    }
+
+    #endregion
+
+    #region Public API
+
+    /// <summary>
+    /// Executes a junction with short-circuit behavior. If the junction returns Right, its
+    /// TReturn value becomes what <see cref="Resolve()"/> returns; if it returns Left, the failure
+    /// is ignored. The chain does not end here: later junctions still run, and a failure in one
+    /// of them still fails the chain.
+    /// </summary>
+    public MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
+        where TJunction : class =>
+        Recorder is not null
+            ? RecordBuiltStep<TJunction>(ChainStepKind.ShortCircuit)
+            : new(ShortCircuitAsync<TJunction>());
+
+    private Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>()
+        where TJunction : class
+    {
+        // Skipped after a failure, like every other step, without building the junction.
+        if (Exception is not null)
+            return Task.FromResult(this);
+
+        var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
+
+        if (junctionInstance is null)
+            return Task.FromResult(this);
+
+        return ShortCircuitAsync(junctionInstance);
+    }
+
+    /// <summary>
+    /// Executes a junction with short-circuit behavior. If the junction returns Right, its
+    /// TReturn value becomes what <see cref="Resolve()"/> returns; if it returns Left, the failure
+    /// is ignored. The chain does not end here: later junctions still run, and a failure in one
+    /// of them still fails the chain.
+    /// </summary>
+    public MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance)
+        where TJunction : class =>
+        Recorder is not null
+            ? RecordStep<TJunction>(ChainStepKind.ShortCircuit)
+            : new(ShortCircuitAsync(junctionInstance));
+
+    private async Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>(
+        TJunction junctionInstance
+    )
+        where TJunction : class
+    {
+        if (Exception is not null)
+            return this;
+
+        var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();
+
+        var chainMethod = ReflectionHelpers.FindGenericShortCircuitJunctionMethod<
+            TJunction,
+            TInput,
+            TReturn
+        >(this, tIn, tOut, 2);
+
+        var input = MonadExtensions.ExtractTypeFromMemory(
+            this,
+            tIn,
+            missing => MonadExtensions.NeedsJunctionInput(typeof(TJunction), missing, Train)
+        );
+
+        if (input is null)
+            return this;
+
+        // Invoke the generic ShortCircuitJunction — returns Task<(Monad, Either<Exception, TOut>)>
+        var taskObj = chainMethod.Invoke(this, [junctionInstance, input])!;
+
+        // Await the dynamic Task<...>
+        var task = (Task)taskObj;
+        await task.ConfigureAwait(false);
+
+        // Extract the Result property (the tuple) from Task<TResult>.
+        // Named ValueTuple elements (Monad, Result) are stored as Item1, Item2 at runtime.
+        var resultProperty = taskObj.GetType().GetProperty("Result")!;
+        var tuple = resultProperty.GetValue(taskObj)!;
+        var tupleItem2Field = tuple.GetType().GetField("Item2")!;
+        var eitherResult = tupleItem2Field.GetValue(tuple)!;
+
+        if (ReflectionHelpers.TryGetRightFromEither(eitherResult, out var rightValue))
+        {
+            FunctionalExtensions.AssertLoaded(rightValue);
+            ShortCircuitValue = (TReturn)rightValue;
+            ShortCircuitValueSet = true;
+        }
+
+        return this;
+    }
+
+    #endregion
+}
