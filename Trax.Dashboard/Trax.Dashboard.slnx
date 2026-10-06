@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Dashboard/Trax.Dashboard.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Dashboard.Tests.Integration/Trax.Dashboard.Tests.Integration.csproj" />
+    <Project Path="tests/Trax.Dashboard.Tests.Meta/Trax.Dashboard.Tests.Meta.csproj" />
+    <Project Path="tests/Trax.Dashboard.Tests.Stress/Trax.Dashboard.Tests.Stress.csproj" />
+  </Folder>
+</Solution>

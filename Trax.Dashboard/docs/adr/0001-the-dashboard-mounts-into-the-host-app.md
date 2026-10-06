@@ -1,0 +1,150 @@
+---
+authors: [Theauxm]
+areas: [platform, ui]
+status: accepted
+---
+
+# The dashboard mounts into the host's application
+
+`Trax.Dashboard` is a Blazor Server component library, not a deployable. A host calls
+`AddTraxDashboard()` and `UseTraxDashboard()` and the pages appear inside its own
+application, at `/trax`. There is no separate process, no separate port, and no separate
+deployment.
+
+## Status
+
+**Accepted.**
+
+## Considered options
+
+**A standalone dashboard application**, which is what most job schedulers ship. It is the
+obvious shape and it was rejected because of what it drags in: its own host, its own
+deployment, its own TLS and ingress, and its own notion of who the caller is. A separate app
+looking at the same database has nothing to reuse and has to be told from scratch who may see
+it.
+
+Mounting into the host does not answer that question, it relocates it. The dashboard is
+reachable wherever the host maps it and is gated by whatever the host applies to that path. A
+host that registers a fallback authorization policy gates every endpoint and therefore gates
+`/trax` too. A host that puts `[Authorize]` on its own controllers and pages, which is the
+ordinary shape, gates `/trax` with nothing and serves it to anyone who can reach the port.
+What mounting buys is an identity the dashboard could reuse, not a gate that is closed by
+default.
+
+**So the host has to choose the gate, and since
+[0002](./0002-the-dashboard-requires-an-authorization-posture.md) it cannot skip choosing.**
+`UseTraxDashboard()` refuses to start until the host names a policy or roles, which it applies
+to the dashboard's endpoints, or calls `AllowAnonymousDashboard()` to say something in front of
+it (a fallback policy, an ingress rule) is the gate.
+
+**A built-in authentication model** has never been weighed on its merits. It was simply never
+built. The argument against one is the argument against any framework-owned auth: it would
+have to ship a user store, which duplicates the host's, or consume the host's claims through
+a configuration surface that ends up no smaller than the `[Authorize]` the host can already
+write. That is an argument for the gate belonging to the host. It is not an argument for
+shipping with the gate open and saying nothing, which is what this package did until
+[0002](./0002-the-dashboard-requires-an-authorization-posture.md). The option stays open.
+
+## Consequences
+
+**`UseTraxDashboard()` mutates the host's application.** It calls `UseStaticFiles()`,
+`UseAntiforgery()` and `MapStaticAssets()`, maps Razor components with the interactive server
+render mode (and returns their convention builder), and writes the route prefix and the environment name into the shared
+`DashboardOptions` singleton, plus the title when one is passed. Those are side effects on
+somebody else's application, and a host that already calls that middleware gets it twice.
+
+**The mount path is fixed at `/trax`.** Every page carries a hardcoded `@page "/trax/..."`
+template, `Routes.razor` is a plain `<Router>` over the assembly, and
+`MapRazorComponents<App>()` applies no prefix, so the pages sit at `/trax` whatever
+`UseTraxDashboard()` is passed. `DashboardOptions.RoutePrefix` is read in exactly one place,
+`DashboardSidebar`, to build the navigation links. `UseTraxDashboard("/admin")` therefore
+moves the links and not the pages, and every link 404s. Blazor route templates are
+compile-time constants, so making the prefix real means changing how the pages are routed,
+not changing this method. The setter is `internal`, so that argument is the only way to set it.
+
+**The host must be a Blazor-capable ASP.NET Core app.** Interactive server components need a
+circuit, which means SignalR and sticky sessions if the host scales out. A pure Web API
+host cannot take the dashboard without becoming something else.
+
+**Radzen is a transitive dependency of every consumer** that mounts it, and its component
+styles land in the host's static asset pipeline.
+
+**Two ordering rules, both enforced by refusal.** `AddTrax()` must come before
+`AddTraxDashboard()`, which checks for the `TraxMarker` and throws naming the call to add;
+and `AddTraxDashboard()` must come before `UseTraxDashboard()`, which resolves
+`DashboardOptions` through `GetRequiredService` and throws when nothing registered it. Both
+refuse rather than silently changing behaviour. Only the first is the shape `api/0002`
+describes, which is about reading the `IServiceCollection` during registration; the second
+resolves from a built provider, where asking is safe by construction.
+
+**`AddTraxDashboard()` is called once.** A second call throws instead of registering a second
+`DashboardOptions`: the last registration would win, so a shared bootstrap could replace the
+host's posture with `AllowAnonymousDashboard()`.
+
+**The Scheduler is required, and checked when the dashboard is mapped.** The pages inject
+`IOperationsService`, which only `AddScheduler()` registers, so a host with `AddTrax()` and
+`AddMediator()` alone used to start and then serve a 500 or a dead circuit on `/trax`.
+`UseTraxDashboard()` asks the built provider whether `IOperationsService` is registered and
+throws naming `AddScheduler()`. It checks there rather than in `AddTraxDashboard()`, so the two
+registrations can come in either order. `AddScheduler()` only compiles after `AddMediator()`,
+so this also covers the train discovery the Trains and metadata pages inject.
+
+**The `TraxMarker` check is coarser than the dependencies it guards.** It catches a host that
+never called `AddTrax()` at all, which is the common mistake and the one with the least legible
+failure. The Scheduler check above is what catches a pipeline built without the parts the pages
+need.
+
+## Exemplars
+
+- `DashboardServiceExtensionsTests` pins part of the registration half: the options that land,
+  the defaults (`/trax`), the scoped services, that the dashboard registers **no** train
+  discovery of its own, that the `TraxMarker` precondition throws with a message naming
+  the call to add, that a second `AddTraxDashboard()` throws, and that `UseTraxDashboard()`
+  without the Scheduler throws naming `AddScheduler()`.
+
+Not covered: three things, in descending order of reach. (Authorization was the first of
+four until [0002](./0002-the-dashboard-requires-an-authorization-posture.md), whose
+exemplars now pin it.)
+
+**`RoutePrefix` does not move the pages**, and nothing fails when the sidebar and the routes
+disagree. The tests set a custom prefix and assert it reaches `DashboardOptions`, which is the
+option plumbing working exactly as designed; nothing asserts where a page is then served, so
+the divergence stays invisible until a consumer passes an argument and clicks a link.
+
+**Nothing asserts what `UseTraxDashboard()` does to the host's pipeline.** A change to the
+middleware it adds, or to the order it adds it in, is invisible here and visible to every
+consumer.
+
+**Nothing asserts the `WebApplicationBuilder` overload of `AddTraxDashboard()`**, the one its
+own documentation calls the recommended one. Tests call it to build a host, but none asserts
+its one mutation outside DI, `UseStaticWebAssets()` outside Development. Inside
+the overload the tests do exercise, `AddRadzenComponents()` and
+`AddRazorComponents().AddInteractiveServerComponents()` are unasserted too.
+
+## Changelog
+
+- **2026-10-05**: `AddTraxDashboard()` no longer registers anything on the logger filter
+  options. Log levels saved on Server Settings go through the Scheduler's `ILogLevelService`,
+  which `AddScheduler()` registers and the API's log levels query and mutation share, so
+  `DashboardLogLevelOverrides` is gone.
+- **2026-10-01**: `UseTraxDashboard()` refuses to start without the Scheduler, naming
+  `AddScheduler()`, and a second `AddTraxDashboard()` throws. Corrected two stale claims:
+  `RoutePrefix` has an `internal` setter, so a prefix can no longer be set through
+  `AddTraxDashboard(o => ...)` and then overwritten; and the `WebApplicationBuilder` overload no
+  longer pushes an in-memory configuration source (log levels saved on Server Settings reach
+  the logger filter options through `DashboardLogLevelOverrides`).
+- **2026-09-27**: The authorization half moved to
+  [0002](./0002-the-dashboard-requires-an-authorization-posture.md): the dashboard now refuses
+  to start without a posture, so the host can no longer skip the gate silently.
+- **2026-09-11**: Corrected the claim that mounting into the host puts the dashboard behind
+  the host's login. That holds only under a fallback authorization policy; the package applies
+  none of its own. Reworked `## Considered options` around that and recorded a built-in auth
+  model as still open rather than rejected.
+- **2026-09-11**: Corrected the route prefix. The pages are hardcoded at `/trax` and
+  `RoutePrefix` only moves the sidebar links.
+- **2026-09-11**: Named the second ordering rule, Add before Use, and narrowed the
+  `TraxMarker` precondition to what it actually catches, which is not the discovery dependency
+  it was said to guard.
+- **2026-09-11**: Widened `Not covered:` to the untested `WebApplicationBuilder` overload and
+  the two product gaps above.
+- **2026-09-11**: Recorded.

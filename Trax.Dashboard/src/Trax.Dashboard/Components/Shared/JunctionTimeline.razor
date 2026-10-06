@@ -1,0 +1,288 @@
+@* Per-step timeline of one run, read from trax.junction_run (written by AddJunctionEvents) *@
+@using System.Globalization
+@using Trax.Api.DTOs
+
+<RadzenCard class="rz-mb-4">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+        <RadzenText TextStyle="TextStyle.H6" Style="margin: 0;">Junction Timeline</RadzenText>
+        @if (_attempt is { } attempt)
+        {
+            <RadzenBadge class="cs-jt-attempt" BadgeStyle="BadgeStyle.Info" Variant="Variant.Outlined" Text="@($"attempt {attempt}")" />
+        }
+    </RadzenStack>
+
+    @if (_rows.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="cs-jt-hint" Style="color: var(--rz-text-disabled-color); margin: 0;">
+            No steps recorded for this run. Steps are recorded only when the host enables junction
+            events with <code>AddJunctionEvents()</code>, and a run that has not started has none yet.
+        </RadzenText>
+    }
+    else
+    {
+        @if (HasMoreSteps)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="cs-jt-truncated rz-mb-2" Style="color: var(--rz-warning); margin: 0;">
+                Showing the first @Steps.Count steps; this run recorded more.
+            </RadzenText>
+        }
+        <div class="cs-jt">
+            @foreach (var row in _rows)
+            {
+                var step = row.Step;
+                var nameWithheld = step.NameWithheld;
+                <div class="cs-jt-row @(step.TrackPosition is null ? "" : "cs-jt-row--on-track")" data-position="@step.Position">
+                    <div class="cs-jt-label">
+                        <div class="cs-jt-name" title="@(nameWithheld ? "withheld" : step.Name)">
+                            <RadzenIcon Icon="@KindIcon(step.Kind)" Style="font-size: 16px;" />
+                            <span class="cs-jt-step-number">#@step.Position</span>
+                            @if (step.Kind != JunctionRunKind.Junction)
+                            {
+                                <span class="cs-jt-title">@KindLabel(step.Kind)</span>
+                            }
+                            else if (nameWithheld)
+                            {
+                                <span class="cs-jt-title cs-jt-answer--withheld">withheld</span>
+                            }
+                            else
+                            {
+                                <span class="cs-jt-title">@step.Name</span>
+                            }
+                        </div>
+                        <div class="cs-jt-detail">
+                            @if (step.TrackPosition is { } track)
+                            {
+                                <span class="cs-jt-on-track">on track of step #@track</span>
+                            }
+                            @if (step.Kind == JunctionRunKind.Junction)
+                            {
+                                <span class="cs-jt-duration">@row.Duration</span>
+                            }
+                            else
+                            {
+                                @* A question or route on a withheld track shows neither its key nor its answer. *@
+                                @if (nameWithheld)
+                                {
+                                    <span class="cs-jt-question cs-jt-answer--withheld">withheld</span>
+                                }
+                                else
+                                {
+                                    var question = step.QuestionKey ?? step.Name;
+                                    <span class="cs-jt-question" title="@question">@question</span>
+                                }
+                                <span>&rarr;</span>
+                                @if (step.AnswerWithheld || nameWithheld)
+                                {
+                                    <span class="cs-jt-answer cs-jt-answer--withheld">withheld</span>
+                                }
+                                else
+                                {
+                                    <span class="cs-jt-answer">@(step.Answer ?? "no answer")</span>
+                                    @if (step.Confidence is { } confidence)
+                                    {
+                                        <span class="cs-jt-confidence">@FormatConfidence(confidence) confidence</span>
+                                    }
+                                }
+                                @if (step.Replayed)
+                                {
+                                    <RadzenBadge class="cs-jt-replayed" BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Outlined" Text="replayed" />
+                                }
+                            }
+                            @if (step.State is JunctionRunState.Failed or JunctionRunState.Cancelled)
+                            {
+                                <span class="cs-jt-failure">
+                                    @string.Join(" · ", new[] { step.State == JunctionRunState.Cancelled ? "Cancelled" : step.FailureClass?.ToString(), step.FailureException }.Where(s => !string.IsNullOrEmpty(s)))
+                                </span>
+                            }
+                        </div>
+                    </div>
+                    <div class="cs-jt-track">
+                        @if (row.IsPoint)
+                        {
+                            <div class="cs-jt-point @StateClass(step.State)"
+                                 style="left: @Pct(row.Left);"
+                                 title="@step.State.ToString()"></div>
+                        }
+                        else
+                        {
+                            <div class="cs-jt-bar @StateClass(step.State)"
+                                 style="left: @Pct(row.Left); width: @Pct(row.Width);"
+                                 title="@($"{step.State} · {row.Duration}")"></div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</RadzenCard>
+
+@code {
+    /// <summary>The run the steps belong to; its start time is the timeline's origin.</summary>
+    [Parameter, EditorRequired]
+    public Metadata Metadata { get; set; } = default!;
+
+    /// <summary>
+    /// The run's steps, as <c>JunctionRunQueries.ForRun</c> reads them and
+    /// <see cref="JunctionStep.From(Trax.Effect.Models.JunctionRun.JunctionRun)"/> maps them for
+    /// the API: ordered by position, a withheld answer
+    /// already absent. A step whose name is withheld is shown as "withheld". Empty when the host
+    /// did not enable junction events.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<JunctionStep> Steps { get; set; } = [];
+
+    /// <summary>
+    /// True when the run recorded more steps than <see cref="Steps"/> holds, so the timeline says
+    /// it shows only the first of them.
+    /// </summary>
+    [Parameter]
+    public bool HasMoreSteps { get; set; }
+
+    /// <summary>
+    /// The time an in-progress step's bar extends to while the run is running. Defaults to the
+    /// current UTC time, so each poll of the page moves a running step's bar on. Once the run has
+    /// an end time, a step still marked in progress ends there instead.
+    /// </summary>
+    [Parameter]
+    public DateTime? Now { get; set; }
+
+    private List<TimelineRow> _rows = [];
+    private int? _attempt;
+
+    // What the rows were last laid out from. A poll of a finished run hands the same steps again,
+    // and then the timeline is not rendered again (see ShouldRender).
+    private IReadOnlyList<JunctionStep>? _laidOutSteps;
+    private bool _laidOutHasMore;
+    private DateTime _laidOutStart;
+    private DateTime? _laidOutEnd;
+    private bool _shouldRender = true;
+
+    protected override bool ShouldRender() => _shouldRender;
+
+    protected override void OnParametersSet()
+    {
+        // Nothing moves with the clock once the run has an end time, not even a step still marked
+        // in progress (see EndOf), so the same steps lay out the same rows whatever Now is.
+        var unchanged =
+            ReferenceEquals(Steps, _laidOutSteps)
+            && HasMoreSteps == _laidOutHasMore
+            && Metadata.StartTime == _laidOutStart
+            && Metadata.EndTime == _laidOutEnd
+            && Metadata.EndTime is not null;
+        _shouldRender = !unchanged;
+        if (unchanged)
+            return;
+
+        _laidOutSteps = Steps;
+        _laidOutHasMore = HasMoreSteps;
+        _laidOutStart = Metadata.StartTime;
+        _laidOutEnd = Metadata.EndTime;
+
+        var now = Now ?? DateTime.UtcNow;
+        _attempt = Steps.Select(s => s.Attempt).FirstOrDefault(a => a is not null);
+
+        if (Steps.Count == 0)
+        {
+            _rows = [];
+            return;
+        }
+
+        var origin = Metadata.StartTime;
+        var firstStart = Steps.Min(s => s.StartedAt);
+        if (origin == default || firstStart < origin)
+            origin = firstStart;
+
+        var runEnd = Metadata.EndTime;
+        var end = runEnd ?? now;
+        foreach (var step in Steps)
+        {
+            var stepEnd = EndOf(step, now, runEnd);
+            if (stepEnd > end)
+                end = stepEnd;
+        }
+
+        var span = Math.Max((end - origin).TotalMilliseconds, 1);
+
+        _rows = Steps
+            .Select(step =>
+            {
+                var stepEnd = EndOf(step, now, runEnd);
+                var left = Math.Clamp((step.StartedAt - origin).TotalMilliseconds / span, 0, 1);
+                var width = Math.Clamp((stepEnd - step.StartedAt).TotalMilliseconds / span, 0, 1 - left);
+                // An ended step's duration is the one the API reports; a running one's is so far. A
+                // step still in progress when its run has ended never had its end recorded (the
+                // host died mid-junction, or the writer dropped the row's end), so it has no
+                // duration to report.
+                var duration = step.DurationMs is { } ms ? FormatDuration(ms)
+                    : step.State == JunctionRunState.InProgress && runEnd is not null
+                        ? EndNotRecorded
+                    : FormatDuration(Math.Max((stepEnd - step.StartedAt).TotalMilliseconds, 0))
+                        + (step.State == JunctionRunState.InProgress ? " so far" : "");
+                return new TimelineRow(
+                    step,
+                    left,
+                    Math.Max(width, 0.005),
+                    IsPoint: step.Kind != JunctionRunKind.Junction,
+                    Duration: duration
+                );
+            })
+            .ToList();
+    }
+
+    private const string EndNotRecorded = "end not recorded";
+
+    // A step that has not ended is drawn up to now while its run runs, and up to the run's end once
+    // the run has one, since a step cannot outlast its run; a step that ended without an end time
+    // (a question, or a row the writer dropped the end of) is drawn as a point.
+    private static DateTime EndOf(JunctionStep step, DateTime now, DateTime? runEnd)
+    {
+        if (step.EndedAt is { } ended)
+            return ended;
+        if (step.State != JunctionRunState.InProgress)
+            return step.StartedAt;
+        var until = runEnd ?? now;
+        return until > step.StartedAt ? until : step.StartedAt;
+    }
+
+    private static string Pct(double fraction) =>
+        (fraction * 100).ToString("0.###", CultureInfo.InvariantCulture) + "%";
+
+    private static string FormatConfidence(double confidence) =>
+        (confidence * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
+
+    private static string StateClass(JunctionRunState state) =>
+        state switch
+        {
+            JunctionRunState.InProgress => "cs-jt--in-progress",
+            JunctionRunState.Completed => "cs-jt--completed",
+            JunctionRunState.Failed => "cs-jt--failed",
+            JunctionRunState.Cancelled => "cs-jt--cancelled",
+            _ => "",
+        };
+
+    private static string KindIcon(JunctionRunKind kind) =>
+        kind switch
+        {
+            JunctionRunKind.Junction => "linear_scale",
+            JunctionRunKind.Route => "alt_route",
+            _ => "help_outline",
+        };
+
+    private static string KindLabel(JunctionRunKind kind) =>
+        kind switch
+        {
+            JunctionRunKind.Choice => "Choice",
+            JunctionRunKind.Score => "Score",
+            JunctionRunKind.YesNo => "Yes/No",
+            JunctionRunKind.Route => "Route",
+            _ => kind.ToString(),
+        };
+
+    private sealed record TimelineRow(
+        JunctionStep Step,
+        double Left,
+        double Width,
+        bool IsPoint,
+        string Duration
+    );
+}

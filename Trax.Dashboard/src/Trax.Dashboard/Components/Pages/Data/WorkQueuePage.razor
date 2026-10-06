@@ -1,0 +1,174 @@
+@page "/trax/data/work-queue"
+@using System.Linq.Dynamic.Core
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Work Queue</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Pending and dispatched train execution requests. Items are queued when a manifest is due and dispatched to the task server for execution.
+</RadzenText>
+
+@if (_selectedEntries.Count > 0)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+        <RadzenButton Text="@($"Cancel Selected ({_selectedEntries.Count})")"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Warning"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@CancelSelected" />
+    </RadzenStack>
+}
+
+@if (BatchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
+}
+
+<TraxDataGrid @ref="_grid"
+                    TItem="WorkQueueRow"
+                    ServerLoadData="@LoadPageAsync">
+    <Columns>
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="q">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedEntries.Contains(q.Id))"
+                                Change="@(args => ToggleSelection(q.Id, (bool)args!))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Title=""
+                              Width="50px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="q">
+                <RadzenButton Icon="visibility"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => Navigation.NavigateTo($"trax/data/work-queue/{q.Id}"))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="TrainName"
+                              Title="Train"
+                              Width="200px">
+            <Template Context="q">@ShortName(q.TrainName)</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="Status"
+                              Title="Status"
+                              Width="120px">
+            <Template Context="q">
+                <RadzenBadge BadgeStyle="@GetWorkQueueStatusBadgeStyle(q.Status)"
+                             Text="@q.Status.ToString()" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="Priority"
+                              Title="Priority"
+                              Width="90px" />
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="ManifestId"
+                              Title="Manifest Id"
+                              Width="140px" />
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="MetadataId"
+                              Title="Metadata Id"
+                              Width="140px" />
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="CreatedAt"
+                              Title="Created At"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="DispatchedAt"
+                              Title="Dispatched At"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="SubjectKey"
+                              Title="Subject"
+                              Width="160px">
+            <Template Context="entry">@(entry.SubjectKey ?? "—")</Template>
+        </RadzenDataGridColumn>
+        @* An entry staged by a two-phase enqueue is Queued but not yet dispatchable; it is
+           normally confirmed moments later, once its OnQueue hook returns. Only a queued entry
+           can be staged: a cancelled one keeps a null ConfirmedAt but is simply cancelled. *@
+        <RadzenDataGridColumn TItem="WorkQueueRow"
+                              Property="ConfirmedAt"
+                              Title="Confirmed"
+                              Width="120px">
+            <Template Context="entry">
+                @if (entry is { ConfirmedAt: null, Status: WorkQueueStatus.Queued })
+                {
+                    <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="Staged" />
+                }
+                else if (entry.ConfirmedAt is not null)
+                {
+                    <text>Yes</text>
+                }
+                else
+                {
+                    <text>—</text>
+                }
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private TraxDataGrid<WorkQueueRow>? _grid;
+    private readonly GridCount _count = new();
+
+    // Keyed by id: the grid reads a fresh page of entries on every load, so a selection kept by
+    // reference would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedEntries = [];
+
+    private void ToggleSelection(long id, bool selected)
+    {
+        if (selected)
+            _selectedEntries.Add(id);
+        else
+            _selectedEntries.Remove(id);
+        PausePolling = _selectedEntries.Count > 0;
+    }
+
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    // Through the operations service, as the API's cancelWorkQueueEntries is. It cancels the
+    // selected entries that are still Queued and says how many that was.
+    private Task CancelSelected() => RunBatchOperationAsync(
+        "Entries Cancelled",
+        () => OperationsService.CancelWorkQueueEntriesAsync(_selectedEntries.ToList(), DisposalToken),
+        () => _selectedEntries.Clear());
+
+    // The row without the entry's input, which the grid does not show.
+    private Task<ServerDataResult<WorkQueueRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            GridQueries.WorkQueue,
+            WorkQueueRow.Projection,
+            args,
+            _count,
+            scope: null,
+            ct
+        );
+
+}

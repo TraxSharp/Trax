@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <AssemblyName>Trax.Dashboard</AssemblyName>
+    <PackageDescription>Blazor Server operations dashboard for Trax .NET, mounted into your existing ASP.NET Core host at /trax: trains, run metadata and logs, scheduler manifests and groups, dead letters, the work queue, and runtime effect settings. Install it in the app that already calls AddTrax, then call builder.AddTraxDashboard() and app.UseTraxDashboard().</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Scheduler" />
+    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Dashboard.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Dashboard.Tests.Stress" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Radzen.Blazor" />
+  </ItemGroup>
+
+  <!--
+    Known limitation: the Razor SDK overwrites the package's build/Trax.Dashboard.props
+    (and the buildTransitive/ chain) during pack with static-asset imports,
+    wiping anything we set there. Targets-file workarounds run too late
+    because the SDK reads RequiresAspNetWebAssets during the props phase.
+    Net effect: every host that calls UseTraxDashboard() MUST set
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets> in its own csproj.
+    Without it, _framework/blazor.web.js is missing from the build output,
+    the Blazor Server circuit never establishes, and the dashboard renders
+    but every button click is a no-op.
+  -->
+</Project>

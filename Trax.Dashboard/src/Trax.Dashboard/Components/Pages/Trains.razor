@@ -1,0 +1,105 @@
+@page "/trax/trains"
+@inject ITrainDiscoveryService TrainDiscovery
+@inject IDashboardSettingsService DashboardSettings
+@inject DialogService DialogService
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">Registered Trains</RadzenText>
+
+<TraxDataGrid Data="@_trains"
+                    TItem="TrainRegistration">
+    <Columns>
+        <RadzenDataGridColumn TItem="TrainRegistration"
+                              Property="ServiceTypeName"
+                              Title="Train"
+                              Width="250px" />
+        <RadzenDataGridColumn TItem="TrainRegistration"
+                              Property="ImplementationTypeName"
+                              Title="Implementation"
+                              Width="250px" />
+        <RadzenDataGridColumn TItem="TrainRegistration"
+                              Property="InputTypeName"
+                              Title="Input Type"
+                              Width="200px" />
+        <RadzenDataGridColumn TItem="TrainRegistration"
+                              Property="OutputTypeName"
+                              Title="Output Type"
+                              Width="200px" />
+        <RadzenDataGridColumn TItem="TrainRegistration"
+                              Property="Lifetime"
+                              Title="Lifetime"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="TrainRegistration"
+                              Title="Actions"
+                              Width="180px"
+                              Filterable="false"
+                              Sortable="false">
+            <Template Context="registration">
+                <RadzenButton Text="Queue"
+                              Icon="queue"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Size="ButtonSize.Small"
+                              Click="@(() => OpenQueueDialog(registration))" />
+                <RadzenButton Text="Run"
+                              Icon="play_arrow"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Size="ButtonSize.Small"
+                              class="rz-ms-2"
+                              Click="@(() => OpenRunDialog(registration))" />
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private IReadOnlyList<TrainRegistration> _trains = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await DashboardSettings.InitializeAsync();
+
+        var all = TrainDiscovery.DiscoverTrains();
+
+        if (DashboardSettings.HideAdminTrains)
+        {
+            // A train is administrative when its interface FullName is one of the scheduler's,
+            // the rule the run and manifest lists and the API's hideAdminTrains filter use. The
+            // short class name would also hide a consumer's train that happens to share it.
+            _trains = all.Where(w => !AdminTrains.FullNames.Contains(w.ServiceType.FullName))
+                .ToList();
+        }
+        else
+        {
+            _trains = all;
+        }
+    }
+
+    private async Task OpenQueueDialog(TrainRegistration registration)
+    {
+        await DialogService.OpenAsync<QueueTrainDialog>(
+            $"Queue {registration.ServiceTypeName}",
+            new Dictionary<string, object?> { ["Registration"] = registration },
+            new DialogOptions
+            {
+                Width = "600px",
+                Resizable = true,
+                Draggable = true,
+            }
+        );
+    }
+
+    // Runs the train now through IOperationsService.RunTrainAsync, the path the API's run takes
+    // (docs/0022). It bypasses the work queue and its subject lock (docs/0019 names this bypass).
+    private async Task OpenRunDialog(TrainRegistration registration)
+    {
+        await DialogService.OpenAsync<RunTrainDialog>(
+            $"Run {registration.ServiceTypeName}",
+            new Dictionary<string, object?> { ["Registration"] = registration },
+            new DialogOptions
+            {
+                Width = "600px",
+                Resizable = true,
+                Draggable = true,
+            }
+        );
+    }
+}

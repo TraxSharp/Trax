@@ -1,0 +1,21 @@
+@inject DialogService DialogService
+
+<RadzenStack Gap="0.75rem">
+    <RadzenText>Deactivating a persisted operation makes future requests for its id resolve to <code>null</code>. Provide a reason for the audit log.</RadzenText>
+    <RadzenFormField Text="Reason" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            <RadzenTextBox @bind-Value="_reason" />
+        </ChildContent>
+    </RadzenFormField>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" Variant="Variant.Outlined" Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="Deactivate"
+                      ButtonStyle="ButtonStyle.Warning"
+                      Click="@(() => DialogService.Close(_reason))"
+                      Disabled="@(string.IsNullOrWhiteSpace(_reason))" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    private string _reason = "";
+}

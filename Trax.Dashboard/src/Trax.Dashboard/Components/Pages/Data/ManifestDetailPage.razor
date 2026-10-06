@@ -1,0 +1,282 @@
+@page "/trax/data/manifests/{ManifestId:long}"
+@inherits PollingComponentBase
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo("trax/data/manifests"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_manifest is not null)
+        {
+            @ShortName(_manifest.Name)
+        }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
+        else if (!IsLoading)
+        {
+            <text>Manifest Not Found</text>
+        }
+    </RadzenText>
+
+    @if (_manifest is not null)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            <RadzenButton Text="Run Now"
+                          Icon="play_arrow"
+                          ButtonStyle="ButtonStyle.Secondary"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@(() => TriggerManifest(askAfresh: false))"
+                          IsBusy="@(_triggering && !_triggeringAskAfresh)"
+                          Disabled="@_triggering" />
+            <RadzenButton Text="Run Now, Ask Afresh"
+                          Icon="psychology_alt"
+                          ButtonStyle="ButtonStyle.Secondary"
+                          Variant="Variant.Text"
+                          Size="ButtonSize.Small"
+                          title="Run now; if this releases a queued retry, it asks the model afresh instead of replaying the failed run's decisions."
+                          Click="@(() => TriggerManifest(askAfresh: true))"
+                          IsBusy="@(_triggering && _triggeringAskAfresh)"
+                          Disabled="@_triggering" />
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_manifest is null)
+{
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load manifest @ManifestId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
+    <RadzenText TextStyle="TextStyle.Body1">No manifest found with ID @ManifestId.</RadzenText>
+    return;
+}
+
+@if (_replayError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_replayError
+    </RadzenAlert>
+}
+
+@if (_triggerError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_triggerError
+    </RadzenAlert>
+}
+
+@* ── Manifest Details ── *@
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="ID" Value="@_manifest.Id.ToString()" />
+                <FieldDisplay Label="Name" Value="@ShortName(_manifest.Name)" />
+                <FieldDisplay Label="External ID" Value="@_manifest.ExternalId" />
+                <FieldDisplay Label="Enabled" Value="@(_manifest.IsEnabled ? "Yes" : "No")" />
+                @if (_manifest.ManifestGroup is not null)
+                {
+                    <FieldDisplay Label="Group">
+                        <RadzenLink Path="@($"trax/data/manifest-groups/{_manifest.ManifestGroupId}")" Text="@_manifest.ManifestGroup.Name" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Group" Value="—" />
+                }
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Schedule Type" Value="@_manifest.ScheduleType.ToString()" />
+                <FieldDisplay Label="Cron Expression" Value="@(_manifest.CronExpression ?? "—")" />
+                <FieldDisplay Label="Interval (s)" Value="@(_manifest.IntervalSeconds?.ToString() ?? "—")" />
+                <FieldDisplay Label="Priority" Value="@_manifest.Priority.ToString()" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Max Retries" Value="@_manifest.MaxRetries.ToString()" />
+                <FieldDisplay Label="Replay decisions on retry">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center"
+                                 title="On: a retry of a failed run replays the decisions that run recorded. Off: retries ask the model afresh.">
+                        @* Keyed so a refused or failed change rebuilds the switch from the stored value:
+                           it flips itself on click, and the unchanged value it is handed back is not
+                           passed to it again. *@
+                        <RadzenSwitch @key="_replaySwitchVersion"
+                                      class="cs-replay-toggle"
+                                      Value="@_manifest.ReplayDecisionsOnRetry"
+                                      TValue="bool"
+                                      Disabled="@_settingReplay"
+                                      Change="@SetReplayDecisionsOnRetry" />
+                        <RadzenText TextStyle="TextStyle.Body1" class="cs-replay-value" Style="margin: 0;">@(_manifest.ReplayDecisionsOnRetry ? "Yes" : "No (retries ask afresh)")</RadzenText>
+                    </RadzenStack>
+                </FieldDisplay>
+                <FieldDisplay Label="Timeout (s)" Value="@(_manifest.TimeoutSeconds?.ToString() ?? "—")" />
+                <FieldDisplay Label="Last Successful Run" Value="@(_manifest.LastSuccessfulRun?.ToString("yyyy-MM-dd HH:mm:ss") ?? "Never")" />
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenCard>
+
+@* ── Exclusion Windows ── *@
+@if (_exclusions.Count > 0)
+{
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Exclusion Windows</RadzenText>
+        <RadzenStack Gap="0.5rem">
+            @foreach (var exclusion in _exclusions)
+            {
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                    <RadzenBadge Text="@exclusion.Type.ToString()" BadgeStyle="BadgeStyle.Warning" />
+                    <RadzenText TextStyle="TextStyle.Body2">@FormatExclusion(exclusion)</RadzenText>
+                </RadzenStack>
+            }
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@* ── Summary Cards ── *@
+<RadzenRow Gap="1rem" class="rz-mb-4">
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="bar_chart" Style="font-size: 2rem; color: var(--rz-primary);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_totalRuns</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Total Runs</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="check_circle" Style="font-size: 2rem; color: var(--rz-success);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_completedRuns</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Completed</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="error" Style="font-size: 2rem; color: var(--rz-danger);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_failedRuns</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">Failed</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+    <RadzenColumn Size="6" SizeMD="3">
+        <RadzenCard>
+            <RadzenStack AlignItems="AlignItems.Center" Gap="0.25rem">
+                <RadzenIcon Icon="sync" Style="font-size: 2rem; color: var(--rz-info);" />
+                <RadzenText TextStyle="TextStyle.H3" Style="margin: 0;">@_inProgressRuns</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" Style="text-align: center;">In Progress</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@* ── Metadata Runs ── *@
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Execution History</RadzenText>
+    @if (_totalRuns > 0)
+    {
+        <TraxDataGrid @ref="_runsGrid"
+                      TItem="RunRow"
+                      ServerLoadData="@LoadRunsPageAsync">
+            <Columns>
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Title=""
+                                      Width="50px"
+                                      Sortable="false"
+                                      Filterable="false"
+                                      Frozen="true"
+                                      TextAlign="TextAlign.Center">
+                    <Template Context="m">
+                        <RadzenButton Icon="visibility"
+                                      Variant="Variant.Text"
+                                      Size="ButtonSize.Small"
+                                      Click="@(() => Navigation.NavigateTo($"trax/data/metadata/{m.Id}"))" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="Id"
+                                      Title="Id"
+                                      Width="80px"
+                                      SortOrder="SortOrder.Descending" />
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="TrainState"
+                                      Title="State"
+                                      Width="120px">
+                    <Template Context="m">
+                        <RadzenBadge BadgeStyle="@GetStateBadgeStyle(m.TrainState)"
+                                     Text="@m.TrainState.ToString()" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="ExternalId"
+                                      Title="External Id"
+                                      Width="200px" />
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="StartTime"
+                                      Title="Start Time"
+                                      Width="180px"
+                                      FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="EndTime"
+                                      Title="End Time"
+                                      Width="180px"
+                                      FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Title="Duration"
+                                      Width="120px"
+                                      Sortable="false"
+                                      Filterable="false">
+                    <Template Context="m">@FormatDuration(m)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="FailureJunction"
+                                      Title="Failure Junction"
+                                      Width="150px" />
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="FailureReason"
+                                      Title="Failure Reason"
+                                      Width="250px" />
+                <RadzenDataGridColumn TItem="RunRow"
+                                      Property="ParentId"
+                                      Title="Parent Id"
+                                      Width="100px">
+                    <Template Context="m">
+                        @if (m.ParentId.HasValue)
+                        {
+                            <RadzenLink Path="@($"trax/data/metadata/{m.ParentId}")" Text="@m.ParentId.ToString()" />
+                        }
+                        else
+                        {
+                            <text>—</text>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </TraxDataGrid>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">
+            No executions found for this manifest.
+        </RadzenText>
+    }
+</RadzenCard>

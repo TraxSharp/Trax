@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="bunit" />
+    <!-- Force bunit's transitive AngleSharp up to the patched 1.5.0 (GHSA-pgww-w46g-26qg). -->
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Trax.Dashboard/Trax.Dashboard.csproj" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Api.GraphQL.PersistedOperations" />
+  </ItemGroup>
+</Project>

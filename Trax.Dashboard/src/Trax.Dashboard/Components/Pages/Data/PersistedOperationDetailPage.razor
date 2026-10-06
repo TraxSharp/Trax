@@ -1,0 +1,314 @@
+@page "/trax/data/persisted-operations/{Id}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Logging
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
+@using Trax.Api.GraphQL.PersistedOperations.Services
+@using Trax.Dashboard.Services.Authorization
+@inject NavigationManager Navigation
+@inject IServiceProvider ServiceProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject DashboardCircuitAuthorization Authorization
+@inject ILogger<PersistedOperationDetailPage> Logger
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+    <RadzenButton Icon="arrow_back" Variant="Variant.Text" Click="@(() => Navigation.NavigateTo("trax/data/persisted-operations"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">@Id</RadzenText>
+    <RadzenBadge BadgeStyle="BadgeStyle.Light" Text="@TenantLabel" title="Tenant" />
+    @if (_row is not null)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            <RadzenButton Text="Edit" Icon="edit" Size="ButtonSize.Small" Click="@OpenEditor" />
+            @if (_row.IsActive)
+            {
+                <RadzenButton Text="Deactivate" Icon="block" ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.Small" Click="@Deactivate" />
+            }
+            else
+            {
+                <RadzenButton Text="Restore" Icon="restart_alt" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small" Click="@Restore" />
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@if (!_available)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
+        Persisted Operations is not enabled on this server.
+    </RadzenAlert>
+}
+else if (_loading)
+{
+    <RadzenProgressBarCircular IsIndeterminate="true" />
+}
+else if (_loadError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">@_loadError</RadzenAlert>
+}
+else if (_row is null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Persisted operation '@Id' not found for tenant @TenantLabel.</RadzenAlert>
+}
+else
+{
+    <RadzenCard class="rz-mb-3">
+        <RadzenStack Gap="0.5rem">
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Tenant</strong></RadzenColumn>
+                <RadzenColumn Size="9">@TenantLabel</RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Operation</strong></RadzenColumn>
+                <RadzenColumn Size="9">@_row.OperationName (v@_row.Version)</RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Active</strong></RadzenColumn>
+                <RadzenColumn Size="9">@_row.IsActive</RadzenColumn>
+            </RadzenRow>
+            @if (!_row.IsActive)
+            {
+                <RadzenRow>
+                    <RadzenColumn Size="3"><strong>Deprecation reason</strong></RadzenColumn>
+                    <RadzenColumn Size="9">@_row.DeprecationReason</RadzenColumn>
+                </RadzenRow>
+            }
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Shape fingerprint</strong></RadzenColumn>
+                <RadzenColumn Size="9"><code>@_row.ShapeFingerprint</code></RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Description</strong></RadzenColumn>
+                <RadzenColumn Size="9">@(_row.Description ?? "—")</RadzenColumn>
+            </RadzenRow>
+            <RadzenRow>
+                <RadzenColumn Size="3"><strong>Updated</strong></RadzenColumn>
+                <RadzenColumn Size="9">@_row.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")</RadzenColumn>
+            </RadzenRow>
+        </RadzenStack>
+    </RadzenCard>
+
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Document</RadzenText>
+    <RadzenCard class="rz-mb-3">
+        <pre style="margin: 0; white-space: pre-wrap; font-family: monospace;">@_row.Document</pre>
+    </RadzenCard>
+
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">History</RadzenText>
+    <RadzenDataGrid Data="@_history" TItem="PersistedOperationHistoryDto" PageSize="20" AllowPaging="true">
+        <Columns>
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ChangedAt" Title="When" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ChangeType" Title="Change" Width="140px" />
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ShapeFingerprint" Title="Shape" Width="220px">
+                <Template Context="h">
+                    <code>@h.ShapeFingerprint.Substring(0, 12)…</code>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="PersistedOperationHistoryDto" Property="ChangedReason" Title="Reason" />
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    /// <summary>The persisted operation's id, from the route.</summary>
+    [Parameter]
+    public string Id { get; set; } = "";
+
+    /// <summary>
+    /// The row's tenant. A persisted operation is keyed by tenant and id, so two rows can share
+    /// an id; absent or empty means the default tenant, as in the API.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "tenant")]
+    public string? Tenant { get; set; }
+
+    private bool _available;
+    private bool _loading = true;
+    private string? _loadError;
+    private IPersistedOperationsService? _service;
+    private PersistedOperationDto? _row;
+    private IReadOnlyList<PersistedOperationHistoryDto> _history = [];
+
+    private string? TenantKey => string.IsNullOrEmpty(Tenant) ? null : Tenant;
+
+    private string TenantLabel => TenantKey ?? "(default)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The service is resolved, not injected: a host without persisted operations registers
+        // none, and an @inject of it would fail the page's construction and end the circuit
+        // instead of showing the notice below. UsePersistedOperations and
+        // AddPersistedOperationStore both register it.
+        _service = ServiceProvider.GetService<IPersistedOperationsService>();
+        _available = _service is not null;
+        if (_available)
+            await LoadAsync();
+        _loading = false;
+    }
+
+    /// <summary>
+    /// Reads the row and its history through the shared persisted-operations service the API's
+    /// <c>persistedOperation</c> and <c>persistedOperationHistory</c> fields call, for this page's
+    /// tenant and id (central ADR 0022). A failed read is shown on the page rather than thrown,
+    /// which would end the operator's circuit.
+    /// </summary>
+    private async Task LoadAsync()
+    {
+        if (_service is null) return;
+        _loading = true;
+        _loadError = null;
+        try
+        {
+            _row = await _service.GetAsync(Id, TenantKey, CancellationToken.None);
+            _history = _row is null
+                ? []
+                : await _service.GetHistoryAsync(Id, TenantKey, skip: 0, take: 100, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load persisted operation {Id} for tenant {Tenant}", Id, TenantLabel);
+            _row = null;
+            _history = [];
+            _loadError = $"Could not load persisted operation '{Id}' for tenant {TenantLabel}. The error has been logged; try again shortly.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenEditor()
+    {
+        if (_row is null) return;
+        var parameters = new Dictionary<string, object?>
+        {
+            ["ExistingId"] = _row.Id,
+            ["ExistingTenantKey"] = TenantKey ?? "",
+            ["ExistingDocument"] = _row.Document,
+            ["ExistingDescription"] = _row.Description ?? "",
+            ["ExistingVersion"] = _row.Version,
+            ["ShowBypassShapeDiff"] = true,
+        };
+        var result = await DialogService.OpenAsync<PersistedOperationEditor>(
+            $"Edit {_row.Id}",
+            parameters,
+            options: new DialogOptions { Width = "720px", Height = "auto", Resizable = false }
+        );
+        if (result is true)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation updated.", duration: 3000);
+            await LoadAsync();
+        }
+        else if (result is string warning)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, NotBroadcastWarning.Title, warning, duration: 15000);
+            await LoadAsync();
+        }
+    }
+
+    /// <summary>
+    /// Deactivates this tenant's row through the shared service the API's
+    /// <c>deactivatePersistedOperation</c> mutation calls, so the dashboard refuses, and reports,
+    /// exactly what the API does.
+    /// </summary>
+    private async Task Deactivate()
+    {
+        if (_row is null || _service is null) return;
+        var reason = await DialogService.OpenAsync<DeactivationReasonDialog>(
+            "Deactivate persisted operation",
+            parameters: new Dictionary<string, object?>(),
+            options: new DialogOptions { Width = "520px", Height = "auto" }
+        );
+        if (reason is not string r)
+            return;
+
+        var id = _row.Id;
+        await WriteAsync(
+            "Deactivated",
+            async service =>
+            {
+                var payload = await service.DeactivateAsync(
+                    new DeactivatePersistedOperationInput(id, r, TenantKey),
+                    CancellationToken.None
+                );
+                return (payload.Success, payload.Errors);
+            }
+        );
+    }
+
+    /// <summary>Restores this tenant's row through the shared service the API's <c>restorePersistedOperation</c> mutation calls.</summary>
+    private async Task Restore()
+    {
+        if (_row is null || _service is null) return;
+        var id = _row.Id;
+        await WriteAsync(
+            "Restored",
+            async service =>
+            {
+                var payload = await service.RestoreAsync(
+                    new RestorePersistedOperationInput(id, TenantKey),
+                    CancellationToken.None
+                );
+                return (payload.Success, payload.Errors);
+            }
+        );
+    }
+
+    /// <summary>
+    /// Runs one write after re-checking the dashboard's authorization posture, and reports the
+    /// service's verdict. A write that throws (the database is unreachable) is reported, not
+    /// thrown, which would end the operator's circuit.
+    /// </summary>
+    private async Task WriteAsync(
+        string summary,
+        Func<IPersistedOperationsService, Task<(bool Success, IReadOnlyList<PersistedOperationError> Errors)>> write
+    )
+    {
+        if (_service is null) return;
+        if (!await Authorization.EnsureAuthorizedAsync())
+        {
+            NotificationService.Notify(
+                NotificationSeverity.Error,
+                "Not changed",
+                "You are no longer authorized to use the dashboard.",
+                duration: 8000
+            );
+            return;
+        }
+
+        bool success;
+        IReadOnlyList<PersistedOperationError> errors;
+        try
+        {
+            (success, errors) = await write(_service);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not change persisted operation {Id} for tenant {Tenant}", Id, TenantLabel);
+            NotificationService.Notify(
+                NotificationSeverity.Error,
+                "Not changed",
+                "The change could not be saved. The error has been logged; try again shortly.",
+                duration: 8000
+            );
+            return;
+        }
+
+        await ReportAsync(success, errors, summary);
+    }
+
+    private async Task ReportAsync(bool success, IReadOnlyList<PersistedOperationError> errors, string summary)
+    {
+        if (success)
+            NotificationService.Notify(NotificationSeverity.Success, summary, $"{Id} ({TenantLabel})", duration: 3000);
+        else if (NotBroadcastWarning.From(errors) is { } warning)
+            // The change is saved; only telling the other nodes failed.
+            NotificationService.Notify(NotificationSeverity.Warning, NotBroadcastWarning.Title, warning, duration: 15000);
+        else
+            NotificationService.Notify(
+                NotificationSeverity.Error,
+                "Not changed",
+                string.Join(" ", errors.Select(e => e.Message)),
+                duration: 8000
+            );
+        await LoadAsync();
+    }
+}

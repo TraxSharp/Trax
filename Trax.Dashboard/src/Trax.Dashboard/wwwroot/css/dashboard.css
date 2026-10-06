@@ -1,0 +1,509 @@
+/* Trax Dashboard — custom variables bridging Radzen theme tokens.
+   --cs-* variables reference --rz-* tokens so they auto-cascade on theme change.
+   The .cs-dashboard wrapper scopes Radzen variable overrides to this dashboard. */
+
+:root {
+    /* ── Trax.Core custom tokens ── */
+    --cs-header-bg: #1B5E20;
+    --cs-header-text: #ffffff;
+    --cs-primary: #2E7D32;
+    --cs-primary-lighter: #388E3C;
+    --cs-grid-row-selected-bg: var(--rz-secondary-lighter, rgba(255, 255, 255, 0.1));
+    --cs-grid-row-hover-bg: var(--rz-base-background-color-hover, rgba(255, 255, 255, 0.18));
+
+    /* ── Override Radzen primary colour palette ──
+       !important is required because <RadzenTheme> injects a <style> block
+       that sets --rz-primary on :root AFTER our stylesheet loads, winning
+       the cascade by source order.  !important flips the priority. */
+    --rz-primary: #2E7D32 !important;
+    --rz-primary-light: #388E3C !important;
+    --rz-primary-lighter: #4CAF50 !important;
+    --rz-primary-dark: #1B5E20 !important;
+    --rz-primary-darker: #145A1E !important;
+    --rz-on-primary: #ffffff !important;
+    --rz-on-primary-lighter: #ffffff !important;
+}
+
+/* Panel menu active states — scoped to the dashboard wrapper. */
+.cs-dashboard {
+    --rz-panel-menu-item-active-background-color: var(--cs-primary);
+    --rz-panel-menu-item-active-color: var(--rz-text-contrast-color);
+    --rz-panel-menu-item-active-indicator: var(--cs-primary-lighter);
+    --rz-panel-menu-item-2nd-level-active-background-color: var(--cs-primary-lighter);
+    --rz-panel-menu-item-2nd-level-active-color: var(--rz-text-contrast-color);
+}
+
+/* Layout structure */
+.cs-dashboard .rz-layout {
+    min-height: 100vh;
+}
+
+.cs-dashboard .rz-sidebar {
+    width: 250px;
+}
+
+/* Header: forest green background, white text */
+.cs-dashboard .rz-header {
+    background-color: var(--cs-header-bg);
+}
+
+.cs-dashboard .rz-header,
+.cs-dashboard .rz-header * {
+    color: var(--cs-header-text);
+}
+
+/* UTC clock in header */
+.cs-dashboard .cs-utc-clock {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+/* Environment badge in header */
+.cs-dashboard .cs-env-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    color: #ffffff;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* Ensure nested panel menu items are not greyed out */
+.cs-dashboard .rz-panel-menu .rz-navigation-item .rz-navigation-item .rz-navigation-item-link {
+    opacity: 1;
+    color: var(--rz-text-color);
+}
+
+.cs-dashboard .rz-panel-menu .rz-navigation-item .rz-navigation-item .rz-navigation-item-icon {
+    color: var(--rz-text-color);
+}
+
+/* Smooth border transition on fieldsets for unsaved-changes indicator */
+.cs-dashboard .rz-fieldset {
+    transition: border-color 0.3s ease;
+}
+
+/* Unsaved changes indicator — amber border on dirty fieldsets */
+.cs-fieldset-dirty {
+    border-color: var(--rz-warning, #FF9800) !important;
+}
+
+/* Settings page wrapper — ensures page fills the viewport so
+   the action bar is pushed to the bottom even on short pages */
+.cs-settings-page {
+    min-height: calc(100vh - 7rem);
+}
+
+/* Sticky action bar pinned to the bottom of the settings viewport */
+.cs-settings-actions {
+    position: sticky;
+    bottom: 0;
+    background-color: var(--rz-body-background-color, var(--rz-base-background-color, #121212));
+    padding: 1rem 0 2rem;
+    border-top: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.1));
+    z-index: 1;
+    margin-top: auto;
+}
+
+/* Prevent datagrid cells from clipping switches / toggles */
+.cs-dashboard .rz-data-grid td .rz-switch {
+    vertical-align: middle;
+    margin: 0.25rem 0;
+}
+
+/* Shrink the oversized focus ripple on switches inside grids */
+.cs-dashboard .rz-data-grid .rz-switch-circle::before {
+    transform: scale(0.6);
+}
+
+/* ── DAG Graph ── */
+
+.cs-dag-container {
+    overflow-x: auto;
+    border: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.1));
+    border-radius: var(--rz-border-radius, 4px);
+    background-color: var(--rz-base-background-color, #121212);
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.cs-dag-svg {
+    display: block;
+}
+
+.cs-dag-node rect {
+    fill: var(--rz-base-background-color, #1e1e1e);
+    stroke: var(--rz-primary, #2E7D32);
+    stroke-width: 2;
+    transition: fill 0.15s ease;
+}
+
+.cs-dag-node:hover rect {
+    fill: var(--rz-primary-lighter, #388E3C);
+}
+
+.cs-dag-node text {
+    fill: var(--rz-text-color, #ffffff);
+    font-size: 12px;
+    font-family: var(--rz-body-font-family, sans-serif);
+    pointer-events: none;
+}
+
+.cs-dag-node:hover text {
+    fill: var(--rz-on-primary-lighter, #ffffff);
+}
+
+.cs-dag-node--highlighted rect {
+    fill: var(--cs-primary, #2E7D32);
+    stroke: var(--cs-primary-lighter, #388E3C);
+    stroke-width: 3;
+}
+
+.cs-dag-node--highlighted text {
+    fill: #ffffff;
+    font-weight: 600;
+}
+
+.cs-dag-edge {
+    fill: none;
+    stroke: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+    stroke-width: 1.5;
+}
+
+.cs-dag-arrowhead {
+    fill: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+}
+
+/* ── State Timeline ── */
+
+.cs-timeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: 1rem 0;
+    overflow-x: auto;
+}
+
+.cs-timeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    min-width: 120px;
+    flex: 1;
+}
+
+.cs-timeline-connector {
+    position: absolute;
+    top: 16px;
+    left: calc(50% + 16px);
+    right: calc(-50% + 16px);
+    height: 2px;
+    background-color: var(--rz-base-300, rgba(255, 255, 255, 0.15));
+    z-index: 0;
+}
+
+.cs-timeline-step:last-child .cs-timeline-connector {
+    display: none;
+}
+
+.cs-timeline-connector--reached {
+    background-color: var(--rz-primary, #2E7D32);
+}
+
+.cs-timeline-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    z-index: 1;
+    border: 2px solid var(--rz-base-300, rgba(255, 255, 255, 0.15));
+    background-color: var(--rz-base-background-color, #121212);
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+    transition: all 0.2s ease;
+}
+
+.cs-timeline-circle--pending {
+    border-color: var(--rz-info, #1565C0);
+    color: var(--rz-info, #1565C0);
+}
+
+.cs-timeline-circle--in-progress {
+    border-color: var(--rz-info, #1565C0);
+    background-color: var(--rz-info, #1565C0);
+    color: #fff;
+    animation: cs-pulse 1.5s ease-in-out infinite;
+}
+
+.cs-timeline-circle--completed {
+    border-color: var(--rz-success, #2E7D32);
+    background-color: var(--rz-success, #2E7D32);
+    color: #fff;
+}
+
+.cs-timeline-circle--failed {
+    border-color: var(--rz-danger, #C62828);
+    background-color: var(--rz-danger, #C62828);
+    color: #fff;
+}
+
+.cs-timeline-circle--cancelled {
+    border-color: var(--rz-warning, #F9A825);
+    background-color: var(--rz-warning, #F9A825);
+    color: #fff;
+}
+
+.cs-timeline-circle--future {
+    border-color: var(--rz-base-300, rgba(255, 255, 255, 0.15));
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+}
+
+@keyframes cs-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(21, 101, 192, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(21, 101, 192, 0); }
+}
+
+.cs-timeline-label {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--rz-text-color, #fff);
+}
+
+.cs-timeline-label--future {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.3));
+}
+
+.cs-timeline-time {
+    font-size: 0.65rem;
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.5));
+    text-align: center;
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+}
+
+.cs-timeline-duration {
+    position: absolute;
+    top: -0.25rem;
+    left: calc(50% + 20px);
+    right: calc(-50% + 20px);
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+    white-space: nowrap;
+}
+
+/* ── Junction Timeline (one row per step, bars placed against the run's start) ── */
+
+.cs-jt {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.cs-jt-row {
+    display: grid;
+    grid-template-columns: minmax(12rem, 2fr) 3fr;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.06));
+}
+
+.cs-jt-row:last-child {
+    border-bottom: none;
+}
+
+.cs-jt-label {
+    min-width: 0;
+}
+
+/* A junction that ran on a routing step's track is indented under it. */
+.cs-jt-row--on-track .cs-jt-label {
+    padding-left: 1.25rem;
+    border-left: 2px solid var(--rz-base-300, rgba(255, 255, 255, 0.15));
+}
+
+.cs-jt-step-number,
+.cs-jt-on-track {
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+}
+
+.cs-jt-name {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-jt-detail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--rz-text-secondary-color, rgba(255, 255, 255, 0.6));
+}
+
+.cs-jt-question {
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cs-jt-answer {
+    font-weight: 600;
+    color: var(--rz-text-color);
+}
+
+.cs-jt-answer--withheld {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+}
+
+.cs-jt-failure {
+    color: var(--rz-danger, #C62828);
+}
+
+.cs-jt-duration,
+.cs-jt-confidence {
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+}
+
+.cs-jt-track {
+    position: relative;
+    height: 1rem;
+    background-color: var(--rz-base-200, rgba(255, 255, 255, 0.05));
+    border-radius: 3px;
+}
+
+.cs-jt-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 2px;
+    border-radius: 3px;
+}
+
+.cs-jt-point {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-top: -5px;
+    border-radius: 50%;
+}
+
+.cs-jt--completed { background-color: var(--rz-success, #2E7D32); }
+.cs-jt--failed { background-color: var(--rz-danger, #C62828); }
+.cs-jt--cancelled { background-color: var(--rz-warning, #F9A825); }
+
+.cs-jt--in-progress {
+    background-color: var(--rz-info, #1565C0);
+    animation: cs-jt-running 1.5s ease-in-out infinite;
+}
+
+@keyframes cs-jt-running {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+@media (max-width: 640px) {
+    .cs-jt-row {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+    }
+}
+
+/* ── Exception Viewer ── */
+
+.cs-exception-viewer {
+    border-left: 4px solid var(--rz-danger, #C62828);
+    margin-bottom: 1rem;
+}
+
+.cs-exception-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.cs-exception-header:hover {
+    opacity: 0.85;
+}
+
+.cs-exception-toggle {
+    font-size: 1.25rem;
+    color: var(--rz-text-disabled-color);
+    transition: transform 0.2s ease;
+}
+
+.cs-exception-toggle--open {
+    transform: rotate(90deg);
+}
+
+.cs-stacktrace {
+    font-size: 0.75rem;
+    line-height: 1.6;
+    max-height: 400px;
+    overflow: auto;
+    margin: 0;
+    padding: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background-color: var(--rz-base-background-color, #121212);
+    border: 1px solid var(--rz-base-200, rgba(255, 255, 255, 0.1));
+    border-radius: var(--rz-border-radius, 4px);
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+}
+
+.cs-stacktrace-at {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.35));
+}
+
+.cs-stacktrace-method {
+    color: var(--rz-primary-lighter, #4CAF50);
+}
+
+.cs-stacktrace-file {
+    color: var(--rz-info, #1565C0);
+}
+
+.cs-stacktrace-line {
+    color: var(--rz-warning, #F9A825);
+    font-weight: 600;
+}
+
+.cs-stacktrace-exception {
+    color: var(--rz-danger, #C62828);
+    font-weight: 600;
+}
+
+.cs-stacktrace-inner {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+    font-style: italic;
+}

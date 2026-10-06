@@ -1,0 +1,20 @@
+@page "/trax/data/logs"
+@inherits PollingComponentBase
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Logs</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Log entries captured during train execution, including messages, exceptions, and diagnostic information.
+</RadzenText>
+
+<LogsGrid @ref="_grid" />
+
+@code {
+    private LogsGrid? _grid;
+
+    // The grid reads its page through the operations service, as the API's logs query does.
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+}

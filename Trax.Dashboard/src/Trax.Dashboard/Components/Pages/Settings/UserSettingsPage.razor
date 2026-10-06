@@ -1,0 +1,90 @@
+@page "/trax/settings/user"
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-4">User Settings</RadzenText>
+
+<RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="true" class="rz-mb-4">
+    These settings are stored in your browser and only affect your session.
+</RadzenAlert>
+
+<RadzenStack Gap="1.5rem" class="cs-settings-page">
+
+    <RadzenFieldset Text="Data Refresh" class="@(IsDataRefreshDirty ? "cs-fieldset-dirty" : "")">
+        <RadzenStack Gap="0.25rem">
+            <RadzenLabel Text="Polling Interval (seconds)" Component="PollingInterval" />
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                How often dashboard pages re-query for fresh data.
+            </RadzenText>
+            <RadzenNumeric @bind-Value="_pollingIntervalSeconds"
+                           TValue="int"
+                           Min="1"
+                           Max="300"
+                           Style="max-width: 400px;"
+                           Name="PollingInterval" />
+        </RadzenStack>
+    </RadzenFieldset>
+
+    <RadzenFieldset Text="Administration Trains" class="@(IsAdminTrainsDirty ? "cs-fieldset-dirty" : "")">
+        <RadzenStack Gap="0.25rem">
+            <RadzenLabel Text="Hide Administration Trains" Component="HideAdminTrains" />
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                Exclude scheduler internals (ManifestManager, JobRunner, MetadataCleanup) from dashboard statistics and charts.
+            </RadzenText>
+            <RadzenSwitch @bind-Value="_hideAdminTrains" Name="HideAdminTrains" />
+        </RadzenStack>
+    </RadzenFieldset>
+
+    <RadzenFieldset Text="Dashboard Components" class="@(IsComponentsDirty ? "cs-fieldset-dirty" : "")">
+        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);" class="rz-mb-3">
+            Toggle which sections are visible on the dashboard home page.
+        </RadzenText>
+        <RadzenStack Gap="1.5rem">
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Server Health" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Process CPU, memory, GC heap, and uptime.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showServerHealth" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Summary Cards" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Executions Today, Success Rate, Currently Running, Dead Letters.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showSummaryCards" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Executions Chart" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Bar chart of completed, failed, and cancelled executions with a time range toggle (last hour or last 24 hours).
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showExecutionsChart" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Failures" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Top failing trains chart (7 days) and recent failures table.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showFailures" />
+            </RadzenStack>
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="Avg Execution Duration" />
+                <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-disabled-color);">
+                    Bar chart of average train execution times over the last 7 days.
+                </RadzenText>
+                <RadzenSwitch @bind-Value="_showAvgDuration" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenFieldset>
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End" class="cs-settings-actions">
+        <RadzenButton Text="Reset Default"
+                      Icon="restart_alt"
+                      ButtonStyle="ButtonStyle.Light"
+                      Click="ResetDefault" />
+        <RadzenButton Text="Save"
+                      Icon="save"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Click="Save" />
+    </RadzenStack>
+
+</RadzenStack>

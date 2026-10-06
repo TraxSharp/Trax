@@ -1,0 +1,202 @@
+@page "/trax/data/persisted-operations"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using Microsoft.Extensions.DependencyInjection
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
+@using Trax.Api.GraphQL.PersistedOperations.Services
+@inject NavigationManager Navigation
+@inject IServiceProvider ServiceProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">Persisted Operations</RadzenText>
+    @if (_available)
+    {
+        <RadzenButton Text="Upload"
+                      Icon="upload"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Style="margin-left: auto;"
+                      Click="@OpenEditor" />
+    }
+</RadzenStack>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Server-managed GraphQL operations resolved by stable id.
+</RadzenText>
+
+@if (!_available)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter">
+        Persisted Operations is not enabled on this server. Call <code>UsePersistedOperations(...)</code> on the Trax GraphQL builder, or <code>AddPersistedOperationStore(...)</code> on a host that serves no GraphQL, to enable management.
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="0.75rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+        <RadzenFormField Text="Tenant" Variant="Variant.Outlined">
+            <RadzenDropDown TValue="string"
+                            Data="@TenantScopes"
+                            Value="@_tenantScope"
+                            ValueChanged="@((string v) => OnTenantScopeChanged(v))"
+                            Style="width: 12rem;" />
+        </RadzenFormField>
+        @if (_tenantScope == TenantScopeNamed)
+        {
+            <RadzenFormField Text="Tenant key" Variant="Variant.Outlined">
+                <RadzenTextBox Value="@_tenantKey"
+                               Name="PersistedOperationsTenantFilter"
+                               Change="@((string v) => OnFilterChanged(() => _tenantKey = v))" />
+            </RadzenFormField>
+        }
+        <RadzenFormField Text="Status" Variant="Variant.Outlined">
+            <RadzenDropDown TValue="string"
+                            Data="@StatusScopes"
+                            Value="@_status"
+                            ValueChanged="@((string v) => OnFilterChanged(() => _status = v))"
+                            Style="width: 9rem;" />
+        </RadzenFormField>
+        <RadzenFormField Text="Id starts with" Variant="Variant.Outlined">
+            <RadzenTextBox Value="@_idPrefix"
+                           Change="@((string v) => OnFilterChanged(() => _idPrefix = v))" />
+        </RadzenFormField>
+    </RadzenStack>
+
+    <TraxDataGrid @ref="_grid"
+                  TItem="PersistedOperationDto"
+                  ServerLoadData="@LoadPageAsync"
+                  AllowFiltering="false"
+                  AllowSorting="false"
+                  PageSize="25">
+        <Columns>
+            <RadzenDataGridColumn TItem="PersistedOperationDto"
+                                  Title=""
+                                  Width="50px"
+                                  Sortable="false"
+                                  Filterable="false"
+                                  Frozen="true"
+                                  TextAlign="TextAlign.Center">
+                <Template Context="r">
+                    <RadzenButton Icon="visibility"
+                                  Variant="Variant.Text"
+                                  Size="ButtonSize.Small"
+                                  Click="@(() => Navigation.NavigateTo(DetailPath(r)))" />
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="Id" Title="Id" Width="240px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="TenantKey" Title="Tenant" Width="160px">
+                <Template Context="r">@(string.IsNullOrEmpty(r.TenantKey) ? "(default)" : r.TenantKey)</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="OperationName" Title="Operation" Width="200px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="Version" Title="Version" Width="100px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="IsActive" Title="Active" Width="100px" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="UpdatedAt" Title="Updated" Width="180px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+            <RadzenDataGridColumn TItem="PersistedOperationDto" Property="Description" Title="Description" />
+        </Columns>
+    </TraxDataGrid>
+}
+
+@code {
+    private const string TenantScopeAll = "All tenants";
+    private const string TenantScopeDefault = "Default tenant";
+    private const string TenantScopeNamed = "Named tenant";
+    private static readonly string[] TenantScopes = [TenantScopeAll, TenantScopeDefault, TenantScopeNamed];
+
+    private const string StatusAll = "All";
+    private const string StatusActive = "Active";
+    private const string StatusInactive = "Inactive";
+    private static readonly string[] StatusScopes = [StatusAll, StatusActive, StatusInactive];
+
+    private bool _available;
+    private IPersistedOperationsService? _service;
+    private TraxDataGrid<PersistedOperationDto>? _grid;
+    private string _tenantScope = TenantScopeAll;
+    private string _tenantKey = "";
+    private string _status = StatusAll;
+    private string _idPrefix = "";
+
+    protected override Task OnInitializedAsync()
+    {
+        // Resolved, not injected, so a host without persisted operations gets the notice above
+        // rather than a page that fails to construct. UsePersistedOperations and
+        // AddPersistedOperationStore both register it.
+        _service = ServiceProvider.GetService<IPersistedOperationsService>();
+        _available = _service is not null;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// One page of rows from the shared persisted-operations service the API's
+    /// <c>persistedOperations</c> field calls, with the same filter, ordering and page bounds
+    /// (central ADR 0022). Nothing is capped: the grid pages through every row the filter admits.
+    /// </summary>
+    private async Task<ServerDataResult<PersistedOperationDto>> LoadPageAsync(
+        LoadDataArgs args,
+        CancellationToken ct
+    )
+    {
+        if (_service is null)
+            return new ServerDataResult<PersistedOperationDto>([], 0);
+        var page = await _service.ListAsync(BuildFilter(), skip: args.Skip ?? 0, take: args.Top ?? 25, ct);
+        return new ServerDataResult<PersistedOperationDto>(page.Items, page.TotalCount);
+    }
+
+    private PersistedOperationFilter BuildFilter() =>
+        new(
+            IsActive: _status switch
+            {
+                StatusActive => true,
+                StatusInactive => false,
+                _ => null,
+            },
+            // The API reads a null tenant key as every tenant and an empty one as the default.
+            TenantKey: _tenantScope switch
+            {
+                TenantScopeDefault => "",
+                TenantScopeNamed when !string.IsNullOrWhiteSpace(_tenantKey) => _tenantKey.Trim(),
+                _ => null,
+            },
+            IdStartsWith: string.IsNullOrWhiteSpace(_idPrefix) ? null : _idPrefix.Trim()
+        );
+
+    private static string DetailPath(PersistedOperationDto row) =>
+        PersistedOperationRoutes.Detail(row.Id, row.TenantKey);
+
+    private async Task OnTenantScopeChanged(string scope)
+    {
+        _tenantScope = scope;
+        if (scope != TenantScopeNamed)
+            _tenantKey = "";
+        await ReloadAsync();
+    }
+
+    private async Task OnFilterChanged(Action apply)
+    {
+        apply();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    private async Task OpenEditor()
+    {
+        var result = await DialogService.OpenAsync<PersistedOperationEditor>(
+            "Upload persisted operation",
+            parameters: new Dictionary<string, object?>(),
+            options: new DialogOptions { Width = "720px", Height = "auto", Resizable = false }
+        );
+        if (result is true)
+        {
+            NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation uploaded.", duration: 3000);
+            await ReloadAsync();
+        }
+        else if (result is string warning)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, NotBroadcastWarning.Title, warning, duration: 15000);
+            await ReloadAsync();
+        }
+    }
+}

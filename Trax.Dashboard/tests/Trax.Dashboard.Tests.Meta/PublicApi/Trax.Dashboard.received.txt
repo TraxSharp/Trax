@@ -1,0 +1,487 @@
+namespace Trax.Dashboard.Components
+{
+    public class App : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public App() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    public class Routes : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public Routes() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+}
+namespace Trax.Dashboard.Components.Dialogs
+{
+    public class ConfigureEffectDialog : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public ConfigureEffectDialog() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public required string EffectFullName { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnInitialized() { }
+    }
+    public class QueueTrainDialog : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
+    {
+        public QueueTrainDialog() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public required Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public void Dispose() { }
+        protected override void OnInitialized() { }
+    }
+    public class RunTrainDialog : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
+    {
+        public RunTrainDialog() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public required Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public void Dispose() { }
+        protected override void OnInitialized() { }
+    }
+}
+namespace Trax.Dashboard.Components.Layout
+{
+    public class DashboardLayout : Microsoft.AspNetCore.Components.LayoutComponentBase
+    {
+        public DashboardLayout() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
+        protected override void OnParametersSet() { }
+    }
+}
+namespace Trax.Dashboard.Components.Layout.Footer
+{
+    public class DashboardFooter : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public DashboardFooter() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+}
+namespace Trax.Dashboard.Components.Layout.Header
+{
+    public class DashboardHeader : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
+    {
+        public DashboardHeader() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string EnvironmentName { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool IsDarkMode { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback OnToggleSidebar { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback OnToggleTheme { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Title { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        protected override System.Threading.Tasks.Task OnInitializedAsync() { }
+    }
+}
+namespace Trax.Dashboard.Components.Layout.Sidebar
+{
+    public class DashboardSidebar : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public DashboardSidebar() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool Expanded { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnInitialized() { }
+    }
+}
+namespace Trax.Dashboard.Components.Pages.Data
+{
+    public class DeactivationReasonDialog : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public DeactivationReasonDialog() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/dead-letters/{DeadLetterId:long}")]
+    public class DeadLetterDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public DeadLetterDetailPage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long DeadLetterId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/dead-letters")]
+    public class DeadLettersPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public DeadLettersPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public override System.Threading.Tasks.ValueTask DisposeAsync() { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/logs")]
+    public class LogsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public LogsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/manifests/{ManifestId:long}")]
+    public class ManifestDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public ManifestDetailPage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long ManifestId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/manifest-groups/{ManifestGroupId:long}")]
+    public class ManifestGroupDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public ManifestGroupDetailPage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long ManifestGroupId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/manifest-groups")]
+    public class ManifestGroupsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public ManifestGroupsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/manifests")]
+    public class ManifestsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public ManifestsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/metadata/{MetadataId:long}")]
+    public class MetadataDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public MetadataDetailPage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long MetadataId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/metadata")]
+    public class MetadataPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public MetadataPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/persisted-operations/{Id}")]
+    public class PersistedOperationDetailPage : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public PersistedOperationDetailPage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Id { get; set; }
+        [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name="tenant")]
+        public string? Tenant { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override System.Threading.Tasks.Task OnInitializedAsync() { }
+    }
+    public class PersistedOperationEditor : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public PersistedOperationEditor() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ExistingDescription { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ExistingDocument { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ExistingId { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ExistingTenantKey { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public int ExistingVersion { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool ShowBypassShapeDiff { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnInitialized() { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/persisted-operations")]
+    public class PersistedOperationsPage : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public PersistedOperationsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override System.Threading.Tasks.Task OnInitializedAsync() { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/work-queue/{WorkQueueId:long}")]
+    public class WorkQueueDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public WorkQueueDetailPage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long WorkQueueId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/work-queue")]
+    public class WorkQueuePage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public WorkQueuePage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+}
+namespace Trax.Dashboard.Components.Pages
+{
+    [Microsoft.AspNetCore.Components.Route("/trax")]
+    public class Index : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public Index() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/trains")]
+    public class Trains : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public Trains() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override System.Threading.Tasks.Task OnInitializedAsync() { }
+    }
+}
+namespace Trax.Dashboard.Components.Pages.Settings
+{
+    [Microsoft.AspNetCore.Components.Route("/trax/settings/effects")]
+    public class EffectsSettingsPage : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public EffectsSettingsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnInitialized() { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/settings/server")]
+    public class ServerSettingsPage : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public ServerSettingsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnInitialized() { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/settings/user")]
+    public class UserSettingsPage : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public UserSettingsPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override System.Threading.Tasks.Task OnInitializedAsync() { }
+    }
+}
+namespace Trax.Dashboard.Components.Shared
+{
+    public class DagGraph : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public DagGraph() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Dashboard.Utilities.DagLayout? Layout { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback<long> OnNodeClick { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    public sealed class DashboardAuthorizationMonitor : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
+    {
+        public DashboardAuthorizationMonitor() { }
+        public void Dispose() { }
+        protected override void OnInitialized() { }
+    }
+    public class ExceptionViewer : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public ExceptionViewer() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? FailureException { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? FailureJunction { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? FailureReason { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? StackTrace { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnParametersSet() { }
+    }
+    public class FieldDisplay : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public FieldDisplay() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.RenderFragment? ChildContent { get; set; }
+        [Microsoft.AspNetCore.Components.EditorRequired]
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Label { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Value { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    public class JunctionTimeline : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public JunctionTimeline() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool HasMoreSteps { get; set; }
+        [Microsoft.AspNetCore.Components.EditorRequired]
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Effect.Models.Metadata.Metadata Metadata { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public System.DateTime? Now { get; set; }
+        [Microsoft.AspNetCore.Components.EditorRequired]
+        [Microsoft.AspNetCore.Components.Parameter]
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> Steps { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnParametersSet() { }
+        protected override bool ShouldRender() { }
+    }
+    public class LargeTextArea : Microsoft.AspNetCore.Components.ComponentBase, System.IDisposable
+    {
+        public LargeTextArea() { }
+        [Microsoft.AspNetCore.Components.Parameter(CaptureUnmatchedValues=true)]
+        public System.Collections.Generic.IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public int MaxLength { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Name { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Placeholder { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool ReadOnly { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public int Rows { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Value { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback<string> ValueChanged { get; set; }
+        [Microsoft.JSInterop.JSInvokable]
+        public void AppendText(long id, string chunk) { }
+        [Microsoft.JSInterop.JSInvokable]
+        public void BeginText(long id, int length) { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        [Microsoft.JSInterop.JSInvokable]
+        public System.Threading.Tasks.Task CommitText(long id) { }
+        public void Dispose() { }
+        protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
+    }
+    public class LogsGrid : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public LogsGrid() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Scheduler.Services.Operations.LogOrder DefaultOrder { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long? MetadataId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    public abstract class PollingComponentBase : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
+    {
+        protected PollingComponentBase() { }
+        public virtual System.Threading.Tasks.ValueTask DisposeAsync() { }
+        protected override System.Threading.Tasks.Task OnInitializedAsync() { }
+        protected override System.Threading.Tasks.Task OnParametersSetAsync() { }
+    }
+    public class StateTimeline : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public StateTimeline() { }
+        [Microsoft.AspNetCore.Components.EditorRequired]
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Effect.Models.Metadata.Metadata Metadata { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnParametersSet() { }
+    }
+    public class TraxDataGrid<TItem> : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
+        where TItem :  notnull
+    {
+        public TraxDataGrid() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool AllowFiltering { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool AllowPaging { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool AllowSorting { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.RenderFragment? Columns { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public System.Collections.Generic.IEnumerable<TItem>? Data { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool IsLoading { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public int PageSize { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback<Radzen.DataGridRowMouseEventArgs<TItem>> RowClick { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public System.Func<Radzen.LoadDataArgs, System.Threading.CancellationToken, System.Threading.Tasks.Task<Trax.Dashboard.Models.ServerDataResult<TItem>>>? ServerLoadData { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? Style { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
+        protected override System.Threading.Tasks.Task OnParametersSetAsync() { }
+    }
+}
+namespace Trax.Dashboard.Configuration
+{
+    public class DashboardOptions
+    {
+        public DashboardOptions() { }
+        public string EnvironmentName { get; }
+        public string RoutePrefix { get; }
+        public string Title { get; set; }
+        public Trax.Dashboard.Configuration.DashboardOptions AllowAnonymousDashboard() { }
+        public Trax.Dashboard.Configuration.DashboardOptions RequirePolicy(string policy) { }
+        public Trax.Dashboard.Configuration.DashboardOptions RequireRoles(params string[] roles) { }
+    }
+}
+namespace Trax.Dashboard.Extensions
+{
+    public static class DashboardServiceExtensions
+    {
+        public static Microsoft.AspNetCore.Builder.WebApplicationBuilder AddTraxDashboard(this Microsoft.AspNetCore.Builder.WebApplicationBuilder builder, System.Action<Trax.Dashboard.Configuration.DashboardOptions>? configure = null) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddTraxDashboard(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Dashboard.Configuration.DashboardOptions>? configure = null) { }
+        public static Microsoft.AspNetCore.Builder.RazorComponentsEndpointConventionBuilder UseTraxDashboard(this Microsoft.AspNetCore.Builder.WebApplication app, string routePrefix = "/trax", string? title = null) { }
+    }
+}
+namespace Trax.Dashboard.Models
+{
+    public class ServerDataResult<T> : System.IEquatable<Trax.Dashboard.Models.ServerDataResult<T>>
+    {
+        public ServerDataResult(System.Collections.Generic.IEnumerable<T> Items, int TotalCount) { }
+        public System.Collections.Generic.IEnumerable<T> Items { get; init; }
+        public int TotalCount { get; init; }
+    }
+}
+namespace Trax.Dashboard.Services.DashboardSettings
+{
+    public interface IDashboardSettingsService
+    {
+        bool HideAdminTrains { get; }
+        string? LastPollError { get; }
+        System.DateTime LastPollTime { get; }
+        System.TimeSpan PollingInterval { get; }
+        bool ShowAvgDuration { get; }
+        bool ShowExecutionsChart { get; }
+        bool ShowFailures { get; }
+        bool ShowServerHealth { get; }
+        bool ShowSummaryCards { get; }
+        System.Threading.Tasks.Task InitializeAsync();
+        void NotifyPollFailed(string message);
+        void NotifyPolled();
+        System.Threading.Tasks.Task SetComponentVisibilityAsync(string key, bool visible);
+        System.Threading.Tasks.Task SetHideAdminTrainsAsync(bool hide);
+        System.Threading.Tasks.Task SetPollingIntervalAsync(int seconds);
+    }
+}
+namespace Trax.Dashboard.Utilities
+{
+    public class DagLayout
+    {
+        public DagLayout() { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Dashboard.Utilities.PositionedEdge> Edges { get; init; }
+        public double Height { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Dashboard.Utilities.PositionedNode> Nodes { get; init; }
+        public double Width { get; init; }
+    }
+    public class PositionedEdge
+    {
+        public PositionedEdge() { }
+        public long FromId { get; init; }
+        public string PathData { get; init; }
+        public long ToId { get; init; }
+    }
+    public class PositionedNode
+    {
+        public PositionedNode() { }
+        public double Height { get; init; }
+        public long Id { get; init; }
+        public bool IsHighlighted { get; init; }
+        public string Label { get; init; }
+        public double Width { get; init; }
+        public double X { get; init; }
+        public double Y { get; init; }
+    }
+}
+namespace Trax.Dashboard
+{
+    public class _Imports
+    {
+        public _Imports() { }
+        protected void Execute() { }
+    }
+}

@@ -1,0 +1,78 @@
+# Trax.Dashboard
+
+A Blazor Server monitoring UI that mounts into an existing application rather than running
+as its own. Trains, runs, manifests and the dead-letter queue, rendered with Radzen. It sits
+above `Trax.Api` and below `Trax.Samples`.
+
+This file is the entry point. It routes; it does not restate the rules.
+
+## Architecture decisions
+
+`docs/adr/` records **why** things are the way they are. A documentation page says what the
+rule is; an ADR says whether it is a deliberate constraint or an accident, so you can tell
+which ones are safe to change. Read the relevant one before proposing to change a rule, and
+if your work contradicts one, say so rather than silently overriding it.
+
+| Working on | Read first |
+| --- | --- |
+| `AddTraxDashboard` or `UseTraxDashboard` | [0001](./docs/adr/0001-the-dashboard-mounts-into-the-host-app.md), these run inside somebody else's application and change its middleware |
+| the dashboard's authorization, or anything `UseTraxDashboard` maps | [0002](./docs/adr/0002-the-dashboard-requires-an-authorization-posture.md), it refuses to start without a policy, roles or `AllowAnonymousDashboard()`, and the posture covers every endpoint `MapRazorComponents<App>()` maps |
+| the queue dialog, the Re-queue button, or anything else that enqueues | central `docs/0017`: enqueue through `IOperationsService` inside the `"dashboard"` trusted scope, never by building a work queue row; per-train `[TraxAuthorize]` does not apply because the dashboard is gated as a whole by its host |
+| what the Re-queue button replays | central `docs/0041`, the requeued run replays the decisions the run recorded; the dead-letter requeue replays as the manifest's retry would, when the manifest replays decisions on retry; either asks afresh when the operator chooses Ask Afresh |
+| the work queue pages (Staged, Subject, Waiting On) or the Failure Class field | central `docs/0018`, `docs/0019` and `docs/0020` |
+| the Run dialog | central `docs/0022` and `docs/0019`: it runs through `IOperationsService.RunTrainAsync` inside the `"dashboard"` trusted scope, the path the API's run takes, and bypasses subject serialization by design, so for a train that overrides `QueueSubjectKey` it warns and points at Queue rather than waiting |
+| the persisted-operations pages | [0005](./docs/adr/0005-persisted-operations-pages-call-the-shared-service.md): read and write through the API package's `IPersistedOperationsService`, gated on that service being registered, addressed by tenant and id |
+| a third-party pin in `Directory.Packages.props` | [0006](./docs/adr/0006-radzen-and-test-di-float-within-their-major.md): `Radzen.Blazor` and the test DI container float within their major on purpose; the lockfiles hold the version |
+
+Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by repo. Twenty-eight name `dashboard`: the workspace-wide conventions, `0016`
+to `0020` and `0041` (the enqueue ones routed above), and the canonical train name being the interface
+FullName, which this repo compares against when it looks a train up. In a
+workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
+on GitHub, because it crosses a repository boundary.
+
+## When your change makes a decision
+
+Most changes do not. When one does (reversing it would cost something real, a future reader
+would ask why it is like this, and there were real alternatives), it takes five steps and
+the build enforces four. The `adr-guard` job runs on every pull request.
+
+| | Step | Enforced |
+| --- | --- | --- |
+| 1 | Notice you made a decision, and write the ADR | no, this is the human step |
+| 2 | Tag it `areas`, and add it to `docs/adr/README.md` | yes |
+| 3 | Say where it stands in `## Status` and record it in `## Changelog` | yes |
+| 4 | Give it `## Exemplars`: guards, `**Enforced elsewhere:**`, or `**Unenforced:**` with a reason | yes |
+| 5 | Have each guard you named cite the ADR back, in its docstring and its failure message | yes |
+
+Step 1 is the only one you have to remember, because no test can detect a decision you chose
+not to record. The format is
+[`.claude/skills/recording-decisions/ADR-FORMAT.md`](./.claude/skills/recording-decisions/ADR-FORMAT.md).
+
+## Guards
+
+`tests/Trax.Dashboard.Tests.Meta/` holds thirteen convention guards, and **all thirteen are
+shared** with the other repos. This repo owns no convention guard of its own;
+`WorkQueueCreationSitesTests` runs here with an empty allow-list, so no dashboard code may
+build a work queue row (`docs/0017`). The gaps that matter are
+named in the `## Exemplars` section of
+[0001](./docs/adr/0001-the-dashboard-mounts-into-the-host-app.md), in descending order of
+reach: `RoutePrefix` moving the sidebar but not the pages; then nothing asserting what `UseTraxDashboard()` does to
+the host's middleware pipeline; then, inside the registration half, nothing exercising the
+`WebApplicationBuilder` overload of `AddTraxDashboard()`, the one its own documentation calls
+recommended and the one that mutates the host outside DI.
+
+The census is on: every guard class under that folder is either credited to an ADR or
+carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is
+unclassified until you choose, and the build says so. Opting out is a normal answer; a reason
+that reads as a deferral is not.
+
+## Running the tests
+
+```bash
+dotnet test
+```
+
+`tests/Trax.Dashboard.Tests.Stress/` times the grids' page queries against Postgres at a million
+runs. It is `[Explicit]`, so a plain `dotnet test` skips it; run it with
+`TRAX_TEST_PG_PORT=<port> dotnet test --filter TestCategory=Stress` (port 5432 when unset).

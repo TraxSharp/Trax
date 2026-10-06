@@ -1,0 +1,202 @@
+@page "/trax/data/manifests"
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Manifests</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Scheduled train definitions with their scheduling configuration, retry policies, and execution history.
+</RadzenText>
+
+<RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+    @if (_selectedManifests.Count > 0)
+    {
+        <RadzenButton Text="@($"Trigger Selected ({_selectedManifests.Count})")"
+                      Icon="play_arrow"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => TriggerSelected(askAfresh: false))" />
+        <RadzenButton Text="@($"Trigger Selected, Ask Afresh ({_selectedManifests.Count})")"
+                      Icon="psychology_alt"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Variant="Variant.Text"
+                      Size="ButtonSize.Small"
+                      title="Trigger; a queued retry this releases asks the model afresh instead of replaying the failed run's decisions."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => TriggerSelected(askAfresh: true))" />
+        <RadzenButton Text="@($"Enable Selected ({_selectedManifests.Count})")"
+                      Icon="check_circle"
+                      ButtonStyle="ButtonStyle.Success"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedEnabled(true))" />
+        <RadzenButton Text="@($"Disable Selected ({_selectedManifests.Count})")"
+                      Icon="block"
+                      ButtonStyle="ButtonStyle.Danger"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedEnabled(false))" />
+        <RadzenButton Text="@($"Replay On Retry ({_selectedManifests.Count})")"
+                      Icon="replay"
+                      ButtonStyle="ButtonStyle.Secondary"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      title="Retries of the selected manifests replay the decisions the failed run recorded."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedReplay(true))" />
+        <RadzenButton Text="@($"Ask Afresh On Retry ({_selectedManifests.Count})")"
+                      Icon="psychology_alt"
+                      ButtonStyle="ButtonStyle.Secondary"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      title="Retries of the selected manifests ask the model afresh instead of replaying the failed run's decisions."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedReplay(false))" />
+    }
+</RadzenStack>
+
+@if (BatchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
+}
+
+<TraxDataGrid @ref="_grid"
+              TItem="ManifestRow"
+              ServerLoadData="@LoadPageAsync">
+    <Columns>
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="m">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedManifests.ContainsKey(m.Id))"
+                                Change="@(args => { if ((bool)args!) _selectedManifests[m.Id] = m; else _selectedManifests.Remove(m.Id); PausePolling = _selectedManifests.Count > 0; })" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Title=""
+                              Width="50px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="m">
+                <RadzenButton Icon="visibility"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => Navigation.NavigateTo($"trax/data/manifests/{m.Id}"))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="Name"
+                              Title="Name"
+                              Width="250px">
+            <Template Context="m">@ShortName(m.Name)</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="ExternalId"
+                              Title="External Id"
+                              Width="200px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="GroupName"
+                              Title="Group"
+                              Width="180px" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="IsEnabled"
+                              Title="Enabled"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="ScheduleType"
+                              Title="Schedule Type"
+                              Width="150px" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="CronExpression"
+                              Title="Cron Expression"
+                              Width="170px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="IntervalSeconds"
+                              Title="Interval (s)"
+                              Width="130px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="MaxRetries"
+                              Title="Max Retries"
+                              Width="140px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="TimeoutSeconds"
+                              Title="Timeout (s)"
+                              Width="130px"
+                              Visible="false" />
+        <RadzenDataGridColumn TItem="ManifestRow"
+                              Property="LastSuccessfulRun"
+                              Title="Last Successful Run"
+                              Width="200px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private TraxDataGrid<ManifestRow>? _grid;
+    private readonly GridCount _count = new();
+
+    // Keyed by id: the grid reads a fresh page of manifests on every load, so a selection kept
+    // by reference would stop matching the rows it was made on.
+    private Dictionary<long, ManifestRow> _selectedManifests = [];
+
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    // One page at a time from the database, as the API's manifests query reads them.
+    // The row without the manifest's properties and exclusions, which the grid does not show.
+    private Task<ServerDataResult<ManifestRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db => GridQueries.Manifests(db, DashboardSettings.HideAdminTrains),
+            ManifestRow.Projection,
+            args,
+            _count,
+            DashboardSettings.HideAdminTrains,
+            ct
+        );
+
+    // Through the operations service in one call, as the API's triggerManifests is: the service
+    // triggers each manifest in turn, counts the ones that already had a queued entry apart from
+    // the ones it queued, and notes each manifest it could not trigger as asked (unknown, or a
+    // retry the dispatcher claimed before an ask-afresh trigger reached it).
+    private Task TriggerSelected(bool askAfresh) => RunBatchTriggerAsync(
+        askAfresh ? "Batch Trigger, Ask Afresh" : "Batch Trigger",
+        () => OperationsService.TriggerManifestsAsync(_selectedManifests.Keys.ToList(), askAfresh, DisposalToken),
+        () => _selectedManifests.Clear());
+
+    // Through the operations service, as the API's setManifestsEnabled is. Only manifests whose
+    // flag differs are written, and the count says how many that was.
+    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(
+        enabled ? "Manifests Enabled" : "Manifests Disabled",
+        () => OperationsService.SetManifestsEnabledAsync(_selectedManifests.Keys.ToList(), enabled, DisposalToken),
+        () => _selectedManifests.Clear());
+
+    // Through the operations service, as the API's setManifestsReplayDecisionsOnRetry is, and
+    // reported as enable and disable are. Off, retries ask the model afresh.
+    private Task SetSelectedReplay(bool replay) => RunBatchOperationAsync(
+        replay ? "Retries Replay Decisions" : "Retries Ask Afresh",
+        () => OperationsService.SetManifestsReplayDecisionsOnRetryAsync(_selectedManifests.Keys.ToList(), replay, DisposalToken),
+        () => _selectedManifests.Clear());
+}

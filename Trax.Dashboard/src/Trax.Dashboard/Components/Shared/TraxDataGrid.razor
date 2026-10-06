@@ -1,0 +1,224 @@
+@typeparam TItem where TItem : notnull
+@using System.Linq.Dynamic.Core
+@implements IAsyncDisposable
+
+@if (_loadError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false" class="rz-mb-2">
+        Could not load rows: @_loadError
+    </RadzenAlert>
+}
+<RadzenDataGrid @ref="_grid"
+                TItem="TItem"
+                Data="@_view"
+                Count="@_count"
+                IsLoading="@(IsLoading || _serverLoading)"
+                LoadData="@OnLoadData"
+                AllowFiltering="@AllowFiltering"
+                AllowSorting="@AllowSorting"
+                AllowPaging="@AllowPaging"
+                PageSize="@PageSize"
+                PagerHorizontalAlign="HorizontalAlign.Center"
+                AllowColumnResize="true"
+                AllowColumnPicking="true"
+                ColumnsPickerAllowDrag="false"
+                FilterMode="FilterMode.Advanced"
+                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                RowClick="@RowClick"
+                Style="@Style"
+                class="rz-datatable-striped">
+    <Columns>
+        @Columns
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+    private RadzenDataGrid<TItem> _grid = default!;
+    private IEnumerable<TItem> _view = [];
+    private int _count;
+    private IEnumerable<TItem>? _previousData;
+    private CancellationTokenSource? _loadCts;
+    private bool _serverLoading;
+    private bool _serverLoadStarted;
+    private string? _loadError;
+
+    /// <summary>
+    /// The rows for client-side mode, filtered, sorted and paged in memory. The grid reloads when
+    /// a different collection instance is passed; mutating the same instance does not. Ignored
+    /// when <see cref="ServerLoadData"/> is set.
+    /// </summary>
+    [Parameter]
+    public IEnumerable<TItem>? Data { get; set; }
+
+    /// <summary>
+    /// Switches the grid to server-side mode: called with Radzen's filter, sort, skip and take
+    /// for every page the grid needs, and cancelled when a newer request supersedes it. If it
+    /// throws, the grid clears its rows and shows the exception message.
+    /// </summary>
+    [Parameter]
+    public Func<LoadDataArgs, CancellationToken, Task<ServerDataResult<TItem>>>? ServerLoadData { get; set; }
+
+    /// <summary>The Radzen column definitions.</summary>
+    [Parameter]
+    public RenderFragment? Columns { get; set; }
+
+    /// <summary>Shows the loading indicator, in addition to the grid's own while a server page loads.</summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    /// <summary>Whether column filters are shown (case-insensitive, advanced mode). Defaults to <see langword="true"/>.</summary>
+    [Parameter]
+    public bool AllowFiltering { get; set; } = true;
+
+    /// <summary>Whether columns can be sorted. Defaults to <see langword="true"/>.</summary>
+    [Parameter]
+    public bool AllowSorting { get; set; } = true;
+
+    /// <summary>Whether the grid pages its rows. Defaults to <see langword="true"/>.</summary>
+    [Parameter]
+    public bool AllowPaging { get; set; } = true;
+
+    /// <summary>Rows per page. Defaults to 20.</summary>
+    [Parameter]
+    public int PageSize { get; set; } = 20;
+
+    /// <summary>Invoked when the user clicks a row.</summary>
+    [Parameter]
+    public EventCallback<DataGridRowMouseEventArgs<TItem>> RowClick { get; set; }
+
+    /// <summary>Inline CSS applied to the grid.</summary>
+    [Parameter]
+    public string? Style { get; set; }
+
+    private bool IsServerMode => ServerLoadData is not null;
+
+    /// <summary>
+    /// Asks the grid to load its current page again; in server-side mode this calls
+    /// <see cref="ServerLoadData"/>. Does nothing before the grid has rendered.
+    /// </summary>
+    internal async Task ReloadAsync()
+    {
+        if (_grid is not null)
+            await _grid.Reload();
+    }
+
+    /// <summary>
+    /// Goes back to the first page and loads it, as a changed column filter does; for a filter
+    /// the page sets outside the grid. Does nothing before the grid has rendered.
+    /// </summary>
+    internal async Task FirstPageAsync()
+    {
+        if (_grid is not null)
+            await _grid.FirstPage(forceReload: true);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Safety net: if Radzen didn't fire LoadData on init, trigger it ourselves.
+        if (firstRender && IsServerMode && !_serverLoadStarted)
+        {
+            await _grid.Reload();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsServerMode)
+            return;
+
+        if (!ReferenceEquals(Data, _previousData))
+        {
+            _previousData = Data;
+
+            // Eagerly sync _view and _count so the grid always has data,
+            // even if RadzenDataGrid hasn't fired LoadData yet.
+            var items = (Data ?? []).ToList();
+            _view = items;
+            _count = items.Count;
+
+            if (_grid is not null)
+                await _grid.Reload();
+        }
+    }
+
+    // IMPORTANT: This stays as void so client-side mode behavior is identical
+    // to the original. Server-side async work is fire-and-forget with explicit
+    // StateHasChanged once complete.
+    private void OnLoadData(LoadDataArgs args)
+    {
+        if (IsServerMode)
+        {
+            _serverLoadStarted = true;
+            _ = InvokeServerLoadAsync(args);
+        }
+        else
+        {
+            var query = (Data ?? []).AsQueryable();
+
+            if (!string.IsNullOrEmpty(args.Filter))
+                query = query.Where(args.Filter);
+
+            if (!string.IsNullOrEmpty(args.OrderBy))
+                query = query.OrderBy(args.OrderBy);
+
+            _count = query.Count();
+
+            if (args.Skip.HasValue)
+                query = query.Skip(args.Skip.Value);
+
+            if (args.Top.HasValue)
+                query = query.Take(args.Top.Value);
+
+            _view = query.ToList();
+        }
+    }
+
+    private async Task InvokeServerLoadAsync(LoadDataArgs args)
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+
+        try
+        {
+            _serverLoading = true;
+            await InvokeAsync(StateHasChanged);
+
+            var result = await ServerLoadData!(args, _loadCts.Token);
+
+            await InvokeAsync(() =>
+            {
+                _view = result.Items;
+                _count = result.TotalCount;
+                _loadError = null;
+                _serverLoading = false;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer request — ignore.
+        }
+        catch (Exception ex)
+        {
+            // The rows on screen belong to the previous filter or page. Showing them under the
+            // new one would present them as its answer, so clear them and say why.
+            await InvokeAsync(() =>
+            {
+                _view = [];
+                _count = 0;
+                _loadError = ex.Message;
+                _serverLoading = false;
+                StateHasChanged();
+            });
+        }
+    }
+
+    /// <summary>Cancels a server page load still in flight.</summary>
+    public ValueTask DisposeAsync()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

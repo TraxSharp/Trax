@@ -1,0 +1,185 @@
+@* A paged grid of log entries, read through IOperationsService.GetLogsAsync and CountLogsAsync,
+   the calls the API's logs query makes. The filters are the ones the service serves, set above
+   the grid rather than in the column headers, so no column offers a filter the read ignores. *@
+@using Microsoft.Extensions.Logging
+@using Trax.Scheduler.Services.Operations
+@inject IOperationsService OperationsService
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="0.75rem" Wrap="FlexWrap.Wrap" class="rz-mb-2 cs-logs-filters">
+    @if (MetadataId is null)
+    {
+        <RadzenStack Gap="0.25rem">
+            <RadzenLabel Text="Run (Metadata Id)" Component="cs-logs-run" />
+            <RadzenNumeric TValue="long?"
+                           Name="cs-logs-run"
+                           class="cs-logs-run"
+                           Min="1"
+                           ShowUpDown="false"
+                           Placeholder="Any run"
+                           Value="@_runId"
+                           ValueChanged="@(async (long? v) => { _runId = v; await FilterChangedAsync(); })"
+                           Style="width: 10rem;" />
+        </RadzenStack>
+    }
+    <RadzenStack Gap="0.25rem">
+        <RadzenLabel Text="Minimum level" Component="cs-logs-level" />
+        <RadzenDropDown TValue="LogLevel?"
+                        Name="cs-logs-level"
+                        class="cs-logs-level"
+                        Data="@Levels"
+                        AllowClear="true"
+                        Placeholder="Any level"
+                        Value="@_minimumLevel"
+                        ValueChanged="@(async (LogLevel? v) => { _minimumLevel = v; await FilterChangedAsync(); })"
+                        Style="width: 10rem;" />
+    </RadzenStack>
+    <RadzenStack Gap="0.25rem">
+        <RadzenLabel Text="Category contains" Component="cs-logs-category" />
+        <RadzenTextBox Name="cs-logs-category"
+                       class="cs-logs-category"
+                       Placeholder="Any category"
+                       Value="@_categoryContains"
+                       ValueChanged="@(async (string v) => { _categoryContains = v; await FilterChangedAsync(); })"
+                       Style="width: 14rem;" />
+    </RadzenStack>
+    <RadzenStack Gap="0.25rem">
+        <RadzenLabel Text="Message contains" Component="cs-logs-message" />
+        <RadzenTextBox Name="cs-logs-message"
+                       class="cs-logs-message"
+                       Placeholder="Any message"
+                       Value="@_messageContains"
+                       ValueChanged="@(async (string v) => { _messageContains = v; await FilterChangedAsync(); })"
+                       Style="width: 18rem;" />
+    </RadzenStack>
+</RadzenStack>
+<RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2 cs-logs-filter-hint" Style="color: var(--rz-text-secondary-color);">
+    Text filters ignore case. The grid sorts by Id only (@(DefaultOrder == LogOrder.OldestFirst ? "oldest first" : "newest first") until you change it); the exception text is not searchable.
+</RadzenText>
+
+@if (_capped.Value)
+{
+    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2 cs-logs-capped" Style="color: var(--rz-warning);">
+        More than @Trax.Scheduler.Services.Operations.OperationsService.LogCountCap.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) entries match this text filter, so the pager stops there. Narrow the filter, or filter by run or level, to reach the rest.
+    </RadzenText>
+}
+
+<TraxDataGrid @ref="_grid"
+              TItem="LogRow"
+              AllowFiltering="false"
+              ServerLoadData="@LoadPageAsync">
+    <Columns>
+        <RadzenDataGridColumn TItem="LogRow"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="@(DefaultOrder == LogOrder.OldestFirst ? SortOrder.Ascending : SortOrder.Descending)" />
+        @if (MetadataId is null)
+        {
+            <RadzenDataGridColumn TItem="LogRow"
+                                  Property="MetadataId"
+                                  Title="Metadata Id"
+                                  Width="140px"
+                                  Sortable="false" />
+        }
+        <RadzenDataGridColumn TItem="LogRow"
+                              Property="Level"
+                              Title="Level"
+                              Width="120px"
+                              Sortable="false">
+            <Template Context="l">
+                <RadzenBadge BadgeStyle="@GetLogLevelBadgeStyle(l.Level)"
+                             Text="@l.Level.ToString()" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="LogRow"
+                              Property="Category"
+                              Title="Category"
+                              Width="200px"
+                              Sortable="false">
+            <Template Context="l"><span title="@l.Category">@ShortName(l.Category)</span></Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="LogRow"
+                              Property="Message"
+                              Title="Message"
+                              Sortable="false" />
+        <RadzenDataGridColumn TItem="LogRow"
+                              Property="Exception"
+                              Title="Exception"
+                              Width="250px"
+                              Sortable="false" />
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private static readonly LogLevel?[] Levels =
+    [
+        LogLevel.Trace,
+        LogLevel.Debug,
+        LogLevel.Information,
+        LogLevel.Warning,
+        LogLevel.Error,
+        LogLevel.Critical,
+    ];
+
+    private TraxDataGrid<LogRow>? _grid;
+    private readonly GridCount _count = new();
+    private readonly LogCountCapped _capped = new();
+    private long? _runId;
+    private LogLevel? _minimumLevel;
+    private string? _categoryContains;
+    private string? _messageContains;
+
+    /// <summary>
+    /// Shows only this run's entries, and leaves out the run filter and column. Null shows every
+    /// run's entries.
+    /// </summary>
+    [Parameter]
+    public long? MetadataId { get; set; }
+
+    /// <summary>
+    /// The order the grid reads entries in until the operator sorts the Id column: newest first
+    /// by default, oldest first for a run's own log, which reads top to bottom.
+    /// </summary>
+    [Parameter]
+    public LogOrder DefaultOrder { get; set; } = LogOrder.NewestFirst;
+
+    /// <summary>
+    /// Reads the current page again with the current filters. Does nothing before the grid has
+    /// rendered.
+    /// </summary>
+    internal async Task ReloadAsync()
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    // A changed filter starts again from the first page, as a column filter does.
+    private async Task FilterChangedAsync()
+    {
+        if (_grid is not null)
+            await _grid.FirstPageAsync();
+    }
+
+    private async Task<ServerDataResult<LogRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+    {
+        var wasCapped = _capped.Value;
+        var page = await LogGridQuery.LoadPageAsync(
+            OperationsService,
+            new LogQuery(MetadataId: MetadataId ?? _runId, MinimumLevel: _minimumLevel)
+            {
+                MessageContains = _messageContains,
+                CategoryContains = _categoryContains,
+            },
+            args,
+            DefaultOrder,
+            _count,
+            _capped,
+            ct
+        );
+
+        // The caption above the grid is this component's, which the grid's own render skips.
+        if (_capped.Value != wasCapped)
+            await InvokeAsync(StateHasChanged);
+        return page;
+    }
+}

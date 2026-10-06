@@ -1,0 +1,198 @@
+@using Microsoft.Extensions.Logging
+@using Trax.Api.GraphQL.PersistedOperations.Services
+@using Trax.Api.GraphQL.PersistedOperations.Storage
+@using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions
+@using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models
+@using Trax.Dashboard.Services.Authorization
+@inject IPersistedOperationsService Service
+@inject DashboardCircuitAuthorization Authorization
+@inject ILogger<PersistedOperationEditor> Logger
+@inject DialogService DialogService
+
+<RadzenStack Gap="0.75rem">
+    @if (string.IsNullOrEmpty(ExistingId))
+    {
+        <RadzenFormField Text="Id" Variant="Variant.Outlined" Style="width: 100%;">
+            <ChildContent>
+                <RadzenTextBox @bind-Value="_id" Name="PersistedOperationId" Placeholder="e.g. greet.v1" />
+            </ChildContent>
+        </RadzenFormField>
+        <RadzenFormField Text="Tenant (optional, blank for the default tenant)" Variant="Variant.Outlined" Style="width: 100%;">
+            <ChildContent>
+                <RadzenTextBox @bind-Value="_tenantKey" Name="PersistedOperationTenant" />
+            </ChildContent>
+        </RadzenFormField>
+    }
+    else
+    {
+        <RadzenText><strong>Id:</strong> <code>@ExistingId</code></RadzenText>
+        <RadzenText><strong>Tenant:</strong> @(string.IsNullOrEmpty(_tenantKey) ? "(default)" : _tenantKey)</RadzenText>
+    }
+
+    <RadzenFormField Text="Description (optional)" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            <RadzenTextBox @bind-Value="_description" />
+        </ChildContent>
+    </RadzenFormField>
+
+    <RadzenFormField Text="Version (optional metadata)" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            <RadzenNumeric TValue="int" @bind-Value="_version" Min="0" />
+        </ChildContent>
+    </RadzenFormField>
+
+    <RadzenFormField Text="Document" Variant="Variant.Outlined" Style="width: 100%;">
+        <ChildContent>
+            @* A GraphQL document can be larger than one hub message; LargeTextArea sends it in chunks. *@
+            <LargeTextArea @bind-Value="_document"
+                           Rows="12"
+                           style="font-family: monospace; width: 100%;" />
+        </ChildContent>
+    </RadzenFormField>
+
+    @if (ShowBypassShapeDiff)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenCheckBox @bind-Value="_bypassShapeDiff" Name="BypassShapeDiff" />
+            <RadzenLabel Text="Bypass shape-diff guardrail" Component="BypassShapeDiff" />
+        </RadzenStack>
+        @if (_bypassShapeDiff)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+                Bypass only when the shape change is known to be safe for shipped clients. The change is recorded in the audit log.
+            </RadzenAlert>
+        }
+    }
+
+    @foreach (var error in _errors)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">
+            <strong>@ErrorTitle(error.Code)</strong>
+            @if (error.Locations is { Count: > 0 } locations)
+            {
+                <span> at line @locations[0].Line, column @locations[0].Column</span>
+            }
+            <div>@error.Message</div>
+            @if (error.OldFingerprint is not null && error.NewFingerprint is not null)
+            {
+                <div>Old fingerprint: <code>@Abbreviate(error.OldFingerprint)</code></div>
+                <div>New fingerprint: <code>@Abbreviate(error.NewFingerprint)</code></div>
+                <div>Tick "Bypass shape-diff guardrail" if the change is verified safe.</div>
+            }
+        </RadzenAlert>
+    }
+    @if (_otherError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" AllowClose="false">@_otherError</RadzenAlert>
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" Variant="Variant.Outlined" Click="@Cancel" Disabled="@_submitting" />
+        <RadzenButton Text="Save" ButtonStyle="ButtonStyle.Primary" Click="@Save" Disabled="@_submitting" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>The id of the operation being edited; when empty the dialog uploads a new one and asks for an id.</summary>
+    [Parameter] public string? ExistingId { get; set; }
+    /// <summary>The tenant of the operation being edited; <see langword="null"/> for the default tenant.</summary>
+    [Parameter] public string? ExistingTenantKey { get; set; }
+    /// <summary>The GraphQL document to start the editor with.</summary>
+    [Parameter] public string? ExistingDocument { get; set; }
+    /// <summary>The description to start the editor with.</summary>
+    [Parameter] public string? ExistingDescription { get; set; }
+    /// <summary>The version to start the editor with.</summary>
+    [Parameter] public int ExistingVersion { get; set; }
+    /// <summary>
+    /// Whether to offer the "bypass shape-diff guardrail" checkbox, which lets a save change the
+    /// operation's result shape; the bypass is recorded in the audit log.
+    /// </summary>
+    [Parameter] public bool ShowBypassShapeDiff { get; set; }
+
+    private string _id = "";
+    private string _tenantKey = "";
+    private string _document = "";
+    private string _description = "";
+    private int _version;
+    private bool _bypassShapeDiff;
+    private bool _submitting;
+
+    private IReadOnlyList<PersistedOperationError> _errors = [];
+    private string? _otherError;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(ExistingId)) _id = ExistingId;
+        if (ExistingTenantKey is not null) _tenantKey = ExistingTenantKey;
+        if (ExistingDocument is not null) _document = ExistingDocument;
+        if (ExistingDescription is not null) _description = ExistingDescription;
+        _version = ExistingVersion;
+    }
+
+    /// <remarks>
+    /// The dialog closes with <see langword="true"/> when the upload succeeded, and with the
+    /// service's message (a <see cref="string"/>) when it was saved but not sent to every node.
+    /// </remarks>
+    private void Cancel() => DialogService.Close(false);
+
+    /// <summary>
+    /// Saves through the shared persisted-operations service the API's
+    /// <c>uploadPersistedOperation</c> mutation calls, so an upload from the dashboard is
+    /// checked, and refused, exactly as one from the API (central ADR 0022).
+    /// </summary>
+    private async Task Save()
+    {
+        _errors = [];
+        _otherError = null;
+        _submitting = true;
+        try
+        {
+            if (!await Authorization.EnsureAuthorizedAsync())
+            {
+                _otherError = "You are no longer authorized to use the dashboard.";
+                return;
+            }
+
+            var payload = await Service.UploadAsync(
+                new UploadPersistedOperationInput(
+                    _id,
+                    _document,
+                    Description: string.IsNullOrWhiteSpace(_description) ? null : _description,
+                    BypassShapeDiff: _bypassShapeDiff,
+                    Version: _version,
+                    TenantKey: string.IsNullOrWhiteSpace(_tenantKey) ? null : _tenantKey.Trim()
+                ),
+                CancellationToken.None
+            );
+            if (payload.Success)
+                DialogService.Close(true);
+            else if (payload.Operation is not null && NotBroadcastWarning.From(payload.Errors) is { } warning)
+                // Saved, but the other nodes were not told: close with the warning, not as a refusal.
+                DialogService.Close(warning);
+            else
+                _errors = payload.Errors;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not save persisted operation {Id}", _id);
+            _otherError = "The operation could not be saved. The error has been logged; try again shortly.";
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string ErrorTitle(string code) =>
+        code switch
+        {
+            "INVALID_INPUT" => "Invalid input",
+            PersistedOperationParseException.CodeValue => "Parse error",
+            PersistedOperationValidationException.CodeValue => "Schema validation failed",
+            ShapeDiffViolationException.CodeValue => "Shape change rejected",
+            _ => code,
+        };
+
+    private static string Abbreviate(string fingerprint) =>
+        fingerprint.Length > 16 ? fingerprint[..16] + "…" : fingerprint;
+}

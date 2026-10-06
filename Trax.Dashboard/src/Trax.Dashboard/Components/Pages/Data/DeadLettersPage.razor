@@ -1,0 +1,381 @@
+@page "/trax/data/dead-letters"
+@using System.Linq.Dynamic.Core
+@using Trax.Scheduler.Services.DeadLetterRequeue
+@using Trax.Scheduler.Services.TraxScheduler
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+@inject ITraxScheduler Scheduler
+@inject IDeadLetterRequeueJobs RequeueAllJobs
+@inject NotificationService NotificationService
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Dead Letters</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Train executions that exceeded their maximum retry count and require manual intervention. Resolve by retrying or acknowledging.
+</RadzenText>
+
+<RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+    <RadzenButton Text="Requeue All"
+                  Icon="replay"
+                  ButtonStyle="ButtonStyle.Primary"
+                  Variant="Variant.Outlined"
+                  Size="ButtonSize.Small"
+                  Disabled="@(BatchOperating || RequeueAllRunning)"
+                  Click="@(() => RequeueAll(askAfresh: false))" />
+    <RadzenButton Text="Requeue All, Ask Afresh"
+                  Icon="psychology_alt"
+                  ButtonStyle="ButtonStyle.Primary"
+                  Variant="Variant.Text"
+                  Size="ButtonSize.Small"
+                  title="Requeue every dead letter; each run asks the model afresh instead of replaying the failed run's decisions."
+                  Disabled="@(BatchOperating || RequeueAllRunning)"
+                  Click="@(() => RequeueAll(askAfresh: true))" />
+    <RadzenButton Text="Acknowledge All"
+                  Icon="check_circle"
+                  ButtonStyle="ButtonStyle.Success"
+                  Variant="Variant.Outlined"
+                  Size="ButtonSize.Small"
+                  Disabled="@(BatchOperating)"
+                  Click="@(() => { _showBatchAcknowledgeInput = true; })" />
+    @if (_selectedDeadLetters.Count > 0)
+    {
+        <RadzenButton Text="@($"Requeue Selected ({_selectedDeadLetters.Count})")"
+                      Icon="replay"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => RequeueSelected(askAfresh: false))" />
+        <RadzenButton Text="@($"Requeue Selected, Ask Afresh ({_selectedDeadLetters.Count})")"
+                      Icon="psychology_alt"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Variant="Variant.Text"
+                      Size="ButtonSize.Small"
+                      title="Requeue the selected dead letters; each run asks the model afresh instead of replaying the failed run's decisions."
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => RequeueSelected(askAfresh: true))" />
+        <RadzenButton Text="@($"Acknowledge Selected ({_selectedDeadLetters.Count})")"
+                      Icon="check_circle"
+                      ButtonStyle="ButtonStyle.Success"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => { _showBatchAcknowledgeInput = true; _acknowledgeSelectedOnly = true; })" />
+    }
+</RadzenStack>
+
+@if (_showBatchAcknowledgeInput)
+{
+    <RadzenCard class="rz-mb-3 rz-p-3">
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+            @* The scheduler refuses a longer note (TraxScheduler.MaxAcknowledgeNoteLength), as the API does. *@
+            <RadzenTextBox @bind-Value="_batchAcknowledgeNote"
+                           class="cs-acknowledge-note"
+                           MaxLength="1000"
+                           Placeholder="Resolution note, up to 1,000 characters (e.g., root cause, why no retry needed)..."
+                           Style="flex: 1;" />
+            <RadzenButton Text="Confirm"
+                          ButtonStyle="ButtonStyle.Success"
+                          Size="ButtonSize.Small"
+                          Disabled="@(BatchOperating)"
+                          Click="@AcknowledgeBatch" />
+            <RadzenButton Text="Cancel"
+                          ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Click="@(() => { _showBatchAcknowledgeInput = false; _acknowledgeSelectedOnly = false; })" />
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@if (_requeueAll is { Status: DeadLetterRequeueJobStatus.Running } running)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" ShowIcon="false" AllowClose="false" class="rz-mb-3 cs-requeue-all-progress">
+        <RadzenStack Gap="0.5rem">
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
+                @running.Message
+                Started @running.StartedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC@(running.AskAfresh ? ", asking afresh" : "").
+                It runs on the server, so leaving this page does not stop it.
+            </RadzenText>
+            @if (running.AwaitingAtStart > 0)
+            {
+                <RadzenProgressBar Mode="ProgressBarMode.Determinate"
+                                   Value="@Math.Min(100, running.Processed * 100.0 / running.AwaitingAtStart)"
+                                   ShowValue="false" Style="height: 0.4rem;" />
+            }
+            else
+            {
+                <RadzenProgressBar Mode="ProgressBarMode.Indeterminate" ShowValue="false" Style="height: 0.4rem;" />
+            }
+        </RadzenStack>
+    </RadzenAlert>
+}
+
+@if (BatchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
+}
+
+<TraxDataGrid @ref="_grid"
+                    TItem="DeadLetter"
+                    ServerLoadData="@LoadPageAsync">
+    <Columns>
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <HeaderTemplate>
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedDeadLetters.Count > 0)"
+                                Change="@(args => { if (!(bool)args!) ClearSelection(); })" />
+            </HeaderTemplate>
+            <Template Context="d">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedDeadLetters.Contains(d.Id))"
+                                Change="@(args => ToggleSelection(d.Id, (bool)args!))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Title=""
+                              Width="50px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="d">
+                <RadzenButton Icon="visibility"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => Navigation.NavigateTo($"trax/data/dead-letters/{d.Id}"))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="Id"
+                              Title="Id"
+                              Width="80px"
+                              SortOrder="SortOrder.Descending" />
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="ManifestId"
+                              Title="Manifest Id"
+                              Width="140px" />
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="Status"
+                              Title="Status"
+                              Width="150px">
+            <Template Context="d">
+                <RadzenBadge BadgeStyle="@GetDeadLetterStatusBadgeStyle(d.Status)"
+                             Text="@d.Status.ToString()" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="DeadLetteredAt"
+                              Title="Dead Lettered At"
+                              Width="200px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="Reason"
+                              Title="Reason"
+                              Width="300px" />
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="RetryCountAtDeadLetter"
+                              Title="Retry Count"
+                              Width="140px" />
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="ResolvedAt"
+                              Title="Resolved At"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+        <RadzenDataGridColumn TItem="DeadLetter"
+                              Property="ResolutionNote"
+                              Title="Resolution Note"
+                              Width="250px" />
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private TraxDataGrid<DeadLetter>? _grid;
+    private readonly GridCount _count = new();
+
+    // Keyed by id: the grid reads a fresh page of dead letters on every load, so a selection kept
+    // by reference would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedDeadLetters = [];
+    private bool _showBatchAcknowledgeInput;
+    private bool _acknowledgeSelectedOnly;
+    private string _batchAcknowledgeNote = "";
+
+    private void ToggleSelection(long id, bool selected)
+    {
+        if (selected)
+            _selectedDeadLetters.Add(id);
+        else
+            _selectedDeadLetters.Remove(id);
+        PausePolling = _selectedDeadLetters.Count > 0;
+    }
+
+    // Polling pauses while anything is selected, so emptying the selection resumes it.
+    private void ClearSelection()
+    {
+        _selectedDeadLetters.Clear();
+        PausePolling = false;
+    }
+
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    private Task<ServerDataResult<DeadLetter>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+        => DataGridQueryHelper.LoadPageAsync(
+            DataContextFactory,
+            db => db.DeadLetters.AsNoTracking().OrderByDescending(d => d.Id),
+            args,
+            _count,
+            scope: null,
+            ct
+        );
+
+    // The requeue-all job this circuit started or was handed, while it is followed. It runs in the
+    // scheduler's IDeadLetterRequeueJobs on this node, the same job the API's requeueAllDeadLetters
+    // starts, so the fold over a large backlog never runs in the operator's circuit.
+    private DeadLetterRequeueJob? _requeueAll;
+    private readonly CancellationTokenSource _following = new();
+
+    // How often a running requeue-all is read again.
+    private static readonly TimeSpan RequeueAllPollInterval = TimeSpan.FromSeconds(1);
+
+    private bool RequeueAllRunning => _requeueAll is { Status: DeadLetterRequeueJobStatus.Running };
+
+    // Starts the job and returns at once; the page then follows it. Asking afresh is the job's
+    // mode, as askAfresh is the API's. When one is already running on this node nothing new is
+    // started: the page says so and follows the running one, as an API client reads it back.
+    private Task RequeueAll(bool askAfresh) => RunBatchOperationAsync(async () =>
+    {
+        var job = await RequeueAllJobs.StartAsync(askAfresh, DisposalToken);
+        _requeueAll = job;
+
+        if (job.Started)
+            NotificationService.Notify(NotificationSeverity.Info, "Requeue All Started", job.Message, duration: 4000);
+        else
+            NotificationService.Notify(NotificationSeverity.Warning, "Requeue All Already Running", job.Message, duration: 8000);
+
+        _ = FollowRequeueAllAsync(job.Id, _following.Token);
+    }, ClearSelection);
+
+    // Reads the job until it stops, then reports how it ended and reloads the grid. Runs off the
+    // click handler, so the circuit is never held for the fold.
+    private async Task FollowRequeueAllAsync(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(RequeueAllPollInterval, ct);
+                var job = RequeueAllJobs.Get(id);
+
+                if (job is { Status: DeadLetterRequeueJobStatus.Running })
+                {
+                    await InvokeAsync(() =>
+                    {
+                        _requeueAll = job;
+                        StateHasChanged();
+                    });
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    _requeueAll = job;
+                    ReportRequeueAllOutcome(job);
+                    StateHasChanged();
+                    await LoadDataAsync(ct);
+                    StateHasChanged();
+                });
+                return;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The page was left; the job runs on in the server.
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                BatchError = ex.Message;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void ReportRequeueAllOutcome(DeadLetterRequeueJob? job)
+    {
+        switch (job?.Status)
+        {
+            case DeadLetterRequeueJobStatus.Succeeded:
+                NotificationService.Notify(
+                    job.Count == 0 ? NotificationSeverity.Warning : NotificationSeverity.Success,
+                    "Requeue All",
+                    job.Message,
+                    duration: 6000
+                );
+                break;
+            case DeadLetterRequeueJobStatus.Failed or DeadLetterRequeueJobStatus.Canceled:
+                BatchError = job.Message;
+                break;
+            default:
+                // This node no longer knows it: it restarted, or the job finished more than a day ago.
+                BatchError =
+                    "This server no longer knows the requeue-all it was following, so how it ended "
+                    + "is not known. Dead letters it requeued stay requeued; Requeue All again "
+                    + "requeues the rest.";
+                break;
+        }
+    }
+
+    /// <summary>Stops following a requeue-all; the job itself runs on.</summary>
+    public override async ValueTask DisposeAsync()
+    {
+        await _following.CancelAsync();
+        _following.Dispose();
+        await base.DisposeAsync();
+    }
+
+    private Task RequeueSelected(bool askAfresh) => RunBatchOperationAsync(async () =>
+    {
+        var ids = _selectedDeadLetters.ToArray();
+        var result = askAfresh
+            ? await Scheduler.RequeueDeadLettersAsync(ids, askAfresh: true)
+            : await Scheduler.RequeueDeadLettersAsync(ids);
+        NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
+    }, ClearSelection);
+
+    // Nothing acknowledged is a warning that leaves the note, the input and the selection as they
+    // are: the scheduler refuses a note over 1,000 characters, an empty selection or too many ids
+    // by acknowledging nothing, and the operator can correct it and confirm again.
+    private Task AcknowledgeBatch() => RunBatchOperationAsync(async () =>
+    {
+        BatchDeadLetterResult result;
+
+        if (_acknowledgeSelectedOnly)
+        {
+            var ids = _selectedDeadLetters.ToArray();
+            result = await Scheduler.AcknowledgeDeadLettersAsync(ids, _batchAcknowledgeNote);
+        }
+        else
+        {
+            result = await Scheduler.AcknowledgeAllDeadLettersAsync(_batchAcknowledgeNote);
+        }
+
+        if (result.Count == 0)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Batch Acknowledge", result.Message, duration: 8000);
+            return;
+        }
+
+        NotificationService.Notify(NotificationSeverity.Success, "Batch Acknowledge", result.Message, duration: 4000);
+
+        _showBatchAcknowledgeInput = false;
+        _acknowledgeSelectedOnly = false;
+        _batchAcknowledgeNote = "";
+        ClearSelection();
+    });
+}

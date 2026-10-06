@@ -1,0 +1,248 @@
+@page "/trax/data/metadata/{MetadataId:long}"
+@inherits PollingComponentBase
+@using Microsoft.Extensions.Logging
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo("trax/data/metadata"))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_metadata is not null)
+        {
+            @ShortName(_metadata.Name)
+        }
+        else if (!IsLoading && LoadError is not null)
+        {
+            <text>Could Not Load</text>
+        }
+        else if (!IsLoading)
+        {
+            <text>Metadata Not Found</text>
+        }
+    </RadzenText>
+
+    @if (_metadata is not null)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            @if (_metadata.TrainState is TrainState.Pending or TrainState.InProgress)
+            {
+                <RadzenButton Text="Cancel"
+                              Icon="cancel"
+                              ButtonStyle="ButtonStyle.Danger"
+                              Variant="Variant.Outlined"
+                              Size="ButtonSize.Small"
+                              Click="@CancelTrain"
+                              IsBusy="@_cancelling"
+                              Disabled="@_cancelling" />
+            }
+            @if (!string.IsNullOrWhiteSpace(_metadata.Input))
+            {
+                <RadzenButton Text="Re-queue"
+                              Icon="queue"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Variant="Variant.Outlined"
+                              Size="ButtonSize.Small"
+                              Click="@(() => RequeueTrain(askAfresh: false))"
+                              IsBusy="@(_rerunning && !_rerunningAskAfresh)"
+                              Disabled="@_rerunning" />
+                <RadzenButton Text="Re-queue, Ask Afresh"
+                              Icon="psychology_alt"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              title="Re-queue; the new run asks the model afresh instead of replaying this run's decisions."
+                              Click="@(() => RequeueTrain(askAfresh: true))"
+                              IsBusy="@(_rerunning && _rerunningAskAfresh)"
+                              Disabled="@_rerunning" />
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_metadata is null)
+{
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load metadata @MetadataId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
+    <RadzenText TextStyle="TextStyle.Body1">No metadata found with ID @MetadataId.</RadzenText>
+    return;
+}
+
+@if (_rerunError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_rerunError
+    </RadzenAlert>
+}
+
+@if (_cancelError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4">
+        @_cancelError
+    </RadzenAlert>
+}
+
+@* ── State Timeline ── *@
+<StateTimeline Metadata="@_metadata" />
+
+@* ── Metadata Details ── *@
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="ID" Value="@_metadata.Id.ToString()" />
+                <FieldDisplay Label="Name" Value="@ShortName(_metadata.Name)" />
+                <FieldDisplay Label="External ID" Value="@_metadata.ExternalId" />
+                <FieldDisplay Label="State" Value="@_metadata.TrainState.ToString()" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Start Time" Value="@_metadata.StartTime.ToString("yyyy-MM-dd HH:mm:ss")" />
+                <FieldDisplay Label="End Time" Value="@(_metadata.EndTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+                <FieldDisplay Label="Duration" Value="@FormatDuration(_metadata)" />
+                <FieldDisplay Label="Scheduled Time" Value="@(_metadata.ScheduledTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                @if (_metadata.ManifestId.HasValue)
+                {
+                    <FieldDisplay Label="Manifest ID">
+                        <RadzenLink Path="@($"trax/data/manifests/{_metadata.ManifestId}")" Text="@_metadata.ManifestId.ToString()" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Manifest ID" Value="—" />
+                }
+                @if (_metadata.ParentId.HasValue)
+                {
+                    <FieldDisplay Label="Parent ID">
+                        <RadzenLink Path="@($"trax/data/metadata/{_metadata.ParentId}")" Text="@_metadata.ParentId.ToString()" />
+                    </FieldDisplay>
+                }
+                else
+                {
+                    <FieldDisplay Label="Parent ID" Value="—" />
+                }
+                <FieldDisplay Label="Executor" Value="@(_metadata.Executor ?? "—")" />
+                @if (_metadata.ReplayDecisionsOf.HasValue)
+                {
+                    <FieldDisplay Label="Replays Decisions Of">
+                        <RadzenLink Path="@($"trax/data/metadata/{_metadata.ReplayDecisionsOf}")" Text="@_metadata.ReplayDecisionsOf.ToString()" />
+                    </FieldDisplay>
+                }
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenCard>
+
+@* ── Execution Host ── *@
+@if (_metadata.HostName is not null || _metadata.HostEnvironment is not null)
+{
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Execution Host</RadzenText>
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Hostname" Value="@(_metadata.HostName ?? "—")" />
+                    <FieldDisplay Label="Environment" Value="@(_metadata.HostEnvironment ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenStack Gap="0.75rem">
+                    <FieldDisplay Label="Instance ID" Value="@(_metadata.HostInstanceId ?? "—")" />
+                </RadzenStack>
+            </RadzenColumn>
+            @if (!string.IsNullOrWhiteSpace(_metadata.HostLabels))
+            {
+                <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                    <RadzenStack Gap="0.75rem">
+                        <FieldDisplay Label="Labels">
+                            <pre style="font-size: 0.75rem; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("host-labels", _metadata.HostLabels)</pre>
+                        </FieldDisplay>
+                    </RadzenStack>
+                </RadzenColumn>
+            }
+        </RadzenRow>
+    </RadzenCard>
+}
+
+@* ── Junction Progress (only if in progress with a running junction) ── *@
+@if (_metadata.TrainState == TrainState.InProgress && !string.IsNullOrWhiteSpace(_metadata.CurrentlyRunningJunction))
+{
+    <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-info);">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="color: var(--rz-info);">Junction Progress</RadzenText>
+        <RadzenStack Gap="0.75rem">
+            <FieldDisplay Label="Currently Running" Value="@_metadata.CurrentlyRunningJunction" />
+            <FieldDisplay Label="Junction Started" Value="@(_metadata.JunctionStartedAt?.ToString("HH:mm:ss") ?? "—")" />
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@* ── Junction Timeline (the run's steps, as AddJunctionEvents recorded them) ── *@
+<JunctionTimeline Metadata="@_metadata" Steps="@_junctionRuns" HasMoreSteps="@_moreJunctionSteps" />
+
+@* ── Failure Details (only if failed) ── *@
+@if (_metadata.TrainState == TrainState.Failed)
+{
+    <ExceptionViewer FailureJunction="@_metadata.FailureJunction"
+                     FailureException="@_metadata.FailureException"
+                     FailureReason="@_metadata.FailureReason"
+                     FailureClass="@_metadata.FailureClass"
+                     StackTrace="@_metadata.StackTrace" />
+}
+
+@* ── Input / Output ── *@
+@if (!string.IsNullOrWhiteSpace(_metadata.Input) || !string.IsNullOrWhiteSpace(_metadata.Output))
+{
+    <RadzenRow Gap="1rem" class="rz-mb-4">
+        @if (!string.IsNullOrWhiteSpace(_metadata.Input))
+        {
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenCard>
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Input</RadzenText>
+                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("input", _metadata.Input)</pre>
+                </RadzenCard>
+            </RadzenColumn>
+        }
+        @if (!string.IsNullOrWhiteSpace(_metadata.Output))
+        {
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenCard>
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Output</RadzenText>
+                    <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("output", _metadata.Output)</pre>
+                </RadzenCard>
+            </RadzenColumn>
+        }
+    </RadzenRow>
+}
+
+@* ── Logs ── *@
+<RadzenCard>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Logs</RadzenText>
+    @if (_logCount > 0)
+    {
+        <LogsGrid @ref="_logsGrid"
+                  MetadataId="@MetadataId"
+                  DefaultOrder="Trax.Scheduler.Services.Operations.LogOrder.OldestFirst" />
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-disabled-color); text-align: center; padding: 2rem;">
+            No logs found for this execution.
+        </RadzenText>
+    }
+</RadzenCard>

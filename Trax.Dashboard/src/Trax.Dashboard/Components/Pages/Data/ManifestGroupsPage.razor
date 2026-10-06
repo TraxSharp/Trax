@@ -1,0 +1,258 @@
+@page "/trax/data/manifest-groups"
+@using Microsoft.Extensions.DependencyInjection
+@inherits PollingComponentBase
+@inject IDataContextProviderFactory DataContextFactory
+@inject NavigationManager Navigation
+@inject NotificationService NotificationService
+@inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">Manifest Groups</RadzenText>
+    @if (_items.Count > 0)
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Style="margin-left: auto;">
+            <RadzenButton Text="Enable All"
+                          Icon="play_arrow"
+                          ButtonStyle="ButtonStyle.Success"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@(() => SetAllGroupsEnabled(true))"
+                          Disabled="@(BatchOperating || _items.All(g => g.IsEnabled))" />
+            <RadzenButton Text="Disable All"
+                          Icon="pause"
+                          ButtonStyle="ButtonStyle.Danger"
+                          Variant="Variant.Outlined"
+                          Size="ButtonSize.Small"
+                          Click="@(() => SetAllGroupsEnabled(false))"
+                          Disabled="@(BatchOperating || _items.All(g => !g.IsEnabled))" />
+        </RadzenStack>
+    }
+</RadzenStack>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    Logical groupings of related manifests with per-group dispatch controls.
+</RadzenText>
+
+@if (_selectedGroups.Count > 0)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-3">
+        <RadzenButton Text="@($"Trigger Selected ({_selectedGroups.Count})")"
+                      Icon="play_arrow"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@TriggerSelected" />
+        <RadzenButton Text="@($"Enable Selected ({_selectedGroups.Count})")"
+                      Icon="check_circle"
+                      ButtonStyle="ButtonStyle.Success"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedEnabled(true))" />
+        <RadzenButton Text="@($"Disable Selected ({_selectedGroups.Count})")"
+                      Icon="block"
+                      ButtonStyle="ButtonStyle.Danger"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@(() => SetSelectedEnabled(false))" />
+        <RadzenButton Text="@($"Cancel Running ({_selectedGroups.Count})")"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Warning"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      Disabled="@(BatchOperating)"
+                      Click="@CancelSelectedRunning" />
+    </RadzenStack>
+}
+
+@if (BatchError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" class="rz-mb-3">@BatchError</RadzenAlert>
+}
+
+@if (_dagLayout is not null && _dagLayout.Nodes.Count > 0)
+{
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Dependency Graph</RadzenText>
+    <DagGraph Layout="@_dagLayout" OnNodeClick="@OnDagNodeClick" />
+}
+
+<TraxDataGrid Data="@_items"
+                    TItem="GroupSummary"
+                    IsLoading="@IsLoading">
+    <Columns>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Width="40px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true">
+            <Template Context="g">
+                <RadzenCheckBox TValue="bool"
+                                Value="@(_selectedGroups.Contains(g.Id))"
+                                Change="@(args => ToggleSelection(g.Id, (bool)args!))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Title=""
+                              Width="50px"
+                              Sortable="false"
+                              Filterable="false"
+                              Frozen="true"
+                              TextAlign="TextAlign.Center">
+            <Template Context="g">
+                <RadzenButton Icon="visibility"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              Click="@(() => Navigation.NavigateTo($"trax/data/manifest-groups/{g.Id}"))" />
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="Name"
+                              Title="Group"
+                              Width="250px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="Priority"
+                              Title="Priority"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="MaxActiveJobs"
+                              Title="Max Active Jobs"
+                              Width="160px">
+            <Template Context="g">@(g.MaxActiveJobs?.ToString() ?? "—")</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="IsEnabled"
+                              Title="Enabled"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="ManifestCount"
+                              Title="Manifests"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="TotalExecutions"
+                              Title="Total Executions"
+                              Width="170px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="CompletedCount"
+                              Title="Completed"
+                              Width="120px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="FailedCount"
+                              Title="Failed"
+                              Width="100px" />
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Title="In Progress"
+                              Width="120px"
+                              Sortable="false"
+                              Filterable="false">
+            <Template Context="g">@g.InProgressCount</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="GroupSummary"
+                              Property="LastRun"
+                              Title="Last Run"
+                              Width="180px"
+                              FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private List<GroupSummary> _items = [];
+    // Keyed by id: a refresh replaces every summary object, so a selection kept by reference
+    // would stop matching the rows it was made on.
+    private readonly HashSet<long> _selectedGroups = [];
+    private DagLayout? _dagLayout;
+
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        using var context = await DataContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var groups = await context.ManifestGroups
+            .AsNoTracking()
+            .OrderBy(g => g.Id)
+            .Select(g => new { g.Id, g.Name, g.MaxActiveJobs, g.Priority, g.IsEnabled })
+            .ToListAsync(cancellationToken);
+
+        // The counts come from the operations service, the call the API's group stats make. It
+        // takes at most OperationsService.MaxBatchSize ids per call and this page lists every group.
+        var stats = new Dictionary<long, Trax.Scheduler.Services.Operations.ManifestGroupExecutionStats>();
+        foreach (var chunk in groups.Select(g => g.Id).Chunk(Trax.Scheduler.Services.Operations.OperationsService.MaxBatchSize))
+        {
+            foreach (var row in await OperationsService.GetManifestGroupExecutionStatsAsync(chunk, cancellationToken))
+                stats[row.GroupId] = row;
+        }
+
+        _items = groups
+            .Select(g =>
+            {
+                var s = stats.GetValueOrDefault(g.Id);
+                return new GroupSummary
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    MaxActiveJobs = g.MaxActiveJobs,
+                    Priority = g.Priority,
+                    IsEnabled = g.IsEnabled,
+                    ManifestCount = s?.ManifestCount ?? 0,
+                    TotalExecutions = s?.TotalExecutions ?? 0,
+                    CompletedCount = s?.Completed ?? 0,
+                    FailedCount = s?.Failed ?? 0,
+                    InProgressCount = s?.InProgress ?? 0,
+                    LastRun = s?.LastRun,
+                };
+            })
+            .ToList();
+
+        // The group-level dependency graph comes from the shared operations service, so it is
+        // the graph the GraphQL dependencyGraph query returns, not a second copy of its query.
+        var graph = await OperationsService.GetGlobalManifestGroupGraphAsync(cancellationToken);
+
+        var dagNodes = graph.Nodes
+            .Select(n => new DagNode { Id = n.Id, Label = n.Name })
+            .ToList();
+
+        var dagEdges = graph.Edges
+            .Select(e => new DagEdge { FromId = e.FromId, ToId = e.ToId })
+            .ToList();
+
+        _dagLayout = DagLayoutEngine.ComputeLayout(dagNodes, dagEdges);
+    }
+
+    private void ToggleSelection(long id, bool selected)
+    {
+        if (selected)
+            _selectedGroups.Add(id);
+        else
+            _selectedGroups.Remove(id);
+        PausePolling = _selectedGroups.Count > 0;
+    }
+
+    // Through the operations service, as the API's setAllManifestGroupsEnabled is. A selection
+    // is left as it is: this acts on every group, not the selected ones.
+    private Task SetAllGroupsEnabled(bool enabled) => RunBatchOperationAsync(
+        enabled ? "All Groups Enabled" : "All Groups Disabled",
+        () => OperationsService.SetAllManifestGroupsEnabledAsync(enabled, DisposalToken));
+
+    // Through the operations service, as the API's setManifestGroupsEnabled is. Only groups whose
+    // flag differs are written, and the count says how many that was.
+    private Task SetSelectedEnabled(bool enabled) => RunBatchOperationAsync(
+        enabled ? "Groups Enabled" : "Groups Disabled",
+        () => OperationsService.SetManifestGroupsEnabledAsync(_selectedGroups.ToList(), enabled, DisposalToken),
+        () => _selectedGroups.Clear());
+
+    // Through the operations service in one call each, as the API's triggerManifestGroups and
+    // cancelManifestGroups are. A trigger counts manifests: a member that already had a queued
+    // entry is counted apart from the ones queued, and a group that no longer exists is noted.
+    private Task TriggerSelected() => RunBatchTriggerAsync(
+        "Groups Triggered",
+        () => OperationsService.TriggerManifestGroupsAsync(_selectedGroups.ToList(), DisposalToken),
+        () => _selectedGroups.Clear());
+
+    private Task CancelSelectedRunning() => RunBatchOperationAsync(
+        "Cancellation Requested",
+        () => OperationsService.CancelManifestGroupsAsync(_selectedGroups.ToList(), DisposalToken),
+        () => _selectedGroups.Clear());
+
+    private void OnDagNodeClick(long groupId)
+    {
+        Navigation.NavigateTo($"trax/data/manifest-groups/{groupId}");
+    }
+}

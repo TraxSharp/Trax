@@ -1,0 +1,91 @@
+@using Trax.Scheduler.Services.Effects
+<RadzenStack Gap="1rem">
+    @if (_effect is null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter" AllowClose="false">
+            No configurable effect named <code>@EffectFullName</code> is registered in this process.
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Subtitle1">
+            Configuration: <strong>@ShortTypeName(_effect.ConfigurationTypeName)</strong>
+        </RadzenText>
+
+        <RadzenStack Gap="0.75rem">
+            @foreach (var field in _editable)
+            {
+                @if (field.Sensitive)
+                {
+                    <RadzenStack Gap="0.25rem" data-testid="@($"sensitive-{field.Name}")">
+                        <RadzenFormField Text="@FormatLabel(field.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                            <RadzenPassword Value="@(GetFormValue<string>(field.Name))"
+                                            Change="@(v => SetFormValue(field.Name, v))"
+                                            Placeholder="@(field.HasValue ? "Set a new value" : "Not set; enter a value")"
+                                            AutoCompleteType="AutoCompleteType.NewPassword" />
+                        </RadzenFormField>
+                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                            Sensitive: @(field.HasValue ? "a value is set, and it is never shown." : "no value is set.")
+                            Leave blank to keep it as it is.
+                        </RadzenText>
+                    </RadzenStack>
+                }
+                else if (field.Kind == EffectFieldKind.Boolean)
+                {
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="padding: 0.75rem 1rem; border: 1px solid var(--rz-input-border); border-radius: var(--rz-border-radius);">
+                        <RadzenLabel Text="@FormatLabel(field.Name)" />
+                        <RadzenSwitch Value="@(GetFormValue<string>(field.Name) == "true")"
+                                      ValueChanged="@((bool v) => SetFormValue(field.Name, v ? "true" : "false"))" />
+                    </RadzenStack>
+                }
+                else if (field.Kind == EffectFieldKind.Enum)
+                {
+                    <RadzenFormField Text="@FormatLabel(field.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                        <RadzenDropDown TValue="string"
+                                        Data="@field.EnumValues"
+                                        AllowClear="@field.Nullable"
+                                        Value="@(GetFormValue<string>(field.Name))"
+                                        ValueChanged="@((string v) => SetFormValue(field.Name, v))" />
+                    </RadzenFormField>
+                }
+                else
+                {
+                    <RadzenFormField Text="@FormatLabel(field.Name)" Variant="Variant.Outlined" class="rz-w-100">
+                        <RadzenTextBox Value="@(GetFormValue<string>(field.Name))"
+                                       Change="@(v => SetFormValue(field.Name, v))"
+                                       Placeholder="@field.Hint" />
+                    </RadzenFormField>
+                }
+            }
+
+            @foreach (var field in _setInCode)
+            {
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem"
+                             data-testid="@($"set-in-code-{field.Name}")">
+                    <RadzenLabel Text="@FormatLabel(field.Name)" />
+                    <RadzenText TextStyle="TextStyle.Caption">
+                        @(field.HasValue ? "Set in code" : "Not set") (not editable here)
+                    </RadzenText>
+                </RadzenStack>
+            }
+        </RadzenStack>
+    }
+
+    @if (_error is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat">
+            @_error
+        </RadzenAlert>
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel"
+                      ButtonStyle="ButtonStyle.Light"
+                      Click="Cancel" />
+        <RadzenButton Text="Save"
+                      Icon="save"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Disabled="@(_effect is null)"
+                      Click="Save" />
+    </RadzenStack>
+</RadzenStack>
