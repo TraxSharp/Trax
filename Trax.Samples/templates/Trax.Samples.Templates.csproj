@@ -6,6 +6,7 @@
     <PackageDescription>Project templates for Trax .NET - GraphQL API and Scheduler with Dashboard for .NET</PackageDescription>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/TraxSharp/Trax.Samples</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>dotnet-new;templates;trax;workflows;railway-oriented-programming;graphql;api;scheduler;dashboard</PackageTags>
 
     <TargetFramework>net10.0</TargetFramework>
@@ -21,6 +22,7 @@
     <!-- The lockfiles hold this repo's restore of the template projects, not a consumer's. -->
     <Content Include="content/**" Exclude="**/bin/**;**/obj/**;**/packages.lock.json" />
     <Compile Remove="**/*" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <!--

@@ -91,7 +91,8 @@ over GraphQL, and that a v2 context missing `total` is refused, which is what ma
 
 A React app in [web/](web/) drives both machines through these mutations with a machine-agnostic transport
 and a `useMachine` hook. Start this host, then `cd web && npm install && npm run dev` and open
-http://localhost:5173.
+http://localhost:5173. The host allows that origin only, so Vite refuses to start rather than move to
+another port while a different sample's client holds 5173.
 
 The page teaches the machine before the example. Each machine has a tab: the turnstile first, as the simplest
 machine, then the checkout, a machine with an effect. A state diagram follows every move and marks the moves out of

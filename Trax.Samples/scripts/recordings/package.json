@@ -8,7 +8,8 @@
     "state-machine": "node state-machine.mjs",
     "chat-service": "node chat-service.mjs",
     "signalr-broadcaster": "node signalr-broadcaster.mjs",
-    "persisted-operations": "node persisted-operations.mjs"
+    "persisted-operations": "node persisted-operations.mjs",
+    "dashboard": "node dashboard.mjs"
   },
   "devDependencies": {
     "@microsoft/signalr": "10.0.11",

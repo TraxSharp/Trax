@@ -22,30 +22,24 @@ PlayerSchemaConfiguration.Configure(builder.Services.AddGraphQLServer());
 
 builder.Services.AddRouting();
 
-var app = builder.Build();
-app.MapGraphQL("/graphql");
-
 // 5312: the GraphQLClient sample's range is 5310-5319 (the Gateway's servers take 5310 and 5311).
 const string url = "http://localhost:5312";
+
+// The client calls this same host's /graphql endpoint. AssemblySchemaProvider uses the same
+// PlayerSchemaConfiguration.Configure delegate the server runs, so the client validates queries
+// against the exact schema the server will execute, and needs no introspection.
+builder
+    .Services.AddTraxGraphQLClient(new Uri($"{url}/graphql"))
+    .UseAssemblySchema(PlayerSchemaConfiguration.Configure);
+
+var app = builder.Build();
+app.MapGraphQL("/graphql");
 app.Urls.Add(url);
 
 // StartAsync returns once Kestrel is listening, so the client below never races the server.
 await app.StartAsync();
 
-// Now build a client pointed at our own /graphql endpoint. AssemblySchemaProvider uses
-// the same PlayerSchemaConfiguration.Configure delegate the server runs, so the client
-// validates queries against the exact schema the server will execute.
-var clientServices = new ServiceCollection();
-clientServices
-    .AddTraxGraphQLClient(new Uri($"{url}/graphql"))
-    .UseAssemblySchema(PlayerSchemaConfiguration.Configure);
-
-// Sample uses a separate DI container for the client to keep the example self-contained;
-// production code would normally consume the executor through the host's container instead.
-#pragma warning disable ASP0000
-await using var clientProvider = clientServices.BuildServiceProvider();
-#pragma warning restore ASP0000
-var executor = clientProvider.GetRequiredService<IGraphQLClientExecutor>();
+var executor = app.Services.GetRequiredService<IGraphQLClientExecutor>();
 
 Console.WriteLine("Running three modes against the same player:");
 Console.WriteLine();

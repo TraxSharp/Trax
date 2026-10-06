@@ -31,7 +31,8 @@ No Docker: Trax metadata and chat data are both SQLite files next to the API.
 # The API, in Development, on http://localhost:5210
 dotnet run --project samples/ChatService/Trax.Samples.ChatService.Api
 
-# Optional: the React client on http://localhost:5173
+# Optional: the React client on http://localhost:5173 (the only origin the API allows;
+# Vite refuses to start if another sample's client already holds the port)
 cd samples/ChatService/Trax.Samples.ChatService.Client
 npm ci
 npm run dev

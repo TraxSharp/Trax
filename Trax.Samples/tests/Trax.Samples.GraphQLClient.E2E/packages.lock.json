@@ -1114,6 +1114,16 @@
           "System.IO.Hashing": "8.0.0"
         }
       },
+      "trax.samples.graphqlclient": {
+        "type": "Project",
+        "dependencies": {
+          "HotChocolate.AspNetCore": "[16.6.7, )",
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "Trax.Api.GraphQL.Client": "[1.46.0, )",
+          "Trax.Api.GraphQL.Client.Trax": "[1.46.0, )",
+          "Trax.Api.GraphQL.Client.Typed": "[1.46.0, )"
+        }
+      },
       "trax.samples.graphqlclient.billingserver": {
         "type": "Project",
         "dependencies": {
@@ -1268,6 +1278,30 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12",
           "Microsoft.Extensions.Http": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12"
+        }
+      },
+      "Trax.Api.GraphQL.Client.Trax": {
+        "type": "CentralTransitive",
+        "requested": "[1.46.0, )",
+        "resolved": "1.46.0",
+        "contentHash": "KgSTeyOa/lJYlkvHp+/L1WjplE/KGy1PBmL+3YWizU+FQFVah0vk3NxlKNPsvpa1tGBrJUmM5JdAbcyqNclLbQ==",
+        "dependencies": {
+          "GraphQL": "8.8.5",
+          "GraphQL.Client": "6.1.0",
+          "GraphQL.Client.Serializer.SystemTextJson": "6.1.0",
+          "HotChocolate": "16.6.7",
+          "HotChocolate.CostAnalysis": "16.6.7",
+          "HotChocolate.Execution.Projections": "16.6.7",
+          "Microsoft.EntityFrameworkCore": "10.0.12",
+          "Microsoft.Extensions.DependencyInjection": "10.0.12",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Http": "10.0.12",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
+          "Trax.Api.GraphQL.Client": "1.46.0",
+          "Trax.Effect": "1.59.0",
+          "Trax.Effect.Data": "1.59.0",
+          "Trax.Mediator": "1.24.1"
         }
       },
       "Trax.Api.GraphQL.Client.Typed": {

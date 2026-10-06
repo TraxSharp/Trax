@@ -31,8 +31,14 @@ dotnet run --project samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway
 dotnet run --project samples/GraphQLClient/Trax.Samples.GraphQLClient
 ```
 
-The Gateway starts both servers in-process, on 5310 and 5311. Either server also runs on its own,
-in Development, on 5313 (inventory) or 5314 (billing):
+The Gateway starts both servers in-process, on 5310 and 5311. Its keyed clients read each server's
+schema by introspection, which Trax serves in Development only, so the Gateway's launch profile runs
+it (and both servers) in Development; started in Production, the servers refuse introspection and the
+Gateway stops with `GraphQLSchemaIntrospectionException`. A real consumer of a Production server loads
+the schema from a checked-in file with `UseFileSchema(...)`. The modes sample needs no introspection:
+its client builds the schema from the same `PlayerSchemaConfiguration` the server runs.
+
+Either server also runs on its own, in Development, on 5313 (inventory) or 5314 (billing):
 
 ```bash
 dotnet run --project samples/GraphQLClient/Trax.Samples.GraphQLClient.InventoryServer
@@ -58,6 +64,9 @@ so and exits with 1.
 dotnet test tests/Trax.Samples.GraphQLClient.E2E
 ```
 
-The suite boots both Trax servers with `WebApplicationFactory` and points two keyed clients at them.
+The suite boots both Trax servers with `WebApplicationFactory` and points two keyed clients at them
+(`KeyedClientE2ETests`), checks that the servers refuse introspection in Production
+(`IntrospectionPostureE2ETests`), and runs the modes sample's four requests against its schema
+(`ClientModesE2ETests`).
 
 Docs: <https://traxsharp.net/docs/samples/graphql-client>

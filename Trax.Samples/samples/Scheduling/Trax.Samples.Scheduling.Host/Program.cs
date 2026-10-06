@@ -24,6 +24,7 @@
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Dashboard.Extensions;
+using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
@@ -59,6 +60,9 @@ builder.Services.AddTrax(trax =>
                 .UsePostgres(connectionString)
                 // Store each run's input and output, so the dashboard can show them.
                 .SaveTrainParameters()
+                // Store what the host and its trains log in trax.log, so the dashboard's Logs
+                // page can show it.
+                .AddDataContextLogging(minimumLogLevel: LogLevel.Information)
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>

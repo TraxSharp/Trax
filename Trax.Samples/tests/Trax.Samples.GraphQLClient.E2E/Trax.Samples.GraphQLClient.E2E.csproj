@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\samples\GraphQLClient\Trax.Samples.GraphQLClient.InventoryServer\Trax.Samples.GraphQLClient.InventoryServer.csproj" />
     <ProjectReference Include="..\..\samples\GraphQLClient\Trax.Samples.GraphQLClient.BillingServer\Trax.Samples.GraphQLClient.BillingServer.csproj" />
     <ProjectReference Include="..\..\samples\GraphQLClient\Trax.Samples.GraphQLClient.Gateway\Trax.Samples.GraphQLClient.Gateway.csproj" />
+    <ProjectReference Include="..\..\samples\GraphQLClient\Trax.Samples.GraphQLClient\Trax.Samples.GraphQLClient.csproj" />
   </ItemGroup>
 
   <ItemGroup>

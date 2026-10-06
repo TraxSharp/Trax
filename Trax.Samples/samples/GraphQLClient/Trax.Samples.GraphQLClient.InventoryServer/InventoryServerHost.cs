@@ -33,9 +33,11 @@ public static class InventoryServerHost
                 )
         );
 
-        // Introspection is enabled so an outbound Trax GraphQL client can fetch this server's
-        // schema to validate queries. Demo only — keep introspection gated in production.
-        builder.Services.AddTraxGraphQL(graphql => graphql.AllowIntrospection(_ => true));
+        // The outbound Trax GraphQL client reads this server's schema by introspection to validate
+        // its queries. Trax serves introspection in Development only, which is where this demo
+        // runs (the launch profile, the Gateway's launch profile, or WebApplicationFactory); in
+        // Production the schema stays private and a client would load it from a file instead.
+        builder.Services.AddTraxGraphQL();
         builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
         var app = builder.Build();
