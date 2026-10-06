@@ -46,7 +46,7 @@
     {
       "folder": "Trax.Samples",
       "upstream": ["Trax.Dashboard", "Trax.Cli"],
-      "dotnet": { "solution": "Trax.Samples.slnx", "release-pack": "templates/Trax.Samples.Templates.csproj", "pack": false, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["chat_e2e_tests", "energyhub_e2e_tests", "bookworm_e2e_tests", "auth_e2e_tests", "persisted_operations_e2e_tests", "recovery_e2e_tests", "scheduling_e2e_tests", "contentshield_e2e_tests", "statemachine_e2e_tests"], "timeout": 25, "test-args": "" },
+      "dotnet": { "solution": "Trax.Samples.slnx", "release-pack": "templates/Trax.Samples.Templates.csproj", "pack": false, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["chat_e2e_tests", "energyhub_e2e_tests", "bookworm_e2e_tests", "auth_e2e_tests", "persisted_operations_e2e_tests", "recovery_e2e_tests", "scheduling_e2e_tests", "contentshield_e2e_tests", "statemachine_e2e_tests"], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "testing,ci,samples", "census-root": "tests/Trax.Samples.Tests.Meta" }
     },
     {

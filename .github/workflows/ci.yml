@@ -378,9 +378,10 @@ jobs:
 
   # The only check branch protection requires. It runs whatever happened above, and fails
   # when any job that ran failed or was cancelled; a job skipped by change detection passes.
+  # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, coverage, adr-guard, website, website-dashboard, state-machine]
+    needs: [changes, dotnet, adr-guard, website, website-dashboard, state-machine]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
