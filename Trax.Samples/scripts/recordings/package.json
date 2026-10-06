@@ -13,6 +13,6 @@
   },
   "devDependencies": {
     "@microsoft/signalr": "10.0.11",
-    "graphql-ws": "6.0.6"
+    "graphql-ws": "6.3.0"
   }
 }
