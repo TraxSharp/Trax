@@ -291,31 +291,23 @@ namespace Trax.Core.Exceptions
     {
         public TrainException(string message) { }
     }
-    [System.Runtime.CompilerServices.RequiredMember]
     public class TrainExceptionData
     {
-        [System.Obsolete("Constructors of types with required members are not supported in this version of " +
-            "your compiler.", true)]
         public TrainExceptionData() { }
         [System.Text.Json.Serialization.JsonPropertyName("failureClass")]
         public Trax.Core.Exceptions.FailureClass? FailureClass { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
         [System.Text.Json.Serialization.JsonPropertyName("junction")]
-        public string Junction { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
+        public required string Junction { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("message")]
-        public string Message { get; set; }
+        public required string Message { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("stackTrace")]
         public string? StackTrace { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
         [System.Text.Json.Serialization.JsonPropertyName("trainExternalId")]
-        public string TrainExternalId { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
+        public required string TrainExternalId { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("trainName")]
-        public string TrainName { get; set; }
-        [System.Runtime.CompilerServices.RequiredMember]
+        public required string TrainName { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("type")]
-        public string Type { get; set; }
+        public required string Type { get; set; }
     }
 }
 namespace Trax.Core.Extensions
