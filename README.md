@@ -6,7 +6,8 @@
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 Business logic you can call, schedule, or serve as an API, with every run recorded in your Postgres.
-[Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started)
+[Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) ·
+[Samples](Trax.Samples) · [NuGet](https://www.nuget.org/profiles/Theauxm)
 
 ## Install
 
@@ -36,7 +37,8 @@ public class RecalculateLeaderboardTrain
 
 ## Where this fits
 
-Trax is split into layers, one folder each. Take the packages you need; the trains you wrote do not change.
+Trax is split into layers, one folder each, and every package releases at one version from this repository. Each .NET
+folder depends only on folders above it in this table; take the layers you need, and the trains you wrote do not change.
 
 | Folder | What it adds |
 |---|---|
@@ -47,10 +49,13 @@ Trax is split into layers, one folder each. Take the packages you need; the trai
 | [Trax.Api](Trax.Api) | GraphQL generated from your trains, with authentication, audit and typed clients |
 | [Trax.Dashboard](Trax.Dashboard) | A Blazor Server UI for runs, schedules and dead letters, mounted in your app |
 | [Trax.Cli](Trax.Cli) | The `trax` tool: scaffold a hub and trains from an OpenAPI or GraphQL schema, and state-machine codegen |
-| [Trax.Samples](Trax.Samples) | Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
+| [Trax.Samples](Trax.Samples) | **Start here.** Complete sample apps, and the `trax-api`, `trax-scheduler` and `trax-hub` templates |
 | [Trax.Api.StateMachine](Trax.Api.StateMachine) | `@trax/state-machine`, the TypeScript twin of the state-machine engine |
 | [Trax.Docs](Trax.Docs) | The documentation published at [traxsharp.net/docs](https://traxsharp.net/docs), and the decision records |
 | [Trax.Website](Trax.Website) | The source of [traxsharp.net](https://traxsharp.net) |
+
+Trax used to be split into one repository per layer (`TraxSharp/Trax.Core` and the rest). Those are archived; their
+history is here, under each folder.
 
 ## Contributing
 
@@ -60,3 +65,6 @@ vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 ## License
 
 MIT. There is no commercial edition, and there will not be one.
+
+Trax is an independent open-source project and is not affiliated with the Utah Transit Authority, Trax Retail, or any
+other organization using the Trax name.

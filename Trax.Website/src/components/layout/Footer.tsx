@@ -32,7 +32,7 @@ export default function Footer() {
             </div>
             <div className="space-y-2">
               <a
-                href="https://github.com/TraxSharp"
+                href="https://github.com/TraxSharp/Trax"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-text-muted hover:text-text-secondary"

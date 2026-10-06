@@ -3,15 +3,15 @@ interface Pkg {
   desc: string;
 }
 
-interface Repo {
-  repo: string;
+interface Folder {
+  folder: string;
   summary: string;
   packages: Pkg[];
 }
 
-const repos: Repo[] = [
+const folders: Folder[] = [
   {
-    repo: "Trax.Core",
+    folder: "Trax.Core",
     summary: "Trains, junctions and the chain",
     packages: [
       { name: "Trax.Core", desc: "Trains, junctions, decisions and railway error handling" },
@@ -22,7 +22,7 @@ const repos: Repo[] = [
     ],
   },
   {
-    repo: "Trax.Effect",
+    folder: "Trax.Effect",
     summary: "Run recording, storage, decisions and state machines",
     packages: [
       {
@@ -74,7 +74,7 @@ const repos: Repo[] = [
     ],
   },
   {
-    repo: "Trax.Mediator",
+    folder: "Trax.Mediator",
     summary: "The train bus",
     packages: [
       {
@@ -88,7 +88,7 @@ const repos: Repo[] = [
     ],
   },
   {
-    repo: "Trax.Scheduler",
+    folder: "Trax.Scheduler",
     summary: "Schedules, retries and workers",
     packages: [
       {
@@ -101,7 +101,7 @@ const repos: Repo[] = [
     ],
   },
   {
-    repo: "Trax.Api",
+    folder: "Trax.Api",
     summary: "GraphQL, authentication and the client",
     packages: [
       { name: "Trax.Api", desc: "Train catalog, health checks and shared types" },
@@ -143,14 +143,14 @@ const repos: Repo[] = [
     ],
   },
   {
-    repo: "Trax.Dashboard",
+    folder: "Trax.Dashboard",
     summary: "The monitoring UI",
     packages: [
       { name: "Trax.Dashboard", desc: "Blazor Server dashboard that mounts into your app" },
     ],
   },
   {
-    repo: "Trax.Cli",
+    folder: "Trax.Cli",
     summary: "The trax command",
     packages: [
       {
@@ -160,7 +160,7 @@ const repos: Repo[] = [
     ],
   },
   {
-    repo: "Trax.Samples",
+    folder: "Trax.Samples",
     summary: "Templates",
     packages: [
       { name: "Trax.Samples.Templates", desc: "dotnet new templates for an API, a scheduler or a hub" },
@@ -168,7 +168,7 @@ const repos: Repo[] = [
   },
 ];
 
-const total = repos.reduce((n, r) => n + r.packages.length, 0);
+const total = folders.reduce((n, f) => n + f.packages.length, 0);
 
 function Badge({ name }: { name: string }) {
   return (
@@ -186,29 +186,30 @@ export default function PackageList() {
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">Packages</h2>
         <p className="mt-2 text-text-muted">
-          {total} packages across {repos.length} repos, all on NuGet and all MIT
-          licensed. There is no commercial edition, and there will not be one.
+          {total} packages in one repository, released together at one version,
+          all on NuGet and all MIT licensed. There is no commercial edition, and
+          there will not be one.
         </p>
 
         <div className="mt-8 divide-y divide-border/50 border-y border-border/50">
-          {repos.map((r) => (
-            <details key={r.repo} className="group/repo">
+          {folders.map((f) => (
+            <details key={f.folder} className="group/folder">
               <summary className="flex cursor-pointer list-none items-baseline justify-between gap-4 py-4 [&::-webkit-details-marker]:hidden">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span className="font-mono text-sm text-text-primary">{r.repo}</span>
-                  <span className="text-xs text-text-muted">{r.summary}</span>
+                  <span className="font-mono text-sm text-text-primary">{f.folder}</span>
+                  <span className="text-xs text-text-muted">{f.summary}</span>
                 </div>
                 <span className="flex-shrink-0 text-xs text-text-muted">
-                  {r.packages.length}{" "}
-                  {r.packages.length === 1 ? "package" : "packages"}
-                  <span className="ml-2 inline-block transition-transform group-open/repo:rotate-90">
+                  {f.packages.length}{" "}
+                  {f.packages.length === 1 ? "package" : "packages"}
+                  <span className="ml-2 inline-block transition-transform group-open/folder:rotate-90">
                     &rsaquo;
                   </span>
                 </span>
               </summary>
 
               <div className="pb-4 pl-4">
-                {r.packages.map((pkg) => (
+                {f.packages.map((pkg) => (
                   <a
                     key={pkg.name}
                     href={`https://www.nuget.org/packages/${pkg.name}/`}

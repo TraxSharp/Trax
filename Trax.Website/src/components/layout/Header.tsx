@@ -45,7 +45,7 @@ export default function Header() {
             );
           })}
           <a
-            href="https://github.com/TraxSharp"
+            href="https://github.com/TraxSharp/Trax"
             target="_blank"
             rel="noopener noreferrer"
             className="ml-2 rounded-lg px-3 py-2 text-sm text-text-muted transition-colors hover:text-text-primary"

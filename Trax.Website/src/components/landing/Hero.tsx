@@ -29,12 +29,12 @@ export default function Hero() {
               Get started
             </Link>
             <a
-              href="https://github.com/TraxSharp"
+              href="https://github.com/TraxSharp/Trax"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm font-medium text-text-muted transition-colors hover:text-text-secondary"
             >
-              github.com/TraxSharp &rarr;
+              github.com/TraxSharp/Trax &rarr;
             </a>
           </div>
           <p className="mt-8 font-mono text-xs text-text-muted">
