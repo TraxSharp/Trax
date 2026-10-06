@@ -1,0 +1,274 @@
+namespace Trax.Mediator.Configuration
+{
+    public class MediatorConfiguration
+    {
+        public MediatorConfiguration() { }
+        public bool AllowMissingAuthorizationService { get; }
+        public System.Reflection.Assembly[] Assemblies { get; }
+        public int? GlobalMaxConcurrentRun { get; }
+        public int MaxInputJsonBytes { get; }
+        public System.TimeSpan MaxQueueHookDuration { get; }
+        public int? PerPrincipalMaxConcurrentRun { get; }
+        public bool SkipChainVerification { get; }
+        public Microsoft.Extensions.DependencyInjection.ServiceLifetime TrainLifetime { get; }
+    }
+    public class TraxBuilderWithMediator
+    {
+        public bool HasDataProvider { get; }
+        public bool HasDatabaseProvider { get; }
+        public Microsoft.Extensions.DependencyInjection.IServiceCollection ServiceCollection { get; }
+    }
+    public class TraxMediatorBuilder
+    {
+        public Trax.Mediator.Configuration.TraxMediatorBuilder AllowMissingAuthorizationService() { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder ConcurrentRunLimit<TTrain>(int maxConcurrent)
+            where TTrain :  class { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder GlobalConcurrentRunLimit(int maxConcurrent) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder PerPrincipalMaxConcurrentRun(int limit) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder ScanAssemblies(params System.Reflection.Assembly[] assemblies) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder SkipChainVerification() { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder TrainLifetime(Microsoft.Extensions.DependencyInjection.ServiceLifetime lifetime) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder WithMaxInputJsonBytes(int bytes) { }
+        public Trax.Mediator.Configuration.TraxMediatorBuilder WithMaxQueueHookDuration(System.TimeSpan limit) { }
+    }
+}
+namespace Trax.Mediator.Exceptions
+{
+    public class AmbiguousTrainNameException : System.InvalidOperationException
+    {
+        public AmbiguousTrainNameException(string requestedName, System.Collections.Generic.IReadOnlyList<string> candidateFullNames) { }
+        public System.Collections.Generic.IReadOnlyList<string> CandidateFullNames { get; }
+        public string RequestedName { get; }
+    }
+    public class DecisionReplayNotSupportedException : System.NotSupportedException
+    {
+        public DecisionReplayNotSupportedException(System.Type implementationType) { }
+        public System.Type ImplementationType { get; }
+    }
+    public class NoTrainForInputException : System.InvalidOperationException
+    {
+        public NoTrainForInputException(System.Type inputType, System.Collections.Generic.IReadOnlyList<string> scannedAssemblies) { }
+        public System.Type InputType { get; }
+        public System.Collections.Generic.IReadOnlyList<string> ScannedAssemblies { get; }
+    }
+    public class QueueHookTimeoutException : System.InvalidOperationException
+    {
+        public QueueHookTimeoutException(string trainName, System.TimeSpan limit) { }
+        public System.TimeSpan Limit { get; }
+        public string TrainName { get; }
+    }
+    public class QueuedWorkCancelledException : System.InvalidOperationException
+    {
+        public QueuedWorkCancelledException(long workQueueId, string trainName) { }
+        public string TrainName { get; }
+        public long WorkQueueId { get; }
+    }
+    public class TrainAuthorizationNotConfiguredException : System.InvalidOperationException
+    {
+        public TrainAuthorizationNotConfiguredException(string trainName, string message) { }
+        public string TrainName { get; }
+    }
+    public class TrainInputValidationException : System.InvalidOperationException
+    {
+        public TrainInputValidationException(string trainName, int observedBytes, int maxBytes) { }
+        public int MaxBytes { get; }
+        public int ObservedBytes { get; }
+        public string TrainName { get; }
+    }
+    public class TrainNotFoundException : System.InvalidOperationException
+    {
+        public TrainNotFoundException(string requestedName) { }
+        public string RequestedName { get; }
+    }
+}
+namespace Trax.Mediator.Extensions
+{
+    public static class BuilderOrderExtensions
+    {
+        [System.Obsolete("Call AddEffects(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
+        [System.Obsolete("Call AddEffects(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilder builder, params System.Reflection.Assembly[] assemblies) { }
+        [System.Obsolete("AddMediator(...) is already called. Call it once and configure everything in that" +
+            " call.", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
+        [System.Obsolete("AddMediator(...) is already called. Call it once and configure everything in that" +
+            " call.", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, params System.Reflection.Assembly[] assemblies) { }
+        [System.Obsolete("Call AddStateMachines(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddStateMachines(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, params System.Reflection.Assembly[] assemblies) { }
+        [System.Obsolete("Call AddStateMachines(...) before AddMediator(...).", true)]
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddStateMachines(this Trax.Mediator.Configuration.TraxBuilderWithMediator builder, System.Action<dynamic> configure, params System.Reflection.Assembly[] assemblies) { }
+    }
+    public static class ServiceExtensions
+    {
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, System.Func<Trax.Mediator.Configuration.TraxMediatorBuilder, Trax.Mediator.Configuration.TraxMediatorBuilder> configure) { }
+        public static Trax.Mediator.Configuration.TraxBuilderWithMediator AddMediator(this Trax.Effect.Configuration.TraxBuilder.TraxBuilderWithEffects builder, params System.Reflection.Assembly[] assemblies) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddServiceTrainBus(this Microsoft.Extensions.DependencyInjection.IServiceCollection serviceCollection, Microsoft.Extensions.DependencyInjection.ServiceLifetime serviceTrainLifetime = 2, params System.Reflection.Assembly[] assemblies) { }
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection RegisterServiceTrains(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, Microsoft.Extensions.DependencyInjection.ServiceLifetime serviceLifetime = 2, params System.Reflection.Assembly[] assemblies) { }
+    }
+}
+namespace Trax.Mediator.Services.ConcurrencyLimiter
+{
+    public class ConcurrencyLimiter : Trax.Mediator.Services.ConcurrencyLimiter.IConcurrencyLimiter
+    {
+        public ConcurrencyLimiter(Trax.Mediator.Configuration.MediatorConfiguration configuration, Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Mediator.Services.Principal.ICurrentPrincipalProvider principalProvider) { }
+        public System.Threading.Tasks.Task<System.IDisposable> AcquireAsync(string trainFullName, System.Threading.CancellationToken ct) { }
+    }
+    public interface IConcurrencyLimiter
+    {
+        System.Threading.Tasks.Task<System.IDisposable> AcquireAsync(string trainFullName, System.Threading.CancellationToken ct);
+    }
+}
+namespace Trax.Mediator.Services.Principal
+{
+    public interface ICurrentPrincipalProvider
+    {
+        string? GetCurrentPrincipalId();
+    }
+}
+namespace Trax.Mediator.Services.RunExecutor
+{
+    public interface IRunExecutor
+    {
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, System.Threading.CancellationToken ct = default);
+    }
+    public class LocalRunExecutor : Trax.Mediator.Services.RunExecutor.IRunExecutor
+    {
+        public LocalRunExecutor(Trax.Mediator.Services.TrainBus.ITrainBus trainBus, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> ExecuteAsync(string trainName, object input, System.Type outputType, System.Threading.CancellationToken ct = default) { }
+    }
+}
+namespace Trax.Mediator.Services.TrainAuthorization
+{
+    public interface ITrainAuthorizationService
+    {
+        System.Threading.Tasks.Task AuthorizeAsync(Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, System.Threading.CancellationToken ct = default);
+    }
+}
+namespace Trax.Mediator.Services.TrainBus
+{
+    public interface ITrainBus
+    {
+        object InitializeTrain(object trainInput);
+        System.Threading.Tasks.Task RunAsync(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task RunAsync(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task<TOut> RunAsync<TOut>(object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task RunByNameAsync(string trainName, object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+        System.Threading.Tasks.Task<TOut> RunByNameAsync<TOut>(string trainName, object trainInput, System.Threading.CancellationToken cancellationToken, Trax.Effect.Models.Metadata.Metadata? metadata = null);
+    }
+}
+namespace Trax.Mediator.Services.TrainDiscovery
+{
+    public interface ITrainDiscoveryService
+    {
+        System.Collections.Generic.IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> DiscoverTrains();
+    }
+    public class TrainDiscoveryService : Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService
+    {
+        public TrainDiscoveryService(Microsoft.Extensions.DependencyInjection.IServiceCollection serviceCollection) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Mediator.Services.TrainDiscovery.TrainRegistration> DiscoverTrains() { }
+    }
+    public class TrainRegistration
+    {
+        public TrainRegistration() { }
+        public string? GraphQLDeprecationReason { get; init; }
+        public string? GraphQLDescription { get; init; }
+        public string? GraphQLName { get; init; }
+        public string? GraphQLNamespace { get; init; }
+        public required Trax.Effect.Attributes.GraphQLOperation GraphQLOperations { get; init; }
+        public bool HasAllowAnonymousAttribute { get; init; }
+        public bool HasAuthorizeAttribute { get; init; }
+        public bool HasQueueSubjectKey { get; init; }
+        public required System.Type ImplementationType { get; init; }
+        public required string ImplementationTypeName { get; init; }
+        public required System.Type InputType { get; init; }
+        public required string InputTypeName { get; init; }
+        public required bool IsBroadcastEnabled { get; init; }
+        public required bool IsMutation { get; init; }
+        public required bool IsQuery { get; init; }
+        public required bool IsRemote { get; init; }
+        public required Microsoft.Extensions.DependencyInjection.ServiceLifetime Lifetime { get; init; }
+        public int? MaxConcurrentRun { get; init; }
+        public required System.Type OutputType { get; init; }
+        public required string OutputTypeName { get; init; }
+        public required System.Collections.Generic.IReadOnlyList<string> RequiredPolicies { get; init; }
+        public System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string>> RequiredRoleSets { get; init; }
+        public required System.Collections.Generic.IReadOnlyList<string> RequiredRoles { get; init; }
+        public required System.Type ServiceType { get; init; }
+        public required string ServiceTypeName { get; init; }
+    }
+}
+namespace Trax.Mediator.Services.TrainExecution
+{
+    public interface ITrainExecutionService
+    {
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.PreparedTrain> PrepareAsync(string trainName, string? inputJson, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string? inputJson, Trax.Mediator.Services.TrainExecution.QueueTrainOptions options, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string? inputJson, int priority = 0, System.DateTime? scheduledAt = default, System.Threading.CancellationToken ct = default);
+        System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunAsync(string trainName, string inputJson, System.Threading.CancellationToken ct = default);
+    }
+    public sealed class PreparedTrain
+    {
+        public object Input { get; }
+        public Trax.Mediator.Services.TrainDiscovery.TrainRegistration Registration { get; }
+    }
+    public sealed class QueueTrainOptions : System.IEquatable<Trax.Mediator.Services.TrainExecution.QueueTrainOptions>
+    {
+        public QueueTrainOptions() { }
+        public int Priority { get; init; }
+        public long? ReplayDecisionsOf { get; init; }
+        public System.DateTime? ScheduledAt { get; init; }
+    }
+    public class QueueTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.QueueTrainResult>
+    {
+        public QueueTrainResult(long WorkQueueId, string ExternalId) { }
+        public string ExternalId { get; init; }
+        public long WorkQueueId { get; init; }
+    }
+    public class RunTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.RunTrainResult>
+    {
+        public RunTrainResult(long MetadataId, string ExternalId, object? Output = null) { }
+        public string ExternalId { get; init; }
+        public long MetadataId { get; init; }
+        public object? Output { get; init; }
+    }
+    public class TrainExecutionService : Trax.Mediator.Services.TrainExecution.ITrainExecutionService
+    {
+        public TrainExecutionService(Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService discoveryService, Trax.Mediator.Services.RunExecutor.IRunExecutor runExecutor, Trax.Mediator.Services.ConcurrencyLimiter.IConcurrencyLimiter concurrencyLimiter, Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory, Trax.Mediator.Configuration.MediatorConfiguration mediatorConfiguration, System.IServiceProvider serviceProvider) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.PreparedTrain> PrepareAsync(string trainName, string? inputJson, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string? inputJson, Trax.Mediator.Services.TrainExecution.QueueTrainOptions options, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.QueueTrainResult> QueueAsync(string trainName, string? inputJson, int priority = 0, System.DateTime? scheduledAt = default, System.Threading.CancellationToken ct = default) { }
+        public System.Threading.Tasks.Task<Trax.Mediator.Services.TrainExecution.RunTrainResult> RunAsync(string trainName, string inputJson, System.Threading.CancellationToken ct = default) { }
+    }
+    public static class TrainInputReader
+    {
+        public const int StoredInputGrowthFactor = 4;
+        public static object Read(string? inputJson, Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, int maxInputJsonBytes) { }
+        public static string ResolveSavedInput(string savedInputJson, Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, int maxInputJsonBytes) { }
+    }
+}
+namespace Trax.Mediator.Services.TrainRegistry
+{
+    public interface ITrainRegistry
+    {
+        System.Collections.Generic.Dictionary<System.Type, System.Type> InputTypeToTrain { get; set; }
+    }
+}
+namespace Trax.Mediator.Services.TrustedExecution
+{
+    public interface ITrustedExecutionScope
+    {
+        string? CurrentReason { get; }
+        bool IsTrusted { get; }
+        System.IDisposable BeginTrusted(string reason);
+    }
+    public sealed class TrustedExecutionScope : Trax.Mediator.Services.TrustedExecution.ITrustedExecutionScope
+    {
+        public TrustedExecutionScope() { }
+        public string? CurrentReason { get; }
+        public bool IsTrusted { get; }
+        public System.IDisposable BeginTrusted(string reason) { }
+    }
+}

@@ -1,0 +1,191 @@
+using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
+using Trax.Core.Junction;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Mediator.Services.TrainBus;
+using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+using Trax.Mediator.Tests.Postgres.Integration.Fixtures;
+using Metadata = Trax.Effect.Models.Metadata.Metadata;
+
+namespace Trax.Mediator.Tests.Postgres.Integration.IntegrationTests;
+
+public class PostgresContextTests : TestSetup
+{
+    [Theory]
+    public async Task TestPostgresProviderCanCreateMetadata()
+    {
+        // Arrange
+        var postgresContextFactory =
+            Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+
+        using var context = (IDataContext)postgresContextFactory.Create();
+
+        var metadata = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "TestMetadata",
+                Input = Unit.Default,
+                ExternalId = Guid.NewGuid().ToString("N"),
+            }
+        );
+
+        await context.Track(metadata);
+
+        await context.SaveChanges(CancellationToken.None);
+        context.Reset();
+
+        // Act
+        var foundMetadata = await context.Metadatas.FirstOrDefaultAsync(x => x.Id == metadata.Id);
+
+        // Assert
+        foundMetadata.Should().NotBeNull();
+        foundMetadata.Id.Should().Be(metadata.Id);
+        foundMetadata.Name.Should().Be(metadata.Name);
+    }
+
+    [Theory]
+    public async Task TestPostgresProviderCanRunTrain()
+    {
+        // Arrange
+        // Act
+        var train = await TrainBus.RunAsync<ITestTrain>(new TestTrainInput());
+
+        // Assert
+        var metadata = train!.Metadata!;
+        metadata.Name.Should().Be(typeof(ITestTrain).FullName);
+        metadata.FailureException.Should().BeNullOrEmpty();
+        metadata.FailureReason.Should().BeNullOrEmpty();
+        metadata.FailureJunction.Should().BeNullOrEmpty();
+        metadata.TrainState.Should().Be(TrainState.Completed);
+    }
+
+    [Theory]
+    public async Task TestPostgresProviderCanRunTrainTwo()
+    {
+        // Arrange
+        // Act
+        var train = await TrainBus.RunAsync<ITestTrain>(new TestTrainInput());
+        await TrainBus.RunAsync<Unit>(new TestTrainWithoutInterfaceInput());
+
+        // Assert
+        var metadata = train!.Metadata!;
+        metadata.Name.Should().Be(typeof(ITestTrain).FullName);
+        metadata.FailureException.Should().BeNullOrEmpty();
+        metadata.FailureReason.Should().BeNullOrEmpty();
+        metadata.FailureJunction.Should().BeNullOrEmpty();
+        metadata.TrainState.Should().Be(TrainState.Completed);
+    }
+
+    [Theory]
+    public async Task TestPostgresProviderCanRunTrainWithinTrain()
+    {
+        // Arrange
+        var dataContextProvider =
+            Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        var arrayLoggerProvider = Scope.ServiceProvider.GetRequiredService<IArrayLoggingProvider>();
+
+        // Act
+        var (innerTrain, train) = await TrainBus.RunAsync<(ITestTrain, ITestTrainWithinTrain)>(
+            new TestTrainWithinTrainInput()
+        );
+
+        // Assert
+        var trainMetadata = train!.Metadata!;
+        trainMetadata.Name.Should().Be(typeof(ITestTrainWithinTrain).FullName);
+        trainMetadata.FailureException.Should().BeNullOrEmpty();
+        trainMetadata.FailureReason.Should().BeNullOrEmpty();
+        trainMetadata.FailureJunction.Should().BeNullOrEmpty();
+        trainMetadata.TrainState.Should().Be(TrainState.Completed);
+        var innerTrainMetadata = innerTrain!.Metadata!;
+        innerTrainMetadata.Name.Should().Be(typeof(ITestTrain).FullName);
+        innerTrainMetadata.FailureException.Should().BeNullOrEmpty();
+        innerTrainMetadata.FailureReason.Should().BeNullOrEmpty();
+        innerTrainMetadata.FailureJunction.Should().BeNullOrEmpty();
+        innerTrainMetadata.TrainState.Should().Be(TrainState.Completed);
+
+        using var dataContext = (IDataContext)dataContextProvider.Create();
+
+        var parentTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == trainMetadata.Id
+        );
+        var childTrainResult = await dataContext.Metadatas.FirstOrDefaultAsync(x =>
+            x.Id == innerTrainMetadata.Id
+        );
+        parentTrainResult.Should().NotBeNull();
+        parentTrainResult!.Id.Should().Be(trainMetadata.Id);
+        parentTrainResult!.TrainState.Should().Be(TrainState.Completed);
+        parentTrainResult.Input.Should().NotBeNull();
+        parentTrainResult.Output.Should().NotBeNull();
+
+        childTrainResult.Should().NotBeNull();
+        childTrainResult!.Id.Should().Be(innerTrainMetadata.Id);
+        childTrainResult.TrainState.Should().Be(TrainState.Completed);
+        childTrainResult.Input.Should().NotBeNull();
+        childTrainResult.Output.Should().NotBeNull();
+
+        var logLevel = arrayLoggerProvider
+            .Loggers.SelectMany(x => x.Logs)
+            .Select(x => x.Level)
+            .Count(x => x == LogLevel.Critical);
+        logLevel.Should().Be(1);
+    }
+
+    internal class TestTrain : ServiceTrain<TestTrainInput, ITestTrain>, ITestTrain
+    {
+        // The train is its own output so the test can read the Metadata of the run. Seeding it
+        // under its interface is what makes that expressible as a declaration.
+        protected override Task<Either<Exception, ITestTrain>> Junctions() =>
+            Task.FromResult(AddServices<ITestTrain>(this).Resolve());
+    }
+
+    // Deliberately has no dedicated interface: the canonical name falls back to the concrete
+    // type. Nothing asserts on its output, so it declares a chain of no junctions.
+    internal class TestTrainWithoutInterface : ServiceTrain<TestTrainWithoutInterfaceInput, Unit>
+    {
+        protected override Task<Either<Exception, Unit>> Junctions() => Task.FromResult(Resolve());
+    }
+
+    internal record TestTrainWithoutInterfaceInput;
+
+    internal record TestTrainInput;
+
+    internal class TestTrainWithinTrain()
+        : ServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)>,
+            ITestTrainWithinTrain
+    {
+        protected override Task<
+            Either<Exception, (ITestTrain, ITestTrainWithinTrain)>
+        > Junctions() =>
+            AddServices<ITestTrainWithinTrain>(this).Chain<JunctionToRunTestTrain>().Resolve();
+    }
+
+    internal record TestTrainWithinTrainInput;
+
+    internal class JunctionToRunTestTrain(
+        ITrainBus trainBus,
+        ILogger<JunctionToRunTestTrain> logger
+    ) : EffectJunction<Unit, ITestTrain>
+    {
+        public override async Task<ITestTrain> Run(Unit input)
+        {
+            var testTrain = await trainBus.RunAsync<ITestTrain>(new TestTrainInput());
+
+            logger.LogCritical("Ran {TrainName}", "TestTrain");
+
+            return testTrain;
+        }
+    }
+
+    internal interface ITestTrain : IServiceTrain<TestTrainInput, ITestTrain> { }
+
+    internal interface ITestTrainWithinTrain
+        : IServiceTrain<TestTrainWithinTrainInput, (ITestTrain, ITestTrainWithinTrain)> { }
+}

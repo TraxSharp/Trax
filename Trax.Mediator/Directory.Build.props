@@ -1,0 +1,65 @@
+<Project>
+  <PropertyGroup>
+    <Version>1.99.99</Version>
+    <!-- Audit direct + transitive dependencies and fail the build on any known
+         vulnerability (low through critical). -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Every project restores with a lockfile. Without this, a locked-mode restore checks a
+       lockfile only where one happens to be committed, and a new project without one restores
+       unlocked and passes CI. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!-- Package metadata shared by every packable project. A project overrides a value by setting
+       it in its own csproj.
+       No separate symbol package: DotNet.ReproducibleBuilds (below) sets DebugType to embedded, so
+       the PDB, with its SourceLink map to this repository, ships inside each DLL. A .snupkg would
+       hold no PDB, and nuget.org rejects an empty one. -->
+  <PropertyGroup>
+    <Authors>Theauxm</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Mediator</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <PackageTags>trax;dotnet;mediator;train-bus;dispatch;trains</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <!-- XML docs for the shipped libraries, so the summaries in source reach IntelliSense for
+       package consumers. Every public member is documented and CS1591 stays on, so a new public
+       member without a comment fails the zero-warning build. Trax.Mediator.Testing already
+       generates its documentation file from its own project. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Package validation: `dotnet pack` compares each published library with the last release on
+       nuget.org and fails on a binary break, such as narrowing a member a published downstream
+       package calls or overrides. It runs on pack only, so the pull request workflow packs too.
+       Bump the baseline to the new version after each release. The Version above (1.99.99
+       locally, the released version in CI) is the package being checked, not the baseline.
+       Central ADR 0033 records why. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Trax.Mediator' Or '$(MSBuildProjectName)' == 'Trax.Mediator.Testing'">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.23.2</PackageValidationBaselineVersion>
+  </PropertyGroup>
+
+  <!-- Deterministic/reproducible builds. CI source-path normalization
+       (ContinuousIntegrationBuild) is turned on by the package only when CI is detected. -->
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

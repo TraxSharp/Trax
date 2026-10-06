@@ -1,0 +1,146 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Logging.Extensions;
+using Trax.Effect.Provider.Json.Extensions;
+using Trax.Effect.Provider.Parameter.Extensions;
+using Trax.Effect.Services.EffectRunner;
+using Trax.Mediator.Extensions;
+using Trax.Mediator.Services.TrainBus;
+using Trax.Mediator.Tests.ArrayLogger.Services.ArrayLoggingProvider;
+
+namespace Trax.Mediator.Tests.Postgres.Integration.Fixtures;
+
+[TestFixture]
+public abstract class TestSetup
+{
+    private ServiceProvider ServiceProvider { get; set; }
+
+    public IServiceScope Scope { get; private set; }
+
+    public ITrainBus TrainBus { get; private set; }
+
+    [OneTimeSetUp]
+    public async Task RunBeforeAnyTests()
+    {
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
+        var connectionString = TestPostgres.WithPort(
+            configuration.GetRequiredSection("Configuration")["DatabaseConnectionString"]!
+        );
+
+        var arrayLoggingProvider = new ArrayLoggingProvider();
+
+        ServiceProvider = new ServiceCollection()
+            .AddSingleton<ILoggerProvider>(arrayLoggingProvider)
+            .AddSingleton<IArrayLoggingProvider>(arrayLoggingProvider)
+            .AddLogging(x => x.AddConsole().SetMinimumLevel(LogLevel.Debug))
+            .AddTrax(trax =>
+                trax.AddEffects(effects =>
+                        effects
+                            .SetEffectLogLevel(LogLevel.Information)
+                            .SaveTrainParameters()
+                            .UsePostgres(connectionString)
+                            .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
+                            .AddJson()
+                            .AddJunctionLogger(serializeJunctionData: true)
+                    )
+                    .AddMediator(assemblies: [typeof(AssemblyMarker).Assembly])
+            )
+            .BuildServiceProvider();
+    }
+
+    [OneTimeTearDown]
+    public async Task RunAfterAnyTests()
+    {
+        await ServiceProvider.DisposeAsync();
+    }
+
+    [SetUp]
+    public virtual async Task TestSetUp()
+    {
+        Scope = ServiceProvider.CreateScope();
+        TrainBus = Scope.ServiceProvider.GetRequiredService<ITrainBus>();
+
+        var factory = Scope.ServiceProvider.GetRequiredService<IDataContextProviderFactory>();
+        using var cleanupContext = (IDataContext)factory.Create();
+        await CleanupDatabase(cleanupContext);
+    }
+
+    /// <summary>
+    /// Deletes all rows from all scheduler tables in FK-safe order to ensure
+    /// complete test isolation between runs.
+    /// </summary>
+    private static async Task CleanupDatabase(IDataContext dataContext)
+    {
+        // Delete in FK-safe order (children before parents)
+        await dataContext.BackgroundJobs.ExecuteDeleteAsync();
+        await dataContext.Logs.ExecuteDeleteAsync();
+        await dataContext.WorkQueues.ExecuteDeleteAsync();
+        await dataContext.DeadLetters.ExecuteDeleteAsync();
+        await dataContext.Metadatas.ExecuteDeleteAsync();
+
+        // Clear self-referencing FK before deleting manifests
+        await dataContext
+            .Manifests.Where(m => m.DependsOnManifestId != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DependsOnManifestId, (int?)null));
+        await dataContext.Manifests.ExecuteDeleteAsync();
+
+        // Delete manifest groups after manifests (FK dependency)
+        await dataContext.ManifestGroups.ExecuteDeleteAsync();
+
+        dataContext.Reset();
+    }
+
+    /// <summary>
+    /// The ceiling on any wait for a signal a run raises. Owned here rather than inherited
+    /// (Trax.Docs/adr/0014-a-test-owns-every-timeout-it-waits-behind.md).
+    /// </summary>
+    protected static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Waits for <paramref name="signal"/>, which a run raises part-way through, while also
+    /// watching the run itself. A run that faults before raising it surfaces its own exception
+    /// instead of hanging the test, and one that never raises it fails after
+    /// <see cref="SignalTimeout"/>.
+    /// </summary>
+    protected static async Task AwaitSignalAsync(Task signal, Task run, string what)
+    {
+        var first = await Task.WhenAny(signal, run).WaitAsync(SignalTimeout);
+        if (first == signal)
+            return;
+
+        await run;
+        Assert.Fail($"The run finished before {what}.");
+    }
+
+    /// <summary>
+    /// Lets a run the test released finish before the next test starts, without letting its
+    /// outcome replace the assertion that already failed.
+    /// </summary>
+    protected static async Task DrainAsync(Task run)
+    {
+        try
+        {
+            await run.WaitAsync(SignalTimeout);
+        }
+        catch
+        {
+            // The test has already asserted on the outcome it cares about.
+        }
+    }
+
+    [TearDown]
+    public async Task TestTearDown()
+    {
+        Scope.Dispose();
+    }
+}
