@@ -1,0 +1,10 @@
+query GetPlayerByResource($id: String!) {
+  player(id: $id) {
+    id
+    name
+    level
+    rank
+    guild { id name }
+    inventory { id name category }
+  }
+}

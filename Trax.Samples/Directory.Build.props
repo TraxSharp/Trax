@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <Version>1.99.99</Version>
+    <!-- Audit direct + transitive dependencies and fail the build on any known
+         vulnerability (low through critical). -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Every project restores with a lockfile. Without this, a locked-mode restore checks a
+       lockfile only where one happens to be committed, and a new project without one restores
+       unlocked and passes CI. The template projects under templates/content block this file, and
+       carry their own setting. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!-- Deterministic/reproducible builds. CI source-path normalization
+       (ContinuousIntegrationBuild) is turned on by the package only when CI is detected. -->
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

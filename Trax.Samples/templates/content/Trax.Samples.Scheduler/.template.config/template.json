@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Trax",
+  "classifications": ["Web", "Trax", "Scheduler", "Dashboard"],
+  "identity": "Trax.Samples.Scheduler.CSharp",
+  "name": "Trax Scheduler with Dashboard",
+  "shortName": "trax-scheduler",
+  "sourceName": "Trax.Samples.Scheduler",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  }
+}

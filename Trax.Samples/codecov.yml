@@ -1,0 +1,11 @@
+# Coverage scope for the Trax.Samples workspace.
+#
+# The samples are reference applications, so coverage is judged on the product code they
+# demonstrate. The paths below are excluded because they are not that product code:
+#   - EF Core migration files are machine-generated (re-emitted by `dotnet ef migrations add`);
+#     gating coverage on them measures the generator, not our code.
+#   - lib/Trax.Samples.Shared.Testing is the shared E2E test harness. It is test code that the
+#     suites consume, not a subject under test.
+ignore:
+  - "**/Migrations/**"
+  - "lib/Trax.Samples.Shared.Testing/**"

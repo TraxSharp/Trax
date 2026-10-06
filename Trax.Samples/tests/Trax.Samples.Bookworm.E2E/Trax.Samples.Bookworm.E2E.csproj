@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.Api\Trax.Samples.Bookworm.Api.csproj" />
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.Catalog\Trax.Samples.Bookworm.Catalog.csproj" />
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.Lending\Trax.Samples.Bookworm.Lending.csproj" />
+    <ProjectReference Include="..\..\samples\Bookworm\Trax.Samples.Bookworm.CrossSchema\Trax.Samples.Bookworm.CrossSchema.csproj" />
+    <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

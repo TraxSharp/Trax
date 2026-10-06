@@ -1,0 +1,12 @@
+{
+  "operations": [
+    {
+      "id": "greet_v1",
+      "document": "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt } } } }"
+    },
+    {
+      "id": "lookupUser_v1",
+      "document": "query LookupUser($input: LookupUserInput!) { discover { users { lookupUser(input: $input) { userId displayName email loginCount } } } }"
+    }
+  ]
+}

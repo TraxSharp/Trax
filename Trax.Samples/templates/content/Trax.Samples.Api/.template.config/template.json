@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Trax",
+  "classifications": ["Web", "Trax", "GraphQL", "API"],
+  "identity": "Trax.Samples.Api.CSharp",
+  "name": "Trax GraphQL API",
+  "shortName": "trax-api",
+  "sourceName": "Trax.Samples.Api",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  }
+}

@@ -1,0 +1,83 @@
+<Solution>
+  <Folder Name="/samples/DistributedWorkers/">
+    <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub/Trax.Samples.EnergyHub.csproj" />
+    <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub/Trax.Samples.EnergyHub.Hub.csproj" />
+    <Project Path="samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker/Trax.Samples.EnergyHub.Worker.csproj" />
+  </Folder>
+  <Folder Name="/samples/SignalRBroadcaster/">
+    <Project Path="samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster/Trax.Samples.SignalRBroadcaster.csproj" />
+  </Folder>
+  <Folder Name="/samples/GraphQLClient/">
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient/Trax.Samples.GraphQLClient.csproj" />
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient.InventoryServer/Trax.Samples.GraphQLClient.InventoryServer.csproj" />
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient.BillingServer/Trax.Samples.GraphQLClient.BillingServer.csproj" />
+    <Project Path="samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Trax.Samples.GraphQLClient.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/samples/EphemeralWorkers/">
+    <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield/Trax.Samples.ContentShield.csproj" />
+    <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Api/Trax.Samples.ContentShield.Api.csproj" />
+    <Project Path="samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner/Trax.Samples.ContentShield.Runner.csproj" />
+  </Folder>
+  <Folder Name="/samples/ChatService/">
+    <Project Path="samples/ChatService/Trax.Samples.ChatService.Data/Trax.Samples.ChatService.Data.csproj" />
+    <Project Path="samples/ChatService/Trax.Samples.ChatService/Trax.Samples.ChatService.csproj" />
+    <Project Path="samples/ChatService/Trax.Samples.ChatService.Api/Trax.Samples.ChatService.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/Auth/">
+    <Project Path="samples/Auth/Trax.Samples.Auth/Trax.Samples.Auth.csproj" />
+  </Folder>
+  <Folder Name="/samples/PersistedOperations/">
+    <Project Path="samples/PersistedOperations/Trax.Samples.PersistedOperations/Trax.Samples.PersistedOperations.csproj" />
+    <Project Path="samples/PersistedOperations/Trax.Samples.PersistedOperations.Api/Trax.Samples.PersistedOperations.Api.csproj" />
+    <Project Path="samples/PersistedOperations/Trax.Samples.PersistedOperations.Client/Trax.Samples.PersistedOperations.Client.csproj" />
+  </Folder>
+  <Folder Name="/samples/Bookworm/">
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.Catalog/Trax.Samples.Bookworm.Catalog.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.Lending/Trax.Samples.Bookworm.Lending.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.CrossSchema/Trax.Samples.Bookworm.CrossSchema.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm/Trax.Samples.Bookworm.csproj" />
+    <Project Path="samples/Bookworm/Trax.Samples.Bookworm.Api/Trax.Samples.Bookworm.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/StateMachine/">
+    <Project Path="samples/StateMachine/Trax.Samples.StateMachine/Trax.Samples.StateMachine.csproj" />
+    <Project Path="samples/StateMachine/Trax.Samples.StateMachine.Api/Trax.Samples.StateMachine.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/Recovery/">
+    <Project Path="samples/Recovery/Trax.Samples.Recovery/Trax.Samples.Recovery.csproj" />
+    <Project Path="samples/Recovery/Trax.Samples.Recovery.Api/Trax.Samples.Recovery.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/Scheduling/">
+    <Project Path="samples/Scheduling/Trax.Samples.Scheduling/Trax.Samples.Scheduling.csproj" />
+    <Project Path="samples/Scheduling/Trax.Samples.Scheduling.Host/Trax.Samples.Scheduling.Host.csproj" />
+  </Folder>
+  <Folder Name="/lib/">
+    <Project Path="lib/Trax.Samples.Shared.Testing/Trax.Samples.Shared.Testing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Samples.Bookworm.E2E/Trax.Samples.Bookworm.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Tests.Reflection/Trax.Samples.Tests.Reflection.csproj" />
+    <Project Path="tests/Trax.Samples.ChatService.Tests/Trax.Samples.ChatService.Tests.csproj" />
+    <Project Path="tests/Trax.Samples.Templates.Tests/Trax.Samples.Templates.Tests.csproj" />
+    <Project Path="tests/Trax.Samples.ChatService.E2E/Trax.Samples.ChatService.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.EnergyHub.E2E/Trax.Samples.EnergyHub.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.PersistedOperations.E2E/Trax.Samples.PersistedOperations.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.GraphQLClient.E2E/Trax.Samples.GraphQLClient.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.StateMachine.Tests/Trax.Samples.StateMachine.Tests.csproj" />
+    <Project Path="tests/Trax.Samples.StateMachine.E2E/Trax.Samples.StateMachine.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Auth.E2E/Trax.Samples.Auth.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Recovery.E2E/Trax.Samples.Recovery.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Scheduling.E2E/Trax.Samples.Scheduling.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.ContentShield.E2E/Trax.Samples.ContentShield.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.SignalRBroadcaster.E2E/Trax.Samples.SignalRBroadcaster.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Tests.Meta/Trax.Samples.Tests.Meta.csproj" />
+  </Folder>
+  <Folder Name="/templates/">
+    <Project Path="templates/Trax.Samples.Templates.csproj" />
+    <Project Path="templates/content/Trax.Samples.Api/Trax.Samples.Api.csproj" />
+    <Project Path="templates/content/Trax.Samples.Api/tests/Trax.Samples.Api.Tests/Trax.Samples.Api.Tests.csproj" />
+    <Project Path="templates/content/Trax.Samples.Hub/Trax.Samples.Hub.csproj" />
+    <Project Path="templates/content/Trax.Samples.Hub/tests/Trax.Samples.Hub.Tests/Trax.Samples.Hub.Tests.csproj" />
+    <Project Path="templates/content/Trax.Samples.Scheduler/Trax.Samples.Scheduler.csproj" />
+    <Project Path="templates/content/Trax.Samples.Scheduler/tests/Trax.Samples.Scheduler.Tests/Trax.Samples.Scheduler.Tests.csproj" />
+  </Folder>
+</Solution>

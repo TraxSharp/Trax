@@ -1,0 +1,33 @@
+services:
+  database:
+    container_name: trax_database
+    # The same images the CI workflows run, pinned by digest so a pull cannot change what
+    # runs under the tag. Dependabot's docker-compose updates move them.
+    image: postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527
+    restart: unless-stopped
+    shm_size: 512m
+    environment:
+      POSTGRES_USER: trax
+      POSTGRES_PASSWORD: trax123
+      POSTGRES_DB: trax
+      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests,chat_e2e_tests,energyhub_e2e_tests,bookworm_e2e_tests,trax_api_operations,trax_api_workqueue,trax_api_logs,trax_api_health,trax_api_auth_http,trax_api_auth_model,trax_api_auth_sub,trax_api_auth_subprop,trax_api_auth_authorize,auth_e2e_tests,persisted_operations_e2e_tests,recovery_e2e_tests,scheduling_e2e_tests,contentshield_e2e_tests,statemachine_e2e_tests,trax_auth,trax_bookworm,trax_contentshield,trax_energyhub,trax_persisted_operations,trax_recovery,trax_scheduling,trax_statemachine
+    tty: true
+    ports:
+      - "127.0.0.1:${TRAX_PG_PORT:-5432}:5432"
+    networks:
+      - default
+    volumes:
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
+
+  rabbitmq:
+    container_name: trax_rabbitmq
+    image: rabbitmq:4-management@sha256:dbaf95088210b885b305e338e846d8d2ce7a2659d4b4005da8da02b885a71671
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: trax
+      RABBITMQ_DEFAULT_PASS: trax123
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    networks:
+      - default

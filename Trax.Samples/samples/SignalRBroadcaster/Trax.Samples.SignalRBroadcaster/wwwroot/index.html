@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0a0f0c" />
+  <link rel="icon" href="data:," />
+  <title>Trax SignalR broadcaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- The SignalR JavaScript client. Pinned and checked with Subresource Integrity. -->
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"
+          integrity="sha384-mU1xC5yC2LldSW74Rj1Ax8wPiLw/28V5eh51uKJMlBbRVsOtUYd4xyzNsgIAJARB"
+          crossorigin="anonymous"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      /* Trax's palette: forest and moss greens on a near-black that leans green. */
+      --bg: #0a0f0c;
+      --bg-glow-1: rgba(46, 125, 80, 0.2);
+      --bg-glow-2: rgba(132, 160, 72, 0.1);
+      --panel: rgba(17, 24, 19, 0.74);
+      --panel-solid: #121a15;
+      --raised: #18221b;
+      --ink: #e6ede7;
+      --muted: #8b9a8e;
+      --faint: #59675c;
+      --line: rgba(220, 255, 230, 0.07);
+      --line-strong: rgba(220, 255, 230, 0.13);
+      --accent: #7fb069;
+      --accent-strong: #3d7a46;
+      --accent-ink: #f4fbf3;
+      --running: #38bdf8;
+      --ok: #34d399;
+      --fail: #f87171;
+      --replay: #e3c565;
+      --afresh: #fb923c;
+      --route: #6b7a6e;
+      --code-bg: #0b110d;
+      --code-ink: #c8d5cb;
+      --gutter: #3c4a40;
+      --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 40px -12px rgba(0, 0, 0, 0.6);
+      --radius: 14px;
+      --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: #f4f7f2;
+        --bg-glow-1: rgba(46, 125, 80, 0.11);
+        --bg-glow-2: rgba(132, 160, 72, 0.08);
+        --panel: rgba(255, 255, 255, 0.84);
+        --panel-solid: #ffffff;
+        --raised: #edf2eb;
+        --ink: #141a16;
+        --muted: #5b6a5f;
+        --faint: #97a39a;
+        --line: rgba(16, 32, 20, 0.08);
+        --line-strong: rgba(16, 32, 20, 0.14);
+        --accent: #3d7a46;
+        --accent-strong: #2a5a33;
+        --running: #0284c7;
+        --ok: #059669;
+        --fail: #dc2626;
+        --replay: #a27c14;
+        --afresh: #ea580c;
+        --route: #94a39a;
+        --shadow: 0 1px 2px rgba(16, 32, 20, 0.04), 0 12px 32px -16px rgba(16, 32, 20, 0.18);
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font); -webkit-font-smoothing: antialiased; color: var(--ink); min-height: 100vh;
+      background: radial-gradient(1200px 600px at 10% -10%, var(--bg-glow-1), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, var(--bg-glow-2), transparent 55%), var(--bg);
+      background-attachment: fixed;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    button:disabled { cursor: default; opacity: 0.45; }
+    code { font-family: var(--mono); }
+    .hidden { display: none !important; }
+
+    .app { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; height: 100vh; padding: 20px; overflow: hidden; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); backdrop-filter: blur(16px);
+    }
+
+    /* Sidebar */
+    .sidebar { display: flex; flex-direction: column; gap: 22px; padding: 22px 20px; min-height: 0; overflow-y: auto; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--muted);
+      padding: 4px 10px 4px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); margin-bottom: 12px;
+    }
+    .mark { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--replay)); }
+    h1 { font-size: 21px; font-weight: 650; letter-spacing: -0.025em; line-height: 1.2; }
+    .subtitle { color: var(--muted); margin-top: 10px; font-size: 13.5px; line-height: 1.55; }
+    .group { display: flex; flex-direction: column; gap: 10px; }
+    .group-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); }
+    .wiring { list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 12px; }
+    .wiring li { counter-increment: step; display: grid; grid-template-columns: 22px 1fr; gap: 10px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+    .wiring li::before { content: counter(step); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px;
+      font: 600 11px var(--mono); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .wiring li > span { min-width: 0; }
+    .wiring code { display: block; margin-top: 6px; font-size: 11px; line-height: 1.6; color: var(--ink); padding: 7px 9px; border-radius: 7px;
+      background: var(--code-bg); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .viewer { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); }
+    .viewer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+    .viewer-row span:first-child { color: var(--muted); }
+    .conn-id { font: 11.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+      border: 1px solid var(--line-strong); color: var(--muted); }
+    .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .pill.connected { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+    .pill.connected::before { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); animation: beat 1.6s ease-in-out infinite; }
+    .pill.reconnecting, .pill.connecting { color: var(--afresh); border-color: color-mix(in srgb, var(--afresh) 40%, transparent); }
+    .pill.disconnected { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, transparent); }
+    .link-button { align-self: flex-start; font-size: 12.5px; color: var(--accent); background: none; border: none; padding: 2px 0; }
+    .hood-toggle { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: auto; padding: 9px 12px; border-radius: 10px;
+      border: 1px dashed var(--line-strong); background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; text-align: left; }
+    .hood-toggle:hover { color: var(--ink); border-color: var(--accent); }
+    .hood-toggle.on { border-style: solid; color: var(--ink); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .hood-icon { font: 600 11px var(--mono); color: var(--accent); padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+    /* Stage */
+    .stage { display: flex; flex-direction: column; gap: 16px; min-height: 0; min-width: 0; }
+    .panel { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+    .panel h2 { font-size: 15px; font-weight: 600; }
+    .panel-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+    .panel-note code { font-size: 12px; color: var(--ink); }
+    .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .action { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px; border-radius: 12px;
+      border: 1px solid var(--line-strong); background: var(--raised); transition: all 0.15s; }
+    .action:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+    .action-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+    .action-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .action[data-outcome="Succeed"] .action-dot { background: var(--ok); }
+    .action[data-outcome="FailForClients"] .action-dot { background: var(--afresh); }
+    .action[data-outcome="FailUnexpectedly"] .action-dot { background: var(--fail); }
+    .action-text { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+    .runs-panel { flex: 1; min-height: 0; }
+    .runs-head { display: flex; justify-content: space-between; align-items: baseline; }
+    .runs-count { font: 600 12px var(--mono); color: var(--muted); }
+    .runs { list-style: none; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; flex: 1; padding-right: 2px; }
+    .runs-empty { color: var(--faint); font-size: 13.5px; padding: 10px 0; }
+    .run { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; align-items: center; padding: 12px 14px; border-radius: 12px;
+      background: var(--raised); border: 1px solid var(--line); animation: enter 0.25s ease-out; }
+    .run.run-flash { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+    .run-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .run-train { font: 600 13.5px var(--mono); }
+    .run-id { font: 11.5px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-steps { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .step { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12.5px; padding: 4px 10px; border-radius: 8px;
+      border: 1px solid var(--line-strong); background: var(--code-bg); animation: enter 0.25s ease-out; }
+    .step-time { font: 11px var(--mono); color: var(--faint); }
+    .step.Started { color: var(--running); }
+    .step.Completed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .step.Failed { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, transparent); }
+    .step-arrow { color: var(--faint); font-size: 12px; }
+    .step-gap { font: 11px var(--mono); color: var(--faint); }
+    .reason { grid-column: 1 / -1; display: flex; gap: 10px; align-items: baseline; font-size: 13px; padding: 8px 12px; border-radius: 9px; line-height: 1.45; }
+    .reason.shown { color: var(--ink); background: color-mix(in srgb, var(--afresh) 9%, transparent); border: 1px solid color-mix(in srgb, var(--afresh) 35%, transparent); }
+    .reason.withheld { color: var(--muted); background: color-mix(in srgb, var(--fail) 7%, transparent); border: 1px dashed color-mix(in srgb, var(--fail) 40%, transparent); }
+    .reason-tag { font: 600 10px var(--font); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+    .shown .reason-tag { color: var(--afresh); }
+    .withheld .reason-tag { color: var(--fail); }
+    .status { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--running); }
+    .status.Completed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+    .status.Failed { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, transparent); background: color-mix(in srgb, var(--fail) 10%, transparent); }
+
+    /* Signed out */
+    .gate { margin: auto; max-width: 520px; padding: 30px; display: flex; flex-direction: column; gap: 14px; text-align: center; align-items: center; }
+    .gate-icon { font-size: 30px; width: 64px; height: 64px; display: grid; place-items: center; border-radius: 18px; background: var(--raised); border: 1px solid var(--line); }
+    .gate h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+    .gate p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .gate-buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+    .primary { height: 40px; padding: 0 18px; border-radius: 10px; border: none; font-weight: 600; color: var(--accent-ink);
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong)); box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--accent-strong) 80%, transparent); }
+    .secondary { height: 40px; padding: 0 16px; border-radius: 10px; border: 1px dashed color-mix(in srgb, var(--fail) 45%, transparent); background: transparent; color: var(--fail); font-weight: 500; }
+    .probe-result { font: 12.5px var(--mono); color: var(--ink); padding: 8px 12px; border-radius: 9px; background: var(--code-bg); border: 1px solid var(--line); }
+    .gate small { color: var(--faint); font-size: 12px; }
+
+    /* Raw traffic */
+    .hood { position: fixed; top: 20px; right: 20px; bottom: 20px; width: min(460px, calc(100vw - 40px)); z-index: 20; display: flex; flex-direction: column;
+      background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8); }
+    .hood-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+    .hood-head h2 { font-size: 14px; font-weight: 600; }
+    .hood-head p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .hood-tools { display: flex; gap: 6px; }
+    .icon-button { height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; }
+    .hood-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+    .entry { padding: 6px 8px; border-radius: 9px; font-size: 12.5px; animation: enter 0.18s ease-out; }
+    .entry:hover { background: var(--raised); }
+    .entry-line { display: flex; align-items: center; gap: 8px; }
+    .entry-arrow { width: 14px; text-align: center; font-weight: 700; }
+    .out .entry-arrow { color: var(--accent); }
+    .in .entry-arrow { color: var(--ok); }
+    .info .entry-arrow { color: var(--faint); }
+    .chip { font: 600 10px var(--mono); padding: 2px 6px; border-radius: 6px; flex-shrink: 0; }
+    .chip.http { color: var(--running); background: color-mix(in srgb, var(--running) 14%, transparent); }
+    .chip.hub { color: var(--afresh); background: color-mix(in srgb, var(--afresh) 14%, transparent); }
+    .entry-title { font: 12px var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .entry-time { font: 11px var(--mono); color: var(--faint); }
+    .entry-note { margin: 3px 0 0 22px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .entry pre { margin: 6px 0 2px 22px; padding: 9px 11px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line);
+      font: 11.5px/1.55 var(--mono); color: var(--code-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    @keyframes beat { 50% { opacity: 0.45; } }
+    @keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+    @media (max-width: 1000px) {
+      .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; overflow: visible; padding: 12px; }
+      .actions { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="card sidebar">
+    <div>
+      <span class="eyebrow"><span class="mark">T</span>Trax · SignalR</span>
+      <h1>Train events, pushed to the browser</h1>
+      <p class="subtitle">
+        Every train run raises lifecycle events. The SignalR sink pushes each one to every browser connected
+        to the hub as it happens. This page never asks for them.
+      </p>
+    </div>
+
+    <div class="group">
+      <span class="group-label">How it is wired</span>
+      <ol class="wiring">
+        <li><span>The sink: which events, which trains, and what each event carries.
+          <code>.UseBroadcaster(b =&gt; b
+  .UseSignalRHub(hub =&gt; hub
+    .OnlyForEvents("Started",
+      "Completed", "Failed")
+    .OnlyForTrains&lt;IPingTrain&gt;()
+    .WithProjection(
+      LiveTrainEvent.From)))</code></span></li>
+        <li><span>The hub, and who may connect to it. It will not start without saying.
+          <code>app.MapTraxTrainEventHub(hub =&gt;
+  hub.RequireRoles("Operator"));</code></span></li>
+        <li><span>This page: a plain SignalR client, listening for one message.
+          <code>hub.on("TrainEvent", (evt) =&gt; ...);</code></span></li>
+      </ol>
+    </div>
+
+    <div class="group hidden" id="viewer">
+      <span class="group-label">Who is watching</span>
+      <div class="viewer">
+        <div class="viewer-row"><span>Signed in as</span><strong id="who"></strong></div>
+        <div class="viewer-row"><span>Hub</span><span class="pill connecting" id="status">connecting</span></div>
+        <div class="viewer-row"><span>Connection</span><span class="conn-id" id="conn">…</span></div>
+      </div>
+      <form method="post" action="/sign-out"><button class="link-button">Sign out</button></form>
+    </div>
+
+    <button class="hood-toggle" id="hood-toggle"><span class="hood-icon">&lt;/&gt;</span><span id="hood-label">Show the raw traffic</span></button>
+  </aside>
+
+  <main class="stage">
+    <section class="card gate hidden" id="signed-out">
+      <div class="gate-icon">🔒</div>
+      <h2>The hub admits signed-in operators only</h2>
+      <p>It sends every train's events to every client it lets in, so it has to say who may connect. Here that is
+        anyone signed in with the Operator role; the cookie travels with the connection by itself.</p>
+      <div class="gate-buttons">
+        <form method="post" action="/demo/sign-in"><button class="primary">Sign in as the demo operator</button></form>
+        <button class="secondary" id="probe">Try to connect without signing in</button>
+      </div>
+      <div class="probe-result hidden" id="probe-result"></div>
+      <small>The demo sign-in exists only in Development.</small>
+    </section>
+
+    <section class="card panel hidden" id="run-panel">
+      <h2>Run a train</h2>
+      <div class="actions">
+        <button class="action" data-outcome="Succeed">
+          <span class="action-title"><span class="action-dot"></span>A ping that succeeds</span>
+          <span class="action-text">Started, then Completed.</span>
+        </button>
+        <button class="action" data-outcome="FailForClients">
+          <span class="action-title"><span class="action-dot"></span>A ping that fails, for readers</span>
+          <span class="action-text">It throws a <code>TrainException</code>, a message written for whoever watches, so the hub sends it.</span>
+        </button>
+        <button class="action" data-outcome="FailUnexpectedly">
+          <span class="action-title"><span class="action-dot"></span>A ping that fails, internally</span>
+          <span class="action-text">Any other exception may name a host or a credential, so the hub sends a fixed sentence. The real message stays in the server log.</span>
+        </button>
+      </div>
+      <p class="panel-note">Pressing one posts to <code>/pings</code>, which answers <code>202 Accepted</code> and nothing else. Everything below arrives over the hub.</p>
+    </section>
+
+    <section class="card panel runs-panel hidden" id="runs-panel">
+      <div class="runs-head"><h2>Runs, live</h2><span class="runs-count" id="runs-count">0 runs</span></div>
+      <div class="runs-empty" id="runs-empty">No runs yet. Run a train, or start one anywhere else on this host: every run of the ping train shows up here.</div>
+      <ul class="runs" id="runs"></ul>
+    </section>
+  </main>
+</div>
+
+<aside class="hood hidden" id="hood">
+  <div class="hood-head">
+    <div><h2>Raw traffic</h2><p>What this page sends, and every message the hub pushes.</p></div>
+    <div class="hood-tools"><button class="icon-button" id="hood-clear">Clear</button><button class="icon-button" id="hood-close">✕</button></div>
+  </div>
+  <div class="hood-list" id="hood-list"></div>
+</aside>
+
+<script>
+  // Everything that reaches the page from the server is written with textContent, never as HTML.
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const MASKED = "The run failed. The reason is in the server log.";
+
+  // ── Raw traffic ─────────────────────────────────────────────────────────
+  const hood = $("hood");
+  function log(direction, channel, title, note, detail) {
+    const entry = el("div", `entry ${direction}`);
+    const line = el("div", "entry-line");
+    line.append(el("span", "entry-arrow", direction === "out" ? "↑" : direction === "in" ? "↓" : "•"),
+      el("span", `chip ${channel}`, channel === "http" ? "HTTP" : "HUB"),
+      el("span", "entry-title", title), el("span", "entry-time", clock(new Date().toISOString())));
+    entry.append(line);
+    if (note) entry.append(el("div", "entry-note", note));
+    if (detail !== undefined) entry.append(el("pre", "", typeof detail === "string" ? detail : JSON.stringify(detail, null, 2)));
+    const list = $("hood-list");
+    list.append(entry);
+    while (list.children.length > 200) list.firstChild.remove();
+    list.scrollTop = list.scrollHeight;
+  }
+  function setHood(open) {
+    hood.classList.toggle("hidden", !open);
+    $("hood-toggle").classList.toggle("on", open);
+    $("hood-label").textContent = open ? "Hide the raw traffic" : "Show the raw traffic";
+  }
+  $("hood-toggle").addEventListener("click", () => setHood(hood.classList.contains("hidden")));
+  $("hood-close").addEventListener("click", () => setHood(false));
+  $("hood-clear").addEventListener("click", () => ($("hood-list").textContent = ""));
+
+  // ── Runs, grouped by the run's external id ──────────────────────────────
+  const runs = new Map();
+  function showEvent(evt) {
+    $("runs-empty").classList.add("hidden");
+    let run = runs.get(evt.externalId);
+    if (!run) {
+      const item = el("li", "run");
+      const title = el("div", "run-title");
+      title.append(el("span", "run-train", evt.trainName), el("span", "run-id", evt.externalId));
+      const status = el("span", "status", "Running");
+      const steps = el("div", "run-steps");
+      item.append(title, status, steps);
+      $("runs").prepend(item);
+      run = { item, status, steps, first: null };
+      runs.set(evt.externalId, run);
+      $("runs-count").textContent = `${runs.size} run${runs.size === 1 ? "" : "s"}`;
+    }
+    const at = new Date(evt.timestamp).getTime();
+    if (run.steps.children.length) {
+      run.steps.append(el("span", "step-arrow", "→"));
+      if (run.first !== null) run.steps.append(el("span", "step-gap", `+${Math.max(0, at - run.first)} ms`));
+    } else run.first = at;
+    const step = el("span", `step ${evt.eventType}`, evt.eventType);
+    step.append(el("span", "step-time", clock(evt.timestamp)));
+    run.steps.append(step);
+    if (evt.eventType !== "Started") {
+      run.status.textContent = evt.eventType;
+      run.status.className = `status ${evt.eventType}`;
+    }
+    if (evt.eventType === "Failed") {
+      const withheld = evt.failureReason === MASKED;
+      const reason = el("div", `reason ${withheld ? "withheld" : "shown"}`);
+      reason.append(el("span", "reason-tag", withheld ? "Reason withheld" : "Reason"), el("span", "", evt.failureReason ?? ""));
+      run.item.append(reason);
+    }
+    run.item.classList.add("run-flash");
+    setTimeout(() => run.item.classList.remove("run-flash"), 900);
+  }
+
+  // ── Signed out: show that the hub refuses a connection without the cookie ──
+  $("probe").addEventListener("click", async () => {
+    const url = "/hubs/trax-events/negotiate?negotiateVersion=1";
+    log("out", "http", "POST negotiate", "Asks the hub for a connection, with no sign-in cookie.");
+    const res = await fetch(url, { method: "POST" });
+    log("in", "http", `${res.status} ${res.statusText || ""}`.trim(), res.status === 401 ? "The hub refused before any connection opened." : undefined);
+    const out = $("probe-result");
+    out.classList.remove("hidden");
+    out.textContent = `POST ${url}  →  ${res.status} ${res.status === 401 ? "Unauthorized: no connection was opened." : res.statusText}`;
+  });
+
+  async function main() {
+    const me = await fetch("/me");
+    if (!me.ok) {
+      $("signed-out").classList.remove("hidden");
+      return;
+    }
+    const who = (await me.json()).name;
+    $("who").textContent = who;
+    for (const id of ["viewer", "run-panel", "runs-panel"]) $(id).classList.remove("hidden");
+
+    // Same origin, so the browser sends the sign-in cookie on negotiate and on the WebSocket.
+    const hub = new signalR.HubConnectionBuilder().withUrl("/hubs/trax-events").withAutomaticReconnect().build();
+    const status = $("status");
+    const setStatus = (s) => { status.textContent = s; status.className = `pill ${s}`; };
+
+    // The payload is this sample's projection, LiveTrainEvent, in camelCase.
+    hub.on("TrainEvent", (evt) => {
+      const note = evt.eventType === "Failed"
+        ? (evt.failureReason === MASKED ? "Failed with an exception the hub does not repeat: a fixed sentence goes out instead." : "Failed with a TrainException: its message is meant to be read, so it goes out.")
+        : `The ${evt.trainName} run ${evt.eventType.toLowerCase()}.`;
+      log("in", "hub", `TrainEvent · ${evt.eventType}`, note, evt);
+      showEvent(evt);
+    });
+    hub.onreconnecting(() => { setStatus("reconnecting"); log("info", "hub", "Reconnecting"); });
+    hub.onreconnected((id) => { setStatus("connected"); $("conn").textContent = id ?? ""; log("info", "hub", "Reconnected"); });
+    hub.onclose(() => { setStatus("disconnected"); log("info", "hub", "Connection closed"); });
+
+    log("out", "hub", "Connect /hubs/trax-events", "Negotiates, then opens the connection. The sign-in cookie goes with both, so the page sends no token.");
+    await hub.start();
+    setStatus("connected");
+    $("conn").textContent = hub.connectionId ?? "";
+    log("in", "hub", "Connected", `Connection ${hub.connectionId}. Every TrainEvent the sink sends now reaches this page.`);
+
+    for (const button of document.querySelectorAll("button[data-outcome]")) {
+      button.addEventListener("click", async () => {
+        const body = { outcome: button.dataset.outcome };
+        log("out", "http", "POST /pings", "Runs the ping train on the server.", body);
+        const res = await fetch("/pings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        log("in", "http", `${res.status} ${res.statusText || ""}`.trim(), "No result in the response: the run's events come over the hub.");
+      });
+    }
+  }
+  main();
+</script>
+</body>
+</html>
