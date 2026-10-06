@@ -1,0 +1,148 @@
+---
+layout: default
+title: Parameter Effect
+description: SaveTrainParameters, the effect that stores train inputs and outputs as JSON on Metadata, with size bounds, field masking and runtime configuration.
+parent: Effect Providers
+grand_parent: Effect
+nav_order: 3
+---
+
+# Parameter Effect
+
+The parameter effect serializes train inputs and outputs to JSON and stores them on the `Metadata` record. Without this provider, the `Metadata.Input` and `Metadata.Output` columns are null. You'll know a train ran and whether it succeeded, but not what data it processed.
+
+## Registration
+
+```bash
+dotnet add package Trax.Effect.Provider.Parameter
+```
+
+```csharp
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Provider.Parameter.Extensions;
+
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+        .SaveTrainParameters()
+    )
+);
+```
+
+You can pass custom serialization options:
+
+```csharp
+.SaveTrainParameters(new JsonSerializerOptions
+{
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    WriteIndented = false
+})
+```
+
+## Configuration
+
+By default, both inputs and outputs are serialized. You can control this with the `configure` parameter:
+
+```csharp
+// Save only inputs (skip output serialization)
+.SaveTrainParameters(configure: cfg =>
+{
+    cfg.SaveInputs = true;
+    cfg.SaveOutputs = false;
+})
+
+// Save only outputs
+.SaveTrainParameters(configure: cfg =>
+{
+    cfg.SaveInputs = false;
+    cfg.SaveOutputs = true;
+})
+```
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `SaveInputs` | `bool` | `true` | Whether to serialize train input parameters to `Metadata.Input` |
+| `SaveOutputs` | `bool` | `true` | Whether to serialize train output parameters to `Metadata.Output` |
+| `MaxParameterBytes` | `int?` | `1048576` (1 MiB) | Hard byte ceiling per serialized parameter. Over-limit payloads abort mid-serialization and store a `{"_truncated": true, ...}` placeholder. `null` removes the ceiling; `0` or a negative value is refused with `ArgumentOutOfRangeException`. |
+| `ShouldSaveInputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's input. |
+| `ShouldSaveOutputs` | `Func<string, bool>?` | `null` | Predicate on the canonical train name; return `false` to skip that train's output. |
+
+The configuration is registered as a singleton and can be modified at runtime via the [Dashboard Effects page](/docs/dashboard#effects-page). Changes take effect on the next train execution scope.
+
+## Bounding what gets stored
+
+Enabling parameter serialization turns it on for every train. When a process runs a fan-out of trains whose outputs are large (multi-MB fetch results, cached blobs), that turns into large writes to `trax.metadata` on every run, and serializing several of them concurrently can exhaust host memory. Three knobs bound this without turning serialization off everywhere.
+
+**Skip output for known-large trains.** `ExcludeOutput` skips output serialization for named trains while keeping their (usually tiny) inputs:
+
+```csharp
+.SaveTrainParameters(configure: cfg =>
+{
+    cfg.ExcludeOutput<GetEntitiesQuery>();   // by type
+    cfg.ExcludeOutput("GetLeadsQuery");      // or by name fragment
+})
+```
+
+Matching is a substring check against the canonical train name (`Metadata.Name`), so pass the type that appears in that name: the train interface for named routes, or the request/query type for trains dispatched by input type.
+
+**Skip input for trains whose input you do not want stored.** `ExcludeInput` is the mirror of `ExcludeOutput`, and the two are independent:
+
+```csharp
+.SaveTrainParameters(configure: cfg =>
+{
+    cfg.ExcludeInput<IDeltaImportAllTrain>();
+    cfg.ExcludeInput("HealthProbe");
+})
+```
+
+Size is rarely the reason here. Inputs are usually small, but they are also where personal data arrives, so the question is normally which ones are worth storing rather than which are too big. When the list worth keeping is the short one, invert it with the predicate:
+
+```csharp
+.SaveTrainParameters(configure: cfg =>
+    cfg.ShouldSaveInputs = name => name.Contains(typeof(IPatchCustomerTrain).FullName!))
+```
+
+That stores the mutation train's input and nothing else. How long it is then kept is a separate question, answered by [per-train metadata retention](/docs/scheduler/admin-trains/metadata-cleanup).
+
+**Cap every parameter.** `MaxParameterBytes` is the automatic safety net for the trains you did not predict, and it is on by default at 1 MiB per parameter. Raise it for a host whose trains legitimately carry more, or set it to `null` to store parameters of any size:
+
+```csharp
+.SaveTrainParameters(configure: cfg => cfg.MaxParameterBytes = 4 * 1_048_576)
+```
+
+A parameter that serializes past the ceiling is aborted before it is fully materialized (the serializer streams through a byte-counting writer and stops the moment the count is exceeded), and a small placeholder is stored instead. This bounds serialization work for collection and object graphs; it does not shrink the train's return value, which is already resident in memory. For a train that genuinely returns tens of MB, prefer `ExcludeOutput` and reduce what the train returns.
+
+## Masking sensitive fields
+
+A member marked `[TraxSensitive]` is written as `{"_redacted": true}` in the stored input and output, while the train runs with the real value. Marking is opt-in: nothing is masked because of its name. See [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters#masking-sensitive-fields) for nested objects, collections, records and renamed members.
+
+## How It Works
+
+The parameter effect only cares about `Metadata` objects and ignores other tracked models. When `SaveChanges` runs:
+
+1. It iterates through every tracked `Metadata` instance.
+2. If `SaveInputs` is enabled and the train is not excluded (via `ExcludeInput`/`ShouldSaveInputs`), it calls `metadata.GetInputObject()`, serializes it to JSON, and assigns it to `metadata.Input`.
+3. If `SaveOutputs` is enabled and the train is not excluded (via `ExcludeOutput`/`ShouldSaveOutputs`), it calls `metadata.GetOutputObject()`, serializes it to JSON, and assigns it to `metadata.Output`.
+
+Unless `MaxParameterBytes` is set to `null`, both serializations run through a streaming writer that aborts once the ceiling is crossed and substitutes the placeholder, so a runaway payload never gets fully built.
+
+A parameter that cannot be serialized at all is stored as `{"_unserializable": true, "_error": "<exception type>"}`, and the run's outcome is unaffected. That covers a reference cycle, an unsupported type, a contract `System.Text.Json` rejects (two members with the same `[JsonPropertyName]`, `[JsonInclude]` on a non-public member), and a property getter that throws.
+
+These fields are then persisted by whatever data provider you have registered (Postgres or InMemory). When you later inspect train executions (through the [Dashboard](/docs/dashboard), direct database queries, or the metadata API), you can see exactly what went in and what came out.
+
+On disposal, the provider clears the input/output object references from metadata to release memory.
+
+## Requires a Data Provider
+
+This effect populates fields on `Metadata`, but it doesn't persist the metadata itself. You need either `UsePostgres` or `UseInMemory` registered alongside it. Without a data provider, the serialized parameters are written to a `Metadata` object that's never saved anywhere.
+
+## When to Use It
+
+- **Production**: When you need to query or debug train executions after the fact. "What input caused this failure?"
+- **Audit trails**: The serialized input/output gives you a record of what data each train processed.
+- **Dashboard**: The [Dashboard](/docs/dashboard) displays `Input` and `Output` in its metadata detail view. Without this provider, those fields show as empty.
+
+## SDK Reference
+
+> [SaveTrainParameters](/docs/sdk-reference/configuration/save-train-parameters)

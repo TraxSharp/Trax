@@ -1,0 +1,275 @@
+---
+layout: default
+title: Setup
+description: "Setting up Trax.Scheduler: AddScheduler with a data provider, the default job submitter, local worker options and defining and scheduling your first train."
+parent: Scheduling
+nav_order: 1
+---
+
+# Setup & Creating Scheduled Trains
+
+## Quick Setup
+
+### Installation
+
+```bash
+dotnet add package Trax.Scheduler
+dotnet add package Trax.Effect.Data.Postgres
+```
+
+`AddScheduler()` requires a data provider, and each provider is its own package: `Trax.Effect.Data.Postgres` for `UsePostgres`, `Trax.Effect.Data.Sqlite` for `UseSqlite`, `Trax.Effect.Data.InMemory` for `UseInMemory`. Use Postgres when several servers share the work. The local workers that run jobs are built into `Trax.Scheduler`, so they need no further package. [Packages](/docs/reference/packages) lists the rest.
+
+### Default Job Submitter
+
+The scheduler automatically selects the right job submitter based on your effect configuration:
+
+| Effect Configuration | Job Submitter | Behavior |
+|---------------------|---------------|----------|
+| `UsePostgres(...)` or `UseSqlite(...)` | `PostgresJobSubmitter` | Inserts into `trax.background_job` table. Local workers are started automatically. |
+| `UseInMemory()` (no database) | Built-in in-memory submitter | Executes jobs inline, synchronously. No database needed. Good for testing and prototyping. |
+| `OverrideSubmitter(...)` | Custom | Your own `IJobSubmitter` implementation takes priority over both defaults. |
+
+> **Validation:** The scheduler validates configuration at build time. `AddScheduler()` requires a data provider (`UsePostgres()`, `UseSqlite()` or `UseInMemory()`); without one, it throws a clear `InvalidOperationException` with a message showing the fix. Similarly, `AddJunctionProgress()` without a data provider fails fast at build time.
+
+### Configuration
+
+Jobs can be scheduled directly in startup configuration. The scheduler creates or updates manifests when the app starts:
+
+```csharp
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.Scheduling;
+using Trax.Scheduler.Services.TraxScheduler;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Database");
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(Program).Assembly)
+    .AddScheduler(scheduler => scheduler
+        .PollingInterval(TimeSpan.FromSeconds(5))
+        .MaxActiveJobs(10)
+        .DefaultMaxRetries(3)
+
+        // Schedule jobs directly in configuration
+        .Schedule<IHelloWorldTrain>(
+            "hello-world",
+            new HelloWorldInput { Name = "Trax.Core Scheduler" },
+            Every.Minutes(1))
+
+        .Schedule<IDailyReportTrain>(
+            "daily-report",
+            new DailyReportInput { ReportType = "sales" },
+            Cron.Daily(hour: 3),
+            opts => opts.MaxRetries(5))
+    )
+);
+
+var app = builder.Build();
+app.Run();
+```
+
+`AddScheduler` registers hosted services based on the configured data provider:
+
+| Service | PostgreSQL | InMemory |
+|---------|-----------|----------|
+| `SchedulerStartupService` | Seeds manifests, recovers stuck jobs | Seeds manifests |
+| `ManifestManagerPollingService` | Evaluates manifests on a timer, creates work queue entries | Evaluates manifests on a timer, dispatches jobs inline |
+| `JobDispatcherPollingService` | Claims work queue entries via `FOR UPDATE SKIP LOCKED` | Not registered (InMemory dispatches directly) |
+| `MetadataCleanupPollingService` | Cleans up old metadata (if `AddMetadataCleanup()`) | Not registered (uses `ExecuteDeleteAsync`) |
+
+With InMemory, the `ManifestManagerPollingService` runs an `InMemoryManifestManagerTrain` that skips the timeout, stale-metadata and stale staged-entry junctions (`CancelTimedOutJobs`, `ReapStalePendingMetadata`, `ReapStaleInProgressMetadata`, `ResolveStaleStagedEntries`) and dispatches jobs directly through the in-memory job submitter. No work queue or JobDispatcher needed.
+
+When `UsePostgres()` is configured, the scheduler automatically starts a background worker service that polls the `trax.background_job` table for queued jobs using PostgreSQL's `FOR UPDATE SKIP LOCKED` for atomic, lock-free dequeue. No extra connection string needed, it reuses the `IDataContext` from `UsePostgres()`. See [Job Submission](/docs/scheduler/job-submission) for architecture details.
+
+All internal scheduler trains (`ManifestManagerTrain`, `JobDispatcherTrain`, `JobRunnerTrain`, `MetadataCleanupTrain`, `DeadLetterCleanupTrain`) are registered automatically by `AddScheduler()`, you only need to pass your own train assemblies to `AddMediator()`.
+
+### Local Worker Options
+
+You can customize the local workers' worker count, polling interval, and timeouts with `ConfigureLocalWorkers()`:
+
+```csharp
+.ConfigureLocalWorkers(options =>
+{
+    options.WorkerCount = 4;                                // default: processor count
+    options.PollingInterval = TimeSpan.FromSeconds(2);      // default: 1 second
+    options.VisibilityTimeout = TimeSpan.FromMinutes(15);   // default: 30 minutes
+    options.ShutdownTimeout = TimeSpan.FromMinutes(1);      // default: 30 seconds
+})
+```
+
+See [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) for full parameter documentation.
+
+> **Migrating from Hangfire?** See the [migration guide](/docs/scheduler/job-submission#migrating-from-hangfire).
+
+## Creating Scheduled Trains
+
+### 1. Define the Input
+
+Your train input must implement `IManifestProperties`. This marker interface signals the type is safe for serialization and storage:
+
+```csharp
+using Trax.Effect.Models.Manifest;
+
+public record SyncCustomersInput : IManifestProperties
+{
+    public string Region { get; init; } = "us-east";
+    public int BatchSize { get; init; } = 1000;
+}
+```
+
+Types without `IManifestProperties` won't compile with the scheduling API, this catches mistakes before runtime.
+
+`IManifestProperties` lives in the `Trax.Effect` package (namespace `Trax.Effect.Models.Manifest`), not in the Scheduler package. You won't need an extra package reference if you already have `Trax.Effect` installed.
+
+### 2. Create the Train
+
+Standard `ServiceTrain` with an interface for DI resolution:
+
+```csharp
+public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, Unit> { }
+
+public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
+{
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<FetchCustomersJunction>()
+            .Chain<TransformDataJunction>()
+            .Chain<WriteToDestinationJunction>().Resolve();
+}
+```
+
+Scheduled trains can return any output type, the output is discarded for background jobs. Using `Unit` is common for fire-and-forget work, but any `TOutput` is valid:
+
+```csharp
+// A train that returns a result type, the output is discarded by the scheduler
+public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, SyncResult> { }
+
+public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, SyncResult>, ISyncCustomersTrain
+{
+    protected override Task<Either<Exception, SyncResult>> Junctions() =>
+        Chain<FetchCustomersJunction>()
+            .Chain<TransformDataJunction>()
+            .Chain<WriteToDestinationJunction>()
+            .Resolve();
+}
+```
+
+### 3. Schedule It
+
+**Option A: Startup Configuration (recommended for static jobs)**
+
+```csharp
+.AddScheduler(scheduler => scheduler
+    .Schedule<ISyncCustomersTrain>(
+        "sync-customers-us-east",
+        new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
+        Cron.Hourly(minute: 30),
+        opts => opts.MaxRetries(3))
+)
+```
+
+**Option B: Runtime via ITraxScheduler (for dynamic jobs)**
+
+```csharp
+public class JobSetupService(ITraxScheduler scheduler)
+{
+    public async Task SetupJobs()
+    {
+        await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput, Unit>(
+            "sync-customers-us-east",
+            new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
+            Every.Hours(6),
+            opts => opts.MaxRetries(3));
+    }
+}
+```
+
+Both approaches use upsert semantics, the ExternalId determines whether to create or update the manifest.
+
+## Schedule Helpers
+
+The `Schedule` type defines when a job runs. Two static factory classes create `Schedule` objects:
+
+- **`Every`**: interval-based: `Every.Seconds(30)`, `Every.Minutes(5)`, `Every.Hours(1)`, `Every.Days(1)`
+- **`Cron`**: cron-based: `Cron.Minutely()`, `Cron.Daily(hour: 3)`, `Cron.Weekly(DayOfWeek.Sunday, hour: 2)`, `Cron.Expression("0 */6 * * *")`
+
+### When each manifest runs
+
+| Declared with | First run | After that |
+|---|---|---|
+| `Schedule(..., Every.X(n))` | On the first ManifestManager poll after it is seeded | `n` after its last success (or cancel). A failed run does not move that point |
+| `Schedule(..., Cron.X(...))` | At its first occurrence after it is seeded, in UTC, never at startup | The next occurrence after its last success |
+| `ScheduleOnce(..., delay)` | Once `delay` has passed since the host started (every start moves a one-off that has not run yet) | Never: it disables itself after its first success |
+| `ThenInclude` / `Include` | After its parent's next success | After each parent success since its own latest run started |
+| `Include(..., o => o.Dormant())` | Only when its parent activates it through `IDormantDependentContext` | The same |
+
+A failed run is retried when the manifest is next due, after the retry backoff; see
+[When a retry runs](/docs/scheduler/dead-letters-and-cleanup#when-a-retry-runs).
+
+## A complete host
+
+The [Scheduling sample](/docs/samples/scheduling) is a whole scheduler host, Postgres, local
+workers, the GraphQL operations surface behind a role and the dashboard, with its `Program.cs`, its
+registration order and a walkthrough you can run.
+
+### What refuses to start
+
+Trax checks its configuration when the host builds and starts, before any worker takes a job. Each
+of these throws `InvalidOperationException`:
+
+| Cause | Message starts |
+|---|---|
+| `AddScheduler()` with no data provider | `AddScheduler() requires a data provider (UsePostgres(), UseSqlite(), or UseInMemory()).` |
+| A duration or count outside its range, such as `DeleteBatchSize = 20_000` | `The scheduler configuration has values it cannot run with.`, then each value, for example `AddMetadataCleanup: DeleteBatchSize must be between 1 and 10000.` See [Value Ranges](/docs/sdk-reference/scheduler-api/add-scheduler#value-ranges) |
+| Manifest groups that depend on each other in a cycle | `Circular dependency detected among manifest groups` |
+| `UseTraxDashboard()` with no posture | `UseTraxDashboard() needs to know who may use the dashboard` |
+| `ExposeOperationQueries()` or `ExposeOperationMutations()` with no gate | `ExposeOperationMutations() exposes scheduler-control mutations (...) but the GraphQL endpoint is not gated` |
+| `GateOperations()` with no policy or roles | `GateOperations() needs a policy or roles` |
+| A `do-not-use-in-production` demo key outside Development | `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production'` |
+| A train whose chain asks a decider, with no `AddDecisionRecording()` | Names the trains. See [A host that does not record](/docs/effect/decisions#a-host-that-does-not-record) |
+
+### Quieter logs
+
+The ManifestManager and JobDispatcher log each cycle at `Information`, every few seconds. To keep
+your trains' logs and drop that chatter, raise their category in `appsettings.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Trax.Scheduler.Trains": "Warning"
+    }
+  }
+}
+```
+
+Failures and dead letters are still logged: a failed job at `Error` by
+`Trax.Scheduler.Services.LocalWorkerService`, and the dead letter at `Warning` by the
+ManifestManager (`... exceeds max retries (3/2). Creating dead letter.`).
+
+## Namespace Reference
+
+The scheduler spans multiple packages. This table lists every public type you're likely to use during integration:
+
+| Type | Namespace | Package |
+|------|-----------|---------|
+| `IManifestProperties` | `Trax.Effect.Models.Manifest` | `Trax.Effect` |
+| `JobRunnerTrain` | `Trax.Scheduler.Trains.JobRunner` | `Trax.Scheduler` |
+| `LocalWorkerOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
+| `Cron` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
+| `Every` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
+| `Schedule` | `Trax.Scheduler.Services.Scheduling` | `Trax.Scheduler` |
+| `ITraxScheduler` | `Trax.Scheduler.Services.TraxScheduler` | `Trax.Scheduler` |
+| `ManifestOptions` | `Trax.Scheduler.Configuration` | `Trax.Scheduler` |
+| `IDormantDependentContext` | `Trax.Scheduler.Services.DormantDependentContext` | `Trax.Scheduler` |
+
+## SDK Reference
+
+> [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [Schedule](/docs/sdk-reference/scheduler-api/schedule) | [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers) | [Every / Cron](/docs/sdk-reference/scheduler-api/scheduling-helpers)

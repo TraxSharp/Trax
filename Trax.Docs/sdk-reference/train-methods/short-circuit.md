@@ -1,0 +1,64 @@
+---
+layout: default
+title: ShortCircuit
+description: Reference for ShortCircuit, which runs a junction whose successful result becomes the train's return value at Resolve, while its failures are ignored.
+parent: Train Methods
+grand_parent: SDK Reference
+nav_order: 4
+---
+
+# ShortCircuit
+
+Executes a junction that can **return early** from the train. If the junction succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result. When [Resolve](/docs/sdk-reference/train-methods/resolve) is called, it returns this value instead of looking in Memory.
+
+If the junction **fails** (returns Left), the failure is **ignored**. No exception is set and the train continues normally.
+
+> **Important:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute. The short-circuit value only affects `Resolve()`: it returns the captured value instead of doing a Memory lookup. Nothing in a chain skips the remaining junctions and still returns the short-circuit value. `Junctions()` cannot branch on its input, because a chain is declared once and checked at startup (`Trax.Docs/adr/0016`), and a later junction that fails puts the train on the left track, where `Resolve()` returns that failure rather than the captured value. A junction after a `ShortCircuit` that should not repeat work has to decide that itself, from what it is given.
+
+## ShortCircuit\<TJunction\>()
+
+Creates and executes a junction with short-circuit behavior.
+
+```csharp
+protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>() where TJunction : class
+```
+
+| Type Parameter | Constraint | Description |
+|---------------|------------|-------------|
+| `TJunction` | `class` | The junction type. Must implement `IJunction<TIn, TOut>` for some `TIn`/`TOut`. |
+
+## ShortCircuit\<TJunction\>(TJunction junctionInstance)
+
+Executes a pre-created junction with short-circuit behavior.
+
+```csharp
+protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance) where TJunction : class
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `junctionInstance` | `TJunction` | A pre-created junction instance |
+
+## Example
+
+```csharp
+protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        ShortCircuit<CheckCache>()            // If cache has result, capture it for resolution
+        .Chain<ValidateOrder>()           // Still executes even on cache hit
+        .Chain<ProcessPayment>().Resolve();          // Returns cached result OR processed result
+```
+
+## Behavior
+
+1. Creates the junction instance and extracts input from Memory.
+2. Executes the junction.
+3. If the junction **succeeds** and returns a value of type `TReturn`:
+   - The value is stored as `ShortCircuitValue`.
+   - `Resolve()` will return this value, bypassing Memory lookup.
+4. If the junction **fails** (returns Left): the failure is **ignored**. No exception is set and the train continues normally.
+
+## Remarks
+
+- The key difference from `Chain`: failures do not stop the train. A failing short-circuit junction is silently ignored.
+- If the junction output type matches the train's `TReturn`, the value becomes the short-circuit result for `Resolve()`.
+- This is useful for cache checks, optional enrichment junctions, and conditional early returns.

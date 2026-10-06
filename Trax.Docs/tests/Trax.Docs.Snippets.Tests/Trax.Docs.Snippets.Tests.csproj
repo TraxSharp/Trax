@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      The lockfile is what makes "compiled against the published release" true: CI restores it
+      in locked mode (GitHub Actions sets CI=true), so a restore that would resolve anything
+      else, the workspace's local 1.99.99 feed included, fails instead of passing on other bits.
+    -->
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <!--
+    The packages a compiled snippet is checked against. Their versions are pinned in
+    Directory.Packages.props, which says why they are exact published releases.
+  -->
+  <ItemGroup Label="Trax">
+    <PackageReference Include="Trax.Api" />
+    <PackageReference Include="Trax.Api.Auth.ApiKey" />
+    <PackageReference Include="Trax.Api.GraphQL" />
+    <PackageReference Include="Trax.Core" />
+    <PackageReference Include="Trax.Dashboard" />
+    <PackageReference Include="Trax.Effect" />
+    <PackageReference Include="Trax.Effect.Data.InMemory" />
+    <PackageReference Include="Trax.Effect.Data.Postgres" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Logging" />
+    <PackageReference Include="Trax.Effect.JunctionProvider.Progress" />
+    <PackageReference Include="Trax.Effect.Provider.Json" />
+    <PackageReference Include="Trax.Effect.Provider.Parameter" />
+    <PackageReference Include="Trax.Mediator" />
+    <PackageReference Include="Trax.Scheduler" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Supporting declarations for a page's snippets. Compiled with the snippets, not into this assembly. -->
+    <Compile Remove="Context/**" />
+    <None Include="Context/**" />
+  </ItemGroup>
+
+  <!--
+    Hands the snippet compiler the same reference set this project compiles against: the
+    framework reference packs plus every package above, reference assemblies where a package
+    ships them. Written after the build, so a test run that skips the build still finds it.
+  -->
+  <Target Name="WriteSnippetReferences" AfterTargets="CopyFilesToOutputDirectory">
+    <WriteLinesToFile
+      File="$(OutDir)snippet-references.txt"
+      Lines="@(ReferencePathWithRefAssemblies)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true"
+    />
+  </Target>
+</Project>

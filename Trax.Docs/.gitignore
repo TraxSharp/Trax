@@ -1,0 +1,12 @@
+# Visual Studio / .NET build output
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esult*/
+
+# IDE
+.vs/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

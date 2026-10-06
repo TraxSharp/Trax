@@ -1,0 +1,33 @@
+---
+layout: default
+title: API Auth
+description: "Index of the Trax.Api.Auth reference: the principal abstraction, API-key, JWT, Cognito and OIDC schemes, and the JWT test fixtures."
+parent: SDK Reference
+nav_order: 7
+has_children: true
+---
+
+# API Auth
+
+> NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
+
+Reference for `Trax.Api.Auth` (core principal abstraction), `Trax.Api.Auth.ApiKey` (API-key scheme), `Trax.Api.Auth.Jwt` (JWT bearer scheme), `Trax.Api.Auth.Jwt.Cognito` (Cognito validator helpers), `Trax.Api.Auth.Jwt.Cognito.Issuer` (Cognito token minting), `Trax.Api.Auth.Jwt.Testing` (test fixtures), and `Trax.Api.Auth.Oidc` (OpenID Connect scheme).
+
+Pages:
+
+- [AddTraxApiKeyAuth](/docs/sdk-reference/api-auth/add-trax-api-key-auth)
+- [AddTraxJwtAuth](/docs/sdk-reference/api-auth/add-trax-jwt-auth)
+- [AddTraxJwtDispatcher](/docs/sdk-reference/api-auth/add-trax-jwt-dispatcher)
+- [UseCognito](/docs/sdk-reference/api-auth/use-cognito)
+- [Cognito Issuer](/docs/sdk-reference/api-auth/cognito-issuer)
+- [JWT Testing](/docs/sdk-reference/api-auth/jwt-testing)
+- [AddTraxOidcAuth](/docs/sdk-reference/api-auth/add-trax-oidc-auth)
+- [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal)
+- [Injecting TraxPrincipal](/docs/sdk-reference/api-auth/injecting-trax-principal)
+- [TraxCaller](/docs/sdk-reference/api-auth/trax-caller)
+- [ITraxPrincipalResolver](/docs/sdk-reference/api-auth/i-trax-principal-resolver)
+- [ApiKeyDefaults](/docs/sdk-reference/api-auth/api-key-defaults)
+- [ApiKeyAuthenticationOptions](/docs/sdk-reference/api-auth/api-key-authentication-options)
+- [JwtDefaults](/docs/sdk-reference/api-auth/jwt-defaults)
+- [OidcDefaults](/docs/sdk-reference/api-auth/oidc-defaults)
+- [TraxAuthClaimTypes](/docs/sdk-reference/api-auth/trax-auth-claim-types)

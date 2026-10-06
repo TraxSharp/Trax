@@ -1,0 +1,155 @@
+---
+layout: default
+title: Analyzer
+description: The deprecated TrainChainAnalyzer in Trax.Core.Analyzers, its CHAIN001 and CHAIN002 diagnostics, and why startup chain verification has replaced it.
+parent: Core
+nav_order: 4
+---
+
+# Analyzer
+
+> **Deprecated.** The `TrainChainAnalyzer` in `Trax.Core.Analyzers` no longer checks anything.
+> It only inspects chains that start at `Activate()`, and `Activate` is now internal, so no
+> train can write a chain the analyzer recognises. A chain declared in `Junctions()` produces no
+> CHAIN001 or CHAIN002 diagnostics, whether it is correct or not.
+>
+> The [startup chain verification](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic)
+> replaces it. At host startup Trax reads every registered train's `Junctions()` declaration and
+> refuses to start if a junction's input never reaches Memory or the chain ends without the
+> train's return type, which are the same two faults the analyzer reported. The rest of this page
+> describes the analyzer as it was designed, for projects that still reference the package.
+
+The `Trax.Core.Analyzers` Roslyn analyzer is deprecated: chains are now checked at host startup instead. As designed, it validated a train's route at compile time, checking that every junction's input would be in Memory before that junction ran. When you chain junctions via `.Chain<TJunction>()`, the analyzer simulates the runtime Memory dictionary to verify that each junction's input type is available before that junction executes.
+
+## The Problem
+
+Consider this train:
+
+```csharp
+Chain<LoadMetadataJunction>()                // TIn=RunJobRequest -> TOut=Metadata
+    .Chain<ValidateMetadataStateJunction>()  // TIn=Metadata -> TOut=Unit
+    .Chain<RunScheduledTrainJunction>();
+```
+
+If someone removes `LoadMetadataJunction`, `ValidateMetadataStateJunction` expects `Metadata` in Memory but nothing produces it. Today this is a runtime error. The train fails when it tries to find `Metadata` in the dictionary. You won't discover this until the code actually runs.
+
+The analyzer makes it a compile-time error. You see the problem immediately in your IDE, before you even build.
+
+## What It Checks
+
+The analyzer triggers on `.Resolve()` calls in `Train<,>` or `ServiceTrain<,>` subclasses whose chain starts at `Activate()` (which is why it no longer fires). It walks through the chain and simulates Memory forward:
+
+```
+Activate(input)       -> Memory = { TInput, Unit }
+.Chain<JunctionA>()   -> Check: is JunctionA's TIn in Memory? Add JunctionA's TOut.
+.Chain<JunctionB>()   -> Check: is JunctionB's TIn in Memory? Add JunctionB's TOut.
+                      -> Check: is TReturn in Memory?
+```
+
+| Method | What the analyzer does |
+|--------|----------------------|
+| `Activate(input, otherInputs...)` | Seeds Memory with `TInput` and `Unit`, plus the type of each extra argument. A chain that does not start here is not analyzed, which is why a `Junctions()` declaration never was |
+| `.Chain<TJunction>()` | Checks `TIn` in Memory, then adds `TOut` |
+| `.ShortCircuit<TJunction>()` | Same as `Chain`: checks `TIn` in Memory, adds `TOut` |
+| `.AddServices<T1, T2>()` | Adds each type argument to Memory |
+| `.Extract<TIn, TOut>()` | Adds `TOut` to Memory |
+| `.Resolve()` / end of chain | Checks `TReturn` in Memory |
+
+## Diagnostics
+
+### CHAIN001: Junction input type not available (Error)
+
+Fires when a junction needs a type that no previous junction has produced.
+
+```csharp
+public class BrokenTrain : ServiceTrain<string, Unit>
+{
+    // The RunInternal and Activate form this was written for; neither is reachable any more.
+    protected override Task<Either<Exception, Unit>> RunInternal(string input) =>
+        Activate(input).Chain<LogGreetingJunction>().Resolve();  // <- CHAIN001: LogGreetingJunction
+                                      //   requires HelloWorldInput, but Memory only has [string, Unit]
+}
+```
+
+The message tells you exactly what's missing and what's available:
+
+```
+error CHAIN001: Junction 'LogGreetingJunction' requires input type 'HelloWorldInput'
+which has not been produced by a previous junction. Available: [string, Unit].
+```
+
+### CHAIN002: Train return type not available (Error)
+
+Fires when `Resolve()` needs a type that hasn't been produced. The analyzer tracks all chain methods including `ShortCircuit`, so a missing return type is always an error.
+
+```csharp
+public class MissingReturnTrain : ServiceTrain<OrderRequest, Receipt>
+{
+    protected override Task<Either<Exception, Receipt>> RunInternal(OrderRequest input) =>
+        Activate(input)
+            .Chain<ValidateOrderJunction>()  // Returns Unit
+            .Resolve();                      // <- CHAIN002: Receipt not in Memory
+}
+```
+
+## Tuple and Interface Handling
+
+The analyzer mirrors the runtime's Memory behavior:
+
+**Tuple outputs are decomposed.** When a junction produces `(User, Order)`, the analyzer adds `User` and `Order` to Memory individually (not the tuple itself). This matches how the runtime stores tuple elements.
+
+**Tuple inputs are validated component-by-component.** When a junction takes `(User, Order)`, the analyzer checks that both `User` and `Order` are individually available in Memory.
+
+**Interface resolution works through concrete types.** When a junction produces `ConcreteUser` (which implements `IUser`), the analyzer adds both `ConcreteUser` and `IUser` to Memory. A subsequent junction requiring `IUser` will pass validation.
+
+## Known Limitations
+
+**Sibling interface inputs.** When the train's `TInput` is an interface (e.g., `Train<IFoo, Unit>`) and a junction requires a different interface that the runtime concrete type also implements, the analyzer can't verify this. Suppress with `#pragma warning disable CHAIN001`.
+
+**Cross-method chains.** The analyzer only looks within a single method body. If you build a chain across helper methods, it won't follow the calls.
+
+## Setup
+
+The analyzer is a **separate, opt-in package**. Referencing `Trax.Core` does not bring it
+in: `Trax.Core` ships only `lib/net10.0/Trax.Core.dll` and does not depend on it.
+
+```bash
+dotnet add package Trax.Core.Analyzers
+```
+
+It is marked as a development dependency, so it applies to the project that references it
+and does not flow to that project's own consumers. Its NuGet description says it is
+deprecated; there is no reason to add it to a new project, and an existing reference can be
+removed.
+
+For development within the Trax.Core solution itself, the analyzer is propagated to all projects via `Directory.Build.props`:
+
+```xml
+<ItemGroup Condition="'$(MSBuildProjectName)' != 'Trax.Core.Analyzers'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
+</ItemGroup>
+```
+
+## Suppressing Diagnostics
+
+If the analyzer fires on a chain that you know is correct (interface patterns, dynamic Memory seeding, etc.), suppress it with a pragma:
+
+```csharp
+#pragma warning disable CHAIN001
+    .Chain<MyDynamicJunction>()
+#pragma warning restore CHAIN001
+```
+
+Or suppress at the project level in your `.csproj`:
+
+```xml
+<PropertyGroup>
+    <NoWarn>$(NoWarn);CHAIN001</NoWarn>
+</PropertyGroup>
+```
+
+## SDK Reference
+
+> [Junctions](/docs/sdk-reference/train-methods/junctions) | [Chain](/docs/sdk-reference/train-methods/chain) | [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) | [Extract](/docs/sdk-reference/train-methods/extract) | [AddServices](/docs/sdk-reference/train-methods/add-services) | [Resolve](/docs/sdk-reference/train-methods/resolve)

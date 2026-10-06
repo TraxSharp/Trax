@@ -1,0 +1,164 @@
+---
+layout: default
+title: UseRemoteRun
+description: Reference for UseRemoteRun, which sends synchronous run requests to a remote HTTP runner, with signing keys, timeouts and the remote side's setup.
+parent: Scheduler API
+grand_parent: SDK Reference
+nav_order: 9.1
+---
+
+# UseRemoteRun
+
+Configures the scheduler to offload synchronous `run` execution to a remote HTTP endpoint instead of executing in-process. The call blocks until the remote train completes and returns the output.
+
+"Synchronous run" means every run that answers its caller with the output: a GraphQL mutation in `RUN` mode, a `[TraxQuery]` query, and `ITrainExecutionService.RunAsync`. All of them go through the replaced run executor, so with `UseRemoteRun` a query is executed on the runner too, not on the API process.
+
+## Signature
+
+```csharp
+public SchedulerConfigurationBuilder UseRemoteRun(
+    Action<RemoteRunOptions> configure
+)
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `configure` | `Action<RemoteRunOptions>` | Yes | Callback to set the remote endpoint URL and HTTP client options |
+
+## Returns
+
+`SchedulerConfigurationBuilder`, for continued fluent chaining.
+
+## RemoteRunOptions
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `BaseUrl` | `string` | _(required)_ | The URL of the remote endpoint that receives run requests (e.g., `https://my-runner.example.com/trax/run`) |
+| `ConfigureHttpClient` | `Action<HttpClient>?` | `null` | Optional callback to configure the `HttpClient` (add auth headers, custom timeouts, or any other HTTP configuration) |
+| `Timeout` | `TimeSpan` | 5 minutes | HTTP request timeout. Longer default than `UseRemoteWorkers` (30s) because run requests block until the train completes |
+| `Retry` | `HttpRetryOptions` | _(see below)_ | Retry options for transient HTTP failures (429, 502, 503). Same configuration as [`RemoteWorkerOptions.Retry`](/docs/sdk-reference/scheduler-api/use-remote-workers#httpretryoptions) |
+| `SigningKey` | `byte[]?` | `null` | The key shared with the runner's `AddTraxJobRunner(runner => runner.SigningKey = ...)`, at least 32 bytes. When set, each request (and each retry) carries a `Trax-Signature` the runner verifies. See [Authorization Posture](/docs/scheduler/remote-execution#authorization-posture) |
+
+## Examples
+
+### Basic Usage
+
+```csharp
+services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(assemblies)
+    .AddScheduler(scheduler => scheduler
+        .UseRemoteWorkers(
+            remote => remote.BaseUrl = "https://my-runner.example.com/trax/execute",
+            routing => routing.ForTrain<IMyTrain>()
+        )
+        .UseRemoteRun(remote =>
+            remote.BaseUrl = "https://my-runner.example.com/trax/run"
+        )
+    )
+);
+```
+
+### With a Signing Key
+
+```csharp
+.UseRemoteRun(remote =>
+{
+    remote.BaseUrl = "https://my-runner.example.com/trax/run";
+    remote.SigningKey = Convert.FromBase64String(configuration["Trax:RunnerSigningKey"]!);
+})
+```
+
+A run request must reach the runner within its `MaxClockSkew` (five minutes by default) and is accepted once. For a runner that uses an authorization policy instead, add its credentials with `ConfigureHttpClient`.
+
+### With Custom Timeout
+
+```csharp
+.UseRemoteRun(remote =>
+{
+    remote.BaseUrl = "https://my-runner.example.com/trax/run";
+    remote.Timeout = TimeSpan.FromMinutes(10);
+})
+```
+
+## Remote Side Setup
+
+The remote process registers `AddTraxJobRunner` with a posture and maps the run endpoint with `UseTraxRunEndpoint()`:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddTrax(trax => trax
+    .AddEffects(effects => effects
+        .UsePostgres(connectionString)
+    )
+    .AddMediator(typeof(MyTrain).Assembly)
+);
+builder.Services.AddTraxJobRunner(runner =>
+    runner.SigningKey = Convert.FromBase64String(builder.Configuration["Trax:RunnerSigningKey"]!)
+);
+
+var app = builder.Build();
+app.UseTraxRunEndpoint("/trax/run");
+app.Run();
+```
+
+If the remote also handles queued jobs, map both endpoints:
+
+```csharp
+var app = builder.Build();
+app.UseTraxJobRunner("/trax/execute");  // queue path
+app.UseTraxRunEndpoint("/trax/run");    // synchronous run path
+app.Run();
+```
+
+## Registered Services
+
+`UseRemoteRun()` registers:
+
+| Service | Lifetime | Description |
+|---------|----------|-------------|
+| `RemoteRunOptions` | Singleton | Configuration options |
+| `IRunExecutor` | Transient | A typed `HttpClient` client (`AddHttpClient`). Replaced with an internal implementation that dispatches run requests via HTTP POST and blocks until the response |
+
+> **Note:** Without `UseRemoteRun()`, the default `LocalRunExecutor` executes trains in-process via `ITrainBus.RunByNameAsync()`. `UseRemoteRun()` overrides this via last-registration-wins.
+
+## How It Works
+
+When a GraphQL `run*` mutation or a `[TraxQuery]` query is called, the `IRunExecutor` registered by `UseRemoteRun()`:
+
+1. Serializes a `RemoteRunRequest` containing the train name, input JSON, and input type
+2. POSTs the JSON payload to `BaseUrl`
+3. Blocks until the remote endpoint returns a `RemoteRunResponse`
+4. On success: deserializes the train output from the response and returns it to GraphQL
+5. On error: throws a `RemoteRunException` (a `TrainException`) with the remote error details. Its `PublicMessage` is the runner's message for a client, and null for a transport failure or any failure other than a train author's `TrainException`
+
+The remote endpoint (`UseTraxRunEndpoint`) calls `ITrainExecutionService.RunAsync()` locally, which creates metadata, runs the train, and returns the output. Since both processes share the same Postgres database, the metadata is visible to the dashboard.
+
+## Differences from UseRemoteWorkers
+
+| | UseRemoteRun | UseRemoteWorkers |
+|---|---|---|
+| **Execution path** | `run*` mutations and `[TraxQuery]` queries | `queue*` mutations |
+| **Blocking** | Yes, blocks until train completes | No, returns immediately with WorkQueueId |
+| **Returns** | Train output (deserialized from response) | WorkQueueId + ExternalId |
+| **Remote endpoint** | `UseTraxRunEndpoint()` (`/trax/run`) | `UseTraxJobRunner()` (`/trax/execute`) |
+| **Abstraction** | `IRunExecutor` | `IJobSubmitter` |
+| **Default timeout** | 5 minutes | 30 seconds |
+
+## Package
+
+```
+dotnet add package Trax.Scheduler
+```
+
+## See Also
+
+- [Remote Execution](/docs/scheduler/remote-execution): architecture overview and deployment models
+- [UseRemoteWorkers](/docs/sdk-reference/scheduler-api/use-remote-workers): remote dispatch for queued trains
+- [UseLambdaRun](/docs/sdk-reference/scheduler-api/use-lambda-run): Lambda-based run execution (direct SDK, no public endpoint)
+- [AddTraxJobRunner](/docs/sdk-reference/scheduler-api/add-trax-job-runner): remote receiver setup (includes `UseTraxRunEndpoint`)
