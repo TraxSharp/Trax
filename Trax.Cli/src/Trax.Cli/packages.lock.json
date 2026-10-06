@@ -38,9 +38,9 @@
       },
       "Trax.Effect.StateMachine.Persistence": {
         "type": "Direct",
-        "requested": "[1.59.0, )",
-        "resolved": "1.59.0",
-        "contentHash": "X6vpC0X8Y3d0fOmwQ/1vQ7ACfIaHCI04+23AWby/6ku4LPruItyX3s0UTWDyBG4lJrWAJvQNnBwPAoBMmwRYJA==",
+        "requested": "[1.60.0, )",
+        "resolved": "1.60.0",
+        "contentHash": "rlRZQ8RC56FpjNg3xn+yaWhLD4hnklcZi5AyWjUotfV60aM5b9MB/Uzuqc4EYXU6Reqya7FHIMD22TX4t7lJqg==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
@@ -51,9 +51,9 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.9.1",
-          "Trax.Effect": "1.59.0",
-          "Trax.Effect.Data": "1.59.0",
-          "Trax.Effect.StateMachine": "1.59.0"
+          "Trax.Effect": "1.60.0",
+          "Trax.Effect.Data": "1.60.0",
+          "Trax.Effect.StateMachine": "1.60.0"
         }
       },
       "Microsoft.EntityFrameworkCore": {
@@ -235,8 +235,8 @@
       },
       "Trax.Effect": {
         "type": "Transitive",
-        "resolved": "1.59.0",
-        "contentHash": "jEzteaAWERyOzLuHzpI8Y88KY/dLS87QVOXwMvkHlLepmUlf0ZftNmQt+SDCL7vi1rjbun8ZIaSnU95Qp/49mw==",
+        "resolved": "1.60.0",
+        "contentHash": "XdqZJmOcYvmLp+YFWd8WYO7vuB/aN9HEJfiWo4ZzNUjgWz3PEJkVo7xf0nF3Cl9/4eFkm+QcQ28zpnLu1x4T3A==",
         "dependencies": {
           "Microsoft.Extensions.Hosting.Abstractions": "10.0.12",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
@@ -245,8 +245,8 @@
       },
       "Trax.Effect.Data": {
         "type": "Transitive",
-        "resolved": "1.59.0",
-        "contentHash": "lLL1Ir+eo62lBp0tR1ozGSPwtwsHafS3PsNZPY8/xUlQa2L/gYJg59Yl1f4ChcHsUmlLeEfknRiXzrw2kRHLBw==",
+        "resolved": "1.60.0",
+        "contentHash": "aIbMgVw00ybnPUzTK1+WHkgkeuR2Q9GIDWYs598eH9i0wtqESvYkaYm5O2SkqCI2JZs+0aVgUj2Osl94VOHSMA==",
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.12",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.12",
@@ -256,13 +256,13 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
           "Npgsql": "10.0.3",
           "Trax.Core": "1.9.1",
-          "Trax.Effect": "1.59.0"
+          "Trax.Effect": "1.60.0"
         }
       },
       "Trax.Effect.StateMachine": {
         "type": "Transitive",
-        "resolved": "1.59.0",
-        "contentHash": "K2t70im/7ypqfYIFGgHxmmyU5DAQDBO95W5le9pu5adhZwBNP4TGrfaNpy7fM3uQvBbmX9VxeC3EZkliYEDImA=="
+        "resolved": "1.60.0",
+        "contentHash": "StEwF0uG80m9pHBTIgU6GV/iFruGG0+cfYOpglu6BYnivrMng7jxWXb7kcBJnuhTWP6deZDWLvXD22wktv2Pbg=="
       }
     }
   }
