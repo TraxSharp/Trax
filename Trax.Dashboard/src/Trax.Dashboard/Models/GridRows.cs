@@ -1,16 +1,17 @@
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Enums;
-using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Models;
 
 // The rows the server-paged grids show. Each is a projection of its entity without the columns
 // no grid displays: a run's input, output and stack trace, a work queue entry's input, a
-// manifest's properties and exclusions, a log's stack trace. Those are text columns that can hold
+// manifest's properties and exclusions. (A log row is read through the operations service, whose
+// entries carry a stack trace capped at 4,000 characters.) Those are text columns that can hold
 // megabytes each, and a grid re-reads its page on every poll tick, so loading whole entities
 // moved them over the wire and into circuit memory every few seconds for nothing. The detail
 // pages still load the whole row. Grid filters and sorts are applied after the projection, so a
@@ -112,7 +113,10 @@ internal sealed class ManifestRow
     };
 }
 
-/// <summary>A log entry as the log grids show it.</summary>
+/// <summary>
+/// A log entry as the log grids show it, read through <c>IOperationsService.GetLogsAsync</c>
+/// rather than projected here, without the stack trace the grids do not show.
+/// </summary>
 internal sealed class LogRow
 {
     public long Id { get; init; }
@@ -122,13 +126,14 @@ internal sealed class LogRow
     public string Message { get; init; } = "";
     public string? Exception { get; init; }
 
-    public static readonly Expression<Func<Log, LogRow>> Projection = l => new LogRow
-    {
-        Id = l.Id,
-        MetadataId = l.MetadataId,
-        Level = l.Level,
-        Category = l.Category,
-        Message = l.Message,
-        Exception = l.Exception,
-    };
+    public static LogRow From(LogRecord log) =>
+        new()
+        {
+            Id = log.Id,
+            MetadataId = log.MetadataId,
+            Level = log.Level,
+            Category = log.Category,
+            Message = log.Message,
+            Exception = log.Exception,
+        };
 }

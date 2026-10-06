@@ -193,5 +193,10 @@ else
             NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation uploaded.", duration: 3000);
             await ReloadAsync();
         }
+        else if (result is string warning)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, NotBroadcastWarning.Title, warning, duration: 15000);
+            await ReloadAsync();
+        }
     }
 }

@@ -235,39 +235,9 @@
     <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Logs</RadzenText>
     @if (_logCount > 0)
     {
-        <TraxDataGrid @ref="_logsGrid"
-                      TItem="LogRow"
-                      ServerLoadData="@LoadLogsPageAsync">
-            <Columns>
-                <RadzenDataGridColumn TItem="LogRow"
-                                      Property="Id"
-                                      Title="Id"
-                                      Width="80px"
-                                      SortOrder="SortOrder.Descending" />
-                <RadzenDataGridColumn TItem="LogRow"
-                                      Property="Level"
-                                      Title="Level"
-                                      Width="120px">
-                    <Template Context="l">
-                        <RadzenBadge BadgeStyle="@GetLogLevelBadgeStyle(l.Level)"
-                                     Text="@l.Level.ToString()" />
-                    </Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="LogRow"
-                                      Property="Category"
-                                      Title="Category"
-                                      Width="200px">
-                    <Template Context="l">@ShortName(l.Category)</Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="LogRow"
-                                      Property="Message"
-                                      Title="Message" />
-                <RadzenDataGridColumn TItem="LogRow"
-                                      Property="Exception"
-                                      Title="Exception"
-                                      Width="250px" />
-            </Columns>
-        </TraxDataGrid>
+        <LogsGrid @ref="_logsGrid"
+                  MetadataId="@MetadataId"
+                  DefaultOrder="Trax.Scheduler.Services.Operations.LogOrder.OldestFirst" />
     }
     else
     {

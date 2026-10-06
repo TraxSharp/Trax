@@ -52,8 +52,12 @@ host's own login page. The dashboard's assets are the same files the NuGet packa
 
 **A named policy that is not registered fails at startup**, not on the first request.
 `AddRazorComponents()` registers the authorization services, so the policy name is the only
-thing that can be missing. Authentication is still the host's: with no scheme that can
-challenge, a gated request fails rather than being served.
+thing that can be missing. Authentication is still the host's, but a posture that could only
+answer a refusal with a 500 fails at startup too: a policy naming an authentication scheme that
+is not registered; a policy without schemes, or roles, on a host with no default challenge
+scheme; and a default forbid scheme the host named that is not registered, through which a
+signed-in caller the posture refuses would be forbidden. A roles-only posture is not combined
+with the host's default authorization policy, so that policy's schemes play no part.
 
 **A circuit stays authorized only while its user satisfies the posture.** The endpoint checks
 the posture on the page request and on the hub's negotiate and connect, and navigation inside
@@ -83,8 +87,8 @@ re-authenticated. **Only the posture is re-checked**: conventions a host adds on
 
 - `DashboardAuthorizationTests` pins the refusal without a posture, the posture on every page
   and hub endpoint, the startup failure for an unregistered policy, the warning for
-  `AllowAnonymousDashboard()`, the contradiction between the two, and that the returned builder
-  composes.
+  `AllowAnonymousDashboard()`, the contradiction between the two, the startup failures for a
+  posture with no scheme to challenge or forbid with, and that the returned builder composes.
 - `CircuitAuthorizationTests` pins the in-circuit half: a user whose role is revoked mid-circuit
   has the next inbound message refused, an authentication change is acted on without waiting
   for the interval, a live policy is re-run, a write checks first, a refused circuit reloads, a
@@ -102,6 +106,8 @@ rely on the per-message check.
 
 ## Changelog
 
+- **2026-10-05**: A posture with no authentication scheme to challenge with, a policy naming an
+  unregistered scheme, or an unregistered default forbid scheme fails at startup.
 - **2026-10-01**: Replaced "a circuit is authorized once". The posture is now re-checked inside
   the circuit, on authentication changes, on an interval and before each inbound message, and
   a refused circuit is closed. Recorded why the dashboard reads the host's

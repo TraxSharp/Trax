@@ -1,11 +1,9 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Radzen;
-using Trax.Dashboard.Services.LogLevels;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
@@ -14,8 +12,9 @@ namespace Trax.Dashboard.Components.Pages.Settings;
 /// The server settings page, at <c>/trax/settings/server</c>: scheduler settings (polling, retries,
 /// timeouts, dead letter and metadata cleanup, local workers) and log levels. Scheduler changes
 /// save through the scheduler's operations service, the same path as the GraphQL scheduler config
-/// mutation; log levels are applied to this process's logger filter. Each section appears only when
-/// its services are registered. Part of the dashboard UI, routed by the package; not intended to be used directly.
+/// mutation; log levels read and save through the scheduler's log level service, the same path as the
+/// GraphQL log levels query and mutation, and apply to this process's logger filter. Each section
+/// appears only when its services are registered. Part of the dashboard UI, routed by the package; not intended to be used directly.
 /// </summary>
 public partial class ServerSettingsPage
 {
@@ -67,8 +66,7 @@ public partial class ServerSettingsPage
     private static readonly List<string> TimeUnits = ["seconds", "minutes", "hours", "days"];
 
     // ── Logging state ──
-    private IConfiguration? _configuration;
-    private DashboardLogLevelOverrides? _logLevelOverrides;
+    private ILogLevelService? _logLevelService;
     private bool _loggingAvailable;
     private List<LogLevelEntry> _logLevels = [];
     private Dictionary<string, string> _savedLogLevels = new();
@@ -177,17 +175,12 @@ public partial class ServerSettingsPage
         }
 
         // Logging
-        _configuration = ServiceProvider.GetService<IConfiguration>();
-        _logLevelOverrides = ServiceProvider.GetService<DashboardLogLevelOverrides>();
-        _loggingAvailable =
-            _configuration is not null
-            && _logLevelOverrides is not null
-            && _configuration.GetSection("Logging:LogLevel").GetChildren().Any();
-
-        if (_loggingAvailable)
+        _logLevelService = ServiceProvider.GetService<ILogLevelService>();
+        if (_logLevelService is not null)
         {
             LoadLogging();
             SnapshotLoggingState();
+            _loggingAvailable = _logLevels.Count > 0;
         }
     }
 
@@ -297,54 +290,40 @@ public partial class ServerSettingsPage
     // ── Logging helpers ──
 
     /// <summary>
-    /// One row per category the host configures under <c>Logging:LogLevel</c>, showing a level
-    /// saved from this page over the configured one.
+    /// One row per category the host configures under <c>Logging:LogLevel</c> (and any set at
+    /// runtime since), with the level its loggers filter at now, as the log level service reads
+    /// them for the API.
     /// </summary>
     private void LoadLogging()
     {
-        var overrides = _logLevelOverrides!.Levels;
-        _logLevels = _configuration!
-            .GetSection("Logging:LogLevel")
-            .GetChildren()
-            .Select(section => new LogLevelEntry
-            {
-                Category = section.Key,
-                Level = overrides.TryGetValue(section.Key, out var saved)
-                    ? saved.ToString()
-                    : section.Value ?? "Information",
-            })
-            .OrderBy(e =>
-                e.Category == DashboardLogLevelOverrides.DefaultCategory ? "" : e.Category
-            )
+        _logLevels = _logLevelService!
+            .GetLogLevels()
+            .Select(l => new LogLevelEntry { Category = l.Category, Level = l.Level.ToString() })
             .ToList();
     }
 
     /// <summary>
-    /// Applies the changed levels to the host's logger filters, then reads back the level each
-    /// category is filtered at. Returns the categories where that is not the level saved, which
-    /// happens when the host sets the filter itself after the dashboard.
+    /// Sends the changed levels to the log level service, which applies them to the host's logger
+    /// filters and reads back the level each category is filtered at, then reads the levels
+    /// again. Null when nothing changed.
     /// </summary>
-    private List<string> SaveLogging()
+    private LogLevelUpdateResult? SaveLogging()
     {
         var changed = _logLevels
             .Where(e => e.Level != _savedLogLevels.GetValueOrDefault(e.Category, "Information"))
-            .Select(e => KeyValuePair.Create(e.Category, Enum.Parse<LogLevel>(e.Level)))
+            .Select(e => new LogLevelChange(e.Category, Enum.Parse<LogLevel>(e.Level)))
             .ToList();
         if (changed.Count == 0)
-            return [];
+            return null;
 
-        _logLevelOverrides!.Set(changed);
+        var result = _logLevelService!.SetLogLevels(changed);
+        if (result.Success)
+        {
+            LoadLogging();
+            SnapshotLoggingState();
+        }
 
-        var filters = ServiceProvider
-            .GetRequiredService<IOptionsMonitor<LoggerFilterOptions>>()
-            .CurrentValue;
-        var notApplied = changed
-            .Where(c => DashboardLogLevelOverrides.EffectiveLevel(filters, c.Key) != c.Value)
-            .Select(c => c.Key)
-            .ToList();
-
-        SnapshotLoggingState();
-        return notApplied;
+        return result;
     }
 
     private void DiscardLoggingChanges()
@@ -409,8 +388,22 @@ public partial class ServerSettingsPage
 
         if (_loggingAvailable)
         {
-            var notApplied = SaveLogging();
-            if (notApplied.Count > 0)
+            var result = SaveLogging();
+            if (result is { Success: false })
+            {
+                NotificationService.Notify(
+                    new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "Log levels not saved",
+                        Detail = result.Message,
+                        Duration = 8000,
+                    }
+                );
+                return;
+            }
+
+            if (result is { NotApplied.Count: > 0 })
             {
                 NotificationService.Notify(
                     new NotificationMessage
@@ -419,7 +412,7 @@ public partial class ServerSettingsPage
                         Summary = "Log levels not applied",
                         Detail =
                             "The host sets these categories' levels after the dashboard, so the "
-                            + $"saved level is not the one in force: {string.Join(", ", notApplied)}.",
+                            + $"saved level is not the one in force: {string.Join(", ", result.NotApplied)}.",
                         Duration = 8000,
                     }
                 );

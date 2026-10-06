@@ -173,4 +173,20 @@ public class DashboardServiceExtensionsTests
             )
             .WithMessage("*AddScheduler*");
     }
+
+    [Test]
+    public void UseTraxDashboard_WithoutAddTraxDashboard_ThrowsNamingTheMissingCall()
+    {
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions { EnvironmentName = "Production" }
+        );
+        builder.Services.AddSingleton<TraxMarker>();
+        using var app = builder.Build();
+
+        Action act = () => app.UseTraxDashboard();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("UseTraxDashboard() requires AddTraxDashboard()*");
+    }
 }

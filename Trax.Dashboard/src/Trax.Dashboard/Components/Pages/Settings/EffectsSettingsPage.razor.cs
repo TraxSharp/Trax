@@ -1,23 +1,22 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Dashboard.Components.Dialogs;
-using Trax.Effect.Services.EffectProviderFactory;
-using Trax.Effect.Services.EffectRegistry;
+using Trax.Scheduler.Services.Effects;
 
 namespace Trax.Dashboard.Components.Pages.Settings;
 
 /// <summary>
 /// The effects settings page, at <c>/trax/settings/effects</c>: lists every registered effect
 /// provider, lets the user enable or disable the toggleable ones, and opens
-/// <see cref="Dialogs.ConfigureEffectDialog"/> for configurable ones. Changes apply to this
-/// process in memory and are not persisted. Shows a notice instead when no effect registry is
+/// <see cref="Dialogs.ConfigureEffectDialog"/> for configurable ones, all through
+/// <see cref="IEffectSettingsService"/>, which the API's effects query and mutations call too.
+/// Changes apply to this process in memory and are not persisted. Shows a notice instead when no effect registry is
 /// registered. Part of the dashboard UI, routed by the package; not intended to be used directly.
 /// </summary>
 public partial class EffectsSettingsPage
 {
     [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = default!;
+    private IEffectSettingsService EffectSettings { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -26,55 +25,42 @@ public partial class EffectsSettingsPage
     private DialogService DialogService { get; set; } = default!;
 
     // ── Effects state ──
-    private IEffectRegistry? _effectRegistry;
     private bool _effectsAvailable;
     private List<EffectEntry> _effects = [];
-    private Dictionary<Type, bool> _savedEffectStates = new();
+    private Dictionary<string, bool> _savedEffectStates = new(StringComparer.Ordinal);
 
     // ── Dirty tracking ──
     private bool IsEffectsDirty =>
         _effectsAvailable
         && _effects.Any(e =>
-            e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FactoryType)
+            e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FullName)
         );
 
     /// <summary>
-    /// Resolves the effect registry, if any, and snapshots each effect's enabled state for
-    /// change tracking.
+    /// Reads the effects through <see cref="IEffectSettingsService"/>, when an effect registry is
+    /// registered, and snapshots each effect's enabled state for change tracking.
     /// </summary>
     protected override void OnInitialized()
     {
-        _effectRegistry = ServiceProvider.GetService<IEffectRegistry>();
-        _effectsAvailable = _effectRegistry is not null;
+        _effectsAvailable = EffectSettings.IsAvailable;
 
         if (_effectsAvailable)
-        {
-            LoadEffects();
-            SnapshotEffectState();
-        }
+            ReloadEffects();
     }
 
     // ── Effect helpers ──
 
     private void LoadEffects()
     {
-        _effects = _effectRegistry!
-            .GetAll()
-            .Select(kvp =>
+        _effects = EffectSettings
+            .GetEffects()
+            .Select(e => new EffectEntry
             {
-                var factory = ServiceProvider.GetService(kvp.Key);
-                var isConfigurable = factory is IConfigurableProviderFactory;
-
-                return new EffectEntry
-                {
-                    FactoryType = kvp.Key,
-                    Name = kvp.Key.Name,
-                    FullName = kvp.Key.FullName ?? kvp.Key.Name,
-                    Enabled = kvp.Value,
-                    Toggleable = _effectRegistry.IsToggleable(kvp.Key),
-                    IsConfigurable = isConfigurable,
-                    Factory = factory,
-                };
+                Name = e.Name,
+                FullName = e.FullName,
+                Enabled = e.Enabled,
+                Toggleable = e.Toggleable,
+                IsConfigurable = e.IsConfigurable,
             })
             .OrderBy(e => e.Name)
             .ToList();
@@ -93,44 +79,55 @@ public partial class EffectsSettingsPage
     }
 
     /// <summary>
-    /// Applies the toggles the operator changed, then reads the registry again. A toggle left
-    /// alone is not applied: applying it would put back the state this page loaded over a change
-    /// another writer (another operator, the GraphQL <c>setEffectEnabled</c> mutation) made since.
+    /// Applies the toggles the operator changed through
+    /// <see cref="IEffectSettingsService.SetEffectEnabled"/>, the call the API's
+    /// <c>setEffectEnabled</c> mutation makes, then reads the effects again. A toggle left alone
+    /// is not applied: applying it would put back the state this page loaded over a change
+    /// another writer (another operator, the mutation) made since. A toggle the service refuses
+    /// is reported and the others are still applied.
     /// </summary>
     private void Save()
     {
-        if (_effectRegistry is null)
+        if (!_effectsAvailable)
             return;
 
+        var refused = new List<string>();
         foreach (
             var entry in _effects.Where(e =>
-                e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FactoryType)
+                e.Toggleable && e.Enabled != _savedEffectStates.GetValueOrDefault(e.FullName)
             )
         )
         {
-            if (entry.Enabled)
-                _effectRegistry.Enable(entry.FactoryType);
-            else
-                _effectRegistry.Disable(entry.FactoryType);
+            var result = EffectSettings.SetEffectEnabled(entry.FullName, entry.Enabled);
+            if (!result.Success)
+                refused.Add(result.Message ?? $"{entry.Name} was not changed.");
         }
 
         ReloadEffects();
 
         NotificationService.Notify(
-            new NotificationMessage
-            {
-                Severity = NotificationSeverity.Success,
-                Summary = "Effects Saved",
-                Detail = "Effect settings updated.",
-                Duration = 4000,
-            }
+            refused.Count == 0
+                ? new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Effects Saved",
+                    Detail = "Effect settings updated.",
+                    Duration = 4000,
+                }
+                : new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Some Effects Not Saved",
+                    Detail = string.Join(" ", refused),
+                    Duration = 8000,
+                }
         );
     }
 
-    /// <summary>Drops unsaved toggles and shows the registry's current state.</summary>
+    /// <summary>Drops unsaved toggles and shows the effects' current state.</summary>
     private void DiscardChanges()
     {
-        if (_effectRegistry is null)
+        if (!_effectsAvailable)
             return;
 
         ReloadEffects();
@@ -154,20 +151,23 @@ public partial class EffectsSettingsPage
 
     private void SnapshotEffectState()
     {
-        _savedEffectStates = _effects.ToDictionary(e => e.FactoryType, e => e.Enabled);
+        _savedEffectStates = _effects.ToDictionary(
+            e => e.FullName,
+            e => e.Enabled,
+            StringComparer.Ordinal
+        );
     }
 
     private async Task OpenConfigureDialog(EffectEntry entry)
     {
-        if (entry.Factory is not IConfigurableProviderFactory configurable)
+        if (!entry.IsConfigurable)
             return;
 
         await DialogService.OpenAsync<ConfigureEffectDialog>(
             $"Configure {entry.Name}",
             new Dictionary<string, object?>
             {
-                ["ConfigurationType"] = configurable.GetConfigurationType(),
-                ["Configuration"] = configurable.GetConfiguration(),
+                [nameof(ConfigureEffectDialog.EffectFullName)] = entry.FullName,
             },
             new DialogOptions
             {
@@ -182,12 +182,10 @@ public partial class EffectsSettingsPage
 
     private class EffectEntry
     {
-        public required Type FactoryType { get; init; }
         public required string Name { get; init; }
         public required string FullName { get; init; }
         public bool Enabled { get; set; }
         public required bool Toggleable { get; init; }
         public required bool IsConfigurable { get; init; }
-        public object? Factory { get; init; }
     }
 }

@@ -78,18 +78,52 @@ internal static class DataGridQueryHelper
         if (!string.IsNullOrEmpty(args.OrderBy))
             query = query.OrderBy(args.OrderBy);
 
-        var key = $"{scope}\u001f{args.Filter}";
-        var counted = !count.TryGet(key, out var total);
-        if (counted)
-            total = await query.CountAsync(ct);
-
         var page = query;
         if (args.Skip.HasValue)
             page = page.Skip(args.Skip.Value);
         if (args.Top.HasValue)
             page = page.Take(args.Top.Value);
 
-        var items = await page.ToListAsync(ct);
+        return await LoadPageAsync<T>(
+            async token => await page.ToListAsync(token),
+            token => query.CountAsync(token),
+            $"{scope}\u001f{args.Filter}",
+            args,
+            count,
+            ct
+        );
+    }
+
+    /// <summary>
+    /// Loads a page of data for a server-side TraxDataGrid from a service that reads pages and
+    /// counts them itself, such as <c>IOperationsService.GetLogsAsync</c> and
+    /// <c>CountLogsAsync</c>, remembering the total in <paramref name="count"/> as the query
+    /// overload does.
+    /// </summary>
+    /// <param name="readPage">Reads the page <paramref name="args"/> asks for.</param>
+    /// <param name="countAll">Counts every row the filter matches.</param>
+    /// <param name="filterKey">
+    /// Identifies the filter and scope the rows are counted under, so a change to either is
+    /// counted again rather than answered from <paramref name="count"/>.
+    /// </param>
+    /// <param name="args">The Radzen LoadDataArgs; only its skip and take are read here.</param>
+    /// <param name="count">The grid's remembered total; see <see cref="GridCount"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public static async Task<ServerDataResult<T>> LoadPageAsync<T>(
+        Func<CancellationToken, Task<IReadOnlyList<T>>> readPage,
+        Func<CancellationToken, Task<int>> countAll,
+        string filterKey,
+        Radzen.LoadDataArgs args,
+        GridCount count,
+        CancellationToken ct
+    )
+        where T : class
+    {
+        var counted = !count.TryGet(filterKey, out var total);
+        if (counted)
+            total = await countAll(ct);
+
+        var items = await readPage(ct);
 
         var skip = args.Skip ?? 0;
         if (args.Top is { } top && items.Count < top && (items.Count > 0 || skip == 0))
@@ -101,12 +135,12 @@ internal static class DataGridQueryHelper
         else if (total < skip + items.Count)
         {
             // Rows were added since the total was counted, past what it allows for.
-            total = await query.CountAsync(ct);
+            total = await countAll(ct);
             counted = true;
         }
 
         if (counted)
-            count.Set(key, total);
+            count.Set(filterKey, total);
 
         return new ServerDataResult<T>(items, total);
     }

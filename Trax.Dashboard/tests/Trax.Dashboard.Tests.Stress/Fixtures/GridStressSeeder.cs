@@ -10,19 +10,33 @@ namespace Trax.Dashboard.Tests.Stress.Fixtures;
 /// <param name="Metadata">Runs in the metadata table.</param>
 /// <param name="WorkQueue">Entries in the work queue table.</param>
 /// <param name="Manifests">Manifests, all in one group.</param>
+/// <param name="Logs">
+/// Log entries. One in fifty belongs to the newest run, so one run has a long log of its own; the
+/// rest are spread over the other runs.
+/// </param>
 /// <param name="BlobRows">
 /// How many of the newest runs, entries and manifests carry a 1 MiB input, output or properties
 /// value. These are the rows a grid's first page shows.
 /// </param>
-public sealed record GridStressProfile(long Metadata, long WorkQueue, int Manifests, int BlobRows)
+public sealed record GridStressProfile(
+    long Metadata,
+    long WorkQueue,
+    int Manifests,
+    int BlobRows,
+    long Logs
+)
 {
     public static GridStressProfile FromEnvironment() =>
         new(
             Metadata: EnvLong("TRAX_STRESS_METADATA", 1_000_000),
             WorkQueue: EnvLong("TRAX_STRESS_WORKQUEUE", 500_000),
             Manifests: (int)EnvLong("TRAX_STRESS_MANIFEST", 5_000),
-            BlobRows: (int)EnvLong("TRAX_STRESS_BLOB_ROWS", 200)
+            BlobRows: (int)EnvLong("TRAX_STRESS_BLOB_ROWS", 200),
+            Logs: EnvLong("TRAX_STRESS_LOG", 1_000_000)
         );
+
+    /// <summary>The run that holds one in fifty log entries: the newest.</summary>
+    public long BusyRun => Metadata;
 
     private static long EnvLong(string name, long fallback) =>
         long.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
@@ -85,6 +99,7 @@ public static class GridStressSeeder
         if (await AlreadySeededAsync(conn, profile))
         {
             log($"Already seeded (metadata≈{profile.Metadata:N0}); skipping.");
+            await SeedLogsAsync(conn, profile, log);
             return;
         }
 
@@ -145,6 +160,47 @@ public static class GridStressSeeder
             "VACUUM (ANALYZE, PARALLEL 0) trax.manifest_group, trax.manifest, trax.metadata, trax.work_queue"
         );
         log($"Seed complete in {sw.Elapsed.TotalSeconds:F0}s.");
+
+        await SeedLogsAsync(conn, profile, log);
+    }
+
+    /// <summary>
+    /// Seeds the log table on its own, so a database seeded before the log grids were timed gains
+    /// its logs without seeding the runs again. Levels, categories and messages vary, so the
+    /// grids' level and text filters have something to match.
+    /// </summary>
+    private static async Task SeedLogsAsync(
+        NpgsqlConnection conn,
+        GridStressProfile profile,
+        Action<string> log
+    )
+    {
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT count(*) FROM trax.log";
+            if ((long)(await cmd.ExecuteScalarAsync())! == profile.Logs)
+            {
+                log($"Logs already seeded ({profile.Logs:N0}); skipping.");
+                return;
+            }
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await ExecAsync(conn, "TRUNCATE trax.log RESTART IDENTITY");
+        log($"Seeding {profile.Logs:N0} log...");
+        await SeedTableAsync(
+            conn,
+            profile.Logs,
+            "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                + $"SELECT CASE WHEN g % 50 = 0 THEN {profile.BusyRun} ELSE 1 + (g % {profile.Metadata - 1}) END, "
+                + "       (g % 1000), "
+                + "       (ARRAY['information','information','information','information','warning','error','debug','trace']::trax.log_level[])[1 + (g % 8)], "
+                + "       'stress log message ' || g, "
+                + "       'Trax.Stress.Category' || (g % 20) "
+                + "FROM generate_series(@lo, @hi) g"
+        );
+        await ExecAsync(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.log");
+        log($"Logs seeded in {sw.Elapsed.TotalSeconds:F0}s.");
     }
 
     private static async Task<bool> AlreadySeededAsync(

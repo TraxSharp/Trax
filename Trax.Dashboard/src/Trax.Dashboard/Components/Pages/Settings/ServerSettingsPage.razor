@@ -270,7 +270,7 @@
         <RadzenFieldset Text="Logging" class="@(IsLoggingDirty ? "cs-fieldset-dirty" : "")">
             <RadzenStack Gap="1rem">
                 <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" AllowClose="false" Variant="Variant.Flat">
-                    Log level changes take effect immediately for all loggers. These are runtime overrides and will reset on application restart.
+                    Log level changes take effect immediately for this process's loggers. They are runtime overrides: they apply only to the process serving the dashboard and reset when it restarts.
                 </RadzenAlert>
 
                 <RadzenDataGrid Data="@_logLevels"

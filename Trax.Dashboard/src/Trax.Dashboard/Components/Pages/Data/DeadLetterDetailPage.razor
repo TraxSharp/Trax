@@ -90,8 +90,11 @@
     <RadzenCard class="rz-mb-4" Style="border-left: 4px solid var(--rz-secondary);">
         <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Acknowledge Dead Letter</RadzenText>
         <RadzenStack Gap="0.75rem">
+            @* The scheduler refuses a longer note (TraxScheduler.MaxAcknowledgeNoteLength), as the API does. *@
             <RadzenTextBox @bind-Value="_acknowledgeNote"
-                           Placeholder="Resolution note (e.g., root cause, why no retry needed)..."
+                           class="cs-acknowledge-note"
+                           MaxLength="1000"
+                           Placeholder="Resolution note, up to 1,000 characters (e.g., root cause, why no retry needed)..."
                            Style="width: 100%;" />
             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                 <RadzenButton Text="Confirm Acknowledge"

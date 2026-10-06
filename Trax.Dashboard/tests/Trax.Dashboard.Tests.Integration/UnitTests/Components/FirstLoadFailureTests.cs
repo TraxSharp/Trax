@@ -11,6 +11,8 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectProvider;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
@@ -35,12 +37,19 @@ public class FirstLoadFailureTests
         _ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         _database = new SwitchableDatabase();
         _ctx.Services.AddSingleton<IDataContextProviderFactory>(_database);
-        _ctx.Services.AddSingleton<ITrainDiscoveryService>(
-            new TrainDiscoveryService(new ServiceCollection())
-        );
+        var discovery = new TrainDiscoveryService(new ServiceCollection());
+        _ctx.Services.AddSingleton<ITrainDiscoveryService>(discovery);
         _ctx.Services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         _ctx.Services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
-        _ctx.Services.AddSingleton(UnusedService<IOperationsService>.Create());
+        // The work queue entry page reads through the operations service, over this database.
+        _ctx.Services.AddSingleton<IOperationsService>(
+            new OperationsService(
+                discovery,
+                _database,
+                new SchedulerConfiguration(),
+                UnusedService<ITrainExecutionService>.Create()
+            )
+        );
     }
 
     [TearDown]

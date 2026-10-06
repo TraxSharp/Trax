@@ -5,13 +5,15 @@ using Radzen;
 using Radzen.Blazor;
 using Trax.Dashboard.Components.Pages.Settings;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Scheduler.Services.Effects;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
 /// <summary>
-/// The Effects page applies the toggles the operator changed, and nothing else, so a change
-/// another writer made after the page loaded (another operator, the GraphQL
-/// <c>setEffectEnabled</c> mutation) survives an unrelated save.
+/// The Effects page applies the toggles the operator changed, and nothing else, through the
+/// Scheduler's effect settings service the GraphQL <c>setEffectEnabled</c> mutation calls, so a
+/// change another writer made after the page loaded (another operator, the mutation) survives an
+/// unrelated save.
 /// </summary>
 [TestFixture]
 public class EffectsSettingsPageTests
@@ -30,6 +32,7 @@ public class EffectsSettingsPageTests
         _registry.Register(typeof(AlphaEffectFactory));
         _registry.Register(typeof(BetaEffectFactory));
         _ctx.Services.AddSingleton<IEffectRegistry>(_registry);
+        _ctx.Services.AddScoped<IEffectSettingsService>(sp => new EffectSettingsService(sp));
     }
 
     [TearDown]

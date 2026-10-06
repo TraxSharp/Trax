@@ -29,6 +29,7 @@ public class ManifestGroupRouteChangeTests
     private Bunit.TestContext _ctx = null!;
     private InMemoryDataContextFactory _data = null!;
     private ITraxScheduler _scheduler = null!;
+    private OperationsCallLog _operations = null!;
 
     [SetUp]
     public void SetUp()
@@ -42,12 +43,23 @@ public class ManifestGroupRouteChangeTests
         _ctx.Services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         _ctx.Services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         _ctx.Services.AddSingleton(_scheduler);
-        _ctx.Services.AddSingleton<IOperationsService>(
-            new OperationsService(
-                new TrainDiscoveryService(new ServiceCollection()),
-                _data,
-                new SchedulerConfiguration(),
-                trainExecution: null!
+        _operations = new OperationsCallLog
+        {
+            // Run Group goes through the operations service, as the API's triggerGroup does.
+            Respond = (method, _) =>
+                method == nameof(IOperationsService.TriggerManifestGroupsAsync)
+                    ? Task.FromResult(new BatchTriggerResult(true, 1, 0, 0, 0, 0, "0 queued.", []))
+                    : null,
+        };
+        _ctx.Services.AddSingleton(
+            RecordingOperationsService.Wrap(
+                new OperationsService(
+                    new TrainDiscoveryService(new ServiceCollection()),
+                    _data,
+                    new SchedulerConfiguration(),
+                    trainExecution: null!
+                ),
+                _operations
             )
         );
     }
@@ -87,9 +99,17 @@ public class ManifestGroupRouteChangeTests
             .First(b => b.TextContent.Contains("Run Group"))
             .ClickAsync(new());
 
-        ((TriggerRecordingScheduler)(object)_scheduler)
-            .TriggeredGroups.Should()
-            .Equal([groupB], "Run Group on B's page queues B");
+        page.WaitForAssertion(
+            () =>
+                _operations
+                    .CallsTo(nameof(IOperationsService.TriggerManifestGroupsAsync))
+                    .Should()
+                    .ContainSingle()
+                    .Which[0]
+                    .Should()
+                    .BeEquivalentTo(new[] { groupB }, "Run Group on B's page queues B"),
+            TimeSpan.FromSeconds(10)
+        );
     }
 
     private static AngleSharp.Dom.IElement SaveButton(IRenderedFragment page) =>
@@ -112,24 +132,16 @@ public class ManifestGroupRouteChangeTests
     }
 
     /// <summary>
-    /// Records <c>TriggerGroupAsync</c> and reports no manifests queued; any other call fails the
-    /// test.
+    /// Fails the test on any call: the page reaches the scheduler only through the operations
+    /// service.
     /// </summary>
     public class TriggerRecordingScheduler : DispatchProxy
     {
-        public List<long> TriggeredGroups { get; } = [];
-
         public static ITraxScheduler Create() =>
             Create<ITraxScheduler, TriggerRecordingScheduler>();
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            if (targetMethod?.Name == nameof(ITraxScheduler.TriggerGroupAsync))
-            {
-                TriggeredGroups.Add((long)args![0]!);
-                return Task.FromResult(0);
-            }
-
             throw new InvalidOperationException(
                 $"ITraxScheduler.{targetMethod?.Name} was called, but this test does not expect it."
             );

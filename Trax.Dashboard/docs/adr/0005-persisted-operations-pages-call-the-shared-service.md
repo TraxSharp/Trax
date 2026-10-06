@@ -41,10 +41,13 @@ says "id is required.", a deactivation with no reason is refused, and a deactiva
 would answer with an error comes back with the API's message. A persisted operation is still
 addressed by tenant and id, and the list still reads at most 200 rows a request.
 
-A dashboard in its own process sees a change made through it on the GraphQL nodes only when the
-host registers the store with the RabbitMQ overload; with the single-argument overload the nodes
-keep their cached copy until they restart. That is the API package's rule, and the dashboard now
-follows it instead of silently opting out.
+A dashboard in its own process declares how its store reaches the GraphQL nodes:
+`AddPersistedOperationStore(store => store.UseRabbitMqInvalidation(...))` with the broker they
+use, or `store.SingleNode()` when no other process caches the operations. The store refuses to
+start with neither. That is the API package's rule, and the dashboard follows it instead of
+opting out. A change the store saved but could not broadcast comes back as
+`CHANGE_NOT_BROADCAST` beside the saved row; the pages show it as a warning with the API's
+message, not as "not changed", because the change is the operation's new state.
 
 ## Exemplars
 
@@ -52,6 +55,8 @@ follows it instead of silently opting out.
   `AddPersistedOperationStore`: the detail page reads and deactivates through the registered
   service, a refused deactivation is reported with the API's own message, rows sharing an id open
   and change only themselves, and an upload is refused with the API's message.
+- `PersistedOperationNotBroadcastTests` pins the warning: a deactivation or an upload the store
+  saved but could not broadcast is reported as saved with the API's message, not refused.
 - `PersistedOperationsSidebarTests` pins the gate: the link shows with the service and without the
   capability marker, and hides with the marker alone.
 
@@ -60,4 +65,6 @@ guard is the tests above, which fail only for the behaviour they exercise.
 
 ## Changelog
 
+- **2026-10-05**: The store declares how it reaches the other nodes (the single-argument
+  overload no longer compiles), and a change saved but not broadcast is shown as a warning.
 - **2026-10-01**: Recorded.

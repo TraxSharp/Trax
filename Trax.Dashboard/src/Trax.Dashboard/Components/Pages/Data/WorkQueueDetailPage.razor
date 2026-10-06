@@ -82,11 +82,11 @@
                 <FieldDisplay Label="Dispatched At" Value="@(_entry.DispatchedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")" />
                 <FieldDisplay Label="Confirmed At" Value="@(_entry.ConfirmedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? (_entry.Status == WorkQueueStatus.Queued ? "Not yet: staged until its OnQueue hook returns" : "—"))" />
                 <FieldDisplay Label="Subject" Value="@(_entry.SubjectKey ?? "—")" />
-                @if (_subjectHeldBy is { } heldBy)
+                @if (_entry.SubjectHeldBy is { } heldBy)
                 {
                     <FieldDisplay Label="Waiting On" Value="@($"Entry {heldBy}, which is running for the same subject")" />
                 }
-                else if (_subjectQueuedBehind is { } behind)
+                else if (_entry.SubjectQueuedBehind is { } behind)
                 {
                     <FieldDisplay Label="Waiting On" Value="@($"Entry {behind}, which is ahead of it for the same subject")" />
                 }
@@ -121,10 +121,10 @@
 </RadzenCard>
 
 @* ── Input JSON ── *@
-@if (!string.IsNullOrWhiteSpace(_maskedInput))
+@if (!string.IsNullOrWhiteSpace(_entry.Input))
 {
     <RadzenCard class="rz-mb-4">
         <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Input</RadzenText>
-        <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("input", _maskedInput)</pre>
+        <pre style="font-size: 0.75rem; max-height: 300px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-all;">@_json.Format("input", _entry.Input)</pre>
     </RadzenCard>
 }

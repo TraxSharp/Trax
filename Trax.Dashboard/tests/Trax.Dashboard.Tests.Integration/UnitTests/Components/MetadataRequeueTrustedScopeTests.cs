@@ -14,6 +14,7 @@ using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -96,6 +97,9 @@ public class MetadataRequeueTrustedScopeTests
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddScoped<ITrainAuthorizationService, TrainAuthorizationService>();
         }
+        // Stands in for the host's database provider, so the requeue is not refused as having
+        // nothing to dispatch it (Trax.Scheduler ADR 0019).
+        services.AddSingleton<ISqlDialect, StandInSqlDialect>();
         services.AddScoped<ITrainExecutionService>(sp => new TrainExecutionService(
             discovery,
             runExecutor: null!,
@@ -108,7 +112,8 @@ public class MetadataRequeueTrustedScopeTests
             discovery,
             _data,
             new SchedulerConfiguration(),
-            sp.GetRequiredService<ITrainExecutionService>()
+            sp.GetRequiredService<ITrainExecutionService>(),
+            sp
         ));
 
         var metadataId = await SeedRunAsync();

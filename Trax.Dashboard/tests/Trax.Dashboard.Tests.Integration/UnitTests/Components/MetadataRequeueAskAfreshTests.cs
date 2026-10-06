@@ -242,7 +242,10 @@ public class MetadataRequeueAskAfreshTests
         return run.Id;
     }
 
-    /// <summary>An operations service whose every call records itself and waits on one task.</summary>
+    /// <summary>
+    /// An operations service whose every call but the log reads records itself and waits on one
+    /// task.
+    /// </summary>
     public class PendingOperations : DispatchProxy
     {
         private object _result = null!;
@@ -262,7 +265,18 @@ public class MetadataRequeueAskAfreshTests
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            _calls.Add((targetMethod!.Name, args ?? []));
+            // The run's logs grid reads through the service on every load: it has none to read.
+            switch (targetMethod!.Name)
+            {
+                case nameof(IOperationsService.CountLogsAsync):
+                    return Task.FromResult(0);
+                case nameof(IOperationsService.CountLogsCappedAsync):
+                    return Task.FromResult(new LogCount(0, Capped: false));
+                case nameof(IOperationsService.GetLogsAsync):
+                    return Task.FromResult(new LogPage([], 0, 0, null));
+            }
+
+            _calls.Add((targetMethod.Name, args ?? []));
             return _result;
         }
     }

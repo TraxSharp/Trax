@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Effect.Data.Services.EnqueueContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -26,6 +27,9 @@ public static class RealOperationsService
     )
     {
         services.AddSingleton<IDataContextProviderFactory>(data);
+        // Stands in for the host's database provider, so queueing is not refused as having
+        // nothing to dispatch it.
+        services.AddSingleton<ISqlDialect, StandInSqlDialect>();
         services.AddSingleton(discovery);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
         // What AddMediator registers for a train's OnQueue hook to enqueue on.

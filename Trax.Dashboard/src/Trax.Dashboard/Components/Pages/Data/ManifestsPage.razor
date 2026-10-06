@@ -1,9 +1,7 @@
 @page "/trax/data/manifests"
-@using Trax.Scheduler.Services.TraxScheduler
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
-@inject ITraxScheduler Scheduler
 @inject NotificationService NotificationService
 @inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
@@ -179,69 +177,14 @@
             ct
         );
 
-    // One trigger per manifest, as the scheduler offers no batch trigger yet. Each is tried in
-    // turn, so one that fails does not stop the rest. A manifest that already has a queued entry
-    // gets nothing more queued: the scheduler marks that entry as the triggered run instead, so
-    // it is reported apart from the manifests that were queued.
-    // Asking afresh uses the scheduler's askAfresh overload, as the API's triggerManifest does
-    // with askAfresh set; the default trigger keeps its own overload.
-    private Task TriggerSelected(bool askAfresh) => RunEachAsync("Batch Trigger", async () =>
-    {
-        var selected = _selectedManifests.Values.ToList();
-        var ids = selected.Select(m => m.Id).ToList();
-
-        HashSet<long> hadEntry;
-        using (var context = await DataContextFactory.CreateDbContextAsync(DisposalToken))
-            hadEntry = (await context.WorkQueues
-                .AsNoTracking()
-                .Where(q => q.ManifestId != null && ids.Contains(q.ManifestId.Value) && q.Status == WorkQueueStatus.Queued)
-                .Select(q => q.ManifestId!.Value)
-                .ToListAsync(DisposalToken))
-                .ToHashSet();
-
-        var queued = 0;
-        var alreadyQueued = 0;
-        var failed = 0;
-        var stillReplaying = 0;
-        var failures = new List<string>();
-        foreach (var manifest in selected)
-        {
-            try
-            {
-                if (askAfresh)
-                {
-                    var result = await Scheduler.TriggerAsync(manifest.ExternalId, askAfresh: true, DisposalToken);
-                    // The dispatcher claimed the queued retry first, so its run still replays.
-                    if (result.ReplayDecisionsOf is { } replays)
-                    {
-                        stillReplaying++;
-                        failures.Add($"{ShortName(manifest.Name)} ({manifest.ExternalId}) was already being dispatched, so its run replays the decisions of run {replays} rather than asking afresh.");
-                        continue;
-                    }
-                }
-                else
-                    await Scheduler.TriggerAsync(manifest.ExternalId, DisposalToken);
-                if (hadEntry.Contains(manifest.Id))
-                    alreadyQueued++;
-                else
-                    queued++;
-            }
-            catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
-            {
-                failed++;
-                failures.Add($"{ShortName(manifest.Name)} ({manifest.ExternalId}) was not triggered: {ex.Message}");
-            }
-        }
-
-        var message = $"{queued} queued";
-        if (alreadyQueued > 0)
-            message += $", {alreadyQueued} already queued (that entry now runs as the trigger)";
-        if (stillReplaying > 0)
-            message += $", {stillReplaying} already dispatched and still replaying";
-        if (failed > 0)
-            message += $", {failed} failed";
-        return new EachOutcome(message + ".", failures);
-    }, () => _selectedManifests.Clear());
+    // Through the operations service in one call, as the API's triggerManifests is: the service
+    // triggers each manifest in turn, counts the ones that already had a queued entry apart from
+    // the ones it queued, and notes each manifest it could not trigger as asked (unknown, or a
+    // retry the dispatcher claimed before an ask-afresh trigger reached it).
+    private Task TriggerSelected(bool askAfresh) => RunBatchTriggerAsync(
+        askAfresh ? "Batch Trigger, Ask Afresh" : "Batch Trigger",
+        () => OperationsService.TriggerManifestsAsync(_selectedManifests.Keys.ToList(), askAfresh, DisposalToken),
+        () => _selectedManifests.Clear());
 
     // Through the operations service, as the API's setManifestsEnabled is. Only manifests whose
     // flag differs are written, and the count says how many that was.

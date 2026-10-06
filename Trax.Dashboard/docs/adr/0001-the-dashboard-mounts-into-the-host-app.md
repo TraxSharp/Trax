@@ -123,6 +123,10 @@ the overload the tests do exercise, `AddRadzenComponents()` and
 
 ## Changelog
 
+- **2026-10-05**: `AddTraxDashboard()` no longer registers anything on the logger filter
+  options. Log levels saved on Server Settings go through the Scheduler's `ILogLevelService`,
+  which `AddScheduler()` registers and the API's log levels query and mutation share, so
+  `DashboardLogLevelOverrides` is gone.
 - **2026-10-01**: `UseTraxDashboard()` refuses to start without the Scheduler, naming
   `AddScheduler()`, and a second `AddTraxDashboard()` throws. Corrected two stale claims:
   `RoutePrefix` has an `internal` setter, so a prefix can no longer be set through

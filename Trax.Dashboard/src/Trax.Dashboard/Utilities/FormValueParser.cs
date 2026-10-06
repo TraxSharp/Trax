@@ -5,7 +5,8 @@ namespace Trax.Dashboard.Utilities;
 
 /// <summary>
 /// Reads what an operator typed into a dialog's text field as a value of the field's type. The
-/// Run, Queue and Configure Effect dialogs all use it, so a value means the same in each of them
+/// Run and Queue dialogs both use it, and the Configure Effect dialog's values are read by the
+/// Scheduler's effect settings service by the same rules, so a value means the same in each of them
 /// whatever culture or time zone the server, or the circuit, runs in: numbers use <c>.</c> for the
 /// decimal point and take no thousands separators, and a date or time with no offset is UTC, as
 /// the dashboard's header says every timestamp is. A value that does not read as its type is
@@ -76,29 +77,6 @@ internal static class FormValueParser
         error = value is null ? $"'{text}' is not {Expected(type)}." : null;
         return value is not null;
     }
-
-    /// <summary>
-    /// Writes a value the way <see cref="TryParse"/> reads it back, so a field shown with the
-    /// current value and saved unchanged holds the same value.
-    /// </summary>
-    /// <param name="value">The current value, or <see langword="null"/>.</param>
-    public static string Format(object? value) =>
-        value switch
-        {
-            null => "",
-            DateTime dt => (
-                dt.Kind == DateTimeKind.Unspecified ? dt : dt.ToUniversalTime()
-            ).ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", Invariant),
-            DateTimeOffset dto => dto.ToUniversalTime()
-                .ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", Invariant),
-            DateOnly d => d.ToString("yyyy-MM-dd", Invariant),
-            TimeOnly t => t.ToString("HH:mm:ss.FFFFFFF", Invariant),
-            TimeSpan ts => ts.ToString("c", Invariant),
-            double d => d.ToString("R", Invariant),
-            float f => f.ToString("R", Invariant),
-            IFormattable formattable => formattable.ToString(null, Invariant),
-            _ => value.ToString() ?? "",
-        };
 
     /// <summary>
     /// The placeholder a text field of <paramref name="type"/> shows, naming the format

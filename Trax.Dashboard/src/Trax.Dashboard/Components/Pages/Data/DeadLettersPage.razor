@@ -1,10 +1,12 @@
 @page "/trax/data/dead-letters"
 @using System.Linq.Dynamic.Core
+@using Trax.Scheduler.Services.DeadLetterRequeue
 @using Trax.Scheduler.Services.TraxScheduler
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
 @inject ITraxScheduler Scheduler
+@inject IDeadLetterRequeueJobs RequeueAllJobs
 @inject NotificationService NotificationService
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Dead Letters</RadzenText>
@@ -18,7 +20,7 @@
                   ButtonStyle="ButtonStyle.Primary"
                   Variant="Variant.Outlined"
                   Size="ButtonSize.Small"
-                  Disabled="@(BatchOperating)"
+                  Disabled="@(BatchOperating || RequeueAllRunning)"
                   Click="@(() => RequeueAll(askAfresh: false))" />
     <RadzenButton Text="Requeue All, Ask Afresh"
                   Icon="psychology_alt"
@@ -26,7 +28,7 @@
                   Variant="Variant.Text"
                   Size="ButtonSize.Small"
                   title="Requeue every dead letter; each run asks the model afresh instead of replaying the failed run's decisions."
-                  Disabled="@(BatchOperating)"
+                  Disabled="@(BatchOperating || RequeueAllRunning)"
                   Click="@(() => RequeueAll(askAfresh: true))" />
     <RadzenButton Text="Acknowledge All"
                   Icon="check_circle"
@@ -64,8 +66,11 @@
 {
     <RadzenCard class="rz-mb-3 rz-p-3">
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+            @* The scheduler refuses a longer note (TraxScheduler.MaxAcknowledgeNoteLength), as the API does. *@
             <RadzenTextBox @bind-Value="_batchAcknowledgeNote"
-                           Placeholder="Resolution note (e.g., root cause, why no retry needed)..."
+                           class="cs-acknowledge-note"
+                           MaxLength="1000"
+                           Placeholder="Resolution note, up to 1,000 characters (e.g., root cause, why no retry needed)..."
                            Style="flex: 1;" />
             <RadzenButton Text="Confirm"
                           ButtonStyle="ButtonStyle.Success"
@@ -78,6 +83,29 @@
                           Click="@(() => { _showBatchAcknowledgeInput = false; _acknowledgeSelectedOnly = false; })" />
         </RadzenStack>
     </RadzenCard>
+}
+
+@if (_requeueAll is { Status: DeadLetterRequeueJobStatus.Running } running)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Shade="Shade.Lighter" ShowIcon="false" AllowClose="false" class="rz-mb-3 cs-requeue-all-progress">
+        <RadzenStack Gap="0.5rem">
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
+                @running.Message
+                Started @running.StartedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC@(running.AskAfresh ? ", asking afresh" : "").
+                It runs on the server, so leaving this page does not stop it.
+            </RadzenText>
+            @if (running.AwaitingAtStart > 0)
+            {
+                <RadzenProgressBar Mode="ProgressBarMode.Determinate"
+                                   Value="@Math.Min(100, running.Processed * 100.0 / running.AwaitingAtStart)"
+                                   ShowValue="false" Style="height: 0.4rem;" />
+            }
+            else
+            {
+                <RadzenProgressBar Mode="ProgressBarMode.Indeterminate" ShowValue="false" Style="height: 0.4rem;" />
+            }
+        </RadzenStack>
+    </RadzenAlert>
 }
 
 @if (BatchError is not null)
@@ -205,15 +233,111 @@
             ct
         );
 
-    // Asking afresh uses the scheduler's askAfresh overloads, as the API's requeue mutations do
-    // with askAfresh set; the default requeue keeps its own overloads.
+    // The requeue-all job this circuit started or was handed, while it is followed. It runs in the
+    // scheduler's IDeadLetterRequeueJobs on this node, the same job the API's requeueAllDeadLetters
+    // starts, so the fold over a large backlog never runs in the operator's circuit.
+    private DeadLetterRequeueJob? _requeueAll;
+    private readonly CancellationTokenSource _following = new();
+
+    // How often a running requeue-all is read again.
+    private static readonly TimeSpan RequeueAllPollInterval = TimeSpan.FromSeconds(1);
+
+    private bool RequeueAllRunning => _requeueAll is { Status: DeadLetterRequeueJobStatus.Running };
+
+    // Starts the job and returns at once; the page then follows it. Asking afresh is the job's
+    // mode, as askAfresh is the API's. When one is already running on this node nothing new is
+    // started: the page says so and follows the running one, as an API client reads it back.
     private Task RequeueAll(bool askAfresh) => RunBatchOperationAsync(async () =>
     {
-        var result = askAfresh
-            ? await Scheduler.RequeueAllDeadLettersAsync(askAfresh: true)
-            : await Scheduler.RequeueAllDeadLettersAsync();
-        NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
+        var job = await RequeueAllJobs.StartAsync(askAfresh, DisposalToken);
+        _requeueAll = job;
+
+        if (job.Started)
+            NotificationService.Notify(NotificationSeverity.Info, "Requeue All Started", job.Message, duration: 4000);
+        else
+            NotificationService.Notify(NotificationSeverity.Warning, "Requeue All Already Running", job.Message, duration: 8000);
+
+        _ = FollowRequeueAllAsync(job.Id, _following.Token);
     }, ClearSelection);
+
+    // Reads the job until it stops, then reports how it ended and reloads the grid. Runs off the
+    // click handler, so the circuit is never held for the fold.
+    private async Task FollowRequeueAllAsync(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(RequeueAllPollInterval, ct);
+                var job = RequeueAllJobs.Get(id);
+
+                if (job is { Status: DeadLetterRequeueJobStatus.Running })
+                {
+                    await InvokeAsync(() =>
+                    {
+                        _requeueAll = job;
+                        StateHasChanged();
+                    });
+                    continue;
+                }
+
+                await InvokeAsync(async () =>
+                {
+                    _requeueAll = job;
+                    ReportRequeueAllOutcome(job);
+                    StateHasChanged();
+                    await LoadDataAsync(ct);
+                    StateHasChanged();
+                });
+                return;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The page was left; the job runs on in the server.
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                BatchError = ex.Message;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private void ReportRequeueAllOutcome(DeadLetterRequeueJob? job)
+    {
+        switch (job?.Status)
+        {
+            case DeadLetterRequeueJobStatus.Succeeded:
+                NotificationService.Notify(
+                    job.Count == 0 ? NotificationSeverity.Warning : NotificationSeverity.Success,
+                    "Requeue All",
+                    job.Message,
+                    duration: 6000
+                );
+                break;
+            case DeadLetterRequeueJobStatus.Failed or DeadLetterRequeueJobStatus.Canceled:
+                BatchError = job.Message;
+                break;
+            default:
+                // This node no longer knows it: it restarted, or the job finished more than a day ago.
+                BatchError =
+                    "This server no longer knows the requeue-all it was following, so how it ended "
+                    + "is not known. Dead letters it requeued stay requeued; Requeue All again "
+                    + "requeues the rest.";
+                break;
+        }
+    }
+
+    /// <summary>Stops following a requeue-all; the job itself runs on.</summary>
+    public override async ValueTask DisposeAsync()
+    {
+        await _following.CancelAsync();
+        _following.Dispose();
+        await base.DisposeAsync();
+    }
 
     private Task RequeueSelected(bool askAfresh) => RunBatchOperationAsync(async () =>
     {
@@ -224,6 +348,9 @@
         NotificationService.Notify(NotificationSeverity.Success, "Batch Requeue", result.Message, duration: 4000);
     }, ClearSelection);
 
+    // Nothing acknowledged is a warning that leaves the note, the input and the selection as they
+    // are: the scheduler refuses a note over 1,000 characters, an empty selection or too many ids
+    // by acknowledging nothing, and the operator can correct it and confirm again.
     private Task AcknowledgeBatch() => RunBatchOperationAsync(async () =>
     {
         BatchDeadLetterResult result;
@@ -238,10 +365,17 @@
             result = await Scheduler.AcknowledgeAllDeadLettersAsync(_batchAcknowledgeNote);
         }
 
+        if (result.Count == 0)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Batch Acknowledge", result.Message, duration: 8000);
+            return;
+        }
+
         NotificationService.Notify(NotificationSeverity.Success, "Batch Acknowledge", result.Message, duration: 4000);
 
         _showBatchAcknowledgeInput = false;
         _acknowledgeSelectedOnly = false;
         _batchAcknowledgeNote = "";
-    }, ClearSelection);
+        ClearSelection();
+    });
 }

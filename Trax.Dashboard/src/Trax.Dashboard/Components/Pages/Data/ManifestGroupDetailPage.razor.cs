@@ -345,13 +345,23 @@ public partial class ManifestGroupDetailPage
 
         try
         {
-            var count = await TraxScheduler.TriggerGroupAsync(ManifestGroupId);
+            // Through the operations service, as the API's triggerGroup is, so both say the same
+            // thing: how many new runs were queued and how many queued ones now run as the trigger.
+            var result = await OperationsService.TriggerManifestGroupsAsync(
+                [ManifestGroupId],
+                DisposalToken
+            );
+            if (!result.Success)
+            {
+                _triggerError = result.Message;
+                return;
+            }
 
             NotificationService.Notify(
                 NotificationSeverity.Success,
                 "Group Queued",
-                $"{count} manifest(s) in \"{_group?.Name}\" queued for execution.",
-                duration: 4000
+                $"\"{_group?.Name}\": {result.Message}",
+                duration: 6000
             );
         }
         catch (Exception ex)

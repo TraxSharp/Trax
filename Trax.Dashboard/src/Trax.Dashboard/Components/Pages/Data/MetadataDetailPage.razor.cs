@@ -10,7 +10,6 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
-using Trax.Effect.Models.Log;
 using Trax.Effect.Models.Metadata;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.Operations;
@@ -58,26 +57,10 @@ public partial class MetadataDetailPage
     // step the writer stored a moment after the run ended, and then not again.
     private int _finishedTimelineReads;
     private int _logCount;
-    private TraxDataGrid<LogRow>? _logsGrid;
-    private readonly GridCount _logsCount = new();
+    private LogsGrid? _logsGrid;
 
     // The input and output are re-indented once per change, not on every render.
     private readonly JsonDisplayCache _json = new();
-
-    // The row without the entry's stack trace, which the grid does not show.
-    private Task<ServerDataResult<LogRow>> LoadLogsPageAsync(
-        LoadDataArgs args,
-        CancellationToken ct
-    ) =>
-        DataGridQueryHelper.LoadPageAsync(
-            DataContextFactory,
-            db => db.Logs.AsNoTracking().Where(l => l.MetadataId == MetadataId).OrderBy(l => l.Id),
-            LogRow.Projection,
-            args,
-            _logsCount,
-            MetadataId,
-            ct
-        );
 
     private bool _rerunning;
 
@@ -104,7 +87,7 @@ public partial class MetadataDetailPage
 
     /// <summary>
     /// Loads the run and the number of its log entries, and reloads the logs grid, which pages its
-    /// rows from the database. Leaves the page empty when no run has the id.
+    /// rows through the operations service, oldest first. Leaves the page empty when no run has the id.
     /// </summary>
     /// <param name="cancellationToken">Cancelled when the page is disposed or a newer load starts.</param>
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
@@ -117,11 +100,12 @@ public partial class MetadataDetailPage
 
         if (_metadata is not null)
         {
-            // The grid pages its logs from the database, as the API's logs query does; the
-            // page only needs to know whether there are any.
-            _logCount = await context
-                .Logs.AsNoTracking()
-                .CountAsync(l => l.MetadataId == MetadataId, cancellationToken);
+            // The grid pages its logs through the operations service, as the API's logs query
+            // does; the page only needs to know whether there are any.
+            _logCount = await OperationsService.CountLogsAsync(
+                new LogQuery(MetadataId: MetadataId),
+                cancellationToken
+            );
 
             await LoadJunctionStepsAsync(context, _metadata.TrainState, cancellationToken);
 

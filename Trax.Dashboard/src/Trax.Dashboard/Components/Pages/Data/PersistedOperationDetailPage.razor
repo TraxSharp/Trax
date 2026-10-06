@@ -197,6 +197,11 @@ else
             NotificationService.Notify(NotificationSeverity.Success, "Saved", "Operation updated.", duration: 3000);
             await LoadAsync();
         }
+        else if (result is string warning)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, NotBroadcastWarning.Title, warning, duration: 15000);
+            await LoadAsync();
+        }
     }
 
     /// <summary>
@@ -294,6 +299,9 @@ else
     {
         if (success)
             NotificationService.Notify(NotificationSeverity.Success, summary, $"{Id} ({TenantLabel})", duration: 3000);
+        else if (NotBroadcastWarning.From(errors) is { } warning)
+            // The change is saved; only telling the other nodes failed.
+            NotificationService.Notify(NotificationSeverity.Warning, NotBroadcastWarning.Title, warning, duration: 15000);
         else
             NotificationService.Notify(
                 NotificationSeverity.Error,

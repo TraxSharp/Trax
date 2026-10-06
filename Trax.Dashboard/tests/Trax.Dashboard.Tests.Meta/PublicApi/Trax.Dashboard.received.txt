@@ -21,10 +21,7 @@ namespace Trax.Dashboard.Components.Dialogs
         public ConfigureEffectDialog() { }
         [Microsoft.AspNetCore.Components.Parameter]
         [System.Runtime.CompilerServices.RequiredMember]
-        public object Configuration { get; set; }
-        [Microsoft.AspNetCore.Components.Parameter]
-        [System.Runtime.CompilerServices.RequiredMember]
-        public System.Type ConfigurationType { get; set; }
+        public string EffectFullName { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override void OnInitialized() { }
     }
@@ -124,6 +121,7 @@ namespace Trax.Dashboard.Components.Pages.Data
     {
         public DeadLettersPage() { }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public override System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/logs")]
     public class LogsPage : Trax.Dashboard.Components.Shared.PollingComponentBase
@@ -354,6 +352,15 @@ namespace Trax.Dashboard.Components.Shared
         public System.Threading.Tasks.Task CommitText(long id) { }
         public void Dispose() { }
         protected override System.Threading.Tasks.Task OnAfterRenderAsync(bool firstRender) { }
+    }
+    public class LogsGrid : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public LogsGrid() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Scheduler.Services.Operations.LogOrder DefaultOrder { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public long? MetadataId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
     }
     public abstract class PollingComponentBase : Microsoft.AspNetCore.Components.ComponentBase, System.IAsyncDisposable
     {

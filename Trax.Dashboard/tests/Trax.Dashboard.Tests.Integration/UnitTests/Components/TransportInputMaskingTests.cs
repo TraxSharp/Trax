@@ -21,6 +21,8 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -30,8 +32,8 @@ namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 /// A work queue entry's input and a manifest's properties are the copies Trax keeps unmasked,
 /// because a run reads its input from them. The dashboard shows them the way it shows a run's
 /// recorded input: each <c>[TraxSensitive]</c> member as <c>{"_redacted": true}</c>, and the
-/// whole value masked when it cannot be read as a registered train input, as the API does for
-/// the same reads.
+/// whole value masked when it cannot be read as a registered train input. The masking is the
+/// scheduler's <c>TransportInputRedaction</c>, the one the API applies to the same reads.
 /// </summary>
 [TestFixture]
 public class TransportInputMaskingTests
@@ -56,8 +58,17 @@ public class TransportInputMaskingTests
         services.AddSingleton<IDataContextProviderFactory>(_data);
         services.AddSingleton<ILocalStorageService, InMemoryLocalStorageService>();
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
-        services.AddSingleton<ITrainDiscoveryService>(new TrainDiscoveryService(trains));
-        services.AddSingleton(UnusedService<IOperationsService>.Create());
+        var discovery = new TrainDiscoveryService(trains);
+        services.AddSingleton<ITrainDiscoveryService>(discovery);
+        // The work queue entry page reads, and masks, through the operations service.
+        services.AddSingleton<IOperationsService>(
+            new OperationsService(
+                discovery,
+                _data,
+                new SchedulerConfiguration(),
+                UnusedService<ITrainExecutionService>.Create()
+            )
+        );
         services.AddSingleton(UnusedService<ITraxScheduler>.Create());
     }
 

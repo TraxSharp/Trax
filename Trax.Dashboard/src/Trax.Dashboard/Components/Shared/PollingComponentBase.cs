@@ -165,19 +165,21 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Runs an action once per selected item, for the batch actions the scheduler offers only one
-    /// item at a time. <paramref name="operation"/> handles every item, carries on past an item
-    /// that fails, and returns what happened. The summary is reported as a notification (a
-    /// warning when any item failed) and the failures, each naming its item, as
-    /// <see cref="BatchError"/>. The selection is cleared either way, because the items that
-    /// succeeded must not be sent again; then polling resumes and the data reloads.
+    /// Runs a batch trigger answered by the operations service, and reports what it did. A
+    /// refusal (no ids, more than the service's batch limit) is shown as <see cref="BatchError"/>
+    /// and leaves the selection and polling as they are, so the operator can change the selection
+    /// and try again. An accepted batch is reported with the service's one-line count, as a
+    /// warning when it triggered nothing or noted an id it could not trigger as asked; each note
+    /// is shown as <see cref="BatchError"/>. Then <paramref name="clearSelection"/> runs, because
+    /// the ids that were triggered must not be sent again, polling resumes and the data reloads.
+    /// An exception is shown as <see cref="BatchError"/>.
     /// </summary>
     /// <param name="summary">The notification's title, such as "Batch Trigger".</param>
-    /// <param name="operation">Handles every item and returns the outcome.</param>
+    /// <param name="operation">The service call.</param>
     /// <param name="clearSelection">Empties the page's selection.</param>
-    private protected async Task RunEachAsync(
+    private protected async Task RunBatchTriggerAsync(
         string summary,
-        Func<Task<EachOutcome>> operation,
+        Func<Task<BatchTriggerResult>> operation,
         Action clearSelection
     )
     {
@@ -186,17 +188,24 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
 
         try
         {
-            var outcome = await operation();
+            var result = await operation();
+            if (!result.Success)
+            {
+                BatchError = result.Message;
+                return;
+            }
+
+            var triggered = result.Queued + result.AlreadyQueued + result.TooLateToAskAfresh;
             BatchNotifications.Notify(
-                outcome.Failures.Count > 0
+                triggered == 0 || result.Notes.Count > 0
                     ? NotificationSeverity.Warning
                     : NotificationSeverity.Success,
                 summary,
-                outcome.Message,
+                result.Message,
                 duration: 6000
             );
-            if (outcome.Failures.Count > 0)
-                BatchError = string.Join(" ", outcome.Failures);
+            if (result.Notes.Count > 0)
+                BatchError = string.Join(" ", result.Notes.Select(n => n.Message));
 
             clearSelection();
             PausePolling = false;
@@ -211,12 +220,6 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
             BatchOperating = false;
         }
     }
-
-    /// <summary>
-    /// What <see cref="RunEachAsync"/> reports: a one-line count of what happened, and a line
-    /// for each item that failed.
-    /// </summary>
-    private protected sealed record EachOutcome(string Message, IReadOnlyList<string> Failures);
 
     /// <summary>
     /// A CancellationToken that is cancelled when the component is disposed.

@@ -9,7 +9,6 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Metadata;
 using Trax.Scheduler.Services.Operations;
-using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
 
 namespace Trax.Dashboard.Components.Pages.Data;
@@ -26,9 +25,6 @@ public partial class ManifestDetailPage
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
-
-    [Inject]
-    private ITraxScheduler TraxScheduler { get; set; } = default!;
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
@@ -141,8 +137,10 @@ public partial class ManifestDetailPage
         };
     }
 
-    // The default trigger keeps its own overload; asking afresh is the overload the API's
-    // triggerManifest takes when askAfresh is set, so a queued retry it releases stops replaying.
+    // Through the operations service, as the API's triggerManifest is, so both say the same thing
+    // about what the trigger did: queued a new run, brought a queued one forward, or released one
+    // already due. Asked afresh, a queued retry the dispatcher had already claimed still replays,
+    // and the notification says so rather than report an ask-afresh that did not happen.
     private async Task TriggerManifest(bool askAfresh)
     {
         if (_manifest is null)
@@ -154,38 +152,29 @@ public partial class ManifestDetailPage
 
         try
         {
-            if (askAfresh)
-            {
-                var result = await TraxScheduler.TriggerAsync(
-                    _manifest.ExternalId,
-                    askAfresh: true,
-                    DisposalToken
-                );
-
-                // The dispatcher claimed the queued retry before the trigger could change it, so
-                // that run still replays: say so rather than report an ask-afresh that did not
-                // happen.
-                if (result.ReplayDecisionsOf is { } replays)
-                {
-                    NotificationService.Notify(
-                        NotificationSeverity.Warning,
-                        "Train Queued, Still Replaying",
-                        $"{ShortName(_manifest.Name)} was already being dispatched (WorkQueue ID {result.WorkQueueId}), "
-                            + $"so its run replays the decisions of run {replays} rather than asking afresh.",
-                        duration: 10000
-                    );
-                    return;
-                }
-            }
-            else
-                await TraxScheduler.TriggerAsync(_manifest.ExternalId);
-
-            NotificationService.Notify(
-                NotificationSeverity.Success,
-                "Train Queued",
-                $"{ShortName(_manifest.Name)} has been queued for execution.",
-                duration: 4000
+            var result = await OperationsService.TriggerManifestAsync(
+                _manifest.ExternalId,
+                delay: null,
+                askAfresh,
+                DisposalToken
             );
+
+            if (!result.Success)
+                _triggerError = result.Message;
+            else if (result.StillReplaying)
+                NotificationService.Notify(
+                    NotificationSeverity.Warning,
+                    "Train Queued, Still Replaying",
+                    result.Message,
+                    duration: 10000
+                );
+            else
+                NotificationService.Notify(
+                    NotificationSeverity.Success,
+                    "Train Queued",
+                    result.Message,
+                    duration: 6000
+                );
         }
         catch (Exception ex)
         {

@@ -12,13 +12,17 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Dashboard.Tests.Stress.IntegrationTests;
 
 /// <summary>
 /// The dashboard's busiest grids against Postgres at a million runs, the newest of them carrying
-/// 1 MiB inputs and outputs. Each grid reloads its page on every poll tick, so a tick has to read
-/// only the columns the grid shows and must not count the whole table again.
+/// 1 MiB inputs and outputs, and a million log entries. Each grid reloads its page on every poll
+/// tick, so a tick has to read only the columns the grid shows and must not count the whole table
+/// again. The log grids read through the operations service, so their timings are the service's.
 /// </summary>
 /// <remarks>
 /// Explicit: seeding takes minutes and needs Postgres. Run it with
@@ -52,6 +56,7 @@ public class GridQueryStressTests
     private readonly SqlCapture _sql = new();
     private ServiceProvider _services = null!;
     private IDataContextProviderFactory _data = null!;
+    private IOperationsService _operations = null!;
 
     [OneTimeSetUp]
     public async Task OneTimeSetUp()
@@ -63,6 +68,12 @@ public class GridQueryStressTests
         services.ConfigureDbContext<PostgresContext>(options => options.AddInterceptors(_sql));
         _services = services.BuildServiceProvider();
         _data = _services.GetRequiredService<IDataContextProviderFactory>();
+        _operations = new OperationsService(
+            new TrainDiscoveryService(new ServiceCollection()),
+            _data,
+            new SchedulerConfiguration(),
+            trainExecution: null!
+        );
 
         await GridStressSeeder.SeedAsync(
             ConnectionString,
@@ -73,6 +84,7 @@ public class GridQueryStressTests
         // Warm the connection pool and the query plans, so a budget times the query, not the
         // first connection.
         await RunsPageAsync(new GridCount());
+        await LogsPageAsync(new GridCount(), new LogQuery(), LogOrder.NewestFirst);
     }
 
     [OneTimeTearDown]
@@ -195,6 +207,143 @@ public class GridQueryStressTests
 
         _sql.Commands.Should().OnlyContain(c => !BlobColumn.IsMatch(c) && !c.Contains("COUNT("));
     }
+
+    [Test]
+    public async Task Logs_page_first_load_and_tick_stay_within_budget()
+    {
+        var count = new GridCount();
+        var first = await MeasureAsync(
+            "logs page first load",
+            CountedLoadBudget,
+            () => LogsPageAsync(count, new LogQuery(), LogOrder.NewestFirst)
+        );
+        first.TotalCount.Should().Be((int)Profile.Logs);
+        first.Items.Should().BeInDescendingOrder(r => r.Id);
+
+        // The page is the service's read, which returns each entry's stack trace for the API's
+        // logs query though the grid does not show it. Log.Create caps a stack trace at 4,000
+        // characters, so a page of 20 reads at most 80,000 more; the log table has no unbounded
+        // column.
+        _sql.Clear();
+        await MeasureAsync(
+            "logs page tick",
+            TickBudget,
+            () => LogsPageAsync(count, new LogQuery(), LogOrder.NewestFirst)
+        );
+        _sql.Commands.Should().ContainSingle("a tick reads its page and nothing else");
+        _sql.Commands.Single().Should().NotContainEquivalentOf("count(");
+    }
+
+    [Test]
+    public async Task A_runs_log_reads_oldest_first_within_budget()
+    {
+        var count = new GridCount();
+        var filter = new LogQuery(MetadataId: Profile.BusyRun);
+
+        var first = await MeasureAsync(
+            "run log first load",
+            CountedLoadBudget,
+            () => LogsPageAsync(count, filter, LogOrder.OldestFirst)
+        );
+        first.TotalCount.Should().Be((int)(Profile.Logs / 50));
+        first.Items.Should().BeInAscendingOrder(r => r.Id);
+        first.Items.Should().OnlyContain(r => r.MetadataId == Profile.BusyRun);
+
+        await MeasureAsync(
+            "run log tick",
+            TickBudget,
+            () => LogsPageAsync(count, filter, LogOrder.OldestFirst)
+        );
+        await MeasureAsync(
+            "run log, a page 10,000 entries in",
+            TickBudget,
+            () => LogsPageAsync(count, filter, LogOrder.OldestFirst, skip: 10_000)
+        );
+    }
+
+    [TestCase("message 4242", false)]
+    [TestCase("no such text anywhere", false)]
+    [TestCase("category7", true)]
+    public async Task A_text_filter_on_the_logs_page_stays_within_budget(
+        string text,
+        bool onCategory
+    )
+    {
+        var filter = onCategory
+            ? new LogQuery { CategoryContains = text }
+            : new LogQuery { MessageContains = text };
+
+        var page = await MeasureAsync(
+            $"logs page filtered ({(onCategory ? "category" : "message")} contains '{text}')",
+            CountedLoadBudget,
+            () => LogsPageAsync(new GridCount(), filter, LogOrder.NewestFirst)
+        );
+
+        page.Items.Should()
+            .OnlyContain(r =>
+                (onCategory ? r.Category : r.Message).Contains(
+                    text,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+    }
+
+    [Test]
+    public async Task A_term_every_entry_carries_is_counted_up_to_the_cap_within_budget()
+    {
+        var capped = new LogCountCapped();
+        var page = await MeasureAsync(
+            "logs page filtered (message contains 'stress log', every entry)",
+            CountedLoadBudget,
+            () =>
+                LogGridQuery.LoadPageAsync(
+                    _operations,
+                    new LogQuery { MessageContains = "stress log" },
+                    new LoadDataArgs { Skip = 0, Top = 20 },
+                    LogOrder.NewestFirst,
+                    new GridCount(),
+                    capped,
+                    default
+                )
+        );
+
+        page.TotalCount.Should().Be(OperationsService.LogCountCap);
+        capped.Value.Should().BeTrue("a million entries match, more than the service counts");
+    }
+
+    [Test]
+    public async Task A_text_filter_within_a_runs_log_stays_within_budget()
+    {
+        var page = await MeasureAsync(
+            "run log filtered (message contains 'message 1')",
+            CountedLoadBudget,
+            () =>
+                LogsPageAsync(
+                    new GridCount(),
+                    new LogQuery(MetadataId: Profile.BusyRun) { MessageContains = "message 1" },
+                    LogOrder.OldestFirst
+                )
+        );
+
+        page.TotalCount.Should().BeGreaterThan(0);
+        page.Items.Should().OnlyContain(r => r.MetadataId == Profile.BusyRun);
+    }
+
+    private Task<ServerDataResult<LogRow>> LogsPageAsync(
+        GridCount count,
+        LogQuery filter,
+        LogOrder order,
+        int skip = 0
+    ) =>
+        LogGridQuery.LoadPageAsync(
+            _operations,
+            filter,
+            new LoadDataArgs { Skip = skip, Top = 20 },
+            order,
+            count,
+            new LogCountCapped(),
+            default
+        );
 
     private Task<ServerDataResult<RunRow>> RunsPageAsync(GridCount count, string? filter = null) =>
         LoadAsync(

@@ -1,64 +1,20 @@
 @page "/trax/data/logs"
-@using System.Linq.Dynamic.Core
 @inherits PollingComponentBase
-@inject IDataContextProviderFactory DataContextFactory
 
 <RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">Logs</RadzenText>
 <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
     Log entries captured during train execution, including messages, exceptions, and diagnostic information.
 </RadzenText>
 
-<TraxDataGrid @ref="_grid"
-                    TItem="LogRow"
-                    ServerLoadData="@LoadPageAsync">
-    <Columns>
-        <RadzenDataGridColumn TItem="LogRow"
-                              Property="Id"
-                              Title="Id"
-                              Width="80px"
-                              SortOrder="SortOrder.Descending" />
-        <RadzenDataGridColumn TItem="LogRow"
-                              Property="MetadataId"
-                              Title="Metadata Id"
-                              Width="140px" />
-        <RadzenDataGridColumn TItem="LogRow"
-                              Property="Level"
-                              Title="Level"
-                              Width="120px" />
-        <RadzenDataGridColumn TItem="LogRow"
-                              Property="Category"
-                              Title="Category"
-                              Width="200px" />
-        <RadzenDataGridColumn TItem="LogRow"
-                              Property="Message"
-                              Title="Message"
-                              Width="350px" />
-        <RadzenDataGridColumn TItem="LogRow"
-                              Property="Exception"
-                              Title="Exception"
-                              Width="250px" />
-    </Columns>
-</TraxDataGrid>
+<LogsGrid @ref="_grid" />
 
 @code {
-    private TraxDataGrid<LogRow>? _grid;
-    private readonly GridCount _count = new();
+    private LogsGrid? _grid;
 
+    // The grid reads its page through the operations service, as the API's logs query does.
     private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         if (_grid is not null)
             await _grid.ReloadAsync();
     }
-
-    // The row without the entry's stack trace, which the grid does not show.
-    private Task<ServerDataResult<LogRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
-        => DataGridQueryHelper.LoadPageAsync(
-            DataContextFactory,
-            db => db.Logs.AsNoTracking().OrderByDescending(l => l.Id),
-            LogRow.Projection,
-            args,
-            _count,
-            scope: null,
-            ct
-        );
 }

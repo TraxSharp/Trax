@@ -116,6 +116,104 @@ public class DashboardAuthorizationTests
     }
 
     [Test]
+    public void A_policy_with_no_authentication_scheme_to_challenge_with_fails_at_startup()
+    {
+        var app = Build(o => o.RequirePolicy("DashboardAdmin"), authentication: false);
+
+        var act = () => app.UseTraxDashboard();
+
+        act.Should()
+            .Throw<InvalidOperationException>(
+                "every request the posture refuses would otherwise answer 500, not 401 or 403"
+            )
+            .WithMessage("*no authentication scheme*AddAuthentication*");
+        DashboardEndpoints(app).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Roles_with_no_authentication_scheme_to_challenge_with_fail_at_startup()
+    {
+        var app = Build(o => o.RequireRoles("Admin"), authentication: false);
+
+        var act = () => app.UseTraxDashboard();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*no authentication scheme*");
+    }
+
+    [Test]
+    public void A_policy_naming_an_unregistered_scheme_fails_at_startup()
+    {
+        var app = Build(o => o.RequirePolicy("NamesAMissingScheme"));
+
+        var act = () => app.UseTraxDashboard();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*'NoSuchScheme'*");
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void A_default_forbid_scheme_that_is_not_registered_fails_at_startup(bool roles)
+    {
+        var app = Build(
+            o =>
+            {
+                if (roles)
+                    o.RequireRoles("Admin");
+                else
+                    o.RequirePolicy("DashboardAdmin");
+            },
+            authentication: false,
+            configureAuthentication: services =>
+                services
+                    .AddAuthentication(o =>
+                    {
+                        o.DefaultScheme = "Cookies";
+                        o.DefaultForbidScheme = "NoSuchForbidScheme";
+                    })
+                    .AddCookie()
+        );
+
+        var act = () => app.UseTraxDashboard();
+
+        act.Should()
+            .Throw<InvalidOperationException>(
+                "a signed-in caller the posture refuses would otherwise answer 500, not 403"
+            )
+            .WithMessage("*'NoSuchForbidScheme'*");
+    }
+
+    [Test]
+    public void A_registered_default_forbid_scheme_starts()
+    {
+        var app = Build(
+            o => o.RequireRoles("Admin"),
+            authentication: false,
+            configureAuthentication: services =>
+                services
+                    .AddAuthentication(o =>
+                    {
+                        o.DefaultScheme = "Cookies";
+                        o.DefaultForbidScheme = "Cookies";
+                    })
+                    .AddCookie()
+        );
+
+        var act = () => app.UseTraxDashboard();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void AllowAnonymousDashboard_needs_no_authentication_scheme()
+    {
+        var app = Build(o => o.AllowAnonymousDashboard(), authentication: false);
+
+        var act = () => app.UseTraxDashboard();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
     public void AllowAnonymousDashboard_maps_it_ungated_and_logs_a_warning()
     {
         var logs = new ListLoggerProvider();
@@ -175,7 +273,9 @@ public class DashboardAuthorizationTests
 
     private WebApplication Build(
         Action<DashboardOptions>? configure,
-        ListLoggerProvider? logs = null
+        ListLoggerProvider? logs = null,
+        bool authentication = true,
+        Action<IServiceCollection>? configureAuthentication = null
     )
     {
         var builder = WebApplication.CreateBuilder(
@@ -188,8 +288,16 @@ public class DashboardAuthorizationTests
         builder.Services.AddSingleton<TraxMarker>();
         builder.Services.AddScoped(_ => UnusedService<IOperationsService>.Create());
         builder.Services.AddAuthorization(o =>
-            o.AddPolicy("DashboardAdmin", p => p.RequireRole("Admin"))
-        );
+        {
+            o.AddPolicy("DashboardAdmin", p => p.RequireRole("Admin"));
+            o.AddPolicy(
+                "NamesAMissingScheme",
+                p => p.AddAuthenticationSchemes("NoSuchScheme").RequireRole("Admin")
+            );
+        });
+        if (authentication)
+            builder.Services.AddAuthentication().AddCookie();
+        configureAuthentication?.Invoke(builder.Services);
         if (logs is not null)
             builder.Logging.AddProvider(logs);
         builder.AddTraxDashboard(configure);

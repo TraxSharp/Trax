@@ -1,18 +1,19 @@
-using System.ComponentModel.DataAnnotations;
-using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Radzen;
-using Trax.Dashboard.Utilities;
+using Trax.Scheduler.Services.Effects;
 
 namespace Trax.Dashboard.Components.Dialogs;
 
 /// <summary>
-/// Dialog that edits an effect provider's configuration object in place, opened from the
-/// Effects settings page for a configurable effect. Save converts every field first and applies
-/// all or none of them to the live object, which is process-wide and read by the next train
-/// that runs; nothing is persisted, so a restart restores the configured values. Cancel writes
-/// nothing. Opened by the dashboard's own pages through Radzen's <c>DialogService</c>; not intended to be used directly.
+/// Dialog that edits an effect's settings, opened from the Effects settings page for a
+/// configurable effect. It reads the settings and writes the ones the operator changed through
+/// <see cref="IEffectSettingsService"/>, the service the API's effects query and mutations call,
+/// so both surfaces refuse the same values and never show a sensitive setting. Save writes all
+/// or none of the changed settings to the effect's process-wide settings object, read by the next
+/// train that runs in this process; nothing is persisted, so a restart restores the configured
+/// values. Cancel writes nothing. Opened by the dashboard's own pages through Radzen's
+/// <c>DialogService</c>; not intended to be used directly.
 /// </summary>
 public partial class ConfigureEffectDialog
 {
@@ -22,118 +23,76 @@ public partial class ConfigureEffectDialog
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
 
-    /// <summary>
-    /// The configuration's type. Its public, readable and writable instance properties become
-    /// the form's fields.
-    /// </summary>
-    [Parameter]
-    public required Type ConfigurationType { get; set; }
+    [Inject]
+    private IEffectSettingsService EffectSettings { get; set; } = default!;
 
-    /// <summary>
-    /// The live configuration instance to edit, an instance of <see cref="ConfigurationType"/>.
-    /// Save writes to it directly.
-    /// </summary>
+    /// <summary>The effect factory's full type name, as <see cref="IEffectSettingsService"/> names it.</summary>
     [Parameter]
-    public required object Configuration { get; set; }
+    public required string EffectFullName { get; set; }
 
-    private PropertyInfo[] _configProperties = [];
-    private PropertyInfo[] _readOnlyProperties = [];
-    private readonly Dictionary<string, object?> _formValues = new();
-    private readonly Dictionary<string, object?> _openedWith = new();
+    private EffectSettings? _effect;
+    private EffectSettingField[] _editable = [];
+    private EffectSettingField[] _setInCode = [];
+    private readonly Dictionary<string, string?> _formValues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> _openedWith = new(StringComparer.Ordinal);
     private string? _error;
 
     /// <summary>
-    /// Reads the current value of every editable property of <see cref="Configuration"/> into the
-    /// form. A property is editable when it is a boolean, an enum or a scalar
-    /// <see cref="FormValueParser"/> reads; any other property, a predicate delegate for example,
-    /// is shown as set in code and never written, since its text form cannot be read back.
+    /// Reads the effect's settings into the form. A sensitive setting's value is never read back,
+    /// so its field opens blank and is written only when the operator types a new value. A
+    /// setting with no text form, a predicate delegate for example, is shown as set in code.
     /// </summary>
     protected override void OnInitialized()
     {
-        var properties = ConfigurationType
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
-            .ToArray();
+        _effect = EffectSettings
+            .GetEffects()
+            .FirstOrDefault(e => e.IsConfigurable && e.FullName == EffectFullName);
+        if (_effect is null)
+            return;
 
-        _configProperties = properties.Where(IsEditable).ToArray();
-        _readOnlyProperties = properties.Where(p => !IsEditable(p)).ToArray();
+        _editable = _effect.Fields.Where(f => f.Kind != EffectFieldKind.SetInCode).ToArray();
+        _setInCode = _effect.Fields.Where(f => f.Kind == EffectFieldKind.SetInCode).ToArray();
 
-        foreach (var prop in _configProperties)
-        {
-            var currentValue = prop.GetValue(Configuration);
-            var underlying = Underlying(prop);
-
-            _formValues[prop.Name] =
-                underlying == typeof(bool) ? currentValue is true
-                : underlying.IsEnum ? currentValue?.ToString() ?? ""
-                : FormValueParser.Format(currentValue);
-        }
-
-        foreach (var (name, value) in _formValues)
-            _openedWith[name] = value;
-    }
-
-    private static Type Underlying(PropertyInfo prop) =>
-        Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
-
-    private static bool IsEditable(PropertyInfo prop)
-    {
-        var underlying = Underlying(prop);
-        return underlying.IsEnum || FormValueParser.IsScalar(underlying);
+        foreach (var field in _editable)
+            _formValues[field.Name] = _openedWith[field.Name] = field.Sensitive
+                ? ""
+                : field.Value ?? "";
     }
 
     private T GetFormValue<T>(string name) =>
         _formValues.TryGetValue(name, out var value) && value is T typed ? typed : default!;
 
-    private void SetFormValue(string name, object? value) => _formValues[name] = value;
+    private void SetFormValue(string name, string? value) => _formValues[name] = value ?? "";
 
     /// <summary>
-    /// Applies the fields this dialog changed to the live configuration, all or nothing. The
-    /// object is the effect's process-wide configuration, read by every train that runs next, so
-    /// every changed field is converted and validated before any is written, and if a setter
-    /// throws part way the fields already written are put back. A field left as it opened is not
-    /// written, so a value saved from elsewhere while the dialog was open is not reverted.
+    /// Sends the settings this dialog changed, and only those, so a value saved from elsewhere
+    /// while the dialog was open is not reverted. A sensitive setting left blank is not sent. The
+    /// service writes all of them or none; a refusal is shown and the dialog stays open.
     /// </summary>
     private void Save()
     {
         _error = null;
+        if (_effect is null)
+            return;
 
-        var changed = _configProperties
-            .Where(p => !Equals(_formValues.GetValueOrDefault(p.Name), _openedWith[p.Name]))
-            .ToList();
+        var changed = _editable
+            .Where(f =>
+                f.Sensitive
+                    ? !string.IsNullOrEmpty(_formValues.GetValueOrDefault(f.Name))
+                    : _formValues.GetValueOrDefault(f.Name) != _openedWith[f.Name]
+            )
+            .ToDictionary(f => f.Name, f => _formValues.GetValueOrDefault(f.Name));
 
-        var converted = new List<(PropertyInfo Property, object? Value)>();
-        var refused = new List<string>();
-        foreach (var prop in changed)
+        if (changed.Count == 0)
         {
-            if (TryConvert(prop, out var value, out var error))
-                converted.Add((prop, value));
-            else
-                refused.Add($"{FormatLabel(prop.Name)}: {error}");
-        }
-
-        if (refused.Count > 0)
-        {
-            _error = $"Failed to save configuration. {string.Join(" ", refused)}";
+            DialogService.Close();
             return;
         }
 
-        var applied = new List<(PropertyInfo Property, object? Previous)>();
-        try
+        var result = EffectSettings.ConfigureEffect(EffectFullName, changed);
+        if (!result.Success)
         {
-            foreach (var (prop, value) in converted)
-            {
-                var previous = prop.GetValue(Configuration);
-                prop.SetValue(Configuration, value);
-                applied.Add((prop, previous));
-            }
-        }
-        catch (Exception ex)
-        {
-            for (var i = applied.Count - 1; i >= 0; i--)
-                applied[i].Property.SetValue(Configuration, applied[i].Previous);
-
-            _error = $"Failed to save configuration: {ex.InnerException?.Message ?? ex.Message}";
+            _error = result.Message;
             return;
         }
 
@@ -142,8 +101,7 @@ public partial class ConfigureEffectDialog
             {
                 Severity = NotificationSeverity.Success,
                 Summary = "Configuration Saved",
-                Detail =
-                    $"{ConfigurationType.Name} updated. Changes apply to the next train execution.",
+                Detail = result.Message,
                 Duration = 4000,
             }
         );
@@ -152,55 +110,14 @@ public partial class ConfigureEffectDialog
     }
 
     /// <summary>
-    /// Reads a field as its property's type: blank is <see langword="null"/> for a property that
-    /// accepts null and refused for one that does not, text is read by
-    /// <see cref="FormValueParser"/>, and the result must pass the property's own
-    /// <see cref="ValidationAttribute"/>s.
-    /// </summary>
-    private bool TryConvert(PropertyInfo prop, out object? value, out string? error)
-    {
-        var formValue = _formValues.GetValueOrDefault(prop.Name);
-        var underlying = Underlying(prop);
-        value = null;
-        error = null;
-
-        if (underlying == typeof(bool))
-            value = formValue is true;
-        else if (formValue is not string text || string.IsNullOrWhiteSpace(text))
-        {
-            if (underlying == typeof(string) && !FormValueParser.AcceptsNull(prop))
-                value = "";
-            else if (!FormValueParser.AcceptsNull(prop))
-            {
-                error = "A value is required.";
-                return false;
-            }
-        }
-        else if (!FormValueParser.TryParse(text, underlying, out value, out error))
-            return false;
-
-        foreach (var rule in prop.GetCustomAttributes<ValidationAttribute>(inherit: true))
-        {
-            var result = rule.GetValidationResult(
-                value,
-                new ValidationContext(Configuration) { MemberName = prop.Name }
-            );
-            if (result != ValidationResult.Success)
-            {
-                error = result?.ErrorMessage ?? $"{value} is not allowed.";
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Closes without writing. Nothing reaches the configuration except through Save, so there
-    /// is nothing to put back, and writing the values the dialog opened with would undo a
-    /// change saved from elsewhere in the meantime.
+    /// Closes without writing. Nothing reaches the settings except through Save, so there is
+    /// nothing to put back, and writing the values the dialog opened with would undo a change
+    /// saved from elsewhere in the meantime.
     /// </summary>
     private void Cancel() => DialogService.Close();
+
+    private static string ShortTypeName(string? fullName) =>
+        fullName is null ? "" : fullName[(fullName.LastIndexOfAny(['.', '+']) + 1)..];
 
     private static string FormatLabel(string name) =>
         Regex.Replace(name, @"(?<=[a-z0-9])(?=[A-Z])", " ");

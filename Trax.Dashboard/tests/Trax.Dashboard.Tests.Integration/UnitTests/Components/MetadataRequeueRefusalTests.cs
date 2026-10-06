@@ -12,6 +12,7 @@ using Trax.Dashboard.Services.LocalStorage;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -57,6 +58,9 @@ public class MetadataRequeueRefusalTests
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         services.AddSingleton<ITrainDiscoveryService>(discovery);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
+        // Stands in for the host's database provider, so the requeue is not refused as having
+        // nothing to dispatch it (Trax.Scheduler ADR 0019).
+        services.AddSingleton<ISqlDialect, StandInSqlDialect>();
         services.AddScoped<ITrainExecutionService>(sp => new TrainExecutionService(
             discovery,
             runExecutor: null!,
@@ -69,7 +73,8 @@ public class MetadataRequeueRefusalTests
             discovery,
             _data,
             new SchedulerConfiguration(),
-            sp.GetRequiredService<ITrainExecutionService>()
+            sp.GetRequiredService<ITrainExecutionService>(),
+            sp
         ));
     }
 
@@ -200,7 +205,8 @@ public class MetadataRequeueRefusalTests
                     sp.GetRequiredService<ITrainDiscoveryService>(),
                     _data,
                     new SchedulerConfiguration(),
-                    sp.GetRequiredService<ITrainExecutionService>()
+                    sp.GetRequiredService<ITrainExecutionService>(),
+                    sp
                 ),
                 sp.GetRequiredService<ITrustedExecutionScope>(),
                 calls
@@ -233,7 +239,7 @@ public class MetadataRequeueRefusalTests
 
     /// <summary>
     /// Forwards every call to the real operations service and records which method was called and
-    /// whether the caller was inside a trusted scope at the time.
+    /// whether the caller was inside a trusted scope at the time, leaving out the log reads.
     /// </summary>
     public class RecordingOperations : DispatchProxy
     {
@@ -257,7 +263,15 @@ public class MetadataRequeueRefusalTests
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
-            _calls.Add((targetMethod!.Name, _scope.IsTrusted));
+            // The run's logs grid reads through the service on every load; only writes count.
+            if (
+                targetMethod!.Name
+                is not (
+                    nameof(IOperationsService.CountLogsAsync)
+                    or nameof(IOperationsService.GetLogsAsync)
+                )
+            )
+                _calls.Add((targetMethod.Name, _scope.IsTrusted));
             return targetMethod.Invoke(_inner, args);
         }
     }

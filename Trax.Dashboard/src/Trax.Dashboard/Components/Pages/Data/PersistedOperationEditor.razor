@@ -129,6 +129,10 @@
         _version = ExistingVersion;
     }
 
+    /// <remarks>
+    /// The dialog closes with <see langword="true"/> when the upload succeeded, and with the
+    /// service's message (a <see cref="string"/>) when it was saved but not sent to every node.
+    /// </remarks>
     private void Cancel() => DialogService.Close(false);
 
     /// <summary>
@@ -162,6 +166,9 @@
             );
             if (payload.Success)
                 DialogService.Close(true);
+            else if (payload.Operation is not null && NotBroadcastWarning.From(payload.Errors) is { } warning)
+                // Saved, but the other nodes were not told: close with the warning, not as a refusal.
+                DialogService.Close(warning);
             else
                 _errors = payload.Errors;
         }

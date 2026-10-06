@@ -35,6 +35,7 @@ public class AskAfreshActionTests
     private Bunit.TestContext _ctx = null!;
     private InMemoryDataContextFactory _data = null!;
     private RecordingScheduler _scheduler = null!;
+    private OperationsCallLog _operations = null!;
 
     // What an askAfresh trigger reports as the run its entry still replays.
     private long? TriggerReplays { get; set; }
@@ -47,6 +48,7 @@ public class AskAfreshActionTests
         _ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         _data = new InMemoryDataContextFactory();
         _ctx.Services.AddDashboardPageServices(_data);
+        _operations = RecordingOperationsService.Register(_ctx.Services, _data);
         var (scheduler, recorder) = RecordingScheduler.Create();
         recorder.Respond = (method, args) =>
             method switch
@@ -85,13 +87,14 @@ public class AskAfreshActionTests
         page.WaitForElement("button:contains('Run Now')", WaitTimeout);
         await Click(page, askAfresh ? "Run Now, Ask Afresh" : "Run Now");
 
-        var args = _scheduler.CallsTo(nameof(ITraxScheduler.TriggerAsync)).Single();
+        // Through the operations service, the call the API's triggerManifest makes.
+        var args = _operations.CallsTo(nameof(IOperationsService.TriggerManifestAsync)).Single();
         args[0].Should().Be("ext-run-now");
-        AskedAfresh(args).Should().Be(askAfresh);
+        args[2].Should().Be(askAfresh);
     }
 
-    [TestCase(null, NotificationSeverity.Success, "has been queued for execution")]
-    [TestCase(41L, NotificationSeverity.Warning, "replays the decisions of run 41")]
+    [TestCase(null, NotificationSeverity.Success, "queued a new run")]
+    [TestCase(41L, NotificationSeverity.Warning, "replays the decisions of execution 41")]
     public async Task Run_now_ask_afresh_warns_when_the_run_still_replays(
         long? replays,
         NotificationSeverity severity,
@@ -100,7 +103,23 @@ public class AskAfreshActionTests
     {
         // The dispatcher claimed the queued retry before the trigger reached it, so the trigger
         // could not clear its replay link.
-        TriggerReplays = replays;
+        // A run that still replays cannot be arranged against the store, so the service's answer
+        // is given; the other goes through the real trigger.
+        if (replays is { } run)
+            _operations.Respond = (method, _) =>
+                method == nameof(IOperationsService.TriggerManifestAsync)
+                    ? Task.FromResult(
+                        new TriggerManifestResult(
+                            true,
+                            "Manifest 'ext-still-replays' triggered, but the dispatcher had already "
+                                + $"claimed its queued retry, so that run replays the decisions of execution {run}.",
+                            TriggerResult(replayDecisionsOf: run)
+                        )
+                        {
+                            StillReplaying = true,
+                        }
+                    )
+                    : null;
         var (manifestId, _) = await SeedManifestAsync("still-replays", "ext-still-replays");
 
         var page = _ctx.RenderComponent<ManifestDetailPage>(p =>
@@ -121,8 +140,28 @@ public class AskAfreshActionTests
     [Test]
     public async Task Trigger_selected_ask_afresh_reports_a_manifest_that_still_replays()
     {
-        TriggerReplays = 41;
-        await SeedManifestAsync("group-a", "ext-a");
+        var (manifestId, _) = await SeedManifestAsync("group-a", "ext-a");
+        // The dispatcher claimed the queued retry before the trigger reached it.
+        _operations.Respond = (method, _) =>
+            method == nameof(IOperationsService.TriggerManifestsAsync)
+                ? Task.FromResult(
+                    new BatchTriggerResult(
+                        true,
+                        1,
+                        0,
+                        0,
+                        1,
+                        0,
+                        "0 queued, 1 already dispatched and still replaying across 1 of 1 manifest(s), asking afresh.",
+                        [
+                            new BatchItemNote(
+                                manifestId,
+                                "Manifest ext-a was already being dispatched, so its run replays the decisions of run 41 rather than asking afresh."
+                            ),
+                        ]
+                    )
+                )
+                : null;
 
         var page = _ctx.RenderComponent<ManifestsPage>();
         WaitForRow(page, "group-a");
@@ -136,7 +175,7 @@ public class AskAfreshActionTests
                     .Messages.Should()
                     .ContainSingle(m =>
                         m.Severity == NotificationSeverity.Warning
-                        && m.Detail == "0 queued, 1 already dispatched and still replaying."
+                        && m.Detail.StartsWith("0 queued, 1 already dispatched and still replaying")
                     ),
             WaitTimeout
         );
@@ -147,7 +186,7 @@ public class AskAfreshActionTests
     [TestCase(true)]
     public async Task Trigger_selected_asks_afresh_only_when_chosen(bool askAfresh)
     {
-        await SeedManifestAsync("group-a", "ext-a");
+        var (manifestId, _) = await SeedManifestAsync("group-a", "ext-a");
 
         var page = _ctx.RenderComponent<ManifestsPage>();
         WaitForRow(page, "group-a");
@@ -155,12 +194,16 @@ public class AskAfreshActionTests
         await Click(page, askAfresh ? "Trigger Selected, Ask Afresh (1)" : "Trigger Selected (1)");
 
         page.WaitForAssertion(
-            () => _scheduler.CallsTo(nameof(ITraxScheduler.TriggerAsync)).Should().ContainSingle(),
+            () =>
+                _operations
+                    .CallsTo(nameof(IOperationsService.TriggerManifestsAsync))
+                    .Should()
+                    .ContainSingle(),
             WaitTimeout
         );
-        AskedAfresh(_scheduler.CallsTo(nameof(ITraxScheduler.TriggerAsync)).Single())
-            .Should()
-            .Be(askAfresh);
+        var args = _operations.CallsTo(nameof(IOperationsService.TriggerManifestsAsync)).Single();
+        ((IEnumerable<long>)args[0]!).Should().Equal(manifestId);
+        args[1].Should().Be(askAfresh);
     }
 
     [TestCase(false)]
@@ -232,10 +275,14 @@ public class AskAfreshActionTests
     )
     {
         var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _scheduler.Respond = (_, args) =>
-            args.Any(a => a is true)
-                ? pending.Task.ContinueWith(_ => TriggerResult(replayDecisionsOf: null))
-                : pending.Task;
+        _operations.Respond = (method, _) =>
+            method == nameof(IOperationsService.TriggerManifestAsync)
+                ? pending.Task.ContinueWith(_ => new TriggerManifestResult(
+                    true,
+                    "triggered",
+                    TriggerResult(replayDecisionsOf: null)
+                ))
+                : null;
         var (manifestId, _) = await SeedManifestAsync("busy", "ext-busy");
 
         var page = _ctx.RenderComponent<ManifestDetailPage>(p =>

@@ -3,12 +3,14 @@ using Bunit;
 using Radzen;
 using Radzen.Blazor;
 using Trax.Dashboard.Components.Dialogs;
+using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Provider.Parameter.Configuration;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
 /// <summary>
-/// The Configure Effect dialog over the real <see cref="ParameterEffectConfiguration"/>, whose
+/// The Configure Effect dialog, through the Scheduler's effect settings service, over the real
+/// <see cref="ParameterEffectConfiguration"/>, whose
 /// fields are what the dialog has to get right: a nullable byte cap where <see langword="null"/>
 /// means no cap, and predicate delegates the host sets in code. A save writes only what the
 /// operator changed, keeps <see langword="null"/> as <see langword="null"/>, never round-trips a
@@ -97,10 +99,7 @@ public class ConfigureEffectDialogParameterTests
     public void A_decimal_is_read_in_the_invariant_culture()
     {
         var configuration = new BoundedConfiguration { Ratio = 1, Limit = 5 };
-        var dialog = _ctx.RenderComponent<ConfigureEffectDialog>(p =>
-            p.Add(x => x.ConfigurationType, typeof(BoundedConfiguration))
-                .Add(x => x.Configuration, configuration)
-        );
+        var dialog = RenderFor(configuration);
 
         dialog.FindAll("input.rz-textbox").First().Change("1.5");
         Save(dialog);
@@ -114,25 +113,26 @@ public class ConfigureEffectDialogParameterTests
     public void A_value_its_property_declares_out_of_range_is_refused()
     {
         var configuration = new BoundedConfiguration { Ratio = 1, Limit = 5 };
-        var dialog = _ctx.RenderComponent<ConfigureEffectDialog>(p =>
-            p.Add(x => x.ConfigurationType, typeof(BoundedConfiguration))
-                .Add(x => x.Configuration, configuration)
-        );
+        var dialog = RenderFor(configuration);
 
         dialog.FindAll("input.rz-textbox").Last().Change("-1");
         Save(dialog);
 
-        dialog.Markup.Should().Contain("Failed to save configuration");
+        dialog.Markup.Should().Contain("The configuration was not saved");
         configuration.Limit.Should().Be(5);
     }
 
     private IRenderedComponent<ConfigureEffectDialog> Render(
         ParameterEffectConfiguration configuration
-    ) =>
-        _ctx.RenderComponent<ConfigureEffectDialog>(p =>
-            p.Add(x => x.ConfigurationType, typeof(ParameterEffectConfiguration))
-                .Add(x => x.Configuration, configuration)
+    ) => RenderFor(configuration);
+
+    private IRenderedComponent<ConfigureEffectDialog> RenderFor(object configuration)
+    {
+        ConfigurableEffectFactory.Register(_ctx.Services, configuration);
+        return _ctx.RenderComponent<ConfigureEffectDialog>(p =>
+            p.Add(x => x.EffectFullName, ConfigurableEffectFactory.FullName)
         );
+    }
 
     private static void Save(IRenderedComponent<ConfigureEffectDialog> dialog) =>
         dialog.Find("button:contains('Save')").Click();

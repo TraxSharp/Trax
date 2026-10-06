@@ -1,10 +1,8 @@
 @page "/trax/data/manifest-groups"
-@using Trax.Scheduler.Services.TraxScheduler
 @using Microsoft.Extensions.DependencyInjection
 @inherits PollingComponentBase
 @inject IDataContextProviderFactory DataContextFactory
 @inject NavigationManager Navigation
-@inject ITraxScheduler Scheduler
 @inject NotificationService NotificationService
 @inject Trax.Scheduler.Services.Operations.IOperationsService OperationsService
 
@@ -240,57 +238,18 @@
         () => OperationsService.SetManifestGroupsEnabledAsync(_selectedGroups.ToList(), enabled, DisposalToken),
         () => _selectedGroups.Clear());
 
-    // One call per group, as the scheduler offers no batch trigger or cancel yet. Each group is
-    // tried in turn, so one that fails does not stop the rest. A group's trigger skips a member
-    // that already has a queued entry and counts only the manifests it queued.
-    private Task TriggerSelected() => RunEachAsync("Groups Triggered", async () =>
-    {
-        var queued = 0;
-        var failures = new List<string>();
-        foreach (var groupId in _selectedGroups.ToList())
-        {
-            try
-            {
-                queued += await Scheduler.TriggerGroupAsync(groupId, DisposalToken);
-            }
-            catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
-            {
-                failures.Add($"Group {GroupName(groupId)} was not triggered: {ex.Message}");
-            }
-        }
+    // Through the operations service in one call each, as the API's triggerManifestGroups and
+    // cancelManifestGroups are. A trigger counts manifests: a member that already had a queued
+    // entry is counted apart from the ones queued, and a group that no longer exists is noted.
+    private Task TriggerSelected() => RunBatchTriggerAsync(
+        "Groups Triggered",
+        () => OperationsService.TriggerManifestGroupsAsync(_selectedGroups.ToList(), DisposalToken),
+        () => _selectedGroups.Clear());
 
-        var triggered = _selectedGroups.Count - failures.Count;
-        var message = $"{queued} manifest(s) queued across {triggered} group(s)";
-        if (failures.Count > 0)
-            message += $", {failures.Count} group(s) failed";
-        return new EachOutcome(message + ".", failures);
-    }, () => _selectedGroups.Clear());
-
-    private Task CancelSelectedRunning() => RunEachAsync("Cancellation Requested", async () =>
-    {
-        var flagged = 0;
-        var failures = new List<string>();
-        foreach (var groupId in _selectedGroups.ToList())
-        {
-            try
-            {
-                flagged += await Scheduler.CancelGroupAsync(groupId, DisposalToken);
-            }
-            catch (Exception ex) when (!DisposalToken.IsCancellationRequested)
-            {
-                failures.Add($"Group {GroupName(groupId)} was not cancelled: {ex.Message}");
-            }
-        }
-
-        var cancelled = _selectedGroups.Count - failures.Count;
-        var message = $"Cancellation requested for {flagged} execution(s) across {cancelled} group(s)";
-        if (failures.Count > 0)
-            message += $", {failures.Count} group(s) failed";
-        return new EachOutcome(message + ".", failures);
-    }, () => _selectedGroups.Clear());
-
-    private string GroupName(long groupId) =>
-        _items.FirstOrDefault(g => g.Id == groupId)?.Name ?? groupId.ToString();
+    private Task CancelSelectedRunning() => RunBatchOperationAsync(
+        "Cancellation Requested",
+        () => OperationsService.CancelManifestGroupsAsync(_selectedGroups.ToList(), DisposalToken),
+        () => _selectedGroups.Clear());
 
     private void OnDagNodeClick(long groupId)
     {

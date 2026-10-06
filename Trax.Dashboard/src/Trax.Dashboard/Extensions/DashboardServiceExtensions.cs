@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Server.Circuits;
@@ -13,7 +14,6 @@ using Trax.Dashboard.Configuration;
 using Trax.Dashboard.Services.Authorization;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
-using Trax.Dashboard.Services.LogLevels;
 using Trax.Dashboard.Services.ThemeState;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Scheduler.Services.Operations;
@@ -133,19 +133,6 @@ public static class DashboardServiceExtensions
         services.AddScoped<IThemeStateService, ThemeStateService>();
         services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();
 
-        // Log levels saved on Server Settings go to the logger filter options, after every
-        // configuration source, rather than into IConfiguration (see DashboardLogLevelOverrides).
-        if (!services.Any(sd => sd.ServiceType == typeof(DashboardLogLevelOverrides)))
-        {
-            services.AddSingleton<DashboardLogLevelOverrides>();
-            services.AddSingleton<IPostConfigureOptions<LoggerFilterOptions>>(sp =>
-                sp.GetRequiredService<DashboardLogLevelOverrides>()
-            );
-            services.AddSingleton<IOptionsChangeTokenSource<LoggerFilterOptions>>(sp =>
-                sp.GetRequiredService<DashboardLogLevelOverrides>()
-            );
-        }
-
         services.AddRadzenComponents();
 
         services.AddRazorComponents().AddInteractiveServerComponents();
@@ -196,10 +183,12 @@ public static class DashboardServiceExtensions
     /// added there are additive; they do not replace the posture.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// No posture was chosen (call <see cref="DashboardOptions.RequirePolicy"/>,
-    /// <see cref="DashboardOptions.RequireRoles"/> or
-    /// <see cref="DashboardOptions.AllowAnonymousDashboard"/>), the named policy is not
-    /// registered, or the Scheduler is not (call <c>AddScheduler()</c> inside <c>AddTrax(...)</c>).
+    /// <c>AddTraxDashboard</c> was not called; no posture was chosen (call
+    /// <see cref="DashboardOptions.RequirePolicy"/>, <see cref="DashboardOptions.RequireRoles"/> or
+    /// <see cref="DashboardOptions.AllowAnonymousDashboard"/>); the named policy is not
+    /// registered; a policy or roles posture has no authentication scheme to challenge a caller
+    /// with (none is the default, and the policy names none that is registered); or the Scheduler
+    /// is not registered (call <c>AddScheduler()</c> inside <c>AddTrax(...)</c>).
     /// </exception>
     public static RazorComponentsEndpointConventionBuilder UseTraxDashboard(
         this WebApplication app,
@@ -209,7 +198,13 @@ public static class DashboardServiceExtensions
     {
         routePrefix = "/" + routePrefix.Trim('/');
 
-        var options = app.Services.GetRequiredService<DashboardOptions>();
+        var options =
+            app.Services.GetService<DashboardOptions>()
+            ?? throw new InvalidOperationException(
+                "UseTraxDashboard() requires AddTraxDashboard() to be called first. Call "
+                    + "builder.AddTraxDashboard(o => ...) after AddTrax(...) and before "
+                    + "builder.Build()."
+            );
         VerifyAuthorizationPosture(app, options);
         VerifySchedulerRegistered(app);
 
@@ -282,19 +277,72 @@ public static class DashboardServiceExtensions
 
         // AddRazorComponents(), which AddTraxDashboard() calls, registers the authorization
         // services, so only the policy name can be missing here.
-        if (
-            options.Policy is not null
-            && app
+        var policy = options.Policy is null
+            ? null
+            : app
                 .Services.GetRequiredService<IAuthorizationPolicyProvider>()
                 .GetPolicyAsync(options.Policy)
                 .GetAwaiter()
-                .GetResult()
-                is null
-        )
+                .GetResult();
+        if (options.Policy is not null && policy is null)
             throw new InvalidOperationException(
                 $"The dashboard requires the authorization policy '{options.Policy}', which is "
                     + "not registered. Add it with builder.Services.AddAuthorization(o => "
                     + $"o.AddPolicy(\"{options.Policy}\", ...))."
             );
+
+        VerifyChallengeScheme(app, policy);
+    }
+
+    // A refused request is answered by challenging (or forbidding) through an authentication
+    // scheme: the ones the policy names, or else the host's default. With none, ASP.NET Core
+    // throws on every request the posture refuses, so the dashboard answers 500 instead of 401
+    // or 403. Refuse at startup instead, naming what is missing.
+    private static void VerifyChallengeScheme(WebApplication app, AuthorizationPolicy? policy)
+    {
+        var schemes = app.Services.GetService<IAuthenticationSchemeProvider>();
+        if (policy is { AuthenticationSchemes.Count: > 0 })
+        {
+            var missing = policy
+                .AuthenticationSchemes.Where(name =>
+                    schemes?.GetSchemeAsync(name).GetAwaiter().GetResult() is null
+                )
+                .ToList();
+            if (missing.Count == 0)
+                return;
+
+            throw new InvalidOperationException(
+                $"The dashboard's authorization policy names the authentication scheme(s) "
+                    + $"{string.Join(", ", missing.Select(m => $"'{m}'"))}, which are not "
+                    + "registered, so every request it refuses would fail with a 500. Register "
+                    + "them with builder.Services.AddAuthentication().Add...(...)."
+            );
+        }
+
+        if (schemes?.GetDefaultChallengeSchemeAsync().GetAwaiter().GetResult() is null)
+            throw new InvalidOperationException(
+                "The dashboard requires authorization, but the host has no authentication scheme "
+                    + "to challenge a caller with, so every request it refuses would fail with a "
+                    + "500 instead of a 401 or 403. Register one with "
+                    + "builder.Services.AddAuthentication(...) (and set it as the default when "
+                    + "there is more than one), or name it on the policy with "
+                    + "AddAuthenticationSchemes(...)."
+            );
+
+        // A signed-in caller the posture refuses is forbidden through the default forbid scheme,
+        // which falls back to the challenge scheme unless the host names one. A name that is not
+        // registered resolves to nothing, and every such refusal would fail with a 500, not 403.
+        if (schemes.GetDefaultForbidSchemeAsync().GetAwaiter().GetResult() is null)
+        {
+            var named = app
+                .Services.GetService<IOptions<AuthenticationOptions>>()
+                ?.Value.DefaultForbidScheme;
+            throw new InvalidOperationException(
+                $"The host's default forbid scheme '{named}' is not a registered authentication "
+                    + "scheme, so every signed-in caller the dashboard refuses would fail with a "
+                    + "500 instead of a 403. Register it, or remove DefaultForbidScheme from "
+                    + "AddAuthentication(...) so the challenge scheme forbids."
+            );
+        }
     }
 }

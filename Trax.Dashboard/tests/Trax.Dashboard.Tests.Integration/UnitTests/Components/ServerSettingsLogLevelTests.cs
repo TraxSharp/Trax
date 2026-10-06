@@ -11,21 +11,19 @@ using Radzen;
 using Radzen.Blazor;
 using Trax.Dashboard.Components.Pages.Settings;
 using Trax.Dashboard.Extensions;
-using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Effect.Configuration.TraxBuilder;
-using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Mediator.Configuration;
-using Trax.Mediator.Services.TrainDiscovery;
-using Trax.Mediator.Services.TrainExecution;
-using Trax.Scheduler.Configuration;
-using Trax.Scheduler.Services.Operations;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
 
 /// <summary>
-/// A log level saved on the Server Settings page is the level the host's loggers use, whichever
-/// <c>AddTraxDashboard</c> overload the host called and whatever configuration sources it added
-/// after it. The host here uses the <c>IServiceCollection</c> overload over a configuration whose
+/// A log level saved on the Server Settings page, through the Scheduler's log level service that
+/// the API's log levels mutation calls, is the level the host's loggers use, whatever
+/// configuration sources the host added. The host here uses the <c>IServiceCollection</c> overload over a configuration whose
 /// only source reloads from its backing store, as a JSON file or environment variables do: a
 /// value written into the configuration is lost on that source's next reload.
 /// </summary>
@@ -63,31 +61,17 @@ public class ServerSettingsLogLevelTests
             logging.AddConfiguration(_configuration.GetSection("Logging"));
             logging.AddProvider(new NullProviderThatCounts());
         });
+        // The real registration: AddScheduler registers the log level service the page and the
+        // API's log levels query and mutation share.
+        new TraxBuilder(services, new EffectRegistry())
+            .AddEffects(effects => effects.UseInMemory())
+            .AddMediator(typeof(ServerSettingsLogLevelTests).Assembly)
+            .AddScheduler();
         services.AddSingleton<TraxMarker>();
         services.AddSingleton<IWebHostEnvironment>(new TestEnvironment());
         services.AddTraxDashboard();
         // AddTraxDashboard brings the server's own JS runtime; the test renderer needs bUnit's.
         services.AddSingleton<IJSRuntime>(_ctx.JSInterop.JSRuntime);
-
-        var data = new InMemoryDataContextFactory();
-        var config = new SchedulerConfiguration();
-        var discovery = new TrainDiscoveryService(new ServiceCollection());
-        services.AddSingleton(config);
-        services.AddSingleton<IDataContextProviderFactory>(data);
-        services.AddScoped<ITrainExecutionService>(sp => new TrainExecutionService(
-            discovery,
-            runExecutor: null!,
-            concurrencyLimiter: null!,
-            data,
-            new MediatorConfiguration(),
-            sp
-        ));
-        services.AddScoped<IOperationsService>(sp => new OperationsService(
-            discovery,
-            data,
-            config,
-            sp.GetRequiredService<ITrainExecutionService>()
-        ));
     }
 
     [TearDown]

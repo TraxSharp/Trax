@@ -102,6 +102,16 @@
             await _grid.Reload();
     }
 
+    /// <summary>
+    /// Goes back to the first page and loads it, as a changed column filter does; for a filter
+    /// the page sets outside the grid. Does nothing before the grid has rendered.
+    /// </summary>
+    internal async Task FirstPageAsync()
+    {
+        if (_grid is not null)
+            await _grid.FirstPage(forceReload: true);
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Safety net: if Radzen didn't fire LoadData on init, trigger it ourselves.
