@@ -1,0 +1,121 @@
+# Trax.Effect
+
+The effect layer: execution metadata, data contexts, effect and junction providers, the
+state machine engine, and the Postgres / Sqlite / InMemory data providers. It sits directly
+above `Trax.Core`, so a change here reaches the six repos downstream of it (Trax.Mediator,
+Trax.Scheduler, Trax.Api, Trax.Dashboard, Trax.Cli and Trax.Samples) through a published
+package. Trax.Core is upstream and never sees it.
+
+This file is the entry point. It routes; it does not restate the rules.
+
+## Architecture decisions
+
+`docs/adr/` records **why** things are the way they are. A documentation page says what the
+rule is; an ADR says whether it is a deliberate constraint or an accident, so you can tell
+which ones are safe to change. Read the relevant one before proposing to change a rule, and
+if your work contradicts one, say so rather than silently overriding it.
+
+| Working on | Read first |
+| --- | --- |
+| a schema change | [0001](./docs/adr/0001-schema-changes-are-hand-written-sql.md), hand-written SQL journaled by DbUp, no EF migrations |
+| an enum stored in a column, or a new value for one | [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md), a Postgres enum mapped in three places, and a new value ships before its writer |
+| anything that creates a table | [0002](./docs/adr/0002-framework-tables-are-migrated-domain-tables-are-bootstrapped.md), which half of the split you are in |
+| a new data model | [0003](./docs/adr/0003-a-model-and-its-persistent-mapping-are-a-pair.md), and [0001](./docs/adr/0001-schema-changes-are-hand-written-sql.md) for the migration it needs |
+| a table for a feature package | `Trax.Docs/adr/0009`, the DDL ships in the core provider set or it never runs, and `Trax.Docs/adr/0036`, it ships with its model, mapping and `DbSet` on `IDataContext`, and the feature reaches it through them rather than SQL of its own |
+| authorization types a consumer writes | [0004](./docs/adr/0004-trax-owns-the-authorization-vocabulary.md), Trax owns the authorization vocabulary: `[TraxAuthorize]` and `[TraxAllowAnonymous]` declare it on every surface, and the server's own attribute is refused at startup |
+| `work_queue.confirmed_at`, `subject_key`, or `IWorkQueuePromotion` | central `docs/0018` (a deferred enqueue is staged, and a stranded one is cancelled), `docs/0019` (one subject's queued work runs one at a time), and [0007](./docs/adr/0007-cancelled-staged-entries-are-deleted-after-a-retention.md) (the sweep that cancels a stranded entry deletes it 30 days on) |
+| `work_queue.is_explicit_trigger`, or which queued entries a disabled manifest still dispatches | [0018](./docs/adr/0018-a-disabled-manifest-holds-its-queued-work-except-an-explicit-trigger.md), the load and the claim hold a disabled manifest's entries, and dispatch only the runs someone asked for by name |
+| `IEnqueueContextAccessor` | central `docs/0018`, the context flows with the async call and is null for a deferring train |
+| `DataLayerGuards.OwnerScopeCompleteness`, or a consumer's per-user row filters | [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md), a filter counts only if it reads the principal, and a per-user entity is a bare `[TraxAuthorize]` |
+| `TrainInput` in `QueueSubjectKey` or `OnQueue`, or `ServiceTrain.EnterQueueHooks` | central `docs/0021`, the enqueue hands the hooks their input for a scope and never sets `Metadata` |
+| `AddDecisionRecording`, the `trax.decision` table, `replay_decisions_of`, or the System One / Nimble decider | central `docs/0040` (a decider chooses a declared track) and `docs/0041` (a requeued run replays the decisions of the run it repeats); the table follows `docs/0009` and `docs/0036` |
+| `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
+| `[TraxSensitive]`, `TraxRedaction`, or anything that serializes a train's input or output for storage | [0010](./docs/adr/0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md), a marked member is masked where its copy is written, opt-in, never by name |
+| `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
+| running a train instance more than once, `AddSingletonTraxRoute`, or how lifecycle hooks are built | [0011](./docs/adr/0011-a-service-train-instance-is-one-run.md), a train instance is one run at a time and never a singleton, and hooks come from the run's scope |
+| overriding `ServiceTrain.Run` or `NewMonad`, or their modifiers | [0009](./docs/adr/0009-a-service-train-does-its-work-in-junctions.md), `Run` and `NewMonad` are sealed so `Junctions()` is the only way a service train does work |
+| `trax.decision.state_hash`, or how long a recorded answer is replayed (`ReplayAnswersFor`) | [0020](./docs/adr/0020-a-recorded-answer-replays-only-while-it-is-fresh.md), an answer replays only into the same state and only while it is younger than the bound, counted from when a decider gave it |
+| `AddJunctionEvents`, `IJunctionEventHandler`, the junction event types, `trax.junction_run`, or `[TraxSensitive]` on a question type | [0019](./docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md), junction events are opt-in, reach junction event handlers only, carry names, times, states and failure classes but never run data, and their rows go with their run |
+| `MapTraxTrainEventHub`, or the SignalR sink's default client payload | [0016](./docs/adr/0016-the-train-event-hub-carries-the-hosts-authorization.md), the hub is mapped with an authorization posture or the host does not start, and the default payload leaves the failure reason out |
+| a state-machine draft's `requestId` replay, or `ISnapshotStore.UpdateWithRequest` | [0013](./docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md), an id replays only for the trigger it recorded, and a request whose outcome was undone fires again |
+| what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
+
+Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by repo. Twenty-seven name `effect`: executable guards, exact version pinning, the
+dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
+delays), the canonical train name being the interface FullName, the documentation lints,
+feature-package tables shipping in the core provider migration set, the public API baseline,
+test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax owning
+its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
+a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
+queued work running one at a time (`0019`), failures being classified where they happen
+(`0020`), a queue hook reading its input through `TrainInput` (`0021`), a warning failing the CI build
+(`0032`), packages validating against their last release (`0033`), a feature table shipping with its
+model on `IDataContext` (`0036`), the ADR guard being released by tag (`0038`), docs merging after
+their code (`0039`), a decider choosing a declared track (`0040`), and a requeued run replaying the
+decisions it repeats (`0041`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
+does not resolve on GitHub, because it crosses a repository boundary.
+
+## When your change makes a decision
+
+Most changes do not. When one does (reversing it would cost something real, a future reader
+would ask why it is like this, and there were real alternatives), it takes five steps and
+the build enforces four. The `adr-guard` job runs on every pull request.
+
+| | Step | Enforced |
+| --- | --- | --- |
+| 1 | Notice you made a decision, and write the ADR | no, this is the human step |
+| 2 | Tag it `areas`, and add it to `docs/adr/README.md` | yes |
+| 3 | Say where it stands in `## Status` and record it in `## Changelog` | yes |
+| 4 | Give it `## Exemplars`: guards, `**Enforced elsewhere:**`, or `**Unenforced:**` with a reason | yes |
+| 5 | Have each guard you named cite the ADR back, in its docstring and its failure message | yes |
+
+Step 1 is the only one you have to remember, because no test can detect a decision you chose
+not to record. The format is
+[`.claude/skills/recording-decisions/ADR-FORMAT.md`](./.claude/skills/recording-decisions/ADR-FORMAT.md).
+
+## Guards
+
+`tests/Trax.Effect.Tests.Meta/` holds the convention guards. Thirteen of the sixteen are
+shared with other repos and enforce workspace-wide rules: ten appear in all eight code
+repos, `PublicApiSurfaceTests` in the seven that publish an API surface,
+`TraxPinLockstepTests` in five and `BuilderPartialSplitTests` in three. Three are unique to
+this repo: `MigrationsIntegrityTests`, `ModelPersistentPairingTests`, and
+`PostgresEnumVocabularyTests`, which checks that the three Postgres enum mappings name the same
+enums and that each enum's members match its migrations (`0006`).
+
+The census is on: every guard class under that folder is either credited to an ADR or
+carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is
+unclassified until you choose, and the build says so. Opting out is a normal answer; a reason
+that reads as a deferral is not.
+
+`tests/Trax.Effect.StateMachine.Persistence.Integration/MigrationSchemaTests.cs` is the
+model-versus-DDL drift guard for the state-machine tables, and `EveryTableIsModelledTests` (Postgres)
+with `SqliteEveryTableIsModelledTests` is the one for the data context: every migrated table is
+mapped, and every mapped column exists (`0036`). The Postgres ones need a live Postgres. `docker compose up -d` provides one.
+
+This repo also **ships** guards rather than only running them, and those live outside the
+census root. `src/Trax.Effect.Data.Testing/DataLayerGuards.cs` is the data-layer guard
+engine: domain contexts derive the shared base, each one has a companion interface, each
+owns a distinct schema, a migration-based context has no pending model changes, and every
+entity holding per-user data is filtered through the principal and exposed only as a bare
+`[TraxAuthorize]` (the owner-scope census, [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md)).
+`DomainDataLayerGuardFixture.cs` next to it is the turnkey fixture a consumer subclasses to
+run all five without writing a test body. `tests/Trax.Effect.Data.Testing.Tests/` is their
+own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
+consumer would. Changing either file changes what every consuming repo enforces, so treat
+them as published API, not as test helpers.
+
+## Running the tests
+
+```bash
+docker compose up -d          # Postgres for the integration suites
+dotnet test
+```
+
+This repo's compose file defines one service, Postgres. The RabbitMQ broadcaster suite wants
+a broker at `amqp://trax:trax123@localhost:5672/` and this repo ships nothing that starts
+one: CI provisions a `rabbitmq:4-management` service container, and locally the broker comes
+from `../Trax.Samples/docker-compose.yml`, whose `rabbitmq` service uses the same
+credentials. Without a broker only one of that file's seven tests skips itself, the one that
+wraps its `StartAsync` in a reachability probe; the other six fail on connect.

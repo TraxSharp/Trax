@@ -1,0 +1,8 @@
+namespace Trax.Effect.JunctionProvider.Logging.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder AddJunctionLogger<TBuilder>(this TBuilder configurationBuilder, bool serializeJunctionData = false)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}

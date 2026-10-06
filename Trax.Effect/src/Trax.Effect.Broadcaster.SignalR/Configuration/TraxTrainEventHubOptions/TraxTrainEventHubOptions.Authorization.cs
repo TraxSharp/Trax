@@ -1,0 +1,112 @@
+using Microsoft.AspNetCore.Http.Connections;
+
+namespace Trax.Effect.Broadcaster.SignalR.Configuration.TraxTrainEventHubOptions;
+
+public partial class TraxTrainEventHubOptions
+{
+    /// <summary>
+    /// Admits only callers the host's authorization accepts. With no arguments a caller must
+    /// satisfy the host's default policy and, when the host sets one, its fallback policy too, so
+    /// the hub is never more open than an endpoint with no authorization of its own. With policy
+    /// names a caller must satisfy every one, and each must be registered on the host or mapping
+    /// the hub fails. Calling it again adds policies. Combines with <see cref="RequireRoles"/>,
+    /// which then also applies.
+    /// </summary>
+    /// <param name="policies">Authorization policy names registered on the host.</param>
+    /// <returns>The same options, for chaining.</returns>
+    /// <exception cref="ArgumentException">A policy name is null or whitespace.</exception>
+    public TraxTrainEventHubOptions RequireAuthorization(params string[] policies)
+    {
+        foreach (var policy in policies ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(policy))
+            {
+                throw new ArgumentException(
+                    "RequireAuthorization() does not accept null or whitespace policy names.",
+                    nameof(policies)
+                );
+            }
+
+            _policies.Add(policy);
+        }
+
+        _requireAuthorization = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Admits only authenticated callers in at least one of <paramref name="roles"/>. Calling it
+    /// again adds roles. Combines with <see cref="RequireAuthorization"/>, which then also applies.
+    /// </summary>
+    /// <param name="roles">Role names; at least one is required.</param>
+    /// <returns>The same options, for chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// No role is given, or one is null, whitespace, or contains a comma.
+    /// </exception>
+    public TraxTrainEventHubOptions RequireRoles(params string[] roles)
+    {
+        if (roles is null || roles.Length == 0)
+        {
+            throw new ArgumentException(
+                "RequireRoles() requires at least one role.",
+                nameof(roles)
+            );
+        }
+
+        foreach (var role in roles)
+        {
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                throw new ArgumentException(
+                    "RequireRoles() does not accept null or whitespace role names.",
+                    nameof(roles)
+                );
+            }
+
+            if (role.Contains(','))
+            {
+                throw new ArgumentException(
+                    $"RequireRoles() takes each role as its own argument; '{role}' contains a comma. "
+                        + "Pass the roles separately, e.g. RequireRoles(\"Operator\", \"Admin\").",
+                    nameof(roles)
+                );
+            }
+
+            _roles.Add(role);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Opens the hub to any client that can reach it, overriding any fallback policy on the host.
+    /// Every such client receives every train's lifecycle events (train name, external id, event
+    /// type, timestamp and whatever the sink's projection adds), so this suits a hub reachable
+    /// only from a trusted network. A warning is logged at startup when it is used. Cannot be
+    /// combined with <see cref="RequireAuthorization"/> or <see cref="RequireRoles"/>.
+    /// </summary>
+    /// <returns>The same options, for chaining.</returns>
+    public TraxTrainEventHubOptions AllowAnonymous()
+    {
+        _allowAnonymous = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Adjusts the hub's connection options after Trax has applied its defaults, so a value set
+    /// here wins, except <see cref="HttpConnectionDispatcherOptions.CloseOnAuthenticationExpiration"/>,
+    /// which Trax always sets. Trax sets
+    /// <see cref="HttpConnectionDispatcherOptions.TransportSendTimeout"/> to
+    /// <c>SignalRHubEndpointExtensions.DefaultTransportSendTimeout</c>.
+    /// </summary>
+    /// <param name="configure">Runs against the hub's connection options.</param>
+    /// <returns>The same options, for chaining.</returns>
+    public TraxTrainEventHubOptions ConfigureConnection(
+        Action<HttpConnectionDispatcherOptions> configure
+    )
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        _configureConnection += configure;
+        return this;
+    }
+}

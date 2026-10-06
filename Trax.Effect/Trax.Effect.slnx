@@ -1,0 +1,45 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trax.Effect/Trax.Effect.csproj" />
+  </Folder>
+  <Folder Name="/src/data/">
+    <Project Path="src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <Project Path="src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
+    <Project Path="src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <Project Path="src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <Project Path="src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
+  </Folder>
+  <Folder Name="/src/statemachine/">
+    <Project Path="src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <Project Path="src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <Project Path="src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
+  </Folder>
+  <Folder Name="/src/broadcaster/">
+    <Project Path="src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
+    <Project Path="src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
+  </Folder>
+  <Folder Name="/src/providers/">
+    <Project Path="src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <Project Path="src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <Project Path="src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
+    <Project Path="src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+  </Folder>
+  <Folder Name="/src/decisions/">
+    <Project Path="src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trax.Effect.Tests.ArrayLogger/Trax.Effect.Tests.ArrayLogger.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Broadcaster/Trax.Effect.Tests.Broadcaster.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Broadcaster.SignalR/Trax.Effect.Tests.Broadcaster.SignalR.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Integration/Trax.Effect.Tests.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Json.Integration/Trax.Effect.Tests.Json.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Data.InMemory.Integration/Trax.Effect.Tests.Data.InMemory.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Data.Sqlite.Integration/Trax.Effect.Tests.Data.Sqlite.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Benchmarks/Trax.Effect.Tests.Benchmarks.csproj" />
+    <Project Path="tests/Trax.Effect.Tests.Meta/Trax.Effect.Tests.Meta.csproj" />
+    <Project Path="tests/Trax.Effect.Data.Testing.Tests/Trax.Effect.Data.Testing.Tests.csproj" />
+    <Project Path="tests/Trax.Effect.StateMachine.Tests/Trax.Effect.StateMachine.Tests.csproj" />
+    <Project Path="tests/Trax.Effect.StateMachine.Persistence.Integration/Trax.Effect.StateMachine.Persistence.Integration.csproj" />
+    <Project Path="tests/Trax.Effect.StateMachine.Tests.Stress/Trax.Effect.StateMachine.Tests.Stress.csproj" />
+  </Folder>
+</Solution>

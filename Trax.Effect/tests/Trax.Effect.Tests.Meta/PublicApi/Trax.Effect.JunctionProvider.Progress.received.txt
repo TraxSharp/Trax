@@ -1,0 +1,18 @@
+namespace Trax.Effect.JunctionProvider.Progress.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static TBuilder AddJunctionProgress<TBuilder>(this TBuilder configurationBuilder)
+            where TBuilder : Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder { }
+    }
+}
+namespace Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckProvider
+{
+    public class CancellationCheckProvider : System.IDisposable, Trax.Effect.Services.JunctionEffectProvider.IJunctionEffectProvider
+    {
+        public CancellationCheckProvider(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dataContextFactory) { }
+        public System.Threading.Tasks.Task AfterJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(Trax.Effect.Services.EffectJunction.EffectJunction<TIn, TOut> effectJunction, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain, System.Threading.CancellationToken cancellationToken) { }
+        public void Dispose() { }
+    }
+}

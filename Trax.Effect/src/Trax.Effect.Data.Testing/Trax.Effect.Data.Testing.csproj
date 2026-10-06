@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Trax.Effect.Data.Testing</AssemblyName>
+    <Description>Architecture-guard checkers for the Trax .NET data layer (DomainDataContext, one-schema-per-context, cross-schema reads). Framework-agnostic: returns offender lists you assert on.</Description>
+    <PackageTags>trax;testing;architecture;guards;data;efcore</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Data.Testing.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Core.Testing" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="NUnit" />
+  </ItemGroup>
+</Project>

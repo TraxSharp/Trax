@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+  database:
+    image: postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527  # postgres:17
+    environment:
+      POSTGRES_USER: trax
+      POSTGRES_PASSWORD: trax123
+      POSTGRES_DB: trax
+      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ../init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh

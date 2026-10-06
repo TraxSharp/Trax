@@ -1,0 +1,16 @@
+namespace Trax.Effect.StateMachine.Testing
+{
+    public static class DifferentialCorpus
+    {
+        public static System.Collections.Generic.IReadOnlyList<string> Replay<TState, TTrigger>(Trax.Effect.StateMachine.SnapshotMachine<TState, TTrigger> machine, string goldenJson)
+            where TState :  struct, System.Enum
+            where TTrigger :  struct, System.Enum { }
+    }
+    public static class MachineConformance
+    {
+        public static System.Collections.Generic.IReadOnlyList<string> Check(Trax.Effect.StateMachine.Persistence.IMachine machine, string irPath, string corpusPath) { }
+        public static System.Collections.Generic.IReadOnlyList<string> CheckCorpus(Trax.Effect.StateMachine.Persistence.IMachine machine, string corpusPath) { }
+        public static System.Collections.Generic.IReadOnlyList<string> CheckIr(Trax.Effect.StateMachine.Persistence.IMachine machine, string irPath) { }
+        public static void WriteIr(Trax.Effect.StateMachine.Persistence.IMachine machine, string irPath) { }
+    }
+}

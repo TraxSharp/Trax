@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>PostgreSQL data provider for Trax.Effect. Adds UsePostgres(connectionString) to the AddEffects builder, which persists train runs to Postgres and applies the Trax .NET schema migrations on startup. The production choice.</Description>
+    <AssemblyName>Trax.Effect.Data.Postgres</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations/*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dbup-core" />
+    <PackageReference Include="dbup-postgresql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+  </ItemGroup>
+</Project>

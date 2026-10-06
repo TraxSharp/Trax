@@ -1,0 +1,15 @@
+namespace Trax.Effect.Data.Sqlite.Extensions
+{
+    public static class ServiceExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData UseSqlite(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, string connectionString) { }
+    }
+}
+namespace Trax.Effect.Data.Sqlite.Utils
+{
+    public static class DatabaseMigrator
+    {
+        public static DbUp.Engine.UpgradeEngine CreateEngineWithEmbeddedScripts(string connectionString) { }
+        public static System.Threading.Tasks.Task Migrate(string connectionString) { }
+    }
+}

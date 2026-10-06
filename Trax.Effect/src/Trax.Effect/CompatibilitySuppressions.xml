@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Models.JunctionMetadata.DTOs.CreateJunctionMetadata.get_State</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Models.JunctionMetadata.JunctionMetadata.get_State</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Models.Manifest.Manifest.SetProperties(Trax.Effect.Models.Manifest.IManifestProperties)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Models.Metadata.Metadata.AddException(System.Exception)</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Trax.Effect.Services.EffectJunction.EffectJunction`2.RailwayJunction``2(LanguageExt.Either{System.Exception,`0},Trax.Effect.Services.ServiceTrain.ServiceTrain{``0,``1})</Target>
+    <Left>lib/net10.0/Trax.Effect.dll</Left>
+    <Right>lib/net10.0/Trax.Effect.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

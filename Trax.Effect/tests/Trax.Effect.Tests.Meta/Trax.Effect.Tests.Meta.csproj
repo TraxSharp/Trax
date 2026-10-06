@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="PublicApiGenerator" />
+    <PackageReference Include="Trax.Core.Testing" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="PublicApi/**/*.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

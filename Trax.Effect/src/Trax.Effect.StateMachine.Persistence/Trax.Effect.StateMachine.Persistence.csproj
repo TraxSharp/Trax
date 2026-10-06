@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Persistence for the Trax .NET snapshot state-machine engine: a user-scoped snapshot store with optimistic concurrency, the FE-drives/BE-validates draft service, and a generic exactly-once effect primitive (lease + fence token).</Description>
+    <AssemblyName>Trax.Effect.StateMachine.Persistence</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <!-- The generic mutation surface (ServiceTrain / Junction / [TraxMutation]) and AddStateMachines. -->
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+    <!-- IDataContext, whose SnapshotDrafts and EffectClaims the stores reach their tables through, and ISqlDialect. -->
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests.Stress" />
+  </ItemGroup>
+</Project>

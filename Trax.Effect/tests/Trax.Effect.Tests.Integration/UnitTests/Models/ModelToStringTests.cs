@@ -1,0 +1,224 @@
+using AwesomeAssertions;
+using NUnit.Framework;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.BackgroundJob;
+using Trax.Effect.Models.BackgroundJob.DTOs;
+using Trax.Effect.Models.DeadLetter;
+using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Models.ManifestGroup;
+using Trax.Effect.Models.SchedulerConfig;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Models.WorkQueue.DTOs;
+
+namespace Trax.Effect.Tests.Integration.UnitTests.Models;
+
+[TestFixture]
+public class ModelToStringTests
+{
+    [Test]
+    public void WorkQueue_Create_AndPropertiesAndToString_AllExercised()
+    {
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "T",
+                Input = "{}",
+                InputTypeName = "Trax.Tests.In",
+                ManifestId = 5,
+                Priority = 3,
+                ScheduledAt = DateTime.UtcNow,
+                DeadLetterId = null,
+            }
+        );
+
+        entry.TrainName.Should().Be("T");
+        entry.Status.Should().Be(WorkQueueStatus.Queued);
+        entry.ManifestId.Should().Be(5);
+        entry.Priority.Should().Be(3);
+        entry.ScheduledAt.Should().NotBeNull();
+        entry.DispatchedAt.Should().BeNull();
+        entry.DispatchAttempts.Should().Be(0);
+        entry.MetadataId.Should().BeNull();
+        entry.Manifest.Should().BeNull();
+        entry.Metadata.Should().BeNull();
+        entry.DeadLetter.Should().BeNull();
+        entry.ToString().Should().NotBeNullOrEmpty().And.Contain("\"T\"");
+    }
+
+    [Test]
+    public void WorkQueue_Create_PriorityClamped()
+    {
+        var low = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "T",
+                Input = "{}",
+                InputTypeName = "X",
+                Priority = -50,
+            }
+        );
+        var high = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "T",
+                Input = "{}",
+                InputTypeName = "X",
+                Priority = 9999,
+            }
+        );
+
+        low.Priority.Should().BeGreaterThanOrEqualTo(0);
+        high.Priority.Should().BeLessThanOrEqualTo(31);
+    }
+
+    [Test]
+    public void Manifest_Create_AndToString()
+    {
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(ModelToStringTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Once,
+                IntervalSeconds = 60,
+                Properties = new Sample { Value = "hello" },
+            }
+        );
+
+        manifest.IsEnabled.Should().BeTrue();
+        manifest.ScheduleType.Should().Be(ScheduleType.Once);
+        manifest.IntervalSeconds.Should().Be(60);
+        manifest.PropertyTypeName.Should().NotBeNullOrEmpty();
+        manifest.MaxRetries.Should().BeGreaterThanOrEqualTo(0);
+        manifest.ToString().Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public void ManifestGroup_PropertiesAndToString()
+    {
+        var group = new ManifestGroup
+        {
+            Name = "g",
+            MaxActiveJobs = 4,
+            Priority = 1,
+            IsEnabled = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        group.MaxActiveJobs.Should().Be(4);
+        group.Priority.Should().Be(1);
+        group.IsEnabled.Should().BeTrue();
+        group.Manifests.Should().BeEmpty();
+        group.ToString().Should().NotBeNullOrEmpty().And.Contain("\"g\"");
+    }
+
+    [Test]
+    public void DeadLetter_Create_AndToString()
+    {
+        var manifest = Manifest.Create(
+            new CreateManifest
+            {
+                Name = typeof(ModelToStringTests),
+                IsEnabled = true,
+                ScheduleType = ScheduleType.Once,
+                Properties = new Sample { Value = "v" },
+            }
+        );
+        var dl = DeadLetter.Create(
+            new CreateDeadLetter
+            {
+                Manifest = manifest,
+                Reason = "boom",
+                RetryCount = 4,
+            }
+        );
+
+        dl.Reason.Should().Be("boom");
+        dl.Status.Should().Be(DeadLetterStatus.AwaitingIntervention);
+        dl.ResolvedAt.Should().BeNull();
+        dl.ResolutionNote.Should().BeNull();
+        dl.ToString().Should().NotBeNullOrEmpty().And.Contain("\"boom\"");
+    }
+
+    [Test]
+    public void BackgroundJob_Create_AndProperties()
+    {
+        var job = BackgroundJob.Create(
+            new CreateBackgroundJob
+            {
+                MetadataId = 99,
+                Input = "{\"value\":\"x\"}",
+                InputType = "Sample",
+                Priority = 1,
+            }
+        );
+
+        job.MetadataId.Should().Be(99);
+        job.InputType.Should().Be("Sample");
+        job.ToString().Should().NotBeNullOrEmpty().And.Contain("99");
+    }
+
+    [Test]
+    public void SchedulerConfig_DefaultsAndPropertiesAndToString()
+    {
+        // Bare ctor + every property accessor exercised so coverage measurement on the
+        // POCO model (which is otherwise only used through its persisted representation
+        // in Trax.Scheduler) reflects what's actually shipped.
+        var cfg = new SchedulerConfig();
+
+        cfg.Id.Should().Be(SchedulerConfig.SingletonId);
+        cfg.ManifestManagerEnabled.Should().BeTrue();
+        cfg.JobDispatcherEnabled.Should().BeTrue();
+        cfg.ManifestManagerPollingInterval.Should().Be(TimeSpan.FromSeconds(5));
+        cfg.JobDispatcherPollingInterval.Should().Be(TimeSpan.FromSeconds(2));
+        cfg.MaxActiveJobs.Should().Be(10);
+        cfg.DefaultMaxRetries.Should().Be(3);
+        cfg.DefaultRetryDelay.Should().Be(TimeSpan.FromMinutes(5));
+        cfg.RetryBackoffMultiplier.Should().Be(2.0);
+        cfg.MaxRetryDelay.Should().Be(TimeSpan.FromHours(1));
+        cfg.DefaultJobTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        cfg.StalePendingTimeout.Should().Be(TimeSpan.FromMinutes(20));
+        cfg.RecoverStuckJobsOnStartup.Should().BeTrue();
+        cfg.DeadLetterRetentionPeriod.Should().Be(TimeSpan.FromDays(30));
+        cfg.AutoPurgeDeadLetters.Should().BeTrue();
+        cfg.LocalWorkerCount.Should().BeNull();
+        cfg.MetadataCleanupInterval.Should().BeNull();
+        cfg.MetadataCleanupRetention.Should().BeNull();
+        cfg.UpdatedAt.Should().Be(default);
+
+        var when = DateTime.UtcNow;
+        cfg.Id = 1;
+        cfg.ManifestManagerEnabled = false;
+        cfg.JobDispatcherEnabled = false;
+        cfg.ManifestManagerPollingInterval = TimeSpan.FromSeconds(15);
+        cfg.JobDispatcherPollingInterval = TimeSpan.FromSeconds(20);
+        cfg.MaxActiveJobs = 50;
+        cfg.DefaultMaxRetries = 7;
+        cfg.DefaultRetryDelay = TimeSpan.FromMinutes(10);
+        cfg.RetryBackoffMultiplier = 3.5;
+        cfg.MaxRetryDelay = TimeSpan.FromHours(2);
+        cfg.DefaultJobTimeout = TimeSpan.FromMinutes(45);
+        cfg.StalePendingTimeout = TimeSpan.FromMinutes(30);
+        cfg.RecoverStuckJobsOnStartup = false;
+        cfg.DeadLetterRetentionPeriod = TimeSpan.FromDays(60);
+        cfg.AutoPurgeDeadLetters = false;
+        cfg.LocalWorkerCount = 8;
+        cfg.MetadataCleanupInterval = TimeSpan.FromMinutes(7);
+        cfg.MetadataCleanupRetention = TimeSpan.FromHours(3);
+        cfg.UpdatedAt = when;
+
+        cfg.MaxActiveJobs.Should().Be(50);
+        cfg.LocalWorkerCount.Should().Be(8);
+        cfg.UpdatedAt.Should().Be(when);
+
+        cfg.ToString().Should().NotBeNullOrEmpty().And.Contain("50");
+    }
+
+    private sealed record Sample : IManifestProperties
+    {
+        public string Value { get; init; } = "";
+    }
+}

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Trax.Effect.StateMachine.Persistence.Integration</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <!-- MachineConformance is the Testing package's helper over IMachine, so its tests live with the
+         Machine<,> fakes here rather than duplicating them in the engine test project. -->
+    <ProjectReference Include="../../src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
+    <!-- The demo mutation trains reference the real Trax ServiceTrain / Junction / attribute API. Living
+         in the test project keeps them out of any production-scanned assembly (G23). -->
+    <ProjectReference Include="../../src/Trax.Effect/Trax.Effect.csproj" />
+    <!-- Both data providers: the migration-guard tests run the SHIPPED migrations (Postgres 040 / SQLite
+         006) and round-trip through the stores, proving the DDL matches the EF model (no EnsureCreated). -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
+    <!-- InMemory + SQLite exercise the ITraxFeatureDbConfigurator seam with no external server, covering the
+         auto-registered SnapshotDbContext on each provider (FeatureDbConfiguratorTests). -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+  </ItemGroup>
+</Project>

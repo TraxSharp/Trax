@@ -1,0 +1,75 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Let a central PackageVersion apply to a package that also arrives
+         transitively, so one version wins across the graph. It does NOT mean a
+         PackageVersion can stand alone: one with no PackageReference anywhere is
+         invisible to Dependabot and freezes. See the Tests.Meta pin guard. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <!-- Local-dev override: pack-local.sh writes trax-local.props (gitignored) with TraxLocalVersion=1.99.99. -->
+  <Import
+    Project="$(MSBuildThisFileDirectory)trax-local.props"
+    Condition="Exists('$(MSBuildThisFileDirectory)trax-local.props')"
+  />
+  <ItemGroup>
+    <!-- Trax.* : exact CI pin, overridable by TraxLocalVersion -->
+    <PackageVersion Include="Trax.Core" Version="1.9.1" />
+    <PackageVersion Include="Trax.Core.Testing" Version="1.9.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- third-party : plain exact -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="dbup-core" Version="6.1.1" />
+    <PackageVersion Include="DotNet.ReproducibleBuilds" Version="2.0.5" />
+    <PackageVersion Include="dbup-postgresql" Version="7.0.1" />
+    <PackageVersion Include="dbup-sqlite" Version="6.0.4" />
+    <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+    <PackageVersion Include="NUnit" Version="5.0.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
+    <PackageVersion Include="PublicApiGenerator" Version="11.5.4" />
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
+    <!-- Referenced directly by the SQLite-using project(s) below rather than pinned
+         transitively: a PackageVersion with no PackageReference is invisible to
+         Dependabot and freezes, which for a CVE floor means it silently stops
+         working. Overrides the vulnerable native lib EF Core Sqlite pulls
+         transitively (CVE-2025-6965). -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+  </ItemGroup>
+
+  <!--
+    Local development override. pack-local.sh writes a gitignored trax-local.props
+    setting TraxLocalVersion=1.99.99; this redirects every Trax.* pin above to the
+    locally packed build. The pins themselves stay plain literal versions so they
+    stay machine-readable: an MSBuild expression in the Version attribute is not a
+    version Dependabot can parse, and it silently skipped every one of them.
+  -->
+  <ItemGroup Condition="'$(TraxLocalVersion)' != ''">
+    <PackageVersion Update="Trax.Core" Version="$(TraxLocalVersion)" />
+    <PackageVersion Update="Trax.Core.Testing" Version="$(TraxLocalVersion)" />
+  </ItemGroup>
+</Project>

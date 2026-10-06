@@ -1,0 +1,110 @@
+using Trax.Effect.Enums;
+
+namespace Trax.Effect.Models.Manifest.DTOs;
+
+/// <summary>
+/// Data transfer object for creating a new Manifest.
+/// </summary>
+public class CreateManifest
+{
+    /// <summary>
+    /// The train type to execute. Must implement IEffectTrain.
+    /// </summary>
+    public required Type Name { get; set; }
+
+    /// <summary>
+    /// Optional properties/configuration for the train.
+    /// </summary>
+    public IManifestProperties? Properties { get; set; }
+
+    #region Scheduling Properties
+
+    /// <summary>
+    /// Whether the manifest is enabled for scheduling. Defaults to true.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// The scheduling strategy. Defaults to None (manual trigger only).
+    /// </summary>
+    public ScheduleType ScheduleType { get; set; } = ScheduleType.None;
+
+    /// <summary>
+    /// Cron expression for Cron-type schedules.
+    /// </summary>
+    public string? CronExpression { get; set; }
+
+    /// <summary>
+    /// Interval in seconds for Interval-type schedules.
+    /// </summary>
+    public int? IntervalSeconds { get; set; }
+
+    /// <summary>
+    /// Maximum retry attempts before dead-lettering. Defaults to 3.
+    /// </summary>
+    public int MaxRetries { get; set; } = 3;
+
+    /// <summary>
+    /// Timeout in seconds for job execution. Null uses the global default.
+    /// </summary>
+    public int? TimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// The ID of the parent manifest this manifest depends on.
+    /// Used with <see cref="ScheduleType.Dependent"/>.
+    /// </summary>
+    public long? DependsOnManifestId { get; set; }
+
+    /// <summary>
+    /// Default dispatch priority for work queue entries. Range: 0-31. Defaults to 0.
+    /// </summary>
+    public int Priority { get; set; }
+
+    /// <summary>
+    /// Misfire policy for missed/overdue runs. Defaults to FireOnceNow.
+    /// </summary>
+    public MisfirePolicy MisfirePolicy { get; set; } = MisfirePolicy.FireOnceNow;
+
+    /// <summary>
+    /// Misfire threshold in seconds. Null uses the global default.
+    /// </summary>
+    public int? MisfireThresholdSeconds { get; set; }
+
+    /// <summary>
+    /// The earliest time this manifest should be executed.
+    /// Used with <see cref="ScheduleType.Once"/> for delayed one-off jobs.
+    /// </summary>
+    public DateTime? ScheduledAt { get; set; }
+
+    /// <summary>
+    /// JSON-serialized exclusion windows. Null means no exclusions.
+    /// </summary>
+    public string? Exclusions { get; set; }
+
+    /// <summary>
+    /// Maximum random delay in seconds added to each scheduled run.
+    /// Null means no variance (deterministic scheduling).
+    /// </summary>
+    public int? VarianceSeconds { get; set; }
+
+    /// <summary>
+    /// How far back, in seconds, a failed run counts toward <see cref="MaxRetries"/>. Null uses the
+    /// scheduler's window. Must be at least 1 when set.
+    /// </summary>
+    public int? FailureWindowSeconds { get; set; }
+
+    #endregion
+
+    /// <summary>
+    /// The application that declares the manifest, so a prune of undeclared manifests keeps to the
+    /// ones that application owns. Null when no application owns it. Cannot be empty or
+    /// whitespace when set.
+    /// </summary>
+    public string? Owner { get; set; }
+
+    /// <summary>
+    /// Whether the manifest's automatic retries and dead-letter requeues replay the failed run's
+    /// recorded decisions (the default). When false they ask the model afresh instead.
+    /// </summary>
+    public bool ReplayDecisionsOnRetry { get; set; } = true;
+}

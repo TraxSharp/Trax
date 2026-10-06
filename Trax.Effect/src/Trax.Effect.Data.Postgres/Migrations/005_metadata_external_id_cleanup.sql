@@ -1,0 +1,1 @@
+drop index trax.train_external_id_uindex;

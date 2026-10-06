@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>The effect layer for Trax .NET trains: the ServiceTrain base class that records every run as a Metadata row (state, timing, input, output, failure), DI registration (AddTrax, AddEffects, AddScopedTraxRoute), lifecycle hooks and the UseBroadcaster event pipeline. Install it with one data provider (Trax.Effect.Data.Postgres, .Sqlite or .InMemory) to persist those runs.</Description>
+    <AssemblyName>Trax.Effect</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Trax.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Broadcaster" />
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Data.InMemory.Integration" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+  </ItemGroup>
+
+  <!--
+    The builder flags that build-time validation reads (TraxBuilder.HasDatabaseProvider, HasDataProvider,
+    MediatorConfigured) have internal setters, so a consumer cannot pass that validation without the provider or
+    the mediator it checks for. These are the assemblies that earn a flag and set it.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Data.Postgres" />
+    <InternalsVisibleTo Include="Trax.Effect.Data.Sqlite" />
+    <InternalsVisibleTo Include="Trax.Effect.Data.InMemory" />
+    <InternalsVisibleTo Include="Trax.Mediator" />
+  </ItemGroup>
+
+  <!-- Decision recording binds each run's decisions to its row through ServiceTrain.Run. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Data" />
+  </ItemGroup>
+</Project>

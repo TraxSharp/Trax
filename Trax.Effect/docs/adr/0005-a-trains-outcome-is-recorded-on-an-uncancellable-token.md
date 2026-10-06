@@ -1,0 +1,121 @@
+---
+authors: [Theauxm]
+areas: [platform, data-model]
+status: accepted
+---
+
+# A train's outcome is recorded on a token the caller cannot cancel
+
+`ServiceTrain` threads the caller's `CancellationToken` through everything it does, which is the
+point of the token. The one write that does not take it is the terminal one: the `SaveChanges` that
+persists `Completed`, `Failed` or `Cancelled` runs on `CancellationToken.None`. The outcome is the
+audit record of the work rather than part of the work, and a record that can only be written when
+the caller is still interested is not a record.
+
+## Status
+
+**Accepted.**
+
+## Why this is written down
+
+Because the obvious edit undoes it. Every other `SaveChanges` in `ServiceTrain` takes
+`CancellationToken`, so the one that does not looks like an oversight, and "fixing" it restores a
+bug that is invisible in normal operation: it only appears when a caller cancels, which is the case
+nobody runs in development.
+
+That bug shipped. `FinishServiceTrain` set the terminal state in memory and the write that would
+persist it was handed the token that had just been cancelled, so it never landed. The row stayed
+`InProgress` with no `EndTime`. A caller who timed out got an exception, the train may or may not
+have stopped, and the database could say neither.
+
+## Considered options
+
+**Leaving it to the reaper.** A scheduler's `ReapStaleInProgressMetadataJunction` already fails
+orphaned `InProgress` rows, so the row does eventually reach a terminal state. Rejected on three
+counts. It takes `StaleInProgressTimeout`, an hour by default, during which the execution is
+unaccounted for. It writes `Failed` rather than `Cancelled`, losing the distinction the state machine
+exists to carry, and for a train whose downstream work completed despite the cancellation it records
+something that did not happen. And it only runs where a scheduler runs: a host that exposes trains
+over GraphQL and schedules nothing has no reaper, so the orphan is permanent.
+
+**A bounded token for the terminal write.** A fresh `CancellationTokenSource` with its own timeout
+would cap how long a shutting-down process waits on the final write. Rejected as a tunable nobody
+asked for, with a new failure mode of its own: a write that times out leaves exactly the orphan this
+decision exists to prevent, and now on a schedule that is configuration rather than behaviour. The
+data provider's own command timeout already bounds the write.
+
+## Consequences
+
+**The terminal write is not interruptible.** A process being killed can still lose it, and that is
+what the reaper remains for. The decision narrows the window to a provider command rather than
+closing it.
+
+**Cancelling a caller no longer implies a cancelled result.** A train whose downstream call takes no
+token finishes its work after the caller gives up, and that run is now recorded and returned as
+`Completed` rather than surfacing `OperationCanceledException`. This is a behaviour change for
+anything that treated a cancelled request as proof the work did not happen. It never was.
+
+**A failed save is never rewritten as a different outcome.** A provider whose save throws does not
+stop the providers after it, so the data provider records the outcome even when an effect
+registered before it fails. When the store says it refused the row for what it carries, by
+throwing `StoreRefusedContentException`, the write is tried once more without the output and the
+failure's message and stack trace; the state and end time are what the reaper, the scheduler and a
+manifest's retries act on. Only that refusal earns the second write. Any other failure, from the
+store or from any other provider, propagates as it is, because the store may already have saved
+the full row and a second write would put placeholders over it. The placeholders are what is
+stored, not what happened: the lifecycle hooks still see the real output and failure text. The
+row's first write gets the same treatment for an input the store refuses. If
+saving a completed run's outcome fails both times, the first save error propagates as it is; the
+run is not recorded as `Failed`, because the work happened, and a row no provider could write stays
+`InProgress` for the stale-run reaper. If recording a failed or cancelled run's outcome throws, the
+recording error is logged and the train's original failure still propagates, with its failure
+hooks, so the caller learns why the train failed rather than why the bookkeeping did.
+
+**Bookkeeping after the work follows the same rule.** A junction effect that records progress
+after a junction's work has returned (`JunctionProgressProvider` clearing the progress columns)
+writes on `CancellationToken.None` and logs its own failure rather than throwing. Otherwise the
+consequence above silently depended on that effect being absent: its write, handed the cancelled
+token, threw `OperationCanceledException` out of the finished junction and the run was recorded
+`Cancelled`. A database error on the same write would likewise have turned finished work into a
+`Failed` run that a manifest retries.
+
+**The rule is one method, not a convention.** `SaveOutcome` exists so the terminal write is a named
+thing with the reason attached, rather than three call sites that each have to remember.
+
+## Exemplars
+
+- `CancelledOutcomePersistenceTests` pins both halves: a train stopped by the caller's token persists
+  `Cancelled` with an `EndTime`, and a train whose work completed anyway persists `Completed`.
+- `OutcomeSaveFailureTests` pins what happens when the terminal save throws: a completed run
+  propagates the save error without being recorded as `Failed`, while the data provider after the
+  failing one still records `Completed`, and a failed run propagates its own exception and fires
+  `OnFailed` once. `StateOnlyOutcomeFallbackTests` pins the second, state-only write: it happens
+  for the store's own content refusal, never over a row the store already saved when another
+  effect throws, and the hooks see the real output. `NulCharacterOutcomeTests` pins a refusal
+  raised by Postgres itself.
+- `JunctionProgressCancellationTests` pins the same outcome with junction progress on: work that
+  finished after the caller cancelled is recorded `Completed`.
+- [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens) is the rule this produces.
+
+Not covered: nothing stops a new terminal-path write from taking `CancellationToken` directly
+instead of going through `SaveOutcome`. The guard pins the behaviour at the two outcomes it can
+observe, not the shape of the code that produces them.
+
+## Changelog
+
+- **2026-09-30**: The state-only retry is limited to the store's own content refusal
+  (`StoreRefusedContentException`), which the data providers raise for the Postgres errors that
+  name a value. Before, any provider's failure triggered it, and the second write replaced a row
+  the store had already saved in full. Hooks now see the real output and failure text after the
+  retry, and an input refused on the first write is recorded as a placeholder instead of leaving
+  the run without a row.
+- **2026-09-29**: A provider whose save throws no longer stops the ones after it, and a terminal
+  write the store refuses is retried once without the output and failure text, so the state is
+  recorded; only when that fails too does the row stay `InProgress` for the reaper.
+- **2026-09-28**: Extended to bookkeeping written after a junction's work returns: the junction
+  progress write no longer takes the caller's token or lets its own failure replace the result.
+- **2026-09-23**: Recorded what happens when the terminal save itself fails: a completed run
+  propagates the save error instead of being rewritten as `Failed` (the row stays `InProgress`
+  for the reaper), and a failed run's recording error is logged while the original failure
+  propagates with its hooks.
+- **2026-09-17**: Recorded.

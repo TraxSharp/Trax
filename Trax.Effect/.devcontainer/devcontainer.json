@@ -1,0 +1,7 @@
+{
+  "name": "Trax.Effect Development",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "forwardPorts": [5000, 5001],
+  "postCreateCommand": "dotnet restore"
+}

@@ -1,0 +1,57 @@
+<Project>
+  <PropertyGroup>
+    <Version>1.99.99</Version>
+    <!-- Audit direct + transitive dependencies and fail the build on any known
+         vulnerability (low through critical). -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Every project restores with a lockfile. Without this, a locked-mode restore checks a
+       lockfile only where one happens to be committed, and a new project without one restores
+       unlocked and passes CI. -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!-- NuGet metadata shared by every package this repo publishes. A project sets only its own
+       Description, and PackageTags where it wants more specific ones. -->
+  <PropertyGroup>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
+    <PackageTags>trax;dotnet;effects;trains;junctions;railway-oriented-programming</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- No .snupkg: DotNet.ReproducibleBuilds embeds the PDB, with SourceLink, in each DLL. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <!-- Package validation: `dotnet pack` compares each published library with the last release on
+       nuget.org and fails on a binary break, such as narrowing a member a published downstream
+       package calls or overrides. It runs on pack only, so the pull request workflow packs too.
+       Every project under src/ ships as a package, so a new one is validated without being listed
+       here. Until its first release there is no baseline to compare with, so set
+       EnablePackageValidation to false in its csproj and remove that once it has shipped. Bump the
+       baseline to the new version after each release. The Version above (1.99.99 locally, the released
+       version in CI) is the package being checked, not the baseline. -->
+  <PropertyGroup Condition="$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').Replace('\', '/').StartsWith('src/'))">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.58.0</PackageValidationBaselineVersion>
+    <!-- Ship the XML doc file so the /// summaries reach consumers' IntelliSense. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

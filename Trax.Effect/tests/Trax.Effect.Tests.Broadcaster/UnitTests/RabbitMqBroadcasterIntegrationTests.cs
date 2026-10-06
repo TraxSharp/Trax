@@ -1,0 +1,335 @@
+using System.Reflection;
+using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using NUnit.Framework;
+using RabbitMQ.Client;
+using Trax.Effect.Broadcaster.RabbitMQ;
+using Trax.Effect.Services.TrainEventBroadcaster;
+
+namespace Trax.Effect.Tests.Broadcaster.UnitTests;
+
+/// <summary>
+/// Integration tests that exercise <see cref="RabbitMqTrainEventBroadcaster"/> and
+/// <see cref="RabbitMqTrainEventReceiver"/> against a real RabbitMQ broker.
+/// CI provisions a rabbitmq:4-management service container with a dedicated
+/// 'trax' user (default 'guest' is restricted to localhost in RabbitMQ, and CI
+/// service containers route through port forwarding so the broker sees
+/// non-localhost connections). The Trax.Samples docker-compose broker is
+/// configured the same way for local parity.
+/// </summary>
+[TestFixture]
+public class RabbitMqBroadcasterIntegrationTests
+{
+    // TRAX_TEST_RABBITMQ_PORT moves the broker off 5672 when another project holds it, the same
+    // way TRAX_TEST_PG_PORT does for Postgres. CI leaves it unset.
+    private static readonly string AmqpUri =
+        $"amqp://trax:trax123@localhost:{PortOrDefault(Environment.GetEnvironmentVariable("TRAX_TEST_RABBITMQ_PORT"))}/";
+
+    private static string PortOrDefault(string? port) =>
+        string.IsNullOrWhiteSpace(port) ? "5672" : port;
+
+    private static RabbitMqBroadcasterOptions Options(string suffix) =>
+        new()
+        {
+            ConnectionString = AmqpUri,
+            ExchangeName = $"trax.test.{suffix}.{Guid.NewGuid():N}",
+        };
+
+    private static TrainLifecycleEventMessage SampleMessage(string trainName) =>
+        new(
+            MetadataId: 1,
+            ExternalId: "ext-1",
+            TrainName: trainName,
+            TrainState: "InProgress",
+            Timestamp: DateTime.UtcNow,
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: "Started",
+            Executor: null,
+            Output: null
+        );
+
+    [Test]
+    public async Task PublishAsync_DeliversMessage_ToReceiver()
+    {
+        var opts = Options("publish");
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+
+        var received = new TaskCompletionSource<TrainLifecycleEventMessage>();
+        await receiver.StartAsync(
+            (msg, _) =>
+            {
+                received.TrySetResult(msg);
+                return Task.CompletedTask;
+            },
+            CancellationToken.None
+        );
+
+        await broadcaster.PublishAsync(SampleMessage("RoundTrip.Train"), CancellationToken.None);
+
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the
+        // fail-safe ceiling so a lost message fails the test instead of hanging it.
+        var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        awaited.Should().Be(received.Task);
+        received.Task.Result.TrainName.Should().Be("RoundTrip.Train");
+
+        await receiver.StopAsync(CancellationToken.None);
+    }
+
+    [Test]
+    public async Task PublishAsync_TwiceOnSameBroadcaster_ReusesChannel()
+    {
+        var opts = Options("reuse");
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+
+        // First publish opens the connection + declares the exchange. The second
+        // publish should hit the already-open channel and skip the exchange-declare.
+        await broadcaster.PublishAsync(SampleMessage("First"), CancellationToken.None);
+        await broadcaster.PublishAsync(SampleMessage("Second"), CancellationToken.None);
+    }
+
+    [Test]
+    public async Task DataChangeMessage_RoundTrips_DomainAndEventTypeAcrossTheBroker()
+    {
+        // The cross-process change-signal path serialises a DataChanged message and rides the same
+        // exchange as lifecycle events. Prove the domain + event type survive the real broker.
+        var opts = Options("datachange");
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+
+        var received = new TaskCompletionSource<TrainLifecycleEventMessage>();
+
+        // Reachability guard: skip at runtime when no broker is reachable rather than hard-fail
+        // (CLAUDE.md). A connection failure throws here, before any assertion.
+        try
+        {
+            await receiver.StartAsync(
+                (msg, _) =>
+                {
+                    received.TrySetResult(msg);
+                    return Task.CompletedTask;
+                },
+                CancellationToken.None
+            );
+        }
+        catch (Exception ex)
+        {
+            Assert.Ignore($"RabbitMQ not reachable at {AmqpUri}: {ex.Message}");
+            return;
+        }
+
+        var message = new TrainLifecycleEventMessage(
+            MetadataId: 0,
+            ExternalId: string.Empty,
+            TrainName: string.Empty,
+            TrainState: string.Empty,
+            Timestamp: DateTime.UtcNow,
+            FailureJunction: null,
+            FailureReason: null,
+            EventType: TrainLifecycleEventMessage.DataChangedEventType,
+            Executor: "SchedulerProc",
+            Output: null,
+            ChangeDomain: "WorkQueue"
+        );
+        await broadcaster.PublishAsync(message, CancellationToken.None);
+
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the
+        // fail-safe ceiling so a lost message fails the test instead of hanging it.
+        var awaited = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        awaited
+            .Should()
+            .Be(received.Task, "the data-change message should be delivered over RabbitMQ");
+
+        var got = received.Task.Result;
+        got.EventType.Should().Be(TrainLifecycleEventMessage.DataChangedEventType);
+        got.ChangeDomain.Should().Be("WorkQueue");
+        got.Executor.Should().Be("SchedulerProc");
+
+        await receiver.StopAsync(CancellationToken.None);
+    }
+
+    [Test]
+    public async Task Receiver_HandlerThrows_NacksAndKeepsConsuming()
+    {
+        var opts = Options("handler-throws");
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+
+        var calls = 0;
+        var second = new TaskCompletionSource();
+        await receiver.StartAsync(
+            (msg, _) =>
+            {
+                calls++;
+                if (calls == 1)
+                    throw new InvalidOperationException("handler down");
+                second.TrySetResult();
+                return Task.CompletedTask;
+            },
+            CancellationToken.None
+        );
+
+        await broadcaster.PublishAsync(SampleMessage("first"), CancellationToken.None);
+        await broadcaster.PublishAsync(SampleMessage("second"), CancellationToken.None);
+
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the
+        // fail-safe ceiling so a lost message fails the test instead of hanging it.
+        var awaited = await Task.WhenAny(second.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        awaited.Should().Be(second.Task);
+        calls.Should().BeGreaterThanOrEqualTo(2);
+
+        await receiver.StopAsync(CancellationToken.None);
+    }
+
+    [Test]
+    public async Task Receiver_StopAsync_ThenDisposeAsync_DoesNotThrow()
+    {
+        var opts = Options("stop-dispose");
+        var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+        await receiver.StartAsync((_, _) => Task.CompletedTask, CancellationToken.None);
+
+        await receiver.StopAsync(CancellationToken.None);
+        await receiver.DisposeAsync();
+    }
+
+    [Test]
+    public async Task Broadcaster_DisposeAsync_WithNoPublishes_DoesNotThrow()
+    {
+        var opts = Options("nop-dispose");
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+
+        await broadcaster.DisposeAsync();
+    }
+
+    [Test]
+    public async Task Broadcaster_DisposeAsync_CalledTwice_IsIdempotent()
+    {
+        // Regression guard for CI flake observed in
+        // Trax.Samples.EnergyHub.E2E.HubTests.SharedHubSetup teardown:
+        // when the host shuts down and disposes the channel before our
+        // own DisposeAsync runs (autorecovery cleanup, connection loss,
+        // or a parallel teardown path), the second close on the same
+        // channel/connection throws ObjectDisposedException. Disposal of
+        // an IAsyncDisposable must be idempotent — a second dispose is
+        // a no-op.
+        var opts = Options("double-dispose");
+        var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+
+        // Publish to ensure channel + connection are actually opened.
+        await broadcaster.PublishAsync(SampleMessage("idempotent"), CancellationToken.None);
+
+        await broadcaster.DisposeAsync();
+        Func<Task> secondDispose = async () => await broadcaster.DisposeAsync();
+        await secondDispose.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task Receiver_SlowHandler_LeavesEventsBeyondThePrefetchOnTheBroker()
+    {
+        var opts = Options("prefetch");
+        opts.PrefetchCount = 2;
+        await using var broadcaster = new RabbitMqTrainEventBroadcaster(
+            opts,
+            NullLogger<RabbitMqTrainEventBroadcaster>.Instance
+        );
+        await using var receiver = new RabbitMqTrainEventReceiver(
+            opts,
+            NullLogger<RabbitMqTrainEventReceiver>.Instance
+        );
+
+        var entered = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var handled = 0;
+        var allHandled = new TaskCompletionSource();
+        await receiver.StartAsync(
+            async (_, _) =>
+            {
+                entered.TrySetResult();
+                await release.Task;
+                if (Interlocked.Increment(ref handled) == 10)
+                    allHandled.TrySetResult();
+            },
+            CancellationToken.None
+        );
+
+        // A failed assertion must still release the handler, or disposing the receiver waits on it.
+        try
+        {
+            for (var i = 0; i < 10; i++)
+                await broadcaster.PublishAsync(SampleMessage($"m{i}"), CancellationToken.None);
+
+            // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
+            (await Task.WhenAny(entered.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+                .Should()
+                .Be(entered.Task);
+
+            // The queue is exclusive to the receiver's connection, so its depth is read on the
+            // receiver's own channel. With the handler held, the broker may hand out only the
+            // prefetch (2); the other 8 stay ready on the broker. Without a prefetch limit it would
+            // push all 10 into the process and report 0.
+            var channel = (IChannel)
+                typeof(RabbitMqTrainEventReceiver)
+                    .GetField("_channel", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .GetValue(receiver)!;
+            var queue = (string)
+                typeof(RabbitMqTrainEventReceiver)
+                    .GetField("_queueName", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .GetValue(receiver)!;
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            uint ready;
+            do
+            {
+                ready = await channel.MessageCountAsync(queue);
+                if (ready == 8)
+                    break;
+                // determinism: polls the broker's counter until it reaches the expected depth.
+                await Task.Delay(50);
+            } while (DateTime.UtcNow < deadline);
+
+            ready.Should().Be(8u, "only PrefetchCount deliveries may be unacknowledged at once");
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        // determinism: the wait is on the TaskCompletionSource; the delay is only the ceiling.
+        (await Task.WhenAny(allHandled.Task, Task.Delay(TimeSpan.FromSeconds(10))))
+            .Should()
+            .Be(allHandled.Task, "releasing the handler lets the rest of the queue through");
+
+        await receiver.StopAsync(CancellationToken.None);
+    }
+}

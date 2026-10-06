@@ -1,0 +1,12 @@
+{
+  "name": "trax-effect",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "Effect system for Trax workflows",
+  "devDependencies": {
+    "semantic-release": "^25.0.9",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.10",
+    "conventional-commits-parser": "^7.1.2"
+  }
+}

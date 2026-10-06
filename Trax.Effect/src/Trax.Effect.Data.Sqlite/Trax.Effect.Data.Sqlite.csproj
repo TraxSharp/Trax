@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>SQLite data provider for Trax.Effect. Adds UseSqlite(connectionString) to the AddEffects builder, which persists train runs to SQLite and applies the Trax .NET schema on startup. For single-server apps and local development; use Postgres when several servers share the work.</Description>
+    <AssemblyName>Trax.Effect.Data.Sqlite</AssemblyName>
+    <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations/*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- Overrides the vulnerable native SQLite lib EF Core Sqlite pulls transitively
+         (CVE-2025-6965). Direct so Dependabot keeps it current. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="dbup-core" />
+    <PackageReference Include="dbup-sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Data.Sqlite.Integration" />
+  </ItemGroup>
+</Project>

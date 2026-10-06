@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>RabbitMQ transport for Trax .NET train lifecycle events. Adds UseRabbitMq(connectionString) to the UseBroadcaster builder, so events raised in one process (started, completed, failed, cancelled) reach handlers in every other process.</Description>
+    <AssemblyName>Trax.Effect.Broadcaster.RabbitMQ</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Broadcaster" />
+  </ItemGroup>
+</Project>

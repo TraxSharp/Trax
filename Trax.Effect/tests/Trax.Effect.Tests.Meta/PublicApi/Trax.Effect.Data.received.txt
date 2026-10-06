@@ -1,0 +1,293 @@
+namespace Trax.Effect.Data.Decisions
+{
+    public sealed class DecisionJournal : Trax.Core.Decisions.IDecisionObserver, Trax.Core.Decisions.IDecisionReplay
+    {
+        public const int MaxReplayChain = 32;
+        public DecisionJournal(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Data.Decisions.DecisionJournal>? logger) { }
+        public DecisionJournal(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory, Microsoft.Extensions.Logging.ILogger<Trax.Effect.Data.Decisions.DecisionJournal>? logger = null, Trax.Effect.Data.Decisions.DecisionRecordingOptions? options = null) { }
+        public bool Required { get; }
+        public System.Threading.Tasks.Task Decided(Trax.Core.Decisions.DecisionMade decision, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task Refused(Trax.Core.Decisions.DecisionRefused refusal, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<Trax.Core.Decisions.RecordedAnswer?> Replay(string train, string runId, string key, int occurrence, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task Routed(Trax.Core.Decisions.TrackRouted routing, System.Threading.CancellationToken cancellationToken) { }
+    }
+    public sealed class DecisionRecordingOptions
+    {
+        public const string StateHashKeyConfigurationKey = "Trax:Decisions:StateHashKey";
+        public static readonly System.TimeSpan DefaultMaxReplayAge;
+        public System.TimeSpan MaxReplayAge { get; }
+        public Trax.Effect.Data.Decisions.DecisionRecordingOptions HashStatesWith(byte[] key) { }
+        public Trax.Effect.Data.Decisions.DecisionRecordingOptions ReplayAnswersFor(System.TimeSpan maxAge) { }
+    }
+    public static class DecisionReplays
+    {
+        public static System.Threading.Tasks.Task<bool> HasDecisionsToReplay(this Trax.Effect.Data.Services.DataContext.IDataContext context, long metadataId, System.Threading.CancellationToken cancellationToken) { }
+    }
+}
+namespace Trax.Effect.Data.Extensions
+{
+    public static class BuilderOrderExtensions
+    {
+        [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLo" +
+            "gging(...).", true)]
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
+        [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDecisionRecor" +
+            "ding().", true)]
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder) { }
+        [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDecisionRecor" +
+            "ding().", true)]
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder, System.Action<Trax.Effect.Data.Decisions.DecisionRecordingOptions> configure) { }
+        [System.Obsolete("Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddJunctionEvent" +
+            "s().", true)]
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddJunctionEvents(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilder configurationBuilder) { }
+    }
+    public static class ServiceExtensions
+    {
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDataContextLogging(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, Microsoft.Extensions.Logging.LogLevel? minimumLogLevel = default, System.Collections.Generic.List<string>? blacklist = null) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddDecisionRecording(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder, System.Action<Trax.Effect.Data.Decisions.DecisionRecordingOptions> configure) { }
+        public static Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData AddJunctionEvents(this Trax.Effect.Configuration.TraxEffectBuilder.TraxEffectBuilderWithData configurationBuilder) { }
+    }
+}
+namespace Trax.Effect.Data.JunctionEvents
+{
+    public static class JunctionRunQueries
+    {
+        public static System.Linq.IOrderedQueryable<Trax.Effect.Models.JunctionRun.JunctionRun> ForRun(this System.Linq.IQueryable<Trax.Effect.Models.JunctionRun.JunctionRun> runs, long metadataId) { }
+    }
+}
+namespace Trax.Effect.Data.Junctions.BeginTransaction
+{
+    public class BeginTransaction : Trax.Core.Junction.Junction<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
+    {
+        public BeginTransaction(Trax.Effect.Data.Services.DataContext.IDataContext dataContext) { }
+        public override System.Threading.Tasks.Task<Trax.Core.Functional.Unit> Run(Trax.Core.Functional.Unit input) { }
+    }
+}
+namespace Trax.Effect.Data.Junctions.CommitTransaction
+{
+    public class CommitTransaction : Trax.Core.Junction.Junction<Trax.Core.Functional.Unit, Trax.Core.Functional.Unit>
+    {
+        public CommitTransaction(Trax.Effect.Data.Services.DataContext.IDataContext dataContextFactory) { }
+        public override System.Threading.Tasks.Task<Trax.Core.Functional.Unit> Run(Trax.Core.Functional.Unit input) { }
+    }
+}
+namespace Trax.Effect.Data.Models
+{
+    public interface IEntityReference { }
+}
+namespace Trax.Effect.Data.Models.JunctionRun
+{
+    public class PersistentJunctionRun : Trax.Effect.Models.JunctionRun.JunctionRun
+    {
+        public PersistentJunctionRun() { }
+    }
+}
+namespace Trax.Effect.Data.Models.RecordedDecision
+{
+    public class PersistentRecordedDecision : Trax.Effect.Models.RecordedDecision.RecordedDecision
+    {
+        public PersistentRecordedDecision() { }
+    }
+}
+namespace Trax.Effect.Data.Services.DataContext
+{
+    public class DataContext<TDbContext> : Microsoft.EntityFrameworkCore.DbContext, System.IAsyncDisposable, System.IDisposable, Trax.Effect.Data.Services.DataContext.IDataContext, Trax.Effect.Services.EffectProvider.IEffectProvider, Trax.Effect.Services.EffectProvider.IPendingRunClaim
+        where TDbContext : Microsoft.EntityFrameworkCore.DbContext
+    {
+        public DataContext(Microsoft.EntityFrameworkCore.DbContextOptions<TDbContext> options) { }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; set; }
+        public int Changes { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Manifest.Manifest> Manifests { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RecordedDecision.RecordedDecision> RecordedDecisions { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; set; }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction() { }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel) { }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task CommitTransaction() { }
+        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+        public void Reset() { }
+        public System.Threading.Tasks.Task RollbackTransaction() { }
+        public System.Threading.Tasks.Task SaveChanges(System.Threading.CancellationToken stoppingToken) { }
+        public System.Threading.Tasks.Task Track(Trax.Effect.Models.IModel model) { }
+        public System.Threading.Tasks.Task<bool> TryClaimPendingRun(Trax.Effect.Models.Metadata.Metadata metadata, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task Update(Trax.Effect.Models.IModel model) { }
+    }
+    public interface IDataContext : System.IAsyncDisposable, System.IDisposable, Trax.Effect.Services.EffectProvider.IEffectProvider
+    {
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; }
+        int Changes { get; set; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Log.Log> Logs { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.ManifestGroup.ManifestGroup> ManifestGroups { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Manifest.Manifest> Manifests { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Metadata.Metadata> Metadatas { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperationHistory.PersistedOperationHistory> PersistedOperationHistories { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.PersistedOperation.PersistedOperation> PersistedOperations { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RecordedDecision.RecordedDecision> RecordedDecisions { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.RunnerNonce.RunnerNonce> RunnerNonces { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SchedulerConfig.SchedulerConfig> SchedulerConfigs { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.SnapshotDraft.SnapshotDraft> SnapshotDrafts { get; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.WorkQueue.WorkQueue> WorkQueues { get; }
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction();
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel);
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContextTransaction.IDataContextTransaction> BeginTransaction(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task CommitTransaction();
+        Trax.Effect.Data.Services.DataContext.DataContext<TDbContext> Raw<TDbContext>()
+            where TDbContext : Microsoft.EntityFrameworkCore.DbContext;
+        void Reset();
+        System.Threading.Tasks.Task RollbackTransaction();
+    }
+}
+namespace Trax.Effect.Data.Services.DataContextLoggingProvider
+{
+    public class DataContextLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public DataContextLogger(System.Threading.Channels.ChannelWriter<Trax.Effect.Models.Log.Log> logChannel, string categoryName, Microsoft.Extensions.Logging.LogLevel minimumLogLevel, System.Collections.Generic.HashSet<string> exactBlacklist, System.Collections.Generic.List<System.Text.RegularExpressions.Regex> wildcardBlacklist) { }
+        public System.IDisposable? BeginScope<TState>(TState state)
+            where TState :  notnull { }
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) { }
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, System.Exception? exception, System.Func<TState, System.Exception?, string> formatter) { }
+    }
+    public class DataContextLoggingProvider : Microsoft.Extensions.Logging.ILoggerProvider, System.IDisposable
+    {
+        public DataContextLoggingProvider(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory dbContextFactory, Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration configuration) { }
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) { }
+        public void Dispose() { }
+    }
+    public class DataContextLoggingProviderConfiguration : Trax.Effect.Data.Services.DataContextLoggingProvider.IDataContextLoggingProviderConfiguration
+    {
+        public DataContextLoggingProviderConfiguration() { }
+        public System.Collections.Generic.List<string> Blacklist { get; set; }
+        public Microsoft.Extensions.Logging.LogLevel MinimumLogLevel { get; set; }
+    }
+    public interface IDataContextLoggingProviderConfiguration
+    {
+        System.Collections.Generic.List<string> Blacklist { get; }
+        Microsoft.Extensions.Logging.LogLevel MinimumLogLevel { get; }
+    }
+}
+namespace Trax.Effect.Data.Services.DataContextTransaction
+{
+    public interface IDataContextTransaction : System.IDisposable
+    {
+        System.Threading.Tasks.Task Commit();
+        System.Threading.Tasks.Task Rollback();
+    }
+}
+namespace Trax.Effect.Data.Services.DomainContext
+{
+    public static class DomainDataContextServiceCollectionExtensions
+    {
+        public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddDomainDataContext<TInterface, TContext>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Microsoft.EntityFrameworkCore.DbContextOptionsBuilder> configureProvider)
+            where TInterface :  class
+            where TContext : Microsoft.EntityFrameworkCore.DbContext, TInterface { }
+        public static System.Threading.Tasks.Task EnsureSchemaCreatedAsync<TContext>(this System.IServiceProvider services, System.Threading.CancellationToken cancellationToken = default)
+            where TContext : Microsoft.EntityFrameworkCore.DbContext { }
+    }
+    public abstract class DomainDataContext<TSelf> : Microsoft.EntityFrameworkCore.DbContext, Trax.Effect.Data.Services.DomainContext.IDomainDataContext
+        where TSelf : Microsoft.EntityFrameworkCore.DbContext
+    {
+        protected DomainDataContext(Microsoft.EntityFrameworkCore.DbContextOptions<TSelf> options) { }
+        protected abstract string Schema { get; }
+        protected abstract void ConfigureModel(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder);
+        protected override sealed void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder) { }
+        public TSelf Raw() { }
+    }
+    public interface IDomainDataContext
+    {
+        System.Threading.Tasks.Task<int> SaveChangesAsync(System.Threading.CancellationToken cancellationToken = default);
+    }
+}
+namespace Trax.Effect.Data.Services.EnqueueContext
+{
+    public class EnqueueContextAccessor : Trax.Effect.Data.Services.EnqueueContext.IEnqueueContextAccessor
+    {
+        public EnqueueContextAccessor() { }
+        public Trax.Effect.Data.Services.DataContext.IDataContext? Current { get; }
+        public System.IDisposable Enter(Trax.Effect.Data.Services.DataContext.IDataContext context) { }
+        public System.IDisposable Suppress() { }
+    }
+    public interface IEnqueueContextAccessor
+    {
+        Trax.Effect.Data.Services.DataContext.IDataContext? Current { get; }
+        System.IDisposable Enter(Trax.Effect.Data.Services.DataContext.IDataContext context);
+        System.IDisposable Suppress();
+    }
+}
+namespace Trax.Effect.Data.Services.FeatureDbConfigurator
+{
+    public sealed class DelegateFeatureDbConfigurator : Trax.Effect.Data.Services.FeatureDbConfigurator.ITraxFeatureDbConfigurator
+    {
+        public DelegateFeatureDbConfigurator(System.Action<Microsoft.EntityFrameworkCore.DbContextOptionsBuilder> configure) { }
+        public void Configure(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder options) { }
+    }
+    public interface ITraxFeatureDbConfigurator
+    {
+        void Configure(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder options);
+    }
+}
+namespace Trax.Effect.Data.Services.IDataContextFactory
+{
+    public interface IDataContextProviderFactory : Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
+    {
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContext.IDataContext> CreateDbContextAsync(System.Threading.CancellationToken cancellationToken);
+    }
+}
+namespace Trax.Effect.Data.Services.SqlDialect
+{
+    public interface ISqlDialect
+    {
+        string ClaimWorkQueueEntry();
+        string DequeueBackgroundJobs();
+        string? EstimateRowCount();
+        bool IsTransient(System.Exception exception);
+        bool IsUniqueViolation(Microsoft.EntityFrameworkCore.DbUpdateException exception);
+        string LoadGroupFairQueuedJobs();
+        string LockSubject();
+        System.FormattableString TryAcquireLeaderLock(string lockName);
+    }
+}
+namespace Trax.Effect.Data.Services.WorkQueuePromotion
+{
+    public interface IWorkQueuePromotion
+    {
+        System.Threading.Tasks.Task<int> CancelStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<bool> PromoteAsync(long workQueueId, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<int> PromoteStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken);
+    }
+    public class WorkQueuePromotion : Trax.Effect.Data.Services.WorkQueuePromotion.IWorkQueuePromotion
+    {
+        public WorkQueuePromotion(Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory contextFactory) { }
+        public System.Threading.Tasks.Task<int> CancelStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<bool> PromoteAsync(long workQueueId, System.Threading.CancellationToken cancellationToken) { }
+        public System.Threading.Tasks.Task<int> PromoteStaleAsync(System.TimeSpan olderThan, System.Threading.CancellationToken cancellationToken) { }
+    }
+}
+namespace Trax.Effect.Data.Utils
+{
+    public static class LikePattern
+    {
+        public const string Escape = "\\";
+        public static string Contains(string term) { }
+    }
+    public class UtcValueConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<System.DateTime, System.DateTime>
+    {
+        public UtcValueConverter() { }
+    }
+}

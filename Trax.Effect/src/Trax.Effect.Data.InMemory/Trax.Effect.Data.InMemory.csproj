@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>In-memory data provider for Trax.Effect. Adds UseInMemory() to the AddEffects builder, which keeps train runs in an EF Core in-memory store that is lost on exit. For tests and prototyping.</Description>
+    <AssemblyName>Trax.Effect.Data.InMemory</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Effect.Data/Trax.Effect.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.Tests.Data.InMemory.Integration" />
+  </ItemGroup>
+</Project>
