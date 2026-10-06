@@ -1,0 +1,25 @@
+# Codecov configuration. Coverage in Trax is information, not a gate: CI's "CI result" is the only
+# required check, and the upload in ci.yml never fails a run.
+codecov:
+  # Report as soon as the uploads are processed. By default Codecov waits for every other check on
+  # the commit, CodeQL included, before it posts anything.
+  require_ci_to_pass: false
+  notify:
+    wait_for_ci: false
+
+coverage:
+  status:
+    # Shown on every pull request, never failing one.
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+flag_management:
+  default_rules:
+    # Each folder uploads under its own flag, and a pull request only runs (and uploads) the folders
+    # it can affect. Carrying the last upload forward keeps an untouched folder at its real coverage
+    # instead of reading as missing.
+    carryforward: true
