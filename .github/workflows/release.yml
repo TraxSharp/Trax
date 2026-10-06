@@ -207,8 +207,8 @@ jobs:
   website:
     needs: [release, publish]
     if: needs.release.outputs.released == 'true'
-    permissions:
-      contents: write
+    # website.yml pushes with the repository's deploy key, so it needs no token permissions.
+    permissions: {}
     uses: ./.github/workflows/website.yml  # zizmor: ignore[self-repository]
     with:
       ref: v${{ needs.release.outputs.version }}

@@ -10,7 +10,10 @@ name: Website
 # code. Dispatch it by hand to publish something else: the latest release again, or `main`
 # for a docs fix that describes nothing unreleased.
 #
-# The job runs no project code and checks nothing out: it is one call to the Git refs API.
+# The job runs no project code and checks nothing out: it fetches the one commit being published
+# and pushes it. The `website` branch is locked by a ruleset whose only bypass is this repository's
+# deploy key, so this job, holding that key as a `website-deploy` environment secret, is the only
+# way to move it.
 on:
   workflow_call:
     inputs:
@@ -37,8 +40,8 @@ jobs:
     timeout-minutes: 5
     # Gate production deploys behind a protected environment.
     environment: website-deploy
-    permissions:
-      contents: write   # move the website branch
+    # The push authenticates with the deploy key, not the workflow token.
+    permissions: {}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
@@ -46,19 +49,33 @@ jobs:
           egress-policy: audit
       - name: Move the website branch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ inputs.ref }}
+          DEPLOY_KEY: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+          # github.com's published ed25519 host key (https://api.github.com/meta), pinned so the key is
+          # only ever offered to GitHub.
+          GITHUB_HOST_KEY: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
         run: |
           # Only a release tag or main may be published.
           if ! [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$REF" == main ]]; then
             echo "::error::'$REF' is neither a release tag (vX.Y.Z) nor main."
             exit 1
           fi
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$REF" --jq .sha)
-          echo "Publishing $REF ($sha)"
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/website" >/dev/null 2>&1; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/website" -f sha="$sha" -F force=true >/dev/null
-          else
-            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/heads/website -f sha="$sha" >/dev/null
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::WEBSITE_DEPLOY_KEY is not set on the website-deploy environment."
+            exit 1
           fi
+
+          umask 077
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$GITHUB_HOST_KEY" > "$RUNNER_TEMP/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts"
+          remote="git@github.com:$GITHUB_REPOSITORY.git"
+
+          git init -q "$RUNNER_TEMP/site"
+          cd "$RUNNER_TEMP/site"
+          git fetch -q --depth=1 "$remote" "$REF"
+          sha=$(git rev-parse 'FETCH_HEAD^{commit}')
+          echo "Publishing $REF ($sha)"
+          git push --force "$remote" "$sha:refs/heads/website"
+          rm -f "$RUNNER_TEMP/deploy_key"
           echo "website now points at $sha; Vercel deploys it."
