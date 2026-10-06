@@ -855,6 +855,50 @@ public class ParameterEffectTests
             .Be(1024 * 1024, "an unconfigured host must not store parameters of any size");
     }
 
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(int.MinValue)]
+    public void MaxParameterBytes_ZeroOrNegative_IsRefused(int ceiling)
+    {
+        var config = new ParameterEffectConfiguration();
+
+        var set = () => config.MaxParameterBytes = ceiling;
+
+        set.Should()
+            .Throw<ArgumentOutOfRangeException>()
+            .WithMessage("*MaxParameterBytes must be a positive number of bytes*");
+        config
+            .MaxParameterBytes.Should()
+            .Be(1024 * 1024, "a refused value leaves the ceiling as it was");
+    }
+
+    [Test]
+    public void MaxParameterBytes_DeclaresItsRange_ForEditorsThatValidateBeforeSetting()
+    {
+        var property = typeof(ParameterEffectConfiguration).GetProperty(
+            nameof(ParameterEffectConfiguration.MaxParameterBytes)
+        )!;
+        var context = new System.ComponentModel.DataAnnotations.ValidationContext(
+            new ParameterEffectConfiguration()
+        )
+        {
+            MemberName = property.Name,
+        };
+
+        System
+            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(0, context, null)
+            .Should()
+            .BeFalse();
+        System
+            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(null, context, null)
+            .Should()
+            .BeTrue("null removes the ceiling");
+        System
+            .ComponentModel.DataAnnotations.Validator.TryValidateProperty(1, context, null)
+            .Should()
+            .BeTrue();
+    }
+
     [Test]
     public async Task Track_DefaultConfiguration_OversizedOutput_ReturnsTruncatedPlaceholder()
     {

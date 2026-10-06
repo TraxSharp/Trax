@@ -161,12 +161,7 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
                     .ConfigureAwait(false);
 
                 if (response.IsSuccessStatusCode)
-                    return Read(
-                        await response
-                            .Content.ReadAsStringAsync(timeout.Token)
-                            .ConfigureAwait(false),
-                        request
-                    );
+                    return Read(await Body(response, timeout.Token).ConfigureAwait(false), request);
 
                 var status = (int)response.StatusCode;
 
@@ -535,6 +530,23 @@ public sealed class SystemOneDecider : IDecider, IVetsQuestions, IDisposable
         }
 
         return new DecisionResult(answers);
+    }
+
+    /// <summary>
+    /// The body of a successful response as text. One whose declared character set cannot be
+    /// decoded is not a System One response, and is thrown as <see cref="MalformedResponse"/>
+    /// rather than escaping unclassified.
+    /// </summary>
+    private static async Task<string> Body(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw new MalformedResponse(e.Message);
+        }
     }
 
     private static Answer? Answer(JsonObject node, Question question)

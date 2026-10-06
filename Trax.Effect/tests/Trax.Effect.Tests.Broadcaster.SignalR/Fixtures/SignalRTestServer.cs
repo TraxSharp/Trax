@@ -31,7 +31,8 @@ internal sealed class SignalRTestServer : IAsyncDisposable
     public static async Task<SignalRTestServer> StartAsync(
         Action<SignalRSinkOptions>? configure = null,
         string hubPath = "/hubs/trax-events",
-        Action<TraxTrainEventHubOptions>? hub = null
+        Action<TraxTrainEventHubOptions>? hub = null,
+        bool throughAddTrax = false
     )
     {
         var hostBuilder = new HostBuilder().ConfigureWebHost(webHost =>
@@ -43,6 +44,18 @@ internal sealed class SignalRTestServer : IAsyncDisposable
                     services.AddLogging();
                     services.AddSignalR();
                     services.AddRouting();
+
+                    if (throughAddTrax)
+                    {
+                        // The whole registration a host gets, including the lifecycle hook
+                        // runner a train resolves for each run.
+                        services.AddTrax(trax =>
+                            trax.AddEffects(effects =>
+                                effects.UseBroadcaster(b => b.UseSignalRHub(configure))
+                            )
+                        );
+                        return;
+                    }
 
                     var registry = new EffectRegistry();
                     services.AddSingleton<IEffectRegistry>(registry);

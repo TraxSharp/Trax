@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using Trax.Effect.Services.LifecycleHookOutputPolicy;
 
 namespace Trax.Effect.Provider.Parameter.Configuration;
@@ -34,10 +35,29 @@ public class ParameterEffectConfiguration
     /// <c>{"_truncated": true, "_maxBytes": N}</c>. This is the automatic safety net that keeps
     /// a single unexpectedly-large train from exhausting host memory, so it is on unless a host
     /// turns it off. Set a larger value for trains that legitimately carry more, or <c>null</c>
-    /// to store parameters of any size. Must be a positive value when set.
+    /// to store parameters of any size. A value of 0 or less is refused with an
+    /// <see cref="ArgumentOutOfRangeException"/>: it would store every parameter as the placeholder.
     /// </remarks>
-    public int? MaxParameterBytes { get; set; } =
-        DefaultLifecycleHookOutputPolicy.DefaultMaxCopyBytes;
+    /// <exception cref="ArgumentOutOfRangeException">The value set is 0 or negative.</exception>
+    [Range(1, int.MaxValue)]
+    public int? MaxParameterBytes
+    {
+        get => _maxParameterBytes;
+        set
+        {
+            if (value is <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(MaxParameterBytes),
+                    value,
+                    "MaxParameterBytes must be a positive number of bytes, or null for no ceiling. "
+                        + "A ceiling of 0 or less would store every input and output as the "
+                        + "truncation placeholder."
+                );
+            _maxParameterBytes = value;
+        }
+    }
+
+    private int? _maxParameterBytes = DefaultLifecycleHookOutputPolicy.DefaultMaxCopyBytes;
 
     /// <summary>
     /// Optional predicate deciding whether a given train's INPUT should be serialized.

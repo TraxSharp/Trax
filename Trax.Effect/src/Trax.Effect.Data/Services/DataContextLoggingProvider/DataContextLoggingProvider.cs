@@ -64,7 +64,10 @@ public class DataContextLoggingProvider : IDataContextLoggingProvider
                 _exactBlacklist.Add(pattern);
         }
 
-        _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token));
+        // The provider is often built on a train run's flow (the first logger asked for). The writer
+        // must not inherit that run, or its own lines would be stored against it.
+        using (ExecutionContext.SuppressFlow())
+            _flushTask = Task.Run(() => FlushLoopAsync(_cts.Token));
     }
 
     /// <summary>

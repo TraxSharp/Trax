@@ -6,6 +6,12 @@ namespace Trax.Effect.Services.TrainLifecycleHookFactory;
 /// Factory for creating <see cref="ITrainLifecycleHook"/> instances.
 /// Registered via <c>AddLifecycleHook&lt;TFactory&gt;()</c> on the effect configuration builder.
 /// </summary>
+/// <remarks>
+/// The runner owns the hooks a factory returns: when the run ends it disposes each one that is
+/// <see cref="IDisposable"/>. A factory that hands every run one shared instance must therefore
+/// return something that is not disposable (a forwarder to the shared instance), or the first run to
+/// end disposes it for every later run.
+/// </remarks>
 public interface ITrainLifecycleHookFactory
 {
     /// <summary>

@@ -3,6 +3,7 @@ namespace Trax.Effect.Provider.Parameter.Configuration
     public class ParameterEffectConfiguration
     {
         public ParameterEffectConfiguration() { }
+        [System.ComponentModel.DataAnnotations.Range(1, 2147483647)]
         public int? MaxParameterBytes { get; set; }
         public bool SaveInputs { get; set; }
         public bool SaveOutputs { get; set; }

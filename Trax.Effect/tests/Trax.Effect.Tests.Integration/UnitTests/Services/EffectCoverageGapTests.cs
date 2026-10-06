@@ -122,6 +122,95 @@ public class EffectCoverageGapTests
             );
     }
 
+    [Test]
+    public async Task EffectJunction_AnEffectThatThrowsAfterAFailedJunction_LeavesTheJunctionsFailure()
+    {
+        var junction = new FailingEffectJunction();
+        var train = CreateTrain(AfterThrows(new InvalidOperationException("save failed")));
+
+        var result = await junction.RailwayJunction(Either<Exception, string>.Right("hi"), train);
+
+        result.IsLeft.Should().BeTrue();
+        result.Swap().ValueUnsafe().Message.Should().Be("the junction failed");
+    }
+
+    [Test]
+    public async Task EffectJunction_AnEffectThatThrowsAfterASkippedJunction_LeavesTheEarlierFailure()
+    {
+        var junction = new TestEffectJunction();
+        var train = CreateTrain(AfterThrows(new InvalidOperationException("save failed")));
+
+        var result = await junction.RailwayJunction(
+            Either<Exception, string>.Left(new InvalidOperationException("earlier junction")),
+            train
+        );
+
+        result.Swap().ValueUnsafe().Message.Should().Be("earlier junction");
+    }
+
+    [Test]
+    public async Task EffectJunction_AnEffectThatThrowsAfterASucceededJunction_FailsTheJunction()
+    {
+        var junction = new TestEffectJunction();
+        var train = CreateTrain(AfterThrows(new InvalidOperationException("save failed")));
+
+        var act = () => junction.RailwayJunction(Either<Exception, string>.Right("hi"), train);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("save failed");
+    }
+
+    [Test]
+    public async Task EffectJunction_AnEffectThatThrowsBeforeASkippedJunction_LeavesTheEarlierFailure()
+    {
+        var junction = new TestEffectJunction();
+        var train = CreateTrain(BeforeThrows(new InvalidOperationException("save failed")));
+
+        var result = await junction.RailwayJunction(
+            Either<Exception, string>.Left(new InvalidOperationException("earlier junction")),
+            train
+        );
+
+        result.Swap().ValueUnsafe().Message.Should().Be("earlier junction");
+        junction.Metadata!.HasRan.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task EffectJunction_AnEffectThatThrowsBeforeAJunctionThatWouldRun_FailsTheJunction()
+    {
+        var junction = new TestEffectJunction();
+        var train = CreateTrain(BeforeThrows(new InvalidOperationException("save failed")));
+
+        var act = () => junction.RailwayJunction(Either<Exception, string>.Right("hi"), train);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("save failed");
+    }
+
+    private static IJunctionEffectRunner BeforeThrows(Exception exception)
+    {
+        var runner = Substitute.For<IJunctionEffectRunner>();
+        runner
+            .BeforeJunctionExecution(
+                Arg.Any<EffectJunction<string, string>>(),
+                Arg.Any<ServiceTrain<string, string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromException(exception));
+        return runner;
+    }
+
+    private static IJunctionEffectRunner AfterThrows(Exception exception)
+    {
+        var runner = Substitute.For<IJunctionEffectRunner>();
+        runner
+            .AfterJunctionExecution(
+                Arg.Any<EffectJunction<string, string>>(),
+                Arg.Any<ServiceTrain<string, string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromException(exception));
+        return runner;
+    }
+
     #endregion
 
     #region JunctionEffectRunner.Before/AfterJunctionExecution
@@ -408,6 +497,12 @@ public class EffectCoverageGapTests
     private class TestEffectJunction : EffectJunction<string, string>
     {
         public override Task<string> Run(string input) => Task.FromResult(input + "-out");
+    }
+
+    private class FailingEffectJunction : EffectJunction<string, string>
+    {
+        public override Task<string> Run(string input) =>
+            throw new InvalidOperationException("the junction failed");
     }
 
     private class NonServiceTrain : Train<string, string>

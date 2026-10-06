@@ -34,10 +34,11 @@ migration system.
 
 ## Consequences
 
-**The bootstrap swallows a `DbException` on its second run.** The create script carries no
-`IF NOT EXISTS`, so the steady state is an "already exists" failure on the first statement,
-caught and ignored. The catch is unfiltered, so a connectivity or permission failure is
-swallowed identically. That is why this is a bootstrap rather than something to build on.
+**The bootstrap compares by name, not by shape.** It probes which of the model's tables and
+sequences exist and creates the rest in one transaction, under a session advisory lock on
+Postgres so hosts that start together do not race each other's DDL. A statement the database
+refuses propagates. A column added to an existing table's model is never added, which is why
+this is a bootstrap rather than something to build on.
 
 **`EnsureCreated` in a test is fine**, and several integration tests use it against
 throwaway databases. What is not fine is a Trax table whose only creation path is
@@ -79,6 +80,8 @@ Not covered:
 
 ## Changelog
 
+- **2026-10-05**: The bootstrap no longer swallows a `DbException`: it creates only the missing
+  tables and sequences, serialized on Postgres. Rewrote the first consequence to match.
 - **2026-09-11**: Dropped the claim that `metadata` has no model-versus-DDL coverage. The
   Postgres integration suite runs against a migration-built database and materialises the
   whole row, so drift there fails a test. Narrowed the line to the tables genuinely left

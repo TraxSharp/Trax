@@ -54,7 +54,7 @@ public class SignalRSinkRegistrationTests
     }
 
     [Test]
-    public void UseSignalRHub_RegistersLifecycleHookFactoryThatReturnsTheDispatcher()
+    public void UseSignalRHub_LifecycleHookFactoryNeverHandsOutTheDisposableDispatcher()
     {
         using var sp = BuildProvider();
 
@@ -62,8 +62,12 @@ public class SignalRSinkRegistrationTests
         var factories = sp.GetServices<ITrainLifecycleHookFactory>().ToList();
         var signalRFactory = factories.OfType<SignalRTrainEventDispatcherFactory>().Single();
 
+        // The runner disposes each IDisposable hook when its run ends, so the shared dispatcher
+        // must reach it only through a forwarder that owns nothing.
         ITrainLifecycleHook hook = signalRFactory.Create();
-        hook.Should().BeSameAs(dispatcher);
+        ((object)hook).Should().NotBeSameAs(dispatcher);
+        hook.Should().NotBeAssignableTo<IDisposable>();
+        hook.Should().NotBeAssignableTo<IAsyncDisposable>();
     }
 
     [Test]
@@ -80,22 +84,15 @@ public class SignalRSinkRegistrationTests
     }
 
     [Test]
-    public void UseSignalRHub_HookFactoryAndEventHandlerShareTheSameSingletonInstance()
+    public void UseSignalRHub_HookFactoryReturnsTheSameForwarderForEveryRun()
     {
         using var sp = BuildProvider();
 
-        var dispatcher = sp.GetRequiredService<SignalRTrainEventDispatcher>();
-        var hookFromFactory = sp.GetServices<ITrainLifecycleHookFactory>()
+        var factory = sp.GetServices<ITrainLifecycleHookFactory>()
             .OfType<SignalRTrainEventDispatcherFactory>()
-            .Single()
-            .Create();
-        var handler = sp.GetServices<ITrainEventHandler>()
-            .OfType<SignalRTrainEventDispatcher>()
             .Single();
 
-        hookFromFactory.Should().BeSameAs(dispatcher);
-        handler.Should().BeSameAs(dispatcher);
-        ((object)hookFromFactory).Should().BeSameAs(handler);
+        factory.Create().Should().BeSameAs(factory.Create());
     }
 
     [Test]

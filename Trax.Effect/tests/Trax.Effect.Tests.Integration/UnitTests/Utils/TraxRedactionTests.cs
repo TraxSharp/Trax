@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AwesomeAssertions;
+using Trax.Core.Decisions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Utils;
 
@@ -352,6 +353,55 @@ public class TraxRedactionTests
 
         [TraxSensitive]
         public int Cvv { get; set; }
+    }
+
+    [TestCase("RedactionPayoutTier")]
+    [TestCase("redaction-test.refund-approval")]
+    [TestCase("RedactionRefundApproval")]
+    [TestCase("Flag<RedactionPayoutTier>")]
+    [TestCase("Outer<Lane>.RedactionPayoutTier")]
+    [TestCase("RedactionPayoutTier[]")]
+    [TestCase("Pair<Lane,RedactionPayoutTier>")]
+    public void A_question_key_built_from_a_marked_type_is_sensitive(string key)
+    {
+        TraxRedaction.IsSensitiveQuestion(key).Should().BeTrue();
+    }
+
+    [TestCase("RedactionUnmarkedTier")]
+    [TestCase("Flag<RedactionUnmarkedTier>")]
+    [TestCase("")]
+    public void A_question_key_with_no_marked_type_in_it_is_not_sensitive(string key)
+    {
+        TraxRedaction.IsSensitiveQuestion(key).Should().BeFalse();
+    }
+
+    [Test]
+    public void A_null_question_key_is_refused()
+    {
+        var act = () => TraxRedaction.IsSensitiveQuestion(null!);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [TraxSensitive]
+    public enum RedactionPayoutTier
+    {
+        Standard,
+        Priority,
+    }
+
+    [TraxSensitive]
+    [Asks("Should this refund be approved?", Key = "redaction-test.refund-approval")]
+    public enum RedactionRefundApproval
+    {
+        Approve,
+        Refuse,
+    }
+
+    public enum RedactionUnmarkedTier
+    {
+        Standard,
+        Priority,
     }
 
     public class Envelope

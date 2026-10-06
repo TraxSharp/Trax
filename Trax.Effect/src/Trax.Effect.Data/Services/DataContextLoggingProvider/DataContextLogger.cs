@@ -2,12 +2,14 @@ using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Trax.Effect.Models.Log.DTOs;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Data.Services.DataContextLoggingProvider;
 
 /// <summary>
 /// The <see cref="ILogger"/> handed out by <see cref="DataContextLoggingProvider"/> for one category.
-/// It turns each accepted log call into a <see cref="Effect.Models.Log.Log"/> row and queues it for the
+/// It turns each accepted log call into a <see cref="Effect.Models.Log.Log"/> row, stamped with the
+/// train run going on in the caller's async flow (0 outside a run), and queues it for the
 /// provider's background writer. Infrastructure; not intended to be constructed directly.
 /// </summary>
 /// <param name="logChannel">The provider's bounded queue of pending rows.</param>
@@ -60,6 +62,9 @@ public class DataContextLogger(
                 Exception = exception,
             }
         );
+
+        // Read here, on the caller's flow: the background writer runs on a flow of its own.
+        log.MetadataId = CurrentRun.MetadataId ?? 0;
 
         logChannel.TryWrite(log);
     }

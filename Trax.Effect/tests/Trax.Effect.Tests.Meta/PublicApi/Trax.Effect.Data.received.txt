@@ -281,6 +281,11 @@ namespace Trax.Effect.Data.Services.WorkQueuePromotion
 }
 namespace Trax.Effect.Data.Utils
 {
+    public static class LikePattern
+    {
+        public const string Escape = "\\";
+        public static string Contains(string term) { }
+    }
     public class UtcValueConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<System.DateTime, System.DateTime>
     {
         public UtcValueConverter() { }

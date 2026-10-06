@@ -21,9 +21,9 @@ namespace Trax.Effect.Models.Log;
 /// never captured.
 /// </para>
 /// <para>
-/// There is no timestamp column: order by <see cref="Id"/>. <see cref="MetadataId"/> is never
-/// written, so a row cannot be joined to the run that logged it; filter on <see cref="Category"/>
-/// or <see cref="Message"/> instead. See
+/// There is no timestamp column: order by <see cref="Id"/>. <see cref="MetadataId"/> is the run
+/// that wrote the line, or 0 for a line written outside any run (startup, a background service,
+/// the scheduler's own polling). See
 /// https://traxsharp.net/docs/effect/debugging-with-the-log-table.
 /// </para>
 /// </remarks>
@@ -39,14 +39,16 @@ public class Log : ILog
     public long Id { get; private set; }
 
     /// <summary>
-    /// Intended reference to <c>trax.metadata.id</c>, but nothing on the write path sets it, so it
-    /// is always 0 and <see cref="Metadata"/> never loads. Filtering logs by run through it returns
-    /// nothing.
+    /// The <c>trax.metadata.id</c> of the run that wrote the line: set when the line is logged
+    /// on a train run's own async flow after its row was first written, so the code the run awaits
+    /// (its junctions, a train run inside one, its lifecycle hooks) is covered. 0 for a line
+    /// written outside any run, and for one a run wrote before its row had an id. Rows written
+    /// before this was set carry 0 too.
     /// </summary>
     [Column("metadata_id")]
     [JsonPropertyName("metadata_id")]
     [JsonInclude]
-    public long MetadataId { get; private set; }
+    public long MetadataId { get; internal set; }
 
     /// <summary>The numeric <c>EventId.Id</c> passed to the logging call; 0 when none was given.</summary>
     [Column("event_id")]
@@ -98,8 +100,9 @@ public class Log : ILog
     #region ForeignKeys
 
     /// <summary>
-    /// Navigation to the run through <see cref="MetadataId"/>. Because that column is never
-    /// written, this is null on every row Trax writes, despite the non-nullable annotation.
+    /// Navigation to the run through <see cref="MetadataId"/>. Null, despite the non-nullable
+    /// annotation, on a row whose <see cref="MetadataId"/> is 0, and on one whose run was deleted:
+    /// the column has no foreign key.
     /// </summary>
     public Metadata.Metadata Metadata { get; set; } = null!;
 

@@ -60,6 +60,7 @@ public class SqliteMigrationTests
         "ix_work_queue_replay_decisions_of",
         "ix_metadata_replay_decisions_of",
         "ix_metadata_manifest_id_id",
+        "ix_decision_metadata_id_id",
     ];
 
     private static string CreateTempDbPath() =>
@@ -209,6 +210,76 @@ public class SqliteMigrationTests
                     "the oldest queued entry stays queued, the later one is cancelled, and a "
                         + "dispatched one is left alone"
                 );
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath))
+                File.Delete(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// 029 rebuilds the log with <c>metadata_id</c> NOT NULL DEFAULT 0, keeping every row, its id,
+    /// and its index, and turning a NULL already there into 0.
+    /// </summary>
+    [Test]
+    public void Migration029_turns_a_null_log_metadata_id_into_0_and_keeps_the_rows()
+    {
+        var dbPath = CreateTempDbPath();
+        try
+        {
+            var connectionString = $"Data Source={dbPath}";
+            var upTo028 = DbUp
+                .DeployChanges.To.SqliteDatabase(connectionString)
+                .WithScriptsEmbeddedInAssembly(
+                    typeof(DatabaseMigrator).Assembly,
+                    name =>
+                        int.Parse(
+                            System
+                                .Text.RegularExpressions.Regex.Match(name, @"\.(\d{3})_")
+                                .Groups[1]
+                                .Value
+                        ) <= 28
+                )
+                .LogToNowhere()
+                .Build()
+                .PerformUpgrade();
+            upTo028.Successful.Should().BeTrue(upTo028.Error?.ToString());
+
+            using (var connection = new SqliteConnection(connectionString))
+            {
+                connection.Open();
+                using var seed = connection.CreateCommand();
+                seed.CommandText = """
+                    INSERT INTO log (id, metadata_id, event_id, level, message, category)
+                    VALUES (7, NULL, 0, 'Information', 'no run', 'Migration'),
+                           (9, 5, 0, 'Error', 'a run', 'Migration');
+                    """;
+                seed.ExecuteNonQuery();
+            }
+
+            DatabaseMigrator.Migrate(connectionString).Wait();
+
+            using var check = new SqliteConnection(connectionString);
+            check.Open();
+            using (var insert = check.CreateCommand())
+            {
+                insert.CommandText =
+                    "INSERT INTO log (event_id, level, message, category) "
+                    + "VALUES (0, 'Information', 'after', 'Migration');";
+                insert.ExecuteNonQuery();
+            }
+            using var command = check.CreateCommand();
+            command.CommandText =
+                "SELECT id || ':' || metadata_id || ':' || message FROM log ORDER BY id;";
+            var rows = new List<string>();
+            using (var reader = command.ExecuteReader())
+                while (reader.Read())
+                    rows.Add(reader.GetString(0));
+
+            rows.Should().Equal("7:0:no run", "9:5:a run", "10:0:after");
+            QueryNames(dbPath, "index").Should().Contain("ix_log_metadata_id");
         }
         finally
         {

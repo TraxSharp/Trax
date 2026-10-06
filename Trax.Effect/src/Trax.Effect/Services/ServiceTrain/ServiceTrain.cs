@@ -354,6 +354,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         Metadata.AssertLoaded();
 
+        // Set in this frame so the rest of this run, and only this run, sees it: a log line written
+        // through ILogger is stored against the run that wrote it, once the row has its id. A run
+        // started inside another one replaces the outer run here rather than inheriting it.
+        CurrentRun.Metadata = Metadata;
+
         // The input goes on the row before its first write, so the InProgress row already carries
         // it. A process that dies mid-run (a Lambda timeout, an OOM kill, a deploy) writes nothing
         // after this, and those are the runs whose input is most needed. Update, not just the

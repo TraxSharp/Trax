@@ -35,6 +35,12 @@ public class PersistentRecordedDecision : BaseModel
                 .IsUnique()
                 .HasDatabaseName("uq_decision_run_question");
 
+            // A run's decisions in id order, for reading them a page at a time. Built by Postgres
+            // migration 064 and Sqlite 028; declared here so a schema created from the model has it.
+            entity
+                .HasIndex(e => new { e.MetadataId, e.Id })
+                .HasDatabaseName("ix_decision_metadata_id_id");
+
             entity.Property(e => e.Question).HasColumnType("jsonb");
             entity.Property(e => e.Answer).HasColumnType("jsonb");
             entity.Property(e => e.Shadows).HasColumnType("jsonb");

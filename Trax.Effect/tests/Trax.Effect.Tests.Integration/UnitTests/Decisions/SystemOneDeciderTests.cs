@@ -748,6 +748,30 @@ public class SystemOneDeciderTests
     }
 
     [Test]
+    public async Task Decide_ASuccessInACharacterSetThatCannotBeRead_IsRetriedThenFailsTransiently()
+    {
+        var model = new FakeModel(_ =>
+        {
+            var response = Ok(Answered);
+            response.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(
+                "application/json; charset=no-such-charset"
+            );
+            return response;
+        });
+        using var decider = new SystemOneDecider(
+            Options(o => o.MaxAttempts = 2),
+            new HttpClient(model)
+        );
+
+        var decide = () => decider.Decide(Ticket, CancellationToken.None);
+
+        var failure = (await decide.Should().ThrowAsync<DecisionServiceException>()).Which;
+        failure.Message.Should().Contain("not a System One response");
+        ClassOf(failure).Should().Be(FailureClass.Transient);
+        model.Requests.Should().HaveCount(2);
+    }
+
+    [Test]
     public async Task Decide_AStateThatCannotBeWrittenAsJson_FailsPermanentlyWithoutSending()
     {
         var model = new FakeModel(_ => Ok(Answered));

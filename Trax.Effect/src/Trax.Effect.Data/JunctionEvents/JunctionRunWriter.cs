@@ -72,7 +72,10 @@ internal sealed class JunctionRunWriter
                 SingleWriter = false,
             }
         );
-        _writer = Task.Run(WriteLoopAsync);
+        // The writer is often first resolved on a train run's flow. Its loop outlives that run, so
+        // it must not carry the run's ambient state (its own log lines would name the run).
+        using (ExecutionContext.SuppressFlow())
+            _writer = Task.Run(WriteLoopAsync);
     }
 
     /// <summary>Steps dropped because the queue was full, since the writer was created.</summary>

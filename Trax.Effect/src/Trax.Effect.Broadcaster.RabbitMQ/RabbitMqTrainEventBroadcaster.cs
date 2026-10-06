@@ -125,7 +125,10 @@ internal class RabbitMqTrainEventBroadcaster : ITrainEventBroadcaster, IAsyncDis
         _publishTimeout = publishTimeout ?? PublishTimeout;
         _firstRetryDelay = firstRetryDelay ?? FirstRetryDelay;
         _queue = new LifecycleEventQueue(queueCapacity);
-        _sender = Task.Run(SendLoopAsync);
+        // The broadcaster is often first resolved on a train run's flow. Its loop outlives that run,
+        // so it must not carry the run's ambient state (its own log lines would name the run).
+        using (ExecutionContext.SuppressFlow())
+            _sender = Task.Run(SendLoopAsync);
     }
 
     /// <summary>

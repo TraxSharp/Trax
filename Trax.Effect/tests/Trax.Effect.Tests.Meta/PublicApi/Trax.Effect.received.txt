@@ -1511,6 +1511,7 @@ namespace Trax.Effect.Utils
     {
         public const string MarkerProperty = "_redacted";
         public static bool ContainsRedaction(string json) { }
+        public static bool IsSensitiveQuestion(string questionKey) { }
         public static System.Text.Json.JsonSerializerOptions WithRedaction(System.Text.Json.JsonSerializerOptions options) { }
     }
 }

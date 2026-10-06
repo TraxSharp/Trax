@@ -31,6 +31,11 @@ public class PostgresMigrationTests
         // 054: the metadata cleanup keeps a run that a queued entry or another run replays.
         "ix_work_queue_replay_decisions_of",
         "ix_metadata_replay_decisions_of",
+        // 064: a run's decisions read a page at a time, in id order.
+        "ix_decision_metadata_id_id",
+        // 066: runs searched by the text of their failure, and by the junction they failed in.
+        "ix_metadata_failure_reason_trgm",
+        "ix_metadata_failure_junction",
     ];
 
     private static string GetConnectionString()
@@ -319,6 +324,77 @@ public class PostgresMigrationTests
         });
 
     /// <summary>
+    /// The model maps <c>log.metadata_id</c> as a plain long, so a NULL in the column broke every
+    /// read of a page containing it. 065 turns the NULLs already there into 0 and makes the column
+    /// NOT NULL with a default of 0, so a row written without it reads back as the writer's own do.
+    /// Rows that already name a run, or 0, are left as they were.
+    /// </summary>
+    [Test]
+    public async Task Migration065_turns_a_null_log_metadata_id_into_0_and_refuses_another() =>
+        await WithDatabaseMigratedTo(
+            64,
+            async connectionString =>
+            {
+                await using (var before = new NpgsqlConnection(connectionString))
+                {
+                    await before.OpenAsync();
+                    await Exec(
+                        before,
+                        "INSERT INTO trax.log (event_id, level, message, category) "
+                            + "VALUES (0, 'information', 'written before 065', 'Migration')"
+                    );
+                    // Rows the writer already stored, outside a run and inside one, keep their
+                    // value: the upgrade only fills the NULLs.
+                    await Exec(
+                        before,
+                        "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                            + "VALUES (0, 0, 'information', 'no run before 065', 'Migration'), "
+                            + "(42, 0, 'information', 'a run before 065', 'Migration')"
+                    );
+                }
+
+                await DatabaseMigrator.Migrate(connectionString);
+
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+                await Exec(
+                    connection,
+                    "INSERT INTO trax.log (event_id, level, message, category) "
+                        + "VALUES (0, 'information', 'written after 065', 'Migration')"
+                );
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT message || ':' || metadata_id FROM trax.log ORDER BY id"
+                    )
+                )
+                    .Should()
+                    .Equal(
+                        "written before 065:0",
+                        "no run before 065:0",
+                        "a run before 065:42",
+                        "written after 065:0"
+                    );
+
+                var explicitNull = async () =>
+                    await Exec(
+                        connection,
+                        "INSERT INTO trax.log (metadata_id, event_id, level, message, category) "
+                            + "VALUES (NULL, 0, 'information', 'null', 'Migration')"
+                    );
+                await explicitNull.Should().ThrowAsync<PostgresException>();
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT conname FROM pg_constraint WHERE conname = 'ck_log_metadata_id_not_null'"
+                    )
+                )
+                    .Should()
+                    .BeEmpty("the check only stands in for the scan SET NOT NULL would make");
+            }
+        );
+
+    /// <summary>
     /// A consumer correlating its records with runs looks them up by external id. Without an index
     /// every lookup read the whole metadata table.
     /// </summary>
@@ -341,6 +417,99 @@ public class PostgresMigrationTests
         string.Join('\n', plan)
             .Should()
             .Contain("ix_metadata_external_id", "the lookup must not be a pass over every run");
+    }
+
+    /// <summary>
+    /// A search for text inside a log entry's message or category, written as the scheduler's log
+    /// query writes it: lowered, a parameter for the pattern, and an escape clause. The trigram
+    /// index only serves an expression it was built over, so this fails when either side changes
+    /// shape and the search goes back to reading every entry.
+    /// </summary>
+    [TestCase("message", "ix_log_message_trgm")]
+    [TestCase("category", "ix_log_category_trgm")]
+    public async Task A_search_inside_log_text_reads_an_index(string column, string index)
+    {
+        var connectionString = GetConnectionString();
+        await DatabaseMigrator.Migrate(connectionString);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await Exec(connection, "SET LOCAL enable_seqscan = off;");
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"EXPLAIN SELECT count(*) FROM trax.log AS l WHERE lower(l.{column}) LIKE @pattern ESCAPE '\\'";
+        command.Parameters.AddWithValue("pattern", "%needle\\_marker%");
+        var plan = new List<string>();
+        await using (var rows = await command.ExecuteReaderAsync())
+            while (await rows.ReadAsync())
+                plan.Add(rows.GetString(0));
+
+        string.Join('\n', plan)
+            .Should()
+            .Contain(index, "a search inside the text must not be a pass over every entry");
+    }
+
+    /// <summary>
+    /// A search of runs by the text of their failure, written as the executions query writes it:
+    /// lowered, a parameter for the pattern, and an escape clause. Like the log's text search,
+    /// the trigram index serves only the expression it was built over.
+    /// </summary>
+    [Test]
+    public async Task A_search_inside_a_failure_reason_reads_an_index()
+    {
+        var plan = await PlanWithoutSeqScan(
+            "EXPLAIN SELECT count(*) FROM trax.metadata AS m "
+                + "WHERE lower(m.failure_reason) LIKE @value ESCAPE '\\'",
+            "%connection\\_refused%"
+        );
+
+        plan.Should()
+            .Contain(
+                "ix_metadata_failure_reason_trgm",
+                "a search inside the failure text must not be a pass over every run"
+            );
+    }
+
+    /// <summary>
+    /// The runs that failed in one junction are found through the junction index, not by a pass
+    /// over every run. Which way a page is read depends on the table's statistics (the stress
+    /// suite measures it at scale); this checks the index exists and serves the comparison.
+    /// </summary>
+    [Test]
+    public async Task A_search_by_failure_junction_reads_an_index()
+    {
+        var plan = await PlanWithoutSeqScan(
+            "EXPLAIN SELECT count(*) FROM trax.metadata WHERE failure_junction = @value",
+            "ChargeCardJunction"
+        );
+
+        plan.Should()
+            .Contain(
+                "ix_metadata_failure_junction",
+                "a junction's failures must not be found by a pass over every run"
+            );
+    }
+
+    private static async Task<string> PlanWithoutSeqScan(string explain, string value)
+    {
+        var connectionString = GetConnectionString();
+        await DatabaseMigrator.Migrate(connectionString);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await Exec(connection, "SET LOCAL enable_seqscan = off;");
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = explain;
+        command.Parameters.AddWithValue("value", value);
+        var plan = new List<string>();
+        await using (var rows = await command.ExecuteReaderAsync())
+            while (await rows.ReadAsync())
+                plan.Add(rows.GetString(0));
+        return string.Join('\n', plan);
     }
 
     /// <summary>

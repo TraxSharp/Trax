@@ -6,6 +6,7 @@ using Trax.Core.Train;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.JunctionMetadata;
 using Trax.Effect.Models.JunctionMetadata.DTOs;
+using Trax.Effect.Services.JunctionEffectRunner;
 using Trax.Effect.Services.JunctionEvents;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -89,11 +90,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
         );
 
         if (serviceTrain.JunctionEffectRunner is not null)
-            await serviceTrain.JunctionEffectRunner.BeforeJunctionExecution(
-                this,
-                serviceTrain,
-                serviceTrain.CancellationToken
-            );
+            await BeforeJunction(serviceTrain.JunctionEffectRunner, serviceTrain, previousOutput);
 
         Metadata.StartTimeUtc = DateTime.UtcNow;
 
@@ -130,13 +127,67 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             );
 
         if (serviceTrain.JunctionEffectRunner is not null)
-            await serviceTrain.JunctionEffectRunner.AfterJunctionExecution(
+            await AfterJunction(serviceTrain.JunctionEffectRunner, serviceTrain, result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Runs the junction effects' <c>BeforeJunctionExecution</c>. When the railway already carries a
+    /// failure, this junction is skipped and that failure is what the train reports: an effect that
+    /// throws then is logged and the failure stands, as in <see cref="AfterJunction"/>. Before a
+    /// junction that will run, an effect that throws fails the train as before.
+    /// </summary>
+    private async Task BeforeJunction<TTrainIn, TTrainOut>(
+        IJunctionEffectRunner runner,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
+        Either<Exception, TIn> previousOutput
+    )
+    {
+        try
+        {
+            await runner.BeforeJunctionExecution(
                 this,
                 serviceTrain,
                 serviceTrain.CancellationToken
             );
+        }
+        catch (Exception e) when (previousOutput.IsLeft)
+        {
+            serviceTrain.Logger?.LogWarning(
+                e,
+                "A junction effect failed before skipped junction ({JunctionName}) in train ({TrainName}); the earlier failure stands.",
+                Metadata?.Name,
+                serviceTrain.TrainName
+            );
+        }
+    }
 
-        return result;
+    /// <summary>
+    /// Runs the junction effects' <c>AfterJunctionExecution</c>. When the railway already carries a
+    /// failure, from this junction or one before it, that failure is what the train reports: an
+    /// effect that throws then is logged and the failure stands, rather than the effect's exception
+    /// replacing it. After a success, an effect that throws fails the train as before.
+    /// </summary>
+    private async Task AfterJunction<TTrainIn, TTrainOut>(
+        IJunctionEffectRunner runner,
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
+        Either<Exception, TOut> result
+    )
+    {
+        try
+        {
+            await runner.AfterJunctionExecution(this, serviceTrain, serviceTrain.CancellationToken);
+        }
+        catch (Exception e) when (result.IsLeft)
+        {
+            serviceTrain.Logger?.LogWarning(
+                e,
+                "A junction effect failed after junction ({JunctionName}) in train ({TrainName}) had failed; the junction's failure stands.",
+                Metadata?.Name,
+                serviceTrain.TrainName
+            );
+        }
     }
 
     /// <summary>

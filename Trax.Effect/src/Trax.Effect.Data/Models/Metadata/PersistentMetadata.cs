@@ -23,6 +23,10 @@ internal class PersistentMetadata : Effect.Models.Metadata.Metadata
             entity.HasIndex(e => new { e.Name, e.TrainState });
             // Built by Postgres migration 050; declared here so a schema created from the model has it.
             entity.HasIndex(e => e.ExternalId).HasDatabaseName("ix_metadata_external_id");
+            // Postgres migration 001 made the column char(32). Mapped as text, a lookup sends a
+            // text parameter, Postgres casts the column to compare it, and the index above no
+            // longer applies, so every lookup by external id reads the whole table.
+            entity.Property(e => e.ExternalId).HasColumnType("character(32)");
 
             entity
                 .HasOne(x => x.Parent)

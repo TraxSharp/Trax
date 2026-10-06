@@ -5,12 +5,14 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Trax.Effect.Attributes;
+using Trax.Effect.Services.JunctionEvents;
 
 namespace Trax.Effect.Utils;
 
 /// <summary>
 /// Serializer options that write a <see cref="TraxSensitiveAttribute"/> member as
-/// <c>{"_redacted": true}</c>, for every copy of a train's input or output that Trax keeps.
+/// <c>{"_redacted": true}</c>, for every copy of a train's input or output that Trax keeps, and
+/// the check of whether a recorded decision's answer must be withheld.
 /// </summary>
 public static class TraxRedaction
 {
@@ -59,6 +61,31 @@ public static class TraxRedaction
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Whether the answer to the question with this key must be withheld wherever a recorded
+    /// decision is read back: the question is about an enum or marker type marked
+    /// <see cref="TraxSensitiveAttribute"/>, or the key is built from the name of one.
+    /// </summary>
+    /// <param name="questionKey">
+    /// The question's key as Trax records it, such as <c>trax.decision.question_key</c>.
+    /// </param>
+    /// <remarks>
+    /// <para>The rule junction events, <c>trax.junction_run</c> and the decision journal apply,
+    /// read from the key alone, since a stored decision carries no type. Each marked type in a
+    /// loaded assembly that references Trax.Effect contributes its <c>[Asks(Key = ...)]</c> when it
+    /// declares one and its name without namespace or generic arity, and a key is sensitive when it
+    /// is one of those names or is built from one (<c>Flag&lt;Refund&gt;</c>,
+    /// <c>Outer&lt;X&gt;.Flag</c>, <c>Flag[]</c>).</para>
+    /// <para>It fails closed: a key drops the namespace, so two types can share a name, and when
+    /// either is marked the answer is withheld for both. A marked type must be in an assembly this
+    /// process has loaded for its keys to be recognised.</para>
+    /// </remarks>
+    public static bool IsSensitiveQuestion(string questionKey)
+    {
+        ArgumentNullException.ThrowIfNull(questionKey);
+        return SensitiveQuestions.IsSensitive(questionKey);
     }
 
     private static bool ContainsMarker(JsonElement element)

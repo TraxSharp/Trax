@@ -64,7 +64,10 @@ internal sealed class SignalRTrainEventDispatcher
         _config = config;
         _logger = logger;
         _queue = new DeliveryQueue(config.DeliveryQueueCapacity);
-        _sender = Task.Run(SendLoopAsync);
+        // The dispatcher is often first resolved on a train run's flow. Its loop outlives that run,
+        // so it must not carry the run's ambient state (its own log lines would name the run).
+        using (ExecutionContext.SuppressFlow())
+            _sender = Task.Run(SendLoopAsync);
     }
 
     /// <summary>
