@@ -6,7 +6,7 @@
 
 Trax auth is plumbing, not a security product. It does not vet the strength of your keys, rotate secrets, detect compromised credentials, enforce TLS, rate-limit abusers, detect replay attacks, or threat-model on your behalf, and it is not a substitute for a professional security review. MIT's `NO WARRANTY` clause is not a formality: if your deployment is breached, the fault and the fix are yours.
 
-The full disclaimer, including the consumer responsibility checklist, ships in this package as `SECURITY-DISCLAIMER.md` and is on GitHub: [SECURITY-DISCLAIMER.md](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md). Read it before you deploy.
+The full disclaimer, including the consumer responsibility checklist, ships in this package as `SECURITY-DISCLAIMER.md` and is on GitHub: [SECURITY-DISCLAIMER.md](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/SECURITY-DISCLAIMER.md). Read it before you deploy.
 
 ## What these packages are
 
@@ -92,8 +92,8 @@ Per-train authorization uses `[TraxAuthorize]` on the train class; see [Authoriz
 - [API Security](https://traxsharp.net/docs/api-security): every scheme, subscription auth, auditing and hardening defaults
 - [API Auth reference](https://traxsharp.net/docs/sdk-reference/api-auth)
 - [Trax documentation](https://traxsharp.net/docs)
-- Source: [github.com/TraxSharp/Trax.Api](https://github.com/TraxSharp/Trax.Api)
+- Source: [github.com/TraxSharp/Trax/tree/main/Trax.Api](https://github.com/TraxSharp/Trax/tree/main/Trax.Api)
 
 ## License
 
-MIT, with the security disclaimer above. See [LICENSE](https://github.com/TraxSharp/Trax.Api/blob/main/LICENSE).
+MIT, with the security disclaimer above. See [LICENSE](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/LICENSE).

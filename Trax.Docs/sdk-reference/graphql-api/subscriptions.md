@@ -271,7 +271,7 @@ What the subscriber needs and what it should expect:
 - A `sequence` that skips a number means events were lost. An operator can look the run up in `operations.executions`; a client without that access should read the outcome from the app's own data (a [query model](/docs/sdk-reference/graphql-api/query-models) over what the train wrote).
 - A queued run that fails is not retried.
 
-A runnable C# version of this loop over `System.Net.WebSockets` is the `GraphQLWebSocketClient` in `tests/Trax.Samples.ChatService.E2E/Utilities` of [Trax.Samples](https://github.com/TraxSharp/Trax.Samples); see [Testing subscriptions](/docs/cross-cutting/e2e-testing#testing-subscriptions).
+A runnable C# version of this loop over `System.Net.WebSockets` is the `GraphQLWebSocketClient` in `tests/Trax.Samples.ChatService.E2E/Utilities` of [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples); see [Testing subscriptions](/docs/cross-cutting/e2e-testing#testing-subscriptions).
 
 ## Data Change Signals
 

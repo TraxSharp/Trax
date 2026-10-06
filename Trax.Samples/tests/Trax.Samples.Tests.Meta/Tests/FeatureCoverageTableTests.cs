@@ -36,7 +36,7 @@ public class FeatureCoverageTableTests
     };
 
     private static readonly Regex TestLink = new(
-        @"\[`(?<class>[^`]+)`\]\(https://github\.com/TraxSharp/(?<repo>[\w.]+)/blob/main/(?<path>[^)\s]+)\)",
+        @"\[`(?<class>[^`]+)`\]\(https://github\.com/TraxSharp/Trax/blob/main/(?<repo>Trax\.[\w.]+?)/(?<path>[^)\s]+)\)",
         RegexOptions.Compiled
     );
 
@@ -111,7 +111,7 @@ public class FeatureCoverageTableTests
             .Should()
             .BeEmpty(
                 "each feature-coverage row must link at least one test class as "
-                    + "[`ClassTests`](https://github.com/TraxSharp/<Repo>/blob/main/tests/...), or say "
+                    + "[`ClassTests`](https://github.com/TraxSharp/Trax/blob/main/<Folder>/tests/...), or say "
                     + $"'{NoE2E}' when no end-to-end test exists anywhere. See {Adr}:\n"
                     + string.Join("\n", offenders)
             );

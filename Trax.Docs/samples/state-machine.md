@@ -10,7 +10,7 @@ nav_order: 8
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-`samples/StateMachine` in [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) is a GraphQL host
+`samples/StateMachine` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) is a GraphQL host
 over two snapshot state machines, authored with the fluent API and driven through the four generic
 `stateMachine` mutations, plus a React app (`web/`) that drives them from a browser.
 

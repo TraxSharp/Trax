@@ -41,7 +41,7 @@ namespace MyApp.Scheduler
 `MyApp.Scheduler.Program` is a separate type from the generated entry point, and that is fine:
 `WebApplicationFactory<T>` uses `T` only to find the host's assembly. The samples do this
 (`samples/Scheduling/Trax.Samples.Scheduling.Host/Program.cs` in
-[Trax.Samples](https://github.com/TraxSharp/Trax.Samples)), so the factory reads
+[Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples)), so the factory reads
 `WebApplicationFactory<Host.Program>`.
 
 ### Test Database

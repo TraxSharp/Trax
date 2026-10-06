@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Project Layout
-description: "Where things live: a Trax application's trains, data and tests, and in the Trax repos, data models, migrations, builders, samples and tests."
+description: "Where things live: a Trax application's trains, data and tests, and in the Trax repository, data models, migrations, builders, samples and tests."
 parent: Reference
 nav_order: 11
 ---
@@ -9,7 +9,7 @@ nav_order: 11
 # Project Layout
 
 Where each kind of thing lives. The first section is for an application built on Trax; the rest
-is for contributing to the Trax repositories themselves.
+is for contributing to the Trax repository itself.
 
 ## Your own application
 
@@ -43,7 +43,7 @@ or worker) references the same library and points at the same database. The
 
 ## Contributing to Trax
 
-Before adding something to a Trax repository, find an existing example of the same kind and
+Before adding something to Trax, find an existing example of the same kind and
 mirror it: the same directory depth, the same naming, the same partial-class split.
 
 ### Data models

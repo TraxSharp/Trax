@@ -8,9 +8,9 @@ nav_order: 3
 
 # Packages
 
-Trax ships as 42 NuGet packages from eight repositories. Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
+Trax ships as 42 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
 
-The pages describe the code on each repository's `main` branch. Each package versions on its own, so the docs do not name a version; the nuget.org link shows the latest release and its dependencies.
+Every package releases at the same version, so install them all at one version. The site is published from the latest release, and the nuget.org link shows that release and its dependencies.
 
 ## Which packages you need
 

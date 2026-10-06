@@ -1,13 +1,13 @@
 # Trax.Website
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax.Website/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/TraxSharp/Trax/blob/main/Trax.Website/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-traxsharp.net-blue)](https://traxsharp.net/docs)
 
 > Part of [Trax .NET](https://github.com/TraxSharp): business logic you can call, schedule, or serve as an API, with every
-> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [All repos](https://github.com/TraxSharp)
+> run recorded in your Postgres. [Docs](https://traxsharp.net/docs) · [Getting started](https://traxsharp.net/docs/getting-started) · [Repository](https://github.com/TraxSharp/Trax)
 
 Trax.Website is the source for [traxsharp.net](https://traxsharp.net): the landing page, the docs site rendered from
-[Trax.Docs](https://github.com/TraxSharp/Trax.Docs), with raw Markdown and `llms.txt` for agents, and a demo of the
+[Trax.Docs](https://github.com/TraxSharp/Trax/tree/main/Trax.Docs), with raw Markdown and `llms.txt` for agents, and a demo of the
 operations dashboard, whose source is in [`dashboard/`](dashboard/README.md) for now.
 
 ## Stack
@@ -23,20 +23,29 @@ operations dashboard, whose source is in [`dashboard/`](dashboard/README.md) for
 ## Run it locally
 
 ```bash
-git clone https://github.com/TraxSharp/Trax.Website.git
-cd Trax.Website
+git clone https://github.com/TraxSharp/Trax.git
+cd Trax/Trax.Website
 npm ci
 npm run dev
 ```
 
-`npm run dev`, `npm run build` and `npm test` all run `scripts/sync-docs.sh` first. It copies every `.md` file from a
-sibling `../Trax.Docs` checkout into `.docs-cache/` (gitignored), skipping `README.md`, `adr/`, `.claude/`, `tools/`,
-`tests/` and `.github/`. With no sibling checkout it shallow-clones `main` from GitHub instead. To preview a docs change,
-clone Trax.Docs next to this repo, edit it there, and restart the dev server.
+`npm run dev`, `npm run build` and `npm test` all run `scripts/sync-docs.sh` first. It copies every `.md` file from
+`../Trax.Docs` in the same checkout into `.docs-cache/` (gitignored), skipping `README.md`, `adr/`, `.claude/`, `tools/`,
+`tests/` and `.github/`. To preview a docs change, edit it in `Trax.Docs` and restart the dev server. A production build
+also stamps the latest release's version into every `<PackageReference Include="Trax.*" Version="...">` a page shows
+(`TRAX_DOCS_VERSION` overrides it), so the site always names a version a reader can install.
 
 The ADRs are not published, so the sync also writes `.docs-cache/adr-index.json`, the ADR file names in Trax.Docs and
-in each code repo (from a sibling checkout, else the GitHub API). A citation such as `Trax.Mediator/docs/adr/0004` in a
-page links to that file on GitHub, or to the repo's ADR index when the file is not known.
+in each code folder. A citation such as `Trax.Mediator/docs/adr/0004` in a page links to that file on GitHub, or to the
+folder's ADR index when the file is not known.
+
+## Deploying
+
+traxsharp.net is built by Vercel from the `website` branch, its production branch, with `Trax.Website` as the
+project's root directory. Nothing pushes to that branch by hand: the repository's Release workflow moves it to each
+release tag once the packages are on nuget.org, so the published docs describe released code
+([ADR 0043](../Trax.Docs/adr/0043-the-site-is-published-from-a-release.md)). To publish a docs fix that describes
+nothing unreleased, dispatch the Website workflow with `main`.
 
 The docs are rendered as CommonMark with GFM, not MDX: a `>` is a blockquote, and JSX and `{expressions}` are not
 available. Raw HTML is limited to a short allow-list (`<a id>` anchors and a few inline tags) and sanitized; any other

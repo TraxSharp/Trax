@@ -8,7 +8,7 @@ nav_order: 1
 
 # Scheduling Sample
 
-`samples/Scheduling` in [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) is one ASP.NET
+`samples/Scheduling` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) is one ASP.NET
 process that schedules trains, runs them on the built-in local workers, retries the ones that
 fail and dead-letters the ones that keep failing. The Trax GraphQL operations surface and the
 dashboard show and steer it. It shows the scheduling surface and nothing else, and its E2E suite

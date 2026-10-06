@@ -10,7 +10,7 @@ nav_order: 9
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-`samples/DistributedWorkers` in [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) splits
+`samples/DistributedWorkers` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) splits
 scheduling from execution. One process, the hub, owns the GraphQL API, the scheduler and the
 dashboard. Separate worker processes run every job the hub queues. The two share PostgreSQL (the
 `background_job` table) and RabbitMQ (lifecycle events), and nothing else, so you can run as many

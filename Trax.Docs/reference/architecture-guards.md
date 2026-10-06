@@ -12,11 +12,11 @@ Trax ships per-concern "guard" packages that let any repo enforce the same archi
 
 ## Packages
 
-Each package lives in the repo that owns the concern it checks. Each depends on `Trax.Core.Testing` and NUnit; `Trax.Effect.Data.Testing` also brings in `Trax.Effect.Data`, Roslyn and the Npgsql EF Core provider, and `Trax.Api.GraphQL.Testing` brings in `Trax.Api.GraphQL`:
+Each package lives in the folder of the Trax repository that owns the concern it checks. Each depends on `Trax.Core.Testing` and NUnit; `Trax.Effect.Data.Testing` also brings in `Trax.Effect.Data`, Roslyn and the Npgsql EF Core provider, and `Trax.Api.GraphQL.Testing` brings in `Trax.Api.GraphQL`:
 
 | Package | Owns | Guards |
 |---|---|---|
-| `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]` in any form, including a qualified or suffixed name, an attribute list split across lines, and `Ignore =` or `IgnoreReason =` on a `TestCase`; no legacy asserts, including `ClassicAssert`, `CollectionAssert` and `StringAssert`; no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version; cross-repo Trax refs centrally managed via `Directory.Packages.props` with no inline `Version` or `VersionOverride`); `VocabularyGuards` (a listed third-party attribute, found wherever it sits in an attribute list, with or without its `Attribute` suffix, including in files that see its library only through a global or project-level using) |
+| `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]` in any form, including a qualified or suffixed name, an attribute list split across lines, and `Ignore =` or `IgnoreReason =` on a `TestCase`; no legacy asserts, including `ClassicAssert`, `CollectionAssert` and `StringAssert`; no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version; Trax packages consumed from another repository pinned centrally in `Directory.Packages.props` with no inline `Version` or `VersionOverride`, for a codebase split across repositories); `VocabularyGuards` (a listed third-party attribute, found wherever it sits in an attribute list, with or without its `Attribute` suffix, including in files that see its library only through a global or project-level using) |
 | `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext`, `NoPendingModelChanges`, `OwnerScopeCompleteness`, `OwnerScopeFilterBypasses` |
 | `Trax.Api.GraphQL.Testing` | GraphQL | `EdgeManifestIsValid`, `EdgeResolversUseLoader` |
 | `Trax.Mediator.Testing` | Trains | `EveryTrainHasInterface` |

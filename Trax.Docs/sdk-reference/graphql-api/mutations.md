@@ -229,7 +229,7 @@ Triggers an immediate execution of a manifest, bypassing its normal schedule. A 
 - `Manifest 'order-processing-daily' already had a queued run (work queue entry 42), due now; it now runs as the trigger and nothing more was queued.`
 - `Manifest 'order-processing-daily' already had a queued run (work queue entry 42) that the dispatcher claimed as the trigger reached it, so it is already running; nothing more was queued.`
 
-On a host whose store is in memory (`UseInMemory()` and no database provider) nothing dispatches the work queue, so the trigger answers `success: false` with that reason and queues nothing; the same holds for `triggerManifestDelayed`, `triggerGroup`, `triggerManifests`, `triggerGroups`, `workQueue.queueTrain`, `requeueExecution`, and the dead-letter requeues (`requeueDeadLetter`, `requeueDeadLetters`, `requeueAllDeadLetters`) ([Trax.Scheduler ADR 0019](https://github.com/TraxSharp/Trax.Scheduler/blob/main/docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md)).
+On a host whose store is in memory (`UseInMemory()` and no database provider) nothing dispatches the work queue, so the trigger answers `success: false` with that reason and queues nothing; the same holds for `triggerManifestDelayed`, `triggerGroup`, `triggerManifests`, `triggerGroups`, `workQueue.queueTrain`, `requeueExecution`, and the dead-letter requeues (`requeueDeadLetter`, `requeueDeadLetters`, `requeueAllDeadLetters`) ([Trax.Scheduler ADR 0019](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md)).
 
 ```graphql
 mutation {

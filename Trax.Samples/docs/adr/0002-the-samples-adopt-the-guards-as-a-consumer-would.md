@@ -28,9 +28,11 @@ repo that ships the fixture, against that repo's own `ProjectReference`s, so the
 resolves the fixture, its options type and everything they touch from source whether or not
 any of it reaches the `.nupkg`.
 
-Trax.Samples has no cross-repo `ProjectReference`. It reaches all three fixtures only through
-a `PackageReference` resolved from the feed, so a type left `internal`, a member missing from
-the published assembly, or a file left out of the pack fails here and nowhere else.
+When the samples lived in their own repository they reached all three fixtures through a
+`PackageReference`, so a type left `internal`, a member missing from the published assembly,
+or a file left out of the pack failed here and nowhere else. In the single repository
+(`Trax.Docs/adr/0042`) Bookworm references the fixtures as projects too, so it now proves
+adoption from another folder, not across a package boundary.
 
 ## Consequences
 
@@ -56,10 +58,13 @@ three subclasses and a configuration block.
 
 Not covered: nothing checks that every shipped `*GuardFixture` has a subclass here. A new
 fixture added upstream with no Bookworm adopter is untested from the consumer side, and
-nothing says so.
+nothing says so. Nothing checks the packaging either: a fixture type that compiles from
+source but is missing from the `.nupkg` is no longer caught by any test.
 
 ## Changelog
 
+- **2026-10-06**: The samples moved into the one repository and reference the fixtures as
+  projects, so the packaging half of the justification no longer holds; recorded as not covered.
 - **2026-09-11**: Replaced the justification. All three packages do ship a fixture-subclass
   self-test, so the claim that nothing else exercises subclassing and discovery was false. What
   is only exercised here is adoption across a real `PackageReference` rather than the shipping

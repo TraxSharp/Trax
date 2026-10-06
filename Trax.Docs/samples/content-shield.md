@@ -10,7 +10,7 @@ nav_order: 10
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-`samples/EphemeralWorkers` in [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) is a content
+`samples/EphemeralWorkers` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) is a content
 moderation API whose trains all run somewhere else: on a runner that is an AWS Lambda function in
 production and a local Kestrel server in development. The API holds no workers and writes no
 `background_job` rows. It POSTs each queued job to the runner and returns, and it POSTs each

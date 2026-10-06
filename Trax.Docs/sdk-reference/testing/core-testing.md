@@ -39,7 +39,7 @@ public sealed record ArchitectureGuardOptions
 | `NoIgnoreKnownExceptions` | empty | Repo-relative files exempt from the no-`[Ignore]` guard |
 | `FixedDelayKnownExceptions` | empty | Repo-relative files exempt from the no-fixed-delay guard |
 | `ExpectedDirectoryBuildPropsVersion` | `"1.99.99"` | The `<Version>` the root `Directory.Build.props` must declare |
-| `TraxPackagePrefix` | `"Trax."` | Package ids that count as cross-repo Trax references |
+| `TraxPackagePrefix` | `"Trax."` | Package ids that count as Trax packages consumed from another repository |
 | `CrossRepoPackageKnownExceptions` | empty | Repo-relative project files exempt from the cross-repo package guard |
 
 Allowlist paths are repo-relative with forward slashes.
@@ -87,7 +87,7 @@ public sealed record GuardResult(IReadOnlyList<string> Offenders, int Inspected,
 
 `RepoConventionGuardFixture` runs both as NUnit tests.
 
-These encode the Trax repositories' own build conventions. The version check in particular expects the local-development placeholder `1.99.99` that the Trax repositories keep in `Directory.Build.props`. A consumer repository that versions differently either sets `ExpectedDirectoryBuildPropsVersion` to its own value or does not use this fixture.
+These encode a build convention for a codebase split across several repositories that consume each other's Trax packages: each repository's own version is a fixed local-development placeholder, and every Trax package it consumes is pinned once, centrally. The version check expects `1.99.99` by default, the placeholder Trax keeps in each folder's `Directory.Build.props`. Trax itself is one repository whose packages reference each other with `ProjectReference`, so it has no Trax pins for `CrossRepoPackageVersions` to check. A consumer repository that versions differently either sets `ExpectedDirectoryBuildPropsVersion` to its own value or does not use this fixture.
 
 ## Vocabulary guard
 

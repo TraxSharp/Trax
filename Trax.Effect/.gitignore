@@ -149,5 +149,3 @@ node_modules/
 # MSBuild static graph restore cache
 *.csproj.lscache
 
-# Local-dev CPM override (written by pack-local.sh)
-trax-local.props

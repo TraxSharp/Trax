@@ -10,7 +10,7 @@ nav_order: 11
 
 > NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).
 
-`samples/SignalRBroadcaster` in [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) pushes each
+`samples/SignalRBroadcaster` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) pushes each
 train's lifecycle events to a browser as they happen. It is one process with one train, a plain HTML
 page using the JavaScript SignalR client, and a hub that only a signed-in operator may join. Effects
 are in memory, so it needs no database.

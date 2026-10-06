@@ -4,8 +4,8 @@ The `trax` command-line tool: scaffolds Trax projects from a GraphQL or OpenAPI 
 generates state-machine artifacts (IR, TypeScript twin, differential corpus) from a compiled
 machine. It sits after `Trax.Scheduler` in the dependency order, and the declared order puts
 `Trax.Samples` downstream of it: `DependencyDirectionTests` lists `Trax.Cli` among Samples'
-allowed upstream. No repo pins a `Trax.Cli.*` package today, so in practice nothing depends
-on it yet.
+allowed upstream. No other folder references a `Trax.Cli` project today, so in practice nothing
+depends on it yet.
 
 This file is the entry point. It routes; it does not restate the rules.
 
@@ -20,19 +20,21 @@ if your work contradicts one, say so rather than silently overriding it.
 | --- | --- |
 | anything under `Machines/` | [0001](./docs/adr/0001-the-machine-toolchain-is-half-in-process.md), the C# half loads a compiled assembly and the TypeScript half spawns node |
 
-Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Fourteen name `cli`: executable guards, exact version pinning, the
+Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by folder. Nineteen name `cli`, three of them superseded: executable guards, the
 dependency direction, the three test conventions, the documentation lints, the public API
 baseline, test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax
 owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced
-package, and a chain being a declaration (`0016`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does
-not resolve on GitHub, because it crosses a repository boundary.
+package, a chain being a declaration (`0016`), and one repository releasing at one version
+(`0042`). The index is at
+[`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).
 
 ## When your change makes a decision
 
 Most changes do not. When one does (reversing it would cost something real, a future reader
 would ask why it is like this, and there were real alternatives), it takes five steps and
-the build enforces four. The `adr-guard` job runs on every pull request.
+the build enforces four. The root CI's `adr-guard` job checks this folder on every pull
+request that changes it or a folder upstream of it.
 
 | | Step | Enforced |
 | --- | --- | --- |
@@ -49,7 +51,7 @@ not to record. The format is
 ## Guards
 
 `tests/Trax.Cli.Tests.Meta/` holds eleven convention guards, and **all eleven are shared** with
-the other repos. This repo owns no convention guard of its own.
+the other folders. This folder owns no convention guard of its own.
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is

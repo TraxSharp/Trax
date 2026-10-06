@@ -22,20 +22,20 @@ if your work contradicts one, say so rather than silently overriding it.
 | the work queue pages (Staged, Subject, Waiting On) or the Failure Class field | central `docs/0018`, `docs/0019` and `docs/0020` |
 | the Run dialog | central `docs/0022` and `docs/0019`: it runs through `IOperationsService.RunTrainAsync` inside the `"dashboard"` trusted scope, the path the API's run takes, and bypasses subject serialization by design, so for a train that overrides `QueueSubjectKey` it warns and points at Queue rather than waiting |
 | the persisted-operations pages | [0005](./docs/adr/0005-persisted-operations-pages-call-the-shared-service.md): read and write through the API package's `IPersistedOperationsService`, gated on that service being registered, addressed by tenant and id |
-| a third-party pin in `Directory.Packages.props` | [0006](./docs/adr/0006-radzen-and-test-di-float-within-their-major.md): `Radzen.Blazor` and the test DI container float within their major on purpose; the lockfiles hold the version |
+| a third-party pin in the root `Directory.Packages.props` | [0006](./docs/adr/0006-radzen-and-test-di-float-within-their-major.md): `Radzen.Blazor` and the test DI container float within their major on purpose; the lockfiles hold the version |
 
-Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty-eight name `dashboard`: the workspace-wide conventions, `0016`
+Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by folder. Thirty name `dashboard`, three of them superseded: the repository-wide conventions, `0016`
 to `0020` and `0041` (the enqueue ones routed above), and the canonical train name being the interface
-FullName, which this repo compares against when it looks a train up. In a
-workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
-on GitHub, because it crosses a repository boundary.
+FullName, which this folder compares against when it looks a train up. The index is at
+[`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).
 
 ## When your change makes a decision
 
 Most changes do not. When one does (reversing it would cost something real, a future reader
 would ask why it is like this, and there were real alternatives), it takes five steps and
-the build enforces four. The `adr-guard` job runs on every pull request.
+the build enforces four. The root CI's `adr-guard` job checks this folder on every pull
+request that changes it or a folder upstream of it.
 
 | | Step | Enforced |
 | --- | --- | --- |
@@ -51,8 +51,8 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Dashboard.Tests.Meta/` holds thirteen convention guards, and **all thirteen are
-shared** with the other repos. This repo owns no convention guard of its own;
+`tests/Trax.Dashboard.Tests.Meta/` holds twelve convention guards, and **all twelve are
+shared** with the other folders. This folder owns no convention guard of its own;
 `WorkQueueCreationSitesTests` runs here with an empty allow-list, so no dashboard code may
 build a work queue row (`docs/0017`). The gaps that matter are
 named in the `## Exemplars` section of

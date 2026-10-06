@@ -3,10 +3,10 @@
 ADRs are numbered sequentially per directory: `0001-slug.md`, `0002-slug.md`. Create the
 directory lazily, only when the first ADR is needed.
 
-A decision binding more than one repo lives in `Trax.Docs/adr/`. A decision governing one
-repo lives in that repo at `<Repo>/docs/adr/`. Location is not cosmetic: it is what routes
-the ADR to the people it binds, and a repo-scoped one is found by someone working in that
-directory without going through the central corpus.
+A decision binding more than one folder of the repository lives in `Trax.Docs/adr/`. A
+decision governing one folder lives in that folder at `<Folder>/docs/adr/`. Location is not
+cosmetic: it is what routes the ADR to the people it binds, and a folder-scoped one is found by
+someone working in that directory without going through the central corpus.
 
 ## Template
 
@@ -84,7 +84,8 @@ login.
 
 ### `repos`
 
-Which repos must **obey** the decision. Lowercase slugs matching a workspace directory:
+Which folders must **obey** the decision. Lowercase slugs naming a folder of the repository
+(`Trax.Core` is `core`):
 
 `core` · `effect` · `mediator` · `scheduler` · `dashboard` · `api` · `cli` · `samples` ·
 `docs` · `website`
@@ -97,7 +98,7 @@ Be explicit rather than economical. A decision about the train naming rule binds
 dashboard and the scheduler even though it is implemented in the mediator, because they are
 the ones who can break it by comparing the wrong name.
 
-A **repo-scoped** ADR omits the key entirely: it lives in `<Repo>/docs/adr/`, and its path
+A **folder-scoped** ADR omits the key entirely: it lives in `<Folder>/docs/adr/`, and its path
 already says which repo governs it. Restating it is a second place to drift, and the guard
 rejects it.
 
@@ -185,12 +186,12 @@ rewrite does not. Someone gutting a guard's assertions sees nothing telling them
 depends on it, and the ADR goes on claiming enforcement that has quietly stopped. The
 back-citation puts that warning where the person editing the test is looking.
 
-**2. `**Enforced elsewhere:**`.** The guards are real but live in another repo. This is the
-normal state for the central corpus: a decision binding eight repos is held up by guards in
-those repos, and no checkout of `Trax.Docs` can see them.
+**2. `**Enforced elsewhere:**`.** The guards are real but live in another folder. This is the
+normal state for the central corpus: a decision binding eight folders is held up by guards in
+those folders, and the guard run over `Trax.Docs` reads only `Trax.Docs`.
 
 ```md
-**Enforced elsewhere:** `NoIgnoreAttributeTests` in each repo's Tests.Meta project, and
+**Enforced elsewhere:** `NoIgnoreAttributeTests` in each folder's Tests.Meta project, and
 HygieneGuards.NoIgnoreAttribute shipped from Trax.Core.Testing.
 ```
 
@@ -283,7 +284,7 @@ are asked separately and a marker inside a string literal is not an answer.
 ## Numbering and the index
 
 Scan the ADR's **own directory** for the highest existing number and increment by one.
-Numbering is per directory, so a bare number is ambiguous across them. Cite a repo-scoped
+Numbering is per directory, so a bare number is ambiguous across them. Cite a folder-scoped
 ADR as `effect/0001`, or by path.
 
 **Then add it to that directory's `README.md`**, every table: by area, the full list, and

@@ -170,7 +170,7 @@ export function documentTitle(doc: DocPage): string {
 
 /** The page's source file on GitHub, for readers who want to edit or cite it. */
 export function sourceUrl(doc: DocPage): string {
-  return `https://github.com/TraxSharp/Trax.Docs/blob/main/${doc.sourcePath}`;
+  return `https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/${doc.sourcePath}`;
 }
 
 export function generateStaticParams(): { slug: string[] }[] {

@@ -1,0 +1,64 @@
+name: Website
+
+# Publishes traxsharp.net by moving the `website` branch, which is Vercel's production
+# branch, to a commit; Vercel builds and deploys whatever that branch points at. The site and
+# its docs (Trax.Website, Trax.Docs) are then exactly that commit, and the build stamps the
+# latest release's version into the package references the pages show
+# (Trax.Website/scripts/sync-docs.sh).
+#
+# release.yml calls this with the tag it just cut, so the published docs describe released
+# code. Dispatch it by hand to publish something else: the latest release again, or `main`
+# for a docs fix that describes nothing unreleased.
+#
+# The job runs no project code and checks nothing out: it is one call to the Git refs API.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The tag or branch to publish.'
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'The tag or branch to publish, e.g. v1.61.0 or main.'
+        type: string
+        required: true
+
+concurrency:
+  group: website
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Gate production deploys behind a protected environment.
+    environment: website-deploy
+    permissions:
+      contents: write   # move the website branch
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Move the website branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ inputs.ref }}
+        run: |
+          # Only a release tag or main may be published.
+          if ! [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "$REF" == main ]]; then
+            echo "::error::'$REF' is neither a release tag (vX.Y.Z) nor main."
+            exit 1
+          fi
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$REF" --jq .sha)
+          echo "Publishing $REF ($sha)"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/website" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/website" -f sha="$sha" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/heads/website -f sha="$sha" >/dev/null
+          fi
+          echo "website now points at $sha; Vercel deploys it."

@@ -13,9 +13,9 @@ import { visit, SKIP } from "unist-util-visit";
 // This module is imported by the render tests under plain Node, so it imports
 // packages only: no "@/" aliases and no relative imports.
 
-const GITHUB_ORG = "https://github.com/TraxSharp";
+const GITHUB_REPO = "https://github.com/TraxSharp/Trax";
 
-/** Repo name to the ADR file paths in it, written by scripts/adr-index.mjs. */
+/** Folder name to the ADR file paths in it, written by scripts/adr-index.mjs. */
 export type AdrIndex = Record<string, string[]>;
 
 function loadAdrIndex(): AdrIndex {
@@ -37,7 +37,8 @@ const ADR_CITATION =
 
 /**
  * The GitHub URL of a cited ADR: the exact file when the index knows it, else
- * the repo's ADR index, which lists every record by number.
+ * the folder's ADR index, which lists every record by number. A citation names
+ * the folder (`Trax.Mediator`), which is a directory of the one repository.
  */
 export function adrUrl(
   repo: string,
@@ -46,7 +47,7 @@ export function adrUrl(
   index: AdrIndex
 ): string {
   const file = index[repo]?.find((p) => p.startsWith(`${dir}/${number}-`));
-  return `${GITHUB_ORG}/${repo}/blob/main/${file ?? `${dir}/README.md`}`;
+  return `${GITHUB_REPO}/blob/main/${repo}/${file ?? `${dir}/README.md`}`;
 }
 
 interface MdNode {

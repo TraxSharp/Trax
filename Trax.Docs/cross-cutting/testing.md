@@ -9,7 +9,7 @@ nav_order: 3
 # Testing
 
 The examples use NUnit. The assertions are NUnit's constraint model (`Assert.That`), which needs
-no extra package; Trax's own repositories assert with AwesomeAssertions instead, an Apache-2.0 fork of
+no extra package; Trax's own tests assert with AwesomeAssertions instead, an Apache-2.0 fork of
 FluentAssertions 7 that is free for commercial use (see
 [Test Conventions](/docs/reference/test-conventions)), and either works. A test project needs
 `Microsoft.NET.Test.Sdk`, `NUnit` and `NUnit3TestAdapter`, plus

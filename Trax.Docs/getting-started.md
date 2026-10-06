@@ -76,7 +76,8 @@ each one:
 </Project>
 ```
 
-The versions are the releases this page is compiled against. Pin exact versions as these do: a
+The version is the release this site was published from, and every Trax package shares it. Pin
+exact versions as these do: a
 floating `Version="1.*"` restores whatever was published last, and a Trax minor release can change
 an API your code calls. Newer releases are listed on each package's nuget.org page.
 

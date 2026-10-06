@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const REPO = "https://github.com/TraxSharp/Trax.Samples";
+const REPO = "https://github.com/TraxSharp/Trax";
 
 export interface SampleSourceProps {
   /** The sample's folder under samples/ in Trax.Samples, such as "Recovery". */
@@ -18,7 +18,7 @@ export interface SampleSourceProps {
  * is a recording; this is the code that made it.
  */
 export default function SampleSource({ folder, files, docs, run }: SampleSourceProps) {
-  const tree = `${REPO}/tree/main/samples/${folder}`;
+  const tree = `${REPO}/tree/main/Trax.Samples/samples/${folder}`;
   // A file's name, or its folder and name when another listed file has the same name (two Program.cs).
   const nameOf = (path: string) => {
     const parts = path.split("/");
@@ -34,7 +34,7 @@ export default function SampleSource({ folder, files, docs, run }: SampleSourceP
           {files.map((f) => (
             <li key={f.path} className="flex flex-wrap items-baseline gap-x-2">
               <a
-                href={`${REPO}/blob/main/samples/${folder}/${f.path}`}
+                href={`${REPO}/blob/main/Trax.Samples/samples/${folder}/${f.path}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-xs text-accent hover:text-accent-hover"
@@ -62,7 +62,7 @@ export default function SampleSource({ folder, files, docs, run }: SampleSourceP
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Run it yourself</p>
         <pre className="mt-2 whitespace-pre-wrap rounded border border-border bg-bg-primary p-3 font-mono text-[11.5px] leading-relaxed text-text-secondary [overflow-wrap:anywhere]">
-          {[`git clone ${REPO}.git && cd Trax.Samples`, ...run].map((line) => `$ ${line}`).join("\n")}
+          {[`git clone ${REPO}.git && cd Trax/Trax.Samples`, ...run].map((line) => `$ ${line}`).join("\n")}
         </pre>
       </div>
     </div>

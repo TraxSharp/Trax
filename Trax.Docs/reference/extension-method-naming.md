@@ -17,12 +17,13 @@ unified entry point. Everything else follows one of two prefixes.
 | `Use*` | Maps endpoints or components onto a built `WebApplication` | `UseTraxDashboard`, `UseTraxGraphQL` |
 
 Every public extension method in an `Extensions/` folder contains `Trax` in its name.
-`ExtensionMethodNamingTests`, which each of the eight code repos carries, holds part of that:
-it parses the `.cs` files under an `Extensions/` folder in the repo's source tree and flags a
+`ExtensionMethodNamingTests`, which the `Tests.Meta` suite of each of the eight .NET package
+folders carries, holds part of that: it parses the `.cs` files under an `Extensions/` folder in
+that folder's source tree and flags a
 `public static` method only when the name starts with `Add` or `Use` **and** the `this`
 parameter is one of `IServiceCollection`, `IApplicationBuilder`, `IEndpointRouteBuilder`,
 `WebApplication` or `WebApplicationBuilder`. A method on a Trax builder type, or one whose name
-starts with anything else, is outside what it reads. Each repo's copy also carries its own
+starts with anything else, is outside what it reads. Each folder's copy also carries its own
 `KnownExceptions` list, so a name can be exempted with a justification rather than fixed.
 Everything the check does not reach is held up by review.
 

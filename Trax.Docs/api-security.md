@@ -12,7 +12,7 @@ section: Guides
 
 > NO WARRANTY FOR SECURITY. Trax.Api.Auth and Trax.Api.GraphQL.Audit are provided AS-IS. Trax, its authors, and contributors are NOT LIABLE for any security breach, credential leak, data loss, or damage arising from systems built on top of these packages. Securing your deployment is the SOLE RESPONSIBILITY OF THE CONSUMER.
 
-This page covers authentication, audit logging, and operational hygiene for Trax GraphQL hosts. Read the [security disclaimer](https://github.com/TraxSharp/Trax.Api/blob/main/SECURITY-DISCLAIMER.md) before shipping any of this to production.
+This page covers authentication, audit logging, and operational hygiene for Trax GraphQL hosts. Read the [security disclaimer](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/SECURITY-DISCLAIMER.md) before shipping any of this to production.
 
 Trax ships three pluggable authentication schemes, all feeding the same [`TraxPrincipal`](/docs/sdk-reference/api-auth/trax-principal) abstraction:
 

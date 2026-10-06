@@ -22,7 +22,7 @@ search:
 # Aux links (top right)
 aux_links:
   "View on GitHub":
-    - "https://github.com/TraxSharp/Trax.Docs"
+    - "https://github.com/TraxSharp/Trax/tree/main/Trax.Docs"
 
 aux_links_new_tab: true
 

@@ -19,4 +19,4 @@ dotnet test tests/MyApp.Tests
 Each template stores runs in memory, so it needs no database, and ships a README and a test project. The dashboard
 and the demo API key exist only in Development.
 
-Docs: <https://traxsharp.net/docs/getting-started> · Source: <https://github.com/TraxSharp/Trax.Samples>
+Docs: <https://traxsharp.net/docs/getting-started> · Source: <https://github.com/TraxSharp/Trax/tree/main/Trax.Samples>

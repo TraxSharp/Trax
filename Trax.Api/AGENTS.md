@@ -33,23 +33,24 @@ if your work contradicts one, say so rather than silently overriding it.
 | `failureClass` on executions, or the `executions(failureClass:)` filter | central `docs/0020`, a failure is classified where it happens |
 | `subjectKey` or `confirmedAt` on work queue reads | central `docs/0019` and `docs/0018` |
 
-Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Thirty-three name `api`. Among them: executable guards, exact version pinning, the
+Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by folder. Thirty-five name `api`, three of them superseded. Among them: executable guards, the
 dependency direction, the three test conventions, the canonical train name being the
 interface FullName, the documentation lints, feature-package tables shipping in the core
 provider migration set, the public API baseline, test frameworks staying out of shipped
 libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
 (`0016`), the enqueue, staging, subject and failure-classification decisions (`0017` to
-`0020`), the shared dashboard/API operations (`0022`), and a requeue replaying decisions (`0041`). In a workspace checkout the index is at
-`../Trax.Docs/adr/README.md`; that path does not resolve on GitHub, because it crosses a
-repository boundary.
+`0020`), the shared dashboard/API operations (`0022`), a requeue replaying decisions (`0041`), and one
+repository releasing at one version (`0042`). The index is at
+[`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).
 
 ## When your change makes a decision
 
 Most changes do not. When one does (reversing it would cost something real, a future reader
 would ask why it is like this, and there were real alternatives), it takes five steps and
-the build enforces four. The `adr-guard` job runs on every pull request.
+the build enforces four. The root CI's `adr-guard` job checks this folder on every pull
+request that changes it or a folder upstream of it.
 
 | | Step | Enforced |
 | --- | --- | --- |
@@ -65,10 +66,10 @@ not to record. The format is
 
 ## Guards and validators
 
-`tests/Trax.Api.Tests.Meta/` holds fifteen convention guards. Fourteen are shared with other
-repos and enforce workspace-wide rules, among them `WorkQueueCreationSitesTests`, which allows
-no site in this repo to build a work queue row (`docs/0017`);
-`NoSilentRegistrationOrderDependenceTests` is unique to this repo and is the census behind
+`tests/Trax.Api.Tests.Meta/` holds fourteen convention guards. Thirteen are shared with other
+folders and enforce repository-wide rules, among them `WorkQueueCreationSitesTests`, which allows
+no site in this folder to build a work queue row (`docs/0017`);
+`NoSilentRegistrationOrderDependenceTests` is unique to this folder and is the census behind
 [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md).
 
 Nine runtime validators fail the host at startup rather than at request time: eight under
@@ -85,8 +86,8 @@ that reads as a deferral is not.
 
 ## Running the tests
 
-There is no compose file in this repo. Postgres and RabbitMQ come from the workspace's
-sample stack, which starts both with the `trax`/`trax123` credentials the fixtures expect
+There is no compose file in this folder. Postgres and RabbitMQ come from Trax.Samples'
+stack, which starts both with the `trax`/`trax123` credentials the fixtures expect
 and creates the four databases they hard-code:
 
 ```bash
@@ -96,11 +97,11 @@ dotnet test
 
 Those four databases (`trax_api_operations`, `trax_api_workqueue`, `trax_api_logs`,
 `trax_api_health`) come from the compose file's init script, which Postgres runs only when
-the container is first created. Against a container that predates them, or a clone of this
-repo on its own, there is no one-liner: bring up a `postgres:16` on 5432 and a
+the container is first created. Against a container that predates them, or a Postgres started some
+other way, there is no one-liner: bring up a `postgres:17` on 5432 and a
 `rabbitmq:4-management` on 5672 with that user and password the way
-`.github/workflows/pull_request.yml` does, then create the databases the way its "Create
-per-fixture test databases" step does.
+`../.github/workflows/ci.yml` does, then create the databases the way its "Create test
+databases" step does from the `databases` list in `../.github/ci/packages.json`.
 
 ```bash
 for db in trax_api_operations trax_api_workqueue trax_api_logs trax_api_health; do

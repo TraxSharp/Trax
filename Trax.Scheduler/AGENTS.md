@@ -36,20 +36,20 @@ if your work contradicts one, say so rather than silently overriding it.
 | `[TraxRemote]` routing, or a scheduler build with no routed submitter | [0016](./docs/adr/0016-a-traxremote-train-with-nowhere-to-go-fails-the-build.md), a marked train with nowhere to go fails the build |
 | `RemoteRunResponse.PublicMessage`, `RemoteRunException`, or what a remote failure shows a client | central `docs/0028`, the runner offers only a plain `TrainException`'s message, and every remote failure is rebuilt as a `RemoteRunException` carrying it |
 
-Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Thirty-one name `scheduler`. Besides the workspace-wide conventions and
+Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by folder. Thirty-three name `scheduler`, three of them superseded. Besides the repository-wide conventions and
 `0016` to `0020`, `0022` and `0041` (routed above), `0007` (the canonical train name is the
-interface FullName) is the one this repo touches most, since it is the string stored in
+interface FullName) is the one this folder touches most, since it is the string stored in
 `work_queue.train_name` and the one a remote run puts on the wire. The wire is lenient about
-it: the executing side falls back to the short type name when the FullName does not match. In
-a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
-on GitHub, because it crosses a repository boundary.
+it: the executing side falls back to the short type name when the FullName does not match. The index is at
+[`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).
 
 ## When your change makes a decision
 
 Most changes do not. When one does (reversing it would cost something real, a future reader
 would ask why it is like this, and there were real alternatives), it takes five steps and
-the build enforces four. The `adr-guard` job runs on every pull request.
+the build enforces four. The root CI's `adr-guard` job checks this folder on every pull
+request that changes it or a folder upstream of it.
 
 | | Step | Enforced |
 | --- | --- | --- |
@@ -65,13 +65,15 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Scheduler.Tests.Meta/` holds fifteen convention guards. Thirteen are the
-workspace-wide conventions shared with the other repos. The fourteenth,
+`tests/Trax.Scheduler.Tests.Meta/` holds fifteen convention guards. Twelve are the
+repository-wide conventions shared with the other folders. The thirteenth,
+`SchedulerBuilderOrderDiagnosticsTests`, is this folder's form of the builder-order check that
+Trax.Effect and Trax.Mediator run as `BuilderOrderDiagnosticsTests`. The fourteenth,
 `WorkQueueCreationSitesTests`, also runs in Trax.Api and Trax.Dashboard with a different
 allow-list in each; here it permits only the ManifestManager's enqueue, dormant dependents, and
 `TraxScheduler`'s manifest trigger and dead-letter requeue (`docs/0017`). The fifteenth,
 `TestProjectsAreNotPackedTests`, keeps every project under `tests/` unpackable, since the helper
-library `Trax.Scheduler.Tests.ArrayLogger` once reached nuget.org. The guards this repo's own ADRs name live with the suites they
+library `Trax.Scheduler.Tests.ArrayLogger` once reached nuget.org. The guards this folder's own ADRs name live with the suites they
 belong to rather than in `Tests.Meta`: `RemoteRunContractTests`, `HttpRunExecutorTests` and
 `LambdaRunExecutorTests` for the wire contract, `ProviderConsistencyTests` and
 `SqliteSchedulerBuilderTests` for the provider swap.

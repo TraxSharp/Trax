@@ -157,4 +157,3 @@ tsconfig.tsbuildinfo
 *.csproj.lscache
 
 # Local Trax package version override (CPM)
-trax-local.props

@@ -13,15 +13,16 @@ so rather than silently overriding it.
 central corpus, at `Trax.Docs/adr/`, and declares which repos must obey it. These omit that
 key, because the path already says it.
 
-Numbering is per directory, so `0001` exists in several repos. Cite one of these as
+Numbering is per directory, so `0001` exists in several folders. Cite one of these as
 `effect/0001`.
 
 ## How they are checked
 
-The `adr-guard` job in `.github/workflows/pull_request.yml` runs the guard published by
-Trax.Docs against this directory on every pull request. That job needs nothing else cloned:
-it restores the published guard. To run the same check locally you need the Trax.Docs
-checkout the workspace already has:
+The `adr-guard` job in `.github/workflows/ci.yml`, at the repository root, runs the guard against
+this directory on every pull request that touches this folder or a folder upstream of it. The
+guard is built from `Trax.Docs/tools/Trax.Adr.Guard` in the same checkout. To run the same check
+locally, from this folder, pass the flags the job passes (`.github/ci/packages.json`), or the
+census is not checked at all:
 
 ```bash
 dotnet run --project ../Trax.Docs/tools/Trax.Adr.Guard -- \

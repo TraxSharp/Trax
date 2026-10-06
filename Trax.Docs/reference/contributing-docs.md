@@ -116,7 +116,8 @@ class.
 ## Compiled examples
 
 A C# fence whose info string carries `compile` after the language is compiled in CI against the
-published Trax packages pinned in the repository's `Directory.Packages.props`:
+Trax packages built from the same checkout, which `tests/Trax.Docs.Snippets.Tests` references with
+`ProjectReference`:
 
 ~~~markdown
 ```csharp compile
@@ -146,7 +147,8 @@ joins every compilation from the page, and can hold `global using` lines for the
 examples leave out. `getting-started.md` uses no context file: it is the page a reader copies
 whole.
 
-A Trax `PackageReference` with a `Version` on any page must name the version pinned in that
-project, so a reader installs the release the examples were checked against. When Dependabot bumps
-a pin, update the versions on the pages in the same PR; the lint lists each one.
+Every Trax `PackageReference` with a `Version` on a page names one exact version, the same on
+every page, because every Trax package releases at one version; the lint lists each one that
+differs. A production build of the site stamps the latest release version into each of them, so a
+reader installs the release the site was published from.
 

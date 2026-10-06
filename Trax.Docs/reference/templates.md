@@ -42,8 +42,9 @@ Package versions live in the generated `Directory.Packages.props` (Central Packa
 one line per package, so the `.csproj` files carry no versions. They are the versions the template
 was built and tested against when the package was released. To add a package, run
 `dotnet add package <Name> --version <version>`, which writes the version into
-`Directory.Packages.props` for you. Keep every `Trax.*` package of one family at the same version:
-a new `Trax.Effect.Data.Postgres` goes in at the version `Trax.Effect` already has.
+`Directory.Packages.props` for you. Every Trax package releases at one version, and the template pins every `Trax.*` package at the
+version it was released with. Keep them all at one version: a new `Trax.Effect.Data.Postgres` goes
+in at the version `Trax.Effect` already has.
 
 ## What You Get
 

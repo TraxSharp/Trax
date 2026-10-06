@@ -140,5 +140,5 @@ the state-machine stores tell a lost race for a draft or an effect claim from a 
 ## Integration test databases
 
 A fixture that creates or drops a throwaway database must connect to the always-present
-`postgres` maintenance database, never the app database. CI's `POSTGRES_DB` differs per repo,
+`postgres` maintenance database, never the app database. CI's `POSTGRES_DB` differs per folder,
 so a fixture assuming a specific app database fails with `3D000 database ... does not exist`.

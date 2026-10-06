@@ -66,7 +66,7 @@ A run is otherwise a deliberate bypass of the work queue. It skips dispatch prio
 
 ### When nothing can dispatch a queued run
 
-On a host whose store is in memory (EF Core's InMemory provider, with no database provider registered) the job dispatcher never runs, and no other process can reach the store, so a queued entry would never start. Every method here that would queue a run (`QueueTrainAsync`, `RequeueExecutionAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`) refuses with `OperationsService.NoDispatcherMessage` and writes nothing. `QueueTrainAsync` and `RequeueExecutionAsync` first authorize the caller for the train as the mediator would, so a caller the train refuses gets the authorization failure, not this message. `ITraxScheduler`'s dead-letter requeues, which the dashboard and the API call directly, are refused the same way. `RunTrainAsync` is unaffected. A relational store is never refused, so an API-only host on PostgreSQL whose scheduler runs elsewhere keeps queueing. `ITraxScheduler.TriggerAsync`, called from code, is not refused. See [scheduler ADR 0019](https://github.com/TraxSharp/Trax.Scheduler/blob/main/docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md).
+On a host whose store is in memory (EF Core's InMemory provider, with no database provider registered) the job dispatcher never runs, and no other process can reach the store, so a queued entry would never start. Every method here that would queue a run (`QueueTrainAsync`, `RequeueExecutionAsync`, `TriggerManifestAsync`, `TriggerManifestsAsync`, `TriggerManifestGroupsAsync`) refuses with `OperationsService.NoDispatcherMessage` and writes nothing. `QueueTrainAsync` and `RequeueExecutionAsync` first authorize the caller for the train as the mediator would, so a caller the train refuses gets the authorization failure, not this message. `ITraxScheduler`'s dead-letter requeues, which the dashboard and the API call directly, are refused the same way. `RunTrainAsync` is unaffected. A relational store is never refused, so an API-only host on PostgreSQL whose scheduler runs elsewhere keeps queueing. `ITraxScheduler.TriggerAsync`, called from code, is not refused. See [scheduler ADR 0019](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0019-a-queued-run-is-refused-where-nothing-dispatches-it.md).
 
 ### RequeueExecutionAsync
 
@@ -248,7 +248,7 @@ database failure part way is thrown, not reported; the manifests triggered befor
 triggered, and sending the same batch again is safe, since a manifest holds at most one queued
 entry.
 
-On a relational provider each batch is one `UPDATE` with its state test in it, so a row another writer changes meanwhile keeps its new state. The InMemory provider has no set-based update, so there the rows are loaded, changed and saved, with the same result and count ([scheduler ADR 0007](https://github.com/TraxSharp/Trax.Scheduler/blob/main/docs/adr/0007-the-operations-surface-runs-on-inmemory.md)).
+On a relational provider each batch is one `UPDATE` with its state test in it, so a row another writer changes meanwhile keeps its new state. The InMemory provider has no set-based update, so there the rows are loaded, changed and saved, with the same result and count ([scheduler ADR 0007](https://github.com/TraxSharp/Trax/blob/main/Trax.Scheduler/docs/adr/0007-the-operations-surface-runs-on-inmemory.md)).
 
 ## Read models
 

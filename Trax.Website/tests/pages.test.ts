@@ -66,11 +66,11 @@ test("ADR citations link to the file on GitHub, or to the repo's ADR index", asy
   const html = renderToStaticMarkup(createElement(Content));
   assert.match(
     html,
-    /<a href="https:\/\/github.com\/TraxSharp\/Trax.Docs\/blob\/main\/adr\/0026-role-comparison-is-ordinal.md"><code>Trax.Docs\/adr\/0026<\/code><\/a>/
+    /<a href="https:\/\/github.com\/TraxSharp\/Trax\/blob\/main\/Trax.Docs\/adr\/0026-role-comparison-is-ordinal.md"><code>Trax.Docs\/adr\/0026<\/code><\/a>/
   );
   assert.match(
     html,
-    /<a href="https:\/\/github.com\/TraxSharp\/Trax.Mediator\/blob\/main\/docs\/adr\/README.md">Trax.Mediator\/docs\/adr\/0004<\/a>/
+    /<a href="https:\/\/github.com\/TraxSharp\/Trax\/blob\/main\/Trax.Mediator\/docs\/adr\/README.md">Trax.Mediator\/docs\/adr\/0004<\/a>/
   );
 });
 

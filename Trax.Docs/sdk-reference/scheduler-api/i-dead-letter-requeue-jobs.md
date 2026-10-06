@@ -66,7 +66,7 @@ The messages are the API's, word for word, because both surfaces show the same j
 
 ## Jobs live in the node's memory
 
-Another node does not know a job, and a restart forgets it. Nothing is lost by that: a requeued dead letter no longer awaits intervention, so a fold that stopped part-way left what it finished requeued, and starting another requeues the rest. Two folds on two nodes are safe together, since the scheduler retries a page that loses the race for a manifest's queued entry. Why the state is not in a table is recorded in [Trax.Api ADR 0036](https://github.com/TraxSharp/Trax.Api/blob/main/docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md).
+Another node does not know a job, and a restart forgets it. Nothing is lost by that: a requeued dead letter no longer awaits intervention, so a fold that stopped part-way left what it finished requeued, and starting another requeues the rest. Two folds on two nodes are safe together, since the scheduler retries a page that loses the race for a manifest's queued entry. Why the state is not in a table is recorded in [Trax.Api ADR 0036](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md).
 
 ## Package
 

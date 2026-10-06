@@ -2,7 +2,7 @@
 authors: [Theauxm]
 repos: [core, effect, mediator, scheduler, dashboard, api, cli, samples, docs, website]
 areas: [docs, ci]
-status: accepted
+status: superseded-by-0043
 ---
 
 # A docs change describing new behaviour merges after its code, and its deploy waits for the release
@@ -14,7 +14,8 @@ runs ahead of its package tells readers the package does something it does not.
 
 ## Status
 
-**Accepted.**
+**Superseded by** [0043](./0043-the-site-is-published-from-a-release.md): in one repository a docs
+change lands with its code, and the site is published from each release tag.
 
 ## Why this is written down
 
@@ -67,4 +68,5 @@ described.
 
 ## Changelog
 
+- **2026-10-06**: Superseded by 0043.
 - **2026-10-01**: Recorded.

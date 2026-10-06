@@ -149,5 +149,3 @@ node_modules/
 # MSBuild static graph restore cache
 *.csproj.lscache
 
-# Local CPM override (sets TraxLocalVersion so the local NuGet feed wins)
-trax-local.props

@@ -21,19 +21,20 @@ if your work contradicts one, say so rather than silently overriding it.
 | `QueueTrainOptions.ReplayDecisionsOf`, or the `ITrainExecutionService` overload that carries it | central `docs/0041`, a requeued run replays the decisions of the run it repeats |
 | `TrainChainStartupValidator`, or `SkipChainVerification()` | central `docs/0016`, a chain is a declaration the host reads at startup |
 
-Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty-seven name `mediator`. Besides the workspace-wide conventions, the
+Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by folder. Twenty-nine name `mediator`, three of them superseded. Besides the repository-wide conventions, the
 ones most likely to reach a change here are `0016` to `0019` (routed above) and `0007`, the canonical train name being the interface FullName, which
-`InterfaceFullNameInvariantTests` in this repo enforces at the point of registration, and `0040`/`0041`,
-which a train's decision steps and a requeue's replay link follow. In a
-workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path does not resolve
-on GitHub, because it crosses a repository boundary.
+`InterfaceFullNameInvariantTests` in this folder enforces at the point of registration, and `0040`/`0041`,
+which a train's decision steps and a requeue's replay link follow. `0042` covers how this
+folder references and releases with the others. The index is at
+[`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).
 
 ## When your change makes a decision
 
 Most changes do not. When one does (reversing it would cost something real, a future reader
 would ask why it is like this, and there were real alternatives), it takes five steps and
-the build enforces four. The `adr-guard` job runs on every pull request.
+the build enforces four. The root CI's `adr-guard` job checks this folder on every pull
+request that changes it or a folder upstream of it.
 
 | | Step | Enforced |
 | --- | --- | --- |
@@ -49,11 +50,12 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Mediator.Tests.Meta/` holds fifteen convention guards. Thirteen are shared with
-other repos. Two are this repo's own: `InterfaceFullNameInvariantTests`, which pins the
-canonical-name rule at registration, and `DICompositionSmokeTests`, which fails at the
+`tests/Trax.Mediator.Tests.Meta/` holds sixteen convention guards. Thirteen are shared with
+other folders. Three are this folder's own: `InterfaceFullNameInvariantTests`, which pins the
+canonical-name rule at registration, `DICompositionSmokeTests`, which fails at the
 registration point rather than at first use downstream when a wiring change drops a
-required service.
+required service, and `SubjectKeyGoesThroughCreateTests`, which keeps every queue entry's
+subject key going through `WorkQueue.Create` (`docs/0019`).
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is
@@ -78,9 +80,9 @@ dotnet test tests/Trax.Mediator.Tests.Meta    # the convention guards alone
 dotnet test --filter 'FullyQualifiedName!~Trax.Mediator.Tests.Postgres.Integration'
 ```
 
-This repo ships no compose file and CI provides the database as a workflow service
-(`postgres:17`, user `trax`, database `trax_data_tests`). Locally, bring one up from a
-sibling repo: `docker compose -f ../Trax.Effect/docker-compose.yml up -d` matches the
+This folder ships no compose file, and the root CI provides the database as a service container
+(`postgres:17`, user `trax`, database `trax_data_tests` from `.github/ci/packages.json`).
+Locally, bring one up from another folder: `docker compose -f ../Trax.Effect/docker-compose.yml up -d` matches the
 committed connection string exactly, because its `init-databases.sh` creates
 `trax_data_tests` alongside `trax` on the container's first start. Trax.Scheduler's compose
 file is the same and Trax.Samples' is a superset of it. Any other Postgres works too, as long

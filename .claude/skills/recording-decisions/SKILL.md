@@ -1,6 +1,6 @@
 ---
 name: recording-decisions
-description: Record an architecture decision as an ADR in the Trax workspace. Use when a change makes a decision that is hard to reverse, surprising without context, and the result of a real trade-off, or when editing, superseding or reviewing an existing ADR.
+description: Record an architecture decision as an ADR in the Trax repository. Use when a change makes a decision that is hard to reverse, surprising without context, and the result of a real trade-off, or when editing, superseding or reviewing an existing ADR.
 ---
 
 # Recording decisions
@@ -40,15 +40,16 @@ record beyond "we did the obvious thing".
 
 ## Where it goes
 
-**Does the decision bind more than one repo?**
+**Does the decision bind more than one folder?** (The repository holds one folder per
+package family: `Trax.Core`, `Trax.Effect`, ... `Trax.Docs`, `Trax.Website`.)
 
-- **Yes:** `Trax.Docs/adr/`. Declare `repos:` listing every repo whose developers could
-  break it without realising.
-- **No:** `<Repo>/docs/adr/` in the repo it governs. **Omit** `repos:`, because the path
+- **Yes:** `Trax.Docs/adr/`. Declare `repos:` listing every folder whose developers could
+  break it without realising (the key keeps its old name; its values are folder slugs).
+- **No:** `<Folder>/docs/adr/` in the folder it governs. **Omit** `repos:`, because the path
   already says it and a second place to say it is a second place to drift.
 
-Numbering is per directory, so the same number exists in several repos. Cite a repo-scoped
-ADR as `effect/0001`.
+Numbering is per directory, so the same number exists in several folders. Cite a
+folder-scoped ADR as `effect/0001`.
 
 ## The five steps, four of which the build enforces
 
@@ -62,7 +63,7 @@ ADR as `effect/0001`.
 
 A sixth step applies where the census is switched on with `--census-root`: every guard class
 under that root must be named by an ADR or carry `Not ADR-enforcing: <reason>` in its own
-docstring. Every repo that runs the guard switches it on over its `Tests.Meta` project
+docstring. Every folder the guard runs over switches it on for its `Tests.Meta` project
 (`tests/Trax.Docs.Tests` in Trax.Docs).
 
 Step 1 is the only one you have to remember, because no test can detect a decision you
@@ -70,19 +71,19 @@ chose not to record. Everything after it fails the build until it is done.
 
 ## Running the checks locally
 
-The workspace has `Trax.Docs` as a sibling directory, so the guard runs against any repo
-without cloning anything:
+From the repository root, against one folder:
 
 ```bash
-# From the repo being checked
-dotnet run --project ../Trax.Docs/tools/Trax.Adr.Guard -- \
-  --repo . --known-areas <the repo's vocabulary>
+dotnet run --project Trax.Docs/tools/Trax.Adr.Guard -- \
+  --repo Trax.Core --known-areas <the folder's vocabulary>
 ```
 
-The same tool runs in CI through the `adr-guard` composite action, which Trax.Docs
-publishes. The eight code repos each call it over their own `docs/adr/`, and Trax.Docs over
-the central corpus. Trax.Website has no .NET project and no CI workflow, so nothing runs
-there, though `website` is a valid `repos` slug and a central ADR can bind it.
+Each folder's vocabulary, ADR directory and census root are in `.github/ci/packages.json`,
+under its `adr` entry. CI runs the same tool through the local `.github/actions/adr-guard`
+action, once per folder that has a corpus: the eight code folders over their own `docs/adr/`,
+and Trax.Docs over the central corpus. The guard is built from the same commit it checks, so
+a guard change and the ADRs it newly fails land in one pull request. Trax.Website has no
+corpus of its own, though `website` is a valid `repos` slug and a central ADR can bind it.
 
 ## Writing it
 
@@ -93,8 +94,8 @@ link. If you find yourself explaining *how*, you are writing the wrong document.
 explanation has no home yet, write it there and link it rather than growing the ADR.
 
 **No em-dashes.** The guard's hygiene check rejects them wherever the ADR lives. In Trax.Docs
-`NoEmDashesTests` covers every `.md` in the repo as well, the central ADR corpus included; in
-the other repos the hygiene check is the only thing that sees an ADR.
+`NoEmDashesTests` covers every `.md` in the folder as well, the central ADR corpus included; in
+the other folders the hygiene check is the only thing that sees an ADR.
 
 ## When your change contradicts one
 

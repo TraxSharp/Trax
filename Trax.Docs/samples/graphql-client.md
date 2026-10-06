@@ -8,7 +8,7 @@ nav_order: 5
 
 # GraphQL Client
 
-`samples/GraphQLClient` in [Trax.Samples](https://github.com/TraxSharp/Trax.Samples) calls GraphQL
+`samples/GraphQLClient` in [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) calls GraphQL
 servers from .NET code with `Trax.Api.GraphQL.Client`. Each request is validated against the
 server's schema before it is sent, so a query the server cannot answer fails in the caller, with no
 HTTP round trip. Everything runs in memory: no database, no broker.

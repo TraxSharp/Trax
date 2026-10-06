@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Test Conventions
-description: "Test conventions across the Trax repos: folder layout and what TestFolderLayoutTests checks, fixtures, naming, assertions, coverage, determinism and skipping."
+description: "Trax test conventions: folder layout and what TestFolderLayoutTests checks, fixtures, naming, assertions, coverage, determinism and skipping."
 parent: Reference
 nav_order: 12
 ---
@@ -22,13 +22,14 @@ IntegrationTests/   shared DI container and/or database
 ```
 
 A project takes the ones it needs. Most have two or three, and `Fakes/Models/` exists in
-exactly one project workspace-wide. Use a name from this list when it fits; invent one only
+exactly one project in the repository. Use a name from this list when it fits; invent one only
 when nothing here describes what the folder holds.
 
 `TestFolderLayoutTests` does not check that list. It checks three things, all of them shape
 rather than content: no folder named `Junk`, `Tmp`, `Temp`, `Misc`, `Old`, `Legacy`, `.vs`,
 `.idea` or `node_modules` directly under a test project; every other top-level folder name in
-PascalCase; and the repo `.gitignore` mentioning `TestResults`. A project whose only folder is
+PascalCase; and the `.gitignore` of the project's folder (`Trax.Core/`, `Trax.Effect/`, ...) mentioning
+`TestResults`. A project whose only folder is
 `Banana/` passes all three.
 
 ## Fixture patterns

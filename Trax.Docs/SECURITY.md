@@ -6,7 +6,7 @@ description: How to report a Trax vulnerability privately, which versions receiv
 
 ## Reporting a vulnerability
 
-Report security issues privately through GitHub's [private vulnerability reporting](https://github.com/TraxSharp/Trax.Docs/security/advisories/new), not a public issue. We aim to acknowledge within 3 business days.
+Report security issues privately through GitHub's [private vulnerability reporting](https://github.com/TraxSharp/Trax/security/advisories/new), not a public issue. We aim to acknowledge within 3 business days.
 
 Where possible, include the affected package and version, a description, reproduction steps or a proof of concept, and the impact.
 

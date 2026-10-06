@@ -14,7 +14,7 @@ The working assumption throughout is that any code in a CI job may be compromise
 
 ## Pinned, integrity-verified dependencies
 
-Every .NET repository (the eight code repositories and Trax.Docs) uses Central Package Management. Cross-repo `Trax.*` references and third-party packages are pinned in a single `Directory.Packages.props` per repository, and project files carry no inline versions. The pins are exact versions, with one recorded exception: Trax.Dashboard lets `Radzen.Blazor` and its test-only `Microsoft.Extensions.DependencyInjection` float within their major (`11.*`, `10.*`), as its ADR 0006 records, and the committed lockfile still fixes the resolved version and its hash. Trax.Website is an npm project and pins through its committed `package-lock.json`.
+Every Trax package is built from the one [TraxSharp/Trax](https://github.com/TraxSharp/Trax) repository, and its .NET folders use Central Package Management. Third-party packages are pinned in a single `Directory.Packages.props` at the repository root, and project files carry no inline versions. Trax packages reference each other with `ProjectReference`, so there are no `Trax.*` pins. The pins are exact versions, with one recorded exception: Trax.Dashboard lets `Radzen.Blazor` and its test-only `Microsoft.Extensions.DependencyInjection` float within their major (`11.*`, `10.*`), as its ADR 0006 records, and the committed lockfile still fixes the resolved version and its hash. Trax.Website is an npm project and pins through its committed `package-lock.json`.
 
 `RestorePackagesWithLockFile` is on for every project, and each one commits a `packages.lock.json` capturing the full transitive graph with content hashes. CI restores with `dotnet restore --locked-mode`, which fails the build on any drift from the committed lockfile. Because a locked restore only checks a lockfile that exists, CI also fails when a tracked project is outside the solution (so CI would never restore it) or has no committed lockfile. The npm release tooling is locked the same way and installed with `npm ci --ignore-scripts`, so a package cannot execute code merely by being installed.
 
@@ -30,15 +30,15 @@ NuGetAudit runs over the whole graph, direct and transitive, with every severity
 | No install-time execution | `npm ci --ignore-scripts` for release tooling |
 | Lockfile hygiene | CI guard rejects a lockfile containing a local-only resolved version |
 
-Dependabot proposes updates weekly for NuGet, npm, GitHub Actions and, where a repository has them, Dockerfiles, compose files and the sample applications' frontends. It waits seven days after a version is published before proposing it, so a version that is pulled soon after release never reaches a pull request. Security updates are not delayed.
+Dependabot, configured once in the root `.github/dependabot.yml`, proposes updates weekly for NuGet, npm, GitHub Actions, Dockerfiles, compose files and the sample applications' frontends. It waits seven days after a version is published before proposing it, so a version that is pulled soon after release never reaches a pull request. Security updates are not delayed.
 
 ## Separated build, release, and publish
 
-Each release pipeline is split into jobs, because a job is the isolation unit (a fresh runner with its own secret access):
+The release workflow (`.github/workflows/release.yml`) is split into jobs, because a job is the isolation unit (a fresh runner with its own secret access):
 
-- **build / test** restores, compiles and runs the tests, and holds no release or publish credential.
+- **build / test** runs the full CI (`.github/workflows/ci.yml`) over every folder: restore, compile and test. It holds no release or publish credential.
 - **coverage** uploads the test coverage to Codecov. It holds the Codecov token, and runs no restore, build or project code.
-- **release** runs only for a manual dispatch of `main`. It runs semantic-release with a token that can write tags and GitHub releases. When a version is cut, the same job runs `dotnet restore --locked-mode` and `dotnet pack`, so it builds the package artifact, and records the SHA-256 digest of each package as a job output. It does not hold the publish credential.
+- **release** runs only for a manual dispatch of `main`. It runs semantic-release with a token that can write tags and GitHub releases. When a version is cut, the same job runs `dotnet restore --locked-mode` and `dotnet pack` for every package at that one version, so it builds the package artifact, and records the SHA-256 digest of each package as a job output. It does not hold the publish credential.
 - **publish** downloads that artifact, checks that the set of packages and every digest match what the release job recorded, then attests and pushes them unchanged. It installs the exact SDK version in `global.json` to run `dotnet nuget push`, and runs no restore, build, test or package code. It holds the only credential that can publish.
 
 The publish credential is therefore never present in a job that executes dependency code, and publish refuses any package that is not byte-for-byte what the release job built. The release job is not as clean: restoring and packing runs dependency code (MSBuild targets, analyzers, source generators) in the same job as its `contents: write` token, and that code shapes the `.nupkg` that publish attests.
@@ -49,11 +49,11 @@ Workflows default to `permissions: {}` and widen only what each job needs. The b
 
 ## Pinned actions and images
 
-Every `uses:` reference is pinned to a full commit SHA, and every service-container image is pinned to a digest. Moving a tag does not change what a workflow executes on its next run; updates arrive as reviewable changes to the pinned SHA. Every .NET repository pins its SDK in `global.json` with roll-forward disabled.
+Every `uses:` reference is pinned to a full commit SHA, and every service-container image is pinned to a digest. Moving a tag does not change what a workflow executes on its next run; updates arrive as reviewable changes to the pinned SHA. The repository pins its SDK in the root `global.json` with roll-forward disabled.
 
 ## Reviewed changes
 
-Each .NET repository has a `CODEOWNERS` file that names the maintainer for every path, and lists the files that decide what CI runs and what gets restored (`.github/`, the `Directory.*.props` files, `global.json`) explicitly. The organisation ruleset requires a code owner's approval on `main`.
+The root `.github/CODEOWNERS` file names the maintainer for every path, and lists the files that decide what CI runs, what gets restored and how a release is cut (`.github/`, the `Directory.*.props` files, `global.json`, the release tooling) explicitly. The organisation ruleset requires a code owner's approval on `main`.
 
 On every pull request, CodeQL analyses the C# sources and the workflows (with `build-mode: none`, so the analysis runs no restore, MSBuild targets or package code), and zizmor audits the workflows for template injection, persisted credentials, unpinned actions and dangerous triggers.
 
@@ -61,18 +61,18 @@ On every pull request, CodeQL analyses the C# sources and the workflows (with `b
 
 Packages are published to nuget.org with Trusted Publishing. The publish job exchanges a short-lived GitHub OIDC token for a temporary, single-use nuget.org API key (valid roughly one hour) scoped by a publishing policy to the exact repository, workflow file, and deployment environment. No long-lived publishing key is stored, rotated, or exposed.
 
-Two long-lived secrets remain, each bound to one job: the Codecov upload token, held only by the coverage job, and the Vercel deploy hook that rebuilds the website, held in the protected `website-deploy` environment of Trax.Docs.
+One long-lived secret remains, bound to one job: the Codecov upload token, held only by the coverage job. The website is published by moving the `website` branch with the workflow's own token, behind the protected `website-deploy` environment.
 
 ## Signed build provenance
 
-Every package version published since 2026-07-02, when trusted publishing and attestation were introduced, carries SLSA build provenance, generated keylessly in the publish job and recorded in the Sigstore transparency log. Versions published before that date have none. The attestation binds each package digest to the repository, workflow, and commit that produced it.
+Every package version published since 2026-07-02, when trusted publishing and attestation were introduced, carries SLSA build provenance, generated keylessly in the publish job and recorded in the Sigstore transparency log. Versions published before that date have none. The attestation binds each package digest to the repository, workflow, and commit that produced it. From 1.61.0 that repository is `TraxSharp/Trax`; earlier versions were attested to the separate repository each package was built in then, such as `TraxSharp/Trax.Core`.
 
 nuget.org adds its own repository signature to a package after it is pushed, as a `.signature.p7s` entry inside the `.nupkg`. That changes the file's digest, so `gh attestation verify` fails on the package exactly as downloaded. Deleting that one entry gives back the bytes the publish job attested. Verify a copy, not the package your restore uses:
 
 ```bash
-cp trax.core.1.8.0.nupkg verify.nupkg
+cp trax.core.1.61.0.nupkg verify.nupkg
 zip -d verify.nupkg .signature.p7s
-gh attestation verify verify.nupkg --repo TraxSharp/Trax.Core
+gh attestation verify verify.nupkg --repo TraxSharp/Trax
 ```
 
 ## Deterministic builds
@@ -93,7 +93,7 @@ Externally-influenced fields (pull request titles, branch names, commit messages
 
 ## Enforced conventions
 
-The conventions above are enforced, not just documented. `Trax.Core.Testing` ships architecture guards for the dependency model (centrally-managed versions, no inline versions on cross-repo references), repository structure, and test hygiene. Trax.Core, Trax.Effect, Trax.Mediator and Trax.Dashboard run them against their own tree. Trax.Scheduler, Trax.Api, Trax.Cli and Trax.Samples do not run them over their repository, and enforce their conventions with their own `Tests.Meta` suites instead. Either way, a change that violates a checked convention fails CI rather than drifting in silently.
+The conventions above are enforced, not just documented. Each folder's `Tests.Meta` suite checks the dependency model: a Trax package built in the repository is referenced with `ProjectReference`, never `PackageReference` (`TraxReferencesAreProjectReferencesTests`), every reference points upstream (`DependencyDirectionTests`), and every pin in the root `Directory.Packages.props` is used by some project (`NoOrphanPackageVersionTests`). `Trax.Core.Testing` also ships architecture guards for repository structure and test hygiene that consumers can run over their own code. A change that violates a checked convention fails CI rather than drifting in silently.
 
 ## Layered, not trusted
 

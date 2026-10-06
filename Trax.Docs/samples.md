@@ -9,14 +9,14 @@ section: Guides
 
 # Samples & Deployment Patterns
 
-[Trax.Samples](https://github.com/TraxSharp/Trax.Samples) holds one sample per major Trax feature. Each is a complete,
+[Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples) holds one sample per major Trax feature. Each is a complete,
 runnable application that shows that feature and as little else as possible, and each has an end-to-end test suite
 that runs against the real host, so what a page here tells you to copy is something CI has seen work. Start from the
 sample for the feature you need, then read its page: it lists the packages, the full `Program.cs`, what refuses
 startup and why, and a "Try it" walkthrough whose commands were run as written.
 
 Features without a sample of their own are proven by a test in their own repository; the
-[feature-coverage table](https://github.com/TraxSharp/Trax.Samples#feature-coverage) lists every major feature and
+[feature-coverage table](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples#feature-coverage) lists every major feature and
 the test class that proves it.
 
 Starting a new server rather than learning one feature? The [project templates](/docs/reference/templates)
@@ -145,7 +145,8 @@ Each executable is a `Microsoft.NET.Sdk.Web` project with a `ProjectReference` t
 </Project>
 ```
 
-The versions are the releases these docs are checked against. Pin exact versions, ideally once for
+The version is the release this site was published from, and every Trax package shares it. Pin
+exact versions, ideally once for
 the solution in `Directory.Packages.props`: a floating `Version="1.*"` restores whatever was
 published last, and a Trax minor release can change an API your trains call.
 

@@ -150,4 +150,3 @@ node_modules/
 *.csproj.lscache
 
 # Local NuGet version override (CPM); generated for cross-repo dev, never committed
-trax-local.props

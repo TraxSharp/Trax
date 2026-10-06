@@ -2,9 +2,9 @@
 
 The effect layer: execution metadata, data contexts, effect and junction providers, the
 state machine engine, and the Postgres / Sqlite / InMemory data providers. It sits directly
-above `Trax.Core`, so a change here reaches the six repos downstream of it (Trax.Mediator,
-Trax.Scheduler, Trax.Api, Trax.Dashboard, Trax.Cli and Trax.Samples) through a published
-package. Trax.Core is upstream and never sees it.
+above `Trax.Core`, so a change here reaches the six folders downstream of it (Trax.Mediator,
+Trax.Scheduler, Trax.Api, Trax.Dashboard, Trax.Cli and Trax.Samples) through project
+references, in the same commit. Trax.Core is upstream and never sees it.
 
 This file is the entry point. It routes; it does not restate the rules.
 
@@ -40,8 +40,8 @@ if your work contradicts one, say so rather than silently overriding it.
 | a state-machine draft's `requestId` replay, or `ISnapshotStore.UpdateWithRequest` | [0013](./docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md), an id replays only for the trigger it recorded, and a request whose outcome was undone fires again |
 | what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
 
-Decisions binding more than one repo live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by repo. Twenty-seven name `effect`: executable guards, exact version pinning, the
+Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
+index lists them by folder. Twenty-nine name `effect`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,
@@ -51,16 +51,17 @@ a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), 
 queued work running one at a time (`0019`), failures being classified where they happen
 (`0020`), a queue hook reading its input through `TrainInput` (`0021`), a warning failing the CI build
 (`0032`), packages validating against their last release (`0033`), a feature table shipping with its
-model on `IDataContext` (`0036`), the ADR guard being released by tag (`0038`), docs merging after
-their code (`0039`), a decider choosing a declared track (`0040`), and a requeued run replaying the
-decisions it repeats (`0041`). In a workspace checkout the index is at `../Trax.Docs/adr/README.md`; that path
-does not resolve on GitHub, because it crosses a repository boundary.
+model on `IDataContext` (`0036`), a decider choosing a declared track (`0040`), a requeued run
+replaying the decisions it repeats (`0041`), one repository releasing at one version (`0042`), and
+the site publishing from a release (`0043`). The index is at
+[`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).
 
 ## When your change makes a decision
 
 Most changes do not. When one does (reversing it would cost something real, a future reader
 would ask why it is like this, and there were real alternatives), it takes five steps and
-the build enforces four. The `adr-guard` job runs on every pull request.
+the build enforces four. The root CI's `adr-guard` job checks this folder on every pull
+request that changes it or a folder upstream of it.
 
 | | Step | Enforced |
 | --- | --- | --- |
@@ -76,11 +77,12 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Effect.Tests.Meta/` holds the convention guards. Thirteen of the sixteen are
-shared with other repos and enforce workspace-wide rules: ten appear in all eight code
-repos, `PublicApiSurfaceTests` in the seven that publish an API surface,
-`TraxPinLockstepTests` in five and `BuilderPartialSplitTests` in three. Three are unique to
-this repo: `MigrationsIntegrityTests`, `ModelPersistentPairingTests`, and
+`tests/Trax.Effect.Tests.Meta/` holds the convention guards. Thirteen of the eighteen are
+shared with other folders and enforce repository-wide rules: ten appear in all eight code
+folders, `PublicApiSurfaceTests` in the seven that publish an API surface,
+`BuilderPartialSplitTests` in three and `BuilderOrderDiagnosticsTests` in two. Five are unique to
+this folder: `MigrationsIntegrityTests`, `ModelPersistentPairingTests`,
+`PostgresMigrationRerunTests`, `ServiceTrainRunIsSealedTests` (`0009`), and
 `PostgresEnumVocabularyTests`, which checks that the three Postgres enum mappings name the same
 enums and that each enum's members match its migrations (`0006`).
 
@@ -94,7 +96,7 @@ model-versus-DDL drift guard for the state-machine tables, and `EveryTableIsMode
 with `SqliteEveryTableIsModelledTests` is the one for the data context: every migrated table is
 mapped, and every mapped column exists (`0036`). The Postgres ones need a live Postgres. `docker compose up -d` provides one.
 
-This repo also **ships** guards rather than only running them, and those live outside the
+This folder also **ships** guards rather than only running them, and those live outside the
 census root. `src/Trax.Effect.Data.Testing/DataLayerGuards.cs` is the data-layer guard
 engine: domain contexts derive the shared base, each one has a companion interface, each
 owns a distinct schema, a migration-based context has no pending model changes, and every
@@ -103,7 +105,7 @@ entity holding per-user data is filtered through the principal and exposed only 
 `DomainDataLayerGuardFixture.cs` next to it is the turnkey fixture a consumer subclasses to
 run all five without writing a test body. `tests/Trax.Effect.Data.Testing.Tests/` is their
 own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
-consumer would. Changing either file changes what every consuming repo enforces, so treat
+consumer would. Changing either file changes what every consumer enforces, so treat
 them as published API, not as test helpers.
 
 ## Running the tests
@@ -113,8 +115,8 @@ docker compose up -d          # Postgres for the integration suites
 dotnet test
 ```
 
-This repo's compose file defines one service, Postgres. The RabbitMQ broadcaster suite wants
-a broker at `amqp://trax:trax123@localhost:5672/` and this repo ships nothing that starts
+This folder's compose file defines one service, Postgres. The RabbitMQ broadcaster suite wants
+a broker at `amqp://trax:trax123@localhost:5672/` and this folder ships nothing that starts
 one: CI provisions a `rabbitmq:4-management` service container, and locally the broker comes
 from `../Trax.Samples/docker-compose.yml`, whose `rabbitmq` service uses the same
 credentials. Without a broker only one of that file's seven tests skips itself, the one that
