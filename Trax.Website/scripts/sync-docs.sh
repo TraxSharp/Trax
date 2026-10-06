@@ -48,8 +48,11 @@ done
 if [ -n "${TRAX_DOCS_VERSION:-}" ] || [ "${VERCEL_ENV:-}" = "production" ]; then
   version="${TRAX_DOCS_VERSION:-}"
   if [ -z "$version" ]; then
-    version=$(curl -fsS --retry 3 https://api.github.com/repos/TraxSharp/Trax/releases/latest \
-      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).tag_name.replace(/^v/,"")))')
+    # The release page redirects to the latest release's tag. It is read from github.com, not
+    # the REST API, because the API limits unauthenticated calls per IP and build machines
+    # share theirs.
+    latest=$(curl -fsS --retry 3 -o /dev/null -w '%{redirect_url}' https://github.com/TraxSharp/Trax/releases/latest)
+    version="${latest##*/v}"
   fi
   if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "error: '$version' is not a release version; refusing to stamp the docs with it" >&2
