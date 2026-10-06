@@ -487,6 +487,108 @@ public class TraxLambdaFunctionTests
 
     #endregion
 
+    #region RunLocalAsync
+
+    [Test]
+    [NonParallelizable]
+    public async Task RunLocalAsync_from_another_directory_listens_where_its_appsettings_say_and_stops_when_cancelled()
+    {
+        // Read from the content root by environment name, so no other test sees the file.
+        var environment = $"LocalRunner{Guid.NewGuid():N}";
+        var settings = Path.Combine(AppContext.BaseDirectory, $"appsettings.{environment}.json");
+        var port = FreePort();
+        await File.WriteAllTextAsync(settings, $$"""{ "Urls": "http://127.0.0.1:{{port}}" }""");
+
+        var elsewhere = Directory.CreateTempSubdirectory("trax-local-runner-");
+        var previous = Directory.GetCurrentDirectory();
+        using var stop = new CancellationTokenSource();
+        Task running;
+        try
+        {
+            Directory.SetCurrentDirectory(elsewhere.FullName);
+            running = new TestFunction().RunLocalAsync(["--environment", environment], stop.Token);
+
+            using var http = new HttpClient();
+            var response = await RetryUntilListeningAsync(() =>
+                http.PostAsync($"http://127.0.0.1:{port}/trax/run", new StringContent("{}"))
+            );
+            response
+                .StatusCode.Should()
+                .NotBe(HttpStatusCode.NotFound, "the runner's route answered");
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+            File.Delete(settings);
+        }
+
+        await stop.CancelAsync();
+        // negative-wait: an upper bound on shutdown, not a wait for it.
+        (await Task.WhenAny(running, Task.Delay(TimeSpan.FromSeconds(10))))
+            .Should()
+            .BeSameAs(running, "cancelling the token stops the server");
+        await running;
+        elsewhere.Delete(recursive: true);
+    }
+
+    [Test]
+    [NonParallelizable]
+    public void CreateLocalBuilder_defaults_the_content_root_to_the_base_directory_but_honours_an_argument()
+    {
+        var elsewhere = Directory.CreateTempSubdirectory("trax-local-runner-");
+        var previous = Directory.GetCurrentDirectory();
+        try
+        {
+            Directory.SetCurrentDirectory(elsewhere.FullName);
+
+            Path.TrimEndingDirectorySeparator(
+                    TraxLambdaFunction.CreateLocalBuilder([]).Environment.ContentRootPath
+                )
+                .Should()
+                .Be(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
+            Path.TrimEndingDirectorySeparator(
+                    TraxLambdaFunction
+                        .CreateLocalBuilder([$"--contentRoot={elsewhere.FullName}"])
+                        .Environment.ContentRootPath
+                )
+                .Should()
+                .Be(Path.TrimEndingDirectorySeparator(elsewhere.FullName));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+            elsewhere.Delete(recursive: true);
+        }
+    }
+
+    private static int FreePort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private static async Task<HttpResponseMessage> RetryUntilListeningAsync(
+        Func<Task<HttpResponseMessage>> send
+    )
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (true)
+        {
+            try
+            {
+                return await send();
+            }
+            catch (HttpRequestException) when (DateTime.UtcNow < deadline)
+            {
+                // determinism: the poll interval of a bounded wait for the server to listen.
+                await Task.Delay(50);
+            }
+        }
+    }
+
+    #endregion
+
     #region ConfigureRoutes — local HTTP host
 
     [Test]

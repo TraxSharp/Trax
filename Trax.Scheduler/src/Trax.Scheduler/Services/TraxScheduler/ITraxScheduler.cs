@@ -397,7 +397,11 @@ public interface ITraxScheduler
     /// Acknowledges a single dead letter without retrying.
     /// </summary>
     /// <param name="deadLetterId">The ID of the dead letter to acknowledge.</param>
-    /// <param name="note">A note explaining the acknowledgement.</param>
+    /// <param name="note">
+    /// A note explaining the acknowledgement. One longer than
+    /// <c>TraxScheduler.MaxAcknowledgeNoteLength</c> (1,000) characters is refused and nothing
+    /// changes.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Result indicating success.</returns>
     Task<DeadLetterOperationResult> AcknowledgeDeadLetterAsync(
@@ -448,7 +452,8 @@ public interface ITraxScheduler
     /// <returns>The number of dead letters successfully acknowledged.</returns>
     /// <remarks>
     /// An empty list, or one longer than <c>OperationsService.MaxBatchSize</c> (1000) ids, is
-    /// refused: the result counts nothing and its message says why.
+    /// refused: the result counts nothing and its message says why. So is a note longer than
+    /// <c>TraxScheduler.MaxAcknowledgeNoteLength</c> (1,000) characters.
     /// </remarks>
     Task<BatchDeadLetterResult> AcknowledgeDeadLettersAsync(
         long[] deadLetterIds,
@@ -482,11 +487,43 @@ public interface ITraxScheduler
     ) => throw NotImplementedBy(nameof(RequeueAllDeadLettersAsync));
 
     /// <summary>
+    /// Requeues all dead letters in AwaitingIntervention status, as
+    /// <see cref="RequeueAllDeadLettersAsync(bool, CancellationToken)"/> does, reporting after each
+    /// page how many dead letters it has resolved so far. The requeue-all background job reads it
+    /// to say how far it has got.
+    /// </summary>
+    /// <param name="askAfresh">True queues every run to ask its deciders afresh.</param>
+    /// <param name="progress">
+    /// Told the running total of dead letters resolved after each page commits, on the fold's own
+    /// thread; <c>null</c> reports nothing. An implementation that predates this overload runs
+    /// the fold without reporting.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(
+        bool askAfresh,
+        IProgress<int>? progress,
+        CancellationToken ct = default
+    ) =>
+        askAfresh
+            ? RequeueAllDeadLettersAsync(askAfresh: true, ct)
+            : RequeueAllDeadLettersAsync(ct);
+
+    /// <summary>
     /// Acknowledges all dead letters in AwaitingIntervention status.
     /// </summary>
-    /// <param name="note">A note explaining the acknowledgement.</param>
+    /// <param name="note">
+    /// A note explaining the acknowledgement, written onto every awaiting row. One longer than
+    /// <c>TraxScheduler.MaxAcknowledgeNoteLength</c> (1,000) characters is refused: the result
+    /// counts nothing and nothing changes.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of dead letters acknowledged.</returns>
+    /// <remarks>
+    /// On a relational store the rows are acknowledged a page at a time in id order, each page in
+    /// its own statement, so no one statement outlasts the database's command timeout however
+    /// large the backlog. A failure or cancellation part-way leaves the pages already done
+    /// acknowledged; acknowledging all again finishes the rest.
+    /// </remarks>
     Task<BatchDeadLetterResult> AcknowledgeAllDeadLettersAsync(
         string note,
         CancellationToken ct = default

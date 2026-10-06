@@ -356,7 +356,6 @@ public class TriggerAlreadyQueuedTests
         await fx.MaterializePendingManifestsAsync();
         var retryId = await QueueRetryAsync(fx, "aq-a", DateTime.UtcNow.AddMinutes(30));
 
-        var before = DateTime.UtcNow;
         await fx.Scheduler.TriggerAsync("aq-a");
 
         fx.DataContext.Reset();
@@ -366,9 +365,10 @@ public class TriggerAlreadyQueuedTests
         retry.Status.Should().Be(WorkQueueStatus.Queued);
         retry
             .ScheduledAt.Should()
-            .NotBeNull()
-            .And.BeOnOrBefore(DateTime.UtcNow)
-            .And.BeOnOrAfter(before.AddSeconds(-1));
+            .BeNull(
+                "brought forward to now, it stores no time, as an immediate trigger's new entry "
+                    + "does, so it waits on no clock"
+            );
         (await QueuedPerManifest(fx)).Should().Equal(new Dictionary<string, int> { ["aq-a"] = 1 });
         logs.Messages.Should()
             .Contain(m => m.Contains("moved it forward"), "the trigger says what it did");

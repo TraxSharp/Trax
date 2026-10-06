@@ -13,10 +13,12 @@ using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
+using Trax.Effect.Services.TrainLifecycleHook;
 using Trax.Mediator.Extensions;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
@@ -44,6 +46,7 @@ public class DispatchFailureHandlingTests
     private ServiceProvider _serviceProvider = null!;
     private IServiceScope _scope = null!;
     private IDataContext _dataContext = null!;
+    private readonly LifecycleRecorder _lifecycle = new();
 
     [OneTimeSetUp]
     public async Task RunBeforeAnyTests()
@@ -65,6 +68,7 @@ public class DispatchFailureHandlingTests
                             .AddDataContextLogging(minimumLogLevel: LogLevel.Trace)
                             .AddJson()
                             .AddJunctionLogger(serializeJunctionData: true)
+                            .AddLifecycleHook<RecordingLifecycleHook>()
                     )
                     .AddMediator(
                         typeof(AssemblyMarker).Assembly,
@@ -76,6 +80,7 @@ public class DispatchFailureHandlingTests
                         )
                     )
             )
+            .AddSingleton(_lifecycle)
             .AddScoped<IDataContext>(sp =>
             {
                 var factory = sp.GetRequiredService<IDataContextProviderFactory>();
@@ -96,6 +101,7 @@ public class DispatchFailureHandlingTests
         _scope = _serviceProvider.CreateScope();
         _dataContext = _scope.ServiceProvider.GetRequiredService<IDataContext>();
         await TestSetup.CleanupDatabase(_dataContext);
+        _lifecycle.Clear();
     }
 
     [TearDown]
@@ -411,6 +417,225 @@ public class DispatchFailureHandlingTests
         }
     }
 
+    [Test]
+    public async Task A_run_that_fails_dispatch_for_good_publishes_its_failure_once()
+    {
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        config.MaxDispatchAttempts = 2;
+
+        try
+        {
+            var manifest = await CreateAndSaveManifest();
+            var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+            await RunDispatcherCycle();
+            _lifecycle
+                .Events.Should()
+                .BeEmpty("a requeued attempt is not the run's outcome: the entry runs again");
+
+            await ElapseDispatchBackoff();
+            await RunDispatcherCycle();
+
+            _dataContext.Reset();
+            var failed = await _dataContext
+                .Metadatas.AsNoTracking()
+                .Where(m => m.ManifestId == manifest.Id)
+                .OrderByDescending(m => m.Id)
+                .FirstAsync();
+            _lifecycle
+                .Events.Should()
+                .Equal(
+                    ("Failed", failed.Id, entry.ExternalId, TrainState.Failed),
+                    ("StateChanged", failed.Id, entry.ExternalId, TrainState.Failed)
+                );
+        }
+        finally
+        {
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
+    [Test]
+    public async Task A_dispatch_failure_with_requeue_off_publishes_the_failure()
+    {
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        config.MaxDispatchAttempts = 0;
+
+        try
+        {
+            var manifest = await CreateAndSaveManifest();
+            var entry = await CreateAndSaveWorkQueueEntry(manifest);
+
+            await RunDispatcherCycle();
+
+            _lifecycle
+                .Events.Select(e => (e.Event, e.ExternalId, e.State))
+                .Should()
+                .Equal(
+                    ("Failed", entry.ExternalId, TrainState.Failed),
+                    ("StateChanged", entry.ExternalId, TrainState.Failed)
+                );
+        }
+        finally
+        {
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
+    [Test]
+    public async Task An_entry_whose_input_cannot_be_read_publishes_its_failed_run()
+    {
+        var manifest = await CreateAndSaveManifest();
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(SchedulerTestTrain).FullName!,
+                Input = """{"value":{"not":"a string"}}""",
+                InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
+                ManifestId = manifest.Id,
+            }
+        );
+        await _dataContext.Track(entry);
+        await _dataContext.SaveChanges(CancellationToken.None);
+        _dataContext.Reset();
+
+        await RunDispatcherCycle();
+
+        _lifecycle
+            .Events.Select(e => (e.Event, e.ExternalId, e.State))
+            .Should()
+            .Equal(
+                ("Failed", entry.ExternalId, TrainState.Failed),
+                ("StateChanged", entry.ExternalId, TrainState.Failed)
+            );
+    }
+
+    [Test]
+    public async Task A_dispatch_failure_is_published_without_the_runners_detail()
+    {
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        config.MaxDispatchAttempts = 0;
+
+        try
+        {
+            var manifest = await CreateAndSaveManifest();
+            await CreateAndSaveWorkQueueEntry(manifest);
+
+            await RunDispatcherCycle();
+
+            _dataContext.Reset();
+            var row = await _dataContext
+                .Metadatas.AsNoTracking()
+                .FirstAsync(m => m.ManifestId == manifest.Id);
+            row.FailureReason.Should()
+                .Contain("Simulated enqueue failure", "the row keeps the detail for operators");
+
+            _lifecycle.Failures.Should().NotBeEmpty();
+            _lifecycle
+                .Failures.Should()
+                .AllSatisfy(f =>
+                {
+                    f.FailureException.Should()
+                        .Be("DispatchFailed")
+                        .And.NotBe("TrainException", "a subscriber's mask keys on it");
+                    f.FailureReason.Should().NotContain("Simulated enqueue failure");
+                    f.FailureReason.Should().NotContain("remote worker");
+                    f.StackTrace.Should().BeNull();
+                    (f.ExceptionMessage ?? "").Should().NotContain("Simulated enqueue failure");
+                });
+        }
+        finally
+        {
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
+    [Test]
+    public async Task An_unreadable_input_is_published_without_the_type_or_serializer_detail()
+    {
+        var manifest = await CreateAndSaveManifest();
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = typeof(SchedulerTestTrain).FullName!,
+                Input = """{"value":{"not":"a string"}}""",
+                InputTypeName = typeof(SchedulerTestInput).AssemblyQualifiedName,
+                ManifestId = manifest.Id,
+            }
+        );
+        await _dataContext.Track(entry);
+        await _dataContext.SaveChanges(CancellationToken.None);
+        _dataContext.Reset();
+
+        await RunDispatcherCycle();
+
+        _dataContext.Reset();
+        var row = await _dataContext
+            .Metadatas.AsNoTracking()
+            .FirstAsync(m => m.ManifestId == manifest.Id);
+        row.FailureReason.Should().Contain(typeof(SchedulerTestInput).AssemblyQualifiedName!);
+
+        _lifecycle.Failures.Should().NotBeEmpty();
+        _lifecycle
+            .Failures.Should()
+            .AllSatisfy(f =>
+            {
+                f.FailureException.Should().Be("DispatchFailed");
+                f.FailureReason.Should().NotContain(nameof(SchedulerTestInput));
+                f.FailureReason.Should().NotContain("JSON");
+                (f.ExceptionMessage ?? "").Should().NotContain(nameof(SchedulerTestInput));
+            });
+    }
+
+    [Test]
+    public async Task A_hook_that_hangs_on_a_dispatch_failure_does_not_stall_dispatch()
+    {
+        var config = _serviceProvider.GetRequiredService<SchedulerConfiguration>();
+        var originalMax = config.MaxDispatchAttempts;
+        var originalTimeout = Scheduler
+            .Trains
+            .JobDispatcher
+            .Junctions
+            .DispatchJobsJunction
+            .FailurePublishTimeout;
+        config.MaxDispatchAttempts = 0;
+        Scheduler.Trains.JobDispatcher.Junctions.DispatchJobsJunction.FailurePublishTimeout =
+            TimeSpan.FromMilliseconds(500);
+        _lifecycle.HangOnFailed = true;
+
+        try
+        {
+            var manifest1 = await CreateAndSaveManifest(inputValue: "First");
+            await CreateAndSaveWorkQueueEntry(manifest1);
+            var manifest2 = await CreateAndSaveManifest(inputValue: "Second");
+            await CreateAndSaveWorkQueueEntry(manifest2);
+
+            // A bound, not a wait: a hook that never returns would otherwise hold the cycle forever.
+            var cycle = () => RunDispatcherCycle().WaitAsync(TimeSpan.FromSeconds(20));
+
+            await cycle
+                .Should()
+                .NotThrowAsync("a hook that never returns is abandoned after the timeout");
+
+            _dataContext.Reset();
+            var failed = await _dataContext
+                .Metadatas.AsNoTracking()
+                .Where(m => m.ManifestId == manifest1.Id || m.ManifestId == manifest2.Id)
+                .CountAsync(m => m.TrainState == TrainState.Failed);
+            failed.Should().Be(2, "the entry behind the hung publish is still dispatched");
+        }
+        finally
+        {
+            _lifecycle.HangOnFailed = false;
+            Scheduler.Trains.JobDispatcher.Junctions.DispatchJobsJunction.FailurePublishTimeout =
+                originalTimeout;
+            config.MaxDispatchAttempts = originalMax;
+        }
+    }
+
     private async Task RunDispatcherCycle()
     {
         using var trainScope = _serviceProvider.CreateScope();
@@ -626,6 +851,126 @@ public class DispatchFailureHandlingTests
         _dataContext.Reset();
 
         return entry;
+    }
+
+    #endregion
+
+    #region Lifecycle Recording
+
+    /// <summary>
+    /// The lifecycle events of the scheduled train's runs, in order, across every scope. The
+    /// dispatcher and manifest manager are trains too, and their own events are left out.
+    /// </summary>
+    private sealed class LifecycleRecorder
+    {
+        private readonly List<(
+            string Event,
+            long Id,
+            string ExternalId,
+            TrainState State
+        )> _events = [];
+
+        public IReadOnlyList<(string Event, long Id, string ExternalId, TrainState State)> Events
+        {
+            get
+            {
+                lock (_events)
+                    return _events.ToList();
+            }
+        }
+
+        public void Add(string name, Metadata metadata)
+        {
+            if (metadata.Name != typeof(SchedulerTestTrain).FullName)
+                return;
+            lock (_events)
+                _events.Add((name, metadata.Id, metadata.ExternalId, metadata.TrainState));
+        }
+
+        private readonly List<(
+            string? FailureException,
+            string? FailureReason,
+            string? StackTrace,
+            string? ExceptionMessage
+        )> _failures = [];
+
+        /// <summary>
+        /// What each failure event of the scheduled train's runs carried, as a subscriber sees it.
+        /// </summary>
+        public IReadOnlyList<(
+            string? FailureException,
+            string? FailureReason,
+            string? StackTrace,
+            string? ExceptionMessage
+        )> Failures
+        {
+            get
+            {
+                lock (_failures)
+                    return _failures.ToList();
+            }
+        }
+
+        /// <summary>When set, <c>OnFailed</c> never returns and ignores its token.</summary>
+        public volatile bool HangOnFailed;
+
+        public void AddFailure(Metadata metadata, Exception? exception)
+        {
+            if (
+                metadata.Name != typeof(SchedulerTestTrain).FullName
+                || metadata.TrainState != TrainState.Failed
+            )
+                return;
+            lock (_failures)
+                _failures.Add(
+                    (
+                        metadata.FailureException,
+                        metadata.FailureReason,
+                        metadata.StackTrace,
+                        exception?.Message
+                    )
+                );
+        }
+
+        public void Clear()
+        {
+            lock (_events)
+                _events.Clear();
+            lock (_failures)
+                _failures.Clear();
+        }
+    }
+
+    private sealed class RecordingLifecycleHook(LifecycleRecorder recorder) : ITrainLifecycleHook
+    {
+        public Task OnStarted(Metadata metadata, CancellationToken ct) =>
+            Record("Started", metadata);
+
+        public Task OnCompleted(Metadata metadata, CancellationToken ct) =>
+            Record("Completed", metadata);
+
+        public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
+        {
+            recorder.AddFailure(metadata, exception);
+            if (recorder.HangOnFailed && metadata.Name == typeof(SchedulerTestTrain).FullName)
+                return new TaskCompletionSource().Task;
+            return Record("Failed", metadata);
+        }
+
+        public Task OnCancelled(Metadata metadata, CancellationToken ct) =>
+            Record("Cancelled", metadata);
+
+        public Task OnStateChanged(Metadata metadata, CancellationToken ct)
+        {
+            recorder.AddFailure(metadata, null);
+            return Record("StateChanged", metadata);
+        }
+
+        private Task Record(string name, Metadata metadata)
+        {
+            recorder.Add(name, metadata);
+            return Task.CompletedTask;
+        }
     }
 
     #endregion

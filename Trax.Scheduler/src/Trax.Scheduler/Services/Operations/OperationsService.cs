@@ -10,6 +10,7 @@ using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -20,6 +21,7 @@ using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
+using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
@@ -28,6 +30,7 @@ using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
+using SchedulerTrigger = Trax.Scheduler.Services.TraxScheduler.TraxScheduler;
 
 namespace Trax.Scheduler.Services.Operations;
 
@@ -228,10 +231,14 @@ public class OperationsService : IOperationsService
 
         try
         {
-            requeuedInput = TrainInputReader.ResolveSavedInput(
-                savedInput,
-                registration,
-                MaxInputJsonBytes()
+            // Held to the stored-input cap, not the caller's: the saved input is the run's input
+            // as stored (every member written, and jsonb renders a space after each ':' and ','),
+            // so an input accepted at the caller's cap reads back larger. Then written compactly,
+            // so jsonb's spacing does not count against the mediator's caller cap. Every member is
+            // still written, so an input that left members out and was accepted close to the cap
+            // can be over it here, and is refused: the caller cap is not widened for a requeue.
+            requeuedInput = Compact(
+                TrainInputReader.ResolveSavedInput(savedInput, registration, StoredInputCap())
             );
         }
         catch (JsonException ex)
@@ -283,6 +290,79 @@ public class OperationsService : IOperationsService
     internal Func<CancellationToken, Task>? BeforeReplayEnqueue { get; set; }
 
     /// <summary>
+    /// The refusal for an operation that would queue a run on a host whose store nothing
+    /// dispatches, or <c>null</c> when something can. The store nothing dispatches is EF Core's
+    /// InMemory provider (a context that is not relational) on a host with no database provider
+    /// registered (no <see cref="ISqlDialect"/>): the job dispatcher needs a database and is never
+    /// registered there, and no other process can reach the store, so an entry queued there would
+    /// never run (scheduler ADR 0019). A relational store (PostgreSQL, SQLite) may be dispatched by
+    /// a scheduler on another host, so it is never refused.
+    /// </summary>
+    /// <param name="db">A context from this service's factory.</param>
+    internal string? NoDispatcherRefusal(IDataContext db) =>
+        db is DbContext context
+        && !context.Database.IsRelational()
+        && _services?.GetService<ISqlDialect>() is null
+            ? NoDispatcherMessage
+            : null;
+
+    /// <inheritdoc cref="NoDispatcherRefusal(IDataContext)"/>
+    private async Task<string?> NoDispatcherRefusalAsync(CancellationToken ct)
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        return NoDispatcherRefusal(db);
+    }
+
+    /// <summary>
+    /// Authorizes the caller for <paramref name="registration"/> as
+    /// <see cref="ITrainExecutionService.QueueAsync(string, string?, int, DateTime?, CancellationToken)"/>
+    /// does before it reads anything: through the registered
+    /// <see cref="ITrainAuthorizationService"/>; with none, a trusted scope passes, and a train
+    /// declaring <c>[TraxAuthorize]</c> is refused as unconfigured unless the host opted out with
+    /// <c>AllowMissingAuthorizationService()</c>. For a refusal given before the mediator is
+    /// reached, so it reaches only a caller the mediator would have let through.
+    /// </summary>
+    /// <exception cref="UnauthorizedAccessException">The caller may not queue the train.</exception>
+    /// <exception cref="TrainAuthorizationNotConfiguredException">
+    /// The train declares <c>[TraxAuthorize]</c> and nothing on the host enforces it.
+    /// </exception>
+    private async Task AuthorizeAsTheMediatorWouldAsync(
+        TrainRegistration registration,
+        CancellationToken ct
+    )
+    {
+        if (_services?.GetService<ITrainAuthorizationService>() is { } authorization)
+        {
+            await authorization.AuthorizeAsync(registration, ct);
+            return;
+        }
+
+        if (_services?.GetService<ITrustedExecutionScope>() is { IsTrusted: true })
+            return;
+
+        if (
+            registration.HasAuthorizeAttribute
+            && _services?.GetService<MediatorConfiguration>()
+                is not { AllowMissingAuthorizationService: true }
+        )
+            throw new TrainAuthorizationNotConfiguredException(
+                registration.ServiceType.FullName ?? registration.ServiceTypeName,
+                $"Train '{registration.ServiceTypeName}' declares [TraxAuthorize] but no "
+                    + "ITrainAuthorizationService is registered."
+            );
+    }
+
+    /// <summary>
+    /// What a queueing operation answers on a host with no database provider, where nothing
+    /// dispatches the work queue (scheduler ADR 0019).
+    /// </summary>
+    public const string NoDispatcherMessage =
+        "Nothing on this host can dispatch a queued run: it has no database provider, so its "
+        + "store is in this process's memory and no job dispatcher runs. Nothing was queued. Run "
+        + "the train now instead (runTrain), or configure a database provider such as "
+        + "UsePostgres() so the scheduler dispatches the work queue.";
+
+    /// <summary>
     /// The enqueue <see cref="QueueTrainAsync"/> and <see cref="RequeueExecutionAsync(long, bool, CancellationToken)"/> share,
     /// for a train already found by name: through the mediator, with refusals and failures split
     /// as scheduler/0004 says.
@@ -308,6 +388,17 @@ public class OperationsService : IOperationsService
 
         try
         {
+            // Inside the try, so a store that cannot be reached is logged and thrown as the
+            // enqueue's own failure would be (scheduler/0004).
+            if (await NoDispatcherRefusalAsync(ct) is { } noDispatcher)
+            {
+                // The mediator would have authorized the caller before anything else; the refusal
+                // names the host's store, so a caller who may not queue the train is told that
+                // instead, as the mediator would tell them. Nothing is written either way.
+                await AuthorizeAsTheMediatorWouldAsync(registration, ct);
+                return new OperationResult(false, Message: noDispatcher);
+            }
+
             // Only a replay needs the options overload; every other enqueue goes through the
             // overload every implementation has.
             queued = replayDecisionsOf is null
@@ -670,6 +761,41 @@ public class OperationsService : IOperationsService
     }
 
     /// <summary>
+    /// The cap a saved input is held to when it is read back for a requeue:
+    /// <see cref="TrainInputReader.StoredInputGrowthFactor"/> times the caller cap, the cap the
+    /// mediator holds a queued input's stored form to.
+    /// </summary>
+    private int StoredInputCap() =>
+        (int)
+            Math.Min(
+                (long)MaxInputJsonBytes() * TrainInputReader.StoredInputGrowthFactor,
+                int.MaxValue
+            );
+
+    /// <summary>
+    /// <paramref name="json"/> written without insignificant whitespace. The values and member
+    /// order are unchanged.
+    /// </summary>
+    /// <exception cref="JsonException"><paramref name="json"/> is not JSON.</exception>
+    internal static string Compact(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>(json.Length);
+        using (
+            var writer = new Utf8JsonWriter(
+                buffer,
+                new JsonWriterOptions
+                {
+                    Indented = false,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                }
+            )
+        )
+            document.RootElement.WriteTo(writer);
+        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary>
     /// The mediator's input size cap, or its default when the host registered no
     /// <see cref="MediatorConfiguration"/> or this service was built without a provider.
     /// </summary>
@@ -773,6 +899,12 @@ public class OperationsService : IOperationsService
     /// never materialises a whole table.
     /// </summary>
     public const int MaxPageSize = 500;
+
+    /// <summary>
+    /// The most matches <see cref="CountLogsCappedAsync"/> counts for a query with a text filter.
+    /// A count past it reads as this many, with <see cref="LogCount.Capped"/> set.
+    /// </summary>
+    public const int LogCountCap = 10_000;
 
     /// <inheritdoc />
     /// <remarks>Served index-only by <c>ix_metadata_manifest_state</c>.</remarks>
@@ -885,6 +1017,116 @@ public class OperationsService : IOperationsService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Read from <c>ix_decision_metadata_id_id</c> (Trax.Effect's Postgres migration 064), which
+    /// holds a run's decisions in id order, so a page costs its own rows however many decisions
+    /// the table holds.
+    /// </remarks>
+    public async Task<RecordedDecisionPage> GetRecordedDecisionsAsync(
+        long metadataId,
+        long? afterId,
+        int take,
+        CancellationToken ct
+    )
+    {
+        take = Math.Clamp(take, 1, MaxPageSize);
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var decisions = db.RecordedDecisions.AsNoTracking().Where(d => d.MetadataId == metadataId);
+
+        var page = await (afterId is { } after ? decisions.Where(d => d.Id > after) : decisions)
+            .OrderBy(d => d.Id)
+            .Take(take)
+            .ToListAsync(ct);
+
+        if (page.Count == 0)
+            return new RecordedDecisionPage([], take, null);
+
+        // A track taken on a withheld answer withholds every decision after it, so a page that
+        // starts part way through the run needs to know whether one came before it. Only the keys
+        // of earlier decisions that routed are read; whether a key is withheld is decided here.
+        var firstId = page[0].Id;
+        var routedBefore = await decisions
+            .Where(d => d.Id < firstId && d.Routes != null)
+            .Select(d => d.QuestionKey)
+            .Distinct()
+            .ToListAsync(ct);
+        var onWithheldTrack = routedBefore.Any(TraxRedaction.IsSensitiveQuestion);
+
+        var items = new List<RecordedDecisionRecord>(page.Count);
+        foreach (var d in page)
+        {
+            if (onWithheldTrack)
+            {
+                items.Add(
+                    new RecordedDecisionRecord(
+                        d.Id,
+                        d.MetadataId,
+                        QuestionKey: null,
+                        d.Occurrence,
+                        Kind: null,
+                        Question: null,
+                        Answer: null,
+                        Refused: null,
+                        IsRefused: d.Refused is not null,
+                        Fingerprint: null,
+                        Model: null,
+                        Decider: null,
+                        d.Replayed,
+                        Shadows: null,
+                        Routes: null,
+                        StateHash: null,
+                        d.DecidedAt,
+                        AnswerWithheld: true,
+                        TrackWithheld: true
+                    )
+                );
+                continue;
+            }
+
+            var withheld = TraxRedaction.IsSensitiveQuestion(d.QuestionKey);
+            items.Add(
+                new RecordedDecisionRecord(
+                    d.Id,
+                    d.MetadataId,
+                    d.QuestionKey,
+                    d.Occurrence,
+                    d.Kind,
+                    d.Question,
+                    Answer: withheld ? null : d.Answer,
+                    Refused: withheld ? null : d.Refused,
+                    IsRefused: d.Refused is not null,
+                    d.Fingerprint,
+                    d.Model,
+                    d.Decider,
+                    d.Replayed,
+                    Shadows: withheld ? null : d.Shadows,
+                    Routes: withheld ? null : d.Routes,
+                    d.StateHash,
+                    d.DecidedAt,
+                    AnswerWithheld: withheld,
+                    TrackWithheld: false
+                )
+            );
+
+            // Every decision after a track taken on this answer is on that track.
+            if (withheld && d.Routes is not null)
+                onWithheldTrack = true;
+        }
+
+        return new RecordedDecisionPage(items, take, items[^1].Id);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A page with a text filter and no offset is read in two steps, because in id order alone a
+    /// term found only in rows far from where the page starts makes the database walk every row in
+    /// between, matching or not. The first step reads the <see cref="LogTextWindow"/> ids nearest
+    /// the start in order, which fills the page when the term is common there. The rest is read
+    /// with the order kept out of the index's reach, so the database finds the matches through the
+    /// trigram index and sorts them, which costs what the matches cost rather than what lies
+    /// between them. The rows and their order are the same as one read in id order.
+    /// </remarks>
     public async Task<LogPage> GetLogsAsync(LogQuery query, CancellationToken ct)
     {
         var take = Math.Clamp(query.Take, 1, MaxPageSize);
@@ -892,32 +1134,136 @@ public class OperationsService : IOperationsService
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
 
-        var filtered = FilterLogs(db.Logs.AsNoTracking(), query).OrderByDescending(l => l.Id);
-        IQueryable<Trax.Effect.Models.Log.Log> page = query.AfterId is { } afterId
-            ? filtered.Where(l => l.Id < afterId)
-            : filtered.Skip(skip);
+        var filtered = FilterLogs(db.Logs.AsNoTracking(), query);
+        var oldestFirst = query.Order == LogOrder.OldestFirst;
 
-        var items = await page.Take(take)
-            .Select(l => new LogRecord(
-                l.Id,
-                l.MetadataId,
-                l.EventId,
-                l.Level,
-                l.Category,
-                l.Message,
-                l.Exception,
-                l.StackTrace
-            ))
-            .ToListAsync(ct);
+        var items =
+            skip == 0 && HasTextFilter(query)
+                ? await ReadTextFilteredLogsAsync(
+                    db,
+                    filtered,
+                    query.AfterId,
+                    oldestFirst,
+                    take,
+                    ct
+                )
+                : await ReadLogsInOrderAsync(filtered, query.AfterId, oldestFirst, skip, take, ct);
 
         return new LogPage(items, skip, take, items.Count > 0 ? items[^1].Id : null);
     }
+
+    /// <summary>
+    /// How many ids a text-filtered log page reads in id order from where it starts, before it
+    /// finds the rest of its matches through the text index instead.
+    /// </summary>
+    /// <remarks>
+    /// Large enough that a term in one row of a few hundred fills a page from it, small enough
+    /// that reading it whole costs a few milliseconds when the term is not there. A term rarer
+    /// than that has few matches, and those are cheap to find through the index and sort.
+    /// </remarks>
+    internal const int LogTextWindow = 10_000;
+
+    private static bool HasTextFilter(LogQuery query) =>
+        !string.IsNullOrEmpty(query.MessageContains)
+        || !string.IsNullOrEmpty(query.CategoryContains);
+
+    private static async Task<List<LogRecord>> ReadLogsInOrderAsync(
+        IQueryable<Trax.Effect.Models.Log.Log> filtered,
+        long? afterId,
+        bool oldestFirst,
+        int skip,
+        int take,
+        CancellationToken ct
+    )
+    {
+        // The cursor is applied before the order, so it reads as "after this id in the order".
+        if (afterId is { } after)
+            filtered = oldestFirst
+                ? filtered.Where(l => l.Id > after)
+                : filtered.Where(l => l.Id < after);
+
+        var ordered = oldestFirst
+            ? filtered.OrderBy(l => l.Id)
+            : filtered.OrderByDescending(l => l.Id);
+        var page = afterId.HasValue ? ordered : ordered.Skip(skip);
+
+        return await page.Take(take).Select(ToLogRecord).ToListAsync(ct);
+    }
+
+    private static async Task<List<LogRecord>> ReadTextFilteredLogsAsync(
+        IDataContext db,
+        IQueryable<Trax.Effect.Models.Log.Log> filtered,
+        long? afterId,
+        bool oldestFirst,
+        int take,
+        CancellationToken ct
+    )
+    {
+        // The id the page reads away from: the cursor, or just past the end of the table it starts at.
+        var start =
+            afterId
+            ?? (
+                oldestFirst
+                    ? await db.Logs.MinAsync(l => (long?)l.Id, ct) - 1
+                    : await db.Logs.MaxAsync(l => (long?)l.Id, ct) + 1
+            );
+        if (start is not { } origin)
+            return [];
+
+        var edge = oldestFirst ? origin + LogTextWindow : origin - LogTextWindow;
+        var near = oldestFirst
+            ? filtered.Where(l => l.Id > origin && l.Id <= edge).OrderBy(l => l.Id)
+            : filtered.Where(l => l.Id < origin && l.Id >= edge).OrderByDescending(l => l.Id);
+        var page = await near.Take(take).Select(ToLogRecord).ToListAsync(ct);
+        if (page.Count == take)
+            return page;
+
+        // "+ 0" keeps the primary key from serving the order, so what is sorted is the matches.
+        var far = oldestFirst
+            ? filtered.Where(l => l.Id > edge).OrderBy(l => l.Id + 0)
+            : filtered.Where(l => l.Id < edge).OrderByDescending(l => l.Id + 0);
+        page.AddRange(await far.Take(take - page.Count).Select(ToLogRecord).ToListAsync(ct));
+        return page;
+    }
+
+    private static readonly System.Linq.Expressions.Expression<
+        Func<Trax.Effect.Models.Log.Log, LogRecord>
+    > ToLogRecord = l => new LogRecord(
+        l.Id,
+        l.MetadataId,
+        l.EventId,
+        l.Level,
+        l.Category,
+        l.Message,
+        l.Exception,
+        l.StackTrace
+    );
 
     /// <inheritdoc />
     public async Task<int> CountLogsAsync(LogQuery query, CancellationToken ct)
     {
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
         return await FilterLogs(db.Logs.AsNoTracking(), query).CountAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct)
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var filtered = FilterLogs(db.Logs.AsNoTracking(), query);
+
+        if (
+            string.IsNullOrEmpty(query.MessageContains)
+            && string.IsNullOrEmpty(query.CategoryContains)
+        )
+            return new LogCount(await filtered.CountAsync(ct), Capped: false);
+
+        // One match past the cap tells a capped count from an exact one, and the database stops
+        // reading once it has found that many.
+        var count = await filtered.Take(LogCountCap + 1).CountAsync(ct);
+        return count > LogCountCap
+            ? new LogCount(LogCountCap, Capped: true)
+            : new LogCount(count, Capped: false);
     }
 
     private static IQueryable<Trax.Effect.Models.Log.Log> FilterLogs(
@@ -933,6 +1279,25 @@ public class OperationsService : IOperationsService
 
         if (!string.IsNullOrWhiteSpace(query.Category))
             logs = logs.Where(l => l.Category == query.Category);
+
+        // Lowered on both sides and matched with LIKE, the case-insensitive match every provider
+        // translates (Postgres ILIKE is Npgsql's own). The term's wildcards are escaped, so a
+        // search for "50%" finds the text "50%" and not every message containing "50".
+        if (!string.IsNullOrEmpty(query.MessageContains))
+        {
+            var pattern = LikePattern.Contains(query.MessageContains);
+            logs = logs.Where(l =>
+                EF.Functions.Like(l.Message.ToLower(), pattern, LikePattern.Escape)
+            );
+        }
+
+        if (!string.IsNullOrEmpty(query.CategoryContains))
+        {
+            var pattern = LikePattern.Contains(query.CategoryContains);
+            logs = logs.Where(l =>
+                EF.Functions.Like(l.Category.ToLower(), pattern, LikePattern.Escape)
+            );
+        }
 
         return logs;
     }
@@ -1135,6 +1500,338 @@ public class OperationsService : IOperationsService
         );
     }
 
+    /// <inheritdoc />
+    public async Task<TriggerManifestResult> TriggerManifestAsync(
+        string externalId,
+        TimeSpan? delay,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var manifest = await db
+            .Manifests.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.ExternalId == externalId, ct);
+
+        if (manifest is null)
+            return new TriggerManifestResult(false, $"Manifest '{externalId}' not found.", null);
+        if (NoDispatcherRefusal(db) is { } noDispatcher)
+            return new TriggerManifestResult(false, noDispatcher, null);
+
+        var now = DateTime.UtcNow;
+        // A delay past the last time a DateTime holds cannot be a due time; refused rather than
+        // left to throw ArgumentOutOfRangeException from the addition.
+        if (delay is { } tooLong && tooLong > DateTime.MaxValue - now)
+            return new TriggerManifestResult(
+                false,
+                $"A delay of {tooLong} puts the run past the latest time that can be stored. "
+                    + "Nothing was queued.",
+                null
+            );
+        var runAt = delay is { } d && d > TimeSpan.Zero ? now + d : now;
+
+        // The trigger ITraxScheduler.TriggerAsync and the batch triggers use, so a manifest
+        // triggered here is triggered exactly as one triggered by name from code.
+        var outcome = await SchedulerTrigger.TriggerManifestAsync(
+            db,
+            manifest,
+            runAt,
+            askAfresh,
+            beforeRelease: null,
+            ct
+        );
+        _changeSignal?.Notify(ChangeDomain.WorkQueue);
+
+        var result = DescribeTrigger(externalId, outcome.ToResult(), askAfresh);
+        _logger?.LogInformation("Manifest trigger: {Message}", result.Message);
+        return result;
+    }
+
+    /// <summary>What one manifest's trigger did, in the words an operator reads.</summary>
+    internal static TriggerManifestResult DescribeTrigger(
+        string externalId,
+        TraxScheduler.ManifestTriggerResult trigger,
+        bool askAfresh
+    )
+    {
+        var entry = $"work queue entry {trigger.WorkQueueId}";
+        var due = trigger.ScheduledAt is { } at ? $"due at {at:u}" : "due now";
+
+        if (trigger.AlreadyDispatched)
+        {
+            if (askAfresh && trigger.ReplayDecisionsOf is { } replayed)
+                return new TriggerManifestResult(
+                    true,
+                    $"Manifest '{externalId}' triggered, but the dispatcher had already claimed its "
+                        + $"queued retry ({entry}), so that run replays the decisions of execution "
+                        + $"{replayed} rather than asking its deciders afresh.",
+                    trigger
+                )
+                {
+                    StillReplaying = true,
+                };
+
+            return new TriggerManifestResult(
+                true,
+                $"Manifest '{externalId}' already had a queued run ({entry}) that the dispatcher "
+                    + "claimed as the trigger reached it, so it is already running; nothing more "
+                    + "was queued.",
+                trigger
+            );
+        }
+
+        if (trigger.Created)
+            return new TriggerManifestResult(
+                true,
+                $"Manifest '{externalId}' triggered: queued a new run ({entry}), {due}.",
+                trigger
+            );
+
+        if (trigger.MovedForward)
+            return new TriggerManifestResult(
+                true,
+                $"Manifest '{externalId}' already had a queued run ({entry}); the trigger brought "
+                    + $"it forward, now {due}, and queued nothing more.",
+                trigger
+            );
+
+        return new TriggerManifestResult(
+            true,
+            $"Manifest '{externalId}' already had a queued run ({entry}), {due}; it now runs as the "
+                + "trigger and nothing more was queued.",
+            trigger
+        );
+    }
+
+    /// <inheritdoc />
+    public async Task<BatchTriggerResult> TriggerManifestsAsync(
+        IReadOnlyCollection<long> manifestIds,
+        bool askAfresh,
+        CancellationToken ct
+    )
+    {
+        if (BatchRefusal(manifestIds) is { } refusal)
+            return BatchTriggerResult.Refused(refusal);
+
+        var distinct = manifestIds.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        if (NoDispatcherRefusal(db) is { } noDispatcher)
+            return BatchTriggerResult.Refused(noDispatcher);
+        var found = await db
+            .Manifests.AsNoTracking()
+            .Where(m => distinct.Contains(m.Id))
+            .ToDictionaryAsync(m => m.Id, ct);
+
+        var tally = new TriggerTally(askAfresh);
+        foreach (var id in distinct.Where(id => !found.ContainsKey(id)))
+            tally.Skip(id, $"Manifest {id} not found.");
+
+        // In the order given, each through the trigger ITraxScheduler.TriggerAsync uses, with its
+        // own save, so one manifest's queued entry never fails another's.
+        await TriggerEachAsync(
+            db,
+            distinct.Where(found.ContainsKey).Select(id => (id, found[id])),
+            tally,
+            ct
+        );
+
+        var message =
+            $"{tally.Describe()} across {tally.Matched} of {distinct.Count} manifest(s)"
+            + (askAfresh ? ", asking afresh." : ".");
+        _logger?.LogInformation("Batch trigger of manifests: {Message}", message);
+        return tally.ToResult(message);
+    }
+
+    /// <inheritdoc />
+    public async Task<BatchTriggerResult> TriggerManifestGroupsAsync(
+        IReadOnlyCollection<long> groupIds,
+        CancellationToken ct
+    )
+    {
+        if (BatchRefusal(groupIds) is { } refusal)
+            return BatchTriggerResult.Refused(refusal);
+
+        var distinct = groupIds.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        if (NoDispatcherRefusal(db) is { } noDispatcher)
+            return BatchTriggerResult.Refused(noDispatcher);
+        var existing = (
+            await db
+                .ManifestGroups.AsNoTracking()
+                .Where(g => distinct.Contains(g.Id))
+                .Select(g => g.Id)
+                .ToListAsync(ct)
+        ).ToHashSet();
+
+        var tally = new TriggerTally(askAfresh: false);
+        foreach (var id in distinct.Where(id => !existing.Contains(id)))
+            tally.Skip(id, $"Manifest group {id} not found.");
+
+        // The members ITraxScheduler.TriggerGroupAsync would trigger, group by group in the order
+        // given, so the two choose the same manifests.
+        var members = await SchedulerTrigger
+            .TriggerableInGroups(db.Manifests.AsNoTracking(), existing)
+            .OrderBy(m => m.Id)
+            .ToListAsync(ct);
+        var ordered = distinct
+            .Where(existing.Contains)
+            .SelectMany(groupId =>
+                members.Where(m => m.ManifestGroupId == groupId).Select(m => (groupId, m))
+            );
+
+        await TriggerEachAsync(db, ordered, tally, ct);
+
+        var message =
+            $"{tally.Describe()} across {existing.Count} of {distinct.Count} manifest group(s).";
+        _logger?.LogInformation("Batch trigger of manifest groups: {Message}", message);
+        return tally.ToResult(message, matched: existing.Count);
+    }
+
+    /// <summary>
+    /// Triggers each manifest in turn and counts what happened. Signals
+    /// <c>ChangeDomain.WorkQueue</c> once when any was triggered, also when a later save throws,
+    /// since the ones before it are triggered.
+    /// </summary>
+    private async Task TriggerEachAsync(
+        IDataContext db,
+        IEnumerable<(long Id, Trax.Effect.Models.Manifest.Manifest Manifest)> targets,
+        TriggerTally tally,
+        CancellationToken ct
+    )
+    {
+        var now = DateTime.UtcNow;
+        try
+        {
+            foreach (var (id, manifest) in targets)
+            {
+                var outcome = await SchedulerTrigger.TriggerManifestAsync(
+                    db,
+                    manifest,
+                    runAt: now,
+                    tally.AskAfresh,
+                    beforeRelease: null,
+                    ct
+                );
+                tally.Add(id, manifest, outcome);
+                // Each trigger saves on its own, and a save checks every entity the context
+                // tracks, so a context still holding the entries of the triggers before it makes
+                // each save slower than the last.
+                db.Reset();
+            }
+        }
+        finally
+        {
+            if (tally.Triggered > 0)
+                _changeSignal?.Notify(ChangeDomain.WorkQueue);
+        }
+    }
+
+    /// <summary>What a batch trigger has done so far.</summary>
+    private sealed class TriggerTally(bool askAfresh)
+    {
+        private readonly List<BatchItemNote> _notes = [];
+        private readonly HashSet<long> _matched = [];
+
+        public bool AskAfresh { get; } = askAfresh;
+        public int Queued { get; private set; }
+        public int AlreadyQueued { get; private set; }
+        public int TooLateToAskAfresh { get; private set; }
+        public int Skipped { get; private set; }
+        public int Matched => _matched.Count;
+        public int Triggered => Queued + AlreadyQueued + TooLateToAskAfresh;
+
+        public void Skip(long id, string note)
+        {
+            Skipped++;
+            _notes.Add(new BatchItemNote(id, note));
+        }
+
+        public void Add(
+            long id,
+            Trax.Effect.Models.Manifest.Manifest manifest,
+            SchedulerTrigger.TriggerOutcome outcome
+        )
+        {
+            _matched.Add(manifest.Id);
+
+            if (outcome.Created)
+                Queued++;
+            else if (AskAfresh && outcome.AlreadyDispatched && outcome.ReplayDecisionsOf is { } run)
+            {
+                // The dispatcher claimed the queued retry first, so its run still replays.
+                TooLateToAskAfresh++;
+                _notes.Add(
+                    new BatchItemNote(
+                        id,
+                        $"Manifest {manifest.ExternalId} was already being dispatched, so its run "
+                            + $"replays the decisions of run {run} rather than asking afresh."
+                    )
+                );
+            }
+            else
+                AlreadyQueued++;
+        }
+
+        public string Describe()
+        {
+            var message = $"{Queued} queued";
+            if (AlreadyQueued > 0)
+                message += $", {AlreadyQueued} already queued (that entry now runs as the trigger)";
+            if (TooLateToAskAfresh > 0)
+                message += $", {TooLateToAskAfresh} already dispatched and still replaying";
+            if (Skipped > 0)
+                message += $", {Skipped} not found";
+            return message;
+        }
+
+        public BatchTriggerResult ToResult(string message, int? matched = null) =>
+            new(
+                true,
+                matched ?? Matched,
+                Queued,
+                AlreadyQueued,
+                TooLateToAskAfresh,
+                Skipped,
+                message,
+                _notes
+            );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> CancelManifestGroupsAsync(
+        IReadOnlyCollection<long> groupIds,
+        CancellationToken ct
+    )
+    {
+        if (RefuseBatch(groupIds) is { } refused)
+            return refused;
+
+        var distinct = groupIds.Distinct().ToList();
+
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+        var groups = await db
+            .ManifestGroups.AsNoTracking()
+            .CountAsync(g => distinct.Contains(g.Id), ct);
+
+        // The candidates ITraxScheduler.CancelGroupAsync takes, for every group at once.
+        var flagged = await ExecutionCancellation.RequestAsync(
+            db,
+            await ExecutionCancellation.InGroupsAsync(db, distinct, ct),
+            _services?.GetService<ICancellationRegistry>(),
+            _changeSignal,
+            ct
+        );
+
+        return new OperationResult(
+            true,
+            Count: flagged,
+            Message: $"Cancellation requested for {flagged} execution(s) across {groups} of "
+                + $"{distinct.Count} manifest group(s)."
+        );
+    }
+
     private async Task<int> SetGroupsEnabledAsync(
         IDataContext db,
         IQueryable<Trax.Effect.Models.ManifestGroup.ManifestGroup> groups,
@@ -1247,6 +1944,76 @@ public class OperationsService : IOperationsService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The held-by read is served by <c>ix_work_queue_subject_busy</c>, the queued-behind read by
+    /// <c>ix_work_queue_subject_queued</c>; the latter applies the predicate
+    /// <c>LoadQueuedJobsJunction</c> applies (see <see cref="SubjectSiblingQueries.DispatchedAheadOf"/>).
+    /// </remarks>
+    public async Task<WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(
+        long id,
+        CancellationToken ct
+    )
+    {
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        var entry = await db.WorkQueues.AsNoTracking().FirstOrDefaultAsync(q => q.Id == id, ct);
+        if (entry is null)
+            return null;
+
+        long? heldBy = null;
+        long? queuedBehind = null;
+        if (entry is { Status: WorkQueueStatus.Queued, SubjectKey: { } subject })
+        {
+            // A queued entry whose subject has a run in flight is skipped by dispatch until that
+            // run finishes. Without saying so it looks like an entry that is simply never picked up.
+            heldBy = await db
+                .WorkQueues.AsNoTracking()
+                .Where(b =>
+                    b.SubjectKey == subject
+                    && b.Status == WorkQueueStatus.Dispatched
+                    && b.Metadata != null
+                    && (
+                        b.Metadata.TrainState == TrainState.Pending
+                        || b.Metadata.TrainState == TrainState.InProgress
+                    )
+                )
+                .Select(b => (long?)b.Id)
+                .FirstOrDefaultAsync(ct);
+
+            // Dispatch also offers only the first queued entry per subject each cycle, so an entry
+            // behind a sibling it would take first waits even with nothing running.
+            if (heldBy is null)
+                queuedBehind = await db
+                    .WorkQueues.AsNoTracking()
+                    .DispatchedAheadOf(entry, DateTime.UtcNow)
+                    .Select(b => (long?)b.Id)
+                    .FirstOrDefaultAsync(ct);
+        }
+
+        return new WorkQueueEntryDetail(
+            entry.Id,
+            entry.ExternalId,
+            entry.TrainName,
+            entry.Status,
+            entry.CreatedAt,
+            entry.DispatchedAt,
+            entry.ScheduledAt,
+            entry.Priority,
+            entry.DispatchAttempts,
+            entry.ManifestId,
+            entry.MetadataId,
+            entry.DeadLetterId,
+            entry.InputTypeName,
+            entry.ConfirmedAt,
+            entry.SubjectKey,
+            TransportInputRedaction.Redact(_discoveryService, entry.Input, entry.InputTypeName),
+            heldBy,
+            queuedBehind,
+            entry.ReplayDecisionsOf
+        );
+    }
+
+    /// <inheritdoc />
     public async Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct)
     {
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
@@ -1273,6 +2040,112 @@ public class OperationsService : IOperationsService
             Count: 1,
             Message: $"Work queue entry {id} cancelled."
         );
+    }
+
+    /// <inheritdoc />
+    public async Task<OperationResult> UpdateManifestAsync(
+        long id,
+        ManifestUpdate update,
+        CancellationToken ct
+    )
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        var manifest = await db.Manifests.FirstOrDefaultAsync(m => m.Id == id, ct);
+        if (manifest is null)
+            return new OperationResult(false, Message: $"Manifest {id} not found.");
+
+        if (
+            ManifestUpdateRefusal(
+                manifest.ScheduleType,
+                manifest.CronExpression,
+                manifest.IntervalSeconds,
+                update,
+                DateTime.UtcNow
+            ) is
+            { } refusal
+        )
+            return new OperationResult(
+                false,
+                Id: id,
+                Message: $"Manifest {id} was not updated: {refusal}"
+            );
+
+        if (update.IsEnabled.HasValue)
+            manifest.IsEnabled = update.IsEnabled.Value;
+        if (update.MaxRetries.HasValue)
+            manifest.MaxRetries = update.MaxRetries.Value;
+        if (update.Priority.HasValue)
+            manifest.Priority = update.Priority.Value;
+        if (update.ClearTimeout)
+            manifest.TimeoutSeconds = null;
+        else if (update.TimeoutSeconds.HasValue)
+            manifest.TimeoutSeconds = update.TimeoutSeconds.Value;
+        if (update.ScheduleType.HasValue)
+            manifest.ScheduleType = update.ScheduleType.Value;
+        if (update.CronExpression is not null)
+            manifest.CronExpression = update.CronExpression;
+        if (update.IntervalSeconds.HasValue)
+            manifest.IntervalSeconds = update.IntervalSeconds.Value;
+
+        await db.SaveChanges(ct);
+        _changeSignal?.Notify(ChangeDomain.Manifest);
+        return new OperationResult(true, Id: id, Count: 1, Message: "Manifest updated.");
+    }
+
+    /// <summary>
+    /// Why the scheduler could not use the manifest <paramref name="update"/> would leave, or
+    /// <c>null</c> when it could. The scheduler skips a manifest whose schedule it cannot evaluate
+    /// on every poll, so a bad cron expression saved here would never fire, and a zero timeout
+    /// would cancel every run at once.
+    /// </summary>
+    internal static string? ManifestUpdateRefusal(
+        ScheduleType currentType,
+        string? currentCron,
+        int? currentInterval,
+        ManifestUpdate update,
+        DateTime now
+    )
+    {
+        if (update.MaxRetries is < 0)
+            return "maxRetries may not be negative.";
+        if (update.Priority is < WorkQueue.MinPriority or > WorkQueue.MaxPriority)
+            return $"priority must be between {WorkQueue.MinPriority} and {WorkQueue.MaxPriority}.";
+        if (!update.ClearTimeout && update.TimeoutSeconds is <= 0)
+            return "timeoutSeconds must be greater than 0; set clearTimeout to remove the timeout.";
+        if (update.IntervalSeconds is <= 0)
+            return "intervalSeconds must be greater than 0.";
+
+        var changesSchedule =
+            update.ScheduleType.HasValue
+            || update.CronExpression is not null
+            || update.IntervalSeconds.HasValue;
+        if (!changesSchedule)
+            return null;
+
+        var type = update.ScheduleType ?? currentType;
+        if (
+            type is ScheduleType.Once or ScheduleType.Dependent or ScheduleType.DormantDependent
+            && type != currentType
+        )
+            return $"a manifest cannot be switched to {type} here: it needs a "
+                + (type == ScheduleType.Once ? "time" : "parent manifest")
+                + " this update cannot give. Schedule it from code instead.";
+
+        if (type == ScheduleType.Cron || update.CronExpression is not null)
+        {
+            if (
+                Scheduling.CronParser.Validate(update.CronExpression ?? currentCron, now) is
+                { } cronRefusal
+            )
+                return cronRefusal;
+        }
+
+        if (type == ScheduleType.Interval && (update.IntervalSeconds ?? currentInterval) is null)
+            return "an INTERVAL schedule needs intervalSeconds.";
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -1486,30 +2359,100 @@ public class OperationsService : IOperationsService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The seven aggregations run at once, each on a context and connection of its own, so one
+    /// call holds up to seven pooled connections while it runs.
+    /// </remarks>
     public async Task<DashboardMetrics> GetDashboardMetricsAsync(
         MetricsRange range,
         bool hideAdminTrains,
         CancellationToken ct
     )
     {
-        using var db = await _dataContextFactory.CreateDbContextAsync(ct);
         var now = DateTime.UtcNow;
         var todayStart = now.Date;
         var last7d = now.AddDays(-7);
 
-        var adminNames = AdminTrains.FullNames.ToHashSet();
+        IQueryable<Effect.Models.Metadata.Metadata> ScopedMetadatas(
+            Effect.Data.Services.DataContext.IDataContext db
+        ) => WithoutAdminTrains(db.Metadatas.AsNoTracking(), hideAdminTrains);
 
-        IQueryable<Effect.Models.Metadata.Metadata> ScopedMetadatas() =>
-            hideAdminTrains
-                ? db.Metadatas.AsNoTracking().Where(m => !adminNames.Contains(m.Name))
-                : db.Metadatas.AsNoTracking();
+        // Each aggregation reads different rows through a different index and none depends on
+        // another, so they run at once, each on a context and connection of its own: the
+        // dashboard waits for the slowest rather than for the sum.
+        async Task<T> Read<T>(Func<Effect.Data.Services.DataContext.IDataContext, Task<T>> read)
+        {
+            using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+            return await read(db);
+        }
 
         // ── KPIs (today) ─────────────────────────────────────────────────────
-        var todayStateCounts = await ScopedMetadatas()
-            .Where(m => m.StartTime >= todayStart)
-            .GroupBy(m => m.TrainState)
-            .Select(g => new { State = g.Key, Count = g.Count() })
-            .ToListAsync(ct);
+        var todayStateCountsRead = Read(db =>
+            ScopedMetadatas(db)
+                .Where(m => m.StartTime >= todayStart)
+                .GroupBy(m => m.TrainState)
+                .Select(g => new { State = g.Key, Count = g.Count() })
+                .ToListAsync(ct)
+        );
+
+        var currentlyRunningRead = Read(db =>
+            ScopedMetadatas(db).Where(m => m.TrainState == TrainState.InProgress).CountAsync(ct)
+        );
+
+        var unresolvedDeadLettersRead = Read(db =>
+            db.DeadLetters.AsNoTracking()
+                .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct)
+        );
+
+        // ── Executions over time ─────────────────────────────────────────────
+        var executionsRead = Read(db =>
+            BuildExecutionsOverTimeAsync(db, range, hideAdminTrains, now, ct)
+        );
+
+        // ── Top failures (7d) ────────────────────────────────────────────────
+        // EF can't construct positional records server-side; project to an anonymous
+        // type, then materialise to TrainFailureCount.
+        var topFailuresRead = Read(db =>
+            ScopedMetadatas(db)
+                .Where(m => m.TrainState == TrainState.Failed && m.StartTime >= last7d)
+                .GroupBy(m => m.Name)
+                .Select(g => new { Name = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .Take(10)
+                .ToListAsync(ct)
+        );
+
+        // ── Top average durations (7d, root-level only) ──────────────────────
+        var topDurationsRead = Read(db =>
+            ReadTopAverageDurationsAsync(
+                db,
+                ScopedMetadatas(db)
+                    .Where(m =>
+                        m.TrainState == TrainState.Completed
+                        && m.EndTime != null
+                        && m.StartTime >= last7d
+                        && m.ParentId == null
+                    ),
+                ct
+            )
+        );
+
+        // ── Throughput sparklines (7d, top 3 + Other, 28 6h buckets) ─────────
+        var throughputRead = Read(db =>
+            BuildThroughputSeriesAsync(db, hideAdminTrains, now, last7d, ct)
+        );
+
+        await Task.WhenAll(
+            todayStateCountsRead,
+            currentlyRunningRead,
+            unresolvedDeadLettersRead,
+            executionsRead,
+            topFailuresRead,
+            topDurationsRead,
+            throughputRead
+        );
+
+        var todayStateCounts = await todayStateCountsRead;
 
         int CountForState(TrainState s) =>
             todayStateCounts.FirstOrDefault(x => x.State == s)?.Count ?? 0;
@@ -1519,73 +2462,124 @@ public class OperationsService : IOperationsService
         var terminal = completed + CountForState(TrainState.Failed);
         var successRate = terminal > 0 ? Math.Round(100.0 * completed / terminal, 1) : 0;
 
-        var currentlyRunning = await ScopedMetadatas()
-            .Where(m => m.TrainState == TrainState.InProgress)
-            .CountAsync(ct);
-
-        var unresolvedDeadLetters = await db
-            .DeadLetters.AsNoTracking()
-            .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention, ct);
-
         var kpis = new DashboardKpis(
             executionsToday,
             successRate,
-            currentlyRunning,
-            unresolvedDeadLetters
+            await currentlyRunningRead,
+            await unresolvedDeadLettersRead
         );
 
-        // ── Executions over time ─────────────────────────────────────────────
-        var executions = await BuildExecutionsOverTimeAsync(db, range, hideAdminTrains, now, ct);
-
-        // ── Top failures (7d) ────────────────────────────────────────────────
-        // EF can't construct positional records server-side; project to an anonymous
-        // type, then materialise to TrainFailureCount.
-        var topFailures = (
-            await ScopedMetadatas()
-                .Where(m => m.TrainState == TrainState.Failed && m.StartTime >= last7d)
-                .GroupBy(m => m.Name)
-                .Select(g => new { Name = g.Key, Count = g.Count() })
-                .OrderByDescending(x => x.Count)
-                .Take(10)
-                .ToListAsync(ct)
-        )
+        var topFailures = (await topFailuresRead)
             .Select(x => new TrainFailureCount(x.Name, x.Count))
             .ToList();
 
-        // ── Top average durations (7d, root-level only) ──────────────────────
-        var topDurations = (
-            await ScopedMetadatas()
-                .Where(m =>
-                    m.TrainState == TrainState.Completed
-                    && m.EndTime != null
-                    && m.StartTime >= last7d
-                    && m.ParentId == null
-                )
-                .GroupBy(m => m.Name)
-                .Select(g => new
-                {
-                    Name = g.Key,
-                    AvgMs = g.Average(m => (m.EndTime!.Value - m.StartTime).TotalMilliseconds),
-                })
-                .OrderByDescending(x => x.AvgMs)
-                .Take(10)
-                .ToListAsync(ct)
-        )
-            .Select(x => new TrainAverageDuration(x.Name, x.AvgMs))
-            .ToList();
+        var topDurations = await topDurationsRead;
 
-        // ── Throughput sparklines (7d, top 3 + Other, 28 6h buckets) ─────────
-        var throughputSeries = await BuildThroughputSeriesAsync(
-            db,
-            hideAdminTrains,
-            adminNames,
-            now,
-            last7d,
-            ct
+        return new DashboardMetrics(
+            kpis,
+            await executionsRead,
+            topFailures,
+            topDurations,
+            await throughputRead
+        );
+    }
+
+    /// <summary>
+    /// For each data context type, whether its provider averages a run's duration from the
+    /// difference of its <see cref="DateTime.Ticks"/> rather than from the
+    /// <see cref="TimeSpan.TotalMilliseconds"/> of <c>EndTime - StartTime</c>.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
+        Type,
+        bool
+    > AveragesDurationFromTicks = new();
+
+    /// <summary>
+    /// The ten trains with the longest average duration among <paramref name="runs"/>, averaged
+    /// in the database.
+    /// </summary>
+    /// <remarks>
+    /// Providers translate a date difference differently. Postgres translates the
+    /// <see cref="TimeSpan.TotalMilliseconds"/> of <c>EndTime - StartTime</c>, and InMemory
+    /// evaluates it, but Sqlite translates no <see cref="TimeSpan"/> arithmetic; it does translate
+    /// <see cref="DateTime.Ticks"/>, which Postgres does not. Rather than name a provider, the
+    /// first call for a context type asks EF to translate the first form without running it
+    /// (<c>ToQueryString</c> touches no connection, so the only thing it can fail on is the
+    /// translation) and remembers which form that provider takes. Either way the average,
+    /// ordering and limit run in the database, so no provider reads the runs themselves.
+    /// </remarks>
+    private static async Task<List<TrainAverageDuration>> ReadTopAverageDurationsAsync(
+        IDataContext db,
+        IQueryable<Metadata> runs,
+        CancellationToken ct
+    )
+    {
+        var byTimeSpan = runs.GroupBy(m => m.Name)
+            .Select(g => new
+            {
+                Name = g.Key,
+                AvgMs = g.Average(m => (m.EndTime!.Value - m.StartTime).TotalMilliseconds),
+            })
+            .OrderByDescending(x => x.AvgMs)
+            .Take(10);
+
+        var fromTicks = AveragesDurationFromTicks.GetOrAdd(
+            db.GetType(),
+            _ => !Translates(byTimeSpan)
         );
 
-        return new DashboardMetrics(kpis, executions, topFailures, topDurations, throughputSeries);
+        if (!fromTicks)
+            return (await byTimeSpan.ToListAsync(ct))
+                .Select(x => new TrainAverageDuration(x.Name, x.AvgMs))
+                .ToList();
+
+        var byTicks = await runs.GroupBy(m => m.Name)
+            .Select(g => new
+            {
+                Name = g.Key,
+                AvgTicks = g.Average(m => m.EndTime!.Value.Ticks - m.StartTime.Ticks),
+            })
+            .OrderByDescending(x => x.AvgTicks)
+            .Take(10)
+            .ToListAsync(ct);
+
+        return byTicks
+            .Select(x => new TrainAverageDuration(
+                x.Name,
+                x.AvgTicks / TimeSpan.TicksPerMillisecond
+            ))
+            .ToList();
     }
+
+    /// <summary>
+    /// Whether the provider behind <paramref name="query"/> can translate it, asked without
+    /// running it. A provider that evaluates queries itself, such as InMemory, translates
+    /// everything.
+    /// </summary>
+    private static bool Translates(IQueryable query)
+    {
+        try
+        {
+            _ = EntityFrameworkQueryableExtensions.ToQueryString(query);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="metadatas"/> without the scheduler's own trains when
+    /// <paramref name="hideAdminTrains"/> is set. <c>metadata.name</c> stores the interface
+    /// FullName, which is what <see cref="AdminTrains.FullNames"/> holds.
+    /// </summary>
+    private static IQueryable<Effect.Models.Metadata.Metadata> WithoutAdminTrains(
+        IQueryable<Effect.Models.Metadata.Metadata> metadatas,
+        bool hideAdminTrains
+    ) => hideAdminTrains ? metadatas.Where(m => !AdminTrainNames.Contains(m.Name)) : metadatas;
+
+    private static readonly string[] AdminTrainNames = AdminTrains.FullNames.ToArray();
 
     /// <inheritdoc />
     public ServerMetrics GetServerMetrics()
@@ -1609,17 +2603,15 @@ public class OperationsService : IOperationsService
         CancellationToken ct
     )
     {
-        var adminNames = AdminTrains.FullNames.ToHashSet();
         var bucketCount = range == MetricsRange.Last60Minutes ? 60 : 24;
         var bucketSize =
             range == MetricsRange.Last60Minutes ? TimeSpan.FromMinutes(1) : TimeSpan.FromHours(1);
         var windowStart = now - TimeSpan.FromTicks(bucketSize.Ticks * bucketCount);
 
-        IQueryable<Effect.Models.Metadata.Metadata> q = db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.StartTime >= windowStart);
-        if (hideAdminTrains)
-            q = q.Where(m => !adminNames.Contains(m.Name));
+        var q = WithoutAdminTrains(
+            db.Metadatas.AsNoTracking().Where(m => m.StartTime >= windowStart),
+            hideAdminTrains
+        );
 
         // Group by raw date-parts in SQL, then materialise the DateTime in memory.
         // Constructing DateTimes inside .Select projections doesn't reliably translate
@@ -1708,17 +2700,16 @@ public class OperationsService : IOperationsService
     private static async Task<IReadOnlyList<ThroughputSeries>> BuildThroughputSeriesAsync(
         Effect.Data.Services.DataContext.IDataContext db,
         bool hideAdminTrains,
-        HashSet<string> adminNames,
         DateTime now,
         DateTime last7d,
         CancellationToken ct
     )
     {
-        IQueryable<Effect.Models.Metadata.Metadata> q = db
-            .Metadatas.AsNoTracking()
-            .Where(m => m.TrainState == TrainState.Completed && m.StartTime >= last7d);
-        if (hideAdminTrains)
-            q = q.Where(m => !adminNames.Contains(m.Name));
+        var q = WithoutAdminTrains(
+            db.Metadatas.AsNoTracking()
+                .Where(m => m.TrainState == TrainState.Completed && m.StartTime >= last7d),
+            hideAdminTrains
+        );
 
         // 6-hour blocks. Keep the bucket calc identical to the dashboard's existing logic
         // (group on raw date-parts, materialise DateTime in memory).

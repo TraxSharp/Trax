@@ -91,6 +91,28 @@ public class OperationsServiceRequeueTests : TestSetup
     }
 
     [Test]
+    public async Task A_saved_input_at_exactly_the_cap_is_requeued()
+    {
+        // Compact, the input is exactly the mediator's cap; jsonb renders it back with a space
+        // after the ':', a byte over. The requeue holds it to the stored-input cap and hands the
+        // mediator its compact form.
+        var cap = new Trax.Mediator.Configuration.MediatorConfiguration().MaxInputJsonBytes;
+        var value = new string('x', cap - """{"Value":""}""".Length);
+        var source = await SeedRunAsync($$"""{"Value":"{{value}}"}""");
+        var stored = await DataContext
+            .Metadatas.AsNoTracking()
+            .Where(m => m.Id == source)
+            .Select(m => m.Input)
+            .SingleAsync();
+        System.Text.Encoding.UTF8.GetByteCount(stored!).Should().BeGreaterThan(cap);
+
+        var result = await _operations.RequeueExecutionAsync(source, CancellationToken.None);
+
+        result.Success.Should().BeTrue(result.Message);
+        DataContext.WorkQueues.AsNoTracking().Single().Input.Should().Contain(value);
+    }
+
+    [Test]
     public async Task A_run_that_recorded_decisions_is_requeued_to_replay_them()
     {
         var source = await SeedRunAsync("""{"Value":"again"}""");

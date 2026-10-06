@@ -6,6 +6,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
 using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
 using Every = Trax.Scheduler.Services.Scheduling.Every;
@@ -106,6 +107,70 @@ public class SchedulerDeadLetterTests
 
         result.Success.Should().BeFalse();
     }
+
+    private static readonly string OversizedNote = new(
+        'n',
+        TraxScheduler.MaxAcknowledgeNoteLength + 1
+    );
+
+    private const string OversizedNoteRefusal =
+        "The note is 1001 characters; it may be at most 1000 characters.";
+
+    [Test]
+    public async Task AcknowledgeDeadLetterAsync_NoteOverTheCap_IsRefusedAndChangesNothing()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-note-1");
+        var dl = await SeedDeadLetterAsync(fx, "dl-note-1");
+
+        var result = await fx.Scheduler.AcknowledgeDeadLetterAsync(dl.Id, OversizedNote);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be(OversizedNoteRefusal);
+        (await StatusOfAsync(fx, dl.Id)).Should().Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    [Test]
+    public async Task AcknowledgeDeadLetterAsync_NoteAtTheCap_IsAccepted()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-note-2");
+        var dl = await SeedDeadLetterAsync(fx, "dl-note-2");
+
+        var result = await fx.Scheduler.AcknowledgeDeadLetterAsync(
+            dl.Id,
+            new string('n', TraxScheduler.MaxAcknowledgeNoteLength)
+        );
+
+        result.Success.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task AcknowledgeDeadLettersAsync_NoteOverTheCap_IsRefusedAndChangesNothing()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-note-3");
+        var dl = await SeedDeadLetterAsync(fx, "dl-note-3");
+
+        var result = await fx.Scheduler.AcknowledgeDeadLettersAsync([dl.Id], OversizedNote);
+
+        result.Count.Should().Be(0);
+        result.Message.Should().Be(OversizedNoteRefusal);
+        (await StatusOfAsync(fx, dl.Id)).Should().Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    [Test]
+    public async Task AcknowledgeAllDeadLettersAsync_NoteOverTheCap_IsRefusedAndChangesNothing()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-note-4");
+        var dl = await SeedDeadLetterAsync(fx, "dl-note-4");
+
+        var result = await fx.Scheduler.AcknowledgeAllDeadLettersAsync(OversizedNote);
+
+        result.Count.Should().Be(0);
+        result.Message.Should().Be(OversizedNoteRefusal);
+        (await StatusOfAsync(fx, dl.Id)).Should().Be(DeadLetterStatus.AwaitingIntervention);
+    }
+
+    private static async Task<DeadLetterStatus> StatusOfAsync(SchedulerE2EFixture fx, long id) =>
+        (await fx.DataContext.DeadLetters.AsNoTracking().FirstAsync(d => d.Id == id)).Status;
 
     [Test]
     public async Task RequeueDeadLettersAsync_BatchAcrossManifests_RequeuesEach()
@@ -479,9 +544,67 @@ public class SchedulerDeadLetterTests
             .Be(1, "only the dead letter whose manifest was already queued is left");
     }
 
+    [Test]
+    public async Task RequeueAllDeadLettersAsync_ReportsItsRunningTotalAfterEachPage()
+    {
+        var externalIds = Enumerable.Range(1, 5).Select(i => $"dl-progress-{i}").ToArray();
+        await using var fx = await SchedulerE2EFixture.CreateAsync(s =>
+        {
+            foreach (var id in externalIds)
+                s.Schedule<ISchedulerTestTrain>(id, new SchedulerTestInput(), Every.Minutes(5));
+        });
+        await fx.MaterializePendingManifestsAsync();
+        foreach (var id in externalIds)
+            await SeedDeadLetterAsync(fx, id);
+        ((Trax.Scheduler.Services.TraxScheduler.TraxScheduler)fx.Scheduler).RequeueAllPageSize = 2;
+        var reported = new List<int>();
+
+        var result = await fx.Scheduler.RequeueAllDeadLettersAsync(
+            askAfresh: false,
+            new SynchronousProgress(reported.Add)
+        );
+
+        result.Count.Should().Be(5);
+        reported.Should().Equal([2, 4, 5], "one report per page, each the running total");
+    }
+
+    private sealed class SynchronousProgress(Action<int> report) : IProgress<int>
+    {
+        public void Report(int value) => report(value);
+    }
+
     #endregion
 
     #region Acknowledge in one statement
+
+    [Test]
+    public async Task AcknowledgeAllDeadLettersAsync_AcrossSeveralPages_AcknowledgesEveryAwaitingOne()
+    {
+        await using var fx = await CreateWithManifestAsync("dl-ack-pages");
+        for (var i = 0; i < 5; i++)
+            await SeedDeadLetterAsync(fx, "dl-ack-pages");
+        var done = await SeedDeadLetterAsync(fx, "dl-ack-pages");
+        await fx.Scheduler.AcknowledgeDeadLetterAsync(done.Id, "earlier");
+
+        // Two rows a statement, so five awaiting rows take three pages.
+        (
+            (Trax.Scheduler.Services.TraxScheduler.TraxScheduler)fx.Scheduler
+        ).AcknowledgeAllPageSize = 2;
+
+        var result = await fx.Scheduler.AcknowledgeAllDeadLettersAsync("clearing");
+
+        result.Count.Should().Be(5);
+        (
+            await fx
+                .DataContext.DeadLetters.AsNoTracking()
+                .CountAsync(d => d.Status == DeadLetterStatus.AwaitingIntervention)
+        )
+            .Should()
+            .Be(0);
+        (await fx.DataContext.DeadLetters.AsNoTracking().SingleAsync(d => d.Id == done.Id))
+            .ResolutionNote.Should()
+            .Be("earlier", "a row already resolved is not written again");
+    }
 
     [Test]
     public async Task AcknowledgeAllDeadLettersAsync_ResolvesEveryAwaitingOneAndLeavesResolvedOnesAlone()

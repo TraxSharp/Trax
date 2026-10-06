@@ -82,7 +82,11 @@ public class ChangeSignalEmissionTests
     public async Task QueueTrain_EmitsWorkQueue()
     {
         var recording = new RecordingChangeSignal();
-        await using var fx = CreateFixture(recording);
+        // Postgres: a host with no database provider refuses to queue (scheduler ADR 0019).
+        await using var fx = await SchedulerE2EFixture.CreateAsync(
+            _ => { },
+            services => services.AddSingleton<ITraxChangeSignal>(recording)
+        );
         var ops = fx.Services.GetRequiredService<IOperationsService>();
 
         await ops.QueueTrainAsync(new QueueTrainInput(TrainName), CancellationToken.None);
@@ -94,7 +98,11 @@ public class ChangeSignalEmissionTests
     public async Task CancelWorkQueueEntry_EmitsWorkQueue()
     {
         var recording = new RecordingChangeSignal();
-        await using var fx = CreateFixture(recording);
+        // Postgres: a host with no database provider refuses to queue (scheduler ADR 0019).
+        await using var fx = await SchedulerE2EFixture.CreateAsync(
+            _ => { },
+            services => services.AddSingleton<ITraxChangeSignal>(recording)
+        );
         var ops = fx.Services.GetRequiredService<IOperationsService>();
 
         var queued = await ops.QueueTrainAsync(
@@ -217,7 +225,17 @@ public class ChangeSignalEmissionTests
     public async Task RequeueDeadLetter_EmitsDeadLetterAndWorkQueue()
     {
         var recording = new RecordingChangeSignal();
-        await using var fx = await CreateWithManifestAsync(recording, "req-1");
+        // Postgres: a host with no database provider refuses to requeue (scheduler ADR 0019).
+        await using var fx = await SchedulerE2EFixture.CreateAsync(
+            s =>
+                s.Schedule<ISchedulerTestTrain>(
+                    "req-1",
+                    new SchedulerTestInput(),
+                    Every.Minutes(5)
+                ),
+            services => services.AddSingleton<ITraxChangeSignal>(recording)
+        );
+        await fx.MaterializePendingManifestsAsync();
         var dl = await SeedDeadLetterAsync(fx, "req-1");
         recording.Clear();
 

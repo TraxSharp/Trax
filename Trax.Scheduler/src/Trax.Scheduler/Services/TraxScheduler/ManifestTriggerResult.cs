@@ -26,4 +26,12 @@ public record ManifestTriggerResult(
     DateTime? ScheduledAt,
     bool AlreadyDispatched,
     long? ReplayDecisionsOf
-);
+)
+{
+    /// <summary>
+    /// True when the manifest already had a queued entry due later than the trigger asked, so the
+    /// trigger brought that entry forward to <see cref="ScheduledAt"/>. False for a new entry, for
+    /// an existing entry already due by then, and for one the dispatcher had claimed.
+    /// </summary>
+    public bool MovedForward { get; init; }
+}

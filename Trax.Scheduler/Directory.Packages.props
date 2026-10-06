@@ -16,15 +16,15 @@
   />
 
   <ItemGroup Label="Trax">
-    <PackageVersion Include="Trax.Effect" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.Data" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.Data.Sqlite" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.59.0" />
-    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.59.0" />
+    <PackageVersion Include="Trax.Effect" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.Data" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.Data.Postgres" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.Data.Sqlite" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Logging" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.JunctionProvider.Progress" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Json" Version="1.60.0" />
+    <PackageVersion Include="Trax.Effect.Provider.Parameter" Version="1.60.0" />
     <PackageVersion Include="Trax.Mediator" Version="1.24.1" />
   </ItemGroup>
 

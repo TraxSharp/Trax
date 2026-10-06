@@ -928,8 +928,14 @@ public class ManifestRetryReplaysDecisionsTests
         const BindingFlags members =
             BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
-        // A result the scheduler returns reports the run a replay names; no API accepts one back.
-        Type[] results = [typeof(ManifestTriggerResult)];
+        // A result the scheduler returns reports the run a replay names, or whether an answer was
+        // replayed; no API accepts one back.
+        Type[] results =
+        [
+            typeof(ManifestTriggerResult),
+            typeof(RecordedDecisionRecord),
+            typeof(WorkQueueEntryDetail),
+        ];
 
         var offending = typeof(ITraxScheduler)
             .Assembly.GetExportedTypes()
@@ -1775,8 +1781,6 @@ public class ManifestRetryReplaysDecisionsTests
 
     private async Task<Metadata> DispatchEntryAsync(long entryId)
     {
-        await WaitUntilDueAsync(entryId);
-
         using (var scope = Provider.CreateScope())
             await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
 
@@ -1786,34 +1790,6 @@ public class ManifestRetryReplaysDecisionsTests
             entry.Status.Should().Be(WorkQueueStatus.Dispatched);
             return await data.Metadatas.AsNoTracking().SingleAsync(m => m.Id == entry.MetadataId);
         });
-    }
-
-    /// <summary>
-    /// Waits, briefly, until the database's clock says the entry is due.
-    /// </summary>
-    /// <remarks>
-    /// A retry's <c>ScheduledAt</c> is this host's clock plus the backoff, zero here, but the
-    /// dispatcher compares it with the database's <c>now()</c>. A database clock even a millisecond
-    /// behind (a container's VM under load) sees an entry queued a moment ago as not yet due, skips
-    /// it, and the test reads Queued. The condition below is translated to the same <c>now()</c>
-    /// comparison the dispatcher makes. An entry that never comes due is left for the dispatch's
-    /// own assertion to report.
-    /// </remarks>
-    private async Task WaitUntilDueAsync(long entryId)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-        while (
-            !await WithData(data =>
-                data.WorkQueues.AnyAsync(q =>
-                    q.Id == entryId && (q.ScheduledAt == null || q.ScheduledAt <= DateTime.UtcNow)
-                )
-            )
-            && DateTime.UtcNow < deadline
-        )
-        {
-            // determinism: the poll interval of a bounded wait for the database clock.
-            await Task.Delay(5);
-        }
     }
 
     private Task<WorkQueue> EntryOf(long metadataId) =>

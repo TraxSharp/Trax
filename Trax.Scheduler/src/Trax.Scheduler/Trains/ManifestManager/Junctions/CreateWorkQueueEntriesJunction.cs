@@ -9,6 +9,7 @@ using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
+using Trax.Scheduler.Utilities;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 
@@ -64,6 +65,10 @@ internal class CreateWorkQueueEntriesJunction(
             CancellationToken
         );
 
+        // The dispatcher compares ScheduledAt with the database's clock, so a retry's due time is
+        // the database's now plus its backoff; read once, by the first retry that has a backoff.
+        DateTime? databaseNow = null;
+
         foreach (var view in views)
         {
             Trax.Effect.Models.WorkQueue.WorkQueue? entry = null;
@@ -94,7 +99,18 @@ internal class CreateWorkQueueEntriesJunction(
                     var clampedDelay = TimeSpan.FromSeconds(
                         Math.Min(delaySeconds, schedulerConfiguration.MaxRetryDelay.TotalSeconds)
                     );
-                    scheduledAt = DateTime.UtcNow + clampedDelay;
+                    // No backoff stores no time, so the retry is due on the next poll whatever the
+                    // clocks say. Otherwise its time is the database's (see DatabaseClock): this
+                    // host's clock running ahead of the database's would hold it back a poll.
+                    if (clampedDelay > TimeSpan.Zero)
+                    {
+                        var manifestId = view.Manifest.Id;
+                        databaseNow ??= await DatabaseClock.UtcNowAsync(
+                            dataContext.Manifests.Where(m => m.Id == manifestId),
+                            CancellationToken
+                        );
+                        scheduledAt = databaseNow + clampedDelay;
+                    }
 
                     logger.LogDebug(
                         "Applying retry delay of {Delay} for manifest {ManifestId} (failure #{FailureCount})",

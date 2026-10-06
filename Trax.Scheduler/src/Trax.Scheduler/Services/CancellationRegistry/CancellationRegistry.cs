@@ -20,6 +20,12 @@ internal class CancellationRegistry : ICancellationRegistry
     public void Unregister(long metadataId, CancellationTokenSource cts) =>
         _registry.TryRemove(new KeyValuePair<long, CancellationTokenSource>(metadataId, cts));
 
+    /// <summary>
+    /// The ids of the runs registered on this host when called, so a cancellation over many runs
+    /// asks the database only about these.
+    /// </summary>
+    internal List<long> RegisteredIds() => [.. _registry.Keys];
+
     public bool TryCancel(long metadataId)
     {
         if (!_registry.TryGetValue(metadataId, out var cts))

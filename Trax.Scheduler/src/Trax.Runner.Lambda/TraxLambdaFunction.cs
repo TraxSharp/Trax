@@ -56,7 +56,7 @@ namespace Trax.Runner.Lambda;
 /// </para>
 ///
 /// <para>
-/// <b>Local development:</b> Use <see cref="RunLocalAsync"/> to run the function as a
+/// <b>Local development:</b> Use <see cref="RunLocalAsync(string[])"/> to run the function as a
 /// local Kestrel web server for development and testing without AWS tooling.
 /// </para>
 ///
@@ -260,19 +260,58 @@ public abstract class TraxLambdaFunction
     /// await new Function().RunLocalAsync(args);
     /// </code>
     /// </example>
-    /// <param name="args">Command-line arguments passed to <see cref="WebApplication.CreateBuilder(string[])"/></param>
-    public async Task RunLocalAsync(string[] args)
+    /// <param name="args">Command-line arguments passed to the web application builder. The
+    /// content root, where the server reads its <c>appsettings.json</c> (and so its Kestrel URLs),
+    /// is the app's base directory, the one <see cref="BuildServiceProvider"/> reads its
+    /// configuration from, wherever the process was started; a <c>--contentRoot</c> argument or
+    /// a <c>DOTNET_CONTENTROOT</c> / <c>ASPNETCORE_CONTENTROOT</c> variable still sets it.</param>
+    public Task RunLocalAsync(string[] args) => RunLocalAsync(args, CancellationToken.None);
+
+    /// <summary>
+    /// Runs the Lambda function as a local Kestrel web server for development, as
+    /// <see cref="RunLocalAsync(string[])"/> does, until <paramref name="cancellationToken"/> is
+    /// cancelled or the host shuts down.
+    /// </summary>
+    /// <param name="args">Command-line arguments passed to the web application builder.</param>
+    /// <param name="cancellationToken">Stops the server when cancelled; the returned task then
+    /// completes once it has shut down.</param>
+    public async Task RunLocalAsync(string[] args, CancellationToken cancellationToken)
     {
-        var builder = WebApplication.CreateBuilder(args);
-        var app = builder.Build();
+        await using var app = CreateLocalBuilder(args).Build();
         ConfigureRoutes(app);
-        await app.RunAsync();
+        await Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(
+            app,
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// The builder <see cref="RunLocalAsync(string[], CancellationToken)"/> runs. Its content root
+    /// is <see cref="AppContext.BaseDirectory"/> unless the arguments or the environment name one,
+    /// so <c>dotnet run --project</c> from another directory reads the same
+    /// <c>appsettings.json</c> as the function's own configuration.
+    /// </summary>
+    internal static WebApplicationBuilder CreateLocalBuilder(string[] args)
+    {
+        var named = new ConfigurationBuilder()
+            .AddEnvironmentVariables("DOTNET_")
+            .AddEnvironmentVariables("ASPNETCORE_")
+            .AddCommandLine(args)
+            .Build()["contentRoot"];
+
+        return WebApplication.CreateBuilder(
+            new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = string.IsNullOrEmpty(named) ? AppContext.BaseDirectory : null,
+            }
+        );
     }
 
     /// <summary>
     /// Maps the local-development HTTP endpoints (<c>POST /trax/execute</c>, <c>POST /trax/run</c>)
     /// onto the supplied route builder. Exposed for test hosting; production code uses
-    /// <see cref="RunLocalAsync"/>.
+    /// <see cref="RunLocalAsync(string[], CancellationToken)"/>.
     /// </summary>
     internal void ConfigureRoutes(IEndpointRouteBuilder routes)
     {
@@ -519,7 +558,7 @@ public abstract class TraxLambdaFunction
     /// </summary>
     /// <remarks>
     /// Called once, lazily, on the first invocation (or the first request under
-    /// <see cref="RunLocalAsync"/>), and the result is reused for the life of the instance.
+    /// <see cref="RunLocalAsync(string[], CancellationToken)"/>), and the result is reused for the life of the instance.
     /// Every invocation is refused unless the provider resolves a
     /// <see cref="RunnerRequestVerifier"/> with a signing key or with unsigned requests allowed.
     /// </remarks>

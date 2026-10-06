@@ -190,6 +190,170 @@ public class OperationsServiceInMemoryTests
         (await Flagged()).Should().Equal(pending.Id);
     }
 
+    [Test]
+    public async Task A_scheduler_trigger_releases_a_queued_entry_without_a_set_update()
+    {
+        var group = await SeedGroup("trigger", enabled: true);
+        var queued = await SeedManifest(group, enabled: true);
+        var waiting = await Save(
+            WorkQueue.Create(
+                new CreateWorkQueue
+                {
+                    TrainName = queued.Name,
+                    Input = queued.Properties,
+                    InputTypeName = queued.PropertyTypeName,
+                    ManifestId = queued.Id,
+                    ScheduledAt = DateTime.UtcNow.AddHours(1),
+                }
+            )
+        );
+
+        var result = await _fx.Scheduler.TriggerAsync(
+            queued.ExternalId,
+            askAfresh: false,
+            CancellationToken.None
+        );
+
+        result.Created.Should().BeFalse();
+        result.MovedForward.Should().BeTrue();
+        var released = await _fx
+            .DataContext.WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.Id == waiting.Id);
+        released
+            .IsExplicitTrigger.Should()
+            .BeTrue(
+                "the operations surface runs on InMemory (docs/adr/0007-the-operations-surface-runs-on-inmemory.md)"
+            );
+    }
+
+    [Test]
+    public async Task Batch_group_cancel_acts_on_every_given_group()
+    {
+        var first = await SeedGroup("first", enabled: true);
+        var second = await SeedGroup("second", enabled: true);
+        var a = await SeedManifest(first, enabled: true);
+        await SeedManifest(second, enabled: true);
+        var running = await SeedRun(TrainState.InProgress, a.Id);
+
+        var cancelled = await _operations.CancelManifestGroupsAsync(
+            [first.Id, second.Id],
+            CancellationToken.None
+        );
+
+        cancelled.Count.Should().Be(1);
+        (await Flagged()).Should().Equal(running.Id);
+    }
+
+    [Test]
+    public async Task Logs_filter_by_text_and_read_oldest_first()
+    {
+        foreach (
+            var (message, category) in new[]
+            {
+                ("Disk at 50% capacity", "App.Storage"),
+                ("Disk at 500 MB", "App.Storage"),
+                ("connected to broker", "App.Messaging"),
+                ("DISK alarm cleared", "app.storage.alarms"),
+            }
+        )
+            await Save(
+                Trax.Effect.Models.Log.Log.Create(
+                    new Trax.Effect.Models.Log.DTOs.CreateLog
+                    {
+                        Level = Microsoft.Extensions.Logging.LogLevel.Information,
+                        Message = message,
+                        CategoryName = category,
+                        EventId = 0,
+                    }
+                )
+            );
+
+        var page = await _operations.GetLogsAsync(
+            new LogQuery
+            {
+                MessageContains = "disk",
+                CategoryContains = "STORAGE",
+                Order = LogOrder.OldestFirst,
+            },
+            CancellationToken.None
+        );
+        var percent = await _operations.CountLogsAsync(
+            new LogQuery { MessageContains = "50%" },
+            CancellationToken.None
+        );
+
+        page.Items.Select(l => l.Message)
+            .Should()
+            .Equal("Disk at 50% capacity", "Disk at 500 MB", "DISK alarm cleared");
+        percent.Should().Be(1, "% in the term matches itself, not any text");
+    }
+
+    [TestCase(OperationsService.LogCountCap, OperationsService.LogCountCap, false)]
+    [TestCase(OperationsService.LogCountCap + 1, OperationsService.LogCountCap, true)]
+    public async Task A_text_filtered_log_count_stops_at_the_cap(
+        int matching,
+        int expectedCount,
+        bool expectedCapped
+    )
+    {
+        for (var i = 0; i < matching; i++)
+            await _fx.DataContext.Track(
+                Trax.Effect.Models.Log.Log.Create(
+                    new Trax.Effect.Models.Log.DTOs.CreateLog
+                    {
+                        Level = Microsoft.Extensions.Logging.LogLevel.Information,
+                        Message = $"capped line {i}",
+                        CategoryName = "App.Capped",
+                        EventId = 0,
+                    }
+                )
+            );
+        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        _fx.DataContext.Reset();
+
+        (
+            await _operations.CountLogsCappedAsync(
+                new LogQuery { MessageContains = "CAPPED LINE" },
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(new LogCount(expectedCount, expectedCapped));
+        (
+            await _operations.CountLogsCappedAsync(
+                new LogQuery(Category: "App.Capped"),
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(new LogCount(matching, Capped: false), "a count without a text filter is exact");
+    }
+
+    [Test]
+    public async Task Dashboard_metrics_average_root_run_durations()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-30);
+        foreach (var seconds in new[] { 10, 20 })
+        {
+            var run = await SeedRun(TrainState.Completed);
+            run.StartTime = start;
+            run.EndTime = start.AddSeconds(seconds);
+            _fx.DataContext.Metadatas.Update(run);
+        }
+        await _fx.DataContext.SaveChanges(CancellationToken.None);
+        _fx.DataContext.Reset();
+
+        var metrics = await _operations.GetDashboardMetricsAsync(
+            MetricsRange.Last60Minutes,
+            hideAdminTrains: false,
+            CancellationToken.None
+        );
+
+        metrics.TopAverageDurations.Should().ContainSingle();
+        metrics.TopAverageDurations[0].AverageMilliseconds.Should().BeApproximately(15000, 1);
+        metrics.ExecutionsOverTime.Sum(b => b.Completed).Should().Be(2);
+    }
+
     #region Helpers
 
     private async Task<List<long>> Flagged() =>

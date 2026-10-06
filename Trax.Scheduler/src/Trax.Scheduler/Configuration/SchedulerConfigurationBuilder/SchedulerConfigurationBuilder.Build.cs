@@ -1,14 +1,19 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Services.DeadLetterRequeue;
 using Trax.Scheduler.Services.DecisionRecording;
 using Trax.Scheduler.Services.DormantDependentContext;
+using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.JobDispatcherPollingService;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.Operations;
@@ -68,6 +73,13 @@ public partial class SchedulerConfigurationBuilder
         // Register ITraxScheduler
         _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
 
+        // The effects list, toggle and settings editor the dashboard and the GraphQL API share
+        // (docs/0022). It acts on this process only.
+        _parentBuilder.ServiceCollection.TryAddScoped<
+            IEffectSettingsService,
+            EffectSettingsService
+        >();
+
         // Chooses the run a manifest's retry replays the decisions of (docs/adr/0017).
         _parentBuilder.ServiceCollection.TryAddScoped(sp => new RetryDecisionReplay(
             sp.GetRequiredService<IDataContextProviderFactory>(),
@@ -77,6 +89,17 @@ public partial class SchedulerConfigurationBuilder
         // Register IOperationsService — shared between dashboard UI and GraphQL operations
         // mutations so both surfaces have identical validation and persistence behaviour.
         _parentBuilder.ServiceCollection.AddScoped<IOperationsService, OperationsService>();
+
+        // The background requeue-all both surfaces start and read back (docs/0022). A singleton:
+        // the jobs are this node's, and a fold runs until it finishes or the host stops.
+        _parentBuilder.ServiceCollection.TryAddSingleton<
+            IDeadLetterRequeueJobs,
+            DeadLetterRequeueJobs
+        >();
+
+        // The runtime log levels the dashboard and the GraphQL API share (docs/0022), applied to
+        // this process's logger filters.
+        RegisterLogLevelOverrides(_parentBuilder.ServiceCollection);
 
         // Reads the persisted scheduler_config row at startup and applies it to the
         // in-memory SchedulerConfiguration singleton, then keeps checking it so a save made on
@@ -334,5 +357,30 @@ public partial class SchedulerConfigurationBuilder
                 seen[trainName] = submitterName;
             }
         }
+    }
+
+    /// <summary>
+    /// Registers the runtime log levels once: the overrides as a post-configure step and change
+    /// source of the logger filter options, so a level set at runtime applies over every
+    /// configuration source and the logger factory re-reads its filters, and the service that
+    /// reads and sets them.
+    /// </summary>
+    internal static void RegisterLogLevelOverrides(IServiceCollection services)
+    {
+        if (services.Any(sd => sd.ServiceType == typeof(LogLevelOverrides)))
+            return;
+
+        services.AddSingleton<LogLevelOverrides>();
+        services.AddSingleton<IPostConfigureOptions<LoggerFilterOptions>>(sp =>
+            sp.GetRequiredService<LogLevelOverrides>()
+        );
+        services.AddSingleton<IOptionsChangeTokenSource<LoggerFilterOptions>>(sp =>
+            sp.GetRequiredService<LogLevelOverrides>()
+        );
+        services.TryAddSingleton<ILogLevelService>(sp => new LogLevelService(
+            sp.GetRequiredService<LogLevelOverrides>(),
+            sp.GetService<IConfiguration>(),
+            sp.GetService<IOptionsMonitor<LoggerFilterOptions>>()
+        ));
     }
 }

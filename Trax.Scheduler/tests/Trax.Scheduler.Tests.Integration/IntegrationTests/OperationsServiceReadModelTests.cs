@@ -249,6 +249,208 @@ public class OperationsServiceReadModelTests : TestSetup
         page.Items.Should().HaveCount(expected, "one call never materialises the whole table");
     }
 
+    [Test]
+    public async Task Logs_filter_by_text_the_message_contains_ignoring_case()
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLog(run.Id, "Payment REFUSED for order 7", "Shop.Payments");
+        await SeedLog(run.Id, "payment accepted", "Shop.Payments");
+        await SeedLog(run.Id, "refused: no stock", "Shop.Stock");
+
+        var page = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id) { MessageContains = "refused" },
+            CancellationToken.None
+        );
+        var count = await _operations.CountLogsAsync(
+            new LogQuery(MetadataId: run.Id) { MessageContains = "REFUSED" },
+            CancellationToken.None
+        );
+
+        page.Items.Select(l => l.Message)
+            .Should()
+            .Equal("refused: no stock", "Payment REFUSED for order 7");
+        count.Should().Be(2, "the count takes the same text filter");
+    }
+
+    [Test]
+    public async Task Logs_filter_by_text_the_category_contains_ignoring_case()
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLog(run.Id, "one", "Shop.Payments.Gateway");
+        await SeedLog(run.Id, "two", "Shop.Stock");
+        await SeedLog(run.Id, "three", "shop.payments");
+
+        var page = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id) { CategoryContains = "PAYMENTS" },
+            CancellationToken.None
+        );
+
+        page.Items.Select(l => l.Message).Should().BeEquivalentTo(["one", "three"]);
+        (
+            await _operations.CountLogsAsync(
+                new LogQuery(MetadataId: run.Id)
+                {
+                    CategoryContains = "payments",
+                    MessageContains = "three",
+                },
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(1, "both text filters apply together");
+    }
+
+    [TestCase("50%", "Disk at 50% capacity", TestName = "A_percent_sign_matches_itself")]
+    [TestCase("a_b", "key a_b missing", TestName = "An_underscore_matches_itself")]
+    [TestCase(@"C:\temp", @"wrote C:\temp\out.txt", TestName = "A_backslash_matches_itself")]
+    public async Task Log_text_filters_match_wildcards_literally(string term, string expected)
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLog(run.Id, "Disk at 50% capacity", "Wildcards");
+        await SeedLog(run.Id, "Disk at 500 MB", "Wildcards");
+        await SeedLog(run.Id, "key a_b missing", "Wildcards");
+        await SeedLog(run.Id, "key axb missing", "Wildcards");
+        await SeedLog(run.Id, @"wrote C:\temp\out.txt", "Wildcards");
+        await SeedLog(run.Id, @"wrote C:temp", "Wildcards");
+
+        var page = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id) { MessageContains = term },
+            CancellationToken.None
+        );
+
+        page.Items.Select(l => l.Message).Should().Equal(expected);
+    }
+
+    [Test]
+    public async Task Logs_read_oldest_first_and_page_forward_by_cursor()
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLogs(run.Id, 7, LogLevel.Information, "Ascending");
+
+        var first = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id, Take: 4) { Order = LogOrder.OldestFirst },
+            CancellationToken.None
+        );
+        var second = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id, AfterId: first.NextCursor, Take: 4)
+            {
+                Order = LogOrder.OldestFirst,
+            },
+            CancellationToken.None
+        );
+        var newestFirst = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id, Take: 10),
+            CancellationToken.None
+        );
+
+        first.Items.Select(l => l.Id).Should().BeInAscendingOrder();
+        second.Items.Should().HaveCount(3);
+        first
+            .Items.Concat(second.Items)
+            .Select(l => l.Id)
+            .Should()
+            .Equal(newestFirst.Items.Select(l => l.Id).Reverse(), "the same rows, oldest first");
+    }
+
+    [Test]
+    public async Task Logs_read_oldest_first_page_by_offset()
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLogs(run.Id, 5, LogLevel.Information, "AscendingOffset");
+
+        var all = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id, Take: 5) { Order = LogOrder.OldestFirst },
+            CancellationToken.None
+        );
+        var skipped = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id, Skip: 3, Take: 5) { Order = LogOrder.OldestFirst },
+            CancellationToken.None
+        );
+
+        skipped.Items.Select(l => l.Id).Should().Equal(all.Items.Skip(3).Select(l => l.Id));
+    }
+
+    [TestCase("", TestName = "An_empty_text_filter_matches_everything")]
+    [TestCase(null, TestName = "A_null_text_filter_matches_everything")]
+    public async Task An_empty_text_filter_is_no_filter(string? term)
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLogs(run.Id, 3, LogLevel.Information, "Empty");
+
+        (
+            await _operations.CountLogsAsync(
+                new LogQuery(MetadataId: run.Id)
+                {
+                    MessageContains = term,
+                    CategoryContains = term,
+                },
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(3);
+    }
+
+    [TestCase(LogOrder.NewestFirst)]
+    [TestCase(LogOrder.OldestFirst)]
+    public async Task A_text_filtered_page_reads_matches_on_both_sides_of_the_window_in_order(
+        LogOrder order
+    )
+    {
+        // More rows than the window, with matches near each end and in the middle, so a page
+        // starts in the window and finishes past it, whichever end it reads from.
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        var rows = OperationsService.LogTextWindow + 20_000;
+        var ctx = (DbContext)DataContext;
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO trax.log (metadata_id, event_id, level, message, category)
+            SELECT {run.Id}, 0, 'information'::trax.log_level,
+                   'line ' || g || CASE WHEN g % 1000 = 7 OR g IN (3, {rows
+                - 2}) THEN ' Needle' ELSE '' END,
+                   'Window'
+            FROM generate_series(1, {rows}) g
+            """
+        );
+        var matching = await DataContext
+            .Logs.AsNoTracking()
+            .Where(l => l.MetadataId == run.Id && l.Message.EndsWith(" Needle"))
+            .Select(l => l.Id)
+            .ToListAsync();
+        var expected =
+            order == LogOrder.OldestFirst
+                ? matching.Order().ToList()
+                : matching.OrderDescending().ToList();
+
+        var whole = await _operations.GetLogsAsync(
+            new LogQuery(MetadataId: run.Id, Take: OperationsService.MaxPageSize)
+            {
+                MessageContains = "needle",
+                Order = order,
+            },
+            CancellationToken.None
+        );
+        whole.Items.Select(l => l.Id).Should().Equal(expected);
+
+        var paged = new List<long>();
+        long? cursor = null;
+        do
+        {
+            var page = await _operations.GetLogsAsync(
+                new LogQuery(MetadataId: run.Id, Take: 7, AfterId: cursor)
+                {
+                    MessageContains = "needle",
+                    Order = order,
+                },
+                CancellationToken.None
+            );
+            paged.AddRange(page.Items.Select(l => l.Id));
+            cursor = page.Items.Count == 7 ? page.NextCursor : null;
+        } while (cursor is not null);
+
+        paged.Should().Equal(expected, "paging by cursor reads the same rows in the same order");
+    }
+
     #endregion
 
     #region Helpers
@@ -295,6 +497,49 @@ public class OperationsServiceReadModelTests : TestSetup
         await DataContext.SaveChanges(CancellationToken.None);
         DataContext.Reset();
         return metadata;
+    }
+
+    [TestCase(OperationsService.LogCountCap, OperationsService.LogCountCap, false)]
+    [TestCase(OperationsService.LogCountCap + 1, OperationsService.LogCountCap, true)]
+    public async Task A_text_filtered_count_stops_at_the_cap(
+        int matching,
+        int expectedCount,
+        bool expectedCapped
+    )
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLogs(run.Id, matching, LogLevel.Information, "Shop.Capped");
+        await SeedLogs(run.Id, 5, LogLevel.Information, "Shop.Other");
+        var query = new LogQuery(MetadataId: run.Id) { CategoryContains = "capped" };
+
+        var count = await _operations.CountLogsCappedAsync(query, CancellationToken.None);
+
+        count.Should().Be(new LogCount(expectedCount, expectedCapped));
+        (await _operations.CountLogsAsync(query, CancellationToken.None))
+            .Should()
+            .Be(matching, "the exact count is not capped");
+    }
+
+    [Test]
+    public async Task A_count_without_a_text_filter_is_exact_past_the_cap()
+    {
+        var run = await SeedRun(null, TrainState.Completed, DateTime.UtcNow, DateTime.UtcNow);
+        await SeedLogs(run.Id, OperationsService.LogCountCap + 1, LogLevel.Information, "Wide");
+
+        var count = await _operations.CountLogsCappedAsync(
+            new LogQuery(MetadataId: run.Id, Category: "Wide"),
+            CancellationToken.None
+        );
+
+        count.Should().Be(new LogCount(OperationsService.LogCountCap + 1, Capped: false));
+    }
+
+    private async Task SeedLog(long metadataId, string message, string category)
+    {
+        var ctx = (DbContext)DataContext;
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO trax.log (metadata_id, event_id, level, message, category) VALUES ({metadataId}, 0, 'information'::trax.log_level, {message}, {category})"
+        );
     }
 
     private async Task SeedLogs(long metadataId, int count, LogLevel level, string category)

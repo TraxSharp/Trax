@@ -11,6 +11,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.LifecycleHookRunner;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
@@ -58,6 +59,12 @@ internal class DispatchJobsJunction(
     /// default stale-pending timeout, for a host that registers the type.
     /// </summary>
     internal const int UnknownInputTypeMaxSkips = 10;
+
+    /// <summary>
+    /// How long the lifecycle hooks may take to receive a run that failed at dispatch before the
+    /// dispatcher stops waiting for them. Settable so a test can shorten it.
+    /// </summary>
+    internal static TimeSpan FailurePublishTimeout { get; set; } = FailureRecordingTimeout;
 
     public override async Task<Unit> Run(List<WorkQueue> entries)
     {
@@ -418,7 +425,12 @@ internal class DispatchJobsJunction(
         var backoff = DispatchFailure.Backoff(attempts);
 
         claimed.DispatchAttempts = attempts;
-        claimed.ScheduledAt = DateTime.UtcNow + backoff;
+        // By the database's clock, which the dispatcher compares it with (see DatabaseClock).
+        claimed.ScheduledAt =
+            await DatabaseClock.UtcNowAsync(
+                dataContext.WorkQueues.Where(q => q.Id == claimed.Id),
+                CancellationToken
+            ) + backoff;
         await dataContext.SaveChanges(CancellationToken);
         await dataContext.CommitTransaction();
 
@@ -489,6 +501,7 @@ internal class DispatchJobsJunction(
         await dataContext.SaveChanges(CancellationToken);
         await LinkDeadLetterRetryAsync(dataContext, claimed, metadata.Id);
         await dataContext.CommitTransaction();
+        await PublishFailedAsync(metadata.Id, CancellationToken);
 
         logger.LogError(
             exception,
@@ -566,6 +579,7 @@ internal class DispatchJobsJunction(
         // (effect/0005 records the same rule for a train's outcome).
         using var bounded = new CancellationTokenSource(FailureRecordingTimeout);
         var token = bounded.Token;
+        var failedForGood = false;
 
         try
         {
@@ -633,7 +647,13 @@ internal class DispatchJobsJunction(
                     workQueueEntry.Status = WorkQueueStatus.Queued;
                     workQueueEntry.MetadataId = null;
                     workQueueEntry.DispatchedAt = null;
-                    workQueueEntry.ScheduledAt = now + backoff;
+                    // By the database's clock, which the dispatcher compares it with (see
+                    // DatabaseClock).
+                    workQueueEntry.ScheduledAt =
+                        await DatabaseClock.UtcNowAsync(
+                            dataContext.WorkQueues.Where(w => w.Id == workQueueId),
+                            token
+                        ) + backoff;
 
                     logger.LogWarning(
                         "Requeued work queue entry {WorkQueueId} after dispatch failure "
@@ -658,6 +678,7 @@ internal class DispatchJobsJunction(
 
             await dataContext.SaveChanges(token);
             await dataContext.CommitTransaction();
+            failedForGood = !requeue;
         }
         catch (Exception ex)
         {
@@ -667,6 +688,71 @@ internal class DispatchJobsJunction(
                     + "(Metadata: {MetadataId}). The ReapStalePendingMetadataJunction will recover it "
                     + "on the next ManifestManager cycle",
                 workQueueId,
+                metadataId
+            );
+        }
+
+        // A run failed for good is the run's terminal outcome, published as a train's own failure
+        // is. A requeued attempt is not: its entry runs again under the same external id. Nor is
+        // a row no longer Pending, which a runner owns and reports itself.
+        if (failedForGood)
+            await PublishFailedAsync(metadataId, token);
+    }
+
+    /// <summary>
+    /// Publishes the Failed outcome of a run the dispatcher failed before any runner started it,
+    /// through the same lifecycle hooks a train's own failure goes through: <c>OnFailed</c>, then
+    /// <c>OnStateChanged</c>, which is what the broadcaster and the GraphQL subscriptions follow.
+    /// No train ran, so nothing else publishes it, and a client following the queued run by its
+    /// external id would otherwise wait forever.
+    /// </summary>
+    /// <remarks>
+    /// Called once, after the Failed row is committed. The hooks swallow their own failures; a
+    /// failure to read the row is logged, since the outcome is already recorded either way.
+    /// <para>
+    /// The hooks are given the run with <see cref="DispatchFailure.Published"/> as its failure, not
+    /// what the row records. A dispatch failure's detail is the dispatcher's and the runner's (a
+    /// remote worker's response body, an input type's assembly-qualified name, a serializer's
+    /// message), and a lifecycle event reaches subscribers who are not operators. The row keeps the
+    /// full detail for the operations queries.
+    /// </para>
+    /// <para>
+    /// The dispatch loop waits for this, so the hooks are bounded by
+    /// <see cref="FailurePublishTimeout"/>: a hook that hangs, whether or not it honours its
+    /// token, is abandoned and logged rather than holding up every entry behind it.
+    /// </para>
+    /// </remarks>
+    private async Task PublishFailedAsync(long metadataId, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
+            var metadata = await dataContext
+                .Metadatas.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == metadataId, ct);
+            if (metadata is null)
+                return;
+
+            // Transient, and disposed with the scope.
+            var hooks = scope.ServiceProvider.GetService<ILifecycleHookRunner>();
+            if (hooks is null)
+                return;
+
+            var published = DispatchFailure.Published(metadata);
+            metadata.AddException(published);
+
+            using var bounded = new CancellationTokenSource(FailurePublishTimeout);
+            await hooks
+                .OnFailed(metadata, published, bounded.Token)
+                .WaitAsync(FailurePublishTimeout, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Could not publish the failure of Metadata {MetadataId}, which failed at dispatch; "
+                    + "the failure is recorded on its row",
                 metadataId
             );
         }

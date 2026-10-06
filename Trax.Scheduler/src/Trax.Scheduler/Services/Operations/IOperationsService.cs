@@ -26,6 +26,12 @@ public interface IOperationsService
     /// <c>"The enqueue was refused."</c>, and the exception is logged at Warning. A hook that
     /// refuses with a message for the caller throws <c>TrainException</c> (scheduler/0004).
     /// </para>
+    /// <para>
+    /// On a host with no database provider nothing dispatches the work queue, so the enqueue is
+    /// refused before anything is written, with <c>OperationsService.NoDispatcherMessage</c>
+    /// (scheduler ADR 0019). <see cref="RequeueExecutionAsync(long, bool, CancellationToken)"/>
+    /// and the triggers refuse the same way.
+    /// </para>
     /// </returns>
     /// <exception cref="System.Data.Common.DbException">
     /// The enqueue failed on infrastructure rather than being refused. Not only this type: a
@@ -301,6 +307,117 @@ public interface IOperationsService
         throw NotImplementedBy(nameof(SetAllManifestGroupsEnabledAsync));
 
     /// <summary>
+    /// Triggers the manifest with this external id, as <c>ITraxScheduler.TriggerAsync</c> does,
+    /// and says what the trigger did. The dashboard's Trigger buttons and the API's
+    /// <c>triggerManifest</c> and <c>triggerManifestDelayed</c> all call it (central
+    /// <c>docs/0022</c>).
+    /// </summary>
+    /// <remarks>
+    /// The trigger queues a new entry marked as asked for by name, so it runs even while the
+    /// manifest is disabled. A manifest holds at most one queued entry, so when it already has one
+    /// nothing more is queued and that entry becomes the triggered run: it is marked the same way
+    /// and, when it was due later than the trigger asked, brought forward. The result says which
+    /// happened. With <paramref name="askAfresh"/> true, a released retry asks its deciders afresh
+    /// rather than replaying the failed run's decisions (scheduler/0017); when the dispatcher had
+    /// claimed it first it is too late to change, the trigger still succeeds, and
+    /// <see cref="TriggerManifestResult.StillReplaying"/> is true.
+    /// </remarks>
+    /// <param name="externalId">The manifest's external id.</param>
+    /// <param name="delay">
+    /// How long from now the run becomes due; <c>null</c> (or zero or less) means now. An existing
+    /// entry due sooner keeps its own time.
+    /// </param>
+    /// <param name="askAfresh">True asks a released retry's deciders afresh.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// What the trigger did. A failed result, with nothing changed, when no manifest has the
+    /// external id or when nothing on this host can dispatch a queued run (scheduler ADR 0019).
+    /// </returns>
+    /// <exception cref="System.Data.Common.DbException">
+    /// A save failed on infrastructure. It is thrown, not reported (scheduler/0004).
+    /// </exception>
+    Task<TriggerManifestResult> TriggerManifestAsync(
+        string externalId,
+        TimeSpan? delay,
+        bool askAfresh,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(TriggerManifestAsync));
+
+    /// <summary>
+    /// Triggers each of the given manifests now, exactly as <c>ITraxScheduler.TriggerAsync</c>
+    /// triggers one by external id: a new work queue entry marked as asked for by name, so it runs
+    /// even while the manifest is disabled, or, when the manifest already has a queued entry, that
+    /// entry released as the triggered run and brought forward to now. The manifests are
+    /// triggered one at a time in the order given, each with its own save, and
+    /// <c>ChangeDomain.WorkQueue</c> is signalled once.
+    /// </summary>
+    /// <remarks>
+    /// With <paramref name="askAfresh"/> true, a released entry that would replay a failed run's
+    /// decisions (a retry waiting out its backoff) asks its deciders afresh instead
+    /// (scheduler/0017). When the dispatcher claimed that entry first it is too late to change: the
+    /// manifest is counted in <see cref="BatchTriggerResult.TooLateToAskAfresh"/> with a note naming the
+    /// run it replays. Ids that name no manifest are skipped and noted; they do not stop the rest.
+    /// </remarks>
+    /// <param name="manifestIds">The manifests' database ids (not their external ids).</param>
+    /// <param name="askAfresh">True asks a released retry's deciders afresh.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// What the batch did. A failed result, with nothing triggered, for an empty list, more than
+    /// <c>OperationsService.MaxBatchSize</c> ids, or a host where nothing can dispatch a queued
+    /// run (scheduler ADR 0019).
+    /// </returns>
+    /// <exception cref="System.Data.Common.DbException">
+    /// A save failed on infrastructure. It is thrown, not reported (scheduler/0004); the manifests
+    /// triggered before it stay triggered, and sending the same batch again is safe, since a
+    /// manifest holds at most one queued entry.
+    /// </exception>
+    Task<BatchTriggerResult> TriggerManifestsAsync(
+        IReadOnlyCollection<long> manifestIds,
+        bool askAfresh,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(TriggerManifestsAsync));
+
+    /// <summary>
+    /// Triggers every eligible manifest of each of the given groups, as
+    /// <c>ITraxScheduler.TriggerGroupAsync</c> does for one group: the enabled members that run on
+    /// their own schedule (not Dependent or DormantDependent), each triggered as
+    /// <see cref="TriggerManifestsAsync"/> triggers one. A disabled group is triggered too, as the
+    /// single group trigger triggers it; the group still holds its runs until it is enabled.
+    /// <c>ChangeDomain.WorkQueue</c> is signalled once.
+    /// </summary>
+    /// <param name="groupIds">The groups' ids.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// What the batch did, counting manifests; <see cref="BatchTriggerResult.Matched"/> counts the
+    /// groups found and <see cref="BatchTriggerResult.Skipped"/> the ids that named none. A failed
+    /// result, with nothing triggered, for an empty list, more than
+    /// <c>OperationsService.MaxBatchSize</c> ids, or a host where nothing can dispatch a queued
+    /// run (scheduler ADR 0019).
+    /// </returns>
+    /// <exception cref="System.Data.Common.DbException">
+    /// As from <see cref="TriggerManifestsAsync"/>.
+    /// </exception>
+    Task<BatchTriggerResult> TriggerManifestGroupsAsync(
+        IReadOnlyCollection<long> groupIds,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(TriggerManifestGroupsAsync));
+
+    /// <summary>
+    /// Requests cancellation of every <c>Pending</c> or <c>InProgress</c> run of every manifest in
+    /// the given groups, in one statement, by the rule <see cref="CancelExecutionsAsync"/> applies
+    /// to a list of runs and <c>ITraxScheduler.CancelGroupAsync</c> to one group.
+    /// </summary>
+    /// <returns>
+    /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number of runs flagged,
+    /// zero included; the message also says how many of the ids named a group.
+    /// <c>OperationResult(false, ...)</c> for an empty list or too many ids, with nothing flagged.
+    /// </returns>
+    Task<OperationResult> CancelManifestGroupsAsync(
+        IReadOnlyCollection<long> groupIds,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CancelManifestGroupsAsync));
+
+    /// <summary>
     /// Run counts by state for one manifest, with its most recent run and most recent successful
     /// run. A manifest with no runs, or an id with no manifest, gets zeros and nulls.
     /// </summary>
@@ -323,26 +440,114 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(GetManifestGroupExecutionStatsAsync));
 
     /// <summary>
-    /// A page of log entries, newest first, filtered by run, minimum level and exact category.
-    /// Pages by keyset when <see cref="LogQuery.AfterId"/> is set, otherwise by offset. The page
-    /// size is clamped to 1 through <c>OperationsService.MaxPageSize</c>.
+    /// A page of log entries, filtered by run, minimum level, exact category, and text the message
+    /// or the category contains, newest first unless <see cref="LogQuery.Order"/> says oldest
+    /// first. Pages by keyset when <see cref="LogQuery.AfterId"/> is set, in the chosen order,
+    /// otherwise by offset. The page size is clamped to 1 through
+    /// <c>OperationsService.MaxPageSize</c>.
     /// </summary>
     Task<LogPage> GetLogsAsync(LogQuery query, CancellationToken ct) =>
         throw NotImplementedBy(nameof(GetLogsAsync));
 
     /// <summary>
-    /// The exact number of log entries matching the query's filter; its paging fields and cursor
-    /// are ignored. An exact count of an unfiltered log table is a full scan, so a caller that
+    /// The exact number of log entries matching the query's filter, its text filters included;
+    /// its order, paging fields and cursor are ignored. An exact count of an unfiltered log table is a full scan, so a caller that
     /// only needs a size for a pager on a large table may prefer an estimate.
     /// </summary>
     Task<int> CountLogsAsync(LogQuery query, CancellationToken ct) =>
         throw NotImplementedBy(nameof(CountLogsAsync));
+
+    /// <summary>
+    /// The number of log entries matching the query's filter, for a pager: exact, as
+    /// <see cref="CountLogsAsync"/> gives it, when the query has no text filter, and counted only
+    /// up to <c>OperationsService.LogCountCap</c> (10,000) when it has one
+    /// (<see cref="LogQuery.MessageContains"/> or <see cref="LogQuery.CategoryContains"/>). Its
+    /// order, paging fields and cursor are ignored.
+    /// </summary>
+    /// <remarks>
+    /// <para>A text filter that matches most entries matches a large share of a large table, and
+    /// an exact count of those reads every one of them (about 325 ms at three million rows on
+    /// Postgres). Capped, the count stops at the first 10,001 matches. When more than 10,000
+    /// entries match, the result is <c>Count = 10000</c> with <see cref="LogCount.Capped"/> set,
+    /// to be shown as "10,000+"; exactly 10,000 matches is <c>Count = 10000</c>, not capped.</para>
+    /// <para>The same on every provider. An implementation that does not override this returns
+    /// <see cref="CountLogsAsync"/>'s exact count, never capped.</para>
+    /// </remarks>
+    async Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct) =>
+        new(await CountLogsAsync(query, ct), Capped: false);
+
+    /// <summary>
+    /// A page of the decisions a run recorded in <c>trax.decision</c> (written when the host calls
+    /// <c>AddDecisionRecording</c>), in the order they were recorded, with an answer withheld where
+    /// junction events withhold it: see <see cref="RecordedDecisionRecord"/>. A run with no
+    /// decisions, or an id with no run, gets an empty page.
+    /// </summary>
+    /// <remarks>
+    /// The run's replay link and the work queue entry's are plain columns
+    /// (<c>Metadata.ReplayDecisionsOf</c>, <c>Metadata.ReplayAbandoned</c>,
+    /// <c>WorkQueue.ReplayDecisionsOf</c>) and are read with the run and the entry, not here.
+    /// </remarks>
+    /// <param name="metadataId">The run whose decisions to read.</param>
+    /// <param name="afterId">
+    /// Keyset cursor: only decisions recorded after this one (a page's
+    /// <see cref="RecordedDecisionPage.NextCursor"/>); null for the first page.
+    /// </param>
+    /// <param name="take">Page size, clamped to 1 through <c>OperationsService.MaxPageSize</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<RecordedDecisionPage> GetRecordedDecisionsAsync(
+        long metadataId,
+        long? afterId,
+        int take,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetRecordedDecisionsAsync));
+
+    /// <summary>
+    /// One work queue entry as an operator reads it, or <c>null</c> when no entry has the id. Its
+    /// train input is masked by <see cref="TransportInputRedaction.Redact"/>: each
+    /// <c>[TraxSensitive]</c> member reads <c>{"_redacted": true}</c>, and an input this host cannot
+    /// read as its type is masked whole. For a queued entry with a subject it also names what the
+    /// entry is waiting on: the dispatched entry whose run still holds the subject, or, when
+    /// nothing holds it, the queued sibling dispatch would offer first. The dashboard's work queue
+    /// entry page and the GraphQL API's <c>workQueue.detail</c> both read it here.
+    /// </summary>
+    /// <param name="id">The entry's database id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, CancellationToken ct) =>
+        throw NotImplementedBy(nameof(GetWorkQueueEntryDetailAsync));
 
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "
                 + "after this implementation was written."
         );
+
+    /// <summary>
+    /// Patches mutable settings on one manifest: enabled, retries, priority, timeout and schedule.
+    /// Every check runs before any field is written, so a refused patch changes nothing, and both
+    /// the dashboard and the API's <c>updateManifest</c> call it (central <c>docs/0022</c>).
+    /// </summary>
+    /// <remarks>
+    /// Refused: a negative retry count, a priority outside the work queue's range, a timeout or
+    /// interval that is not positive, a cron expression the scheduler cannot parse or that never
+    /// fires, a switch to <c>Cron</c> without an expression or to <c>Interval</c> without an
+    /// interval, and a switch to <c>Once</c>, <c>Dependent</c> or <c>DormantDependent</c>, which
+    /// need a time or a parent the patch cannot give. The schedule is checked only when the patch
+    /// changes it, so a manifest already holding a bad schedule can still be disabled.
+    /// Signals <c>ChangeDomain.Manifest</c> on success.
+    /// </remarks>
+    /// <param name="id">The manifest's database id.</param>
+    /// <param name="update">The fields to change.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <c>OperationResult(true, Id: id, Count: 1, ...)</c> when saved;
+    /// <c>OperationResult(false, ...)</c> with the reason when the manifest is not found or the
+    /// patch is refused.
+    /// </returns>
+    Task<OperationResult> UpdateManifestAsync(
+        long id,
+        ManifestUpdate update,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(UpdateManifestAsync));
 
     /// <summary>
     /// Patches mutable settings on a manifest group (max active jobs, priority, enabled

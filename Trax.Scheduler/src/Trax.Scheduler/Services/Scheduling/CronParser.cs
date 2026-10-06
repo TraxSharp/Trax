@@ -47,6 +47,42 @@ internal static class CronParser
     }
 
     /// <summary>
+    /// Why the scheduler could not use <paramref name="expression"/>, or <c>null</c> when it can:
+    /// it needs 5 or 6 fields, each field in range, and at least one future occurrence. Checked
+    /// before a manifest is saved, since the scheduler skips a schedule it cannot evaluate on
+    /// every poll and so never runs it.
+    /// </summary>
+    /// <param name="expression">The cron expression.</param>
+    /// <param name="now">The time the future occurrence is looked for after.</param>
+    public static string? Validate(string? expression, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return "a CRON schedule needs a cronExpression.";
+
+        var format = DetectFormat(expression);
+        if (format is null)
+            return $"cronExpression '{expression}' has "
+                + $"{expression.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length} field(s); "
+                + "a cron expression has 5 or 6 (with seconds).";
+
+        CronExpression parsed;
+        try
+        {
+            parsed = CronExpression.Parse(expression, format.Value);
+        }
+        catch (CronFormatException ex)
+        {
+            return $"cronExpression '{expression}' is not a valid cron expression: {ex.Message}";
+        }
+
+        return
+            parsed.GetNextOccurrence(DateTime.SpecifyKind(now, DateTimeKind.Utc), TimeZoneInfo.Utc)
+                is null
+            ? $"cronExpression '{expression}' never fires."
+            : null;
+    }
+
+    /// <summary>
     /// Gets the next occurrence after the given time.
     /// </summary>
     /// <param name="expression">The cron expression</param>

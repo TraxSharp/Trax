@@ -66,10 +66,11 @@ public sealed class SchedulerE2EFixture : IAsyncDisposable
     /// </summary>
     public static async Task<SchedulerE2EFixture> CreateAsync(
         Action<SchedulerConfigurationBuilder> configureScheduler,
-        Action<IServiceCollection>? configureServices = null
+        Action<IServiceCollection>? configureServices = null,
+        string? connectionString = null
     )
     {
-        var connectionString = TestPostgres.ConnectionString;
+        connectionString ??= TestPostgres.ConnectionString;
 
         // Each E2E test stands up its own ServiceProvider with its own Npgsql connection pool.
         // Pin the pool to a single connection that immediately returns to the pool — without

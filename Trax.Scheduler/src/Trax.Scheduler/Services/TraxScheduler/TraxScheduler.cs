@@ -52,6 +52,21 @@ public class TraxScheduler(
 ) : ITraxScheduler
 {
     /// <summary>
+    /// The longest acknowledgement note accepted, in characters. A note is an operator's reason,
+    /// a sentence or a paragraph; <see cref="AcknowledgeAllDeadLettersAsync"/> writes it onto every
+    /// awaiting row, so an unbounded one multiplies into the table by the size of the backlog. A
+    /// longer note is refused, not cut, so what is stored is what the operator wrote. The
+    /// dashboard and the GraphQL API both acknowledge through this scheduler, so both refuse it.
+    /// </summary>
+    public const int MaxAcknowledgeNoteLength = 1_000;
+
+    /// <summary>Why a note is refused, or null when it is accepted.</summary>
+    internal static string? NoteRefusal(string? note) =>
+        note is { Length: > MaxAcknowledgeNoteLength }
+            ? $"The note is {note.Length} characters; it may be at most {MaxAcknowledgeNoteLength} characters."
+            : null;
+
+    /// <summary>
     /// The constructor as it shipped before the discovery service and configuration parameters,
     /// kept so code built against it still binds. A scheduler built this way checks only the
     /// input type when scheduling, and applies the built-in defaults rather than the configured
@@ -499,7 +514,7 @@ public class TraxScheduler(
     /// entry was due later than the trigger asked, moved it forward. <see cref="ScheduledAt"/> is
     /// when the entry is now due; null means immediately.
     /// </summary>
-    private readonly record struct TriggerOutcome(
+    internal readonly record struct TriggerOutcome(
         long WorkQueueId,
         bool Created,
         bool MovedForward,
@@ -509,7 +524,10 @@ public class TraxScheduler(
     )
     {
         public ManifestTriggerResult ToResult() =>
-            new(WorkQueueId, Created, ScheduledAt, AlreadyDispatched, ReplayDecisionsOf);
+            new(WorkQueueId, Created, ScheduledAt, AlreadyDispatched, ReplayDecisionsOf)
+            {
+                MovedForward = MovedForward,
+            };
     }
 
     /// <summary>
@@ -523,15 +541,40 @@ public class TraxScheduler(
     /// ManifestManager or another trigger queues between them is recognised by the insert's
     /// failure and treated the same way; any other failed save is thrown.
     /// </summary>
-    private async Task<TriggerOutcome> TriggerManifestAsync(
+    private Task<TriggerOutcome> TriggerManifestAsync(
         IDataContext context,
         Manifest manifest,
         DateTime runAt,
         bool askAfresh,
         CancellationToken ct
+    ) => TriggerManifestAsync(context, manifest, runAt, askAfresh, BeforeTriggerRelease, ct);
+
+    /// <summary>
+    /// The trigger itself, for <see cref="TriggerManifestAsync(IDataContext, Manifest, DateTime, bool, CancellationToken)"/>
+    /// and for the operations service's batch trigger, so a manifest triggered from a list is
+    /// triggered exactly as one triggered by name. It stays in this file because this file is
+    /// where a manifest's trigger may build a work queue row (docs/0017).
+    /// </summary>
+    internal static async Task<TriggerOutcome> TriggerManifestAsync(
+        IDataContext context,
+        Manifest manifest,
+        DateTime runAt,
+        bool askAfresh,
+        Func<long, CancellationToken, Task>? beforeRelease,
+        CancellationToken ct
     )
     {
-        if (await ReleaseQueuedEntryAsync(context, manifest.Id, runAt, askAfresh, ct) is { } queued)
+        if (
+            await ReleaseQueuedEntryAsync(
+                context,
+                manifest.Id,
+                runAt,
+                askAfresh,
+                beforeRelease,
+                ct
+            ) is
+            { } queued
+        )
             return queued;
 
         // An immediate trigger stores no time, as it always has; a delayed one stores its time.
@@ -561,7 +604,14 @@ public class TraxScheduler(
             context.Reset();
 
             if (
-                await ReleaseQueuedEntryAsync(context, manifest.Id, runAt, askAfresh, ct) is
+                await ReleaseQueuedEntryAsync(
+                    context,
+                    manifest.Id,
+                    runAt,
+                    askAfresh,
+                    beforeRelease,
+                    ct
+                ) is
                 { } raced
             )
                 return raced;
@@ -587,11 +637,12 @@ public class TraxScheduler(
     /// for. The outcome reports it as already dispatched, with the link its run kept, because a
     /// trigger that asked afresh did not get what it asked for.
     /// </remarks>
-    private async Task<TriggerOutcome?> ReleaseQueuedEntryAsync(
+    private static async Task<TriggerOutcome?> ReleaseQueuedEntryAsync(
         IDataContext context,
         long manifestId,
         DateTime runAt,
         bool askAfresh,
+        Func<long, CancellationToken, Task>? beforeRelease,
         CancellationToken ct
     )
     {
@@ -609,11 +660,16 @@ public class TraxScheduler(
         if (queued is null)
             return null;
 
-        if (BeforeTriggerRelease is { } beforeRelease)
+        if (beforeRelease is not null)
             await beforeRelease(queued.Id, ct);
 
         var moveForward = queued.ScheduledAt > runAt;
-        var dueAt = moveForward ? runAt : queued.ScheduledAt;
+        // Brought forward to now, the entry stores no time, as an immediate trigger's new entry
+        // does: the dispatcher compares a stored time with the database's clock, and this host's
+        // "now" may still be ahead of it.
+        var dueAt = moveForward
+            ? (runAt > DateTime.UtcNow ? runAt : (DateTime?)null)
+            : queued.ScheduledAt;
 
         var entry = context.WorkQueues.Where(w =>
             w.Id == queued.Id && w.Status == WorkQueueStatus.Queued
@@ -731,14 +787,7 @@ public class TraxScheduler(
     {
         await using var context = CreateContext();
 
-        var manifests = await context
-            .Manifests.AsNoTracking()
-            .Where(m =>
-                m.ManifestGroupId == groupId
-                && m.IsEnabled
-                && m.ScheduleType != ScheduleType.Dependent
-                && m.ScheduleType != ScheduleType.DormantDependent
-            )
+        var manifests = await TriggerableInGroups(context.Manifests.AsNoTracking(), [groupId])
             .ToListAsync(ct);
 
         if (manifests.Count == 0)
@@ -749,12 +798,18 @@ public class TraxScheduler(
         var now = DateTime.UtcNow;
         var queued = 0;
         foreach (var manifest in manifests)
+        {
             if (
                 (
                     await TriggerManifestAsync(context, manifest, runAt: now, askAfresh: false, ct)
                 ).Created
             )
                 queued++;
+
+            // A save checks every entity the context tracks, so one still holding the entries of
+            // the triggers before makes each save slower than the last.
+            context.Reset();
+        }
 
         if (queued > 0)
             changeSignal?.Notify(ChangeDomain.WorkQueue);
@@ -768,6 +823,23 @@ public class TraxScheduler(
 
         return queued;
     }
+
+    /// <summary>
+    /// The members of the given groups a group trigger queues: enabled manifests that run on
+    /// their own schedule. Dependent and DormantDependent manifests are left out, because they
+    /// run after their parent and may lack standalone inputs. Shared with the operations
+    /// service's batch group trigger, so the two choose the same manifests.
+    /// </summary>
+    internal static IQueryable<Manifest> TriggerableInGroups(
+        IQueryable<Manifest> manifests,
+        IReadOnlyCollection<long> groupIds
+    ) =>
+        manifests.Where(m =>
+            groupIds.Contains(m.ManifestGroupId)
+            && m.IsEnabled
+            && m.ScheduleType != ScheduleType.Dependent
+            && m.ScheduleType != ScheduleType.DormantDependent
+        );
 
     /// <inheritdoc />
     public async Task<int> CancelAsync(string externalId, CancellationToken ct = default)
@@ -801,9 +873,7 @@ public class TraxScheduler(
 
         var flagged = await ExecutionCancellation.RequestAsync(
             context,
-            context.Metadatas.Where(m =>
-                m.Manifest != null && m.Manifest.ManifestGroupId == groupId
-            ),
+            await ExecutionCancellation.InGroupsAsync(context, [groupId], ct),
             cancellationRegistry,
             changeSignal,
             ct
@@ -1162,6 +1232,9 @@ public class TraxScheduler(
     {
         await using var context = CreateContext();
 
+        if (NoDispatcherRefusal(context) is { } noDispatcher)
+            return new DeadLetterOperationResult(false, null, noDispatcher);
+
         var deadLetter = await context
             .DeadLetters.Include(d => d.Manifest)
             .FirstOrDefaultAsync(
@@ -1245,6 +1318,9 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
+        if (NoteRefusal(note) is { } refusal)
+            return new DeadLetterOperationResult(false, null, refusal);
+
         await using var context = CreateContext();
 
         var deadLetter = await context.DeadLetters.FirstOrDefaultAsync(
@@ -1283,6 +1359,8 @@ public class TraxScheduler(
     {
         if (OperationsService.BatchRefusal(deadLetterIds) is { } refused)
             return new BatchDeadLetterResult(0, refused);
+        if (await NoDispatcherRefusalAsync() is { } noDispatcher)
+            return new BatchDeadLetterResult(0, noDispatcher);
 
         var counts = await RequeueDeadLetterBatch(
             context =>
@@ -1306,6 +1384,8 @@ public class TraxScheduler(
     {
         if (OperationsService.BatchRefusal(deadLetterIds) is { } refused)
             return new BatchDeadLetterResult(0, refused);
+        if (NoteRefusal(note) is { } refusal)
+            return new BatchDeadLetterResult(0, refusal);
 
         await using var context = CreateContext();
 
@@ -1331,8 +1411,15 @@ public class TraxScheduler(
         RequeueAllDeadLettersAsync(askAfresh: false, ct);
 
     /// <inheritdoc />
+    public Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(
+        bool askAfresh,
+        CancellationToken ct = default
+    ) => RequeueAllDeadLettersAsync(askAfresh, progress: null, ct);
+
+    /// <inheritdoc />
     public async Task<BatchDeadLetterResult> RequeueAllDeadLettersAsync(
         bool askAfresh,
+        IProgress<int>? progress,
         CancellationToken ct = default
     )
     {
@@ -1340,6 +1427,9 @@ public class TraxScheduler(
         // manifest is in the same page and still folds into one entry. The cursor moves past a
         // page's manifests whether or not they were requeued, so one already queued is skipped
         // once rather than read again on every page.
+        if (await NoDispatcherRefusalAsync() is { } noDispatcher)
+            return new BatchDeadLetterResult(0, noDispatcher);
+
         var total = RequeueCounts.None;
         var after = long.MinValue;
 
@@ -1369,6 +1459,7 @@ public class TraxScheduler(
                 askAfresh,
                 ct
             );
+            progress?.Report(total.Resolved);
 
             after = manifestIds[^1];
         }
@@ -1377,10 +1468,17 @@ public class TraxScheduler(
     }
 
     /// <summary>
-    /// How many manifests <see cref="RequeueAllDeadLettersAsync(bool, CancellationToken)"/> requeues per page. Test seam;
+    /// How many manifests <see cref="RequeueAllDeadLettersAsync(bool, IProgress{int}, CancellationToken)"/> requeues per page. Test seam;
     /// one page is one batch, so it matches the operations surface's batch limit.
     /// </summary>
     internal int RequeueAllPageSize { get; set; } = OperationsService.MaxBatchSize;
+
+    /// <summary>
+    /// How many dead letters <see cref="AcknowledgeAllDeadLettersAsync"/> acknowledges per
+    /// statement on a relational store. Test seam. Measured at 3.9 to 9.5 s per 500,000 rows, so a
+    /// page stays far inside a 30 s command timeout.
+    /// </summary>
+    internal int AcknowledgeAllPageSize { get; set; } = 50_000;
 
     /// <summary>What a dead-letter requeue did, summed across the pages of a requeue-all.</summary>
     private readonly record struct RequeueCounts(int Resolved, int Entries, int Folded, int Skipped)
@@ -1414,14 +1512,47 @@ public class TraxScheduler(
         CancellationToken ct = default
     )
     {
-        await using var context = CreateContext();
+        if (NoteRefusal(note) is { } refusal)
+            return new BatchDeadLetterResult(0, refusal);
 
-        var acknowledged = await AcknowledgeAwaitingAsync(
-            context,
-            context.DeadLetters.Where(d => d.Status == DeadLetterStatus.AwaitingIntervention),
-            note,
-            ct
-        );
+        var acknowledged = 0;
+        await using (var context = CreateContext())
+        {
+            if (!context.SupportsSetUpdates())
+                acknowledged = await AcknowledgeAwaitingAsync(
+                    context,
+                    context.DeadLetters.Where(d =>
+                        d.Status == DeadLetterStatus.AwaitingIntervention
+                    ),
+                    note,
+                    ct
+                );
+            else
+            {
+                // A page of ids at a time, each its own statement, so no single update over a
+                // large backlog outlasts the command timeout. The cursor is the page's last id,
+                // read first, so each page is a range the primary key serves.
+                var after = long.MinValue;
+                while (true)
+                {
+                    var awaiting = context.DeadLetters.Where(d =>
+                        d.Status == DeadLetterStatus.AwaitingIntervention && d.Id > after
+                    );
+                    var last = await awaiting
+                        .OrderBy(d => d.Id)
+                        .Skip(AcknowledgeAllPageSize - 1)
+                        .Select(d => (long?)d.Id)
+                        .FirstOrDefaultAsync(ct);
+
+                    var page = last is { } upTo ? awaiting.Where(d => d.Id <= upTo) : awaiting;
+                    acknowledged += await AcknowledgeAwaitingAsync(context, page, note, ct);
+
+                    if (last is not { } next)
+                        break;
+                    after = next;
+                }
+            }
+        }
 
         logger.LogInformation("Acknowledged all {Count} dead letters", acknowledged);
 
@@ -1447,7 +1578,7 @@ public class TraxScheduler(
     {
         int acknowledged;
 
-        if (((DbContext)context).Database.IsRelational())
+        if (context.SupportsSetUpdates())
         {
             var now = DateTime.UtcNow;
             acknowledged = await awaiting.ExecuteUpdateAsync(
@@ -1671,6 +1802,31 @@ public class TraxScheduler(
     private RetryDecisionReplay? _retryReplay;
 
     // ── Private helpers ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// <see cref="OperationsService.NoDispatcherMessage"/> when a dead letter requeued here would
+    /// never run, or <c>null</c>: on a host that <c>AddScheduler()</c> built without a database
+    /// provider, whose store is in this process's memory and which registers no job dispatcher
+    /// (scheduler ADR 0019). A scheduler built by hand, or resolved on a host without
+    /// <c>AddScheduler()</c>, does not know whether a database provider is registered, and is not
+    /// refused.
+    /// </summary>
+    private string? NoDispatcherRefusal(IDataContext context) =>
+        NothingDispatches && context is DbContext db && !db.Database.IsRelational()
+            ? OperationsService.NoDispatcherMessage
+            : null;
+
+    private bool NothingDispatches =>
+        configuration is { IsSchedulerHost: true, HasDatabaseProvider: false };
+
+    /// <inheritdoc cref="NoDispatcherRefusal(IDataContext)"/>
+    private async Task<string?> NoDispatcherRefusalAsync()
+    {
+        if (!NothingDispatches)
+            return null;
+        await using var context = CreateContext();
+        return NoDispatcherRefusal(context);
+    }
 
     private IDataContext CreateContext() =>
         dataContextFactory.Create() as IDataContext
