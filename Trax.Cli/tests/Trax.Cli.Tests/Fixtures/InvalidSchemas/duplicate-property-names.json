@@ -1,0 +1,32 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "DuplicatePropertyNames", "version": "v1" },
+  "paths": {
+    "/people": {
+      "get": {
+        "tags": ["People"],
+        "operationId": "getPerson",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Person" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Person": {
+        "type": "object",
+        "properties": {
+          "first-name": { "type": "string" },
+          "firstName": { "type": "string" },
+          "status": { "type": "string", "enum": ["in-progress", "inProgress", "done"] }
+        }
+      }
+    }
+  }
+}

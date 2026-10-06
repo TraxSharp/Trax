@@ -1,0 +1,35 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "RefBody", "version": "1.0" },
+  "paths": {
+    "/things": {
+      "post": {
+        "operationId": "createThing",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ThingInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ThingInput": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "color": { "type": "string" }
+        }
+      }
+    }
+  }
+}

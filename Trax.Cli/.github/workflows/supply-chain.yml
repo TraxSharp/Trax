@@ -1,0 +1,53 @@
+name: Supply Chain
+
+# Kept apart from the build and test workflow on purpose. GitHub rejects a whole workflow file
+# when any action in it is not allowed, so an action the org has not allowed yet fails this
+# workflow on its own and never stops the tests from running.
+on:
+  pull_request:
+    branches: [main]
+
+# Default to no permissions; each job widens only what it needs.
+permissions: {}
+
+jobs:
+  # Fails a pull request that adds a dependency with a known advisory. It reads the
+  # dependency graph GitHub builds from the manifests and lockfiles, so it runs no
+  # project code.
+  dependency-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
+        with:
+          fail-on-severity: low
+
+  # Static analysis of the workflows themselves: template injection, credential
+  # persistence, unpinned actions, dangerous triggers.
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Audit workflows
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482  # v0.6.4
+        with:
+          # Report in the log and fail the job, rather than upload to code scanning,
+          # which would need security-events: write.
+          advanced-security: false

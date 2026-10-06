@@ -1,0 +1,25 @@
+using Trax.Effect.Attributes;
+{{- if GraphQLNamespace }}
+using {{ TrainsNamespace }};
+{{- end }}
+using {{ Namespace }}.Junctions;
+
+namespace {{ Namespace }};
+
+/// <summary>
+/// {{ DocDescription }}
+/// </summary>
+[{{ Attribute }}({{ if GraphQLNamespace }}Namespace = GraphQLNamespaces.{{ GraphQLNamespace }}, {{ end }}Description = "{{ Description }}")]
+// Exposed anonymously so the scaffold runs out of the box. Swap for
+// [TraxAuthorize(...)] once you wire up authentication, or gate the whole
+// endpoint with UseTraxGraphQL(configure: e => e.RequireAuthorization(...)).
+[TraxAllowAnonymous]
+public class {{ TrainName }}Train
+    : global::Trax.Effect.Services.ServiceTrain.ServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>,
+        I{{ TrainName }}Train
+{
+    protected override global::System.Threading.Tasks.Task<
+        global::Trax.Core.Functional.Either<global::System.Exception, {{ OutputTypeName }}>
+    > Junctions() =>
+        Chain<{{ TrainName }}Junction>().Resolve();
+}

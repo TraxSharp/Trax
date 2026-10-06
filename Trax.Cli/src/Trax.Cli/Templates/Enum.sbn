@@ -1,0 +1,14 @@
+namespace {{ Namespace }};
+{{- if Description }}
+
+/// <summary>
+/// {{ Description }}
+/// </summary>
+{{- end }}
+
+public enum {{ EnumName }}
+{
+{{- for value in Values }}
+    {{ value }},
+{{- end }}
+}

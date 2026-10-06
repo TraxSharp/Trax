@@ -1,0 +1,68 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Bare Object Properties API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/search": {
+      "get": {
+        "operationId": "search",
+        "summary": "Search items",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SearchResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SearchResult" }
+          },
+          "total": { "type": "integer" }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "hit": {
+            "type": "object",
+            "properties": {
+              "_source": { "type": "object" }
+            }
+          },
+          "mixed": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "data": { "type": "object" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

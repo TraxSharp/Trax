@@ -1,0 +1,62 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "More Edges", "version": "1.0" },
+  "paths": {
+    "/a/list": {
+      "get": {
+        "operationId": "listThings",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/b/list": {
+      "get": {
+        "operationId": "listThings",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/c/list": {
+      "get": {
+        "operationId": "listThings",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/with-status": {
+      "get": {
+        "operationId": "getStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Status" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-status-again": {
+      "get": {
+        "operationId": "getStatus2",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Status" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Status": {
+        "type": "string",
+        "enum": ["Active", "Inactive", "Pending"]
+      }
+    }
+  }
+}

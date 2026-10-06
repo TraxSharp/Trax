@@ -1,0 +1,27 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Collisions", "version": "1.0" },
+  "paths": {
+    "/orders": {
+      "get": {
+        "operationId": "getOrder",
+        "tags": ["Orders"],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/status" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Status": { "type": "string", "enum": ["open", "closed"] },
+      "status": {
+        "type": "object",
+        "properties": { "code": { "type": "integer" } }
+      }
+    }
+  }
+}

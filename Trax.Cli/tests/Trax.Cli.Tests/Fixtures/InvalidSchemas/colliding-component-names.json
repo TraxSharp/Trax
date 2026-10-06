@@ -1,0 +1,42 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Collisions", "version": "1.0" },
+  "paths": {
+    "/invoices": {
+      "get": {
+        "operationId": "getInvoice",
+        "tags": ["Billing"],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Billing.Dto" } } }
+          }
+        }
+      }
+    },
+    "/shipments": {
+      "get": {
+        "operationId": "getShipment",
+        "tags": ["Shipping"],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Shipping.Dto" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Billing.Dto": {
+        "type": "object",
+        "properties": { "amount": { "type": "number" } }
+      },
+      "Shipping.Dto": {
+        "type": "object",
+        "properties": { "carrier": { "type": "string" } }
+      }
+    }
+  }
+}

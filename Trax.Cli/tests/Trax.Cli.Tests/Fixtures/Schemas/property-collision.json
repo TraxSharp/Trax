@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Property Collision API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/notifications": {
+      "get": {
+        "operationId": "listNotifications",
+        "summary": "List notifications",
+        "tags": ["Notifications"],
+        "responses": {
+          "200": {
+            "description": "List of notifications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Notification" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/testimonials": {
+      "get": {
+        "operationId": "listTestimonials",
+        "summary": "List testimonials",
+        "tags": ["Content"],
+        "responses": {
+          "200": {
+            "description": "List of testimonials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Testimonial" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "title": { "type": "string" },
+          "notification": {
+            "type": "string",
+            "description": "The notification message text"
+          },
+          "is_read": { "type": "boolean" }
+        }
+      },
+      "Testimonial": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "testimonial": {
+            "type": "string",
+            "description": "The testimonial text content"
+          },
+          "author": { "type": "string" }
+        }
+      }
+    }
+  }
+}

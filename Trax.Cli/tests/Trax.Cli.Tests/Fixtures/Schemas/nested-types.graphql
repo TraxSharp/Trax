@@ -1,0 +1,20 @@
+type Query {
+  getOrder(id: ID!): Order
+}
+
+type Order {
+  id: ID!
+  items: [OrderItem!]!
+  customer: Customer!
+}
+
+type OrderItem {
+  productId: ID!
+  quantity: Int!
+  price: Float!
+}
+
+type Customer {
+  name: String!
+  email: String
+}

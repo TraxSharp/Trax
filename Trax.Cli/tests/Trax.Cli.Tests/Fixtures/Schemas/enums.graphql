@@ -1,0 +1,15 @@
+type Mutation {
+  updateStatus(id: ID!, status: Status!): Task
+}
+
+enum Status {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+type Task {
+  id: ID!
+  status: Status!
+}

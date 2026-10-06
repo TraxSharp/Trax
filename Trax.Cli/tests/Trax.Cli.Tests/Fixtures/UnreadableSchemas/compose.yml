@@ -1,0 +1,5 @@
+services:
+  database:
+    image: postgres:17
+    ports:
+      - "5432:5432"

@@ -1,0 +1,4 @@
+namespace {{ Namespace }};
+
+public interface I{{ TrainName }}Train
+    : global::Trax.Effect.Services.ServiceTrain.IServiceTrain<{{ InputTypeName }}, {{ OutputTypeName }}>;

@@ -1,0 +1,26 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "InvalidPropertyName", "version": "v1" },
+  "paths": {
+    "/players": {
+      "post": {
+        "tags": ["Players"],
+        "operationId": "createPlayer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "x; } public static class Emitted { } public class Rest { public int y": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "204": { "description": "No content" } }
+      }
+    }
+  }
+}

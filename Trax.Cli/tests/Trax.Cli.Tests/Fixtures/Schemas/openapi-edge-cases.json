@@ -1,0 +1,175 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "OpenAPI Edge Cases", "version": "1.0" },
+  "paths": {
+    "/scalar-response": {
+      "get": {
+        "operationId": "getScalarResponse",
+        "responses": {
+          "200": {
+            "description": "Scalar number",
+            "content": {
+              "application/json": {
+                "schema": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/all-of-ref": {
+      "get": {
+        "operationId": "getAllOfRef",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "merged": {
+                      "allOf": [
+                        { "$ref": "#/components/schemas/Base" }
+                      ]
+                    },
+                    "synthesized": {
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "properties": { "x": { "type": "string" } }
+                        }
+                      ]
+                    },
+                    "oneOfRef": {
+                      "oneOf": [
+                        { "$ref": "#/components/schemas/Base" },
+                        { "type": "string" }
+                      ]
+                    },
+                    "oneOfPrimitive": {
+                      "oneOf": [
+                        { "type": "string" },
+                        { "type": "integer" }
+                      ]
+                    },
+                    "anyOfRef": {
+                      "anyOf": [
+                        { "$ref": "#/components/schemas/Base" }
+                      ]
+                    },
+                    "anyOfPrimitive": {
+                      "anyOf": [
+                        { "type": "boolean" }
+                      ]
+                    },
+                    "stringMap": {
+                      "type": "object",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "floatVal": { "type": "number", "format": "float" },
+                    "uuidVal": { "type": "string", "format": "uuid" },
+                    "uriVal": { "type": "string", "format": "uri" },
+                    "binaryVal": { "type": "string", "format": "binary" },
+                    "dateVal": { "type": "string", "format": "date" },
+                    "dateTimeVal": { "type": "string", "format": "date-time" },
+                    "untyped": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/all-of-merge": {
+      "get": {
+        "operationId": "getAllOfMerge",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MergedShape"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "get": {
+        "operationId": "getUser",
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Base" } }
+            }
+          }
+        }
+      }
+    },
+    "/users/{userId}/profile": {
+      "get": {
+        "operationId": "getUser",
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Base" } }
+            }
+          }
+        }
+      }
+    },
+    "/users/{userId}/posts/{postId}": {
+      "get": {
+        "operationId": "getUser",
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "postId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Base" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Base": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" }
+        }
+      },
+      "MergedShape": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Base" },
+          {
+            "type": "object",
+            "required": ["extra"],
+            "properties": {
+              "extra": { "type": "string" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

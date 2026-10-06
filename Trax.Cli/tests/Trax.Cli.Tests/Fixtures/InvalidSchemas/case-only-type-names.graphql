@@ -1,0 +1,12 @@
+type Query {
+  stats: PlayerStats
+  otherStats: Playerstats
+}
+
+type PlayerStats {
+  wins: Int
+}
+
+type Playerstats {
+  losses: Int
+}

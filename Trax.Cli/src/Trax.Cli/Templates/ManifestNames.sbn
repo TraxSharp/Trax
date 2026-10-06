@@ -1,0 +1,8 @@
+namespace {{ project_name }}.Trains;
+
+public static class ManifestNames
+{
+{{- for op in operations }}
+    public const string {{ op.name }} = "{{ op.kebab_name }}";
+{{- end }}
+}
