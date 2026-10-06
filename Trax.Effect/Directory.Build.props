@@ -19,7 +19,7 @@
   <PropertyGroup>
     <Authors>Theauxm,mark-keaton</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Effect</RepositoryUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
     <PackageTags>trax;dotnet;effects;trains;junctions;railway-oriented-programming</PackageTags>

@@ -3,7 +3,7 @@
     <Version>1.99.99</Version>
     <Authors>Theauxm</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Api</RepositoryUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
     <PackageTags>trax;dotnet;graphql;hotchocolate;api</PackageTags>

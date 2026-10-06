@@ -22,7 +22,7 @@
     <Authors>Theauxm,mark-keaton</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Core</RepositoryUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>trax;dotnet;railway-oriented-programming;functional;pipeline;either</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

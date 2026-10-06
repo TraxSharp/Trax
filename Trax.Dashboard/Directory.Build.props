@@ -29,7 +29,7 @@
   <PropertyGroup>
     <Authors>Theauxm</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Dashboard</RepositoryUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
     <PackageTags>trax;dotnet;dashboard;blazor;blazor-server;radzen;monitoring;scheduler</PackageTags>

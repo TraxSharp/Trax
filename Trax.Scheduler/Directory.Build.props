@@ -33,7 +33,7 @@
   <PropertyGroup>
     <Authors>Theauxm</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/TraxSharp/Trax.Scheduler</RepositoryUrl>
+    <RepositoryUrl>https://github.com/TraxSharp/Trax</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://traxsharp.net/docs</PackageProjectUrl>
     <PackageTags>trax;dotnet;scheduler;cron;jobs;background-jobs;work-queue;dead-letter</PackageTags>
