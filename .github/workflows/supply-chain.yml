@@ -3,9 +3,24 @@ name: Supply Chain
 # Kept apart from the build and test workflow on purpose. GitHub rejects a whole workflow file
 # when any action in it is not allowed, so an action the org has not allowed yet fails this
 # workflow on its own and never stops the tests from running.
+#
+# It runs only when a pull request changes what it inspects: dependency-review reads the
+# dependency graph (manifests and lockfiles, workflow actions, images), and zizmor reads
+# .github. A pull request that changes only code has nothing here to check.
 on:
   pull_request:
     branches: [main]
+    paths:
+      - '.github/**'
+      - 'Directory.Packages.props'
+      - '**/*.csproj'
+      - '**/packages.lock.json'
+      - '**/.config/dotnet-tools.json'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/Dockerfile'
+      - '**/docker-compose*.yml'
+      - 'global.json'
 
 # Default to no permissions; each job widens only what it needs.
 permissions: {}
