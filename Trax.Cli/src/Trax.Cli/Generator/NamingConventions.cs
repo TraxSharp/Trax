@@ -167,6 +167,8 @@ public static partial class NamingConventions
             if (
                 pascal.StartsWith(verbPascal, StringComparison.Ordinal)
                 && pascal.Length > verbPascal.Length
+                // Only at a PascalCase word boundary: `settings` is not `set` + `tings`.
+                && char.IsUpper(pascal[verbPascal.Length])
             )
             {
                 var noun = pascal[verbPascal.Length..];

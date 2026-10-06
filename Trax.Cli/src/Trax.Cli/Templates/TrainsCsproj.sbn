@@ -11,9 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Trax.Effect" Version="1.*" />
-    <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.*" />
-    <PackageReference Include="Trax.Mediator" Version="1.*" />
-    <PackageReference Include="Trax.Scheduler" Version="1.*" />
+{{~ for package in Packages ~}}
+    <PackageReference Include="{{ package.Name | html.escape }}" Version="{{ package.Version | html.escape }}" />
+{{~ end ~}}
   </ItemGroup>
 </Project>

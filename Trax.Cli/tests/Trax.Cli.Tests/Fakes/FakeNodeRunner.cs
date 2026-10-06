@@ -19,6 +19,9 @@ internal sealed class FakeNodeRunner : INodeRunner
     public string ContextsContent { get; set; } = "// generated contexts\n";
     public string MachineContent { get; set; } = "// generated machine\n";
     public string CorpusContent { get; set; } = "{ \"cases\": [] }\n";
+
+    /// <summary>When false, every call exits 0 without writing anything, as a mismatched engine might.</summary>
+    public bool WritesOutputs { get; set; } = true;
     public List<(string Script, IReadOnlyList<string> Args)> Calls { get; } = [];
 
     public bool IsAvailable() => Available;
@@ -28,6 +31,9 @@ internal sealed class FakeNodeRunner : INodeRunner
         Calls.Add((scriptPath, args));
         if (ExitCode != 0)
             return new NodeResult(ExitCode, "", StdErr);
+
+        if (!WritesOutputs)
+            return new NodeResult(0, "", "");
 
         var flags = ParseFlags(args);
         var script = Path.GetFileName(scriptPath);

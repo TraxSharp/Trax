@@ -108,6 +108,11 @@ internal static partial class SchemaNames
         foreach (var field in type.Fields)
         {
             Check(field.Name, $"property of '{type.Name}'", problems);
+            // C# forbids a member named like its enclosing type (CS0542).
+            if (string.Equals(field.Name, type.Name, StringComparison.Ordinal))
+                problems.Add(
+                    $"property '{field.Name}' of '{type.Name}' (a property cannot have its type's name)"
+                );
             if (!IsTypeExpression(field.TypeName))
                 problems.Add(
                     $"type of property '{field.Name}' of '{type.Name}': '{field.TypeName}'"

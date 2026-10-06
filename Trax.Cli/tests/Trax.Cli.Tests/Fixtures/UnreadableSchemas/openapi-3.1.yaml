@@ -1,0 +1,11 @@
+openapi: 3.1.0
+info:
+  title: Players
+  version: 1.0.0
+paths:
+  /players:
+    get:
+      operationId: listPlayers
+      responses:
+        "200":
+          description: ok

@@ -7,31 +7,20 @@ namespace Trax.Cli.Tests.IntegrationTests;
 
 /// <summary>
 /// End-to-end exercise of the full generate path: schema parse + dotnet new
-/// (trax-hub template) + project reference wiring + Program.cs patching.
-/// Requires the trax-hub template to be installed (it is via Trax.Samples.Templates).
+/// (trax-hub template) + project reference wiring + Program.cs patching. The template comes from a private
+/// hive (<see cref="TemplateHive"/>), so this runs in CI rather than skipping when the machine lacks it.
 /// </summary>
 [TestFixture]
 public class GenerateEndToEndTests
 {
     private string _outputDir = null!;
+    private TemplateHive _hive = null!;
 
     [OneTimeSetUp]
-    public void OneTimeSetUp()
-    {
-        // The trax-hub template ships in Trax.Samples.Templates. CI doesn't always
-        // install it, so skip this fixture rather than fail when it's missing.
-        var psi = new System.Diagnostics.ProcessStartInfo("dotnet", "new list trax-hub")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        using var p = System.Diagnostics.Process.Start(psi)!;
-        var stdout = p.StandardOutput.ReadToEnd();
-        p.WaitForExit();
-        if (!stdout.Contains("trax-hub"))
-            Assert.Ignore("trax-hub template is not installed (Trax.Samples.Templates).");
-    }
+    public void OneTimeSetUp() => _hive = TemplateHive.Install();
+
+    [OneTimeTearDown]
+    public void OneTimeTearDown() => _hive.Dispose();
 
     [SetUp]
     public void SetUp()
@@ -53,7 +42,7 @@ public class GenerateEndToEndTests
     public void Generate_FromGraphqlSchema_ProducesHubAndTrainsProjects()
     {
         var schema = new GraphQLSchemaParser().Parse(FixturePath("simple.graphql"));
-        var generator = new TraxProjectGenerator();
+        var generator = _hive.Generator();
 
         generator.Generate(schema, _outputDir, "MyApi", force: false);
 
@@ -77,7 +66,7 @@ public class GenerateEndToEndTests
     public void Generate_TwiceWithForce_OverwritesExistingDirectory()
     {
         var schema = new GraphQLSchemaParser().Parse(FixturePath("simple.graphql"));
-        var generator = new TraxProjectGenerator();
+        var generator = _hive.Generator();
 
         generator.Generate(schema, _outputDir, "MyApi", force: false);
         // Second call with force should not throw
@@ -93,7 +82,8 @@ public class GenerateEndToEndTests
         var schema = new FileInfo(FixturePath("simple.graphql"));
         var output = new DirectoryInfo(_outputDir);
 
-        Action act = () => GenerateCommand.Handle(schema, output, "MyApi", null, force: false);
+        Action act = () =>
+            GenerateCommand.Handle(schema, output, "MyApi", null, force: false, _hive.Generator());
 
         act.Should().NotThrow();
         Directory.Exists(Path.Combine(_outputDir, "MyApi.Hub")).Should().BeTrue();

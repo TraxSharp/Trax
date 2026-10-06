@@ -69,11 +69,16 @@ public class HubTemplateBuildTests
         scaffold.ExitCode.Should().Be(0, scaffold.Output);
 
         var generator = new TraxProjectGenerator();
+        var trainsDir = Path.Combine(output, "Demo.Trains");
         generator.GenerateTrainsLibrary(
             new GraphQLSchemaParser().Parse(FixturePath("simple.graphql")),
-            Path.Combine(output, "Demo.Trains"),
-            "Demo"
+            trainsDir,
+            "Demo",
+            TraxProjectGenerator.HubPackageVersions(hubDir, "Demo.Hub")
         );
+        File.ReadAllText(Path.Combine(trainsDir, "Demo.Trains.csproj"))
+            .Should()
+            .NotContain("*", "the trains library takes the hub's exact Trax versions");
         TraxProjectGenerator.AddProjectReference(hubDir, "Demo.Hub", "Demo.Trains");
         TraxProjectGenerator.PatchProgramCs(hubDir, "Demo");
 

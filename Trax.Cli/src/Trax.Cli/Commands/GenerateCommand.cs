@@ -96,17 +96,26 @@ public static class GenerateCommand
             return Fail();
         }
 
-        var schemaType = SchemaDetector.Detect(schema.FullName, type);
-
-        ISchemaParser parser = schemaType switch
+        string schemaType;
+        try
         {
-            "graphql" => new GraphQLSchemaParser(),
-            "openapi" => new OpenApiSchemaParser(),
-            _ => throw new InvalidOperationException($"Unsupported schema type: {schemaType}"),
-        };
+            schemaType = SchemaDetector.Detect(schema.FullName, type);
+        }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return Fail();
+        }
 
         try
         {
+            ISchemaParser parser = schemaType switch
+            {
+                "graphql" => new GraphQLSchemaParser(),
+                "openapi" => new OpenApiSchemaParser(),
+                _ => throw new InvalidOperationException($"Unsupported schema type: {schemaType}"),
+            };
+
             var apiSchema = parser.Parse(schema.FullName);
 
             Console.WriteLine(

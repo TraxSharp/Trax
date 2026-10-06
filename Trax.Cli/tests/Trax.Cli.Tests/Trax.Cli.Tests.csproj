@@ -32,6 +32,9 @@
     <None Update="Fixtures/HubTemplate/*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Fixtures/UnreadableSchemas/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Fixtures/InvalidSchemas/*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

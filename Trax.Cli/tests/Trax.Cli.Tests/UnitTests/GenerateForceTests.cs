@@ -209,6 +209,20 @@ public class GenerateForceTests
     {
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, $"{name}.csproj"), "<Project>\n</Project>\n");
+        // The template ships its Trax pins beside the hub csproj.
+        File.WriteAllText(
+            Path.Combine(dir, "Directory.Packages.props"),
+            """
+            <Project>
+              <ItemGroup>
+                <PackageVersion Include="Trax.Effect" Version="1.58.0" />
+                <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.58.0" />
+                <PackageVersion Include="Trax.Mediator" Version="1.24.0" />
+                <PackageVersion Include="Trax.Scheduler" Version="1.35.0" />
+              </ItemGroup>
+            </Project>
+            """
+        );
         File.WriteAllText(
             Path.Combine(dir, "Program.cs"),
             "builder.Services.AddTrax(t => t.AddMediator(typeof(Program).Assembly));\n"
@@ -242,5 +256,137 @@ public class GenerateForceTests
             Console.SetError(originalErr);
         }
         return writer.ToString();
+    }
+
+    [Test]
+    public void Generate_writes_the_hubs_exact_Trax_versions_into_the_trains_project()
+    {
+        var output = Path.Combine(_root, "pinned");
+        var schema = new Trax.Cli.Schema.GraphQL.GraphQLSchemaParser().Parse(SchemaFile().FullName);
+
+        new TraxProjectGenerator(FakeScaffold).Generate(schema, output, "Demo", force: false);
+
+        var csproj = File.ReadAllText(Path.Combine(output, "Demo.Trains", "Demo.Trains.csproj"));
+        csproj
+            .Should()
+            .NotContain("*", "a floating version lets the pair resolve different Trax releases");
+        csproj.Should().Contain("<PackageReference Include=\"Trax.Effect\" Version=\"1.58.0\" />");
+        csproj
+            .Should()
+            .Contain("<PackageReference Include=\"Trax.Mediator\" Version=\"1.24.0\" />");
+        csproj
+            .Should()
+            .Contain("<PackageReference Include=\"Trax.Scheduler\" Version=\"1.35.0\" />");
+    }
+
+    [Test]
+    public void HubPackageVersions_falls_back_to_versions_on_the_hubs_own_references()
+    {
+        var hub = Path.Combine(_root, "old-hub");
+        Directory.CreateDirectory(hub);
+        File.WriteAllText(
+            Path.Combine(hub, "Old.Hub.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <ItemGroup>
+                <PackageReference Include="Trax.Effect" Version="1.50.0" />
+                <PackageReference Include="Trax.Effect.Data.InMemory" Version="1.50.0" />
+                <PackageReference Include="Trax.Mediator" Version="1.20.0" />
+                <PackageReference Include="Trax.Scheduler" Version="1.30.0" />
+              </ItemGroup>
+            </Project>
+            """
+        );
+
+        TraxProjectGenerator
+            .HubPackageVersions(hub, "Old.Hub")
+            .Should()
+            .Contain(new KeyValuePair<string, string>("Trax.Mediator", "1.20.0"));
+    }
+
+    [Test]
+    public void HubPackageVersions_refuses_a_hub_that_pins_nothing()
+    {
+        var hub = Path.Combine(_root, "bare-hub");
+        Directory.CreateDirectory(hub);
+        File.WriteAllText(Path.Combine(hub, "Bare.Hub.csproj"), "<Project>\n</Project>\n");
+
+        var act = () => TraxProjectGenerator.HubPackageVersions(hub, "Bare.Hub");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*pins no version for Trax.Effect*");
+    }
+
+    private string HubPinning(string name, string mediatorVersion)
+    {
+        var hub = Path.Combine(_root, name);
+        Directory.CreateDirectory(hub);
+        File.WriteAllText(
+            Path.Combine(hub, "Directory.Packages.props"),
+            $"""
+            <Project>
+              <ItemGroup>
+                <PackageVersion Include="Trax.Effect" Version="1.50.0" />
+                <PackageVersion Include="Trax.Effect.Data.InMemory" Version="1.50.0" />
+                <PackageVersion Include="Trax.Mediator" Version="{mediatorVersion}" />
+                <PackageVersion Include="Trax.Scheduler" Version="[1.30.0, 2.0.0)" />
+              </ItemGroup>
+            </Project>
+            """
+        );
+        return hub;
+    }
+
+    [Test]
+    public void HubPackageVersions_refuses_a_pin_that_is_not_a_nuget_version()
+    {
+        // Decoded by the XML reader, &quot; is a quote, which written raw into the trains csproj would
+        // close the attribute and let the rest of the value add to the project.
+        var hub = HubPinning("quoted-hub", "1.0.0&quot; Condition=&quot;false");
+
+        var act = () => TraxProjectGenerator.HubPackageVersions(hub, "Quoted.Hub");
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*Trax.Mediator at '1.0.0\" Condition=\"false'*not a NuGet version*");
+    }
+
+    [TestCase("1.20.0")]
+    [TestCase("1.20.0-beta.1")]
+    [TestCase("1.*")]
+    [TestCase("[1.20.0]")]
+    [TestCase("(1.0,2.0]")]
+    public void HubPackageVersions_accepts_nuget_versions_and_ranges(string version)
+    {
+        var hub = HubPinning($"hub-{Guid.NewGuid():N}", version);
+
+        TraxProjectGenerator
+            .HubPackageVersions(hub, "Any.Hub")
+            .Should()
+            .Contain(new KeyValuePair<string, string>("Trax.Mediator", version));
+    }
+
+    [Test]
+    public void HubPackageVersions_reports_a_props_file_it_cannot_open_cleanly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Ignore("file modes are Unix-only");
+            return;
+        }
+        var hub = HubPinning("locked-hub", "1.20.0");
+        var props = Path.Combine(hub, "Directory.Packages.props");
+        File.SetUnixFileMode(props, UnixFileMode.None);
+        try
+        {
+            var act = () => TraxProjectGenerator.HubPackageVersions(hub, "Locked.Hub");
+
+            act.Should().Throw<InvalidOperationException>().WithMessage($"Cannot read {props}*");
+        }
+        finally
+        {
+            File.SetUnixFileMode(props, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 }

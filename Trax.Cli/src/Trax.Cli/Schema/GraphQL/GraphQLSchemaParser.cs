@@ -1,5 +1,6 @@
 using GraphQLParser;
 using GraphQLParser.AST;
+using GraphQLParser.Exceptions;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
 
@@ -32,10 +33,16 @@ public class GraphQLSchemaParser : ISchemaParser
         "__DirectiveLocation",
     };
 
+    // Custom scalars, and interfaces and unions, by schema name. None becomes a model: a custom scalar is
+    // written as string and an interface or union as object, each with a TODO on the property.
+    private readonly HashSet<string> _customScalars = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _abstractTypes = new(StringComparer.Ordinal);
+
     public ApiSchema Parse(string filePath)
     {
-        var sdl = File.ReadAllText(filePath);
-        var document = Parser.Parse(sdl);
+        _customScalars.Clear();
+        _abstractTypes.Clear();
+        var document = Read(filePath);
 
         var schema = new ApiSchema { SourceFile = filePath, SchemaType = "graphql" };
 
@@ -47,25 +54,38 @@ public class GraphQLSchemaParser : ISchemaParser
         string? queryTypeName = "Query";
         string? mutationTypeName = "Mutation";
 
+        var objectExtensions = new List<GraphQLObjectTypeExtension>();
+        var inputExtensions = new List<GraphQLInputObjectTypeExtension>();
+        var enumExtensions = new List<GraphQLEnumTypeExtension>();
+        var skipped = new List<string>();
+
+        void ReadOperationTypes(List<GraphQLRootOperationTypeDefinition>? operationTypes)
+        {
+            if (operationTypes == null)
+                return;
+            foreach (var op in operationTypes)
+            {
+                var typeName = op.Type?.Name.StringValue;
+                if (typeName == null)
+                    continue;
+
+                if (op.Operation == OperationType.Query)
+                    queryTypeName = typeName;
+                else if (op.Operation == OperationType.Mutation)
+                    mutationTypeName = typeName;
+            }
+        }
+
         foreach (var definition in document.Definitions)
         {
             switch (definition)
             {
                 case GraphQLSchemaDefinition schemaDef:
-                    if (schemaDef.OperationTypes != null)
-                    {
-                        foreach (var op in schemaDef.OperationTypes)
-                        {
-                            var typeName = op.Type?.Name.StringValue;
-                            if (typeName == null)
-                                continue;
+                    ReadOperationTypes(schemaDef.OperationTypes);
+                    break;
 
-                            if (op.Operation == OperationType.Query)
-                                queryTypeName = typeName;
-                            else if (op.Operation == OperationType.Mutation)
-                                mutationTypeName = typeName;
-                        }
-                    }
+                case GraphQLSchemaExtension schemaExt:
+                    ReadOperationTypes(schemaExt.OperationTypes);
                     break;
 
                 case GraphQLObjectTypeDefinition typeDef:
@@ -80,8 +100,87 @@ public class GraphQLSchemaParser : ISchemaParser
                     if (!BuiltInTypes.Contains(enumDef.Name.StringValue))
                         enumDefinitions[enumDef.Name.StringValue] = enumDef;
                     break;
+
+                case GraphQLObjectTypeExtension objectExt:
+                    objectExtensions.Add(objectExt);
+                    break;
+
+                case GraphQLInputObjectTypeExtension inputExt:
+                    inputExtensions.Add(inputExt);
+                    break;
+
+                case GraphQLEnumTypeExtension enumExt:
+                    enumExtensions.Add(enumExt);
+                    break;
+
+                case GraphQLScalarTypeDefinition scalarDef:
+                    _customScalars.Add(scalarDef.Name.StringValue);
+                    break;
+
+                case GraphQLInterfaceTypeDefinition interfaceDef:
+                    _abstractTypes.Add(interfaceDef.Name.StringValue);
+                    break;
+
+                case GraphQLUnionTypeDefinition unionDef:
+                    _abstractTypes.Add(unionDef.Name.StringValue);
+                    break;
+
+                case GraphQLDirectiveDefinition:
+                    // A directive changes nothing the generated contract carries.
+                    break;
+
+                case GraphQLTypeExtension:
+                    // Scalar, interface and union extensions add nothing a generated type uses.
+                    break;
+
+                default:
+                    skipped.Add(definition.Kind.ToString());
+                    break;
             }
         }
+
+        // A type's fields may be spread over its definition and any number of `extend` blocks (a modular
+        // schema concatenated, or how HotChocolate prints type extensions). Merge them before anything
+        // reads the definitions, so an operation added by `extend type Query` becomes a train.
+        MergeExtensions(
+            objectExtensions,
+            typeDefinitions,
+            e => e.Name.StringValue,
+            (def, ext) =>
+            {
+                if (ext.Fields == null)
+                    return;
+                def.Fields ??= new GraphQLFieldsDefinition([]);
+                def.Fields.Items.AddRange(ext.Fields.Items);
+            }
+        );
+        MergeExtensions(
+            inputExtensions,
+            inputDefinitions,
+            e => e.Name.StringValue,
+            (def, ext) =>
+            {
+                if (ext.Fields == null)
+                    return;
+                def.Fields ??= new GraphQLInputFieldsDefinition([]);
+                def.Fields.Items.AddRange(ext.Fields.Items);
+            }
+        );
+        MergeExtensions(
+            enumExtensions,
+            enumDefinitions,
+            e => e.Name.StringValue,
+            (def, ext) =>
+            {
+                if (ext.Values == null)
+                    return;
+                def.Values ??= new GraphQLEnumValuesDefinition([]);
+                def.Values.Items.AddRange(ext.Values.Items);
+            }
+        );
+
+        foreach (var kind in skipped.Distinct())
+            Console.WriteLine($"Warning: {kind} definitions are not supported and were skipped.");
 
         // Parse enums
         foreach (var (name, enumDef) in enumDefinitions)
@@ -153,7 +252,63 @@ public class GraphQLSchemaParser : ISchemaParser
         return schema;
     }
 
-    private static void ParseOperations(
+    /// <summary>
+    /// Adds each extension's members to the definition it extends. An extension of a type the schema never
+    /// defines is refused: dropping it would lose its members without a word, and inventing the type would
+    /// generate a contract the schema does not declare.
+    /// </summary>
+    private static void MergeExtensions<TExtension, TDefinition>(
+        List<TExtension> extensions,
+        Dictionary<string, TDefinition> definitions,
+        Func<TExtension, string> name,
+        Action<TDefinition, TExtension> merge
+    )
+    {
+        foreach (var extension in extensions)
+        {
+            if (!definitions.TryGetValue(name(extension), out var definition))
+                throw new InvalidOperationException(
+                    $"The schema extends '{name(extension)}' (extend type {name(extension)}), but never defines it."
+                        + " Include the file that defines it."
+                );
+            merge(definition, extension);
+        }
+    }
+
+    /// <summary>
+    /// Reads and parses the SDL, turning a syntax error or an unreadable file into a message that names
+    /// the file (and, for a syntax error, the line and column) instead of an unhandled exception.
+    /// </summary>
+    private static GraphQLDocument Read(string filePath)
+    {
+        string sdl;
+        try
+        {
+            sdl = File.ReadAllText(filePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException(
+                $"Cannot read the GraphQL schema {filePath}: {ex.Message}",
+                ex
+            );
+        }
+
+        try
+        {
+            return Parser.Parse(sdl);
+        }
+        catch (GraphQLParserException ex)
+        {
+            throw new InvalidOperationException(
+                $"{filePath} is not valid GraphQL SDL: {ex.Description} "
+                    + $"(line {ex.Location.Line}, column {ex.Location.Column}).",
+                ex
+            );
+        }
+    }
+
+    private void ParseOperations(
         GraphQLObjectTypeDefinition rootType,
         OperationKind kind,
         ApiSchema schema,
@@ -218,7 +373,7 @@ public class GraphQLSchemaParser : ISchemaParser
         }
     }
 
-    private static ApiType BuildInputTypeFromArguments(
+    private ApiType BuildInputTypeFromArguments(
         string operationName,
         GraphQLArgumentsDefinition? arguments,
         Dictionary<string, GraphQLInputObjectTypeDefinition> inputDefinitions,
@@ -231,11 +386,14 @@ public class GraphQLSchemaParser : ISchemaParser
         {
             foreach (var arg in arguments)
             {
-                // If the argument type is an input object, check if it's a single-arg input type
-                var innerTypeName = GetInnerTypeName(arg.Type);
+                // The `createPlayer(input: PlayerInput!)` idiom: a single argument that is one input object
+                // has its fields used directly. A list of them (`createPlayers(inputs: [PlayerInput!]!)`) is
+                // not flattened, or a batch would become a single item.
                 if (
                     arguments.Count == 1
-                    && inputDefinitions.TryGetValue(innerTypeName, out var inputDef)
+                    && (arg.Type is GraphQLNonNullType nonNull ? nonNull.Type : arg.Type)
+                        is GraphQLNamedType named
+                    && inputDefinitions.TryGetValue(named.Name.StringValue, out var inputDef)
                 )
                 {
                     // Single input argument that is an input type — use that type's fields directly
@@ -253,7 +411,7 @@ public class GraphQLSchemaParser : ISchemaParser
                         TypeName = ResolveTypeName(arg.Type, enumDefinitions),
                         IsRequired = arg.Type is GraphQLNonNullType,
                         IsNullable = arg.Type is not GraphQLNonNullType,
-                        Description = arg.Description?.Value.ToString(),
+                        Description = Describe(arg.Description?.Value.ToString(), arg.Type),
                     }
                 );
             }
@@ -267,7 +425,7 @@ public class GraphQLSchemaParser : ISchemaParser
         };
     }
 
-    private static ApiType BuildOutputType(
+    private ApiType BuildOutputType(
         string operationName,
         GraphQLType graphqlType,
         Dictionary<string, GraphQLObjectTypeDefinition> typeDefinitions,
@@ -277,7 +435,7 @@ public class GraphQLSchemaParser : ISchemaParser
         var innerName = GetInnerTypeName(graphqlType);
 
         // If it's a scalar type, wrap it in an output record
-        if (ScalarMap.ContainsKey(innerName))
+        if (ScalarMap.ContainsKey(innerName) || _customScalars.Contains(innerName))
         {
             var csharpType = ResolveTypeName(graphqlType, enumDefinitions);
             return new ApiType
@@ -290,6 +448,7 @@ public class GraphQLSchemaParser : ISchemaParser
                         Name = "Value",
                         TypeName = csharpType,
                         IsRequired = true,
+                        Description = Describe(null, graphqlType),
                     },
                 ],
                 IsBuiltIn = false,
@@ -366,7 +525,7 @@ public class GraphQLSchemaParser : ISchemaParser
         };
     }
 
-    private static ApiType BuildApiType(
+    private ApiType BuildApiType(
         GraphQLObjectTypeDefinition typeDef,
         Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions
     )
@@ -384,7 +543,7 @@ public class GraphQLSchemaParser : ISchemaParser
                         TypeName = ResolveTypeName(field.Type, enumDefinitions),
                         IsRequired = field.Type is GraphQLNonNullType,
                         IsNullable = field.Type is not GraphQLNonNullType,
-                        Description = field.Description?.Value.ToString(),
+                        Description = Describe(field.Description?.Value.ToString(), field.Type),
                     }
                 );
             }
@@ -399,7 +558,7 @@ public class GraphQLSchemaParser : ISchemaParser
         };
     }
 
-    private static ApiType BuildApiTypeFromInput(
+    private ApiType BuildApiTypeFromInput(
         GraphQLInputObjectTypeDefinition inputDef,
         Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions,
         string? nameOverride = null
@@ -418,7 +577,7 @@ public class GraphQLSchemaParser : ISchemaParser
                         TypeName = ResolveTypeName(field.Type, enumDefinitions),
                         IsRequired = field.Type is GraphQLNonNullType,
                         IsNullable = field.Type is not GraphQLNonNullType,
-                        Description = field.Description?.Value.ToString(),
+                        Description = Describe(field.Description?.Value.ToString(), field.Type),
                     }
                 );
             }
@@ -433,7 +592,7 @@ public class GraphQLSchemaParser : ISchemaParser
         };
     }
 
-    private static string ResolveTypeName(
+    private string ResolveTypeName(
         GraphQLType graphqlType,
         Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions
     )
@@ -447,7 +606,7 @@ public class GraphQLSchemaParser : ISchemaParser
         };
     }
 
-    private static string ResolveNamedType(
+    private string ResolveNamedType(
         string name,
         Dictionary<string, GraphQLEnumTypeDefinition> enumDefinitions
     )
@@ -458,8 +617,33 @@ public class GraphQLSchemaParser : ISchemaParser
         if (enumDefinitions.ContainsKey(name))
             return NamingConventions.ToPascalCase(name);
 
+        if (_customScalars.Contains(name))
+            return "string";
+
+        if (_abstractTypes.Contains(name))
+            return "object";
+
         // Custom type reference — use PascalCase name
         return NamingConventions.ToPascalCase(name);
+    }
+
+    /// <summary>
+    /// A property's description, with a TODO appended when its type is one the generator could only
+    /// approximate: a custom scalar written as <c>string</c>, or an interface or union written as <c>object</c>.
+    /// </summary>
+    private string? Describe(string? description, GraphQLType graphqlType)
+    {
+        var inner = GetInnerTypeName(graphqlType);
+        string? note = null;
+        if (!ScalarMap.ContainsKey(inner) && _customScalars.Contains(inner))
+            note = $"TODO: custom scalar '{inner}' is generated as string; map it to a C# type.";
+        else if (_abstractTypes.Contains(inner))
+            note =
+                $"TODO: interface or union '{inner}' is generated as object; map it to a C# type.";
+
+        if (note is null)
+            return description;
+        return string.IsNullOrWhiteSpace(description) ? note : $"{description} {note}";
     }
 
     private static string GetInnerTypeName(GraphQLType graphqlType)

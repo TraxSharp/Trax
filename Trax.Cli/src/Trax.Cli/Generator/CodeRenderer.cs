@@ -163,9 +163,35 @@ public partial class CodeRenderer
         );
     }
 
-    public string RenderTrainsCsproj()
+    /// <summary>The Trax packages the trains library references, in the order its csproj lists them.</summary>
+    internal static readonly IReadOnlyList<string> TrainsPackages =
+    [
+        "Trax.Effect",
+        "Trax.Effect.Data.InMemory",
+        "Trax.Mediator",
+        "Trax.Scheduler",
+    ];
+
+    public string RenderTrainsCsproj() =>
+        RenderTrainsCsproj(TrainsPackages.ToDictionary(p => p, _ => "1.*"));
+
+    /// <summary>The trains csproj, referencing each of <see cref="TrainsPackages"/> at the version given.</summary>
+    internal string RenderTrainsCsproj(IReadOnlyDictionary<string, string> versions)
     {
-        return Render("TrainsCsproj", new { });
+        var scriptObject = new ScriptObject();
+        var packages = new ScriptArray();
+        foreach (var name in TrainsPackages)
+        {
+            var package = new ScriptObject();
+            package["Name"] = name;
+            package["Version"] = versions[name];
+            packages.Add(package);
+        }
+        scriptObject["Packages"] = packages;
+
+        var context = new TemplateContext();
+        context.PushGlobal(scriptObject);
+        return _templates["TrainsCsproj"].Render(context);
     }
 
     public string RenderGraphQLNamespaces(IEnumerable<string> groups, string projectName)

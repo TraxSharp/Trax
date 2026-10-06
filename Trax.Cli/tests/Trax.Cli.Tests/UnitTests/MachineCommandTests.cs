@@ -41,7 +41,7 @@ public class MachineCommandTests
         command
             .Subcommands.Select(c => c.Name)
             .Should()
-            .BeEquivalentTo(["new", "generate", "check", "migrate"]);
+            .BeEquivalentTo(["new", "generate", "check", "show", "migrate"]);
 
         var generate = command.Subcommands.Single(c => c.Name == "generate");
         generate
@@ -248,6 +248,19 @@ public class MachineCommandTests
     }
 
     [Test]
+    public void New_names_the_package_and_the_prerequisites_of_generate()
+    {
+        var stdout = CaptureOut(() =>
+            MachineCommand.RunNew("checkout", _tempDir, "MyApp.Machines", false, false)
+        );
+
+        stdout
+            .Should()
+            .Contain("dotnet add package Trax.Effect.StateMachine.Persistence --version ");
+        stdout.Should().Contain("--assembly").And.Contain("Node.js 22").And.Contain("--engine-src");
+    }
+
+    [Test]
     public void New_returns_one_when_the_file_exists_without_force()
     {
         MachineCommand.RunNew("checkout", _tempDir, "MyApp", false, false);
@@ -321,6 +334,14 @@ public class MachineCommandTests
     public void RunMigrate_returns_non_zero()
     {
         CaptureErr(() => MachineCommand.RunMigrate().Should().NotBe(0));
+    }
+
+    [Test]
+    public void RunMigrate_speaks_without_internal_decision_names()
+    {
+        var stderr = CaptureErr(() => MachineCommand.RunMigrate());
+
+        stderr.Should().NotContain("Decision");
     }
 
     private static string CaptureOut(Action action)

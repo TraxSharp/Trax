@@ -3,7 +3,7 @@ using Trax.Cli.Models;
 
 namespace Trax.Cli.Generator;
 
-public class TraxProjectGenerator
+public partial class TraxProjectGenerator
 {
     private readonly CodeRenderer _renderer = new();
     private readonly Action<string, string> _scaffoldHub;
@@ -84,7 +84,12 @@ public class TraxProjectGenerator
         // 2. Create the trains library
         var trainsProjectName = $"{projectName}.Trains";
         var trainsDir = Path.Combine(outputDir, trainsProjectName);
-        GenerateTrainsLibrary(schema, trainsDir, projectName);
+        GenerateTrainsLibrary(
+            schema,
+            trainsDir,
+            projectName,
+            HubPackageVersions(hubDir, hubProjectName)
+        );
 
         // 3. Add ProjectReference from hub to trains library
         AddProjectReference(hubDir, hubProjectName, trainsProjectName);
@@ -160,7 +165,98 @@ public class TraxProjectGenerator
         catch (UnauthorizedAccessException) { }
     }
 
-    internal void GenerateTrainsLibrary(ApiSchema schema, string trainsDir, string projectName)
+    /// <summary>
+    /// The version the hub resolves each Trax package the trains library references at: the pins the template
+    /// ships in the hub's <c>Directory.Packages.props</c>, else a <c>Version</c> on the hub's own
+    /// <c>PackageReference</c>. The trains library sits beside the hub, outside that file's reach, so it gets
+    /// the same versions written into its csproj; a float there would let the pair resolve different Trax
+    /// releases. A hub that pins none of them is refused rather than floated.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> HubPackageVersions(
+        string hubDir,
+        string hubProjectName
+    )
+    {
+        var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        ReadVersions(Path.Combine(hubDir, "Directory.Packages.props"), "PackageVersion", versions);
+        ReadVersions(
+            Path.Combine(hubDir, $"{hubProjectName}.csproj"),
+            "PackageReference",
+            versions
+        );
+
+        var missing = CodeRenderer.TrainsPackages.Where(p => !versions.ContainsKey(p)).ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                $"The hub scaffolded at {hubDir} pins no version for {string.Join(", ", missing)}, so the "
+                    + "trains library cannot reference the same Trax release. The installed trax-hub template "
+                    + "does not match this version of trax: run dotnet new install Trax.Samples.Templates."
+            );
+        // The version is written into the trains csproj as an attribute value, so anything that is not a
+        // NuGet version or range (a quote, say) would break that file or add to it.
+        var malformed = CodeRenderer
+            .TrainsPackages.Where(p => !IsNuGetVersion(versions[p]))
+            .ToList();
+        if (malformed.Count > 0)
+            throw new InvalidOperationException(
+                $"The hub scaffolded at {hubDir} pins "
+                    + string.Join(", ", malformed.Select(p => $"{p} at '{versions[p]}'"))
+                    + ", which is not a NuGet version or version range, so it cannot be written into the "
+                    + "trains library's csproj. Fix the pin in the hub."
+            );
+        return CodeRenderer.TrainsPackages.ToDictionary(p => p, p => versions[p]);
+    }
+
+    /// <summary>A NuGet version (<c>1.2.3</c>, <c>1.2.3-beta.1</c>, a float such as <c>1.*</c>) or a range (<c>[1.0,2.0)</c>).</summary>
+    internal static bool IsNuGetVersion(string version) => NuGetVersion().IsMatch(version.Trim());
+
+    private const string VersionPattern =
+        @"(\*|\d+(\.(\d+|\*)){0,3}(-[0-9A-Za-z.*-]+)?(\+[0-9A-Za-z.-]+)?)";
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        "^("
+            + VersionPattern
+            + @"|[\[(]\s*"
+            + VersionPattern
+            + @"?\s*(,\s*"
+            + VersionPattern
+            + @"?\s*)?[\])])\z"
+    )]
+    private static partial System.Text.RegularExpressions.Regex NuGetVersion();
+
+    private static void ReadVersions(
+        string path,
+        string element,
+        Dictionary<string, string> versions
+    )
+    {
+        if (!File.Exists(path))
+            return;
+        System.Xml.Linq.XDocument document;
+        try
+        {
+            document = System.Xml.Linq.XDocument.Load(path);
+        }
+        catch (Exception ex)
+            when (ex is System.Xml.XmlException or IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"Cannot read {path}: {ex.Message}", ex);
+        }
+        foreach (var item in document.Descendants().Where(e => e.Name.LocalName == element))
+        {
+            var include = (string?)item.Attribute("Include");
+            var version = (string?)item.Attribute("Version");
+            if (!string.IsNullOrWhiteSpace(include) && !string.IsNullOrWhiteSpace(version))
+                versions.TryAdd(include, version);
+        }
+    }
+
+    internal void GenerateTrainsLibrary(
+        ApiSchema schema,
+        string trainsDir,
+        string projectName,
+        IReadOnlyDictionary<string, string>? packageVersions = null
+    )
     {
         SchemaNames.Validate(schema, projectName);
 
@@ -185,7 +281,9 @@ public class TraxProjectGenerator
         // Write trains csproj
         WriteFile(
             Path.Combine(trainsDir, $"{trainsProjectName}.csproj"),
-            _renderer.RenderTrainsCsproj()
+            packageVersions is null
+                ? _renderer.RenderTrainsCsproj()
+                : _renderer.RenderTrainsCsproj(packageVersions)
         );
 
         // Write ManifestNames.cs

@@ -1,6 +1,7 @@
 using System.CommandLine;
 using AwesomeAssertions;
 using Trax.Cli.Commands;
+using Trax.Cli.Tests.IntegrationTests;
 
 namespace Trax.Cli.Tests.UnitTests;
 
@@ -73,15 +74,66 @@ public class GenerateCommandTests
     }
 
     [Test]
-    public void Handle_UnsupportedExplicitType_Throws()
+    public void Handle_with_an_unknown_type_reports_it_and_exits_1()
     {
         var schema = new FileInfo(Path.Combine(_tempDir, "schema.graphql"));
         File.WriteAllText(schema.FullName, "type Query { hi: String }");
         var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
 
-        Action act = () => GenerateCommand.Handle(schema, output, "Proj", "wat", false);
+        var exitCode = 0;
+        var stderr = CaptureStderr(() =>
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", "swagger", false)
+        );
 
-        act.Should().Throw<Exception>();
+        exitCode.Should().Be(1);
+        stderr.Should().Contain("Unknown schema type 'swagger'");
+        output.Exists.Should().BeFalse();
+    }
+
+    [Test]
+    public void Handle_with_an_extension_it_cannot_detect_reports_it_and_exits_1()
+    {
+        var schema = new FileInfo(Path.Combine(_tempDir, "schema.txt"));
+        File.WriteAllText(schema.FullName, "type Query { hi: String }");
+        var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
+
+        var exitCode = 0;
+        var stderr = CaptureStderr(() =>
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
+        );
+
+        exitCode.Should().Be(1);
+        stderr.Should().Contain("Use --type");
+    }
+
+    [TestCase("openapi-3.1.yaml", "OpenAPI 3.1.0")]
+    [TestCase("compose.yml", "is not an OpenAPI document")]
+    [TestCase("broken.json", "Cannot read")]
+    [TestCase("broken.graphql", "is not valid GraphQL SDL")]
+    public void Handle_with_a_schema_it_cannot_read_reports_it_and_exits_1(
+        string file,
+        string expected
+    )
+    {
+        var schema = new FileInfo(
+            Path.Combine(
+                TestContext.CurrentContext.TestDirectory,
+                "Fixtures",
+                "UnreadableSchemas",
+                file
+            )
+        );
+        var output = new DirectoryInfo(Path.Combine(_tempDir, "out"));
+
+        var exitCode = 0;
+        var stderr = CaptureStderr(() =>
+            exitCode = GenerateCommand.Handle(schema, output, "Proj", null, false)
+        );
+
+        exitCode.Should().Be(1);
+        stderr.Should().Contain(expected).And.Contain(file);
+        stderr.Should().NotContain(" at ", "the refusal is a message, not a stack trace");
+        output.Exists.Should().BeFalse();
     }
 
     [Test]
@@ -144,14 +196,13 @@ public class GenerateCommandTests
     [Test]
     public void Handle_HappyPathGraphQL_ParsesAndGenerates()
     {
-        if (!IsTraxHubTemplateInstalled())
-            Assert.Ignore("trax-hub template is not installed (Trax.Samples.Templates).");
+        using var hive = TemplateHive.Install();
 
         var schema = new FileInfo(FixturePath("simple.graphql"));
         var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-graphql"));
 
         var stdout = CaptureStdout(() =>
-            GenerateCommand.Handle(schema, output, "HappyGraphQL", null, false)
+            GenerateCommand.Handle(schema, output, "HappyGraphQL", null, false, hive.Generator())
         );
 
         Environment.ExitCode.Should().Be(0);
@@ -165,33 +216,18 @@ public class GenerateCommandTests
     [Test]
     public void Handle_HappyPathOpenApi_ParsesAndGenerates()
     {
-        if (!IsTraxHubTemplateInstalled())
-            Assert.Ignore("trax-hub template is not installed (Trax.Samples.Templates).");
+        using var hive = TemplateHive.Install();
 
         var schema = new FileInfo(FixturePath("petstore.json"));
         var output = new DirectoryInfo(Path.Combine(_tempDir, "happy-openapi"));
 
         var stdout = CaptureStdout(() =>
-            GenerateCommand.Handle(schema, output, "HappyOpenApi", null, false)
+            GenerateCommand.Handle(schema, output, "HappyOpenApi", null, false, hive.Generator())
         );
 
         Environment.ExitCode.Should().Be(0);
         stdout.Should().Contain("from openapi schema");
         stdout.Should().Contain("Generated Trax project at:");
-    }
-
-    private static bool IsTraxHubTemplateInstalled()
-    {
-        var psi = new System.Diagnostics.ProcessStartInfo("dotnet", "new list trax-hub")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        using var p = System.Diagnostics.Process.Start(psi)!;
-        var stdout = p.StandardOutput.ReadToEnd();
-        p.WaitForExit();
-        return stdout.Contains("trax-hub");
     }
 
     private static string FixturePath(string name) =>

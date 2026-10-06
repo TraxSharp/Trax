@@ -1,11 +1,12 @@
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
+using Microsoft.OpenApi.Readers.Exceptions;
 using Trax.Cli.Generator;
 using Trax.Cli.Models;
 
 namespace Trax.Cli.Schema.OpenApi;
 
-public class OpenApiSchemaParser : ISchemaParser
+public partial class OpenApiSchemaParser : ISchemaParser
 {
     private static readonly HashSet<string> QueryMethods = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -23,17 +24,61 @@ public class OpenApiSchemaParser : ISchemaParser
     private readonly HashSet<string> _componentNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _usedOperationNames = new(StringComparer.OrdinalIgnoreCase);
 
+    // Components that only name a primitive (PlayerId: {type: string, format: uuid}), by C# name, mapped to
+    // the C# type a reference to them is written as. They are not models.
+    private readonly Dictionary<string, string> _primitiveAliases = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Reads the document, turning what the reader throws (a file that is not OpenAPI at all, an
+    /// OpenAPI version it cannot read, a YAML or JSON syntax error, an unreadable file) into a message
+    /// that names the file, instead of an unhandled exception.
+    /// </summary>
+    private static (OpenApiDocument? Document, OpenApiDiagnostic Diagnostic) Read(string filePath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(filePath);
+            var document = new OpenApiStreamReader().Read(stream, out var diagnostic);
+            return (document, diagnostic);
+        }
+        catch (OpenApiUnsupportedSpecVersionException ex)
+        {
+            throw new InvalidOperationException(
+                UnsupportedVersion(filePath, ex.SpecificationVersion),
+                ex
+            );
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                $"Cannot read {filePath} as an OpenAPI document: {ex.Message}",
+                ex
+            );
+        }
+    }
+
+    internal static string UnsupportedVersion(string filePath, string? version) =>
+        string.IsNullOrWhiteSpace(version)
+            ? $"{filePath} is not an OpenAPI document: it has no 'openapi' or 'swagger' version field. "
+                + "trax generate reads OpenAPI 2.0 (Swagger) and 3.0."
+            : $"{filePath} is OpenAPI {version}, which trax generate cannot read. It reads OpenAPI 2.0 "
+                + "(Swagger) and 3.0. An ASP.NET Core 10 API writes 3.1 by default; set "
+                + "options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_0 in AddOpenApi to export 3.0.";
+
     public ApiSchema Parse(string filePath)
     {
-        using var stream = File.OpenRead(filePath);
-        var reader = new OpenApiStreamReader();
-        var document = reader.Read(stream, out var diagnostic);
+        var (document, diagnostic) = Read(filePath);
 
-        if (document == null)
+        // A syntax error leaves a document with no paths at all rather than none, so both are a
+        // document that could not be read.
+        if (document?.Paths == null)
         {
-            var errors = string.Join(Environment.NewLine, diagnostic.Errors.Select(e => e.Message));
+            var errors = string.Join(
+                Environment.NewLine,
+                diagnostic.Errors.Select(e => $"  {e.Pointer} - {e.Message}")
+            );
             throw new InvalidOperationException(
-                $"Failed to parse OpenAPI schema:{Environment.NewLine}{errors}"
+                $"Cannot read {filePath} as an OpenAPI document:{Environment.NewLine}{errors}"
             );
         }
 
@@ -57,6 +102,12 @@ public class OpenApiSchemaParser : ISchemaParser
                 _usedTypeNames.Add(pascal);
             }
 
+            // Known before any field is resolved, so a reference resolves the same whichever order the
+            // components are declared in.
+            foreach (var (rawName, componentSchema) in document.Components.Schemas)
+                if (MapPrimitiveAlias(componentSchema) is { } primitive)
+                    _primitiveAliases.TryAdd(ComponentName(rawName), primitive);
+
             var componentSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (rawName, componentSchema) in document.Components.Schemas)
             {
@@ -70,6 +121,8 @@ public class OpenApiSchemaParser : ISchemaParser
                     AddCollidingComponent(schema, ComponentName(rawName), rawName, componentSchema);
                     continue;
                 }
+                if (_primitiveAliases.ContainsKey(ComponentName(rawName)))
+                    continue;
                 if (
                     componentSchema.Enum != null
                     && componentSchema.Enum.Count > 0
@@ -113,22 +166,6 @@ public class OpenApiSchemaParser : ISchemaParser
                     if (!apiType.IsBuiltIn && !schema.Types.Any(t => t.Name == apiType.Name))
                         schema.Types.Add(apiType);
                 }
-            }
-        }
-
-        // Rewrite field types that reference empty schemas to "object" —
-        // HotChocolate rejects types with zero fields, and ordering during component
-        // resolution means some refs may not have been caught inline.
-        var emptyTypeNames = _resolvedTypes
-            .Where(kv => kv.Value.Fields.Count == 0)
-            .Select(kv => kv.Key)
-            .ToHashSet();
-
-        foreach (var apiType in schema.Types)
-        {
-            foreach (var field in apiType.Fields)
-            {
-                field.TypeName = ReplaceEmptyTypeRefs(field.TypeName, emptyTypeNames);
             }
         }
 
@@ -207,6 +244,25 @@ public class OpenApiSchemaParser : ISchemaParser
         {
             if (!apiType.IsBuiltIn && !schema.Types.Any(t => t.Name == apiType.Name))
                 schema.Types.Add(apiType);
+        }
+
+        // Rewrite references to empty schemas to "object": a zero-field type is not written to Models/
+        // (HotChocolate rejects types with zero fields), and whether a reference was resolved before or after
+        // the type it names turned out empty depends on declaration order. Run last, so every type is known,
+        // the inline ones promoted while resolving included, and every type expression is rewritten.
+        var emptyTypeNames = _resolvedTypes
+            .Where(kv => kv.Value.Fields.Count == 0)
+            .Select(kv => kv.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        if (emptyTypeNames.Count > 0)
+        {
+            var allFields = schema
+                .Types.Concat(
+                    schema.Operations.SelectMany(o => new[] { o.InputType, o.OutputType })
+                )
+                .SelectMany(t => t.Fields);
+            foreach (var field in allFields)
+                field.TypeName = ReplaceEmptyTypeRefs(field.TypeName, emptyTypeNames);
         }
 
         return schema;
@@ -339,11 +395,12 @@ public class OpenApiSchemaParser : ISchemaParser
             if (jsonContent.Value?.Schema != null)
             {
                 var bodySchema = jsonContent.Value.Schema;
+                var bodyProperties = BodyProperties(bodySchema);
 
-                if (bodySchema.Properties != null)
+                if (bodyProperties.Count > 0)
                 {
-                    var requiredProps = bodySchema.Required ?? new HashSet<string>();
-                    foreach (var (propName, propSchema) in bodySchema.Properties)
+                    var requiredProps = BodyRequired(bodySchema);
+                    foreach (var (propName, propSchema) in bodyProperties)
                     {
                         fields.Add(
                             (
@@ -360,7 +417,10 @@ public class OpenApiSchemaParser : ISchemaParser
                         );
                     }
                 }
-                else if (bodySchema.Reference != null)
+                else if (
+                    bodySchema.Reference != null
+                    && !_primitiveAliases.ContainsKey(ComponentName(bodySchema.Reference.Id))
+                )
                 {
                     // Reference to a component schema — pull its fields into the input
                     var refType = ResolveSchemaType(
@@ -370,6 +430,25 @@ public class OpenApiSchemaParser : ISchemaParser
                     var rawNames = RawPropertyNames(bodySchema);
                     fields.AddRange(
                         refType.Fields.Select(f => (f, rawNames.GetValueOrDefault(f.Name, f.Name)))
+                    );
+                }
+                else if (!IsEmptyObject(bodySchema))
+                {
+                    // An array, a map, a primitive or a oneOf/anyOf body has no properties to spread
+                    // into the input, so it is carried whole as one field rather than dropped.
+                    var bodyName = RequestBodyName(operation);
+                    fields.Add(
+                        (
+                            new ApiField
+                            {
+                                Name = NamingConventions.ToPascalCase(bodyName),
+                                TypeName = ResolveOpenApiType(bodySchema, operationName + "Body"),
+                                IsRequired = operation.RequestBody.Required,
+                                IsNullable = !operation.RequestBody.Required,
+                                Description = operation.RequestBody.Description,
+                            },
+                            "(request body)"
+                        )
                     );
                 }
             }
@@ -389,6 +468,58 @@ public class OpenApiSchemaParser : ISchemaParser
             Fields = inputFields,
             IsBuiltIn = false,
         };
+    }
+
+    /// <summary>The properties a request body declares, those of each allOf member included.</summary>
+    private static List<KeyValuePair<string, OpenApiSchema>> BodyProperties(OpenApiSchema body)
+    {
+        var properties = new List<KeyValuePair<string, OpenApiSchema>>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (
+            var source in new[] { body }.Concat(body.Reference == null ? body.AllOf ?? [] : [])
+        )
+        foreach (var property in source.Properties ?? new Dictionary<string, OpenApiSchema>())
+            if (seen.Add(property.Key))
+                properties.Add(property);
+        return properties;
+    }
+
+    private static HashSet<string> BodyRequired(OpenApiSchema body) =>
+        (body.Required ?? new HashSet<string>())
+            .Concat(
+                body.Reference == null
+                    ? (body.AllOf ?? []).SelectMany(a => a.Required ?? new HashSet<string>())
+                    : []
+            )
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>An object schema that declares nothing at all, which carries nothing into a train.</summary>
+    private static bool IsEmptyObject(OpenApiSchema schema) =>
+        schema.Type is null or "object"
+        && schema.Properties is not { Count: > 0 }
+        && schema.AdditionalProperties is null
+        && schema.Items is null
+        && schema.AllOf is not { Count: > 0 }
+        && schema.OneOf is not { Count: > 0 }
+        && schema.AnyOf is not { Count: > 0 };
+
+    /// <summary>
+    /// The name of the field a whole request body becomes: <c>x-codegen-request-body-name</c> on the operation,
+    /// the Swagger 2.0 body parameter's name, else <c>body</c>.
+    /// </summary>
+    private static string RequestBodyName(OpenApiOperation operation)
+    {
+        if (
+            operation.Extensions.TryGetValue("x-codegen-request-body-name", out var codegen)
+            && codegen is Microsoft.OpenApi.Any.OpenApiString { Value.Length: > 0 } named
+        )
+            return named.Value;
+        if (
+            operation.RequestBody.Extensions.TryGetValue("x-bodyName", out var bodyName)
+            && bodyName is Microsoft.OpenApi.Any.OpenApiString { Value.Length: > 0 } swagger
+        )
+            return swagger.Value;
+        return "body";
     }
 
     /// <summary>The PascalCase field name of each property a schema declares, mapped to the name it
@@ -446,6 +577,23 @@ public class OpenApiSchemaParser : ISchemaParser
             var typeName = NamingConventions.ToPascalCase(
                 NamingConventions.SimplifySchemaName(responseSchema.Reference.Id)
             );
+
+            // A component that names a primitive returns that value, as an inline scalar response does.
+            if (_primitiveAliases.TryGetValue(typeName, out var primitive))
+                return new ApiType
+                {
+                    Name = $"{operationName}Output",
+                    Fields =
+                    [
+                        new ApiField
+                        {
+                            Name = "Value",
+                            TypeName = primitive,
+                            IsRequired = true,
+                        },
+                    ],
+                    IsBuiltIn = false,
+                };
 
             // If the referenced type has no fields, treat the output as Unit —
             // HotChocolate rejects object types with zero fields
@@ -543,6 +691,9 @@ public class OpenApiSchemaParser : ISchemaParser
                 NamingConventions.SimplifySchemaName(schema.Reference.Id)
             );
 
+            if (_primitiveAliases.TryGetValue(pascalName, out var primitive))
+                return primitive;
+
             // If the resolved type has no fields, use object instead —
             // HotChocolate rejects both input and output types with zero fields
             if (
@@ -597,19 +748,11 @@ public class OpenApiSchemaParser : ISchemaParser
             return "object";
         }
 
+        if (MapPrimitive(schema) is { } mapped)
+            return mapped;
+
         return schema.Type switch
         {
-            "string" when schema.Format == "date-time" => "DateTime",
-            "string" when schema.Format == "date" => "DateOnly",
-            "string" when schema.Format == "uuid" => "Guid",
-            "string" when schema.Format == "uri" => "Uri",
-            "string" when schema.Format == "binary" => "byte[]",
-            "string" => "string",
-            "integer" when schema.Format == "int64" => "long",
-            "integer" => "int",
-            "number" when schema.Format == "float" => "float",
-            "number" => "double",
-            "boolean" => "bool",
             "array" when schema.Items != null =>
                 $"List<{ResolveOpenApiType(schema.Items, contextName)}>",
             "array" => "List<object>",
@@ -622,6 +765,37 @@ public class OpenApiSchemaParser : ISchemaParser
         };
     }
 
+    /// <summary>The C# type for a string, integer, number or boolean schema, by its format; otherwise null.</summary>
+    private static string? MapPrimitive(OpenApiSchema schema) =>
+        schema.Type switch
+        {
+            "string" when schema.Format == "date-time" => "DateTime",
+            "string" when schema.Format == "date" => "DateOnly",
+            "string" when schema.Format == "uuid" => "Guid",
+            "string" when schema.Format == "uri" => "Uri",
+            "string" when schema.Format == "binary" => "byte[]",
+            "string" => "string",
+            "integer" when schema.Format == "int64" => "long",
+            "integer" => "int",
+            "number" when schema.Format == "float" => "float",
+            "number" => "double",
+            "boolean" => "bool",
+            _ => null,
+        };
+
+    /// <summary>
+    /// The C# type a component stands for when all it does is name a primitive: a primitive <c>type</c> with no
+    /// properties and no composition. A string enum is an enum, not an alias.
+    /// </summary>
+    private static string? MapPrimitiveAlias(OpenApiSchema schema) =>
+        schema.Properties is { Count: > 0 }
+        || schema.AllOf is { Count: > 0 }
+        || schema.OneOf is { Count: > 0 }
+        || schema.AnyOf is { Count: > 0 }
+        || (schema.Type == "string" && schema.Enum is { Count: > 0 })
+            ? null
+            : MapPrimitive(schema);
+
     /// <summary>
     /// An inline enum is named after its property (or its title), which many schemas repeat with
     /// different values (<c>status</c> on an order and on a ticket). One with the same values reuses
@@ -629,7 +803,7 @@ public class OpenApiSchemaParser : ISchemaParser
     /// </summary>
     private string ResolveInlineEnum(string baseName, OpenApiSchema schema)
     {
-        var values = EnumValues(schema);
+        var values = EnumValues(baseName, schema);
         for (var n = 1; ; n++)
         {
             var candidate = n == 1 ? baseName : $"{baseName}{n}";
@@ -648,9 +822,23 @@ public class OpenApiSchemaParser : ISchemaParser
         }
     }
 
-    private static List<string> EnumValues(OpenApiSchema schema) =>
+    /// <summary>
+    /// A string enum's members. A <c>null</c> entry is how OpenAPI 3.0 lets a nullable enum hold null, which
+    /// the property's nullability already carries, so it is not a member. Any other entry that is not a
+    /// string is refused rather than written as the name of the reader's CLR type.
+    /// </summary>
+    private static List<string> EnumValues(string name, OpenApiSchema schema) =>
         schema
-            .Enum.Select(e => e is Microsoft.OpenApi.Any.OpenApiString s ? s.Value : e.ToString()!)
+            .Enum.Where(e => e is not Microsoft.OpenApi.Any.OpenApiNull)
+            .Select(e =>
+                e is Microsoft.OpenApi.Any.OpenApiString s
+                    ? s.Value
+                    : throw new InvalidOperationException(
+                        $"The string enum '{name}' has a value that is not a string (found "
+                            + $"{e.GetType().Name.Replace("OpenApi", "").ToLowerInvariant()}). Make every "
+                            + "value a string."
+                    )
+            )
             .Select(v => NamingConventions.ToPascalCase(v))
             .ToList();
 
@@ -664,7 +852,7 @@ public class OpenApiSchemaParser : ISchemaParser
         var apiEnum = new ApiEnum
         {
             Name = pascalName,
-            Values = EnumValues(schema),
+            Values = EnumValues(pascalName, schema),
             Description = schema.Description,
             SourceName = sourceName,
         };
@@ -735,24 +923,26 @@ public class OpenApiSchemaParser : ISchemaParser
         return apiType;
     }
 
-    private static string ReplaceEmptyTypeRefs(string typeName, HashSet<string> emptyTypeNames)
-    {
-        if (emptyTypeNames.Contains(typeName))
-            return "object";
+    /// <summary>
+    /// Replaces every empty type named in a type expression (<c>Score</c>, <c>List&lt;List&lt;Score&gt;&gt;</c>,
+    /// <c>Dictionary&lt;string, Score&gt;</c>) with <c>object</c>. A name followed by type arguments is a framework
+    /// generic, never a model.
+    /// </summary>
+    private static string ReplaceEmptyTypeRefs(string typeName, HashSet<string> emptyTypeNames) =>
+        TypeNameIdentifier()
+            .Replace(
+                typeName,
+                m =>
+                    emptyTypeNames.Contains(m.Value)
+                    && !(
+                        m.Index + m.Length < typeName.Length && typeName[m.Index + m.Length] == '<'
+                    )
+                        ? "object"
+                        : m.Value
+            );
 
-        // Handle generic wrappers like List<EmptyType>
-        if (
-            typeName.StartsWith("List<", StringComparison.Ordinal)
-            && typeName.EndsWith(">", StringComparison.Ordinal)
-        )
-        {
-            var inner = typeName[5..^1];
-            if (emptyTypeNames.Contains(inner))
-                return "List<object>";
-        }
-
-        return typeName;
-    }
+    [System.Text.RegularExpressions.GeneratedRegex(SchemaNames.Pattern)]
+    private static partial System.Text.RegularExpressions.Regex TypeNameIdentifier();
 
     private string PromoteInlineObject(string contextName, OpenApiSchema schema)
     {

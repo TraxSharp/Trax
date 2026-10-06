@@ -46,27 +46,139 @@ internal sealed record CheckResult(IReadOnlyList<ArtifactCheck> Checks)
 internal sealed partial class MachineGenerator
 {
     private readonly INodeRunner _node;
+    private readonly PlacementFiles _files;
 
-    public MachineGenerator(INodeRunner node) => _node = node;
+    public MachineGenerator(INodeRunner node)
+        : this(node, new PlacementFiles()) { }
 
-    /// <summary>Produce every requested artifact and place it at its output root. Atomic against a step failure.</summary>
+    internal MachineGenerator(INodeRunner node, PlacementFiles files)
+    {
+        _node = node;
+        _files = files;
+    }
+
+    /// <summary>Produce every requested artifact and place it at its output root. Every artifact is replaced or none is.</summary>
     public GenerateResult Generate(MachineGenerateOptions options)
     {
         var staging = CreateStagingDir();
         try
         {
-            var written = new List<GeneratedArtifact>();
-            foreach (var artifact in Produce(options, staging))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(artifact.FinalPath)!);
-                File.Copy(artifact.StagedPath, artifact.FinalPath, overwrite: true);
-                written.Add(new GeneratedArtifact(artifact.Kind, artifact.FinalPath));
-            }
-            return new GenerateResult(written);
+            var planned = Produce(options, staging);
+            Place(planned);
+            return new GenerateResult(
+                planned.Select(a => new GeneratedArtifact(a.Kind, a.FinalPath)).ToList()
+            );
         }
         finally
         {
             TryDelete(staging);
+        }
+    }
+
+    /// <summary>
+    /// Replace every artifact or none. Each staged file is first copied beside its target under a temporary
+    /// name, which is where a missing or unwritable output root fails; only then are the targets swapped in,
+    /// each one's previous content kept aside until all have been, so a failure part-way puts back the ones
+    /// already swapped and removes the directories it created. A failure is reported as an
+    /// <see cref="InvalidOperationException"/> naming the path; when something could not be put back, the
+    /// message names where each original was left instead of claiming nothing changed.
+    /// </summary>
+    private void Place(IReadOnlyList<PlannedArtifact> planned)
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var copies = new List<(PlannedArtifact Artifact, string Temp)>();
+        var swapped = new List<(string Final, string? Backup)>();
+        var createdDirs = new List<string>();
+        string current = "";
+        try
+        {
+            foreach (var artifact in planned)
+            {
+                current = artifact.FinalPath;
+                CreateDirectory(Path.GetDirectoryName(artifact.FinalPath)!, createdDirs);
+                var temp = $"{artifact.FinalPath}.{token}.tmp";
+                copies.Add((artifact, temp));
+                _files.Copy(artifact.StagedPath, temp);
+            }
+
+            foreach (var (artifact, temp) in copies)
+            {
+                current = artifact.FinalPath;
+                string? backup = null;
+                if (File.Exists(artifact.FinalPath))
+                {
+                    backup = $"{artifact.FinalPath}.{token}.bak";
+                    _files.Move(artifact.FinalPath, backup);
+                }
+                swapped.Add((artifact.FinalPath, backup));
+                _files.Move(temp, artifact.FinalPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            var leftBehind = new List<string>();
+            for (var i = swapped.Count - 1; i >= 0; i--)
+            {
+                var (final, backup) = swapped[i];
+                // The new file, if it got there; the original is still at its backup path.
+                var cleared = TryRun(() => _files.Delete(final));
+                if (backup is null)
+                    continue;
+                if (!cleared || !TryRun(() => _files.Move(backup, final)))
+                    leftBehind.Add($"{final} is at {backup}");
+            }
+            foreach (var (_, temp) in copies)
+                if (!TryRun(() => _files.Delete(temp)))
+                    leftBehind.Add($"{temp} could not be removed");
+            for (var i = createdDirs.Count - 1; i >= 0; i--)
+                TryRun(() => _files.DeleteEmptyDirectory(createdDirs[i]));
+
+            throw new InvalidOperationException(
+                $"Could not write {current}: {ex.Message} "
+                    + (
+                        leftBehind.Count == 0
+                            ? "No artifact was changed."
+                            : "Putting the previous artifacts back failed too, so move them back by hand: "
+                                + string.Join("; ", leftBehind)
+                                + "."
+                    ),
+                ex
+            );
+        }
+
+        foreach (var (_, backup) in swapped)
+            if (backup is not null)
+                TryRun(() => _files.Delete(backup));
+    }
+
+    /// <summary>Creates <paramref name="dir"/> and records, outermost first, each directory that did not exist.</summary>
+    private void CreateDirectory(string dir, List<string> created)
+    {
+        var missing = new Stack<string>();
+        for (
+            var probe = Path.GetFullPath(dir);
+            !string.IsNullOrEmpty(probe) && !Directory.Exists(probe);
+            probe = Path.GetDirectoryName(probe)
+        )
+            missing.Push(probe);
+
+        _files.CreateDirectory(dir);
+        foreach (var path in missing)
+            if (!created.Contains(path))
+                created.Add(path);
+    }
+
+    /// <summary>Runs a rollback step; true when it succeeded. Nothing it throws replaces the original failure.</summary>
+    private static bool TryRun(Action action)
+    {
+        try
+        {
+            action();
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
@@ -150,33 +262,42 @@ internal sealed partial class MachineGenerator
                 args.Add("--specifier");
                 args.Add(o.Specifier);
             }
-            RunNode(ToolScript(o, "generate-twin.mjs"), args, "the twin");
-            planned.Add(
+            var twinScript = ToolScript(o, "generate-twin.mjs");
+            RunNode(twinScript, args, "the twin");
+            PlannedArtifact[] twin =
+            [
                 new(
                     "contexts",
                     Path.Combine(twinStage, $"{id}.contexts.g.ts"),
                     Path.Combine(o.TwinOut, $"{id}.contexts.g.ts")
-                )
-            );
-            planned.Add(
+                ),
                 new(
                     "machine",
                     Path.Combine(twinStage, $"{id}.machine.g.ts"),
                     Path.Combine(o.TwinOut, $"{id}.machine.g.ts")
-                )
-            );
+                ),
+            ];
+            RequireProduced(twin, twinScript);
+            planned.AddRange(twin);
         }
 
         if (o.CorpusOut is not null)
         {
             RequireEngine(o.EngineSrc, "the corpus");
             var corpusStage = Path.Combine(staging, "differential.json");
+            var corpusScript = ToolScript(o, "generate-corpus.mjs");
             RunNode(
-                ToolScript(o, "generate-corpus.mjs"),
+                corpusScript,
                 ["--ir", stagedIr, "--engine-src", o.EngineSrc!, "--out", corpusStage],
                 "the corpus"
             );
-            planned.Add(new("corpus", corpusStage, Path.Combine(o.CorpusOut, "differential.json")));
+            PlannedArtifact corpus = new(
+                "corpus",
+                corpusStage,
+                Path.Combine(o.CorpusOut, "differential.json")
+            );
+            RequireProduced([corpus], corpusScript);
+            planned.Add(corpus);
         }
 
         return planned;
@@ -198,6 +319,19 @@ internal sealed partial class MachineGenerator
         if (result.ExitCode != 0)
             throw new InvalidOperationException(
                 $"node {Path.GetFileName(script)} failed (exit {result.ExitCode}): {result.StdErr.Trim()}"
+            );
+    }
+
+    // A node step that exits 0 without writing a file the CLI expects (an engine whose generator names its
+    // output differently) is refused here, before anything is placed or compared.
+    private static void RequireProduced(IEnumerable<PlannedArtifact> artifacts, string script)
+    {
+        var missing = artifacts.Where(a => !File.Exists(a.StagedPath)).ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                $"node {Path.GetFileName(script)} exited 0 but did not write "
+                    + string.Join(", ", missing.Select(a => Path.GetFileName(a.StagedPath)))
+                    + ". The engine at --engine-src may not match this version of trax; nothing was written."
             );
     }
 
@@ -261,4 +395,24 @@ internal sealed partial class MachineGenerator
     }
 
     private sealed record PlannedArtifact(string Kind, string StagedPath, string FinalPath);
+}
+
+/// <summary>The file operations <c>generate</c> places artifacts with; a seam so a failure part-way can be tested.</summary>
+internal class PlacementFiles
+{
+    public virtual void Copy(string source, string destination) =>
+        File.Copy(source, destination, overwrite: true);
+
+    public virtual void Move(string source, string destination) => File.Move(source, destination);
+
+    public virtual void Delete(string path) => File.Delete(path);
+
+    public virtual void CreateDirectory(string path) => Directory.CreateDirectory(path);
+
+    /// <summary>Removes <paramref name="path"/> only when it is empty.</summary>
+    public virtual void DeleteEmptyDirectory(string path)
+    {
+        if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
+            Directory.Delete(path);
+    }
 }

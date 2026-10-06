@@ -16,6 +16,7 @@ internal static class MachineCommand
             CreateNew(),
             CreateGenerate(),
             CreateCheck(),
+            CreateShow(),
             CreateMigrate(),
         };
 
@@ -84,9 +85,7 @@ internal static class MachineCommand
                 force
             );
             Console.WriteLine($"Scaffolded {path}");
-            Console.WriteLine(
-                "Next: edit the states/triggers/context, then run 'trax machine generate' to emit the IR and twin."
-            );
+            Console.WriteLine(NewNextSteps());
             return 0;
         }
         catch (InvalidOperationException ex)
@@ -94,6 +93,36 @@ internal static class MachineCommand
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// What a scaffolded machine needs before <c>generate</c> can use it, spelled out because none of it is
+    /// visible from the file: the package its base class lives in, a build, and node plus the engine for the
+    /// TypeScript artifacts.
+    /// </summary>
+    internal static string NewNextSteps()
+    {
+        var version = typeof(Trax.Effect.StateMachine.Persistence.IMachine)
+            .Assembly.GetCustomAttributes(
+                typeof(System.Reflection.AssemblyInformationalVersionAttribute),
+                false
+            )
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()
+            ?.InformationalVersion.Split('+')[0];
+        var versionFlag = version is null ? "" : $" --version {version}";
+        return string.Join(
+            Environment.NewLine,
+            "Next steps:",
+            "  1. The machine derives from Machine<TState, TTrigger> in Trax.Effect.StateMachine.Persistence. In the",
+            "     project that holds this file, reference the version this trax is built against:",
+            $"       dotnet add package Trax.Effect.StateMachine.Persistence{versionFlag}",
+            "  2. Edit the states, triggers and context, then build the project.",
+            "  3. Export the IR from the built assembly:",
+            "       trax machine generate --assembly <path to the built .dll> --ir-out <dir>",
+            "     The TypeScript twin (--twin-out) and differential corpus (--corpus-out) also need Node.js 22 or",
+            "     later on PATH and --engine-src pointing at the TypeScript state-machine engine's src/ directory."
+        );
     }
 
     private static Command CreateGenerate()
@@ -168,11 +197,92 @@ internal static class MachineCommand
         return command;
     }
 
+    private static Command CreateShow()
+    {
+        var o = MachineOptions.Create();
+        var formatOption = new Option<string?>("--format")
+        {
+            Description =
+                "text (default, for a terminal), mermaid (a stateDiagram-v2) or dot (Graphviz).",
+        };
+        var asciiOption = new Option<bool>("--ascii")
+        {
+            Description = "Draw the text format with ASCII only, for terminals without box glyphs.",
+        };
+        var command = new Command(
+            "show",
+            "Print a compiled machine's states and transitions: initial and committed states, guards, reducers and effects."
+        )
+        {
+            o.Assembly,
+            o.Machine,
+            formatOption,
+            asciiOption,
+        };
+        command.SetAction(parseResult =>
+            RunShow(
+                parseResult.GetRequiredValue(o.Assembly).FullName,
+                parseResult.GetValue(o.Machine),
+                parseResult.GetValue(formatOption),
+                parseResult.GetValue(asciiOption),
+                Console.Out,
+                UseColor()
+            )
+        );
+        return command;
+    }
+
+    // Colour only for a terminal, and never when NO_COLOR is set (https://no-color.org).
+    private static bool UseColor() =>
+        !Console.IsOutputRedirected
+        && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR"));
+
+    internal static int RunShow(
+        string assemblyPath,
+        string? machineName,
+        string? format,
+        bool ascii,
+        TextWriter output,
+        bool color = false
+    )
+    {
+        try
+        {
+            var parsedFormat = format?.ToLowerInvariant() switch
+            {
+                null or "text" => MachineFormat.Text,
+                "mermaid" => MachineFormat.Mermaid,
+                "dot" => MachineFormat.Dot,
+                _ => throw new InvalidOperationException(
+                    $"--format must be 'text', 'mermaid' or 'dot', got '{format}'."
+                ),
+            };
+            var machine = MachineLoader.Load(assemblyPath, machineName);
+            string ir;
+            try
+            {
+                ir = machine.ExportIr();
+            }
+            catch (ArgumentException ex)
+            {
+                // The engine refuses a malformed machine when it is built, which exporting triggers.
+                throw new InvalidOperationException(ex.Message, ex);
+            }
+            output.Write(MachineRenderer.Render(ir, parsedFormat, ascii, color));
+            return 0;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
     private static Command CreateMigrate()
     {
         var command = new Command(
             "migrate",
-            "Scaffold a forward migration by diffing the context schema (deferred until migrations are in the IR)."
+            "Scaffold a forward migration by diffing the context schema (not implemented yet)."
         );
         command.SetAction(_ => RunMigrate());
         return command;
@@ -182,7 +292,7 @@ internal static class MachineCommand
     internal static int RunMigrate()
     {
         Console.Error.WriteLine(
-            "trax machine migrate is not implemented: migrations are deferred (Decision E). A stored "
+            "trax machine migrate is not implemented yet: a machine's IR does not carry migrations. A stored "
                 + "snapshot whose version does not match the current machine is rejected as a typed "
                 + "version-mismatch and the client starts fresh."
         );
