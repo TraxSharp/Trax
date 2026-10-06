@@ -1,4 +1,4 @@
-# Trax
+# Trax .NET
 
 [![CI](https://github.com/TraxSharp/Trax/actions/workflows/ci.yml/badge.svg)](https://github.com/TraxSharp/Trax/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Trax.Effect)](https://www.nuget.org/packages?q=Trax)

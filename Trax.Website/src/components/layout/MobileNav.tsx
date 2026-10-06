@@ -31,7 +31,7 @@ export default function MobileNav({ links, pathname, onClose }: MobileNavProps) 
           );
         })}
         <a
-          href="https://github.com/TraxSharp"
+          href="https://github.com/TraxSharp/Trax"
           target="_blank"
           rel="noopener noreferrer"
           className="rounded-lg px-3 py-2 text-sm text-text-muted transition-colors hover:text-text-primary"
