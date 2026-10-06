@@ -1,0 +1,791 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using AwesomeAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Trax.Core.Exceptions;
+using Trax.Effect.Utils;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.RunExecutor;
+
+namespace Trax.Scheduler.Tests.UnitTests;
+
+/// <summary>
+/// The HTTP run executor, including the request it actually puts on the wire.
+///
+/// <para><c>ExecuteAsync_SerializesRequestCorrectly</c> is where a reordering of
+/// <c>RemoteRunRequest</c>'s three interchangeable strings shows up as a real failure: the
+/// executor constructs the record positionally, so a permutation compiles clean and swaps
+/// values that no round-trip test would notice.</para>
+///
+/// <para>Enforces <c>docs/adr/0001-remote-execution-is-a-json-wire-contract.md</c>. The output
+/// type a response may name is <c>docs/adr/0006-a-runner-requires-an-authorization-posture.md</c>,
+/// pinned by <c>RemoteRunOutputTests</c>.</para>
+/// </summary>
+[Property("adr", "docs/adr/0001-remote-execution-is-a-json-wire-contract.md")]
+[TestFixture]
+public class HttpRunExecutorTests
+{
+    #region Successful Execution
+
+    [Test]
+    public async Task ExecuteAsync_SuccessfulResponse_ReturnsOutputAndMetadataId()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 42,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: typeof(TestOutput).FullName
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "test" },
+            typeof(TestOutput)
+        );
+
+        result.MetadataId.Should().Be(42);
+        result.Output.Should().NotBeNull();
+        result.Output.Should().BeOfType<TestOutput>();
+        var output = (TestOutput)result.Output!;
+        output.Value.Should().Be("hello");
+        output.Count.Should().Be(7);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ResponseNamingAnotherOutputType_ReadsIntoTheExpectedType()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 43,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: typeof(Dictionary<string, object>).AssemblyQualifiedName
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "test" },
+            typeof(TestOutput)
+        );
+
+        result.Output.Should().BeOfType<TestOutput>();
+    }
+
+    [TestCase(typeof(ITestOutput))]
+    [TestCase(typeof(TestOutputBase))]
+    public async Task ExecuteAsync_TrainDeclaringAnInterfaceOrAbstractOutput_ReturnsTheOutput(
+        Type declaredOutput
+    )
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 44,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: typeof(TestOutput).FullName
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "test" },
+            declaredOutput
+        );
+
+        result.Output.Should().BeAssignableTo(declaredOutput);
+        ((ITestOutput)result.Output!).Value.Should().Be("hello");
+    }
+
+    [TestCase(typeof(ITestOutput))]
+    [TestCase(typeof(TestOutputBase))]
+    public async Task ExecuteAsync_InterfaceOrAbstractOutput_WorkerNamingATypeThatDoesNotImplementIt_IsRefused(
+        Type declaredOutput
+    ) =>
+        await RunNaming(declaredOutput, typeof(TestInput).FullName)
+            .Should()
+            .ThrowAsync<TrainException>(
+                "only an implementation of the expected output type is read (see {0})",
+                "docs/adr/0006-a-runner-requires-an-authorization-posture.md"
+            );
+
+    [TestCase("Some.Assembly.That.Is.Not.Loaded.Output")]
+    [TestCase("Some.Assembly.That.Is.Not.Loaded.Output, Some.Assembly")]
+    [TestCase(null)]
+    public async Task ExecuteAsync_InterfaceOutput_WorkerNamingNoLoadedImplementation_IsRefused(
+        string? namedType
+    ) =>
+        await RunNaming(typeof(ITestOutput), namedType)
+            .Should()
+            .ThrowAsync<TrainException>(
+                "a type is never loaded by the name a response gives (see {0})",
+                "docs/adr/0006-a-runner-requires-an-authorization-posture.md"
+            );
+
+    private static Func<Task> RunNaming(Type declaredOutput, string? namedType)
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 45,
+            OutputJson: """{"value":"hello","count":7}""",
+            OutputType: namedType
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        return () =>
+            executor.ExecuteAsync("My.Train", new TestInput { Name = "test" }, declaredOutput);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_UnitResponse_ReturnsNullOutput()
+    {
+        var response = new RemoteRunResponse(MetadataId: 10);
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var result = await executor.ExecuteAsync(
+            "My.UnitTrain",
+            new TestInput { Name = "unit" },
+            typeof(Trax.Core.Functional.Unit)
+        );
+
+        result.MetadataId.Should().Be(10);
+        result.Output.Should().BeNull();
+    }
+
+    #endregion
+
+    #region Error Handling — IsError Response
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_ThrowsTrainException()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Train failed: something went wrong"
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        await act.Should()
+            .ThrowAsync<TrainException>()
+            .WithMessage("*Train failed: something went wrong*");
+    }
+
+    [TestCase(
+        "99",
+        TestName = "ExecuteAsync_ErrorResponse_AnUnknownFailureClassNumberIsUnclassified"
+    )]
+    [TestCase(
+        "\"Retryable\"",
+        TestName = "ExecuteAsync_ErrorResponse_AnUnknownFailureClassNameIsUnclassified"
+    )]
+    public async Task ExecuteAsync_ErrorResponse_KeepsTheFailureWhenTheClassIsUnknown(
+        string encoded
+    )
+    {
+        // A newer worker can send a class this scheduler predates. The worker's error has to
+        // survive; the class degrades to unclassified.
+        var body =
+            "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\","
+            + "\"exceptionType\":\"SomeException\",\"failureJunction\":\"Save\","
+            + $"\"failureClass\":{encoded}}}";
+        var client = new HttpClient(new FakeHttpMessageHandler(HttpStatusCode.OK, body))
+        {
+            BaseAddress = new Uri("http://test/"),
+        };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message)!;
+        data.Message.Should().Be("row changed");
+        data.FailureClass.Should().Be(FailureClass.Unclassified);
+    }
+
+    [TestCase(
+        "\"Conflict\"",
+        TestName = "ExecuteAsync_ErrorResponse_ReadsAFailureClassSentAsAName"
+    )]
+    [TestCase("2", TestName = "ExecuteAsync_ErrorResponse_ReadsAFailureClassSentAsAnInteger")]
+    public async Task ExecuteAsync_ErrorResponse_ReadsTheFailureClassInEitherForm(string encoded)
+    {
+        // A worker host whose JSON options write enums as names used to break every error
+        // response carrying a class; the reader must not depend on the worker's configuration.
+        var body =
+            "{\"metadataId\":0,\"isError\":true,\"errorMessage\":\"row changed\","
+            + "\"exceptionType\":\"DbUpdateConcurrencyException\",\"failureJunction\":\"Save\","
+            + $"\"failureClass\":{encoded}}}";
+        var client = new HttpClient(new FakeHttpMessageHandler(HttpStatusCode.OK, body))
+        {
+            BaseAddress = new Uri("http://test/"),
+        };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        JsonSerializer
+            .Deserialize<TrainExceptionData>(ex.Message)!
+            .FailureClass.Should()
+            .Be(FailureClass.Conflict);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_WithTrainExceptionData_ReconstructsStructuredException()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Validation failed",
+            ExceptionType: "InvalidOperationException",
+            FailureJunction: "ValidateInputJunction",
+            StackTrace: "at MyApp.ValidateInputJunction.Run()"
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+
+        // The exception message should be valid TrainExceptionData JSON
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
+        data.Should().NotBeNull();
+        data!.Type.Should().Be("InvalidOperationException");
+        data.Junction.Should().Be("ValidateInputJunction");
+        data.Message.Should().Be("Validation failed");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_WithExceptionTypeAndJunction_PreservesInException()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Some error",
+            ExceptionType: "ArgumentException",
+            FailureJunction: "ProcessDataJunction"
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "x" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
+        data.Should().NotBeNull();
+        data!.Type.Should().Be("ArgumentException");
+        data.Junction.Should().Be("ProcessDataJunction");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_WithStackTrace_PreservesRemoteStackTrace()
+    {
+        var remoteStack =
+            "at MyApp.Junction.Run() in Junction.cs:line 42\nat MyApp.Train.Execute()";
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Crash",
+            ExceptionType: "NullReferenceException",
+            StackTrace: remoteStack
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "x" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        // The exception message should contain the structured data (type preserved)
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
+        data.Should().NotBeNull();
+        data!.Type.Should().Be("NullReferenceException");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_WithPlainMessage_FallsBackToFlatString()
+    {
+        // When no ExceptionType is set, falls back to flat error message
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Something failed"
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "x" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("Something failed");
+        // Should NOT be parseable as TrainExceptionData
+        var parseAct = () => JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
+        parseAct.Should().Throw<JsonException>();
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_WithMetadataId_IncludesInException()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 999,
+            IsError: true,
+            ErrorMessage: "Failed after creating metadata",
+            ExceptionType: "TrainException"
+        );
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "x" },
+                typeof(TestOutput)
+            );
+
+        // The exception is thrown — MetadataId from the response is preserved in TrainExceptionData
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        var data = JsonSerializer.Deserialize<TrainExceptionData>(ex.Message);
+        data.Should().NotBeNull();
+        data!.Type.Should().Be("TrainException");
+    }
+
+    #endregion
+
+    #region Error Handling — Non-2xx HTTP Status
+
+    [Test]
+    public async Task ExecuteAsync_Non2xx_WithJsonBody_ThrowsTrainExceptionWithBodyContent()
+    {
+        var errorBody = """{"detail":"Connection refused to downstream service"}""";
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.InternalServerError,
+            responseBody: errorBody
+        );
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "error" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("500");
+        ex.Message.Should().Contain("Connection refused to downstream service");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_Non2xx_WithEmptyBody_ThrowsTrainExceptionWithStatusCode()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.BadGateway, responseBody: "");
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "error" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("502");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_Non2xx_WithHtmlBody_ThrowsTrainExceptionWithStatusCode()
+    {
+        var htmlBody =
+            "<html><body><h1>503 Service Unavailable</h1><p>The server is temporarily unable to service your request.</p></body></html>";
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.ServiceUnavailable,
+            responseBody: htmlBody
+        );
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "error" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("503");
+        ex.Message.Should().Contain("Service Unavailable");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_Non2xx_OffersTheClientNoMessage()
+    {
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.BadGateway,
+            responseBody: "<html>upstream 10.0.0.5 down</html>"
+        );
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "error" },
+                typeof(TestOutput)
+            );
+
+        (await act.Should().ThrowAsync<RemoteRunException>())
+            .Which.PublicMessage.Should()
+            .BeNull("a transport failure is not a message a train author wrote");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ErrorResponse_CarriesTheRunnersPublicMessage()
+    {
+        var response = new RemoteRunResponse(
+            MetadataId: 0,
+            IsError: true,
+            ErrorMessage: "Order 42 is already closed.",
+            ExceptionType: nameof(TrainException),
+            FailureJunction: "CloseOrder"
+        )
+        {
+            PublicMessage = "Order 42 is already closed.",
+        };
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, response);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.FailingTrain",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        (await act.Should().ThrowAsync<RemoteRunException>())
+            .Which.PublicMessage.Should()
+            .Be("Order 42 is already closed.");
+    }
+
+    #endregion
+
+    #region Error Handling — Null Response
+
+    [Test]
+    public async Task ExecuteAsync_NullResponse_ThrowsTrainException()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, responseBody: "null");
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "null" },
+                typeof(TestOutput)
+            );
+
+        await act.Should().ThrowAsync<TrainException>().WithMessage("*null response*");
+    }
+
+    #endregion
+
+    #region Request Serialization
+
+    [Test]
+    public async Task ExecuteAsync_SerializesRequestCorrectly()
+    {
+        RemoteRunRequest? capturedRequest = null;
+        var response = new RemoteRunResponse(MetadataId: 1);
+        var handler = new FakeHttpMessageHandler(
+            HttpStatusCode.OK,
+            response,
+            onRequest: async content =>
+            {
+                capturedRequest = await content!.ReadFromJsonAsync<RemoteRunRequest>();
+            }
+        );
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+        var input = new TestInput { Name = "serialize-test" };
+
+        await executor.ExecuteAsync("My.Train.FullName", input, typeof(TestOutput));
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!
+            .TrainName.Should()
+            .Be(
+                "My.Train.FullName",
+                "the executor builds RemoteRunRequest positionally from three strings, so a "
+                    + "reordering of its parameters swaps values on the wire with no compile "
+                    + "error. See docs/adr/0001-remote-execution-is-a-json-wire-contract.md."
+            );
+        capturedRequest.InputType.Should().Be(typeof(TestInput).FullName);
+        capturedRequest.InputJson.Should().Contain("serialize-test");
+    }
+
+    #endregion
+
+    #region Cancellation
+
+    [Test]
+    public async Task ExecuteAsync_CancelledToken_ThrowsTaskCanceledException()
+    {
+        var handler = new FakeHttpMessageHandler(HttpStatusCode.OK, new RemoteRunResponse(1));
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = CreateExecutor(client);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "cancel" },
+                typeof(TestOutput),
+                cts.Token
+            );
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    #endregion
+
+    #region Retry Behavior
+
+    [Test]
+    public async Task ExecuteAsync_429ThenSuccess_RetriesAndReturnsResult()
+    {
+        var successResponse = new RemoteRunResponse(MetadataId: 42);
+        var handler = new SequentialFakeHandler([
+            (HttpStatusCode.TooManyRequests, "{}"),
+            (HttpStatusCode.OK, JsonSerializer.Serialize(successResponse)),
+        ]);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = new HttpRunExecutor(
+            client,
+            new RemoteRunOptions
+            {
+                Retry = new HttpRetryOptions
+                {
+                    MaxRetries = 3,
+                    BaseDelay = TimeSpan.FromMilliseconds(1),
+                },
+            },
+            NullLogger<HttpRunExecutor>.Instance
+        );
+
+        var result = await executor.ExecuteAsync(
+            "My.Train",
+            new TestInput { Name = "retry-test" },
+            typeof(TestOutput)
+        );
+
+        result.MetadataId.Should().Be(42);
+        handler.RequestCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_429ExceedsMaxRetries_ThrowsTrainException()
+    {
+        var handler = new SequentialFakeHandler([
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+            (HttpStatusCode.TooManyRequests, "Throttled"),
+        ]);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("http://test/") };
+        var executor = new HttpRunExecutor(
+            client,
+            new RemoteRunOptions
+            {
+                Retry = new HttpRetryOptions
+                {
+                    MaxRetries = 3,
+                    BaseDelay = TimeSpan.FromMilliseconds(1),
+                },
+            },
+            NullLogger<HttpRunExecutor>.Instance
+        );
+
+        var act = async () =>
+            await executor.ExecuteAsync(
+                "My.Train",
+                new TestInput { Name = "fail" },
+                typeof(TestOutput)
+            );
+
+        var ex = (await act.Should().ThrowAsync<TrainException>()).Which;
+        ex.Message.Should().Contain("429");
+        handler.RequestCount.Should().Be(4);
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private static HttpRunExecutor CreateExecutor(HttpClient client) =>
+        new(
+            client,
+            new RemoteRunOptions { Retry = new HttpRetryOptions { MaxRetries = 0 } },
+            NullLogger<HttpRunExecutor>.Instance
+        );
+
+    #endregion
+
+    #region Test Types
+
+    public record TestInput
+    {
+        public string Name { get; init; } = "";
+    }
+
+    public interface ITestOutput
+    {
+        string Value { get; }
+    }
+
+    public abstract record TestOutputBase : ITestOutput
+    {
+        public string Value { get; init; } = "";
+    }
+
+    public record TestOutput : TestOutputBase
+    {
+        public int Count { get; init; }
+    }
+
+    #endregion
+
+    #region Fake HTTP Handler
+
+    private class FakeHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly HttpStatusCode _statusCode;
+        private readonly string _responseBody;
+        private readonly Func<HttpContent?, Task>? _onRequest;
+
+        public FakeHttpMessageHandler(
+            HttpStatusCode statusCode,
+            object? responseObject = null,
+            Func<HttpContent?, Task>? onRequest = null
+        )
+        {
+            _statusCode = statusCode;
+            _responseBody = responseObject is not null
+                ? JsonSerializer.Serialize(responseObject)
+                : "null";
+            _onRequest = onRequest;
+        }
+
+        public FakeHttpMessageHandler(HttpStatusCode statusCode, string responseBody)
+        {
+            _statusCode = statusCode;
+            _responseBody = responseBody;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (_onRequest is not null)
+                await _onRequest(request.Content);
+
+            return new HttpResponseMessage(_statusCode)
+            {
+                Content = new StringContent(
+                    _responseBody,
+                    System.Text.Encoding.UTF8,
+                    "application/json"
+                ),
+            };
+        }
+    }
+
+    private class SequentialFakeHandler(List<(HttpStatusCode Status, string Body)> responses)
+        : HttpMessageHandler
+    {
+        private int _callIndex;
+        public int RequestCount => _callIndex;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var index = _callIndex < responses.Count ? _callIndex : responses.Count - 1;
+            _callIndex++;
+
+            var (status, body) = responses[index];
+            return Task.FromResult(
+                new HttpResponseMessage(status)
+                {
+                    Content = new StringContent(
+                        body,
+                        System.Text.Encoding.UTF8,
+                        "application/json"
+                    ),
+                }
+            );
+        }
+    }
+
+    #endregion
+}

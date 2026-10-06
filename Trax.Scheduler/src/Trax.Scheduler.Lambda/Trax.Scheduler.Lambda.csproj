@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <Description>AWS Lambda transport for Trax.Scheduler: dispatches queued jobs and synchronous train runs to an AWS Lambda function by direct SDK invocation. Install it in the scheduler host when your trains run in a Lambda function built on Trax.Runner.Lambda.</Description>
+    <AssemblyName>Trax.Scheduler.Lambda</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Scheduler/Trax.Scheduler.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.Lambda" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,98 @@
+using Trax.Core.Functional;
+using Trax.Effect.Models.Manifest;
+using Trax.Effect.Services.ServiceTrain;
+
+namespace Trax.Scheduler.Services.DormantDependentContext;
+
+/// <summary>
+/// Scoped service for activating dormant dependent manifests at runtime.
+/// </summary>
+/// <remarks>
+/// Injected into train junctions that need to selectively fire dependent trains
+/// with runtime-determined input. Only dormant dependents declared as children of
+/// the currently executing parent manifest can be activated.
+///
+/// The context is automatically initialized by the JobRunner before the
+/// user's train runs. If called outside of a scheduled execution (no manifest
+/// context), all calls are silently skipped with a warning log — this allows
+/// trains that use dormant dependents to also run via GraphQL mutations or
+/// <see cref="Trax.Mediator.Services.TrainBus.ITrainBus"/> without throwing.
+///
+/// <example>
+/// <code>
+/// public class MyJunction(IDormantDependentContext dormants)
+///     : Junction&lt;MyInput, Unit&gt;
+/// {
+///     public override async Task&lt;Unit&gt; Run(MyInput input)
+///     {
+///         await dormants.ActivateAsync&lt;IChildTrain, ChildInput, Unit&gt;(
+///             "child-external-id",
+///             new ChildInput { Data = input.RuntimeData });
+///         return Unit.Default;
+///     }
+/// }
+/// </code>
+/// </example>
+/// </remarks>
+public interface IDormantDependentContext
+{
+    /// <summary>
+    /// Activates a single dormant dependent manifest, creating a WorkQueue entry
+    /// with the provided runtime input.
+    /// </summary>
+    /// <typeparam name="TTrain">The train interface type of the dormant dependent.</typeparam>
+    /// <typeparam name="TInput">The input type for the train.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
+    /// <param name="externalId">The external ID of the dormant dependent manifest to activate.</param>
+    /// <param name="input">The runtime-determined input for the dependent train.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>
+    /// If the target manifest is disabled, or its manifest group is, the activation is
+    /// skipped: a disabled manifest stays stopped until it is re-enabled. If it already has a
+    /// queued WorkQueue entry or an active execution (Pending/InProgress Metadata), the
+    /// activation is skipped to prevent duplicate work. A warning is logged in each case.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when:
+    /// <list type="bullet">
+    /// <item>No manifest with the specified external ID exists</item>
+    /// <item>The target manifest is not a DormantDependent</item>
+    /// <item>The target manifest does not depend on the current parent manifest</item>
+    /// </list>
+    /// </exception>
+    /// <remarks>
+    /// When called outside of a scheduled execution (no manifest context), the call
+    /// is silently skipped and a warning is logged. This allows trains to be safely
+    /// invoked both through the scheduler and directly via GraphQL or ITrainBus.
+    /// </remarks>
+    Task ActivateAsync<TTrain, TInput, TOutput>(
+        string externalId,
+        TInput input,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, TOutput>
+        where TInput : IManifestProperties;
+
+    /// <summary>
+    /// Activates multiple dormant dependent manifests in a single transaction.
+    /// </summary>
+    /// <typeparam name="TTrain">The train interface type of the dormant dependents.</typeparam>
+    /// <typeparam name="TInput">The input type for the trains.</typeparam>
+    /// <typeparam name="TOutput">The output type of <typeparamref name="TTrain"/>, from its <c>IServiceTrain&lt;TInput, TOutput&gt;</c> interface.</typeparam>
+    /// <param name="activations">
+    /// Collection of (ExternalId, Input) pairs identifying which dormant dependents
+    /// to activate and with what input.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>
+    /// All activations are performed in a single database transaction. If any validation
+    /// fails (wrong parent, not dormant, etc.), the entire batch is rolled back.
+    /// Skipped entries (disabled, already queued or active) do not cause a rollback.
+    /// </remarks>
+    Task ActivateManyAsync<TTrain, TInput, TOutput>(
+        IEnumerable<(string ExternalId, TInput Input)> activations,
+        CancellationToken ct = default
+    )
+        where TTrain : IServiceTrain<TInput, TOutput>
+        where TInput : IManifestProperties;
+}

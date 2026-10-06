@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Theauxm,mark-keaton</Authors>
+    <Description>Amazon SQS transport for Trax.Scheduler: dispatches queued jobs as SQS messages and provides the SQS-triggered Lambda consumer that runs them. Install it when scheduled trains should run on workers fed by an SQS queue.</Description>
+    <AssemblyName>Trax.Scheduler.Sqs</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Trax.Scheduler/Trax.Scheduler.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SQS" />
+    <PackageReference Include="Amazon.Lambda.SQSEvents" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+  </ItemGroup>
+</Project>

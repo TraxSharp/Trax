@@ -1,0 +1,118 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Functional;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Utilities;
+
+namespace Trax.Scheduler.Services.ManifestManagerPollingService;
+
+/// <summary>
+/// Background service that polls for due manifests on a configurable interval
+/// and runs <see cref="IManifestManagerTrain"/> each cycle.
+/// </summary>
+/// <remarks>
+/// With PostgreSQL, uses an advisory lock (<c>pg_try_advisory_xact_lock</c>) to ensure
+/// only one server instance runs the manifest evaluation cycle at a time,
+/// preventing duplicate WorkQueue entries in multi-server deployments.
+///
+/// With InMemory, runs the train directly without transactions or advisory locks.
+/// The resolved <see cref="IManifestManagerTrain"/> is <see cref="InMemoryManifestManagerTrain"/>
+/// which dispatches jobs inline via <see cref="Services.JobSubmitter.InMemoryJobSubmitter"/>.
+/// </remarks>
+internal class ManifestManagerPollingService(
+    IServiceProvider serviceProvider,
+    SchedulerConfiguration configuration,
+    ILogger<ManifestManagerPollingService> logger,
+    ISqlDialect? sqlDialect = null
+) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation(
+            "ManifestManagerPollingService starting with polling interval {Interval}",
+            configuration.ManifestManagerPollingInterval
+        );
+
+        await RunManifestManager(stoppingToken);
+
+        // The interval is read each cycle, so a runtime change applies to the next wait.
+        while (
+            await PollingDelay.WaitAsync(
+                () => configuration.ManifestManagerPollingInterval,
+                stoppingToken
+            )
+        )
+        {
+            await RunManifestManager(stoppingToken);
+        }
+
+        logger.LogInformation("ManifestManagerPollingService stopping");
+    }
+
+    /// <summary>
+    /// One polling cycle: takes the leader lock in a transaction, runs the ManifestManager inside
+    /// it, and commits. Internal so a test can drive the real leader path.
+    /// </summary>
+    internal async Task RunManifestManager(CancellationToken cancellationToken)
+    {
+        if (!configuration.ManifestManagerEnabled)
+        {
+            logger.LogDebug("ManifestManager is disabled, skipping polling cycle");
+            return;
+        }
+
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+
+            // Advisory lock: single-leader election for manifest evaluation.
+            // Prevents duplicate WorkQueue entries when multiple servers poll simultaneously.
+            // InMemory doesn't support transactions or advisory locks — run without lock.
+            if (configuration.HasDatabaseProvider)
+            {
+                var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
+
+                using var transaction = await dataContext.BeginTransaction(cancellationToken);
+
+                var acquired = await ((DbContext)dataContext)
+                    .Database.SqlQuery<bool>(
+                        sqlDialect!.TryAcquireLeaderLock("trax_manifest_manager")
+                    )
+                    .FirstAsync(cancellationToken);
+
+                if (!acquired)
+                {
+                    logger.LogDebug("Another server is running ManifestManager, skipping cycle");
+                    await dataContext.RollbackTransaction();
+                    return;
+                }
+
+                // Run train within the advisory lock transaction
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+
+                logger.LogDebug("ManifestManager polling cycle starting");
+                await train.Run(Unit.Default, cancellationToken);
+                logger.LogDebug("ManifestManager polling cycle completed");
+
+                await dataContext.CommitTransaction();
+            }
+            else
+            {
+                var train = scope.ServiceProvider.GetRequiredService<IManifestManagerTrain>();
+
+                logger.LogDebug("ManifestManager polling cycle starting");
+                await train.Run(Unit.Default, cancellationToken);
+                logger.LogDebug("ManifestManager polling cycle completed");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during ManifestManager polling cycle");
+        }
+    }
+}

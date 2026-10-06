@@ -1,0 +1,143 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Trax.Core.Exceptions;
+using Trax.Effect.Utils;
+using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Http;
+using Trax.Scheduler.Services.RequestSigning;
+
+namespace Trax.Scheduler.Services.JobSubmitter;
+
+/// <summary>
+/// HTTP implementation of <see cref="IJobSubmitter"/> that dispatches jobs to a remote endpoint.
+/// </summary>
+/// <remarks>
+/// Used by <c>UseRemoteWorkers()</c>. Serializes a <see cref="RemoteJobRequest"/> as JSON
+/// and POSTs it to the configured <see cref="RemoteWorkerOptions.BaseUrl"/>.
+/// The remote endpoint runs <see cref="Trains.JobRunner.JobRunnerTrain"/> to execute the train.
+///
+/// Retries transient HTTP failures (429, 502, 503) with exponential backoff.
+/// Configure retry behavior via <see cref="RemoteWorkerOptions.Retry"/>.
+/// </remarks>
+internal class HttpJobSubmitter(
+    HttpClient httpClient,
+    RemoteWorkerOptions options,
+    ILogger<HttpJobSubmitter> logger
+) : IJobSubmitter
+{
+    private const int MaxErrorBodyLength = 2000;
+
+    /// <inheritdoc />
+    public Task<string> EnqueueAsync(long metadataId) =>
+        EnqueueAsync(metadataId, CancellationToken.None);
+
+    /// <inheritdoc />
+    public Task<string> EnqueueAsync(long metadataId, object input) =>
+        EnqueueAsync(metadataId, input, CancellationToken.None);
+
+    /// <inheritdoc />
+    public async Task<string> EnqueueAsync(long metadataId, CancellationToken cancellationToken)
+    {
+        var request = new RemoteJobRequest(metadataId);
+        await PostAsync(request, cancellationToken);
+        return $"http-{Guid.NewGuid():N}";
+    }
+
+    /// <inheritdoc />
+    public async Task<string> EnqueueAsync(
+        long metadataId,
+        object input,
+        CancellationToken cancellationToken
+    )
+    {
+        var inputJson = JsonSerializer.Serialize(
+            input,
+            input.GetType(),
+            TraxJsonSerializationOptions.ManifestProperties
+        );
+
+        var request = new RemoteJobRequest(metadataId, inputJson, input.GetType().FullName);
+        await PostAsync(request, cancellationToken);
+        return $"http-{Guid.NewGuid():N}";
+    }
+
+    private async Task PostAsync(RemoteJobRequest request, CancellationToken cancellationToken)
+    {
+        using var httpResponse = await HttpRetryHelper.PostWithRetryAsync(
+            httpClient,
+            request,
+            options.Retry,
+            logger,
+            cancellationToken,
+            options.SigningKey,
+            RunnerRequestPurpose.Execute
+        );
+
+        if (!httpResponse.IsSuccessStatusCode)
+        {
+            var body = await ReadErrorBodyAsync(httpResponse);
+            throw new TrainException(
+                $"Remote worker returned HTTP {(int)httpResponse.StatusCode}: {body}"
+            );
+        }
+
+        // A 2xx is not enough: a proxy, a load balancer's default page or a misrouted base URL can
+        // answer 200 without the job having reached a runner. Only a runner response for this job
+        // counts as delivered.
+        RemoteJobResponse? response;
+        try
+        {
+            response = await httpResponse.Content.ReadFromJsonAsync<RemoteJobResponse>(
+                cancellationToken
+            );
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            response = null;
+        }
+
+        if (response is null)
+            throw NotARunnerResponse(request.MetadataId);
+
+        if (response.IsError)
+        {
+            throw new TrainException(
+                $"Remote worker reported error: {response.ErrorMessage}"
+                    + (
+                        response.ExceptionType is not null
+                            ? $" [{response.ExceptionType}]"
+                            : string.Empty
+                    )
+            );
+        }
+
+        if (response.MetadataId != request.MetadataId)
+            throw NotARunnerResponse(request.MetadataId);
+    }
+
+    private static TrainException NotARunnerResponse(long metadataId) =>
+        new(
+            $"Remote worker did not return a runner response for Metadata {metadataId}; "
+                + "the endpoint answered with success but the job may not have reached a runner."
+        );
+
+    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (string.IsNullOrWhiteSpace(body))
+                return response.ReasonPhrase ?? "no response body";
+
+            return body.Length > MaxErrorBodyLength
+                ? body[..MaxErrorBodyLength] + "... (truncated)"
+                : body;
+        }
+        catch
+        {
+            return response.ReasonPhrase ?? "unable to read response body";
+        }
+    }
+}

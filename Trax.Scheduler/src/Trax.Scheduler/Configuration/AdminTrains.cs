@@ -1,0 +1,57 @@
+using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Trains.DeadLetterCleanup;
+using Trax.Scheduler.Trains.JobDispatcher;
+using Trax.Scheduler.Trains.JobRunner;
+using Trax.Scheduler.Trains.ManifestManager;
+using Trax.Scheduler.Trains.MetadataCleanup;
+
+namespace Trax.Scheduler.Configuration;
+
+/// <summary>
+/// Central registry of internal/administrative scheduler trains.
+/// These trains are excluded from dashboard statistics and max-active-job counts, and a runner
+/// refuses to run them (see scheduler/0006).
+/// </summary>
+public static class AdminTrains
+{
+    /// <summary>
+    /// The train types considered administrative/internal to the scheduler.
+    /// </summary>
+    public static readonly IReadOnlyList<Type> Types =
+    [
+        typeof(IManifestManagerTrain),
+        typeof(ManifestManagerTrain),
+        typeof(InMemoryManifestManagerTrain),
+        typeof(IJobRunnerTrain),
+        typeof(JobRunnerTrain),
+        typeof(IMetadataCleanupTrain),
+        typeof(MetadataCleanupTrain),
+        typeof(IJobDispatcherTrain),
+        typeof(JobDispatcherTrain),
+        typeof(IDeadLetterCleanupTrain),
+        typeof(DeadLetterCleanupTrain),
+    ];
+
+    /// <summary>
+    /// Fully qualified type names of admin trains.
+    /// </summary>
+    public static readonly IReadOnlyList<string> FullNames = Types
+        .Select(t => t.FullName!)
+        .ToList();
+
+    /// <summary>
+    /// Short (unqualified) type names of admin trains, used for display filtering.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ShortNames = Types.Select(t => t.Name).ToList();
+
+    /// <summary>
+    /// Whether the registration is one of the scheduler's own trains, by its interface or its class.
+    /// </summary>
+    internal static bool Includes(TrainRegistration registration) =>
+        Includes(registration.ServiceType) || Includes(registration.ImplementationType);
+
+    /// <summary>
+    /// Whether the type is one of the scheduler's own train interfaces or classes.
+    /// </summary>
+    internal static bool Includes(Type trainType) => Types.Contains(trainType);
+}
