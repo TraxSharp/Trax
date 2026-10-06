@@ -193,6 +193,43 @@ public class TraxGraphQLAuditListenerTests
     }
 
     [Test]
+    public async Task OperationNamedOnlyInTheDocument_IsRecordedUnderThatName()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("query WhoAmI { ping }");
+        AssertNoErrors(result);
+
+        host.DrainEntries().Should().ContainSingle().Which.OperationName.Should().Be("WhoAmI");
+    }
+
+    [Test]
+    public async Task RequestOperationName_WinsOverTheDocument()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync(
+            QueryRequestBuilder("query First { ping } query Second { ping }")
+                .SetOperationName("Second")
+                .Build()
+        );
+        AssertNoErrors(result);
+
+        host.DrainEntries().Should().ContainSingle().Which.OperationName.Should().Be("Second");
+    }
+
+    [Test]
+    public async Task AnonymousOperation_HasNoOperationName()
+    {
+        await using var host = await TestHost.BuildAsync();
+
+        var result = await host.Executor.ExecuteAsync("{ ping }");
+        AssertNoErrors(result);
+
+        host.DrainEntries().Should().ContainSingle().Which.OperationName.Should().BeNull();
+    }
+
+    [Test]
     public async Task QueryWithErrors_EntryHasSuccessFalseAndErrorText()
     {
         await using var host = await TestHost.BuildAsync();

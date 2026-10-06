@@ -33,12 +33,12 @@ public class NoSilentRegistrationOrderDependenceTests
     );
 
     /// <summary>
-    /// Every site that reads the collection today, with the count it reads it at. Most are an
+    /// Every site that reads the collection today, with the count it reads it at. Each is an
     /// idempotency guard, a precondition that throws, or a decision backed by a startup
-    /// validator that fails loudly when the ordering was wrong. Two are neither, and both are
-    /// knowingly accepted: the broadcaster branch, which is settled by the precondition only
-    /// for the registrations Trax itself ships, and the train-discovery snapshot. The
-    /// per-entry comments below say which is which, and adr/0002 records why.
+    /// validator that fails loudly when the ordering was wrong. The train-discovery snapshot is
+    /// the last kind: <c>TrainRegistrationOrderValidator</c> refuses a host whose train was
+    /// registered after it. The per-entry comments below say which is which, and adr/0002
+    /// records why.
     /// </summary>
     /// <remarks>
     /// To add an entry you must first make the site safe: pair it with a validator that throws
@@ -60,7 +60,8 @@ public class NoSilentRegistrationOrderDependenceTests
         ["src/Trax.Api.Auth.Oidc/OidcAuthServiceCollectionExtensions.cs"] = 1,
         // Idempotency guard for the disclaimer hosted service.
         ["src/Trax.Api.GraphQL.Audit/TraxGraphQLBuilderAuditExtensions.cs"] = 1,
-        // AddTrax precondition (throws) and the train discovery snapshot. The broadcaster branch
+        // AddTrax precondition (throws) and the train discovery snapshot, which
+        // TrainRegistrationOrderValidator backs at startup. The broadcaster branch
         // and the three subscription-interceptor branches are gone: the handlers and the
         // composite socket interceptor are registered unconditionally and decide from the
         // finished container, so there is no order-dependent decision left in either.

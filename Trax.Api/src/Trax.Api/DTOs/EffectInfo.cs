@@ -29,4 +29,13 @@ public record EffectInfo(
     bool IsConfigurable = false,
     string? ConfigurationTypeName = null,
     string? Configuration = null
-);
+)
+{
+    /// <summary>
+    /// The settings of a configurable effect, one per public read-write property of its settings
+    /// type, editable ones first in declaration order; empty when the effect is not configurable.
+    /// <c>operations.configureEffect</c> writes them by <see cref="EffectSettingInfo.Name"/>. A
+    /// setting marked <c>[TraxSensitive]</c> never carries its value.
+    /// </summary>
+    public IReadOnlyList<EffectSettingInfo> Fields { get; init; } = [];
+}

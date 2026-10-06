@@ -96,7 +96,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
 
         await channel
             .ExchangeDeclareAsync(
-                exchange: RabbitMqPersistedOperationBroadcaster.ExchangeName,
+                exchange: _options.RabbitMqExchange,
                 type: ExchangeType.Fanout,
                 durable: true,
                 autoDelete: false,
@@ -117,7 +117,7 @@ internal sealed class PersistedOperationReceiverService : IHostedService, IAsync
         await channel
             .QueueBindAsync(
                 queue: queue.QueueName,
-                exchange: RabbitMqPersistedOperationBroadcaster.ExchangeName,
+                exchange: _options.RabbitMqExchange,
                 routingKey: string.Empty,
                 cancellationToken: cancellationToken
             )

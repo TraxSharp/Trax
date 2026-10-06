@@ -1,5 +1,31 @@
 namespace Trax.Api.DTOs
 {
+    public class BatchTriggerNote : System.IEquatable<Trax.Api.DTOs.BatchTriggerNote>
+    {
+        public BatchTriggerNote(long Id, string Message) { }
+        public long Id { get; init; }
+        public string Message { get; init; }
+    }
+    public class BatchTriggerResponse : System.IEquatable<Trax.Api.DTOs.BatchTriggerResponse>
+    {
+        public BatchTriggerResponse(bool Success, int Matched, int Queued, int AlreadyQueued, int TooLateToAskAfresh, int Skipped, string Message, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.BatchTriggerNote> Notes) { }
+        public int AlreadyQueued { get; init; }
+        public int Matched { get; init; }
+        public string Message { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.BatchTriggerNote> Notes { get; init; }
+        public int Queued { get; init; }
+        public int Skipped { get; init; }
+        public bool Success { get; init; }
+        public int TooLateToAskAfresh { get; init; }
+    }
+    public class ConfigureEffectResponse : System.IEquatable<Trax.Api.DTOs.ConfigureEffectResponse>
+    {
+        public ConfigureEffectResponse(bool Success, int Count, string Message, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.EffectSettingError> Errors) { }
+        public int Count { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.EffectSettingError> Errors { get; init; }
+        public string Message { get; init; }
+        public bool Success { get; init; }
+    }
     public class DataChangedEvent : System.IEquatable<Trax.Api.DTOs.DataChangedEvent>
     {
         public DataChangedEvent(Trax.Effect.Services.ChangeSignal.ChangeDomain Domain, System.DateTime Timestamp) { }
@@ -14,6 +40,7 @@ namespace Trax.Api.DTOs
         public System.DateTime? FinishedAt { get; init; }
         public System.Guid Id { get; init; }
         public string Message { get; init; }
+        public int Processed { get; init; }
         public bool Started { get; init; }
         public System.DateTime StartedAt { get; init; }
         public Trax.Api.DTOs.DeadLetterRequeueJobStatus Status { get; init; }
@@ -39,16 +66,92 @@ namespace Trax.Api.DTOs
         public long? RetryMetadataId { get; init; }
         public Trax.Effect.Enums.DeadLetterStatus Status { get; init; }
     }
+    public class DecisionPage : System.IEquatable<Trax.Api.DTOs.DecisionPage>
+    {
+        public DecisionPage(System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.DecisionRecord> Items, int Take, long? NextCursor) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.DecisionRecord> Items { get; init; }
+        public long? NextCursor { get; init; }
+        public int Take { get; init; }
+    }
+    public class DecisionRecord : System.IEquatable<Trax.Api.DTOs.DecisionRecord>
+    {
+        public DecisionRecord(
+                    long Id,
+                    long MetadataId,
+                    string? QuestionKey,
+                    int Occurrence,
+                    string? Kind,
+                    string? Question,
+                    string? Answer,
+                    string? Refused,
+                    bool IsRefused,
+                    string? Fingerprint,
+                    string? Model,
+                    string? Decider,
+                    bool Replayed,
+                    string? Shadows,
+                    string? Routes,
+                    string? StateHash,
+                    System.DateTime DecidedAt,
+                    bool AnswerWithheld,
+                    bool TrackWithheld) { }
+        public string? Answer { get; init; }
+        public bool AnswerWithheld { get; init; }
+        public System.DateTime DecidedAt { get; init; }
+        public string? Decider { get; init; }
+        public string? Fingerprint { get; init; }
+        public long Id { get; init; }
+        public bool IsRefused { get; init; }
+        public string? Kind { get; init; }
+        public long MetadataId { get; init; }
+        public string? Model { get; init; }
+        public int Occurrence { get; init; }
+        public string? Question { get; init; }
+        public string? QuestionKey { get; init; }
+        public string? Refused { get; init; }
+        public string? ReplayRefused { get; init; }
+        public bool Replayed { get; init; }
+        public string? Routes { get; init; }
+        public string? Shadows { get; init; }
+        public string? StateHash { get; init; }
+        public bool TrackWithheld { get; init; }
+    }
     public class EffectInfo : System.IEquatable<Trax.Api.DTOs.EffectInfo>
     {
         public EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable, bool IsConfigurable = false, string? ConfigurationTypeName = null, string? Configuration = null) { }
         public string? Configuration { get; init; }
         public string? ConfigurationTypeName { get; init; }
         public bool Enabled { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.EffectSettingInfo> Fields { get; init; }
         public string FullName { get; init; }
         public bool IsConfigurable { get; init; }
         public string Name { get; init; }
         public bool Toggleable { get; init; }
+    }
+    public class EffectSettingError : System.IEquatable<Trax.Api.DTOs.EffectSettingError>
+    {
+        public EffectSettingError(string Field, string Message) { }
+        public string Field { get; init; }
+        public string Message { get; init; }
+    }
+    public class EffectSettingInfo : System.IEquatable<Trax.Api.DTOs.EffectSettingInfo>
+    {
+        public EffectSettingInfo(string Name, string TypeName, Trax.Scheduler.Services.Effects.EffectFieldKind Kind, bool Nullable, System.Collections.Generic.IReadOnlyList<string>? EnumValues, bool Sensitive, bool HasValue, string? Value, string Hint) { }
+        public System.Collections.Generic.IReadOnlyList<string>? EnumValues { get; init; }
+        public bool HasValue { get; init; }
+        public string Hint { get; init; }
+        public Trax.Scheduler.Services.Effects.EffectFieldKind Kind { get; init; }
+        public string Name { get; init; }
+        public bool Nullable { get; init; }
+        public bool Sensitive { get; init; }
+        public string TypeName { get; init; }
+        public string? Value { get; init; }
+    }
+    public class EffectSettingValueInput : System.IEquatable<Trax.Api.DTOs.EffectSettingValueInput>
+    {
+        public EffectSettingValueInput(string Name, string? Value) { }
+        public string Name { get; init; }
+        public string? Value { get; init; }
     }
     public class ExecutionDetail : System.IEquatable<Trax.Api.DTOs.ExecutionDetail>
     {
@@ -100,6 +203,7 @@ namespace Trax.Api.DTOs
         public string Name { get; init; }
         public string? Output { get; init; }
         public long? ParentId { get; init; }
+        public bool ReplayAbandoned { get; init; }
         public long? ReplayDecisionsOf { get; init; }
         public System.DateTime? ScheduledTime { get; init; }
         public string? StackTrace { get; init; }
@@ -110,6 +214,7 @@ namespace Trax.Api.DTOs
     {
         public ExecutionSummary(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, string? FailureJunction, string? FailureReason, long? ManifestId, bool CancellationRequested, string? HostName = null, string? HostEnvironment = null, string? HostInstanceId = null, Trax.Core.Exceptions.FailureClass FailureClass = 0) { }
         public bool CancellationRequested { get; init; }
+        public string? CurrentlyRunningJunction { get; init; }
         public System.DateTime? EndTime { get; init; }
         public string ExternalId { get; init; }
         public Trax.Core.Exceptions.FailureClass FailureClass { get; init; }
@@ -121,6 +226,7 @@ namespace Trax.Api.DTOs
         public long Id { get; init; }
         public long? ManifestId { get; init; }
         public string Name { get; init; }
+        public long? ParentId { get; init; }
         public System.DateTime StartTime { get; init; }
         public Trax.Effect.Enums.TrainState TrainState { get; init; }
     }
@@ -230,7 +336,15 @@ namespace Trax.Api.DTOs
     {
         public LogLevelSetting(string Category, string Level) { }
         public string Category { get; init; }
+        public string? ConfiguredLevel { get; init; }
         public string Level { get; init; }
+        public bool Overridden { get; init; }
+    }
+    public class LogLevelSettingInput : System.IEquatable<Trax.Api.DTOs.LogLevelSettingInput>
+    {
+        public LogLevelSettingInput(string Category, Microsoft.Extensions.Logging.LogLevel Level) { }
+        public string Category { get; init; }
+        public Microsoft.Extensions.Logging.LogLevel Level { get; init; }
     }
     public class ManifestDetail : System.IEquatable<Trax.Api.DTOs.ManifestDetail>
     {
@@ -355,6 +469,7 @@ namespace Trax.Api.DTOs
     public class PagedResult<T> : System.IEquatable<Trax.Api.DTOs.PagedResult<T>>
     {
         public PagedResult(System.Collections.Generic.IReadOnlyList<T> Items, int TotalCount, int Skip, int Take, bool IsEstimatedCount = false, long? NextCursor = default) { }
+        public bool IsCountCapped { get; init; }
         public bool IsEstimatedCount { get; init; }
         public System.Collections.Generic.IReadOnlyList<T> Items { get; init; }
         public long? NextCursor { get; init; }
@@ -366,6 +481,14 @@ namespace Trax.Api.DTOs
     {
         public RunTrainResponse(long MetadataId) { }
         public long MetadataId { get; init; }
+    }
+    public class SetLogLevelsResponse : System.IEquatable<Trax.Api.DTOs.SetLogLevelsResponse>
+    {
+        public SetLogLevelsResponse(bool Success, int Count, System.Collections.Generic.IReadOnlyList<string> NotApplied, string Message) { }
+        public int Count { get; init; }
+        public string Message { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> NotApplied { get; init; }
+        public bool Success { get; init; }
     }
     public enum SortOrder
     {
@@ -391,6 +514,7 @@ namespace Trax.Api.DTOs
         public TrainInfo(string ServiceTypeName, string ImplementationTypeName, string InputTypeName, string OutputTypeName, string Lifetime, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema, System.Collections.Generic.IReadOnlyList<string> RequiredPolicies, System.Collections.Generic.IReadOnlyList<string> RequiredRoles, bool IsQuery, bool IsMutation, string? GraphQLName, bool IsBroadcastEnabled) { }
         public required string FullName { get; init; }
         public string? GraphQLName { get; init; }
+        public bool HasQueueSubjectKey { get; init; }
         public string ImplementationTypeName { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.InputPropertySchema> InputSchema { get; init; }
         public string InputTypeName { get; init; }
@@ -464,6 +588,7 @@ namespace Trax.Api.DTOs
         public long? ManifestId { get; init; }
         public long? MetadataId { get; init; }
         public int Priority { get; init; }
+        public long? ReplayDecisionsOf { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
         public Trax.Effect.Enums.WorkQueueStatus Status { get; init; }
         public long? SubjectHeldBy { get; init; }
@@ -485,6 +610,7 @@ namespace Trax.Api.DTOs
         public long? ManifestId { get; init; }
         public long? MetadataId { get; init; }
         public int Priority { get; init; }
+        public long? ReplayDecisionsOf { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
         public Trax.Effect.Enums.WorkQueueStatus Status { get; init; }
         public string? SubjectKey { get; init; }

@@ -4,7 +4,7 @@ using Trax.Api.GraphQL.Validation;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
-using Trax.Effect.Services.EffectRegistry;
+using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -14,7 +14,7 @@ namespace Trax.Api.GraphQL.Mutations;
 /// Scheduler management mutations: trigger, disable, enable, and cancel manifests and groups.
 /// Also exposes the nested <c>deadLetters</c> namespace.
 /// </summary>
-public class OperationsMutations
+public partial class OperationsMutations
 {
     /// <summary>
     /// Nested namespace exposing dead letter mutations (requeue, acknowledge, batch ops).
@@ -47,34 +47,21 @@ public class OperationsMutations
     /// entry is a retry, <c>askAfresh: true</c> makes it ask its deciders again instead of replaying
     /// the failed run's decisions; if the dispatcher had already claimed the retry, it is too late to
     /// change: the mutation still succeeds, and its message says the run replays the failed run's
-    /// decisions. An unknown external id returns <c>success: false</c> and changes nothing.
+    /// decisions. The message says which happened (a new run queued, a queued one brought forward,
+    /// or one already due released as the trigger) and <c>id</c> is that work queue entry. Through
+    /// <see cref="IOperationsService.TriggerManifestAsync"/>, the call the dashboard's Trigger
+    /// buttons make. An unknown external id, or a host with no database provider, where nothing
+    /// dispatches the queue, returns <c>success: false</c> and changes nothing.
     /// </summary>
     public async Task<OperationResponse> TriggerManifest(
         string externalId,
-        [Service] ITraxScheduler scheduler,
-        [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] IOperationsService operationsService,
         CancellationToken ct,
         bool askAfresh = false
-    )
-    {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
-            return refusal;
-
-        // The overload is called only when asked, so a host whose scheduler predates it keeps the
-        // default path.
-        if (askAfresh)
-            return Triggered(
-                await scheduler.TriggerAsync(externalId, askAfresh: true, ct),
-                "Manifest triggered"
-            );
-
-        await scheduler.TriggerAsync(externalId, ct);
-        return new OperationResponse(
-            true,
-            Message: "Manifest triggered: its queued run is due now (an entry it already had is "
-                + "brought forward rather than a second one queued)."
+    ) =>
+        Triggered(
+            await operationsService.TriggerManifestAsync(externalId, delay: null, askAfresh, ct)
         );
-    }
 
     /// <summary>
     /// Queues a run of the manifest with this external id that becomes eligible for dispatch once
@@ -84,47 +71,25 @@ public class OperationsMutations
     /// now + <c>delay</c> otherwise. With <c>askAfresh: true</c> a queued retry the trigger
     /// releases asks its deciders again instead of replaying the failed run's decisions; as with
     /// <c>triggerManifest</c>, the message says so when the dispatcher had already claimed it and it
-    /// still replays. An unknown external id returns <c>success: false</c> and changes nothing.
+    /// still replays. As with <c>triggerManifest</c>, the message says which happened and <c>id</c>
+    /// is the entry. An unknown external id, or a host where nothing dispatches the queue, returns
+    /// <c>success: false</c> and changes nothing.
     /// </summary>
     public async Task<OperationResponse> TriggerManifestDelayed(
         string externalId,
         TimeSpan delay,
-        [Service] ITraxScheduler scheduler,
-        [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] IOperationsService operationsService,
         CancellationToken ct,
         bool askAfresh = false
-    )
-    {
-        if (await NotFound(externalId, dataContextFactory, ct) is { } refusal)
-            return refusal;
-
-        if (askAfresh)
-            return Triggered(
-                await scheduler.TriggerAsync(externalId, delay, askAfresh: true, ct),
-                $"Manifest triggered with {delay} delay"
-            );
-
-        await scheduler.TriggerAsync(externalId, delay, ct);
-        return new OperationResponse(
-            true,
-            Message: $"Manifest triggered: its queued run is due within {delay} (an entry it "
-                + "already had keeps an earlier time or is brought forward to that one)."
-        );
-    }
+    ) => Triggered(await operationsService.TriggerManifestAsync(externalId, delay, askAfresh, ct));
 
     /// <summary>
-    /// The response to a trigger asked afresh: still a success when the dispatcher had already
-    /// claimed the retry, but saying that the run replays the failed run's decisions.
+    /// The response to a manifest trigger: the operations service's own words for what it did
+    /// (queued a new run, brought a queued one forward, or released one already due), with the
+    /// work queue entry's id.
     /// </summary>
-    internal static OperationResponse Triggered(ManifestTriggerResult result, string triggered) =>
-        result.ReplayDecisionsOf is { } replayed
-            ? new OperationResponse(
-                true,
-                Message: $"{triggered}, but the dispatcher had already claimed its queued retry, "
-                    + $"so that run replays the decisions of execution {replayed} rather than "
-                    + "asking its deciders afresh"
-            )
-            : new OperationResponse(true, Message: triggered);
+    internal static OperationResponse Triggered(TriggerManifestResult result) =>
+        new(result.Success, Message: result.Message) { Id = result.Trigger?.WorkQueueId };
 
     /// <summary>
     /// Disables the manifest with this external id so the scheduler stops running it. The manifest
@@ -206,16 +171,19 @@ public class OperationsMutations
     /// <summary>
     /// Queues an immediate run of every enabled manifest in the group that can run on its own.
     /// Dependent manifests are skipped, since they run after their parent. <c>count</c> is the number
-    /// of manifests queued.
+    /// of manifests a new run was queued for; the message also counts the ones that already had a
+    /// queued run, which now runs as the trigger. Through
+    /// <see cref="IOperationsService.TriggerManifestGroupsAsync"/>, the call the dashboard's group
+    /// Trigger makes. A host where nothing dispatches the queue returns <c>success: false</c>.
     /// </summary>
     public async Task<OperationResponse> TriggerGroup(
         long groupId,
-        [Service] ITraxScheduler scheduler,
+        [Service] IOperationsService operationsService,
         CancellationToken ct
     )
     {
-        var count = await scheduler.TriggerGroupAsync(groupId, ct);
-        return new OperationResponse(true, Count: count, Message: $"{count} manifest(s) triggered");
+        var result = await operationsService.TriggerManifestGroupsAsync([groupId], ct);
+        return new OperationResponse(result.Success, Count: result.Queued, Message: result.Message);
     }
 
     /// <summary>
@@ -235,6 +203,50 @@ public class OperationsMutations
             Message: $"Cancellation requested for {count} execution(s)"
         );
     }
+
+    /// <summary>
+    /// Triggers the listed manifests by id, each as <c>triggerManifest</c> triggers one: an
+    /// immediate run is queued, or the manifest's queued entry is brought forward to now when it
+    /// already has one. Through <see cref="IOperationsService.TriggerManifestsAsync"/>, the call the
+    /// dashboard's Trigger Selected makes. With <c>askAfresh: true</c> a queued retry the trigger
+    /// releases asks its deciders again instead of replaying the failed run's decisions; one the
+    /// dispatcher had already claimed still replays, and is counted in <c>tooLateToAskAfresh</c>
+    /// with a note. Unknown ids are skipped and noted without stopping the rest. An empty list, or
+    /// more than 1000 ids, returns <c>success: false</c> and triggers nothing.
+    /// </summary>
+    public async Task<BatchTriggerResponse> TriggerManifests(
+        long[] ids,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct,
+        bool askAfresh = false
+    ) => ToResponse(await operationsService.TriggerManifestsAsync(ids, askAfresh, ct));
+
+    /// <summary>
+    /// Triggers every listed manifest group by id, each as <c>triggerGroup</c> triggers one: every
+    /// enabled member that runs on its own schedule is triggered, and dependent members are left to
+    /// run after their parent. Through <see cref="IOperationsService.TriggerManifestGroupsAsync"/>,
+    /// the call the dashboard's Trigger Selected on the groups page makes. The counts are of
+    /// manifests, except <c>matched</c> and <c>skipped</c>, which count group ids. An empty list,
+    /// or more than 1000 ids, returns <c>success: false</c> and triggers nothing.
+    /// </summary>
+    public async Task<BatchTriggerResponse> TriggerGroups(
+        long[] ids,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) => ToResponse(await operationsService.TriggerManifestGroupsAsync(ids, ct));
+
+    /// <summary>
+    /// Requests cancellation of every pending and running execution of every manifest in the
+    /// listed groups, as <c>cancelGroup</c> does for one, through
+    /// <see cref="IOperationsService.CancelManifestGroupsAsync"/>, the call the dashboard's Cancel
+    /// Running makes. <c>count</c> is the number of executions flagged, zero included. An empty
+    /// list, or more than 1000 ids, returns <c>success: false</c> and flags nothing.
+    /// </summary>
+    public async Task<OperationResponse> CancelGroups(
+        long[] ids,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct
+    ) => ToResponse(await operationsService.CancelManifestGroupsAsync(ids, ct));
 
     /// <summary>
     /// Requests cancellation of a single execution by id, when it is still pending or in
@@ -331,162 +343,117 @@ public class OperationsMutations
     /// schedule). Each field on <paramref name="input"/> is independent; <c>null</c> leaves it
     /// unchanged. See <see cref="UpdateManifestInput"/> for the clear-timeout semantics.
     /// A value the scheduler could not use returns <c>success: false</c> with the reason and saves
-    /// nothing: a timeout or interval that is not positive, a negative retry count, a switch to
-    /// <c>CRON</c> without an expression of 5 or 6 fields, a switch to <c>INTERVAL</c> without an
-    /// interval, and a switch to <c>ONCE</c>, <c>DEPENDENT</c> or <c>DORMANT_DEPENDENT</c>, which
-    /// need a time or a parent this input cannot give. The schedule is checked only when the input
-    /// changes it.
+    /// nothing: a timeout or interval that is not positive, a negative retry count, a priority
+    /// outside 0 to 31, a cron expression the scheduler cannot parse or that never fires, a switch
+    /// to <c>CRON</c> without an expression, a switch to <c>INTERVAL</c> without an interval, and a
+    /// switch to <c>ONCE</c>, <c>DEPENDENT</c> or <c>DORMANT_DEPENDENT</c>, which need a time or a
+    /// parent this input cannot give. The schedule is checked only when the input changes it. Through
+    /// <see cref="IOperationsService.UpdateManifestAsync"/>, which runs every check.
     /// </summary>
     public async Task<OperationResponse> UpdateManifest(
         long id,
         UpdateManifestInput input,
-        [Service] IDataContextProviderFactory dataContextFactory,
-        [Service] ITraxChangeSignal changeSignal,
+        [Service] IOperationsService operationsService,
         CancellationToken ct
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        var manifest = await db.Manifests.FirstOrDefaultAsync(m => m.Id == id, ct);
-        if (manifest is null)
-            return new OperationResponse(false, Message: $"Manifest {id} not found.");
-
-        if (
-            UpdateManifestRefusal(
-                manifest.ScheduleType,
-                manifest.CronExpression,
-                manifest.IntervalSeconds,
-                input
-            ) is
-            { } refusal
-        )
-            return new OperationResponse(
-                false,
-                Message: $"Manifest {id} was not updated: {refusal}"
-            );
-
-        if (input.IsEnabled.HasValue)
-            manifest.IsEnabled = input.IsEnabled.Value;
-        if (input.MaxRetries.HasValue)
-            manifest.MaxRetries = input.MaxRetries.Value;
-        if (input.Priority.HasValue)
-            manifest.Priority = input.Priority.Value;
-        if (input.ClearTimeout)
-            manifest.TimeoutSeconds = null;
-        else if (input.TimeoutSeconds.HasValue)
-            manifest.TimeoutSeconds = input.TimeoutSeconds.Value;
-        if (input.ScheduleType.HasValue)
-            manifest.ScheduleType = input.ScheduleType.Value;
-        if (input.CronExpression is not null)
-            manifest.CronExpression = input.CronExpression;
-        if (input.IntervalSeconds.HasValue)
-            manifest.IntervalSeconds = input.IntervalSeconds.Value;
-
-        await db.SaveChanges(ct);
-        changeSignal.Notify(ChangeDomain.Manifest);
-        return new OperationResponse(true, Count: 1, Message: "Manifest updated");
-    }
-
-    /// <summary>
-    /// Why the scheduler could not use the manifest <paramref name="input"/> would leave, or
-    /// <c>null</c> when it could. The scheduler skips a manifest whose schedule it cannot evaluate
-    /// on every poll, and turns a zero timeout into one that cancels every run at once.
-    /// </summary>
-    /// <remarks>
-    /// The cron check is the scheduler's own first step, a count of 5 or 6 fields; an expression
-    /// with the right count and a bad field is caught by the scheduler, not here, because the
-    /// parser it uses is internal to <c>Trax.Scheduler</c>.
-    /// </remarks>
-    private static string? UpdateManifestRefusal(
-        ScheduleType currentType,
-        string? currentCron,
-        int? currentInterval,
-        UpdateManifestInput input
-    )
-    {
-        if (input.MaxRetries is < 0)
-            return "maxRetries may not be negative.";
-        if (!input.ClearTimeout && input.TimeoutSeconds is <= 0)
-            return "timeoutSeconds must be greater than 0; set clearTimeout to remove the timeout.";
-        if (input.IntervalSeconds is <= 0)
-            return "intervalSeconds must be greater than 0.";
-
-        var changesSchedule =
-            input.ScheduleType.HasValue
-            || input.CronExpression is not null
-            || input.IntervalSeconds.HasValue;
-        if (!changesSchedule)
-            return null;
-
-        var type = input.ScheduleType ?? currentType;
-        if (
-            type is ScheduleType.Once or ScheduleType.Dependent or ScheduleType.DormantDependent
-            && type != currentType
-        )
-            return $"a manifest cannot be switched to {type} here: it needs a "
-                + (type == ScheduleType.Once ? "time" : "parent manifest")
-                + " this input cannot give. Schedule it from code instead.";
-
-        var cron = input.CronExpression ?? currentCron;
-        if (type == ScheduleType.Cron || input.CronExpression is not null)
-        {
-            if (string.IsNullOrWhiteSpace(cron))
-                return "a CRON schedule needs a cronExpression.";
-            var fields = cron.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-            if (fields is not (5 or 6))
-                return $"cronExpression '{cron}' has {fields} field(s); a cron expression has 5 "
-                    + "or 6 (with seconds).";
-        }
-
-        if (type == ScheduleType.Interval && (input.IntervalSeconds ?? currentInterval) is null)
-            return "an INTERVAL schedule needs intervalSeconds.";
-
-        return null;
-    }
+    ) =>
+        ToResponse(
+            await operationsService.UpdateManifestAsync(
+                id,
+                new ManifestUpdate(
+                    input.IsEnabled,
+                    input.MaxRetries,
+                    input.Priority,
+                    input.TimeoutSeconds,
+                    input.ClearTimeout,
+                    input.ScheduleType,
+                    input.CronExpression,
+                    input.IntervalSeconds
+                ),
+                ct
+            )
+        );
 
     /// <summary>
     /// Turns the observational effect whose factory has this full type name on or off in THIS
-    /// process, through the effect registry exactly as the dashboard's effects page does. The
-    /// change is in memory: it does not reach the scheduler or worker processes where trains
-    /// usually run, and a restart restores the configured state. An effect the registry does not
-    /// track, or tracks as not toggleable, is refused and nothing changes. On success
+    /// process, through <see cref="IEffectSettingsService.SetEffectEnabled"/>, the call the
+    /// dashboard's effects page makes. The change is in memory: it does not reach the scheduler or
+    /// worker processes where trains usually run, and a restart restores the configured state. An
+    /// effect the registry does not track, or tracks as not toggleable, is refused and nothing
+    /// changes, as is any effect when the host registers no effect registry. On success
     /// <c>count</c> is 1.
     /// </summary>
     public OperationResponse SetEffectEnabled(
         string fullName,
         bool enabled,
-        [Service] IEffectRegistry registry
+        [Service] IEffectSettingsService effectSettings
+    ) => ToResponse(effectSettings.SetEffectEnabled(fullName, enabled));
+
+    /// <summary>
+    /// Writes settings of the configurable effect whose factory has this full type name, in THIS
+    /// process, through <see cref="IEffectSettingsService.ConfigureEffect"/>, the call the
+    /// dashboard's Configure dialog makes. Send only the settings you change: one not listed is
+    /// not written. It is all or nothing: every value is read as its setting's type and checked
+    /// against the setting's validation before any is written, and nothing is written when one is
+    /// refused; <c>errors</c> then says why, setting by setting. A sensitive setting can be
+    /// written though it is never read back. A setting listed twice, an empty list, or more than
+    /// 1000 entries is refused. The change is in memory and applies to the next run in this
+    /// process; it does not reach the scheduler or worker processes where trains usually run, and
+    /// a restart restores the configured settings.
+    /// </summary>
+    /// <param name="fullName">The effect factory's full type name, as <c>effects</c> lists it.</param>
+    /// <param name="values">The settings to write, by name, as text.</param>
+    /// <param name="effectSettings">Resolved from DI; not a GraphQL argument.</param>
+    public ConfigureEffectResponse ConfigureEffect(
+        string fullName,
+        IReadOnlyList<EffectSettingValueInput> values,
+        [Service] IEffectSettingsService effectSettings
     )
     {
-        var factoryType = registry
-            .GetAll()
-            .Keys.FirstOrDefault(t =>
-                string.Equals(t.FullName ?? t.Name, fullName, StringComparison.Ordinal)
-            );
-
-        if (factoryType is null)
-            return new OperationResponse(
+        if (values.Count > OperationsService.MaxBatchSize)
+            return new ConfigureEffectResponse(
                 false,
-                Message: $"No effect named '{fullName}' is registered in this process."
+                0,
+                $"At most {OperationsService.MaxBatchSize} settings can be written at once.",
+                []
             );
 
-        if (!registry.IsToggleable(factoryType))
-            return new OperationResponse(
+        var repeated = values
+            .GroupBy(v => v.Name, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => new EffectSettingError(g.Key, "Given more than once."))
+            .ToList();
+        if (repeated.Count > 0)
+            return new ConfigureEffectResponse(
                 false,
-                Message: $"The effect '{fullName}' is registered as not toggleable."
+                0,
+                "The configuration was not saved: "
+                    + string.Join(" ", repeated.Select(e => $"{e.Field}: {e.Message}")),
+                repeated
             );
 
-        if (enabled)
-            registry.Enable(factoryType);
-        else
-            registry.Disable(factoryType);
-
-        return new OperationResponse(
-            true,
-            Count: 1,
-            Message: enabled ? "Effect enabled in this process" : "Effect disabled in this process"
+        var result = effectSettings.ConfigureEffect(
+            fullName,
+            values.ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal)
+        );
+        return new ConfigureEffectResponse(
+            result.Success,
+            result.Count,
+            result.Message,
+            result.Errors.Select(e => new EffectSettingError(e.Key, e.Value)).ToList()
         );
     }
+
+    private static BatchTriggerResponse ToResponse(BatchTriggerResult result) =>
+        new(
+            result.Success,
+            result.Matched,
+            result.Queued,
+            result.AlreadyQueued,
+            result.TooLateToAskAfresh,
+            result.Skipped,
+            result.Message,
+            result.Notes.Select(n => new BatchTriggerNote(n.Id, n.Message)).ToList()
+        );
 
     private static OperationResponse ToResponse(OperationResult result) =>
         new(result.Success, result.Count, result.Message) { Id = result.Id };

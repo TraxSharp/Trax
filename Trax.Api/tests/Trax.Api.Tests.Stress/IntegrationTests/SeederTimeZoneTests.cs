@@ -63,7 +63,8 @@ public class SeederTimeZoneTests
                 Manifests: 10,
                 Groups: 2,
                 TrainNames: 3,
-                PersistedOperations: 10
+                PersistedOperations: 10,
+                Decisions: 100
             ),
             _ => { }
         );

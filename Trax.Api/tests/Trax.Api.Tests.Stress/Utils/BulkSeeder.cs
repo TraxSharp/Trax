@@ -21,7 +21,8 @@ public sealed record StressProfile(
     int Manifests,
     int Groups,
     int TrainNames,
-    int PersistedOperations
+    int PersistedOperations,
+    long Decisions
 )
 {
     public static StressProfile FromEnvironment() =>
@@ -35,7 +36,10 @@ public sealed record StressProfile(
             TrainNames: (int)EnvLong("TRAX_STRESS_NAMES", 50),
             // Persisted operations grow with releases, not with traffic, so they get a large
             // catalog rather than millions: many tenants' documents, most of them retired.
-            PersistedOperations: (int)EnvLong("TRAX_STRESS_PERSISTED_OPS", 100_000)
+            PersistedOperations: (int)EnvLong("TRAX_STRESS_PERSISTED_OPS", 100_000),
+            // Only runs whose trains ask deciders record decisions, a few each, so the table is a
+            // fraction of the run table's size.
+            Decisions: EnvLong("TRAX_STRESS_DECISIONS", 1_000_000)
         );
 
     private static long EnvLong(string name, long fallback) =>
@@ -111,6 +115,8 @@ public static class BulkSeeder
             log(
                 $"Already seeded (metadata≈{profile.Metadata:N0}, log≈{profile.Log:N0}); skipping."
             );
+            // A seed from before decisions were seeded gets them without reseeding the rest.
+            await SeedDecisionsAsync(conn, profile, log, ct);
             return;
         }
 
@@ -154,12 +160,13 @@ public static class BulkSeeder
         // Terminal states (completed/failed/cancelled) get an end_time; the rest are null.
         // A failed run is classified transient, conflict or permanent by (g / 9) % 3, so the
         // failureClass filter has a real share of the table to count; every other run keeps the
-        // column's default, unclassified.
+        // column's default, unclassified. A failed run names the junction it failed in and a
+        // reason: see FailureReasonSql for the terms the failure text searches find.
         log($"Seeding {profile.Metadata:N0} metadata...");
         await SeedTable(
             conn,
             profile.Metadata,
-            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment, failure_class) "
+            "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, manifest_id, parent_id, host_instance_id, host_name, host_environment, failure_class, failure_junction, failure_reason) "
                 + "SELECT lpad(g::text, 32, '0'), "
                 + $"       '{TrainName}' || (g % {profile.TrainNames}), "
                 + "       (ARRAY['completed','completed','completed','completed','failed','failed','in_progress','pending','cancelled']::trax.train_state[])[1 + (g % 9)], "
@@ -178,7 +185,12 @@ public static class BulkSeeder
                 + "       'Production', "
                 + "       CASE WHEN (g % 9) IN (4,5) "
                 + "            THEN (ARRAY['transient','conflict','permanent']::trax.failure_class[])[1 + ((g / 9) % 3)] "
-                + "            ELSE 'unclassified'::trax.failure_class END "
+                + "            ELSE 'unclassified'::trax.failure_class END, "
+                + "       CASE WHEN (g % 9) IN (4,5) "
+                + $"            THEN '{FailureJunctionPrefix}' || ((g / 9) % {FailureJunctions}) END, "
+                + "       CASE WHEN (g % 9) IN (4,5) THEN "
+                + FailureReasonSql
+                + " END "
                 + "FROM generate_series(@lo, @hi) g",
             ct
         );
@@ -268,6 +280,8 @@ public static class BulkSeeder
             ct
         );
 
+        await SeedDecisionsAsync(conn, profile, log, ct);
+
         // VACUUM (not just ANALYZE) so the visibility map is set and the metrics
         // covering indexes serve heap-free Index Only Scans immediately, the way
         // autovacuum keeps them in production. PARALLEL 0 keeps VACUUM off the shared-
@@ -289,6 +303,105 @@ public static class BulkSeeder
 
     private const string TrainName = "Trax.Stress.Trains.IStressTrain";
 
+    /// <summary>A failed run's junction is this followed by one of <see cref="FailureJunctions"/> numbers.</summary>
+    public const string FailureJunctionPrefix = "StressJunction";
+
+    /// <summary>How many junctions the failed runs are spread across, evenly.</summary>
+    public const int FailureJunctions = 20;
+
+    /// <summary>The run id at or below which a failed run's reason is the old-only one.</summary>
+    public const long OldFailureIds = 300_000;
+
+    /// <summary>
+    /// The failure reason of the <c>g</c>th run, when it failed. One run in 99,999 (every one of
+    /// them failed) carries the rare reason, which holds a <c>%</c> and an <c>_</c>; the failed
+    /// runs among the oldest <see cref="OldFailureIds"/> carry the old-only reason; every other
+    /// failed run, about two in nine of the table, carries the common one.
+    /// </summary>
+    private static readonly string FailureReasonSql =
+        "CASE WHEN g % 99999 = 4 THEN 'Quota exceeded: 100% of tenant_limit used by order ' || g "
+        + $"WHEN g <= {OldFailureIds} THEN 'Legacy schema mismatch reading order ' || g "
+        + "ELSE 'Connection refused by stress-endpoint-' || (g % 50) || ' after ' || (g % 5) || ' attempts' END";
+
+    /// <summary>Found in about two runs in nine, old and new alike.</summary>
+    public const string CommonFailureTerm = "connection REFUSED";
+
+    /// <summary>Found in every failed run among the oldest <see cref="OldFailureIds"/>, and nowhere else.</summary>
+    public const string OldFailureTerm = "legacy schema";
+
+    /// <summary>Found in a few dozen runs at the default profile; its <c>%</c> and <c>_</c> must match themselves.</summary>
+    public const string RareFailureTerm = "100% of tenant_limit";
+
+    /// <summary>The run the seed gives a long decision history: one question asked in a loop.</summary>
+    public const long ChattyDecisionRun = 2;
+
+    /// <summary>How many decisions <see cref="ChattyDecisionRun"/> records.</summary>
+    public const int ChattyDecisionCount = 2_000;
+
+    /// <summary>How many decisions each of the other deciding runs records.</summary>
+    public const int DecisionsPerRun = 4;
+
+    /// <summary>
+    /// The run the <paramref name="g"/>th decision of the bulk seed belongs to (1-based): every
+    /// third run from id 1 asks <see cref="DecisionsPerRun"/> questions, so
+    /// <see cref="ChattyDecisionRun"/> is never one of them.
+    /// </summary>
+    public static long DecisionRunOf(long g) => 1 + (g - 1) / DecisionsPerRun * 3;
+
+    /// <summary>
+    /// Seeds <c>trax.decision</c> when it holds fewer rows than the profile asks for: the bulk
+    /// spread (see <see cref="DecisionRunOf"/>) and <see cref="ChattyDecisionRun"/>'s history.
+    /// Each row looks like one <c>AddDecisionRecording</c> writes: a choice question, its answer,
+    /// the track it routed and a keyed state hash; one in ten is a replayed answer.
+    /// </summary>
+    private static async Task SeedDecisionsAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Action<string> log,
+        CancellationToken ct
+    )
+    {
+        var bulk = Math.Min(profile.Decisions, (profile.Metadata - 1) / 3 * DecisionsPerRun);
+        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.decision", ct);
+        if (existing >= (bulk + ChattyDecisionCount) * 0.95)
+            return;
+
+        log($"Seeding {bulk + ChattyDecisionCount:N0} decision...");
+        await Exec(conn, "TRUNCATE trax.decision RESTART IDENTITY", ct);
+        await SeedTable(
+            conn,
+            bulk,
+            "INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, "
+                + "question, answer, model, decider, replayed, routes, state_hash, decided_at) "
+                + $"SELECT 1 + ((g - 1) / {DecisionsPerRun}) * 3, "
+                + $"       'Stress.Question' || ((g - 1) % {DecisionsPerRun}), 0, md5(g::text) || md5(g::text), 'choice', "
+                + "       jsonb_build_object('instructions', 'Pick a track', 'options', jsonb_build_array('Express', 'Standard')), "
+                + "       to_jsonb((ARRAY['Express','Standard'])[1 + (g % 2)]), "
+                + "       CASE WHEN g % 10 = 0 THEN NULL ELSE 'stress-model' END, "
+                + "       CASE WHEN g % 10 = 0 THEN NULL ELSE 'Trax.Stress.Deciders.StressDecider' END, "
+                + "       g % 10 = 0, "
+                + "       jsonb_build_array(jsonb_build_object('track', (ARRAY['Express','Standard'])[1 + (g % 2)], 'fallback_reason', NULL)), "
+                + "       'k1:' || md5(g::text) || md5(g::text), "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') "
+                + "FROM generate_series(@lo, @hi) g",
+            ct
+        );
+        await SeedTable(
+            conn,
+            ChattyDecisionCount,
+            "INSERT INTO trax.decision (metadata_id, question_key, occurrence, fingerprint, kind, "
+                + "question, answer, model, decider, replayed, routes, state_hash, decided_at) "
+                + $"SELECT {ChattyDecisionRun}, 'Stress.Loop', g - 1, md5(g::text) || md5(g::text), 'yes_no', "
+                + "       jsonb_build_object('instructions', 'Go round again?'), "
+                + "       to_jsonb(g % 7 <> 0), 'stress-model', 'Trax.Stress.Deciders.StressDecider', false, "
+                + "       jsonb_build_array(jsonb_build_object('track', CASE WHEN g % 7 <> 0 THEN 'Again' ELSE 'Done' END, 'fallback_reason', NULL)), "
+                + "       'k1:' || md5(g::text) || md5(g::text), now() - interval '1 hour' + g * interval '1 second' "
+                + "FROM generate_series(@lo, @hi) g",
+            ct
+        );
+        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.decision", ct);
+    }
+
     private static async Task<bool> AlreadySeeded(
         NpgsqlConnection conn,
         StressProfile profile,
@@ -298,17 +411,25 @@ public static class BulkSeeder
         var metadata = await ScalarLong(conn, "SELECT count(*) FROM trax.metadata", ct);
         var logs = await ScalarLong(conn, "SELECT count(*) FROM trax.log", ct);
         var persisted = await ScalarLong(conn, "SELECT count(*) FROM trax.persisted_operation", ct);
-        // A seed from before failed runs were classified leaves them all unclassified; reseed it.
+        // A seed from before failed runs were classified leaves them all unclassified, and one
+        // from before they had reasons leaves those null; reseed either.
         var classified = await ScalarLong(
             conn,
             "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
                 + "WHERE failure_class <> 'unclassified' LIMIT 1) c",
             ct
         );
+        var reasons = await ScalarLong(
+            conn,
+            "SELECT count(*) FROM (SELECT 1 FROM trax.metadata "
+                + "WHERE failure_reason IS NOT NULL LIMIT 1) r",
+            ct
+        );
         return metadata >= profile.Metadata * 0.95
             && logs >= profile.Log * 0.95
             && persisted >= profile.PersistedOperations * 0.95
-            && classified > 0;
+            && classified > 0
+            && reasons > 0;
     }
 
     private static async Task SeedTable(

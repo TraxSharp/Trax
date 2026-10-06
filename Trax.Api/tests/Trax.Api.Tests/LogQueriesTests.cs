@@ -127,6 +127,23 @@ public class LogQueriesTests
     }
 
     [Test]
+    public async Task GetLogs_ARowWrittenWithoutARun_ReadsWithRunIdZero()
+    {
+        // A row written by hand or by another tool names no run. The column defaults to 0, the
+        // value the log writer itself stores, so the page reads it rather than failing on a null.
+        await using (var db = await _factory.CreateDbContextAsync(default))
+            await ((DbContext)db).Database.ExecuteSqlRawAsync(
+                "INSERT INTO trax.log (event_id, level, message, category) "
+                    + "VALUES (0, 'warning'::trax.log_level, 'no run named', 'External')"
+            );
+        var queries = new LogQueries();
+
+        var result = await queries.GetLogs(Operations, _factory, default);
+
+        result.Items.Should().ContainSingle().Which.MetadataId.Should().Be(0);
+    }
+
+    [Test]
     public async Task GetLogs_PaginatesAndExposesCursor()
     {
         var metaId = await SeedMetadata();

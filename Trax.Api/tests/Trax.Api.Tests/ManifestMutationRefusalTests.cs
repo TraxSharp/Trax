@@ -13,7 +13,11 @@ using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Mediator.Services.TrainExecution;
+using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.TraxScheduler;
+using IOperationsService = Trax.Scheduler.Services.Operations.IOperationsService;
+using OperationsService = Trax.Scheduler.Services.Operations.OperationsService;
 
 namespace Trax.Api.Tests;
 
@@ -88,6 +92,14 @@ public class ManifestMutationRefusalTests
         );
         services.AddScoped(_ => Substitute.For<ITraxHealthService>());
         services.AddScoped(_ => _scheduler);
+        // The triggers go through the shared operations service, over the same store.
+        services.AddScoped<IOperationsService>(sp => new OperationsService(
+            discovery,
+            factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>(),
+            sp
+        ));
 
         _provider = services.BuildServiceProvider();
         _executor = await _provider
@@ -98,7 +110,10 @@ public class ManifestMutationRefusalTests
     [TearDown]
     public async Task TearDown() => await _provider.DisposeAsync();
 
-    private static IEnumerable<TestCaseData> ManifestMutations()
+    private static IEnumerable<TestCaseData> ManifestMutations() =>
+        TriggerMutations().Concat(SchedulerMutations());
+
+    private static IEnumerable<TestCaseData> TriggerMutations()
     {
         yield return new TestCaseData("triggerManifest(externalId: \"{0}\")").SetArgDisplayNames(
             "triggerManifest"
@@ -106,6 +121,10 @@ public class ManifestMutationRefusalTests
         yield return new TestCaseData(
             "triggerManifestDelayed(externalId: \"{0}\", delay: \"PT5M\")"
         ).SetArgDisplayNames("triggerManifestDelayed");
+    }
+
+    private static IEnumerable<TestCaseData> SchedulerMutations()
+    {
         yield return new TestCaseData("disableManifest(externalId: \"{0}\")").SetArgDisplayNames(
             "disableManifest"
         );
@@ -161,7 +180,7 @@ public class ManifestMutationRefusalTests
         _scheduler.ReceivedCalls().Should().BeEmpty("a refusal asks nothing of the scheduler");
     }
 
-    [TestCaseSource(nameof(ManifestMutations))]
+    [TestCaseSource(nameof(SchedulerMutations))]
     public async Task KnownExternalId_IsPassedToTheScheduler(string field)
     {
         var (success, _, _) = await RunAsync(field, KnownId);
@@ -170,33 +189,19 @@ public class ManifestMutationRefusalTests
         _scheduler.ReceivedCalls().Should().ContainSingle();
     }
 
-    [Test]
-    public async Task TriggerManifest_SaysTheRunIsDueNow_WhetherQueuedOrBroughtForward()
+    [TestCaseSource(nameof(TriggerMutations))]
+    public async Task KnownExternalId_OnAnInMemoryStore_TriggerIsRefusedAndNothingQueued(
+        string field
+    )
     {
-        var (_, message, _) = await RunAsync("triggerManifest(externalId: \"{0}\")", KnownId);
+        var (success, message, _) = await RunAsync(field, KnownId);
 
-        message
-            .Should()
-            .Be(
-                "Manifest triggered: its queued run is due now (an entry it already had is "
-                    + "brought forward rather than a second one queued)."
-            );
-    }
-
-    [Test]
-    public async Task TriggerManifestDelayed_SaysWhenTheRunIsDue()
-    {
-        var (_, message, _) = await RunAsync(
-            "triggerManifestDelayed(externalId: \"{0}\", delay: \"PT5M\")",
-            KnownId
-        );
-
-        message
-            .Should()
-            .Be(
-                "Manifest triggered: its queued run is due within 00:05:00 (an entry it already "
-                    + "had keeps an earlier time or is brought forward to that one)."
-            );
+        success.Should().BeFalse("nothing dispatches a queued run on an in-memory store");
+        message.Should().Be(OperationsService.NoDispatcherMessage);
+        await using var db = await _provider
+            .GetRequiredService<IDataContextProviderFactory>()
+            .CreateDbContextAsync(default);
+        db.WorkQueues.Should().BeEmpty();
     }
 
     private interface IRefusalTrain;

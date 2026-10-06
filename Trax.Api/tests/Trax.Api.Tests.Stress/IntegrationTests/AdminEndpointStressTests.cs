@@ -14,6 +14,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
@@ -122,8 +123,7 @@ public class AdminEndpointStressTests : StressTestSetup
             (sp, _) =>
             {
                 var effects = new OperationsQueries().GetEffects(
-                    sp.GetRequiredService<IEffectRegistry>(),
-                    sp
+                    sp.GetRequiredService<IEffectSettingsService>()
                 );
                 effects.Should().NotBeNull();
                 return Task.CompletedTask;
@@ -904,7 +904,9 @@ public class AdminEndpointStressTests : StressTestSetup
             ON CONFLICT (metadata_id, position) DO NOTHING
             """
         );
-        var runId = await ScalarAsync<long>("SELECT max(metadata_id) FROM trax.junction_run");
+        var runId = await ScalarAsync<long>(
+            "SELECT max(metadata_id) FROM trax.junction_run WHERE name LIKE 'StressStep%'"
+        );
 
         await MeasureAsync(
             "operations.junctionRuns",

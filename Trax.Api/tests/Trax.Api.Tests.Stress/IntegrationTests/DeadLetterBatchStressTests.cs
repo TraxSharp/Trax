@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Scheduler.Services.DeadLetterRequeue;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
@@ -80,7 +81,7 @@ public class DeadLetterBatchStressTests : StressTestSetup
     [Test]
     public async Task RequeueAllDeadLetters_WholeSeed_AnswersAtOnceAndFinishesWithinBudget()
     {
-        var jobs = Services.GetRequiredService<DeadLetterRequeueJobs>();
+        var jobs = Services.GetRequiredService<IDeadLetterRequeueJobs>();
 
         await MeasureWriteAsync(
             "operations.deadLetters.requeueAllDeadLetters (whole fold)",
@@ -109,7 +110,10 @@ public class DeadLetterBatchStressTests : StressTestSetup
                 job.GetProperty("status").GetString().Should().Be("RUNNING");
                 job.GetProperty("awaitingAtStart").GetInt32().Should().Be((int)SeededAwaiting);
 
-                await jobs.Current;
+                var id = Guid.Parse(job.GetProperty("id").GetString()!);
+                while (jobs.Get(id)?.Status == DeadLetterRequeueJobStatus.Running)
+                    // determinism: the poll interval while the background fold finishes.
+                    await Task.Delay(50, ct);
 
                 var done = await OperationsFieldAsync(
                     "{ operations { deadLetters { requeueAllJob(id: \""

@@ -153,14 +153,38 @@ public sealed class TraxCompositeSocketInterceptor : DefaultSocketSessionInterce
         CancellationToken cancellationToken = default
     )
     {
-        var status = await AuthenticateAsync(session, connectionInitMessage, cancellationToken)
+        var (status, scheme) = await AuthenticateAsync(
+                session,
+                connectionInitMessage,
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
         if (!status.Accepted)
+        {
+            ReportRefusal(
+                new SocketRefusal(
+                    scheme,
+                    CarriesCredential(connectionInitMessage)
+                        ? SocketRefusal.ReasonCredentialRejected
+                        : SocketRefusal.ReasonMissingCredential,
+                    Principal: null
+                )
+            );
             return status;
+        }
 
         if (!await SatisfiesEndpointPolicyAsync(session).ConfigureAwait(false))
+        {
+            ReportRefusal(
+                new SocketRefusal(
+                    scheme,
+                    SocketRefusal.ReasonEndpointPolicy,
+                    session.Connection.HttpContext?.User
+                )
+            );
             return ConnectionStatus.Reject("Not authorized.");
+        }
 
         BoundLifetime(session);
         return status;
@@ -266,7 +290,10 @@ public sealed class TraxCompositeSocketInterceptor : DefaultSocketSessionInterce
         }
     }
 
-    private ValueTask<ConnectionStatus> AuthenticateAsync(
+    /// <summary>The scheme a refusal names when no token scheme judged the connection.</summary>
+    private const string NoScheme = "None";
+
+    private async ValueTask<(ConnectionStatus Status, string Scheme)> AuthenticateAsync(
         ISocketSession session,
         IOperationMessagePayload connectionInitMessage,
         CancellationToken cancellationToken
@@ -275,15 +302,60 @@ public sealed class TraxCompositeSocketInterceptor : DefaultSocketSessionInterce
         var strategies = _strategies.Value;
 
         if (strategies.ApiKey is null && strategies.Jwt is null)
-            return base.OnConnectAsync(session, connectionInitMessage, cancellationToken);
+            return (
+                await base.OnConnectAsync(session, connectionInitMessage, cancellationToken)
+                    .ConfigureAwait(false),
+                NoScheme
+            );
 
         var target = SelectStrategy(strategies, connectionInitMessage);
         if (target is null)
-            return new ValueTask<ConnectionStatus>(
-                ConnectionStatus.Reject("Missing auth token in connection_init payload.")
+            return (
+                ConnectionStatus.Reject("Missing auth token in connection_init payload."),
+                NoScheme
             );
 
-        return target.OnConnectAsync(session, connectionInitMessage, cancellationToken);
+        var scheme = ReferenceEquals(target, strategies.ApiKey) ? "ApiKey" : "Jwt";
+        return (
+            await target
+                .OnConnectAsync(session, connectionInitMessage, cancellationToken)
+                .ConfigureAwait(false),
+            scheme
+        );
+    }
+
+    /// <summary>Whether the payload carries any credential a Trax token scheme reads.</summary>
+    private static bool CarriesCredential(IOperationMessagePayload connectionInitMessage)
+    {
+        var payload = ConnectionInitPayloadReader.TryRead<ConnectionInitPayload>(
+            connectionInitMessage
+        );
+        return !string.IsNullOrWhiteSpace(payload?.AuthToken)
+            || !string.IsNullOrWhiteSpace(payload?.ApiKey)
+            || !string.IsNullOrWhiteSpace(payload?.Bearer);
+    }
+
+    /// <summary>
+    /// Tells every registered <see cref="ISocketRefusalObserver"/> of a refused connection. An
+    /// observer that throws is logged and never changes the refusal.
+    /// </summary>
+    private void ReportRefusal(SocketRefusal refusal)
+    {
+        var services = _applicationServices.Services;
+        foreach (var observer in services.GetServices<ISocketRefusalObserver>())
+        {
+            try
+            {
+                observer.Refused(refusal);
+            }
+            catch (Exception ex)
+            {
+                services
+                    .GetService<ILoggerFactory>()
+                    ?.CreateLogger<TraxCompositeSocketInterceptor>()
+                    .LogWarning(ex, "A socket refusal observer threw. The refusal stands.");
+            }
+        }
     }
 
     /// <summary>

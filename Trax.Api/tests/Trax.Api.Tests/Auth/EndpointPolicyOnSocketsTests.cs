@@ -45,7 +45,7 @@ public class EndpointPolicyOnSocketsTests
     private const string ReaderKey = "policy-reader-key";
     private const string AdminPolicy = "EndpointPolicyOnSocketsAdmin";
     private const string TriggerMutation =
-        """mutation { operations { triggerManifest(externalId: "m-1") { success } } }""";
+        """mutation { operations { disableManifest(externalId: "m-1") { success } } }""";
 
     #region API-key host gated by a named policy
 
@@ -61,7 +61,7 @@ public class EndpointPolicyOnSocketsTests
         (await ReceiveTypeAsync(ws))
             .Should()
             .Be("(closed)", "the endpoint policy is evaluated over a socket too, per " + Adr);
-        await scheduler.DidNotReceiveWithAnyArgs().TriggerAsync(default!, default);
+        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(default!, default);
     }
 
     [Test]
@@ -85,7 +85,7 @@ public class EndpointPolicyOnSocketsTests
         );
 
         (await ReceiveTypeAsync(ws)).Should().Be("next");
-        await scheduler.Received(1).TriggerAsync("m-1", Arg.Any<CancellationToken>());
+        await scheduler.Received(1).DisableAsync("m-1", Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -126,7 +126,7 @@ public class EndpointPolicyOnSocketsTests
                 new[] { "TRAX_AUTHORIZATION" },
                 "the pipeline evaluates the endpoint policy for every operation, per " + Adr
             );
-        await scheduler.DidNotReceiveWithAnyArgs().TriggerAsync(default!, default);
+        await scheduler.DidNotReceiveWithAnyArgs().DisableAsync(default!, default);
     }
 
     [Test]
@@ -148,7 +148,7 @@ public class EndpointPolicyOnSocketsTests
         var result = await ExecuteAsync(host, Principal("Admin"));
 
         ErrorCodes(result).Should().BeEmpty();
-        await scheduler.Received(1).TriggerAsync("m-1", Arg.Any<CancellationToken>());
+        await scheduler.Received(1).DisableAsync("m-1", Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -157,7 +157,7 @@ public class EndpointPolicyOnSocketsTests
         new(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "TraxApiKey"));
 
     /// <summary>
-    /// Runs the trigger mutation straight through the Trax executor, the way any transport hands
+    /// Runs the operator mutation straight through the Trax executor, the way any transport hands
     /// an operation to it, carrying <paramref name="user"/> as the request's principal.
     /// </summary>
     private static async Task<IExecutionResult> ExecuteAsync(IHost host, ClaimsPrincipal user)

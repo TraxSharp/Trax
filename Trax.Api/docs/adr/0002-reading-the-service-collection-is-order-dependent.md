@@ -14,24 +14,23 @@ precondition that throws, and a decision paired with a startup validator
 
 Inspecting the collection is not banned. Being **silently** different because of order is.
 
-**Two sites are none of the three, and both are knowingly accepted.** The broadcaster branch
-in `AddTraxGraphQL()` wires the GraphQL train-event handlers when an `ITrainEventReceiver` is
-registered. The registrations Trax ships are inside `UseBroadcaster(...)`, which runs within
-`AddTrax(...)`, and the precondition at the top of `AddTraxGraphQL()` refuses to run before
-`AddTrax`, so on the established shape the answer is settled before the read. That is a
-convention, not a guarantee: `ITrainEventReceiver` is public and on the API baseline, so a
-host can register one directly at any point, and one registered after `AddTraxGraphQL()`
-leaves the handlers unwired with no validator and no error. `GraphQLBroadcasterIntegrationTests`
-does exactly that, deliberately. Note also that the SignalR path registers a
-`NullTrainEventReceiver`, so the read answers "has a receiver been registered", not "is a
-broadcaster transport present".
+Two sites used to be none of the three. Both have since been made safe, and no site in
+the census is outside the three kinds today.
 
-The second is train discovery. `AddTraxGraphQL()` snapshots train discovery to decide
-whether `RootQuery` and `RootMutation` get any fields. A `[TraxQuery]` train registered
-afterwards is absent from the schema, with no validator and no error. The code says so where
-it happens. It is tolerated because the established shape is `AddTrax(...)` then
-`AddTraxGraphQL(...)`, with train registration finished inside or before `AddTrax`, but it is
-a real exception to the rule above rather than a fourth safe kind.
+The broadcaster branch in `AddTraxGraphQL()` used to wire the GraphQL train-event handlers
+only when an `ITrainEventReceiver` was already registered, so a receiver registered
+afterwards left them unwired with no error. The handlers are now registered unconditionally.
+Only `TrainEventReceiverService` resolves them, and it exists only when a receiver does, so
+the question disappeared rather than being detected.
+
+Train discovery is a decision paired with a startup validator. `AddTraxGraphQL()` snapshots
+train discovery to check each exposed train's posture and name and to decide whether
+`RootQuery` and `RootMutation` get any fields. A `[TraxQuery]`, `[TraxMutation]` or
+`[TraxBroadcast]` train registered afterwards skips those checks, so
+`TrainRegistrationOrderValidator` compares the trains the finished container exposes with the
+snapshot and refuses the host at startup, naming each train it missed. The established shape
+is still `AddTrax(...)` then `AddTraxGraphQL(...)`, with train registration finished inside or
+before `AddTrax`; the validator makes any other order fail loudly.
 
 ## Status
 
@@ -89,6 +88,11 @@ Not covered:
 
 ## Changelog
 
+- **2026-10-05**: Corrected the two accepted exceptions, both stale. The broadcaster branch
+  was removed on 2026-09-24 (the handlers are registered unconditionally), and a train
+  registered after `AddTraxGraphQL()` is refused at startup by
+  `TrainRegistrationOrderValidator` rather than silently absent. No site is outside the three
+  safe kinds.
 - **2026-09-27**: The subscription interceptor branches are gone, restructured away by
   [0006](./0006-one-socket-interceptor-composes-every-token-scheme.md), so the token-based
   schemes no longer have to precede `AddTraxGraphQL()`. The census count for

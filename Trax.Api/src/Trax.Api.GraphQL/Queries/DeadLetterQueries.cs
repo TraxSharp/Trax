@@ -20,13 +20,15 @@ public class DeadLetterQueries
     /// <param name="take">The page size, clamped to 1 through 500.</param>
     /// <param name="status">Only dead letters in this status; <c>null</c> for all.</param>
     /// <param name="afterId">Only dead letters older than this id (a keyset cursor).</param>
+    /// <param name="manifestId">Only dead letters of this manifest.</param>
     public async Task<PagedResult<DeadLetterSummary>> GetDeadLetters(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
         int skip = 0,
         int take = 25,
         DeadLetterStatus? status = null,
-        long? afterId = null
+        long? afterId = null,
+        long? manifestId = null
     )
     {
         take = OperationsPageBounds.Take(take);
@@ -40,6 +42,9 @@ public class DeadLetterQueries
 
         if (status.HasValue)
             query = query.Where(dl => dl.Status == status.Value);
+
+        if (manifestId.HasValue)
+            query = query.Where(dl => dl.ManifestId == manifestId.Value);
 
         // The total is every record the filter matches, whatever page this is, so it is counted
         // before the cursor narrows the query.
@@ -87,8 +92,8 @@ public class DeadLetterQueries
     /// </summary>
     public DeadLetterRequeueJob? GetRequeueAllJob(
         Guid id,
-        [Service] Trax.Api.GraphQL.Mutations.DeadLetterRequeueJobs jobs
-    ) => jobs.Get(id);
+        [Service] Trax.Scheduler.Services.DeadLetterRequeue.IDeadLetterRequeueJobs jobs
+    ) => jobs.Get(id) is { } job ? DeadLetterRequeueJob.From(job) : null;
 
     /// <summary>
     /// One dead letter by id, or <c>null</c> when none has that id.

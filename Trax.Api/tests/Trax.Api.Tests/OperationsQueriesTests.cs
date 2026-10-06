@@ -66,6 +66,16 @@ public class OperationsQueriesTests
             Substitute.For<ITrainExecutionService>()
         );
 
+    // updateManifest goes through the operations service, which signals the change.
+    private IOperationsService OperationsWith(RecordingChangeSignal signal) =>
+        new OperationsService(
+            Substitute.For<ITrainDiscoveryService>(),
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>(),
+            changeSignal: signal
+        );
+
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
@@ -926,7 +936,7 @@ public class OperationsQueriesTests
         registry.IsToggleable(typeof(FakeInput)).Returns(true);
         registry.IsToggleable(typeof(FakeOutput)).Returns(false);
 
-        var result = new OperationsQueries().GetEffects(registry, EmptyServices);
+        var result = new OperationsQueries().GetEffects(EffectSettings(registry));
 
         result.Should().HaveCount(2);
         var enabled = result.Single(e => e.Name == nameof(FakeInput));
@@ -944,7 +954,7 @@ public class OperationsQueriesTests
         var registry = Substitute.For<IEffectRegistry>();
         registry.GetAll().Returns(new Dictionary<Type, bool>());
 
-        new OperationsQueries().GetEffects(registry, EmptyServices).Should().BeEmpty();
+        new OperationsQueries().GetEffects(EffectSettings(registry)).Should().BeEmpty();
     }
 
     [Test]
@@ -1086,8 +1096,7 @@ public class OperationsQueriesTests
                 ScheduleType: ScheduleType.Cron,
                 CronExpression: "0 0 * * *"
             ),
-            _factory,
-            signal,
+            OperationsWith(signal),
             default
         );
 
@@ -1124,8 +1133,7 @@ public class OperationsQueriesTests
         var resp = await new OperationsMutations().UpdateManifest(
             id,
             input,
-            _factory,
-            signal,
+            OperationsWith(signal),
             default
         );
 
@@ -1152,6 +1160,20 @@ public class OperationsQueriesTests
         );
 
         resp.Message.Should().Contain("5 or 6");
+    }
+
+    [TestCase("99 * * * *")]
+    [TestCase("0 0 30 2 *")]
+    public async Task UpdateManifest_ACronTheSchedulerCannotUse_IsRefusedAndNotSaved(string cron)
+    {
+        var id = await SeedIntervalManifest();
+
+        var resp = await RefusedUpdate(
+            id,
+            new UpdateManifestInput(ScheduleType: ScheduleType.Cron, CronExpression: cron)
+        );
+
+        resp.Message.Should().Contain(cron);
     }
 
     [Test]
@@ -1205,8 +1227,7 @@ public class OperationsQueriesTests
         var resp = await new OperationsMutations().UpdateManifest(
             id,
             new UpdateManifestInput(ScheduleType: ScheduleType.Interval),
-            _factory,
-            new RecordingChangeSignal(),
+            Operations,
             default
         );
 
@@ -1265,8 +1286,7 @@ public class OperationsQueriesTests
         var resp = await new OperationsMutations().UpdateManifest(
             id,
             new UpdateManifestInput(ScheduleType: ScheduleType.Once, Priority: 3),
-            _factory,
-            new RecordingChangeSignal(),
+            Operations,
             default
         );
 
@@ -1292,8 +1312,7 @@ public class OperationsQueriesTests
         var resp = await new OperationsMutations().UpdateManifest(
             id,
             new UpdateManifestInput(IsEnabled: false),
-            _factory,
-            new RecordingChangeSignal(),
+            Operations,
             default
         );
 
@@ -1307,8 +1326,7 @@ public class OperationsQueriesTests
         var resp = await new OperationsMutations().UpdateManifest(
             999999,
             new UpdateManifestInput(IsEnabled: true),
-            _factory,
-            signal,
+            OperationsWith(signal),
             default
         );
 
@@ -1334,8 +1352,7 @@ public class OperationsQueriesTests
                 IntervalSeconds: 60,
                 TimeoutSeconds: 120
             ),
-            _factory,
-            signal,
+            OperationsWith(signal),
             default
         );
         set.Success.Should().BeTrue();
@@ -1351,8 +1368,7 @@ public class OperationsQueriesTests
         var cleared = await mutations.UpdateManifest(
             id,
             new UpdateManifestInput(ClearTimeout: true, TimeoutSeconds: 999),
-            _factory,
-            signal,
+            OperationsWith(signal),
             default
         );
         cleared.Success.Should().BeTrue();
@@ -1490,7 +1506,7 @@ public class OperationsQueriesTests
             .Received(1)
             .QueueAsync(
                 typeof(IRequeueProbeTrain).FullName!,
-                "{\"v\": 1}",
+                "{\"v\":1}",
                 Arg.Is<QueueTrainOptions>(o => o!.ReplayDecisionsOf == id),
                 Arg.Any<CancellationToken>()
             );
@@ -1561,7 +1577,7 @@ public class OperationsQueriesTests
             .Received(1)
             .QueueAsync(
                 typeof(IRequeueProbeTrain).FullName!,
-                "{\"v\": 1}",
+                "{\"v\":1}",
                 0,
                 null,
                 Arg.Any<CancellationToken>()
@@ -1590,7 +1606,7 @@ public class OperationsQueriesTests
             .Received(1)
             .QueueAsync(
                 typeof(IRequeueProbeTrain).FullName!,
-                "{\"v\": 1}",
+                "{\"v\":1}",
                 Arg.Is<QueueTrainOptions>(o => o!.ReplayDecisionsOf == second),
                 Arg.Any<CancellationToken>()
             );
@@ -2025,7 +2041,19 @@ public class OperationsQueriesTests
 
     #region Read fields an API-only frontend needs
 
-    private static readonly IServiceProvider EmptyServices = Substitute.For<IServiceProvider>();
+    /// <summary>
+    /// The effects service the dashboard and the API share, over <paramref name="registry"/> and
+    /// the factories <paramref name="services"/> resolves.
+    /// </summary>
+    private static Trax.Scheduler.Services.Effects.IEffectSettingsService EffectSettings(
+        IEffectRegistry registry,
+        IServiceProvider? services = null
+    )
+    {
+        var provider = services ?? Substitute.For<IServiceProvider>();
+        provider.GetService(typeof(IEffectRegistry)).Returns(registry);
+        return new Trax.Scheduler.Services.Effects.EffectSettingsService(provider);
+    }
 
     [Test]
     public async Task GetExecutionDetail_CarriesParentScheduleExecutorAndHostLabels()
@@ -2218,7 +2246,7 @@ public class OperationsQueriesTests
         var services = Substitute.For<IServiceProvider>();
         services.GetService(typeof(FakeConfigurableFactory)).Returns(new FakeConfigurableFactory());
 
-        var result = new OperationsQueries().GetEffects(registry, services);
+        var result = new OperationsQueries().GetEffects(EffectSettings(registry, services));
 
         var configurable = result.Single(e => e.Name == nameof(FakeConfigurableFactory));
         configurable.IsConfigurable.Should().BeTrue();
@@ -2240,7 +2268,9 @@ public class OperationsQueriesTests
         var services = Substitute.For<IServiceProvider>();
         services.GetService(typeof(FakeUnwritableFactory)).Returns(new FakeUnwritableFactory());
 
-        var effect = new OperationsQueries().GetEffects(registry, services).Single();
+        var effect = new OperationsQueries()
+            .GetEffects(EffectSettings(registry, services))
+            .Single();
 
         effect.IsConfigurable.Should().BeTrue();
         effect.Configuration.Should().BeNull();
@@ -2257,7 +2287,7 @@ public class OperationsQueriesTests
         services.GetService(typeof(FakeCredentialedFactory)).Returns(new FakeCredentialedFactory());
 
         var configuration = new OperationsQueries()
-            .GetEffects(registry, services)
+            .GetEffects(EffectSettings(registry, services))
             .Single()
             .Configuration;
 
@@ -2272,6 +2302,48 @@ public class OperationsQueriesTests
             .Should()
             .BeTrue();
         configuration.Should().NotContain("sk-live-123").And.NotContain("hunter2");
+    }
+
+    [Test]
+    public void GetEffects_ConfigurableFactory_DescribesItsFields_WithoutASensitiveValue()
+    {
+        var registry = Substitute.For<IEffectRegistry>();
+        registry
+            .GetAll()
+            .Returns(new Dictionary<Type, bool> { { typeof(FakeCredentialedFactory), true } });
+        var services = Substitute.For<IServiceProvider>();
+        services.GetService(typeof(FakeCredentialedFactory)).Returns(new FakeCredentialedFactory());
+
+        var fields = new OperationsQueries()
+            .GetEffects(EffectSettings(registry, services))
+            .Single()
+            .Fields;
+
+        var endpoint = fields.Single(f => f.Name == nameof(FakeCredentialedSettings.Endpoint));
+        endpoint.Kind.Should().Be(Trax.Scheduler.Services.Effects.EffectFieldKind.Text);
+        endpoint.Value.Should().Be("https://sink.example");
+        endpoint.Sensitive.Should().BeFalse();
+
+        var apiKey = fields.Single(f => f.Name == nameof(FakeCredentialedSettings.ApiKey));
+        apiKey.Sensitive.Should().BeTrue();
+        apiKey.HasValue.Should().BeTrue();
+        apiKey.Value.Should().BeNull("a [TraxSensitive] setting is never read back");
+
+        fields
+            .Single(f => f.Name == nameof(FakeCredentialedSettings.Nested))
+            .Kind.Should()
+            .Be(Trax.Scheduler.Services.Effects.EffectFieldKind.SetInCode);
+        fields.Should().NotContain(f => f.Value != null && f.Value.Contains("sk-live-123"));
+    }
+
+    [Test]
+    public void GetEffects_NoEffectRegistry_IsEmpty()
+    {
+        var settings = new Trax.Scheduler.Services.Effects.EffectSettingsService(
+            Substitute.For<IServiceProvider>()
+        );
+
+        new OperationsQueries().GetEffects(settings).Should().BeEmpty();
     }
 
     public record FakeNestedCredential(

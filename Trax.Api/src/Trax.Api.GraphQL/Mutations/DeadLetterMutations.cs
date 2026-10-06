@@ -1,8 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Trax.Api.DTOs;
-using Trax.Effect.Data.Services.IDataContextFactory;
-using Trax.Effect.Enums;
+using Trax.Scheduler.Services.DeadLetterRequeue;
 using Trax.Scheduler.Services.TraxScheduler;
+using DeadLetterRequeueJob = Trax.Api.DTOs.DeadLetterRequeueJob;
 
 namespace Trax.Api.GraphQL.Mutations;
 
@@ -12,17 +11,14 @@ namespace Trax.Api.GraphQL.Mutations;
 public class DeadLetterMutations
 {
     /// <summary>
-    /// The longest acknowledgement note accepted, in characters. A note is an operator's reason,
-    /// a sentence or a paragraph; <c>acknowledgeAllDeadLetters</c> writes it onto every awaiting
-    /// row, so an unbounded one multiplies into the table by the size of the backlog. A longer
-    /// note is refused, not cut, so what is stored is what the operator wrote.
+    /// The longest acknowledgement note accepted, in characters: the scheduler's
+    /// <see cref="TraxScheduler.MaxAcknowledgeNoteLength"/>, which refuses a longer note for the
+    /// dashboard and this surface alike. A note is an operator's reason, a sentence or a
+    /// paragraph; <c>acknowledgeAllDeadLetters</c> writes it onto every awaiting row, so an
+    /// unbounded one multiplies into the table by the size of the backlog. A longer note is
+    /// refused, not cut, so what is stored is what the operator wrote.
     /// </summary>
-    public const int MaxNoteLength = 1_000;
-
-    private static string? NoteRefusal(string note) =>
-        note.Length > MaxNoteLength
-            ? $"The note is {note.Length} characters; it may be at most {MaxNoteLength} characters."
-            : null;
+    public const int MaxNoteLength = TraxScheduler.MaxAcknowledgeNoteLength;
 
     /// <summary>
     /// Queues a new run for one dead letter's manifest and marks the dead letter retried. Only a dead
@@ -45,17 +41,14 @@ public class DeadLetterMutations
 
     /// <summary>
     /// Marks one dead letter acknowledged without running it again, recording <c>note</c> as the
-    /// reason. A note longer than 1,000 characters is refused and nothing changes.
+    /// reason. A note longer than 1,000 characters is refused by the scheduler and nothing changes.
     /// </summary>
     public async Task<DeadLetterOperationResult> AcknowledgeDeadLetter(
         long id,
         string note,
         [Service] ITraxScheduler scheduler,
         CancellationToken ct
-    ) =>
-        NoteRefusal(note) is { } refusal
-            ? new DeadLetterOperationResult(false, null, refusal)
-            : await scheduler.AcknowledgeDeadLetterAsync(id, note, ct);
+    ) => await scheduler.AcknowledgeDeadLetterAsync(id, note, ct);
 
     /// <summary>
     /// Requeues the listed dead letters. At most one work queue entry is created per manifest: dead
@@ -82,10 +75,7 @@ public class DeadLetterMutations
         string note,
         [Service] ITraxScheduler scheduler,
         CancellationToken ct
-    ) =>
-        NoteRefusal(note) is { } refusal
-            ? new BatchDeadLetterResult(0, refusal)
-            : await scheduler.AcknowledgeDeadLettersAsync(ids, note, ct);
+    ) => await scheduler.AcknowledgeDeadLettersAsync(ids, note, ct);
 
     /// <summary>
     /// Starts requeueing every dead letter awaiting intervention, creating at most one work queue
@@ -97,22 +87,15 @@ public class DeadLetterMutations
     /// this returns that one with <c>started: false</c>. <c>askAfresh: true</c> makes every new run
     /// ask its deciders again rather than replay.
     /// </summary>
+    /// <remarks>
+    /// The job is the scheduler's <see cref="IDeadLetterRequeueJobs"/>, the one the dashboard's
+    /// Requeue All starts.
+    /// </remarks>
     public async Task<DeadLetterRequeueJob> RequeueAllDeadLetters(
-        [Service] DeadLetterRequeueJobs jobs,
-        [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] IDeadLetterRequeueJobs jobs,
         CancellationToken ct,
         bool askAfresh = false
-    )
-    {
-        int awaiting;
-        using (var db = await dataContextFactory.CreateDbContextAsync(ct))
-            awaiting = await db.DeadLetters.CountAsync(
-                d => d.Status == DeadLetterStatus.AwaitingIntervention,
-                ct
-            );
-
-        return jobs.Start(awaiting, askAfresh);
-    }
+    ) => DeadLetterRequeueJob.From(await jobs.StartAsync(askAfresh, ct));
 
     /// <summary>
     /// Marks every dead letter awaiting intervention acknowledged, recording <c>note</c> on each. A
@@ -122,8 +105,5 @@ public class DeadLetterMutations
         string note,
         [Service] ITraxScheduler scheduler,
         CancellationToken ct
-    ) =>
-        NoteRefusal(note) is { } refusal
-            ? new BatchDeadLetterResult(0, refusal)
-            : await scheduler.AcknowledgeAllDeadLettersAsync(note, ct);
+    ) => await scheduler.AcknowledgeAllDeadLettersAsync(note, ct);
 }

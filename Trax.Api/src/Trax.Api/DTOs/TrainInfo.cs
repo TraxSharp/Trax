@@ -26,4 +26,12 @@ public record TrainInfo(
     /// display and is not accepted by those fields.
     /// </summary>
     public required string FullName { get; init; }
+
+    /// <summary>
+    /// Whether the train overrides <c>QueueSubjectKey</c>, so its queued runs for one subject run
+    /// one at a time (an override may still return no key for a given input). A run started with
+    /// <c>workQueue.runTrain</c> bypasses that serialization and may run alongside queued or
+    /// in-flight work for the same subject, which is what the dashboard's Run dialog warns about.
+    /// </summary>
+    public bool HasQueueSubjectKey { get; init; }
 }

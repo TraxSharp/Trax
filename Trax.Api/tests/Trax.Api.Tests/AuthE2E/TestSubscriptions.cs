@@ -5,6 +5,7 @@ using HotChocolate.Subscriptions;
 using HotChocolate.Types;
 using Microsoft.AspNetCore.Http;
 using Trax.Api.Auth;
+using Trax.Api.GraphQL.Subscriptions;
 using Trax.Effect.Attributes;
 
 namespace Trax.Api.Tests.AuthE2E;
@@ -44,7 +45,9 @@ public sealed class TestSubscriptions
         [EnumeratorCancellation] CancellationToken ct
     )
     {
-        var stream = await receiver.SubscribeAsync<string>(TopicName, ct);
+        // Through the gate Trax's own subscriptions use: ten sockets subscribing together would
+        // otherwise lose one to HotChocolate's topic, as they did here before.
+        var stream = await TopicSubscribe.OneAtATimeAsync<string>(receiver, TopicName, ct);
         await foreach (var msg in stream.ReadEventsAsync().WithCancellation(ct))
             yield return msg;
     }

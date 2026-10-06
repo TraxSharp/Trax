@@ -1,3 +1,6 @@
+using SchedulerJob = Trax.Scheduler.Services.DeadLetterRequeue.DeadLetterRequeueJob;
+using SchedulerJobStatus = Trax.Scheduler.Services.DeadLetterRequeue.DeadLetterRequeueJobStatus;
+
 namespace Trax.Api.DTOs;
 
 /// <summary>Where a <see cref="DeadLetterRequeueJob"/> is.</summary>
@@ -23,9 +26,13 @@ public enum DeadLetterRequeueJobStatus
 /// no longer <see cref="DeadLetterRequeueJobStatus.Running"/>.
 /// </summary>
 /// <remarks>
+/// The job runs in the scheduler's <c>IDeadLetterRequeueJobs</c>, which the dashboard's Requeue
+/// All starts too; this is its GraphQL shape.
+/// <para>
 /// The fold commits a page of manifests at a time, and a requeued dead letter no longer awaits
 /// intervention, so a fold that stops part-way (a failure, a shutdown, a restart) leaves the pages
 /// it finished requeued and the rest awaiting; starting another requeues the rest.
+/// </para>
 /// </remarks>
 /// <param name="Id">Identifies the job to <c>requeueAllJob</c> on the node that started it.</param>
 /// <param name="Status">Where the job is.</param>
@@ -49,4 +56,34 @@ public record DeadLetterRequeueJob(
     /// started and this is the one already running.
     /// </summary>
     public bool Started { get; init; } = true;
+
+    /// <summary>
+    /// How many dead letters the job has requeued so far, updated as each page commits; with
+    /// <see cref="AwaitingAtStart"/> it says how far a running job has got. Once it has succeeded
+    /// it equals <see cref="Count"/>.
+    /// </summary>
+    public int Processed { get; init; }
+
+    /// <summary>The scheduler's job as this surface returns it.</summary>
+    internal static DeadLetterRequeueJob From(SchedulerJob job) =>
+        new(
+            job.Id,
+            job.Status switch
+            {
+                SchedulerJobStatus.Running => DeadLetterRequeueJobStatus.Running,
+                SchedulerJobStatus.Succeeded => DeadLetterRequeueJobStatus.Succeeded,
+                SchedulerJobStatus.Failed => DeadLetterRequeueJobStatus.Failed,
+                SchedulerJobStatus.Canceled => DeadLetterRequeueJobStatus.Canceled,
+                _ => throw new ArgumentOutOfRangeException(nameof(job), job.Status, null),
+            },
+            job.AwaitingAtStart,
+            job.StartedAt,
+            job.FinishedAt,
+            job.Count,
+            job.Message
+        )
+        {
+            Started = job.Started,
+            Processed = job.Processed,
+        };
 }

@@ -34,6 +34,7 @@ using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.CancellationRegistry;
+using Trax.Scheduler.Services.DeadLetterRequeue;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Trains.ManifestManager;
@@ -125,8 +126,8 @@ public class AskAfreshMutationsTests
                 break;
             case Requeue.All:
                 var jobs = JobsOver(Scheduler);
-                var job = await mutations.RequeueAllDeadLetters(jobs, _factory, default, askAfresh);
-                await jobs.Current;
+                var job = await mutations.RequeueAllDeadLetters(jobs, default, askAfresh);
+                await FinishedAsync(jobs, job.Id);
                 jobs.Get(job.Id)!.Count.Should().Be(1);
                 break;
         }
@@ -321,8 +322,8 @@ public class AskAfreshMutationsTests
         await new DeadLetterMutations().RequeueDeadLetter(1, scheduler, default);
         await new DeadLetterMutations().RequeueDeadLetters([1], scheduler, default);
         var jobs = JobsOver(scheduler);
-        await new DeadLetterMutations().RequeueAllDeadLetters(jobs, _factory, default);
-        await jobs.Current;
+        var job = await new DeadLetterMutations().RequeueAllDeadLetters(jobs, default);
+        await FinishedAsync(jobs, job.Id);
 
         await scheduler.Received(1).TriggerAsync("m", Arg.Any<CancellationToken>());
         await scheduler
@@ -356,17 +357,18 @@ public class AskAfreshMutationsTests
     {
         var scheduler = Substitute.For<ITraxScheduler>();
         var fold = new TaskCompletionSource<BatchDeadLetterResult>();
-        scheduler.RequeueAllDeadLettersAsync(Arg.Any<CancellationToken>()).Returns(fold.Task);
+        scheduler
+            .RequeueAllDeadLettersAsync(
+                Arg.Any<bool>(),
+                Arg.Any<IProgress<int>?>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(fold.Task);
         var jobs = JobsOver(scheduler);
         var mutations = new DeadLetterMutations();
 
-        var replaying = await mutations.RequeueAllDeadLetters(jobs, _factory, default);
-        var afresh = await mutations.RequeueAllDeadLetters(
-            jobs,
-            _factory,
-            default,
-            askAfresh: true
-        );
+        var replaying = await mutations.RequeueAllDeadLetters(jobs, default);
+        var afresh = await mutations.RequeueAllDeadLetters(jobs, default, askAfresh: true);
 
         replaying.Started.Should().BeTrue();
         afresh.Started.Should().BeFalse("a fold is already running on this node");
@@ -375,11 +377,15 @@ public class AskAfreshMutationsTests
             .Message.Should()
             .Be(DeadLetterRequeueJobs.OtherModeMessage(runningAsksAfresh: false));
         await scheduler
-            .DidNotReceive()
-            .RequeueAllDeadLettersAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            .Received(1)
+            .RequeueAllDeadLettersAsync(
+                false,
+                Arg.Any<IProgress<int>?>(),
+                Arg.Any<CancellationToken>()
+            );
 
         fold.SetResult(new BatchDeadLetterResult(0, "done"));
-        await jobs.Current;
+        await FinishedAsync(jobs, replaying.Id);
     }
 
     #endregion
@@ -438,12 +444,14 @@ public class AskAfreshMutationsTests
         }
 
         // Requeue-all answers with a job and runs it in the background.
-        await host.Services.GetRequiredService<DeadLetterRequeueJobs>().Current;
+        await FoldStartedAsync(scheduler);
 
-        await scheduler.Received(1).TriggerAsync("m", true, Arg.Any<CancellationToken>());
-        await scheduler
+        await operations
             .Received(1)
-            .TriggerAsync("m", TimeSpan.FromMinutes(5), true, Arg.Any<CancellationToken>());
+            .TriggerManifestAsync("m", null, true, Arg.Any<CancellationToken>());
+        await operations
+            .Received(1)
+            .TriggerManifestAsync("m", TimeSpan.FromMinutes(5), true, Arg.Any<CancellationToken>());
         await scheduler.Received(1).RequeueDeadLetterAsync(1, true, Arg.Any<CancellationToken>());
         await scheduler
             .Received(1)
@@ -452,7 +460,13 @@ public class AskAfreshMutationsTests
                 true,
                 Arg.Any<CancellationToken>()
             );
-        await scheduler.Received(1).RequeueAllDeadLettersAsync(true, Arg.Any<CancellationToken>());
+        await scheduler
+            .Received(1)
+            .RequeueAllDeadLettersAsync(
+                true,
+                Arg.Any<IProgress<int>?>(),
+                Arg.Any<CancellationToken>()
+            );
         await operations
             .Received(1)
             .SetManifestsReplayDecisionsOnRetryAsync(
@@ -487,7 +501,11 @@ public class AskAfreshMutationsTests
             )
             .Returns(new BatchDeadLetterResult(1, "ok"));
         scheduler
-            .RequeueAllDeadLettersAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .RequeueAllDeadLettersAsync(
+                Arg.Any<bool>(),
+                Arg.Any<IProgress<int>?>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(new BatchDeadLetterResult(1, "ok"));
         scheduler
             .TriggerAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
@@ -504,6 +522,20 @@ public class AskAfreshMutationsTests
         operations
             .RequeueExecutionAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new OperationResult(true, Count: 1));
+        operations
+            .TriggerManifestAsync(
+                Arg.Any<string>(),
+                Arg.Any<TimeSpan?>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new TriggerManifestResult(
+                    true,
+                    "triggered",
+                    new ManifestTriggerResult(1, true, null, false, null)
+                )
+            );
         operations
             .SetManifestsReplayDecisionsOnRetryAsync(
                 Arg.Any<IReadOnlyCollection<long>>(),
@@ -599,16 +631,40 @@ public class AskAfreshMutationsTests
     /// it ran from, so a retry of it replays that run.
     /// </summary>
     /// <summary>A requeue-all job runner over <paramref name="scheduler"/>, as the host registers one.</summary>
-    private static DeadLetterRequeueJobs JobsOver(ITraxScheduler scheduler)
+    private IDeadLetterRequeueJobs JobsOver(ITraxScheduler scheduler)
     {
         var services = new ServiceCollection();
         services.AddSingleton(scheduler);
+        services.AddSingleton(_factory);
         return new DeadLetterRequeueJobs(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             NullLogger<DeadLetterRequeueJobs>.Instance,
-            TimeProvider.System,
-            CancellationToken.None
+            TimeProvider.System
         );
+    }
+
+    /// <summary>Waits for the background requeue-all <paramref name="id"/> to finish.</summary>
+    private static async Task FinishedAsync(IDeadLetterRequeueJobs jobs, Guid id)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (jobs.Get(id)?.Status == DeadLetterRequeueJobStatus.Running)
+            // determinism: the poll interval of a wait bounded by the timeout above.
+            await Task.Delay(10, timeout.Token);
+    }
+
+    /// <summary>Waits for a background requeue-all to call the scheduler.</summary>
+    private static async Task FoldStartedAsync(ITraxScheduler scheduler)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (
+            !scheduler
+                .ReceivedCalls()
+                .Any(c =>
+                    c.GetMethodInfo().Name == nameof(ITraxScheduler.RequeueAllDeadLettersAsync)
+                )
+        )
+            // determinism: the poll interval of a wait bounded by the timeout above.
+            await Task.Delay(10, timeout.Token);
     }
 
     /// <summary>A manifest with this external id, so a trigger for it is not refused as unknown.</summary>

@@ -146,6 +146,13 @@ public class PersistedOperationMutationTests
         errors[0].GetProperty("code").GetString().Should().Be("SHAPE_DIFF_VIOLATION");
         errors[0].GetProperty("oldFingerprint").GetString().Should().NotBeNullOrEmpty();
         errors[0].GetProperty("newFingerprint").GetString().Should().NotBeNullOrEmpty();
+        // The caller's lever is the mutation's input field, not the store's C# option.
+        errors[0]
+            .GetProperty("message")
+            .GetString()
+            .Should()
+            .Contain("bypassShapeDiff: true")
+            .And.NotContain("UpsertOptions");
 
         // Row unchanged.
         var row = await _store.GetAsync("shape_v1", null, CancellationToken.None);

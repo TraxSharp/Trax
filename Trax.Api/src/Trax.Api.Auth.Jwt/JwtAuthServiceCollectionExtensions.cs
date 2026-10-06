@@ -260,6 +260,9 @@ public static class JwtAuthServiceCollectionExtensions
 
         services.AddTraxPrincipalAccessor();
         EnsureDisclaimerLog(services);
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHostedService, DemoJwtKeyEnvironmentValidator>()
+        );
 
         var authBuilder = services.AddAuthentication();
         authBuilder.AddJwtBearer(schemeName, options => ConfigureJwtBearer(options, jwtBuilder));

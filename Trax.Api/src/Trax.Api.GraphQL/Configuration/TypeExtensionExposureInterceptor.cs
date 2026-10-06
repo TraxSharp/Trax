@@ -2,6 +2,7 @@ using System.Reflection;
 using HotChocolate.Authorization;
 using HotChocolate.Configuration;
 using HotChocolate.Internal;
+using HotChocolate.Types;
 using HotChocolate.Types.Descriptors.Configurations;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
@@ -189,6 +190,100 @@ internal sealed class TypeExtensionExposureInterceptor : TypeInterceptor
             $"GraphQL field '{fieldPath}' ({resolver}) declares {malformed}, so the gate it "
                 + "means cannot be built. Remove the argument or name a real value."
         );
+
+    // ── Extensions with no type to extend ───────────────────────────────
+
+    /// <summary>The names and runtime types of every named type in the schema being built.</summary>
+    private readonly HashSet<string> _typeNames = new(StringComparer.Ordinal);
+    private readonly List<Type> _runtimeTypes = [];
+
+    /// <summary>Every type extension, with the name or runtime type it targets.</summary>
+    private readonly List<(string Name, Type? ExtendsType, Type Declaring)> _extensions = [];
+
+    /// <summary>A rebuilt schema (an executor eviction) starts its record afresh.</summary>
+    public override void OnBeforeDiscoverTypes()
+    {
+        _typeNames.Clear();
+        _runtimeTypes.Clear();
+        _extensions.Clear();
+    }
+
+    /// <summary>
+    /// Records each named type and each type extension once its name is final. HotChocolate drops
+    /// an extension whose target type does not exist without an error, so the field it adds is
+    /// simply missing from the schema; <see cref="OnAfterMergeTypeExtensions"/> refuses that.
+    /// </summary>
+    public override void OnAfterCompleteName(
+        ITypeCompletionContext completionContext,
+        TypeSystemConfiguration configuration
+    )
+    {
+        if (!completionContext.IsType || configuration is not TypeConfiguration type)
+            return;
+
+        if (
+            completionContext.Type
+            is ObjectTypeExtension
+                or InterfaceTypeExtension
+                or InputObjectTypeExtension
+                or EnumTypeExtension
+                or UnionTypeExtension
+        )
+        {
+            // Only an extension declared by a class: one built inline from a descriptor (Trax's
+            // own train and namespace modules build theirs that way) has no class to name, and
+            // Trax's own are covered by the validators that check what they extend.
+            if (
+                (configuration as ObjectTypeConfiguration)?.FieldBindingType is { } declaring
+                && declaring != typeof(object)
+            )
+                _extensions.Add((type.Name, type.ExtendsType, declaring));
+            return;
+        }
+
+        _typeNames.Add(type.Name);
+        _runtimeTypes.Add(type.RuntimeType);
+    }
+
+    /// <summary>
+    /// Refuses a type extension whose target, by name or by runtime type, is not in the schema.
+    /// For the root names HotChocolate uses by default, the message names Trax's root instead.
+    /// </summary>
+    public override void OnAfterMergeTypeExtensions()
+    {
+        foreach (var (name, extendsType, declaring) in _extensions)
+        {
+            var found = extendsType is null
+                ? _typeNames.Contains(name)
+                : _runtimeTypes.Any(extendsType.IsAssignableFrom);
+            if (found)
+                continue;
+
+            var target = extendsType?.FullName ?? name;
+            var hint = TraxRootFor(name) ?? "";
+            _report.Add(
+                new TypeExtensionExposureViolation(
+                    $"extension:{declaring.FullName}",
+                    $"Type extension '{declaring.FullName}' extends '{target}', which is not a type "
+                        + "in this schema, so the fields it adds would be missing with no error."
+                        + hint
+                )
+            );
+        }
+    }
+
+    private static string? TraxRootFor(string name) =>
+        name switch
+        {
+            "Query" => " Trax's root type for this is 'RootQuery': extend that instead.",
+            "Mutation" => " Trax's root type for this is 'RootMutation': extend that instead.",
+            "Subscription" =>
+                " Trax's root type for this is 'LifecycleSubscriptions': extend that instead.",
+            "RootMutation" =>
+                " Trax adds 'RootMutation' only when the schema exposes a mutation: a "
+                    + "[TraxMutation] train, or the operations mutations.",
+            _ => null,
+        };
 
     // ── Phase 2: the census, on the merged type ─────────────────────────
 

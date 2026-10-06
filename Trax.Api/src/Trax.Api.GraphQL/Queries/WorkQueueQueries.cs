@@ -3,7 +3,7 @@ using Trax.Api.DTOs;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
-using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.GraphQL.Queries;
 
@@ -26,6 +26,8 @@ public class WorkQueueQueries
     /// <param name="status">Only entries in this status.</param>
     /// <param name="trainName">Only entries for this train (matched exactly).</param>
     /// <param name="afterId">Only entries older than this id (a keyset cursor).</param>
+    /// <param name="subjectKey">Only entries that serialize on this subject (matched exactly).</param>
+    /// <param name="manifestId">Only entries queued for this manifest.</param>
     public async Task<PagedResult<WorkQueueSummary>> GetWorkQueues(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -34,6 +36,8 @@ public class WorkQueueQueries
         WorkQueueStatus? status = null,
         string? trainName = null,
         long? afterId = null,
+        string? subjectKey = null,
+        long? manifestId = null,
         [Service] ISqlDialect? sqlDialect = null
     )
     {
@@ -52,7 +56,17 @@ public class WorkQueueQueries
         if (!string.IsNullOrWhiteSpace(trainName))
             baseQuery = baseQuery.Where(q => q.TrainName == trainName);
 
-        var hasFilter = status.HasValue || !string.IsNullOrWhiteSpace(trainName);
+        if (!string.IsNullOrEmpty(subjectKey))
+            baseQuery = baseQuery.Where(q => q.SubjectKey == subjectKey);
+
+        if (manifestId.HasValue)
+            baseQuery = baseQuery.Where(q => q.ManifestId == manifestId.Value);
+
+        var hasFilter =
+            status.HasValue
+            || !string.IsNullOrWhiteSpace(trainName)
+            || !string.IsNullOrEmpty(subjectKey)
+            || manifestId.HasValue;
 
         // An unfiltered total is estimated on every page, so the cursor never changes it.
         var (totalCount, isEstimate) = hasFilter
@@ -88,7 +102,10 @@ public class WorkQueueQueries
                 q.InputTypeName,
                 q.ConfirmedAt,
                 q.SubjectKey
-            ))
+            )
+            {
+                ReplayDecisionsOf = q.ReplayDecisionsOf,
+            })
             .ToListAsync(ct);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
@@ -133,7 +150,10 @@ public class WorkQueueQueries
                 q.InputTypeName,
                 q.ConfirmedAt,
                 q.SubjectKey
-            ))
+            )
+            {
+                ReplayDecisionsOf = q.ReplayDecisionsOf,
+            })
             .FirstOrDefaultAsync(ct);
     }
 
@@ -146,102 +166,38 @@ public class WorkQueueQueries
     /// recorded input, and an input this host cannot read as its type is masked whole.
     /// Returns <c>null</c> when the entry does not exist.
     /// </summary>
+    /// <remarks>
+    /// Read through <see cref="IOperationsService.GetWorkQueueEntryDetailAsync"/>, the call the
+    /// dashboard's work queue entry page makes.
+    /// </remarks>
     public async Task<WorkQueueDetail?> GetDetail(
         long id,
-        [Service] IDataContextProviderFactory dataContextFactory,
-        [Service] ITrainDiscoveryService discovery,
+        [Service] IOperationsService operationsService,
         CancellationToken ct
-    )
-    {
-        using var db = await dataContextFactory.CreateDbContextAsync(ct);
-
-        var entry = await db.WorkQueues.AsNoTracking().FirstOrDefaultAsync(q => q.Id == id, ct);
-        if (entry is null)
-            return null;
-
-        long? heldBy = null;
-        long? queuedBehind = null;
-        if (entry is { Status: WorkQueueStatus.Queued, SubjectKey: { } subject })
-        {
-            // A queued entry whose subject has a run in flight is skipped by dispatch until
-            // that run finishes.
-            heldBy = await db
-                .WorkQueues.AsNoTracking()
-                .Where(b =>
-                    b.SubjectKey == subject
-                    && b.Status == WorkQueueStatus.Dispatched
-                    && b.Metadata != null
-                    && (
-                        b.Metadata.TrainState == TrainState.Pending
-                        || b.Metadata.TrainState == TrainState.InProgress
-                    )
-                )
-                .Select(b => (long?)b.Id)
-                .FirstOrDefaultAsync(ct);
-
-            // Dispatch also offers only the first queued entry per subject each cycle, so an
-            // entry behind a sibling it would take first waits even with nothing running.
-            if (heldBy is null)
-                queuedBehind = await DispatchedAheadOf(
-                        db.WorkQueues.AsNoTracking(),
-                        entry,
-                        DateTime.UtcNow
-                    )
-                    .Select(b => (long?)b.Id)
-                    .FirstOrDefaultAsync(ct);
-        }
-
-        return new WorkQueueDetail(
-            entry.Id,
-            entry.ExternalId,
-            entry.TrainName,
-            entry.Status,
-            entry.CreatedAt,
-            entry.DispatchedAt,
-            entry.ScheduledAt,
-            entry.Priority,
-            entry.DispatchAttempts,
-            entry.ManifestId,
-            entry.MetadataId,
-            entry.DeadLetterId,
-            entry.InputTypeName,
-            entry.ConfirmedAt,
-            entry.SubjectKey,
-            TransportInputRedaction.Redact(discovery, entry.Input, entry.InputTypeName),
-            heldBy,
-            queuedBehind
-        );
-    }
-
-    /// <summary>
-    /// The confirmed, queued entries for <paramref name="entry"/>'s subject that dispatch would
-    /// take before it, most-favoured first.
-    /// </summary>
-    /// <remarks>
-    /// This has to agree with the scheduler's <c>LoadQueuedJobsJunction</c>, and it is the same
-    /// predicate the Blazor dashboard's work queue detail page uses: an entry not yet due is not a
-    /// candidate, nor is one whose manifest group is disabled, and among the rest priority then
-    /// age decides. Group priority is not compared because only the mediator's queue path sets a
-    /// subject key and those entries carry no manifest.
-    /// </remarks>
-    private static IQueryable<Effect.Models.WorkQueue.WorkQueue> DispatchedAheadOf(
-        IQueryable<Effect.Models.WorkQueue.WorkQueue> source,
-        Effect.Models.WorkQueue.WorkQueue entry,
-        DateTime now
     ) =>
-        source
-            .Where(b =>
-                b.SubjectKey == entry.SubjectKey
-                && b.Id != entry.Id
-                && b.Status == WorkQueueStatus.Queued
-                && b.ConfirmedAt != null
-                && (b.ScheduledAt == null || b.ScheduledAt <= now)
-                && (b.ManifestId == null || b.Manifest!.ManifestGroup!.IsEnabled)
-                && (
-                    b.Priority > entry.Priority
-                    || (b.Priority == entry.Priority && b.CreatedAt < entry.CreatedAt)
-                )
+        await operationsService.GetWorkQueueEntryDetailAsync(id, ct) is { } entry
+            ? new WorkQueueDetail(
+                entry.Id,
+                entry.ExternalId,
+                entry.TrainName,
+                entry.Status,
+                entry.CreatedAt,
+                entry.DispatchedAt,
+                entry.ScheduledAt,
+                entry.Priority,
+                entry.DispatchAttempts,
+                entry.ManifestId,
+                entry.MetadataId,
+                entry.DeadLetterId,
+                entry.InputTypeName,
+                entry.ConfirmedAt,
+                entry.SubjectKey,
+                entry.Input,
+                entry.SubjectHeldBy,
+                entry.SubjectQueuedBehind
             )
-            .OrderByDescending(b => b.Priority)
-            .ThenBy(b => b.CreatedAt);
+            {
+                ReplayDecisionsOf = entry.ReplayDecisionsOf,
+            }
+            : null;
 }

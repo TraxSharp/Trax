@@ -91,6 +91,13 @@ public sealed class PersistedOperationsOptions
     public string? RabbitMqConnectionString { get; internal set; }
 
     /// <summary>
+    /// The fanout exchange invalidations are broadcast on. Every node uses the same name so they
+    /// meet without configuration; tests give each run its own so runs on one broker stay apart.
+    /// </summary>
+    internal string RabbitMqExchange { get; set; } =
+        Broadcasting.RabbitMqPersistedOperationBroadcaster.ExchangeName;
+
+    /// <summary>
     /// True when the host declared, with <c>SingleNode()</c>, that one process serves this
     /// endpoint and writes the store, so no broadcast is needed.
     /// </summary>

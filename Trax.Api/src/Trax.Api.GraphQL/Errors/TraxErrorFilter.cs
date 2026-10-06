@@ -96,6 +96,25 @@ internal class TraxErrorFilter(ILogger<TraxErrorFilter>? logger = null) : IError
                 .WithMessage(TrainAuthorizationException.PublicMessage)
                 .WithCode("TRAX_AUTHORIZATION");
 
+        // A directive naming a policy the host never registered, or a role-only directive on a
+        // host with no default policy. Startup refuses the first (SchemaAuthorizationPolicyValidator),
+        // so this is the request-time backstop: the caller is refused as it would be
+        // by any gate, and the policy's name, which describes how the host is built, goes to the
+        // log instead of the response.
+        if (error.Code is "AUTH_POLICY_NOT_FOUND" or "AUTH_NO_DEFAULT_POLICY")
+        {
+            _logger.LogError(
+                "A GraphQL field's authorization could not be evaluated ({Code}): {Detail}. "
+                    + "The caller was refused.",
+                error.Code,
+                error.Message
+            );
+            return error
+                .WithMessage(TrainAuthorizationException.PublicMessage)
+                .WithCode("TRAX_AUTHORIZATION")
+                .WithException(null);
+        }
+
         if (error.Exception is null)
             return error;
 

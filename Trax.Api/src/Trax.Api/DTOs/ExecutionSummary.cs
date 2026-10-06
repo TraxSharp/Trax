@@ -36,4 +36,16 @@ public record ExecutionSummary(
     string? HostEnvironment = null,
     string? HostInstanceId = null,
     Trax.Core.Exceptions.FailureClass FailureClass = Trax.Core.Exceptions.FailureClass.Unclassified
-);
+)
+{
+    /// <summary>
+    /// The execution that started this one, for a run started from inside another train's run;
+    /// <c>null</c> otherwise. <c>executionChildren</c> lists a parent's runs the other way.
+    /// </summary>
+    public long? ParentId { get; init; }
+
+    /// <summary>
+    /// The junction the execution is running now, while it is in progress; <c>null</c> otherwise.
+    /// </summary>
+    public string? CurrentlyRunningJunction { get; init; }
+}

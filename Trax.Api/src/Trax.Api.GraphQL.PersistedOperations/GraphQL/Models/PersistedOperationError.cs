@@ -65,8 +65,19 @@ public sealed record PersistedOperationError(
         }
     }
 
+    /// <summary>
+    /// The payload names the upload input's <c>bypassShapeDiff</c> field, the lever a caller of
+    /// <c>uploadPersistedOperation</c> has, rather than the C# option the exception names.
+    /// </summary>
     internal static PersistedOperationError FromShapeDiff(ShapeDiffViolationException ex) =>
-        new(ex.Code, ex.Message, Locations: null, Path: null, ex.OldFingerprint, ex.NewFingerprint);
+        new(
+            ex.Code,
+            ex.Summary + " Upload it again with bypassShapeDiff: true if the change is shape-safe.",
+            Locations: null,
+            Path: null,
+            ex.OldFingerprint,
+            ex.NewFingerprint
+        );
 
     internal static PersistedOperationError FromNotBroadcast(
         PersistedOperationNotBroadcastException ex

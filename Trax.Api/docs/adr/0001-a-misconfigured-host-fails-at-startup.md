@@ -10,11 +10,12 @@ When a host wires Trax's GraphQL surface wrongly, it throws while starting, with
 naming the call to change. It does not build a schema that looks fine and then fails on the
 request that happens to touch the broken part.
 
-**Seven** validators enforce it: `QueryModelAuthorizationSchemaValidator`,
+**Nine** validators enforce it: `QueryModelAuthorizationSchemaValidator`,
 `QueryModelAuthorizationValidator`, `TraxOperationsServiceValidator`,
 `TraxSubscriptionAuthWiringValidator`, `TraxGraphQLAuthPolicyValidator`,
-`TypeExtensionExposureValidator` and `TrainRegistrationOrderValidator`, which names a train
-registered after `AddTraxGraphQL()`. `DemoApiKeyEnvironmentValidator` in `Trax.Api.Auth.ApiKey`
+`TypeExtensionExposureValidator`, `SchemaAuthorizationPolicyValidator` and
+`TrainAuthorizationPolicyValidator`, which refuse a policy nobody registered, and
+`TrainRegistrationOrderValidator`, which names a train registered after `AddTraxGraphQL()`. `DemoApiKeyEnvironmentValidator` in `Trax.Api.Auth.ApiKey`
 applies the same policy to a demo key outside Development. Each is a hosted service, so it runs
 after the container is complete and sees the truth regardless of the order the host registered
 anything in, and each names the call to change.
@@ -82,6 +83,9 @@ design, so it is the one place Trax cannot control.
   a query model on one field, one entity from two `DbContext`s, a namespace and a model, two
   trains generating one response type, and a type extension's field on a name Trax or another
   extension already uses, each naming both sides.
+- `SchemaAuthorizationPolicyTests` pins the refusal of a policy nobody registered, whether an
+  `@authorize` directive anywhere in the built schema names it or a train's `[TraxAuthorize]`
+  does, naming the policy and where it was named.
 - [Registration Order](/docs/reference/registration-order) is the user-facing statement of
   what order matters and what happens when it is wrong.
 
@@ -104,6 +108,9 @@ Not covered:
 
 ## Changelog
 
+- **2026-10-05**: A policy named by any `@authorize` directive in the built schema, or by a
+  train's `[TraxAuthorize]`, must be registered: `SchemaAuthorizationPolicyValidator` and
+  `TrainAuthorizationPolicyValidator` added, bringing the count to nine.
 - **2026-10-01**: Two surfaces claiming one field or generated type name refuse the host, naming
   both, where HotChocolate would merge the fields and keep whichever it built last.
 - **2026-09-30**: The validators check in `StartingAsync`, so a refusal precedes Kestrel and the

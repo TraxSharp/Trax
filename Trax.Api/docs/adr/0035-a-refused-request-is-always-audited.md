@@ -37,21 +37,35 @@ and says nothing more about who asked for what than the entry for the subscribe 
 and a subscription a lifecycle feed refuses each leave one entry with `Success = false` and the
 error code in `ErrorText`.
 
+**A refused socket and a failed event are audited too.** A socket refused at `connection_init`
+never reaches the execution pipeline, so the composite socket interceptor reports it to the audit
+package, which records one failed entry with `TRAX_SOCKET_REFUSED`, the scheme that judged it and
+the reason, never the credential. An event of an accepted subscription that fails, in a resolver
+or in its source, is recorded as its own failed entry marked `subscriptionEvent=error`: one entry
+per failing event, however many of its fields failed, with the errors joined into `ErrorText` up to
+`MaxErrorTextLength` and their number in `subscriptionEventErrors`. A successful event is still not
+recorded, for the reason above.
+
 **The introspection skip follows the same rule.** An introspection query that raised an error is
 audited; one that succeeded is skipped while `SkipIntrospection` is on.
 
 ## Exemplars
 
 - `AuditRefusedRequestTests` pins it end to end: a subscription the operations gate refuses over
-  HTTP is audited under the default options, beside a request the endpoint gate refuses.
+  HTTP is audited under the default options, beside a request the endpoint gate refuses; a socket
+  refused at `connection_init` with an unknown key or none is audited without the key; and a
+  subscription whose second event throws leaves exactly one entry, and one whose two events each
+  fail in 200 aliased fields leaves exactly two.
 - `TraxGraphQLAuditListenerTests` pins it in the listener: a subscription refused when subscribing,
   one whose event source throws and one that fails validation are each audited with
   `SkipSubscriptions` on; an accepted one is not.
 
-Not covered: an error in a later event of an accepted subscription is not audited, because the
-entry for that subscription was decided when it subscribed. A socket that is refused at
-`connection_init` never reaches the execution pipeline, so it leaves no audit entry.
+Not covered: a host that replaces Trax's socket interceptor through `ConfigureSchema` gets no
+entry for the handshakes its own interceptor refuses.
 
 ## Changelog
 
+- **2026-10-05**: A failing event is one entry, its errors joined, rather than one entry per error.
+- **2026-10-05**: A socket refused at `connection_init` and an error in a later event of an
+  accepted subscription are audited; both were listed as not covered.
 - **2026-10-01**: Recorded.

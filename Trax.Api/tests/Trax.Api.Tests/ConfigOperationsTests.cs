@@ -1,11 +1,13 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Mutations;
 using Trax.Api.GraphQL.Queries;
+using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests;
@@ -108,9 +110,12 @@ public class ConfigOperationsTests
         levels
             .Should()
             .Equal(
-                new LogLevelSetting("Default", "Information"),
-                new LogLevelSetting("Microsoft.AspNetCore", "Warning"),
-                new LogLevelSetting("Trax", "Debug")
+                new LogLevelSetting("Default", "Information") { ConfiguredLevel = "Information" },
+                new LogLevelSetting("Microsoft.AspNetCore", "Warning")
+                {
+                    ConfiguredLevel = "Warning",
+                },
+                new LogLevelSetting("Trax", "Debug") { ConfiguredLevel = "Debug" }
             );
     }
 
@@ -120,5 +125,104 @@ public class ConfigOperationsTests
         var configuration = new ConfigurationBuilder().Build();
 
         new ConfigQueries().GetLogLevels(configuration).Should().BeEmpty();
+    }
+
+    [Test]
+    public void GetLogLevels_ReadsTheSharedService_WithRuntimeChanges()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Logging:LogLevel:Default"] = "Information" }
+            )
+            .Build();
+        var service = Substitute.For<ILogLevelService>();
+        service
+            .GetLogLevels()
+            .Returns([
+                new CategoryLogLevel("Default", LogLevel.Information, "Information", false),
+                new CategoryLogLevel("Trax", LogLevel.Trace, "Debug", true),
+            ]);
+
+        var levels = new ConfigQueries().GetLogLevels(configuration, service);
+
+        levels
+            .Should()
+            .Equal(
+                new LogLevelSetting("Default", "Information") { ConfiguredLevel = "Information" },
+                new LogLevelSetting("Trax", "Trace")
+                {
+                    ConfiguredLevel = "Debug",
+                    Overridden = true,
+                }
+            );
+    }
+
+    [Test]
+    public void SetLogLevels_ForwardsToTheSharedService_AndMapsItsResult()
+    {
+        var service = Substitute.For<ILogLevelService>();
+        service
+            .SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>())
+            .Returns(new LogLevelUpdateResult(true, 1, ["Trax"], "1 log level set."));
+
+        var response = new ConfigMutations().SetLogLevels(
+            [new LogLevelSettingInput("Trax", LogLevel.Debug)],
+            service
+        );
+
+        response.Success.Should().BeTrue();
+        response.Count.Should().Be(1);
+        response.NotApplied.Should().Equal("Trax");
+        response.Message.Should().Be("1 log level set.");
+        service
+            .Received(1)
+            .SetLogLevels(
+                Arg.Is<IReadOnlyList<LogLevelChange>>(l =>
+                    l != null && l.Count == 1 && l[0] == new LogLevelChange("Trax", LogLevel.Debug)
+                )
+            );
+    }
+
+    [Test]
+    public void SetLogLevels_WithoutTheService_IsRefused()
+    {
+        var response = new ConfigMutations().SetLogLevels([
+            new LogLevelSettingInput("Default", LogLevel.Debug),
+        ]);
+
+        response.Success.Should().BeFalse();
+        response.Count.Should().Be(0);
+        response.Message.Should().Contain("AddScheduler");
+    }
+
+    [Test]
+    public void SetLogLevels_MoreThanTheBatchCap_IsRefusedWithoutCallingTheService()
+    {
+        var service = Substitute.For<ILogLevelService>();
+
+        var response = new ConfigMutations().SetLogLevels(
+            Enumerable
+                .Range(0, OperationsService.MaxBatchSize + 1)
+                .Select(_ => new LogLevelSettingInput("Default", LogLevel.Debug))
+                .ToList(),
+            service
+        );
+
+        response.Success.Should().BeFalse();
+        service.DidNotReceive().SetLogLevels(Arg.Any<IReadOnlyList<LogLevelChange>>());
+    }
+
+    [Test]
+    public void GetVersion_IsTheTraxApiPackageVersion_WithoutBuildMetadata()
+    {
+        var version = new ConfigQueries().GetVersion();
+
+        version.Should().NotBeNullOrWhiteSpace().And.NotContain("+");
+        version
+            .Should()
+            .Be(
+                typeof(ConfigQueries).Assembly.GetName().Version!.ToString(3),
+                "it is the Trax.Api.GraphQL package version"
+            );
     }
 }

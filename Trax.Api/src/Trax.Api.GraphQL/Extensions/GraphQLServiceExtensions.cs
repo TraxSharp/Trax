@@ -40,6 +40,8 @@ using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
 using Trax.Mediator.Services.TrainDiscovery;
+using Trax.Scheduler.Services.DeadLetterRequeue;
+using Trax.Scheduler.Services.Effects;
 
 namespace Trax.Api.GraphQL.Extensions;
 
@@ -151,17 +153,27 @@ public static class GraphQLServiceExtensions
             sp.GetRequiredService<ITrainDiscoveryService>()
         ));
 
+        // A train mutation that can queue, on a host whose store is in memory, is refused per
+        // request; this names them once at startup (docs/adr/0038).
+        var queueCapableMutations = trainRegistrations
+            .Where(r => r.IsMutation && r.GraphQLOperations.HasFlag(GraphQLOperation.Queue))
+            .Select(r => r.ServiceType.FullName ?? r.ServiceType.Name)
+            .Distinct()
+            .ToList();
+        services.AddHostedService(sp => new QueueDispatchReporter(
+            queueCapableMutations,
+            sp,
+            sp.GetRequiredService<ILogger<QueueDispatchReporter>>()
+        ));
+
         services.AddTraxApi();
         services.AddSingleton<TrainTypeModule>();
 
-        // requeueAllDeadLetters runs its fold here, in the background, stopped only by the host
-        // shutting down. See docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md.
-        services.TryAddSingleton(sp => new DeadLetterRequeueJobs(
-            sp.GetRequiredService<IServiceScopeFactory>(),
-            sp.GetRequiredService<ILogger<DeadLetterRequeueJobs>>(),
-            sp.GetService<TimeProvider>() ?? TimeProvider.System,
-            sp.GetService<IHostApplicationLifetime>()?.ApplicationStopping ?? CancellationToken.None
-        ));
+        // requeueAllDeadLetters runs its fold in the scheduler's job list, in the background,
+        // stopped only by the host shutting down; AddScheduler registers the same one, so the
+        // dashboard's Requeue All and this surface share it. See
+        // docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md.
+        services.TryAddSingleton<IDeadLetterRequeueJobs, DeadLetterRequeueJobs>();
         services.AddTransient<GraphQLSubscriptionHook>();
         services
             .AddSingleton<LifecycleHookFactory<GraphQLSubscriptionHook>>()
@@ -197,6 +209,12 @@ public static class GraphQLServiceExtensions
         // instead of masking a runtime "Unexpected Execution Error" per request.
         if (operationsExposed)
         {
+            // The effects reads and writes go through the service the dashboard calls. AddScheduler
+            // registers it; an API-only host that registers IOperationsService by hand gets the same
+            // implementation here. Either way the one resolved is EffectSettingsService unless the
+            // host registers its own, so the order of the two calls changes nothing.
+            services.TryAddScoped<IEffectSettingsService, EffectSettingsService>();
+
             var mutationsExposed = config.OperationMutationsExposed;
             services.AddHostedService(sp => new TraxOperationsServiceValidator(
                 sp.GetRequiredService<IServiceProviderIsService>(),
@@ -443,6 +461,12 @@ public static class GraphQLServiceExtensions
         );
         services.AddHostedService<TypeExtensionExposureValidator>();
 
+        // Every policy an @authorize directive in the built schema names is registered, whoever
+        // put the directive there.
+        services.AddHostedService<SchemaAuthorizationPolicyValidator>();
+        // And every policy a train's [TraxAuthorize] names, which no directive carries.
+        services.AddHostedService<TrainAuthorizationPolicyValidator>();
+
         // Every field that takes a where or order argument authorizes the gated types those
         // inputs reach, whoever contributed the field: a query model's entry field, a type
         // extension's resolver, a filtered navigation. A field with no such argument is untouched.
@@ -548,6 +572,13 @@ public static class GraphQLServiceExtensions
         Action<IEndpointConventionBuilder>? configure = null
     )
     {
+        if (app.Services.GetService<GraphQLConfiguration>() is not { } graphQLConfiguration)
+            throw new InvalidOperationException(
+                "UseTraxGraphQL() requires AddTraxGraphQL() to be called first. "
+                    + "Call builder.Services.AddTraxGraphQL(...) after AddTrax(...) and before "
+                    + "builder.Build()."
+            );
+
         // The WebSocket upgrade middleware is wired at the front of the pipeline
         // by WebSocketsStartupFilter (registered in AddTraxGraphQL), so it always
         // runs before endpoint execution regardless of host middleware ordering.
@@ -563,7 +594,7 @@ public static class GraphQLServiceExtensions
         // host, or the allowed origins. The check wraps the endpoint's handler, so it runs
         // before HotChocolate accepts the upgrade. See
         // docs/adr/0007-a-browser-socket-is-accepted-only-from-origins-the-host-serves.md.
-        var allowedOrigins = app.Services.GetService<GraphQLConfiguration>()?.SocketAllowedOrigins;
+        var allowedOrigins = graphQLConfiguration.SocketAllowedOrigins;
         endpoint.Add(endpointBuilder =>
         {
             var handler =

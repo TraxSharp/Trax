@@ -13,6 +13,7 @@ using Trax.Api.Tests.Auth;
 using Trax.Core.Exceptions;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Exceptions;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Mediator.Exceptions;
@@ -179,10 +180,13 @@ public class TrainExceptionMessageRuleTests
             )
             .ThrowsAsync(refusal);
 
+        // A store that is not the in-memory one, so both surfaces attempt the enqueue rather than
+        // refuse it as having nothing to dispatch it.
         using var host = await StartHostAsync(
             execution,
             new RecordingSubmitter(),
-            QueueRegistration()
+            QueueRegistration(),
+            Substitute.For<IDataContextProviderFactory>()
         );
 
         using var typed = await AdminOperationsAuthorizationTests.PostAsync(

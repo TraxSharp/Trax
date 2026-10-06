@@ -51,6 +51,15 @@ public class WorkQueueOperationsTests
     // No train is registered, so a stored input can't be read as its type and shows masked.
     private static ITrainDiscoveryService Discovery => Substitute.For<ITrainDiscoveryService>();
 
+    // The detail resolver reads through the operations service, as a host registers it.
+    private IOperationsService Operations =>
+        new OperationsService(
+            Discovery,
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>()
+        );
+
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
@@ -451,7 +460,7 @@ public class WorkQueueOperationsTests
     {
         var id = await AddEntry(subject: "customer-1", priority: 4, input: "{\"amount\": 12}");
 
-        var detail = await new WorkQueueQueries().GetDetail(id, _factory, Discovery, default);
+        var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
 
         detail.Should().NotBeNull();
         detail!.Id.Should().Be(id);
@@ -472,7 +481,7 @@ public class WorkQueueOperationsTests
         var holder = await AddEntry("customer-2", WorkQueueStatus.Dispatched, metadataId: running);
         var waiting = await AddEntry("customer-2");
 
-        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, Discovery, default);
+        var detail = await new WorkQueueQueries().GetDetail(waiting, Operations, default);
 
         detail!.SubjectHeldBy.Should().Be(holder);
         detail
@@ -487,7 +496,7 @@ public class WorkQueueOperationsTests
         await AddEntry("customer-3", WorkQueueStatus.Dispatched, metadataId: done);
         var waiting = await AddEntry("customer-3");
 
-        var detail = await new WorkQueueQueries().GetDetail(waiting, _factory, Discovery, default);
+        var detail = await new WorkQueueQueries().GetDetail(waiting, Operations, default);
 
         detail!.SubjectHeldBy.Should().BeNull();
         detail.SubjectQueuedBehind.Should().BeNull();
@@ -507,13 +516,13 @@ public class WorkQueueOperationsTests
 
         var queries = new WorkQueueQueries();
 
-        (await queries.GetDetail(younger, _factory, Discovery, default))!
+        (await queries.GetDetail(younger, Operations, default))!
             .SubjectQueuedBehind.Should()
             .Be(older);
-        (await queries.GetDetail(older, _factory, Discovery, default))!
+        (await queries.GetDetail(older, Operations, default))!
             .SubjectQueuedBehind.Should()
             .BeNull();
-        (await queries.GetDetail(ordinary, _factory, Discovery, default))!
+        (await queries.GetDetail(ordinary, Operations, default))!
             .SubjectQueuedBehind.Should()
             .Be(urgent);
     }
@@ -539,7 +548,7 @@ public class WorkQueueOperationsTests
         }
         var dueNow = await AddEntry("customer-6");
 
-        var detail = await new WorkQueueQueries().GetDetail(dueNow, _factory, Discovery, default);
+        var detail = await new WorkQueueQueries().GetDetail(dueNow, Operations, default);
 
         later.Should().BePositive();
         detail!
@@ -556,8 +565,8 @@ public class WorkQueueOperationsTests
         var noSubject = await AddEntry(subject: null);
 
         var queries = new WorkQueueQueries();
-        var d1 = await queries.GetDetail(dispatched, _factory, Discovery, default);
-        var d2 = await queries.GetDetail(noSubject, _factory, Discovery, default);
+        var d1 = await queries.GetDetail(dispatched, Operations, default);
+        var d2 = await queries.GetDetail(noSubject, Operations, default);
 
         d1!.SubjectHeldBy.Should().BeNull();
         d1.SubjectQueuedBehind.Should().BeNull();
@@ -568,9 +577,7 @@ public class WorkQueueOperationsTests
     [Test]
     public async Task GetDetail_MissingId_ReturnsNull()
     {
-        (await new WorkQueueQueries().GetDetail(99999, _factory, Discovery, default))
-            .Should()
-            .BeNull();
+        (await new WorkQueueQueries().GetDetail(99999, Operations, default)).Should().BeNull();
     }
 
     #endregion

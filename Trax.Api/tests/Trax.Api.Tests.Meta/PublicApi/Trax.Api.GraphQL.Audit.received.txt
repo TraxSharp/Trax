@@ -63,7 +63,10 @@ namespace Trax.Api.GraphQL.Audit
     {
         public TraxGraphQLAuditListener(Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor, Trax.Api.GraphQL.Audit.TraxAuditChannel channel, Microsoft.Extensions.Options.IOptions<Trax.Api.GraphQL.Audit.TraxAuditOptions> options, Trax.Api.GraphQL.Audit.ITraxAuditRedactor redactor, System.TimeProvider timeProvider, Microsoft.Extensions.Logging.ILogger<Trax.Api.GraphQL.Audit.TraxGraphQLAuditListener> logger) { }
         public override System.IDisposable ExecuteRequest(HotChocolate.Execution.RequestContext context) { }
+        public override System.IDisposable OnSubscriptionEvent(HotChocolate.Execution.RequestContext context, ulong subscriptionId) { }
         public override void RequestError(HotChocolate.Execution.RequestContext context, System.Exception exception) { }
+        public override void ResolverError(HotChocolate.Resolvers.IMiddlewareContext context, HotChocolate.IError error) { }
+        public override void SubscriptionEventError(HotChocolate.Execution.RequestContext context, ulong subscriptionId, System.Exception exception) { }
     }
     public static class TraxGraphQLBuilderAuditExtensions
     {

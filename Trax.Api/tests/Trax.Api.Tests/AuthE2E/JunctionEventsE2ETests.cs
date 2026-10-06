@@ -93,7 +93,10 @@ public class JunctionEventsE2ETests
                                 .Add(PlayerKey, id: "player", "Player")
                                 .Add(GuestKey, id: "guest", "Guest")
                         );
-                        services.AddAuthorization();
+                        // The scanned trains include one gated by AdminPolicy, which must be registered.
+                        services.AddAuthorization(o =>
+                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
+                        );
 
                         services.AddTrax(trax =>
                             trax.AddEffects(effects =>

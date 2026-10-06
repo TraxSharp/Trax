@@ -16,4 +16,13 @@ public record PagedResult<T>(
     int Take,
     bool IsEstimatedCount = false,
     long? NextCursor = null
-);
+)
+{
+    /// <summary>
+    /// True when <see cref="TotalCount"/> stopped counting at its cap, so the list holds at least
+    /// that many matches and probably more: read it as "10,000+". A capped count is a lower bound,
+    /// not an estimate. Only the <c>logs</c> list filtered by text and the <c>executions</c> list
+    /// filtered by failure text cap their count; every other list leaves this false.
+    /// </summary>
+    public bool IsCountCapped { get; init; }
+}

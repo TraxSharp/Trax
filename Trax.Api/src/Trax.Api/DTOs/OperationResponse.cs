@@ -14,7 +14,8 @@ public record OperationResponse(bool Success, int? Count = null, string? Message
     /// <summary>
     /// The id of the one row the operation acted on, when there is one: the work queue entry
     /// <c>queueTrain</c> and <c>requeueExecution</c> created, the execution (metadata) id
-    /// <c>runTrain</c> started, or the group <c>updateManifestGroup</c> patched. <c>null</c>
+    /// <c>runTrain</c> started, the work queue entry a manifest trigger queued or released, or the
+    /// manifest or group <c>updateManifest</c> or <c>updateManifestGroup</c> patched. <c>null</c>
     /// otherwise, and on a failure that touched no row.
     /// </summary>
     public long? Id { get; init; }

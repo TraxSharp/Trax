@@ -325,5 +325,182 @@ public class OperationsBatchMutationsTests
         (await db.ManifestGroups.AnyAsync(g => g.IsEnabled)).Should().BeFalse();
     }
 
+    [Test]
+    public async Task TriggerManifests_QueuesEachManifest_AndNotesTheUnknownIds()
+    {
+        var groupId = await SeedGroup(enabled: true);
+        var first = await SeedManifest(groupId, enabled: true);
+        var second = await SeedManifest(groupId, enabled: true);
+
+        var response = await new OperationsMutations().TriggerManifests(
+            [first, second, 999_999],
+            Operations,
+            default
+        );
+
+        response.Success.Should().BeTrue(response.Message);
+        response.Matched.Should().Be(2);
+        response.Queued.Should().Be(2);
+        response.AlreadyQueued.Should().Be(0);
+        response.Skipped.Should().Be(1);
+        response.Notes.Should().ContainSingle().Which.Id.Should().Be(999_999);
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (
+            await db
+                .WorkQueues.Where(q => q.Status == WorkQueueStatus.Queued)
+                .Select(q => q.ManifestId)
+                .ToListAsync()
+        )
+            .Should()
+            .BeEquivalentTo(new long?[] { first, second });
+    }
+
+    [Test]
+    public async Task TriggerManifests_AManifestAlreadyQueued_IsNotQueuedTwice()
+    {
+        var groupId = await SeedGroup(enabled: true);
+        var manifest = await SeedManifest(groupId, enabled: true);
+        await new OperationsMutations().TriggerManifests([manifest], Operations, default);
+
+        var response = await new OperationsMutations().TriggerManifests(
+            [manifest],
+            Operations,
+            default,
+            askAfresh: true
+        );
+
+        response.Success.Should().BeTrue(response.Message);
+        response.Queued.Should().Be(0);
+        response.AlreadyQueued.Should().Be(1);
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.WorkQueues.CountAsync(q => q.ManifestId == manifest)).Should().Be(1);
+    }
+
+    [Test]
+    public async Task TriggerManifests_AnEmptyList_IsRefused()
+    {
+        var response = await new OperationsMutations().TriggerManifests([], Operations, default);
+
+        response.Success.Should().BeFalse();
+        response.Matched.Should().Be(0);
+        response.Message.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Test]
+    public async Task TriggerManifests_MoreThanOneBatch_IsRefusedAndQueuesNothing()
+    {
+        var groupId = await SeedGroup(enabled: true);
+        var manifest = await SeedManifest(groupId, enabled: true);
+        var ids = Enumerable
+            .Range(1, OperationsService.MaxBatchSize)
+            .Select(i => manifest + i)
+            .Prepend(manifest)
+            .ToArray();
+
+        var response = await new OperationsMutations().TriggerManifests(ids, Operations, default);
+
+        response.Success.Should().BeFalse();
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.WorkQueues.AnyAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task TriggerGroups_TriggersEveryMemberOfEachGroup_AndNotesTheUnknownIds()
+    {
+        var groupA = await SeedGroup(enabled: true);
+        var groupB = await SeedGroup(enabled: true);
+        await SeedManifest(groupA, enabled: true);
+        await SeedManifest(groupA, enabled: true);
+        await SeedManifest(groupB, enabled: true);
+
+        var response = await new OperationsMutations().TriggerGroups(
+            [groupA, groupB, 999_999],
+            Operations,
+            default
+        );
+
+        response.Success.Should().BeTrue(response.Message);
+        response.Matched.Should().Be(2, "matched counts the groups found");
+        response.Queued.Should().Be(3, "the other counts are of manifests");
+        response.Skipped.Should().Be(1);
+        response.Notes.Should().ContainSingle().Which.Id.Should().Be(999_999);
+    }
+
+    [Test]
+    public async Task TriggerGroups_AnEmptyList_IsRefused()
+    {
+        (await new OperationsMutations().TriggerGroups([], Operations, default))
+            .Success.Should()
+            .BeFalse();
+    }
+
+    [Test]
+    public async Task CancelGroups_FlagsTheRunningRunsOfEveryListedGroup()
+    {
+        var groupA = await SeedGroup(enabled: true);
+        var groupB = await SeedGroup(enabled: true);
+        var other = await SeedGroup(enabled: true);
+        var inA = await SeedRunOf(await SeedManifest(groupA, enabled: true), TrainState.Pending);
+        var inB = await SeedRunOf(await SeedManifest(groupB, enabled: true), TrainState.InProgress);
+        var done = await SeedRunOf(await SeedManifest(groupB, enabled: true), TrainState.Completed);
+        var outside = await SeedRunOf(
+            await SeedManifest(other, enabled: true),
+            TrainState.InProgress
+        );
+
+        var response = await new OperationsMutations().CancelGroups(
+            [groupA, groupB],
+            Operations,
+            default
+        );
+
+        response.Success.Should().BeTrue(response.Message);
+        response.Count.Should().Be(2);
+        await using var db = await _factory.CreateDbContextAsync(default);
+        (await db.Metadatas.Where(m => m.CancellationRequested).Select(m => m.Id).ToListAsync())
+            .Should()
+            .BeEquivalentTo([inA, inB]);
+        (
+            await db.Metadatas.AnyAsync(m =>
+                (m.Id == done || m.Id == outside) && m.CancellationRequested
+            )
+        )
+            .Should()
+            .BeFalse();
+    }
+
+    [Test]
+    public async Task CancelGroups_MoreThanOneBatch_IsRefused()
+    {
+        var ids = Enumerable.Range(1, OperationsService.MaxBatchSize + 1).Select(i => (long)i);
+
+        var response = await new OperationsMutations().CancelGroups(
+            ids.ToArray(),
+            Operations,
+            default
+        );
+
+        response.Success.Should().BeFalse();
+        response.Count.Should().Be(0);
+    }
+
+    private async Task<long> SeedRunOf(long manifestId, TrainState state)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var meta = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Trax.X.Batch",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+                ManifestId = manifestId,
+            }
+        );
+        meta.TrainState = state;
+        await db.Track(meta);
+        await db.SaveChanges(default);
+        return meta.Id;
+    }
+
     private class BatchFakeTrain { }
 }

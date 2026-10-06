@@ -8,7 +8,7 @@ namespace Trax.Api.GraphQL.Startup;
 
 /// <summary>
 /// Fails the host at startup when a type extension added a field that inherits no authorization
-/// gate and declares none. Materialising the schema is what runs
+/// gate and declares none, or extends a type the schema does not have. Materialising the schema is what runs
 /// <see cref="TypeExtensionExposureInterceptor"/>, so the check has to own a schema build rather
 /// than read a registration list.
 /// </summary>
@@ -40,7 +40,7 @@ internal sealed class TypeExtensionExposureValidator(
             return;
 
         throw new InvalidOperationException(
-            $"{violations.Count} GraphQL field(s) cannot be served as declared:"
+            $"{violations.Count} GraphQL field(s) or type extension(s) cannot be served as declared:"
                 + Environment.NewLine
                 + Environment.NewLine
                 + string.Join(

@@ -65,4 +65,13 @@ public record ExecutionDetail(
     string? Executor = null,
     string? HostLabels = null,
     long? ReplayDecisionsOf = null
-);
+)
+{
+    /// <summary>
+    /// True when the execution was queued to replay the decisions of
+    /// <see cref="ReplayDecisionsOf"/> and asked its deciders afresh instead, because that replay
+    /// could not be honoured (the run it replays was not found, for one). False for a run that
+    /// replayed, or was never queued to.
+    /// </summary>
+    public bool ReplayAbandoned { get; init; }
+}

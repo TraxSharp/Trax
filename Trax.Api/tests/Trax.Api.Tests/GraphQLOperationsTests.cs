@@ -21,6 +21,7 @@ namespace Trax.Api.Tests;
 public class GraphQLOperationsTests
 {
     private ITraxScheduler _scheduler = null!;
+    private Trax.Scheduler.Services.Operations.IOperationsService _operations = null!;
     private ITraxHealthService _healthService = null!;
     private ITrainDiscoveryService _discoveryService = null!;
     private ServiceProvider _serviceProvider = null!;
@@ -29,6 +30,7 @@ public class GraphQLOperationsTests
     public void SetUp()
     {
         _scheduler = Substitute.For<ITraxScheduler>();
+        _operations = Substitute.For<Trax.Scheduler.Services.Operations.IOperationsService>();
         _healthService = Substitute.For<ITraxHealthService>();
         _discoveryService = Substitute.For<ITrainDiscoveryService>();
 
@@ -158,9 +160,18 @@ public class GraphQLOperationsTests
     #region Mutation Tests
 
     [Test]
-    public async Task TriggerManifest_CallsScheduler()
+    public async Task TriggerManifest_CallsTheOperationsService()
     {
         // Arrange
+        _operations
+            .TriggerManifestAsync("test-job", null, false, Arg.Any<CancellationToken>())
+            .Returns(
+                new Trax.Scheduler.Services.Operations.TriggerManifestResult(
+                    true,
+                    "Manifest 'test-job' triggered: queued a new run (work queue entry 1), due now.",
+                    new ManifestTriggerResult(1, true, null, false, null)
+                )
+            );
         var executor = await BuildExecutor();
 
         // Act
@@ -183,8 +194,10 @@ public class GraphQLOperationsTests
         operationResult!.Errors.Should().BeNullOrEmpty();
         var json = operationResult.ToJson();
         json.Should().Contain("true");
-        json.Should().Contain("Manifest triggered: its queued run is due now");
-        await _scheduler.Received(1).TriggerAsync("test-job", Arg.Any<CancellationToken>());
+        json.Should().Contain("queued a new run");
+        await _operations
+            .Received(1)
+            .TriggerManifestAsync("test-job", null, false, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -276,7 +289,23 @@ public class GraphQLOperationsTests
     public async Task TriggerGroup_ReturnsCount()
     {
         // Arrange
-        _scheduler.TriggerGroupAsync(42L, Arg.Any<CancellationToken>()).Returns(3);
+        _operations
+            .TriggerManifestGroupsAsync(
+                Arg.Is<IReadOnlyCollection<long>>(ids => ids != null && ids.Single() == 42L),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new Trax.Scheduler.Services.Operations.BatchTriggerResult(
+                    true,
+                    1,
+                    3,
+                    0,
+                    0,
+                    0,
+                    "3 queued across 1 of 1 manifest group(s).",
+                    []
+                )
+            );
 
         var executor = await BuildExecutor();
 
@@ -362,6 +391,7 @@ public class GraphQLOperationsTests
         // Register mocks AFTER AddTraxGraphQL so they override the concrete registrations
         services.AddScoped(_ => _healthService);
         services.AddScoped(_ => _scheduler);
+        services.AddScoped(_ => _operations);
 
         _serviceProvider = services.BuildServiceProvider();
 

@@ -27,7 +27,8 @@ namespace Trax.Api.Tests;
 /// A <c>[TraxSensitive]</c> member is masked in every copy of a train input a read returns, and a
 /// run whose recorded input was masked is never re-queued with the mask in place of the value.
 /// A work queue entry and a manifest keep their input unmasked because a run starts from it, so
-/// the reads mask those copies themselves.
+/// the reads mask those copies themselves, with the scheduler's <c>TransportInputRedaction</c>, whose
+/// own tests are in Trax.Scheduler.
 /// </summary>
 [TestFixture]
 public class SensitiveInputCopiesTests
@@ -36,6 +37,15 @@ public class SensitiveInputCopiesTests
 
     private IDataContextProviderFactory _factory = null!;
     private ITrainDiscoveryService _discovery = null!;
+
+    // The detail resolver reads through the operations service, as a host registers it.
+    private IOperationsService Operations =>
+        new OperationsService(
+            _discovery,
+            _factory,
+            new SchedulerConfiguration(),
+            Substitute.For<ITrainExecutionService>()
+        );
 
     [SetUp]
     public void SetUp()
@@ -134,7 +144,7 @@ public class SensitiveInputCopiesTests
             id = entry.Id;
         }
 
-        var detail = await new WorkQueueQueries().GetDetail(id, _factory, _discovery, default);
+        var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
 
         var input = Parse(detail!.Input);
         input.GetProperty("accountId").GetString().Should().Be("acct-1");
@@ -197,7 +207,7 @@ public class SensitiveInputCopiesTests
             id = entry.Id;
         }
 
-        var detail = await new WorkQueueQueries().GetDetail(id, _factory, _discovery, default);
+        var detail = await new WorkQueueQueries().GetDetail(id, Operations, default);
 
         // Nothing shows the copy holds no sensitive member, so none of it is shown.
         IsMarker(Parse(detail!.Input)).Should().BeTrue(detail.Input);
@@ -226,7 +236,7 @@ public class SensitiveInputCopiesTests
             id = entry.Id;
         }
 
-        return (await new WorkQueueQueries().GetDetail(id, _factory, _discovery, default))!.Input;
+        return (await new WorkQueueQueries().GetDetail(id, Operations, default))!.Input;
     }
 
     private async Task<string?> ReadManifestProperties(string json, Type inputType)
@@ -395,53 +405,6 @@ public class SensitiveInputCopiesTests
         );
 
         IsMarker(Parse(input)).Should().BeTrue(input);
-    }
-
-    [Test]
-    public void A_masked_open_ended_member_is_never_read_back_as_a_value()
-    {
-        var read = () =>
-            JsonSerializer.Deserialize<UntypedPaymentInput>(
-                """{"accountId":"acct-8","details":{"_redacted":true}}""",
-                TransportInputRedaction.WriteOptions
-            );
-
-        read.Should().Throw<NotSupportedException>();
-    }
-
-    [Test]
-    public void A_registration_whose_input_type_has_no_full_name_matches_no_stored_name()
-    {
-        var openParameter = typeof(List<>).GetGenericArguments()[0];
-        var discovery = Substitute.For<ITrainDiscoveryService>();
-        discovery.DiscoverTrains().Returns([Registration(openParameter)]);
-
-        TransportInputRedaction.FindInputType(discovery, "T").Should().BeNull();
-    }
-
-    [TestCase(typeof(object), true)]
-    [TestCase(typeof(JsonElement?), true)]
-    [TestCase(typeof(System.Text.Json.Nodes.JsonArray), true)]
-    [TestCase(typeof(JsonDocument), true)]
-    [TestCase(typeof(System.Collections.ArrayList), true)]
-    [TestCase(typeof(List<List<object>>), true)]
-    [TestCase(typeof(IEnumerable<KeyValuePair<string, JsonElement>>), true)]
-    [TestCase(typeof(string), false)]
-    [TestCase(typeof(int?), false)]
-    [TestCase(typeof(Card), false)]
-    [TestCase(typeof(Dictionary<string, List<Card>>), false)]
-    [TestCase(typeof(SelfNested), false)]
-    public void Whether_a_member_type_can_hold_undeclared_members(Type type, bool openEnded) =>
-        TransportInputRedaction.IsOpenEnded(type, depth: 0).Should().Be(openEnded);
-
-    /// <summary>A collection whose element is itself: looked through a bounded number of times.</summary>
-    internal sealed class SelfNested : IEnumerable<SelfNested>
-    {
-        public IEnumerator<SelfNested> GetEnumerator() =>
-            Enumerable.Empty<SelfNested>().GetEnumerator();
-
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
-            GetEnumerator();
     }
 
     internal sealed record Card([property: TraxSensitive] string Number, string Brand);

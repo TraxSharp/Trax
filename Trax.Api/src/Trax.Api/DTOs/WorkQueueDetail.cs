@@ -55,4 +55,11 @@ public record WorkQueueDetail(
     string? Input,
     long? SubjectHeldBy,
     long? SubjectQueuedBehind
-);
+)
+{
+    /// <summary>
+    /// The execution whose recorded decisions the run this entry starts will replay (a requeue,
+    /// or a manifest's retry that replays); <c>null</c> when it will ask its questions afresh.
+    /// </summary>
+    public long? ReplayDecisionsOf { get; init; }
+}

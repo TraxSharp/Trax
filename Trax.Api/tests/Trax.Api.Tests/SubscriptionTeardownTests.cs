@@ -182,6 +182,7 @@ public class SubscriptionTeardownTests
         var subscribe = () =>
             new LifecycleSubscriptions()
                 .SubscribeToTrainStarted(
+                    externalId: null,
                     receiver,
                     provider.GetRequiredService<ITopicEventSender>(),
                     provider.GetRequiredService<LifecycleSubscriptionAccess>(),

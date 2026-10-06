@@ -5,6 +5,7 @@ using HotChocolate.Execution.Caching;
 using HotChocolate.Language;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
+using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.Tests.PersistedOperations.Fixtures;
 
@@ -26,6 +27,10 @@ public class PersistedOperationCrossNodeTests
     private const string AdrHint =
         "a persisted-operation id means one document on every node "
         + "(Trax.Api docs/adr/0026-a-persisted-operation-id-means-one-document-on-every-node.md)";
+
+    // The two nodes meet on an exchange of their own, so another run on the same broker never
+    // invalidates their caches.
+    private readonly string _exchange = RunExchange.New();
 
     private ServiceProvider _nodeA = null!;
     private ServiceProvider _nodeB = null!;
@@ -53,6 +58,7 @@ public class PersistedOperationCrossNodeTests
                 .StopAsync(CancellationToken.None);
             await node.DisposeAsync();
         }
+        await RunExchange.DeleteAsync(AmqpUri, _exchange);
     }
 
     [SetUp]
@@ -136,9 +142,10 @@ public class PersistedOperationCrossNodeTests
             .Be(0, AdrHint);
     }
 
-    private static async Task<ServiceProvider> StartNodeAsync()
+    private async Task<ServiceProvider> StartNodeAsync()
     {
         var node = await GraphQLFixture.BuildAsync(po => po.UseRabbitMqInvalidation(AmqpUri));
+        node.GetRequiredService<PersistedOperationsOptions>().RabbitMqExchange = _exchange;
         await node.GetRequiredService<PersistedOperationReceiverService>()
             .StartAsync(CancellationToken.None);
         // Build the executor now, so the invalidator knows the schema before any broadcast.

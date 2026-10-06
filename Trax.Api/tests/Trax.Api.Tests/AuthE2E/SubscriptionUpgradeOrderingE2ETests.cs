@@ -68,7 +68,8 @@ public class SubscriptionUpgradeOrderingE2ETests
         services.AddLogging();
         services.AddRouting();
         services.AddAuthentication();
-        services.AddAuthorization();
+        // The scanned trains include one gated by AdminPolicy, which must be registered.
+        services.AddAuthorization(o => o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin")));
         services.AddTrax(trax =>
             trax.AddEffects(effects => effects.UsePostgres(cs).AddJson())
                 .AddMediator(typeof(AuthE2EHost).Assembly)

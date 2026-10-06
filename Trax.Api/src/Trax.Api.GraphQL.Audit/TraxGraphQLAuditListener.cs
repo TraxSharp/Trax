@@ -5,6 +5,7 @@ using HotChocolate.Execution;
 using HotChocolate.Execution.Instrumentation;
 using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
+using HotChocolate.Resolvers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -38,6 +39,16 @@ public sealed class TraxGraphQLAuditListener(
     /// </summary>
     private const string ExceptionKey = "Trax.Audit.RequestException";
 
+    /// <summary>
+    /// Key under which <see cref="ExecuteRequest"/> keeps the caller it captured, so an error in a
+    /// later event of an accepted subscription, which arrives after the request scope ended and
+    /// outside the HTTP request, is recorded against the same caller.
+    /// </summary>
+    private const string PrincipalKey = "Trax.Audit.Principal";
+
+    /// <summary>Metadata on an entry recording an error in one event of an accepted subscription.</summary>
+    internal const string SubscriptionEventKey = "subscriptionEvent";
+
     private readonly TraxAuditOptions _options = options.Value;
 
     /// <inheritdoc />
@@ -48,6 +59,7 @@ public sealed class TraxGraphQLAuditListener(
             var startTicks = timeProvider.GetTimestamp();
             var startTime = timeProvider.GetUtcNow();
             var principal = CapturePrincipal();
+            context.ContextData[PrincipalKey] = principal;
 
             return new RequestScope(this, context, startTicks, startTime, principal);
         }
@@ -66,6 +78,249 @@ public sealed class TraxGraphQLAuditListener(
     /// </remarks>
     public override void RequestError(RequestContext context, Exception exception) =>
         context.ContextData[ExceptionKey] = exception;
+
+    /// <summary>
+    /// Key under which <see cref="OnSubscriptionEvent"/> parks the collector for the event being
+    /// executed. A subscription executes its events one at a time, so a request holds at most one.
+    /// </summary>
+    private const string EventErrorsKey = "Trax.Audit.EventErrors";
+
+    /// <summary>Metadata on a failed event's entry: how many errors the event raised.</summary>
+    internal const string SubscriptionEventErrorCountKey = "subscriptionEventErrors";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Opens a collector for one event of an accepted subscription. Every error the event raises,
+    /// in any resolver or outside them, goes into it, and the event leaves exactly one entry when
+    /// it completes, however many fields failed. See
+    /// <c>docs/adr/0035-a-refused-request-is-always-audited.md</c>.
+    /// </remarks>
+    public override IDisposable OnSubscriptionEvent(RequestContext context, ulong subscriptionId)
+    {
+        try
+        {
+            var errors = new EventErrors(_options.MaxErrorTextLength);
+            context.ContextData[EventErrorsKey] = errors;
+            return new EventScope(this, context, errors);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Trax audit listener failed to start capturing an event.");
+            return EmptyScope;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A resolver error inside an event of an accepted subscription. The subscribe step ran, and
+    /// was audited or skipped, long before; each failing event is recorded,
+    /// whatever <see cref="TraxAuditOptions.SkipSubscriptions"/> says, because only a successful
+    /// request is skipped. The error joins the event's collector, so a failing event is one entry
+    /// however many of its fields fail. A query's or mutation's resolver errors are already part
+    /// of its request's entry. See <c>docs/adr/0035-a-refused-request-is-always-audited.md</c>.
+    /// </remarks>
+    public override void ResolverError(IMiddlewareContext context, IError error)
+    {
+        try
+        {
+            if (context.Operation.Kind != OperationType.Subscription)
+                return;
+
+            RecordSubscriptionEventError(
+                context.ContextData,
+                context.Operation.Name,
+                context.Operation.Document,
+                _options.RecordErrorMessages ? error.Message : Describe(error)
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Trax audit listener failed to record a subscription event error."
+            );
+            channel.RecordDropped(
+                1,
+                "Trax audit listener failed to record a subscription event error."
+            );
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// An accepted subscription's event failed outside any resolver, such as its source stream
+    /// throwing. Recorded like a resolver error in an event: inside an event it joins that event's
+    /// entry; a source stream that throws between events ends the subscription and leaves one
+    /// entry of its own.
+    /// </remarks>
+    public override void SubscriptionEventError(
+        RequestContext context,
+        ulong subscriptionId,
+        Exception exception
+    )
+    {
+        try
+        {
+            context.TryGetOperation(out var operation);
+            RecordSubscriptionEventError(
+                context.ContextData,
+                operation?.Name ?? context.Request.OperationName,
+                RequestDocument(context),
+                DescribeException(exception)
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Trax audit listener failed to record a subscription event error."
+            );
+            channel.RecordDropped(
+                1,
+                "Trax audit listener failed to record a subscription event error."
+            );
+        }
+    }
+
+    /// <summary>
+    /// Adds the error to the collector of the event being executed, or, outside an event (the
+    /// subscribe step, or a source stream that throws between events), records it at once.
+    /// </summary>
+    private void RecordSubscriptionEventError(
+        IDictionary<string, object?> contextData,
+        string? operationName,
+        DocumentNode? document,
+        string errorText
+    )
+    {
+        if (contextData.TryGetValue(EventErrorsKey, out var open) && open is EventErrors errors)
+        {
+            errors.Add(errorText, operationName, document);
+            return;
+        }
+
+        EnqueueSubscriptionEventError(contextData, operationName, document, errorText, 1);
+    }
+
+    private void CompleteEvent(RequestContext context, EventErrors errors)
+    {
+        try
+        {
+            context.ContextData.Remove(EventErrorsKey);
+            if (errors.Count == 0)
+                return;
+
+            EnqueueSubscriptionEventError(
+                context.ContextData,
+                errors.OperationName,
+                errors.Document,
+                errors.Text,
+                errors.Count
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Trax audit listener failed to record a subscription event error."
+            );
+            channel.RecordDropped(
+                1,
+                "Trax audit listener failed to record a subscription event error."
+            );
+        }
+    }
+
+    private void EnqueueSubscriptionEventError(
+        IDictionary<string, object?> contextData,
+        string? operationName,
+        DocumentNode? document,
+        string errorText,
+        int errorCount
+    )
+    {
+        var principal =
+            contextData.TryGetValue(PrincipalKey, out var captured)
+            && captured is ValueTuple<string, string?> known
+                ? known
+                : (_options.DefaultPrincipalId, (string?)null);
+
+        var text = document is null
+            ? string.Empty
+            : AuditLiteralStripper.Strip(document).ToString();
+
+        channel.TryEnqueue(
+            new TraxAuditEntry(
+                PrincipalId: principal.Item1,
+                PrincipalType: principal.Item2,
+                OperationName: Truncate(operationName, _options.MaxOperationNameLength),
+                Document: Truncate(text, _options.MaxDocumentLength)!,
+                Variables: null,
+                DurationMs: 0,
+                Timestamp: timeProvider.GetUtcNow(),
+                Success: false,
+                ErrorText: Truncate(errorText, _options.MaxErrorTextLength),
+                Metadata: new Dictionary<string, string>
+                {
+                    [SubscriptionEventKey] = "error",
+                    [SubscriptionEventErrorCountKey] = errorCount.ToString(
+                        CultureInfo.InvariantCulture
+                    ),
+                }
+            )
+        );
+    }
+
+    /// <summary>
+    /// The errors one subscription event raised. Resolvers of one event can run in parallel, so it
+    /// locks. It keeps only enough text to fill <see cref="TraxAuditOptions.MaxErrorTextLength"/>,
+    /// and counts the rest, so an event with thousands of failing fields costs one bounded entry.
+    /// </summary>
+    private sealed class EventErrors(int maxTextLength)
+    {
+        private readonly Lock _gate = new();
+        private readonly System.Text.StringBuilder _text = new();
+
+        public int Count { get; private set; }
+
+        public string? OperationName { get; private set; }
+
+        public DocumentNode? Document { get; private set; }
+
+        public string Text
+        {
+            get
+            {
+                lock (_gate)
+                    return _text.ToString();
+            }
+        }
+
+        public void Add(string errorText, string? operationName, DocumentNode? document)
+        {
+            lock (_gate)
+            {
+                Count++;
+                OperationName ??= operationName;
+                Document ??= document;
+                // One character past the cap is enough for the entry to be marked truncated.
+                if (_text.Length > maxTextLength)
+                    return;
+                if (_text.Length > 0)
+                    _text.Append("; ");
+                _text.Append(errorText);
+            }
+        }
+    }
+
+    private sealed class EventScope(
+        TraxGraphQLAuditListener listener,
+        RequestContext context,
+        EventErrors errors
+    ) : IDisposable
+    {
+        public void Dispose() => listener.CompleteEvent(context, errors);
+    }
 
     /// <summary>
     /// Both skips need the compiled operation, which exists only partway through the pipeline,
@@ -134,10 +389,7 @@ public sealed class TraxGraphQLAuditListener(
             var entry = new TraxAuditEntry(
                 PrincipalId: principal.Id,
                 PrincipalType: principal.Type,
-                OperationName: Truncate(
-                    context.Request.OperationName,
-                    _options.MaxOperationNameLength
-                ),
+                OperationName: Truncate(OperationName(context), _options.MaxOperationNameLength),
                 Document: document,
                 Variables: redactedVariables,
                 DurationMs: (long)elapsed.TotalMilliseconds,
@@ -195,6 +447,31 @@ public sealed class TraxGraphQLAuditListener(
     private static DocumentNode? RequestDocument(RequestContext context) =>
         context.OperationDocumentInfo.Document
         ?? (context.Request.Document as OperationDocument)?.Document;
+
+    /// <summary>
+    /// The operation name the request sent, or, when it sent none, the name the document gives
+    /// its only operation. A client that names an operation only in the document (<c>query
+    /// WhoAmI { ... }</c> with no <c>operationName</c> field) is recorded under that name. A
+    /// document with several operations needs the request field to pick one, so without it
+    /// the name stays empty.
+    /// </summary>
+    private static string? OperationName(RequestContext context)
+    {
+        if (context.Request.OperationName is { } requested)
+            return requested;
+
+        OperationDefinitionNode? only = null;
+        foreach (var definition in RequestDocument(context)?.Definitions ?? [])
+        {
+            if (definition is not OperationDefinitionNode operation)
+                continue;
+            if (only is not null)
+                return null;
+            only = operation;
+        }
+
+        return only?.Name?.Value;
+    }
 
     private const string TruncatedMarker = "...[truncated]";
 

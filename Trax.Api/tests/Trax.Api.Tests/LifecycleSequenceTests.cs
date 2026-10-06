@@ -75,6 +75,33 @@ public class LifecycleSequenceTests
     }
 
     [Test]
+    public async Task ReadLifecycle_FilteredToOneRun_NumbersOnlyThatRunAndStillSignalsAGap()
+    {
+        // Other runs' events received are filtered out, not lost; 4 was lost and could have been
+        // this run's, so it is reported.
+        var events = new[]
+        {
+            Event(1, Visible, "mine"),
+            Event(2, Visible, "other"),
+            Event(3, Visible, "mine"),
+            Event(5, Visible, "mine"),
+        };
+
+        var delivered = new List<long>();
+        await foreach (
+            var e in LifecycleSubscriptions.ReadLifecycle(
+                new ListStream(events),
+                LifecycleVisibility.Operations,
+                0,
+                externalId: "mine"
+            )
+        )
+            delivered.Add(e.Sequence);
+
+        delivered.Should().Equal([1L, 2L, 4L]);
+    }
+
+    [Test]
     public async Task ReadLifecycle_FromTheBaseline_OnlyALaterJumpIsAGap()
     {
         // Subscribed after publish 40: 41 is the first owed; 39 arrived from before it existed.
@@ -145,10 +172,14 @@ public class LifecycleSequenceTests
     private static IEnumerable<TrainLifecycleEvent> Numbered(params long[] numbers) =>
         numbers.Select(n => Event(n, Visible));
 
-    private static TrainLifecycleEvent Event(long publishSequence, string trainName) =>
+    private static TrainLifecycleEvent Event(
+        long publishSequence,
+        string trainName,
+        string externalId = "ext"
+    ) =>
         new(
             MetadataId: publishSequence,
-            ExternalId: "ext",
+            ExternalId: externalId,
             TrainName: trainName,
             TrainState: TrainState.Completed,
             Timestamp: DateTime.UtcNow,

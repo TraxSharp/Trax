@@ -16,6 +16,11 @@ namespace Trax.Api.GraphQL.Audit;
 /// add their own column.
 /// </para>
 /// <para>
+/// <paramref name="OperationName"/> is the request's <c>operationName</c> field, or, when the
+/// request sent none, the name the document gives its only operation. It is cut to
+/// <see cref="TraxAuditOptions.MaxOperationNameLength"/>.
+/// </para>
+/// <para>
 /// <paramref name="Document"/> is the request's document with every string and numeric literal
 /// replaced by a placeholder (<c>""</c> or <c>0</c>). <paramref name="Variables"/> is what the
 /// registered <see cref="ITraxAuditRedactor"/> returned, which by default is <c>null</c>.

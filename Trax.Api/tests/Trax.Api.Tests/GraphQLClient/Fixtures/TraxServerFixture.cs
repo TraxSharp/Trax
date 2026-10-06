@@ -46,8 +46,11 @@ public sealed class TraxServerFixture : IDisposable
                     // TrainAuthorizationService is wired by AddTraxApi and depends on
                     // IAuthorizationService. Development env enables strict DI validation,
                     // so register the authorization stack to satisfy the constructor.
-                    // None of the trains under test are gated, so the policies stay empty.
-                    services.AddAuthorization();
+                    // None of the trains under test are gated, but the scan also finds one gated
+                    // by AdminPolicy, and a policy a train names must be registered.
+                    services.AddAuthorization(o =>
+                        o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
+                    );
 
                     services.AddTrax(trax =>
                         trax.AddEffects(effects => effects.UseInMemory().AddJson())

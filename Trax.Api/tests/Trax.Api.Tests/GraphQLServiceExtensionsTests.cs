@@ -57,6 +57,20 @@ public class GraphQLServiceExtensionsTests
     }
 
     [Test]
+    public async Task UseTraxGraphQL_WithoutAddTraxGraphQL_NamesTheMissingCall()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddRouting();
+        await using var app = builder.Build();
+
+        Action act = () => app.UseTraxGraphQL();
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("UseTraxGraphQL() requires AddTraxGraphQL()*");
+    }
+
+    [Test]
     public async Task AddTraxGraphQL_WithCustomTypeModule_RegistersAndLoadsModule()
     {
         var services = NewMinimalServices();

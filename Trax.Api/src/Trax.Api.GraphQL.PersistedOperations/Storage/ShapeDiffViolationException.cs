@@ -38,13 +38,23 @@ public sealed class ShapeDiffViolationException : PersistedOperationException
     /// </summary>
     public ShapeDiffViolationException(string id, string oldFingerprint, string newFingerprint)
         : base(
-            $"Persisted operation '{id}' edit rejected: response shape changed "
-                + $"(old fingerprint {oldFingerprint[..8]}…, new {newFingerprint[..8]}…). "
-                + "Pass UpsertOptions { BypassShapeDiff = true } if the change is shape-safe."
+            Describe(id, oldFingerprint, newFingerprint)
+                + " Pass UpsertOptions { BypassShapeDiff = true } if the change is shape-safe."
         )
     {
+        Summary = Describe(id, oldFingerprint, newFingerprint);
         Id = id;
         OldFingerprint = oldFingerprint;
         NewFingerprint = newFingerprint;
     }
+
+    /// <summary>
+    /// What was refused, without the lever that overrides it. Each surface adds its own: the
+    /// exception message names the C# option, the GraphQL payload the mutation's input field.
+    /// </summary>
+    internal string Summary { get; }
+
+    private static string Describe(string id, string oldFingerprint, string newFingerprint) =>
+        $"Persisted operation '{id}' edit rejected: response shape changed "
+        + $"(old fingerprint {oldFingerprint[..8]}…, new {newFingerprint[..8]}…).";
 }

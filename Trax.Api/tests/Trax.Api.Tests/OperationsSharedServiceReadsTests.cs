@@ -90,7 +90,9 @@ public class OperationsSharedServiceReadsTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(new LogPage([record], 0, 500, 41));
-        service.CountLogsAsync(Arg.Any<LogQuery>(), Arg.Any<CancellationToken>()).Returns(77);
+        service
+            .CountLogsCappedAsync(Arg.Any<LogQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new LogCount(77, Capped: false));
 
         var page = await new LogQueries().GetLogs(
             service,
@@ -106,5 +108,6 @@ public class OperationsSharedServiceReadsTests
         page.IsEstimatedCount.Should().BeFalse();
         page.Take.Should().Be(500);
         page.NextCursor.Should().Be(41);
+        page.IsCountCapped.Should().BeFalse();
     }
 }

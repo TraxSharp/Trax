@@ -10,13 +10,13 @@ using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
-using Trax.Effect.Services.EffectProviderFactory;
-using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.Effects;
 using Trax.Scheduler.Services.Operations;
 using ManifestExecutionStats = Trax.Api.DTOs.ManifestExecutionStats;
 
@@ -123,70 +123,143 @@ public class OperationsQueries
             )
             {
                 FullName = r.ServiceType.FullName!,
+                HasQueueSubjectKey = r.HasQueueSubjectKey,
             })
             .ToList();
     }
 
     /// <summary>
     /// The observational effects registered in THIS process, with their enabled + toggleable state
-    /// and, for a factory that exposes runtime settings, those settings as JSON. The registry is an
-    /// in-memory per-process singleton, so this reflects the API host only, not the
-    /// scheduler/worker processes where effects run; <c>operations.setEffectEnabled</c> toggles
-    /// one here. Backs the dashboard effects list.
+    /// and, for a factory that exposes runtime settings, those settings: as JSON, and as
+    /// <c>fields</c> an editor can be built from. Read through
+    /// <see cref="IEffectSettingsService"/>, the call the dashboard's effects page makes. The
+    /// registry and each settings object are in-memory per-process singletons, so this reflects the
+    /// API host only, not the scheduler/worker processes where effects run;
+    /// <c>operations.setEffectEnabled</c> and <c>operations.configureEffect</c> change them here.
+    /// Empty when the host registers no effect registry.
     /// </summary>
     /// <remarks>
     /// Settings can hold credentials. They are reachable only here, under the operations
-    /// namespace, so they answer to the same gate as an execution's input, and a settings member
-    /// marked <c>[TraxSensitive]</c> is written as <c>{"_redacted": true}</c>.
+    /// namespace, so they answer to the same gate as an execution's input. A settings member
+    /// marked <c>[TraxSensitive]</c> is written as <c>{"_redacted": true}</c> in the JSON, and its
+    /// field never carries its value.
     /// </remarks>
-    public IReadOnlyList<EffectInfo> GetEffects(
-        [Service] IEffectRegistry registry,
-        [Service] IServiceProvider services
+    public IReadOnlyList<EffectInfo> GetEffects([Service] IEffectSettingsService effectSettings) =>
+        effectSettings
+            .GetEffects()
+            .Select(e => new EffectInfo(
+                e.Name,
+                e.FullName,
+                e.Enabled,
+                e.Toggleable,
+                e.IsConfigurable,
+                e.ConfigurationTypeName,
+                e.Configuration
+            )
+            {
+                Fields = e
+                    .Fields.Select(f => new EffectSettingInfo(
+                        f.Name,
+                        f.TypeName,
+                        f.Kind,
+                        f.Nullable,
+                        f.EnumValues,
+                        f.Sensitive,
+                        f.HasValue,
+                        // The service never reads a sensitive value back; this keeps that true
+                        // here whatever an implementation returns.
+                        f.Sensitive
+                            ? null
+                            : f.Value,
+                        f.Hint
+                    ))
+                    .ToList(),
+            })
+            .ToList();
+
+    /// <summary>
+    /// One run's recorded decisions, in the order it made them: each question it asked a decider,
+    /// the answer it acted on (or refused), and the tracks routing steps took on it. Read through
+    /// <see cref="IOperationsService.GetRecordedDecisionsAsync"/>, the read the dashboard's run
+    /// page makes. Empty for a run that recorded none, and for an id with no run. A run's replay
+    /// link is on <c>executionDetail</c> (<c>replayDecisionsOf</c>, <c>replayAbandoned</c>).
+    /// </summary>
+    /// <remarks>
+    /// An answer to a question about a <c>[TraxSensitive]</c> type is withheld, and so is every
+    /// decision after the run took a track on one; see <see cref="DecisionRecord"/>.
+    /// </remarks>
+    /// <param name="metadataId">The run's id.</param>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="afterId">Only decisions recorded after this one (a page's <c>nextCursor</c>).</param>
+    /// <param name="take">The page size, clamped to 1 through 500.</param>
+    public async Task<DecisionPage> GetDecisions(
+        long metadataId,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct,
+        long? afterId = null,
+        int take = 50
     )
     {
-        return registry
-            .GetAll()
-            .Select(kvp =>
-            {
-                var configurable = services.GetService(kvp.Key) as IConfigurableProviderFactory;
-                return new EffectInfo(
-                    kvp.Key.Name,
-                    kvp.Key.FullName ?? kvp.Key.Name,
-                    kvp.Value,
-                    registry.IsToggleable(kvp.Key),
-                    IsConfigurable: configurable is not null,
-                    ConfigurationTypeName: configurable?.GetConfigurationType().FullName,
-                    Configuration: configurable is null ? null : SerializeSettings(configurable)
-                );
-            })
-            .OrderBy(e => e.FullName, StringComparer.Ordinal)
-            .ToList();
+        RunIdArgument.Require(metadataId);
+
+        var page = await operationsService.GetRecordedDecisionsAsync(
+            metadataId,
+            afterId,
+            OperationsPageBounds.Take(take),
+            ct
+        );
+
+        return new DecisionPage(
+            page.Items.Select(d => new DecisionRecord(
+                    d.Id,
+                    d.MetadataId,
+                    d.QuestionKey,
+                    d.Occurrence,
+                    d.Kind,
+                    d.Question,
+                    d.Answer,
+                    d.Refused,
+                    d.IsRefused,
+                    d.Fingerprint,
+                    d.Model,
+                    d.Decider,
+                    d.Replayed,
+                    d.Shadows,
+                    d.Routes,
+                    d.StateHash,
+                    d.DecidedAt,
+                    d.AnswerWithheld,
+                    d.TrackWithheld
+                )
+                {
+                    ReplayRefused = ReplayRefusedOf(d.Answer),
+                })
+                .ToList(),
+            page.Take,
+            page.NextCursor
+        );
     }
 
-    private static readonly JsonSerializerOptions SettingsJson = new()
+    /// <summary>
+    /// The <c>replay_refused</c> member of a recorded answer, or <c>null</c> when it has none or
+    /// is not a JSON object.
+    /// </summary>
+    private static string? ReplayRefusedOf(string? answer)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        ReferenceHandler = ReferenceHandler.IgnoreCycles,
-        MaxDepth = 8,
-        Converters = { new JsonStringEnumConverter() },
-    };
-
-    /// <summary><see cref="SettingsJson"/> with every <c>[TraxSensitive]</c> member masked.</summary>
-    private static readonly JsonSerializerOptions RedactedSettingsJson =
-        TraxRedaction.WithRedaction(SettingsJson);
-
-    // Serialized against the runtime type so a settings object typed as object still writes
-    // its properties, and a [TraxSensitive] member at any depth is written as the mask, as every
-    // other copy on the operations surface is. A settings type System.Text.Json cannot write
-    // (a delegate, a pointer) reads as null rather than failing the whole effects list.
-    private static string? SerializeSettings(IConfigurableProviderFactory factory)
-    {
-        var settings = factory.GetConfiguration();
+        if (string.IsNullOrEmpty(answer))
+            return null;
         try
         {
-            return JsonSerializer.Serialize(settings, settings.GetType(), RedactedSettingsJson);
+            using var json = JsonDocument.Parse(answer);
+            return
+                json.RootElement.ValueKind == JsonValueKind.Object
+                && json.RootElement.TryGetProperty("replay_refused", out var refused)
+                && refused.ValueKind == JsonValueKind.String
+                ? refused.GetString()
+                : null;
         }
-        catch (Exception e) when (e is NotSupportedException or JsonException)
+        catch (JsonException)
         {
             return null;
         }
@@ -239,6 +312,7 @@ public class OperationsQueries
     /// <param name="nameContains">Only manifests whose train name contains this text.</param>
     /// <param name="afterId">Only manifests older than this id (a keyset cursor).</param>
     /// <param name="manifestGroupId">Only manifests in this group.</param>
+    /// <param name="hideAdminTrains">Leave out the scheduler's own internal trains' manifests (see <c>adminTrainNames</c>).</param>
     public async Task<PagedResult<ManifestSummary>> GetManifests(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -249,6 +323,7 @@ public class OperationsQueries
         string? nameContains = null,
         long? afterId = null,
         long? manifestGroupId = null,
+        bool hideAdminTrains = false,
         [Service] ISqlDialect? sqlDialect = null
     )
     {
@@ -269,12 +344,17 @@ public class OperationsQueries
             baseQuery = baseQuery.Where(m => m.Name.Contains(nameContains));
         if (manifestGroupId.HasValue)
             baseQuery = baseQuery.Where(m => m.ManifestGroupId == manifestGroupId.Value);
+        // A manifest's Name is its train's interface FullName, the form AdminTrains.FullNames
+        // holds; the dashboard's manifests page hides the same rows.
+        if (hideAdminTrains)
+            baseQuery = baseQuery.Where(m => !AdminTrains.FullNames.Contains(m.Name));
 
         var hasFilter =
             isEnabled.HasValue
             || scheduleType.HasValue
             || !string.IsNullOrWhiteSpace(nameContains)
-            || manifestGroupId.HasValue;
+            || manifestGroupId.HasValue
+            || hideAdminTrains;
 
         // A filtered total is exact; an unfiltered one may be estimated. The cursor never
         // changes it: totalCount is the size of the whole list, whichever page this is.
@@ -545,10 +625,17 @@ public class OperationsQueries
 
     /// <summary>
     /// A page of executions. Pass the previous page's <c>nextCursor</c> as <c>afterId</c> to page
-    /// deeply in either order; <c>skip</c> is ignored when <c>afterId</c> is set. The total is exact
-    /// whenever a filter is given; unfiltered, it may be an estimate. Carries no input, output or stack trace;
+    /// deeply in either order; <c>skip</c> is ignored when <c>afterId</c> is set. Unfiltered, the
+    /// total may be an estimate (<c>isEstimatedCount</c>). Filtered by failure text, it counts at
+    /// most 10,000 matches: past that it reads 10,000 with <c>isCountCapped</c> true, a lower bound.
+    /// Under any other filter it is exact. Carries no input, output or stack trace;
     /// <c>executionDetail</c> does.
     /// </summary>
+    /// <remarks>
+    /// <c>failureReasonContains</c> matches text anywhere in the failure reason, ignoring case,
+    /// with <c>%</c>, <c>_</c> and <c>\</c> matching themselves. On Postgres a term of three
+    /// characters or more is looked up in a trigram index; a shorter one reads the run table.
+    /// </remarks>
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="sqlDialect">Resolved from DI when the provider registers one; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
@@ -564,6 +651,11 @@ public class OperationsQueries
     /// <param name="manifestGroupId">Only executions scheduled by a manifest in this group.</param>
     /// <param name="hideAdminTrains">Leave out the scheduler's own internal trains.</param>
     /// <param name="failureClass">Only executions whose failure was classified this way.</param>
+    /// <param name="externalId">Only the execution with this external id (matched exactly).</param>
+    /// <param name="parentId">Only executions started from inside this execution's run.</param>
+    /// <param name="hostName">Only executions run on the machine with this name (matched exactly).</param>
+    /// <param name="failureReasonContains">Only executions whose failure reason contains this text, ignoring case.</param>
+    /// <param name="failureJunction">Only executions that failed in the junction with this name (matched exactly).</param>
     public async Task<PagedResult<ExecutionSummary>> GetExecutions(
         [Service] IDataContextProviderFactory dataContextFactory,
         CancellationToken ct,
@@ -579,6 +671,11 @@ public class OperationsQueries
         long? manifestGroupId = null,
         bool hideAdminTrains = false,
         FailureClass? failureClass = null,
+        string? externalId = null,
+        long? parentId = null,
+        string? hostName = null,
+        string? failureReasonContains = null,
+        string? failureJunction = null,
         [Service] ISqlDialect? sqlDialect = null
     )
     {
@@ -605,6 +702,28 @@ public class OperationsQueries
             filtered = filtered.Where(m => m.StartTime <= startedBefore.Value);
         if (manifestId.HasValue)
             filtered = filtered.Where(m => m.ManifestId == manifestId.Value);
+        // Each of these three seeks an index of its own: ix_metadata_external_id,
+        // ix_metadata_parent_id and ix_metadata_host_name.
+        if (!string.IsNullOrWhiteSpace(externalId))
+            filtered = filtered.Where(m => m.ExternalId == externalId);
+        if (parentId.HasValue)
+            filtered = filtered.Where(m => m.ParentId == parentId.Value);
+        if (!string.IsNullOrWhiteSpace(hostName))
+            filtered = filtered.Where(m => m.HostName == hostName);
+        // ix_metadata_failure_junction holds only the runs that failed, in id order under each
+        // junction, so a page of one junction's failures reads just that page.
+        if (!string.IsNullOrWhiteSpace(failureJunction))
+            filtered = filtered.Where(m => m.FailureJunction == failureJunction);
+        // Lowered, with the term's wildcards escaped: the expression
+        // ix_metadata_failure_reason_trgm is built over, so a rare term reads only its matches.
+        var textFilter = !string.IsNullOrEmpty(failureReasonContains);
+        if (textFilter)
+        {
+            var pattern = LikePattern.Contains(failureReasonContains!);
+            filtered = filtered.Where(m =>
+                EF.Functions.Like(m.FailureReason!.ToLower(), pattern, LikePattern.Escape)
+            );
+        }
         if (manifestGroupId.HasValue)
         {
             // Executions for a group = executions of any manifest in that group. The subquery
@@ -625,13 +744,32 @@ public class OperationsQueries
             || manifestId.HasValue
             || manifestGroupId.HasValue
             || hideAdminTrains
-            || failureClass.HasValue;
+            || failureClass.HasValue
+            || !string.IsNullOrWhiteSpace(externalId)
+            || parentId.HasValue
+            || !string.IsNullOrWhiteSpace(hostName)
+            || !string.IsNullOrWhiteSpace(failureJunction)
+            || textFilter;
 
-        // A filtered total is exact; an unfiltered one may be estimated. The cursor never
-        // changes it: totalCount is the size of the whole list, whichever page this is.
-        var (totalCount, isEstimate) = hasFilter
-            ? (await filtered.CountAsync(ct), false)
-            : await CountEstimator.EstimateOrCountAsync(
+        // A text filter counts up to FailureTextCountCap matches and no further, so a common term
+        // never counts every failed run; every other filtered total is exact, and an unfiltered
+        // one may be estimated. The cursor never changes it: totalCount is the size of the whole
+        // list, whichever page this is.
+        int totalCount;
+        var isEstimate = false;
+        var isCapped = false;
+        if (textFilter)
+        {
+            // One match past the cap tells a capped count from an exact one, and the database
+            // stops reading once it has found that many.
+            var count = await filtered.Take(FailureTextCountCap + 1).CountAsync(ct);
+            (totalCount, isCapped) =
+                count > FailureTextCountCap ? (FailureTextCountCap, true) : (count, false);
+        }
+        else if (hasFilter)
+            totalCount = await filtered.CountAsync(ct);
+        else
+            (totalCount, isEstimate) = await CountEstimator.EstimateOrCountAsync(
                 db,
                 sqlDialect,
                 "metadata",
@@ -639,38 +777,11 @@ public class OperationsQueries
                 ct
             );
 
-        // Keyset stays safe in both directions: Newest pages id < afterId (DESC), Oldest
-        // pages id > afterId (ASC). Both use the primary key index.
         var oldest = order == SortOrder.Oldest;
-        var query = filtered;
-        if (afterId.HasValue)
-            query = oldest
-                ? query.Where(m => m.Id > afterId.Value)
-                : query.Where(m => m.Id < afterId.Value);
-        query = oldest ? query.OrderBy(m => m.Id) : query.OrderByDescending(m => m.Id);
-
-        if (!afterId.HasValue && skip > 0)
-            query = query.Skip(skip);
-
-        var items = await query
-            .Take(take)
-            .Select(m => new ExecutionSummary(
-                m.Id,
-                m.ExternalId,
-                m.Name,
-                m.TrainState,
-                m.StartTime,
-                m.EndTime,
-                m.FailureJunction,
-                m.FailureReason,
-                m.ManifestId,
-                m.CancellationRequested,
-                m.HostName,
-                m.HostEnvironment,
-                m.HostInstanceId,
-                m.FailureClass
-            ))
-            .ToListAsync(ct);
+        var items =
+            textFilter && (afterId.HasValue || skip == 0)
+                ? await ReadTextFilteredExecutionsAsync(db, filtered, afterId, oldest, take, ct)
+                : await ReadExecutionsInOrderAsync(filtered, afterId, oldest, skip, take, ct);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;
 
@@ -681,8 +792,118 @@ public class OperationsQueries
             take,
             isEstimate,
             nextCursor
-        );
+        )
+        {
+            IsCountCapped = isCapped,
+        };
     }
+
+    /// <summary>
+    /// The most matches <see cref="GetExecutions"/> counts under a failure text filter: the log
+    /// list's cap, so the two text searches count alike.
+    /// </summary>
+    internal const int FailureTextCountCap = OperationsService.LogCountCap;
+
+    /// <summary>
+    /// How many ids a page filtered by failure text reads in id order from where it starts, before
+    /// it finds the rest of its matches through the trigram index instead. The log list's text
+    /// read takes the same two steps over the same width.
+    /// </summary>
+    /// <remarks>
+    /// In id order alone, a term found only in runs far from where the page starts makes the
+    /// database walk every run in between, matching or not. The window fills the page when the
+    /// term is common near the start, and reading it whole costs a few milliseconds when the term
+    /// is not there; a term rarer than that has few matches, which are cheap to find through the
+    /// index and sort.
+    /// </remarks>
+    internal const int FailureTextWindow = 10_000;
+
+    private static async Task<List<ExecutionSummary>> ReadExecutionsInOrderAsync(
+        IQueryable<Effect.Models.Metadata.Metadata> filtered,
+        long? afterId,
+        bool oldest,
+        int skip,
+        int take,
+        CancellationToken ct
+    )
+    {
+        // Keyset stays safe in both directions: Newest pages id < afterId (DESC), Oldest
+        // pages id > afterId (ASC). Both use the primary key index.
+        var query = filtered;
+        if (afterId.HasValue)
+            query = oldest
+                ? query.Where(m => m.Id > afterId.Value)
+                : query.Where(m => m.Id < afterId.Value);
+        query = oldest ? query.OrderBy(m => m.Id) : query.OrderByDescending(m => m.Id);
+
+        if (!afterId.HasValue && skip > 0)
+            query = query.Skip(skip);
+
+        return await query.Take(take).Select(ToExecutionSummary).ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// A page filtered by failure text, read in two steps (see <see cref="FailureTextWindow"/>).
+    /// The rows and their order are the same as one read in id order.
+    /// </summary>
+    private static async Task<List<ExecutionSummary>> ReadTextFilteredExecutionsAsync(
+        Trax.Effect.Data.Services.DataContext.IDataContext db,
+        IQueryable<Effect.Models.Metadata.Metadata> filtered,
+        long? afterId,
+        bool oldest,
+        int take,
+        CancellationToken ct
+    )
+    {
+        // The id the page reads away from: the cursor, or just past the end of the table it starts at.
+        var start =
+            afterId
+            ?? (
+                oldest
+                    ? await db.Metadatas.MinAsync(m => (long?)m.Id, ct) - 1
+                    : await db.Metadatas.MaxAsync(m => (long?)m.Id, ct) + 1
+            );
+        if (start is not { } origin)
+            return [];
+
+        var edge = oldest ? origin + FailureTextWindow : origin - FailureTextWindow;
+        var near = oldest
+            ? filtered.Where(m => m.Id > origin && m.Id <= edge).OrderBy(m => m.Id)
+            : filtered.Where(m => m.Id < origin && m.Id >= edge).OrderByDescending(m => m.Id);
+        var page = await near.Take(take).Select(ToExecutionSummary).ToListAsync(ct);
+        if (page.Count == take)
+            return page;
+
+        // "+ 0" keeps the primary key from serving the order, so what is sorted is the matches.
+        var far = oldest
+            ? filtered.Where(m => m.Id > edge).OrderBy(m => m.Id + 0)
+            : filtered.Where(m => m.Id < edge).OrderByDescending(m => m.Id + 0);
+        page.AddRange(await far.Take(take - page.Count).Select(ToExecutionSummary).ToListAsync(ct));
+        return page;
+    }
+
+    private static readonly System.Linq.Expressions.Expression<
+        Func<Effect.Models.Metadata.Metadata, ExecutionSummary>
+    > ToExecutionSummary = m => new ExecutionSummary(
+        m.Id,
+        m.ExternalId,
+        m.Name,
+        m.TrainState,
+        m.StartTime,
+        m.EndTime,
+        m.FailureJunction,
+        m.FailureReason,
+        m.ManifestId,
+        m.CancellationRequested,
+        m.HostName,
+        m.HostEnvironment,
+        m.HostInstanceId,
+        m.FailureClass
+    )
+    {
+        ParentId = m.ParentId,
+        CurrentlyRunningJunction = m.CurrentlyRunningJunction,
+    };
 
     /// <summary>
     /// One execution by id, without input, output or stack trace, or <c>null</c> when none has that id.
@@ -713,7 +934,11 @@ public class OperationsQueries
                 m.HostEnvironment,
                 m.HostInstanceId,
                 m.FailureClass
-            ))
+            )
+            {
+                ParentId = m.ParentId,
+                CurrentlyRunningJunction = m.CurrentlyRunningJunction,
+            })
             .FirstOrDefaultAsync(ct);
     }
 
@@ -761,7 +986,10 @@ public class OperationsQueries
                 m.Executor,
                 m.HostLabels,
                 m.ReplayDecisionsOf
-            ))
+            )
+            {
+                ReplayAbandoned = m.ReplayAbandoned,
+            })
             .FirstOrDefaultAsync(ct);
 
         if (detail is null)
@@ -812,7 +1040,11 @@ public class OperationsQueries
                 m.HostEnvironment,
                 m.HostInstanceId,
                 m.FailureClass
-            ))
+            )
+            {
+                ParentId = m.ParentId,
+                CurrentlyRunningJunction = m.CurrentlyRunningJunction,
+            })
             .ToListAsync(ct);
 
         var nextCursor = items.Count > 0 ? items[^1].Id : (long?)null;

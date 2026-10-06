@@ -24,8 +24,9 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 /// <summary>
 /// Fan-out SLAs for the subscription paths the dashboard keeps open: <c>onDataChanged</c>,
 /// fed by every admin write through the change-signal coalescer, the lifecycle stream
-/// (<c>onTrainStateChanged</c>), fed by every run's state changes, and <c>onJunctionEvent</c>,
-/// fed by every run's steps on one shared topic.
+/// (<c>onTrainStateChanged</c>), fed by every run's state changes, whole or followed one run at a
+/// time by <c>externalId</c>, and <c>onJunctionEvent</c>, fed by every run's steps on one shared
+/// topic.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -195,13 +196,16 @@ public class SubscriptionStressTests
     public async Task OnTrainStateChanged_SustainedRuns_ReachEverySubscriberInFullOrSignalAGap()
     {
         // A busy host: 500 state changes a second (250 short runs, each publishing on start and
-        // on completion) for four seconds, published the way the hooks publish them. The feed is
-        // lossy by design: a subscriber that falls behind loses its oldest buffered events. What
-        // must hold is that it is never silent about it: every subscriber either receives every
-        // event, or sees a skip in `sequence` and knows to refetch.
+        // on completion), 2,000 in all, published the way the hooks publish them. The pacing
+        // follows the wall clock, so time spent publishing counts toward each tick rather than
+        // being added to it; on a loaded machine the publisher may still fall short, and the rate
+        // it reached is reported. The feed is lossy by design: a
+        // subscriber that falls behind loses its oldest buffered events. What must hold is that it
+        // is never silent about it: every subscriber either receives every event, or sees a skip
+        // in `sequence` and knows to refetch.
         const int Events = 2_000;
         const int PerTick = 50;
-        var tick = TimeSpan.FromMilliseconds(100);
+        const int TargetPerSecond = 500;
 
         await using var subscribers = await AttachLifecycleSubscribersAsync();
 
@@ -210,9 +214,7 @@ public class SubscriptionStressTests
         {
             await Publish(i);
             if (i % PerTick == 0)
-                // allowed-delay: paces the publisher to a fixed event rate; this is the load
-                // shape under test, not a wait for a condition.
-                await Task.Delay(tick);
+                await PaceAsync(sw, i, TargetPerSecond);
         }
         var published = sw.Elapsed;
 
@@ -227,7 +229,8 @@ public class SubscriptionStressTests
         var gapped = outcomes.Count(o => o.Gap);
         TestContext.Out.WriteLine(
             $"onTrainStateChanged (sustained): {Events:N0} events over "
-                + $"{published.TotalMilliseconds:F0}ms reached all {SubscriberCount:N0} subscribers "
+                + $"{published.TotalMilliseconds:F0}ms ({Events / published.TotalSeconds:F0}/s "
+                + $"against a ceiling of {TargetPerSecond}/s) reached all {SubscriberCount:N0} subscribers "
                 + $"{drained.TotalMilliseconds:F0}ms after the last publish; {complete:N0} received "
                 + $"all of them, {gapped:N0} saw a gap in sequence; events per subscriber min "
                 + $"{outcomes.Min(o => o.Received)} max {outcomes.Max(o => o.Received)}"
@@ -248,6 +251,127 @@ public class SubscriptionStressTests
                 o => !o.Gap || o.Received < Events,
                 "a subscriber that received every event saw no loss, so it must see no skip"
             );
+    }
+
+    [Test]
+    public async Task OnTrainStateChanged_FollowingOneRunByExternalId_EachSubscriberGetsOnlyItsRunInFullOrSignalsAGap()
+    {
+        // The queue-then-follow pattern at scale: many runs changing state at once on the one
+        // lifecycle topic, each followed by its own share of the subscribers through
+        // `externalId`. Every subscriber reads every run's events and keeps only its run's, as on
+        // the junction topic, so what is measured is the fan-out with the filter applied. Paced to
+        // at most 500 state changes a second.
+        const int Runs = 100;
+        const int ChangesPerRun = 20;
+        const int PerTick = 50;
+        const int TargetPerSecond = 500;
+
+        var subscribers = new List<Subscribers<RunChange>>();
+        try
+        {
+            for (var run = 1; run <= Runs; run++)
+            {
+                var metadataId = run;
+                subscribers.Add(
+                    await Subscribers<RunChange>.AttachAsync(
+                        _executor,
+                        "subscription { onTrainStateChanged(externalId: \""
+                            + metadataId.ToString("D32")
+                            + "\") { sequence metadataId trainState } }",
+                        Math.Max(1, SubscriberCount / Runs),
+                        json => new RunChange(
+                            long.Parse(NumberField(json, "metadataId")),
+                            long.Parse(NumberField(json, "sequence")),
+                            StringField(json, "trainState") == "COMPLETED"
+                        ),
+                        prime: () => Publish(metadataId, TrainState.InProgress)
+                    )
+                );
+            }
+
+            var sw = Stopwatch.StartNew();
+            var sent = 0;
+            for (var change = 1; change <= ChangesPerRun; change++)
+            for (var run = 1; run <= Runs; run++)
+            {
+                await Publish(
+                    run,
+                    change == ChangesPerRun ? TrainState.Completed : TrainState.InProgress
+                );
+                if (++sent % PerTick == 0)
+                    await PaceAsync(sw, sent, TargetPerSecond);
+            }
+            var published = sw.Elapsed;
+
+            var delivered = true;
+            foreach (var group in subscribers)
+                delivered &= await group.WaitUntilAsync(
+                    received => received.Any(e => e.Last),
+                    Deadline
+                );
+            var drained = sw.Elapsed - published;
+
+            var outcomes = subscribers
+                .SelectMany((g, index) => g.Streams().Select(s => (Run: index + 1L, s)))
+                .Select(x =>
+                {
+                    var numbers = x
+                        .s.BeforeReset.Concat(x.s.Received)
+                        .Select(e => e.Sequence)
+                        .ToList();
+                    return (
+                        Received: x.s.Received.Count,
+                        Foreign: x.s.Received.Count(e => e.MetadataId != x.Run),
+                        Gap: numbers.Zip(numbers.Skip(1), (a, b) => b != a + 1).Any(g => g)
+                    );
+                })
+                .ToArray();
+            TestContext.Out.WriteLine(
+                $"onTrainStateChanged(externalId): {Runs * ChangesPerRun:N0} changes of {Runs} runs "
+                    + $"over {published.TotalMilliseconds:F0}ms "
+                    + $"({Runs * ChangesPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                    + $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
+                    + $"({outcomes.Length / Runs} per run); drained {drained.TotalMilliseconds:F0}ms "
+                    + $"after the last publish; {outcomes.Count(o => o.Received == ChangesPerRun):N0} "
+                    + $"received their run in full, {outcomes.Count(o => o.Gap):N0} saw a gap"
+            );
+
+            delivered.Should().BeTrue("each run's last state change should reach its followers");
+            drained.Should().BeLessThan(TimeSpan.FromSeconds(1));
+            outcomes
+                .Should()
+                .OnlyContain(o => o.Foreign == 0, "a subscriber following one run sees only it");
+            outcomes
+                .Should()
+                .OnlyContain(
+                    o => o.Received == ChangesPerRun || o.Gap,
+                    "a subscriber that lost changes of its run must see a skip in sequence, per "
+                        + "docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md"
+                );
+        }
+        finally
+        {
+            foreach (var group in subscribers)
+                await group.DisposeAsync();
+        }
+    }
+
+    /// <summary>One state change of a followed run as its subscriber received it.</summary>
+    private sealed record RunChange(long MetadataId, long Sequence, bool Last);
+
+    /// <summary>
+    /// Holds the publisher back until <paramref name="sent"/> events are due at
+    /// <paramref name="perSecond"/>. A publisher already behind that schedule is not delayed, so
+    /// the rate is a ceiling and the time spent publishing is never added to on top of it.
+    /// </summary>
+    private static async Task PaceAsync(Stopwatch clock, int sent, int perSecond)
+    {
+        var due = TimeSpan.FromSeconds((double)sent / perSecond);
+        var ahead = due - clock.Elapsed;
+        if (ahead > TimeSpan.Zero)
+            // allowed-delay: paces the publisher to a ceiling rate; this is the load shape under
+            // test, not a wait for a condition.
+            await Task.Delay(ahead);
     }
 
     /// <summary>
@@ -304,11 +428,12 @@ public class SubscriptionStressTests
         // the subscribers: every subscriber reads every run's steps and keeps only its run's, so
         // the fan-out cost is subscribers x all steps, not subscribers x their run's steps. The
         // steps go through the handler the run's path calls, so its publish bound is what is
-        // measured on the run's side. Paced at 500 steps a second for four seconds.
+        // measured on the run's side. Paced to at most 500 steps a second; the rate reached is
+        // reported, since the publisher's own fan-out may hold it below that.
         const int Runs = 100;
         const int StepsPerRun = 20;
         const int PerTick = 50;
-        var tick = TimeSpan.FromMilliseconds(100);
+        const int TargetPerSecond = 500;
 
         var handler = _provider.GetServices<IJunctionEventHandler>().Single();
         var subscribers = new List<Subscribers<Step>>();
@@ -343,9 +468,7 @@ public class SubscriptionStressTests
                 if (publish.Elapsed > slowest)
                     slowest = publish.Elapsed;
                 if (++sent % PerTick == 0)
-                    // allowed-delay: paces the publisher to a fixed step rate; this is the load
-                    // shape under test, not a wait for a condition.
-                    await Task.Delay(tick);
+                    await PaceAsync(sw, sent, TargetPerSecond);
             }
             var published = sw.Elapsed;
 
@@ -370,7 +493,9 @@ public class SubscriptionStressTests
                 .ToArray();
             TestContext.Out.WriteLine(
                 $"onJunctionEvent: {Runs * StepsPerRun:N0} steps of {Runs} runs over "
-                    + $"{published.TotalMilliseconds:F0}ms to {outcomes.Length:N0} subscribers "
+                    + $"{published.TotalMilliseconds:F0}ms "
+                    + $"({Runs * StepsPerRun / published.TotalSeconds:F0}/s against a ceiling of "
+                    + $"{TargetPerSecond}/s) to {outcomes.Length:N0} subscribers "
                     + $"({outcomes.Length / Runs} per run); slowest publish on the run's path "
                     + $"{slowest.TotalMilliseconds:F0}ms; drained {drained.TotalMilliseconds:F0}ms "
                     + $"after the last publish; {outcomes.Count(o => o.Received == StepsPerRun):N0} "
@@ -445,7 +570,7 @@ public class SubscriptionStressTests
         );
 
     // Through the publisher the lifecycle hooks use, which numbers each event on its topic.
-    private Task Publish(long metadataId) =>
+    private Task Publish(long metadataId, TrainState state = TrainState.Completed) =>
         LifecycleEventPublisher
             .For(_provider.GetRequiredService<ITopicEventSender>())
             .PublishAsync(
@@ -454,7 +579,7 @@ public class SubscriptionStressTests
                     metadataId,
                     metadataId.ToString("D32"),
                     typeof(IStressProbeTrain).FullName!,
-                    TrainState.Completed,
+                    state,
                     DateTime.UtcNow,
                     FailureJunction: null,
                     FailureReason: null,

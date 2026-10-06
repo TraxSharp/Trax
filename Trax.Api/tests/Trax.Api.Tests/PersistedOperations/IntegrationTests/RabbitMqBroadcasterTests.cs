@@ -5,14 +5,15 @@ using RabbitMQ.Client;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
+using Trax.Api.Tests.PersistedOperations.Fixtures;
 
 namespace Trax.Api.Tests.PersistedOperations.IntegrationTests;
 
 /// <summary>
 /// Integration tests against a real RabbitMQ broker (the docker-compose
 /// trax_rabbitmq container). Exercises the publish/receive path end to end.
-/// Tests filter by a unique id-prefix so concurrent runs do not collide on
-/// the shared exchange.
+/// The fixture publishes on an exchange of its own, so concurrent runs on one
+/// broker never receive each other's messages.
 /// </summary>
 [TestFixture]
 [Category("Integration")]
@@ -23,6 +24,18 @@ public class RabbitMqBroadcasterTests
     // configured with these credentials. Default 'guest' would work locally
     // but RabbitMQ rejects it from non-localhost in CI's port-forwarded setup.
     private const string AmqpUri = "amqp://trax:trax123@localhost:5672/";
+
+    private readonly string _exchange = RunExchange.New();
+
+    [OneTimeTearDown]
+    public Task OneTimeTearDown() => RunExchange.DeleteAsync(AmqpUri, _exchange);
+
+    /// <summary>Options for this fixture's own exchange.</summary>
+    private PersistedOperationsOptions OnRunExchange(PersistedOperationsOptions options)
+    {
+        options.RabbitMqExchange = _exchange;
+        return options;
+    }
 
     private static bool IsRabbitMqReachable()
     {
@@ -48,10 +61,12 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task PublishAsync_DeliversMessage_ToReceiverOnSameExchange()
     {
-        var options = new PersistedOperationsBuilder()
-            .WithInMemoryCache()
-            .UseRabbitMqInvalidation(AmqpUri)
-            .Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri)
+                .Build()
+        );
 
         var receivedKey = $"test_{Guid.NewGuid():N}";
         var cache = new RecordingCache();
@@ -99,7 +114,9 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task PublishAsync_CompletesOnlyOnceTheBrokerHasConfirmedIt()
     {
-        var options = new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build()
+        );
         await using var publisher = new RabbitMqPersistedOperationBroadcaster(
             options,
             NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
@@ -124,7 +141,9 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task PublishAsync_AfterItsChannelClosed_OpensAnotherOnTheSameConnection()
     {
-        var options = new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder().UseRabbitMqInvalidation(AmqpUri).Build()
+        );
         await using var publisher = new RabbitMqPersistedOperationBroadcaster(
             options,
             NullLogger<RabbitMqPersistedOperationBroadcaster>.Instance
@@ -173,10 +192,12 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task TwoReceivers_BothObserveSameMessage()
     {
-        var options = new PersistedOperationsBuilder()
-            .WithInMemoryCache()
-            .UseRabbitMqInvalidation(AmqpUri)
-            .Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri)
+                .Build()
+        );
 
         var key = $"twonodes_{Guid.NewGuid():N}";
         var cacheA = new RecordingCache();
@@ -239,10 +260,12 @@ public class RabbitMqBroadcasterTests
         // After Stop, a published message must NOT reach the receiver's cache.
         // This proves StopAsync actually unbinds the consumer rather than
         // leaving it silently running.
-        var options = new PersistedOperationsBuilder()
-            .WithInMemoryCache()
-            .UseRabbitMqInvalidation(AmqpUri)
-            .Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri)
+                .Build()
+        );
         var cache = new RecordingCache();
         var svc = new PersistedOperationReceiverService(
             options,
@@ -283,10 +306,12 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task AReceiverWhoseChannelTheBrokerCloses_EmptiesItsCaches_AndKeepsReceiving()
     {
-        var options = new PersistedOperationsBuilder()
-            .WithInMemoryCache()
-            .UseRabbitMqInvalidation(AmqpUri)
-            .Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri)
+                .Build()
+        );
         var cache = new RecordingCache();
         var generation = new PersistedOperationCacheGeneration();
         var svc = new PersistedOperationReceiverService(
@@ -347,10 +372,12 @@ public class RabbitMqBroadcasterTests
     [Test]
     public async Task ReceiverService_DisposeWithoutStop_ReleasesResourcesIdempotently()
     {
-        var options = new PersistedOperationsBuilder()
-            .WithInMemoryCache()
-            .UseRabbitMqInvalidation(AmqpUri)
-            .Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri)
+                .Build()
+        );
         var svc = new PersistedOperationReceiverService(
             options,
             new RecordingCache(),
@@ -373,10 +400,12 @@ public class RabbitMqBroadcasterTests
         // Publish a non-JSON byte payload directly to the exchange. The
         // receiver's OnMessageAsync should fail to deserialize, log, and
         // nack without crashing the host.
-        var options = new PersistedOperationsBuilder()
-            .WithInMemoryCache()
-            .UseRabbitMqInvalidation(AmqpUri)
-            .Build();
+        var options = OnRunExchange(
+            new PersistedOperationsBuilder()
+                .WithInMemoryCache()
+                .UseRabbitMqInvalidation(AmqpUri)
+                .Build()
+        );
         var cache = new RecordingCache();
         var svc = new PersistedOperationReceiverService(
             options,
@@ -390,13 +419,13 @@ public class RabbitMqBroadcasterTests
         await using var conn = await factory.CreateConnectionAsync();
         await using var channel = await conn.CreateChannelAsync();
         await channel.ExchangeDeclareAsync(
-            exchange: RabbitMqPersistedOperationBroadcaster.ExchangeName,
+            exchange: _exchange,
             type: RabbitMQ.Client.ExchangeType.Fanout,
             durable: true,
             autoDelete: false
         );
         await channel.BasicPublishAsync(
-            exchange: RabbitMqPersistedOperationBroadcaster.ExchangeName,
+            exchange: _exchange,
             routingKey: string.Empty,
             mandatory: false,
             basicProperties: new RabbitMQ.Client.BasicProperties

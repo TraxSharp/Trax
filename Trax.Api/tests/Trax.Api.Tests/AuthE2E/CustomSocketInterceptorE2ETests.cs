@@ -86,7 +86,10 @@ public class CustomSocketInterceptorE2ETests
                         s.AddLogging();
                         s.AddRouting();
                         s.AddAuthentication();
-                        s.AddAuthorization();
+                        // The scanned trains include one gated by AdminPolicy, which must be registered.
+                        s.AddAuthorization(o =>
+                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
+                        );
 
                         if (authMode == AuthMode.JwtBeforeGraphQL)
                             s.AddTraxJwtAuth(jwt => jwt.UseSymmetricKey("https://iss", "aud", key));

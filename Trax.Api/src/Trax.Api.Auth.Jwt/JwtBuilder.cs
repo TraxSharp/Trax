@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -19,6 +20,12 @@ namespace Trax.Api.Auth.Jwt;
 /// </remarks>
 public sealed class JwtBuilder
 {
+    /// <summary>
+    /// The marker the Trax templates and samples put on their demo signing keys. A symmetric key
+    /// whose bytes, read as UTF-8, contain it starts only in Development.
+    /// </summary>
+    internal const string DemoKeyMarker = "do-not-use-in-production";
+
     internal string? Authority { get; private set; }
     internal string? Audience { get; private set; }
     internal string? Issuer { get; private set; }
@@ -27,6 +34,39 @@ public sealed class JwtBuilder
     internal bool RequireHttpsMetadata { get; private set; } = true;
     internal Action<JwtBearerOptions>? BearerOptionsCustomizer { get; private set; }
     internal Action<TokenValidationParameters>? TokenValidationCustomizer { get; private set; }
+
+    /// <summary>
+    /// True when <paramref name="key"/> is symmetric key material carrying
+    /// <see cref="DemoKeyMarker"/>: a <see cref="SymmetricSecurityKey"/>, or a
+    /// <see cref="JsonWebKey"/> of type <c>oct</c>.
+    /// </summary>
+    internal static bool IsDemoKey(SecurityKey? key)
+    {
+        var bytes = key switch
+        {
+            SymmetricSecurityKey symmetric => symmetric.Key,
+            JsonWebKey { Kty: JsonWebAlgorithmsKeyTypes.Octet, K: { Length: > 0 } k } =>
+                DecodeOrNull(k),
+            _ => null,
+        };
+        return bytes is not null
+            && Encoding
+                .UTF8.GetString(bytes)
+                .Contains(DemoKeyMarker, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static byte[]? DecodeOrNull(string base64Url)
+    {
+        try
+        {
+            return Base64UrlEncoder.DecodeBytes(base64Url);
+        }
+        catch (FormatException)
+        {
+            // Not key material the handler could use either; the handler reports it.
+            return null;
+        }
+    }
 
     /// <summary>
     /// Configures the scheme to fetch signing keys from an OIDC-compliant
@@ -50,7 +90,10 @@ public sealed class JwtBuilder
     /// </summary>
     /// <param name="issuer">Expected <c>iss</c> claim value.</param>
     /// <param name="audience">Expected <c>aud</c> claim value.</param>
-    /// <param name="key">Key material; must be at least 32 bytes for HS256.</param>
+    /// <param name="key">
+    /// Key material; must be at least 32 bytes for HS256. A key containing
+    /// <c>do-not-use-in-production</c> starts only in Development.
+    /// </param>
     public JwtBuilder UseSymmetricKey(string issuer, string audience, byte[] key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
@@ -67,7 +110,8 @@ public sealed class JwtBuilder
 
     /// <summary>
     /// Configures an arbitrary <see cref="SecurityKey"/> (asymmetric or symmetric).
-    /// Use when keys are loaded from a secret manager or certificate store.
+    /// Use when keys are loaded from a secret manager or certificate store. A symmetric key
+    /// containing <c>do-not-use-in-production</c> starts only in Development.
     /// </summary>
     public JwtBuilder UseSigningKey(string issuer, string audience, SecurityKey key)
     {
@@ -109,6 +153,8 @@ public sealed class JwtBuilder
     /// Called after Trax sets issuer, audience, signing key, and clock skew.
     /// Multiple calls chain: each callback runs in registration order, so
     /// helpers (e.g. <c>UseCognito</c>) and consumer overrides can compose.
+    /// A symmetric signing key set here that contains <c>do-not-use-in-production</c> starts
+    /// only in Development, as one passed to <see cref="UseSigningKey"/> does.
     /// </summary>
     public JwtBuilder CustomizeTokenValidation(Action<TokenValidationParameters> configure)
     {
@@ -134,7 +180,9 @@ public sealed class JwtBuilder
     /// <c>OnChallenge</c>, <c>OnAuthenticationFailed</c>, etc.). Runs after
     /// Trax has wired <c>OnTokenValidated</c> to the principal resolver, so
     /// do not overwrite the events collection wholesale. Multiple calls
-    /// chain in registration order.
+    /// chain in registration order. A symmetric signing key set here that contains
+    /// <c>do-not-use-in-production</c> starts only in Development, as one passed to
+    /// <see cref="UseSigningKey"/> does.
     /// </summary>
     public JwtBuilder CustomizeBearerOptions(Action<JwtBearerOptions> configure)
     {

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.Subscriptions;
 
 namespace Trax.Api.GraphQL.Audit;
 
@@ -48,6 +49,8 @@ public static class TraxGraphQLBuilderAuditExtensions
         services.AddScoped<ITraxAuditSink, TSink>();
         services.TryAddSingleton<ITraxAuditRedactor, DefaultAuditRedactor>();
         services.AddSingleton<TraxGraphQLAuditListener>();
+        // A socket refused at connection_init never reaches the listener.
+        services.AddSingleton<ISocketRefusalObserver, TraxSocketRefusalAudit>();
         services.AddSingleton<IHostedService, TraxAuditWriter>();
 
         // The options pattern's startup validation: an out-of-range value refuses the host

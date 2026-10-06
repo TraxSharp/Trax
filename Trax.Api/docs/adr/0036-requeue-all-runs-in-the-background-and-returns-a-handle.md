@@ -13,6 +13,10 @@ and, once it succeeds, the count and message the fold returned. `requeueAllJob(i
 again. The fold runs under the host's shutdown token, never the request's, so neither
 HotChocolate's execution timeout nor a client that goes away stops it part-way.
 
+The job runs in Trax.Scheduler's `IDeadLetterRequeueJobs`, registered by `AddScheduler`, and the
+Blazor dashboard's Requeue All starts the same job and polls it (central `0022`, one operation
+per action). The resolvers map the scheduler's job to this surface's types and nothing else.
+
 ## Status
 
 **Accepted.**
@@ -22,8 +26,9 @@ HotChocolate's execution timeout nor a client that goes away stops it part-way.
 The fold over a large backlog takes longer than a request may: about 36 s at 500,000 dead
 letters, and HotChocolate 16 cancels a request after its default `ExecutionTimeout` of 30 s.
 The fold commits a page of manifests at a time, so a cancelled request left most of the work
-done and told the client it had failed. The Blazor dashboard calls the scheduler directly and
-has no such limit, so the two surfaces answered the same action differently.
+done and told the client it had failed. The Blazor dashboard then ran the fold inline in the
+operator's circuit and had no such limit, so the two surfaces answered the same action
+differently; since 2026-10-05 both start the scheduler's job.
 
 ## Considered options
 
@@ -63,12 +68,21 @@ AWAITING_INTERVENTION).totalCount`, can be read on any node.
   gets the host's stopping token rather than the request's and runs on after the request is
   cancelled, the success, failure and shutdown outcomes, one fold per node, the unknown id, and
   the retention.
-- `DeadLetterBatchStressTests` measures the mutation's answer and the whole fold over the
-  stress seed, through the request executor.
+- `DeadLetterBatchStressTests.cs` measures the mutation's answer and the whole fold over the
+  stress seed, through the request executor. It is an explicit stress fixture, so CI does not
+  run it; it is evidence, not a guard.
+
+**Enforced elsewhere:** Trax.Scheduler's
+`Trax.Scheduler.Tests.Integration.UnitTests.DeadLetterRequeueJobsTests` pins the job itself (the
+stopping token, one fold per node, the other-mode refusal, retention), and Trax.Dashboard's
+`Trax.Dashboard.Tests.Integration.UnitTests.Components.RequeueAllJobTests` pins that Requeue All
+starts and polls that job rather than folding in the circuit.
 
 Not covered: nothing checks that a job started on one node is read on that node; a client
 behind a load balancer that spreads requests sees `null` from the others.
 
 ## Changelog
 
+- **2026-10-05**: The job moved to Trax.Scheduler's `IDeadLetterRequeueJobs`, which the
+  dashboard's Requeue All now starts too; the GraphQL contract is unchanged.
 - **2026-10-01**: Recorded.

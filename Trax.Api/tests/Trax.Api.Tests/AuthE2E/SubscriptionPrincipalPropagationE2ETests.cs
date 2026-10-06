@@ -355,6 +355,11 @@ public class SubscriptionPrincipalPropagationE2ETests
             var msg = JsonDocument.Parse(text).RootElement;
             var type = msg.GetProperty("type").GetString();
 
+            if (type is "error" or "complete")
+                throw new InvalidOperationException(
+                    $"Subscription {subscriptionId} ended before an event arrived: {text}"
+                );
+
             if (type == "next")
             {
                 if (msg.TryGetProperty("id", out var idEl) && idEl.GetString() == subscriptionId)

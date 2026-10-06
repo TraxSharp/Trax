@@ -20,7 +20,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
         IAsyncDisposable
 {
     /// <summary>
-    /// Exchange name. Constant so producers and receivers across nodes
+    /// The default exchange name. Constant so producers and receivers across nodes
     /// rendezvous without configuration. The name is namespaced under
     /// <c>trax.</c> to avoid collisions with the train-broadcaster exchange.
     /// </summary>
@@ -73,7 +73,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
 
         await channel
             .BasicPublishAsync(
-                exchange: ExchangeName,
+                exchange: _options.RabbitMqExchange,
                 routingKey: string.Empty,
                 mandatory: false,
                 basicProperties: properties,
@@ -86,7 +86,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             "Published persisted-operation change ({ChangeType}) for id {Id} to exchange {Exchange}.",
             message.ChangeType,
             message.Id,
-            ExchangeName
+            _options.RabbitMqExchange
         );
     }
 
@@ -124,7 +124,7 @@ internal sealed class RabbitMqPersistedOperationBroadcaster
             {
                 await _channel
                     .ExchangeDeclareAsync(
-                        exchange: ExchangeName,
+                        exchange: _options.RabbitMqExchange,
                         type: ExchangeType.Fanout,
                         durable: true,
                         autoDelete: false,

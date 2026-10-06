@@ -3,6 +3,7 @@ using HotChocolate.Language;
 using HotChocolate.Resolvers;
 using HotChocolate.Types;
 using Trax.Api.DTOs;
+using Trax.Api.GraphQL.Startup;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -155,8 +156,23 @@ public partial class TrainTypeModule
     )
     {
         var inputJson = SerializeInput(ctx, registration.InputType);
-        var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
         var executionService = ctx.Service<ITrainExecutionService>();
+
+        // On a host whose store is in memory nothing would ever dispatch the entry, so the
+        // mutation is refused and nothing is queued (docs/adr/0038). The train's authorization
+        // comes first, exactly as the enqueue applies it and still writing nothing, so a caller
+        // the train refuses is told it is not authorized rather than how the host is configured.
+        if (await QueueDispatch.NothingDispatchesAsync(ctx.Services, ctx.RequestAborted))
+        {
+            await executionService.PrepareAsync(
+                registration.ServiceType.FullName!,
+                inputJson,
+                ctx.RequestAborted
+            );
+            throw QueueDispatch.Unavailable();
+        }
+
+        var priority = ctx.ArgumentValue<int?>("priority") ?? 0;
         return await executionService.QueueAsync(
             registration.ServiceType.FullName!,
             inputJson,

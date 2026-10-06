@@ -51,11 +51,12 @@ public abstract class StressTestSetup
     protected static readonly TimeSpan ListBudget = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
-    /// Budget for the dashboard metrics block (several aggregations over the 7-day window).
-    /// Set below the pre-index cost (~630-770ms at 3M rows) so dropping the metrics covering
-    /// indexes from migration 037 fails this suite; the covering indexes land it at ~350-470ms.
+    /// Budget for the dashboard metrics block (several aggregations over the 7-day window, read
+    /// at once on separate connections, so it costs the slowest of them). Set below the cost
+    /// without the metrics covering indexes from migration 037 (~500-760ms at 3M rows) so
+    /// dropping them fails this suite; with them it lands at ~290-345ms.
     /// </summary>
-    protected static readonly TimeSpan MetricsBudget = TimeSpan.FromMilliseconds(600);
+    protected static readonly TimeSpan MetricsBudget = TimeSpan.FromMilliseconds(450);
 
     /// <summary>Budget for the health snapshot (polled continuously by the dashboard).</summary>
     protected static readonly TimeSpan HealthBudget = TimeSpan.FromMilliseconds(300);

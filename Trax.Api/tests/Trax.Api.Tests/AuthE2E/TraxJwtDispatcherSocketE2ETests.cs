@@ -77,7 +77,10 @@ public class TraxJwtDispatcherSocketE2ETests
                             d.MapIssuer(jwks.Issuer, "cognito")
                                 .MapIssuer(InternalIssuer, "internal")
                         );
-                        s.AddAuthorization();
+                        // The scanned trains include one gated by AdminPolicy, which must be registered.
+                        s.AddAuthorization(o =>
+                            o.AddPolicy("AdminPolicy", p => p.RequireRole("Admin"))
+                        );
                         s.AddTrax(trax =>
                             trax.AddEffects(effects => effects.UsePostgres(cs).AddJson())
                                 .AddMediator(typeof(AuthE2EHost).Assembly)

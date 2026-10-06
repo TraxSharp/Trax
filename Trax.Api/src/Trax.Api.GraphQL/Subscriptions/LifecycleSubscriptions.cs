@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using HotChocolate;
@@ -25,40 +26,105 @@ public class LifecycleSubscriptions
     private const string PrincipalState = "ClaimsPrincipal";
 
     /// <summary>
-    /// Fires when a train you may see starts running.
+    /// Fires when a train you may see starts running. Pass <paramref name="externalId"/> to receive only
+    /// the run with that external id, such as the one a queue mutation returned.
     /// </summary>
+    /// <param name="externalId">Only the run with this external id (matched exactly); every run when omitted.</param>
+    /// <param name="e">The event.</param>
     [AuthorizedPerSubscriber]
+    [GraphQLName("onTrainStarted")]
     [Subscribe(With = nameof(SubscribeToTrainStarted))]
-    public TrainLifecycleEvent OnTrainStarted([EventMessage] TrainLifecycleEvent e) => e;
+    public TrainLifecycleEvent OnTrainStarted(
+        string? externalId,
+        [EventMessage] TrainLifecycleEvent e
+    ) => e;
+
+    /// <summary>Kept for binary compatibility; the GraphQL field is the overload taking <c>externalId</c>.</summary>
+    /// <param name="e">The event.</param>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TrainLifecycleEvent OnTrainStarted(TrainLifecycleEvent e) => e;
 
     /// <summary>
-    /// Fires when a train you may see completes successfully.
+    /// Fires when a train you may see completes successfully. Pass <paramref name="externalId"/> to receive only
+    /// the run with that external id, such as the one a queue mutation returned.
     /// </summary>
+    /// <param name="externalId">Only the run with this external id (matched exactly); every run when omitted.</param>
+    /// <param name="e">The event.</param>
     [AuthorizedPerSubscriber]
+    [GraphQLName("onTrainCompleted")]
     [Subscribe(With = nameof(SubscribeToTrainCompleted))]
-    public TrainLifecycleEvent OnTrainCompleted([EventMessage] TrainLifecycleEvent e) => e;
+    public TrainLifecycleEvent OnTrainCompleted(
+        string? externalId,
+        [EventMessage] TrainLifecycleEvent e
+    ) => e;
+
+    /// <summary>Kept for binary compatibility; the GraphQL field is the overload taking <c>externalId</c>.</summary>
+    /// <param name="e">The event.</param>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TrainLifecycleEvent OnTrainCompleted(TrainLifecycleEvent e) => e;
 
     /// <summary>
-    /// Fires when a train you may see fails.
+    /// Fires when a train you may see fails. Pass <paramref name="externalId"/> to receive only
+    /// the run with that external id, such as the one a queue mutation returned.
     /// </summary>
+    /// <param name="externalId">Only the run with this external id (matched exactly); every run when omitted.</param>
+    /// <param name="e">The event.</param>
     [AuthorizedPerSubscriber]
+    [GraphQLName("onTrainFailed")]
     [Subscribe(With = nameof(SubscribeToTrainFailed))]
-    public TrainLifecycleEvent OnTrainFailed([EventMessage] TrainLifecycleEvent e) => e;
+    public TrainLifecycleEvent OnTrainFailed(
+        string? externalId,
+        [EventMessage] TrainLifecycleEvent e
+    ) => e;
+
+    /// <summary>Kept for binary compatibility; the GraphQL field is the overload taking <c>externalId</c>.</summary>
+    /// <param name="e">The event.</param>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TrainLifecycleEvent OnTrainFailed(TrainLifecycleEvent e) => e;
 
     /// <summary>
-    /// Fires when a train you may see is cancelled.
+    /// Fires when a train you may see is cancelled. Pass <paramref name="externalId"/> to receive only
+    /// the run with that external id, such as the one a queue mutation returned.
     /// </summary>
+    /// <param name="externalId">Only the run with this external id (matched exactly); every run when omitted.</param>
+    /// <param name="e">The event.</param>
     [AuthorizedPerSubscriber]
+    [GraphQLName("onTrainCancelled")]
     [Subscribe(With = nameof(SubscribeToTrainCancelled))]
-    public TrainLifecycleEvent OnTrainCancelled([EventMessage] TrainLifecycleEvent e) => e;
+    public TrainLifecycleEvent OnTrainCancelled(
+        string? externalId,
+        [EventMessage] TrainLifecycleEvent e
+    ) => e;
+
+    /// <summary>Kept for binary compatibility; the GraphQL field is the overload taking <c>externalId</c>.</summary>
+    /// <param name="e">The event.</param>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TrainLifecycleEvent OnTrainCancelled(TrainLifecycleEvent e) => e;
 
     /// <summary>
     /// Fires on every state change of a train you may see, including the start, completion, failure
-    /// and cancellation that the other lifecycle subscriptions report individually.
+    /// and cancellation that the other lifecycle subscriptions report individually. Pass
+    /// <paramref name="externalId"/> to follow one run, such as the one a queue mutation returned.
     /// </summary>
+    /// <param name="externalId">Only the run with this external id (matched exactly); every run when omitted.</param>
+    /// <param name="e">The event.</param>
     [AuthorizedPerSubscriber]
+    [GraphQLName("onTrainStateChanged")]
     [Subscribe(With = nameof(SubscribeToTrainStateChanged))]
-    public TrainLifecycleEvent OnTrainStateChanged([EventMessage] TrainLifecycleEvent e) => e;
+    public TrainLifecycleEvent OnTrainStateChanged(
+        string? externalId,
+        [EventMessage] TrainLifecycleEvent e
+    ) => e;
+
+    /// <summary>Kept for binary compatibility; the GraphQL field is the overload taking <c>externalId</c>.</summary>
+    /// <param name="e">The event.</param>
+    [GraphQLIgnore]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TrainLifecycleEvent OnTrainStateChanged(TrainLifecycleEvent e) => e;
 
     /// <summary>
     /// Fires for each step of the run <paramref name="metadataId"/>: a junction starting, completing,
@@ -85,44 +151,76 @@ public class LifecycleSubscriptions
     public DataChangedEvent OnDataChanged([EventMessage] DataChangedEvent e) => e;
 
     internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainStarted(
+        string? externalId,
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainStarted), receiver, sender, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainStarted), externalId, receiver, sender, access, user, ct);
 
     internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainCompleted(
+        string? externalId,
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainCompleted), receiver, sender, access, user, ct);
+    ) =>
+        SubscribeLifecycle(
+            nameof(OnTrainCompleted),
+            externalId,
+            receiver,
+            sender,
+            access,
+            user,
+            ct
+        );
 
     internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainFailed(
+        string? externalId,
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainFailed), receiver, sender, access, user, ct);
+    ) => SubscribeLifecycle(nameof(OnTrainFailed), externalId, receiver, sender, access, user, ct);
 
     internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainCancelled(
+        string? externalId,
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainCancelled), receiver, sender, access, user, ct);
+    ) =>
+        SubscribeLifecycle(
+            nameof(OnTrainCancelled),
+            externalId,
+            receiver,
+            sender,
+            access,
+            user,
+            ct
+        );
 
     internal ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeToTrainStateChanged(
+        string? externalId,
         [Service] ITopicEventReceiver receiver,
         [Service] ITopicEventSender sender,
         [Service] LifecycleSubscriptionAccess access,
         [GlobalState(PrincipalState)] ClaimsPrincipal? user,
         CancellationToken ct
-    ) => SubscribeLifecycle(nameof(OnTrainStateChanged), receiver, sender, access, user, ct);
+    ) =>
+        SubscribeLifecycle(
+            nameof(OnTrainStateChanged),
+            externalId,
+            receiver,
+            sender,
+            access,
+            user,
+            ct
+        );
 
     internal async ValueTask<ISourceStream<JunctionEvent>> SubscribeToJunctionEvent(
         long metadataId,
@@ -142,7 +240,9 @@ public class LifecycleSubscriptions
             throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
 
         const string topic = nameof(OnJunctionEvent);
-        var stream = await receiver.SubscribeAsync<JunctionEvent>(topic, ct).ConfigureAwait(false);
+        var stream = await TopicSubscribe
+            .OneAtATimeAsync<JunctionEvent>(receiver, topic, ct)
+            .ConfigureAwait(false);
         long baseline;
         try
         {
@@ -174,14 +274,15 @@ public class LifecycleSubscriptions
         if (!await access.DataChangesFor(user).ConfigureAwait(false))
             throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
 
-        var stream = await receiver
-            .SubscribeAsync<DataChangedEvent>(nameof(OnDataChanged), ct)
+        var stream = await TopicSubscribe
+            .OneAtATimeAsync<DataChangedEvent>(receiver, nameof(OnDataChanged), ct)
             .ConfigureAwait(false);
         return new SubscriberSourceStream<DataChangedEvent>(stream, Read);
     }
 
     private static async ValueTask<ISourceStream<TrainLifecycleEvent>> SubscribeLifecycle(
         string topic,
+        string? externalId,
         ITopicEventReceiver receiver,
         ITopicEventSender sender,
         LifecycleSubscriptionAccess access,
@@ -193,8 +294,8 @@ public class LifecycleSubscriptions
         if (visibility.IsEmpty)
             throw new GraphQLException(EndpointPolicyRequestMiddleware.NotAuthorized());
 
-        var stream = await receiver
-            .SubscribeAsync<TrainLifecycleEvent>(topic, ct)
+        var stream = await TopicSubscribe
+            .OneAtATimeAsync<TrainLifecycleEvent>(receiver, topic, ct)
             .ConfigureAwait(false);
 
         // Read once the subscription is registered: every event numbered above it is sent to this
@@ -215,12 +316,14 @@ public class LifecycleSubscriptions
 
         return new SubscriberSourceStream<TrainLifecycleEvent>(
             stream,
-            (topicStream, readCt) => ReadLifecycle(topicStream, visibility, baseline, readCt)
+            (topicStream, readCt) =>
+                ReadLifecycle(topicStream, visibility, baseline, externalId, readCt)
         );
     }
 
     /// <summary>
-    /// Reads a lifecycle topic for one subscriber: passes each event through
+    /// Reads a lifecycle topic for one subscriber: keeps only the run with the external id
+    /// <paramref name="externalId"/> when one is given, passes each event through
     /// <paramref name="visibility"/>, and numbers the events it delivers in
     /// <see cref="TrainLifecycleEvent.Sequence"/>, skipping a number after any lost publish.
     /// </summary>
@@ -230,20 +333,27 @@ public class LifecycleSubscriptions
     /// be events this subscriber could not see anyway; the gap is reported regardless, because the
     /// cost of a needless refetch is small and the alternative is a feed that misses state changes
     /// without saying so. The gap is always one skipped number, so a broadcast subscriber does not
-    /// learn how many events other trains produced. See
+    /// learn how many events other trains produced. A subscriber following one run sees the same
+    /// jump for a loss that may have been other runs' events, for the same reason. See
     /// <c>docs/adr/0032-the-lifecycle-feed-is-lossy-and-numbers-its-events.md</c>.
     /// </remarks>
     internal static IAsyncEnumerable<TrainLifecycleEvent> ReadLifecycle(
         ISourceStream<TrainLifecycleEvent> stream,
         LifecycleVisibility visibility,
         long baseline,
+        string? externalId = null,
         CancellationToken ct = default
     ) =>
         ReadNumbered(
             stream,
             baseline,
             e => e.PublishSequence,
-            visibility.Present,
+            string.IsNullOrEmpty(externalId)
+                ? visibility.Present
+                : e =>
+                    string.Equals(e.ExternalId, externalId, StringComparison.Ordinal)
+                        ? visibility.Present(e)
+                        : null,
             (e, sequence) => e with { Sequence = sequence },
             ct
         );

@@ -71,7 +71,7 @@ no site in this repo to build a work queue row (`docs/0017`);
 `NoSilentRegistrationOrderDependenceTests` is unique to this repo and is the census behind
 [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md).
 
-Seven runtime validators fail the host at startup rather than at request time: six under
+Nine runtime validators fail the host at startup rather than at request time: eight under
 `src/Trax.Api.GraphQL/Startup/` and `TraxGraphQLAuthPolicyValidator` alongside the
 authorization code. They derive from `StartupGate` and check in `StartingAsync`, after the
 container is complete and before Kestrel or any worker starts (Api ADR 0001).

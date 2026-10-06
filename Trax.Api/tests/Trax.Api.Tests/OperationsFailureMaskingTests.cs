@@ -59,7 +59,13 @@ public class OperationsFailureMaskingTests
             )
             .ThrowsAsync(new NpgsqlException($"Failed to connect to {UnreachableHost}:5432"));
 
-        using var host = await StartHostAsync(execution, new RecordingSubmitter());
+        // A store that is not the in-memory one, so the enqueue is attempted rather than refused
+        // as having nothing to dispatch it.
+        using var host = await StartHostAsync(
+            execution,
+            new RecordingSubmitter(),
+            dataContextFactory: Substitute.For<IDataContextProviderFactory>()
+        );
 
         var doc = await AdminOperationsAuthorizationTests.PostAsync(
             host,

@@ -277,13 +277,13 @@ public class OperationsExposureTests
         );
 
         var result = await executor.ExecuteAsync(
-            "mutation { operations { triggerManifest(externalId: \"abc\") { success } } }"
+            "mutation { operations { disableManifest(externalId: \"abc\") { success } } }"
         );
 
         var operationResult = result as OperationResult;
         operationResult.Should().NotBeNull();
         operationResult!.Errors.Should().BeNullOrEmpty();
-        await _scheduler!.Received(1).TriggerAsync("abc", Arg.Any<CancellationToken>());
+        await _scheduler!.Received(1).DisableAsync("abc", Arg.Any<CancellationToken>());
     }
 
     [Test]

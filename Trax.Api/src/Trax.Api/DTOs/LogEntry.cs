@@ -6,7 +6,10 @@ namespace Trax.Api.DTOs;
 /// One log record written by a train while it ran, as the paged log read returns it.
 /// </summary>
 /// <param name="Id">The log record's id; pages are keyed on it.</param>
-/// <param name="MetadataId">The id of the execution that wrote it.</param>
+/// <param name="MetadataId">
+/// The id of the execution that wrote it, or 0 when the record names none. Trax's own log writer
+/// does not record the run, so its records carry 0.
+/// </param>
 /// <param name="EventId">The <see cref="Microsoft.Extensions.Logging.EventId"/> the message was logged with (0 when none was given).</param>
 /// <param name="Level">The level it was logged at.</param>
 /// <param name="Category">The logger category, usually the full name of the class that logged it.</param>
