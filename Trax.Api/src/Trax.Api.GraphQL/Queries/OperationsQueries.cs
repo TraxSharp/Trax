@@ -993,6 +993,8 @@ public partial class OperationsQueries
             )
             {
                 ReplayAbandoned = m.ReplayAbandoned,
+                ResumeFrom = m.ResumeFrom,
+                ResumeAt = m.ResumeAt,
             })
             .FirstOrDefaultAsync(ct);
 

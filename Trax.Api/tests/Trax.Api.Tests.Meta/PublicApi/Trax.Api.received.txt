@@ -205,6 +205,8 @@ namespace Trax.Api.DTOs
         public long? ParentId { get; init; }
         public bool ReplayAbandoned { get; init; }
         public long? ReplayDecisionsOf { get; init; }
+        public string? ResumeAt { get; init; }
+        public long? ResumeFrom { get; init; }
         public System.DateTime? ScheduledTime { get; init; }
         public string? StackTrace { get; init; }
         public System.DateTime StartTime { get; init; }

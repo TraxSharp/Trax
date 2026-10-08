@@ -157,6 +157,24 @@ public class RunGraphResumeTests
             .ToDictionary(n => n.GetProperty("id").GetString()!);
         graphQl[Checkpoint].GetProperty("state").GetString().Should().Be("RESTORED");
         graphQl[Summarize].GetProperty("state").GetString().Should().Be("COMPLETED");
+
+        // The run says which run it resumed, as the dashboard's "Resumes" field does.
+        var execution = await _host.GraphQLAsync(
+            $$"""{ operations { executionDetail(id: {{resumed}}) { resumeFrom resumeAt } } }"""
+        );
+        execution
+            .RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse(execution.RootElement.GetRawText());
+        var detail = execution
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("executionDetail");
+        detail.GetProperty("resumeFrom").GetInt64().Should().Be(failed, Adr);
+        detail
+            .GetProperty("resumeAt")
+            .ValueKind.Should()
+            .Be(JsonValueKind.Null, "it resumed after the latest checkpoint");
     }
 
     private async Task<ResumeVerdict> Check(long run, string node)

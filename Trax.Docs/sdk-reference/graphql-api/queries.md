@@ -740,7 +740,10 @@ retry that replays; it is null when the run replays nothing, a run queued to ask
 **Replays Decisions Of**. `replayAbandoned` (`Boolean!`) is `true` when the run was queued to replay
 `replayDecisionsOf` and asked its deciders afresh instead, because that replay could not be honoured;
 `false` for a run that replayed or was never queued to. The decisions themselves are on
-[`decisions`](#decisions).
+[`decisions`](#decisions). `resumeFrom` (`Long`) is the failed or cancelled execution this run
+resumed from a [checkpoint](/docs/sdk-reference/train-methods/checkpoint), shown on the dashboard as
+**Resumes**, and `resumeAt` (`String`) the step it resumed at, null when it resumed after the latest
+checkpoint; both are null for a run that ran from the top.
 
 `input` and `output` can hold credentials. They are on this single-row read and on no list; see
 [Train inputs and the operations gate](#train-inputs-and-the-operations-gate).
