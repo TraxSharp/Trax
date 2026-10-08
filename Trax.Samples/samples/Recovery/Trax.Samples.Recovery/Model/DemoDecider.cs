@@ -1,6 +1,7 @@
 using Trax.Core.Decisions;
 using Trax.Samples.Recovery.Trains.Refund;
 using Trax.Samples.Recovery.Trains.Research;
+using Trax.Samples.Recovery.Trains.Topics;
 
 namespace Trax.Samples.Recovery.Model;
 
@@ -36,6 +37,7 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
                 (ResearchBrief brief, ChoiceQuestion) => ChooseSource(brief),
                 (Findings findings, ScoreQuestion) => ScoreDepth(findings),
                 (RefundCase refund, YesNoQuestion) => ApproveRefund(refund),
+                (CoCitationEvidence evidence, YesNoQuestion) => SameTopic(evidence),
                 _ => throw new InvalidOperationException(
                     $"The demo model cannot answer {question.Key} about {request.State.GetType().Name}."
                 ),
@@ -64,6 +66,17 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         var probability = refund.Amount <= 250m ? 0.93 : 0.62;
         probability -= 0.35 * refund.PriorRefunds;
         return new YesNoAnswer(Math.Round(Math.Clamp(probability, 0.02, 0.98), 2))
+        {
+            Model = ModelName,
+        };
+    }
+
+    // Shared references mean more the more of the slice they connect: in a slice where most papers
+    // cite something another one cites, they mark topics; where few do, they are noise.
+    private static YesNoAnswer SameTopic(CoCitationEvidence evidence)
+    {
+        var linked = evidence.Papers == 0 ? 0 : (double)evidence.LinkedPapers / evidence.Papers;
+        return new YesNoAnswer(Math.Round(Math.Clamp(0.1 + 0.9 * linked, 0.02, 0.98), 2))
         {
             Model = ModelName,
         };

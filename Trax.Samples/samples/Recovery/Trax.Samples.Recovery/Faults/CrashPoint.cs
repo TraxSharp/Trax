@@ -17,4 +17,11 @@ public enum CrashPoint
     /// Every order reaches one of the three, so a crash armed here fires whatever the model answers.
     /// </summary>
     RefundTrack,
+
+    /// <summary>
+    /// The step on the track the topic map's co-citation decision routes to, inside the
+    /// <c>cocitation</c> branch. The branch fails, so the run fails naming it, and the join after
+    /// the branches never writes.
+    /// </summary>
+    CoCitation,
 }

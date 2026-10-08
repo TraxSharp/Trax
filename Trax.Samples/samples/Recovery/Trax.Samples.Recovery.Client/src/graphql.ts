@@ -18,6 +18,7 @@ const STEP = `
   nameWithheld
   trackPosition
   attempt
+  nodeId
 `;
 
 // The sample's own mutation: schedules a one-off manifest (Trax.Api has no ScheduleOnce operation).
@@ -154,6 +155,38 @@ export const WORK_QUEUE_ENTRY = gql`
           id
           status
           metadataId
+        }
+      }
+    }
+  }
+`;
+
+// The run drawn on its train's declared chain: every node, its state, each routing step's tracks
+// and each Parallel step's branches. Three levels of nodes, as deep as the sample's trains go (the gate
+// inside the co-citation branch) and as deep as the server's cycle-depth limit allows.
+const NODE = `id kind junction state replayed trackTaken`;
+export const RUN_GRAPH = gql`
+  query RunGraph($metadataId: Long!) {
+    operations {
+      runGraph(metadataId: $metadataId) {
+        hasGraph
+        nodes {
+          ${NODE}
+          tracks {
+            name
+            taken
+            nodes {
+              ${NODE}
+              tracks {
+                name
+                taken
+                nodes {
+                  ${NODE}
+                  tracks { name taken }
+                }
+              }
+            }
+          }
         }
       }
     }

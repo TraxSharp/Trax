@@ -8,11 +8,25 @@ import {
   JUNCTION_RUNS,
   ON_JUNCTION_EVENT,
   REQUEUE,
+  RUN_GRAPH,
   START_RUN,
   TRIGGER_ASK_AFRESH,
   WORK_QUEUE_ENTRY,
 } from "./graphql";
-import { shownAnswer, type Attempt, type ConsoleLine, type Fork, type Journal, type Phase, type RunInfo, type Scenario, type Step, type Tone } from "./types";
+import {
+  branchOf,
+  shownAnswer,
+  type Attempt,
+  type ConsoleLine,
+  type Fork,
+  type Journal,
+  type Phase,
+  type RunGraph,
+  type RunInfo,
+  type Scenario,
+  type Step,
+  type Tone,
+} from "./types";
 
 const POLL_MS = 500;
 const RANK = { IN_PROGRESS: 0, COMPLETED: 1, FAILED: 1, CANCELLED: 1 } as const;
@@ -29,7 +43,8 @@ interface ExecutionRow {
 /**
  * Follows one demo run: its manifest's attempts (found by polling operations.executions), each
  * attempt's steps (onJunctionEvent, merged with operations.junctionRuns by position), and the
- * decision journal once an attempt ends. Narrates what it sees into console lines.
+ * decision journal once an attempt ends, and its run graph (operations.runGraph) while it runs. Narrates what it
+ * sees into console lines.
  */
 export function useRecoveryRun() {
   const client = useApolloClient();
@@ -44,6 +59,8 @@ export function useRecoveryRun() {
   const narrated = useRef(new Set<string>());
   const subscriptions = useRef(new Map<number, { unsubscribe(): void }>());
   const journaled = useRef(new Set<number>());
+  // Attempts whose run graph was read after they ended: nothing on it changes any more.
+  const graphed = useRef(new Set<number>());
   // The attempts in the order they were found, kept outside React state so narration can label them at once.
   const order = useRef<{ id: number; origin: Attempt["origin"] }[]>([]);
   const stepRank = useRef(new Map<string, number>());
@@ -68,11 +85,18 @@ export function useRecoveryRun() {
       if (!known) return;
       const label = labelOf(known);
       const key = `${attemptId}:${step.position}:${step.state}`;
-      const name = step.nameWithheld ? "(withheld)" : step.name;
+      const branch = branchOf(step.nodeId);
+      const name = (step.nameWithheld ? "(withheld)" : step.name) + (branch ? ` [${branch} branch]` : "");
       if (step.kind === "JUNCTION") {
         if (step.state === "IN_PROGRESS") say(key, "info", `${label} # JUNCTION ${name} is running...`);
         else if (step.state === "COMPLETED")
           say(key, "info", `${label} # JUNCTION ${name} completed in ${Math.round(step.durationMs ?? 0)} ms`);
+        else if (branch)
+          say(
+            key,
+            "error",
+            `${label} # JUNCTION ${name} failed with ${step.failureException ?? "an exception"}. The ${branch} branch has failed, so the run fails naming it before the join writes anything; the manifest will retry it.`,
+          );
         else
           say(
             key,
@@ -132,6 +156,15 @@ export function useRecoveryRun() {
     [client, mergeSteps],
   );
 
+  const readGraph = useCallback(
+    async (attemptId: number) => {
+      const { data } = await client.query({ query: RUN_GRAPH, variables: { metadataId: attemptId } });
+      const graph = data.operations.runGraph as RunGraph | null;
+      setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, graph } : a)));
+    },
+    [client],
+  );
+
   const follow = useCallback(
     (row: ExecutionRow, origin: Attempt["origin"]) => {
       if (subscriptions.current.has(row.id)) return;
@@ -139,7 +172,7 @@ export function useRecoveryRun() {
         origin === "requeue" ? "requeue" : forkRef.current === "askAfresh" && order.current.length > 0 ? "askAfresh" : null;
       order.current.push({ id: row.id, origin });
       setAttempts((all) =>
-        all.some((a) => a.id === row.id) ? all : [...all, { ...row, origin, startedBy, steps: {}, journal: null }],
+        all.some((a) => a.id === row.id) ? all : [...all, { ...row, origin, startedBy, steps: {}, journal: null, graph: null }],
       );
 
       const label = labelOf({ id: row.id, origin });
@@ -201,6 +234,7 @@ export function useRecoveryRun() {
           updateRow(row);
         }
         for (const id of [...subscriptions.current.keys()]) {
+          if (!graphed.current.has(id)) void readGraph(id);
           if (!rows.some((r) => r.id === id)) {
             const one = await client.query({ query: EXECUTION, variables: { id } });
             if (one.data.operations.execution) updateRow(one.data.operations.execution as ExecutionRow);
@@ -216,7 +250,7 @@ export function useRecoveryRun() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [client, run, follow, updateRow]);
+  }, [client, run, follow, updateRow, readGraph]);
 
   // Once an attempt ends: read its steps one last time and its decision journal.
   useEffect(() => {
@@ -226,19 +260,22 @@ export function useRecoveryRun() {
       journaled.current.add(a.id);
       void (async () => {
         await readStored(a.id);
+        graphed.current.add(a.id);
+        await readGraph(a.id);
         const { data } = await client.query({ query: DECISION_JOURNAL, variables: { metadataId: a.id } });
         const journal = data.discover.decisionJournal as Journal;
         setAttempts((all) => all.map((x) => (x.id === a.id ? { ...x, journal } : x)));
         if (a.trainState === "COMPLETED") say(`${a.id}:end`, "success", `${labelOf(a)} # COMPLETED. ${describeJournal(journal)}`);
       })();
     }
-  }, [attempts, client, labelOf, readStored, say]);
+  }, [attempts, client, labelOf, readStored, readGraph, say]);
 
   const reset = useCallback(() => {
     subscriptions.current.forEach((s) => s.unsubscribe());
     subscriptions.current.clear();
     narrated.current.clear();
     journaled.current.clear();
+    graphed.current.clear();
     stepRank.current.clear();
     order.current = [];
     runRef.current = null;
@@ -255,16 +292,14 @@ export function useRecoveryRun() {
   }, []);
 
   const start = useCallback(
-    async (scenario: Scenario, crashOnce: boolean, orderId: string, topic: string) => {
+    async (scenario: Scenario, crashOnce: boolean, choice: Record<string, unknown>) => {
       reset();
       base.current = Date.now();
       setStarting(true);
       try {
         const { data } = await client.mutate({
           mutation: START_RUN,
-          variables: {
-            input: scenario === "RESEARCH" ? { scenario, crashOnce, topic } : { scenario, crashOnce, orderId },
-          },
+          variables: { input: { scenario, crashOnce, ...choice } },
         });
         const output = data.dispatch.startRun.output;
         const info: RunInfo = { ...output, scenario };
@@ -275,7 +310,9 @@ export function useRecoveryRun() {
             ? ", with a crash armed in the report step of the first attempt"
             : output.armedCrash === "REFUND_TRACK"
               ? ", with a crash armed in the step after the approval, on the first attempt"
-              : "";
+              : output.armedCrash === "CO_CITATION"
+                ? ", with a crash armed in the co-citation branch of the first attempt"
+                : "";
         say("start", "system", `# Scheduled a one-off manifest (MaxRetries ${output.maxRetries})${crash}`);
       } catch (error) {
         say(`start-error-${Date.now()}`, "error", `# Could not start: ${(error as Error).message}`);

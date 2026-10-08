@@ -111,6 +111,7 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
             $$"""
             { operations { junctionRuns(metadataId: {{metadataId}}) {
                 position kind name state questionKey answer replayed nameWithheld trackPosition attempt
+                nodeId
             } } }
             """,
             apiKey

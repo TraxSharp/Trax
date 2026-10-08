@@ -1,4 +1,5 @@
-import { shownAnswer, type Attempt, type Step } from "../types";
+import { branchOf, shownAnswer, type Attempt, type Step } from "../types";
+import { RunGraphView } from "./RunGraphView";
 
 interface Props {
   attempts: Attempt[];
@@ -103,7 +104,11 @@ function Lane({
   }
   if (t1 > cursor) segments.push({ kind: "gap", ms: t1 - cursor });
 
-  const nameOf = (step: Step) => (step.nameWithheld ? "(withheld)" : step.kind === "JUNCTION" ? step.name : `${step.questionKey}?`);
+  const nameOf = (step: Step) => {
+    const name = step.nameWithheld ? "(withheld)" : step.kind === "JUNCTION" ? step.name : `${step.questionKey}?`;
+    const branch = branchOf(step.nodeId);
+    return branch ? `${branch}: ${name}` : name;
+  };
 
   return (
     <div className="lane">
@@ -142,6 +147,7 @@ function Lane({
           );
         })}
       </div>
+      {attempt.graph?.hasGraph && <RunGraphView graph={attempt.graph} />}
     </div>
   );
 }

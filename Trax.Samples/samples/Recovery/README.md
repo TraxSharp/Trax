@@ -4,7 +4,9 @@ A live demo of a crashed run retrying without paying for its model's answers twi
 decider (a stand-in model, or [Nimble](#using-nimble) running on your machine) which track to take, and Trax records each answer with a hash of the state
 it was about. A later step crashes, and the manifest's automatic retry reuses the recorded answers
 while that hash still matches, so it takes the same tracks. Every junction, question and track
-reaches the page as it happens, through junction events.
+reaches the page as it happens, through junction events. A third scenario, the topic map, runs three
+similarity signals side by side in [parallel branches](#the-topic-map), crashes one, and draws each attempt
+on the train's declared graph.
 
 ![The Recovery demo: the research run crashes while it writes its report, and the retry replays the model's two answers](screenshot.png)
 
@@ -15,7 +17,7 @@ and [junction events](https://traxsharp.net/docs/effect/junction-events). The fu
 
 ```
 Recovery/
-├── Trax.Samples.Recovery/          Trains, junctions, the demo decider, the fault injector
+├── Trax.Samples.Recovery/          Trains, junctions, the demo decider, the fault injector, the topic map's corpus
 ├── Trax.Samples.Recovery.Api/      One host: GraphQL + scheduler + local workers + dashboard
 └── Trax.Samples.Recovery.Client/   React 19 + Vite + Apollo + graphql-ws page
 ```
@@ -45,7 +47,8 @@ Development only. When your Postgres is not on 5432, start the host with
 ## Try it
 
 The page has the controls on the left, the train's real C# with the running step highlighted, a console that
-narrates every junction event as it arrives, and a timeline with one lane per attempt. The **Progress** pills
+narrates every junction event as it arrives, and a timeline with one lane per attempt, each with the attempt's
+run graph (`operations.runGraph`) under it. The **Progress** pills
 follow the run: **Runs**, **Breaks** when an attempt crashes, **Recovers** when the retry runs.
 
 1. Leave **Research**, the first topic and **Crash once** selected and press **Run**. Attempt 1 runs
@@ -65,6 +68,12 @@ follow the run: **Runs**, **Breaks** when an attempt crashes, **Recovers** when 
    takes the same track.
 5. After a run completes, **Ask afresh** re-queues its last execution with
    `requeueExecution(id, askAfresh: true)`, as a run of its own: a lane labelled `[requeue]`.
+6. Pick **Topic map**, leave **Crash once** on, and press **Run**. Attempt 1 loads the papers and runs three
+   branches at once: `embedding`, `cocitation` and `authors`. The `cocitation` branch asks the model `SameTopic`
+   and crashes in the step on the track it picks. The run fails naming `Parallel#0/cocitation`, and the join,
+   `CombineSignals`, never runs, so nothing is written. The retry replays the answer and writes the map. The run
+   graph under each lane shows the three branches side by side. The three slices on the picker take the gate's
+   three tracks (`Yes`, `Unsure`, `No`).
 
 The same over plain GraphQL, with header `X-Api-Key: recovery-operator-key-do-not-use-in-production`:
 
@@ -77,6 +86,31 @@ query { operations { executions(manifestId: 1, order: OLDEST) { items { id train
 query { operations { junctionRuns(metadataId: 42) { position kind name state answer replayed attempt } } }
 ```
 
+## The topic map
+
+`BuildTopicMapTrain` maps a slice of 28 made-up papers, shaped like works from a scholarly index (title,
+abstract, year, authors, references, concepts), held in a `topic_map` schema. The host creates the schema and
+adds the papers at startup, skipping any already there. No network calls.
+
+```
+LoadCorpus → Parallel ─┬─ embedding:  EmbeddingSimilarity           (bag-of-words cosine)
+                       ├─ cocitation: CountSharedReferences → Gate<SameTopic> → Trust / Dampen / Ignore
+                       └─ authors:    AuthorOverlap
+           → CombineSignals (the join: the only step that writes, in one transaction)
+           → FindHiddenTwins (papers that read alike but cite nothing in common)
+```
+
+Branches compute; the join commits. `Parallel` is experimental, so the project opts in with
+`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`. Over GraphQL:
+
+```graphql
+mutation { dispatch { startRun(input: { scenario: TOPIC_MAP, crashOnce: true, fromYear: 2016, toYear: 2025 }) {
+  output { runId manifestId } } } }
+
+query { operations { runGraph(metadataId: 42) {
+  nodes { id kind state tracks { name taken nodes { id state } } } } } }
+```
+
 ## Keys
 
 Two demo keys, registered only in Development (a key carrying `do-not-use-in-production` refuses to
@@ -85,7 +119,7 @@ start anywhere else):
 | Key | Role | Sees |
 |---|---|---|
 | `recovery-operator-key-do-not-use-in-production` | `Operator` | The operations view: every answer and every step name. The page uses it. |
-| `recovery-viewer-key-do-not-use-in-production` | `Viewer` | The broadcast view of the two scenario trains: the run's shape, with answers and the steps on a track withheld. |
+| `recovery-viewer-key-do-not-use-in-production` | `Viewer` | The broadcast view of the scenario trains: the run's shape, with answers and the steps on a track withheld. |
 
 ## Demo-only settings
 

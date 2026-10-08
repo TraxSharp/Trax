@@ -3,6 +3,7 @@ using Trax.Core.Decisions;
 using Trax.Samples.Recovery.Model;
 using Trax.Samples.Recovery.Trains.Refund;
 using Trax.Samples.Recovery.Trains.Research;
+using Trax.Samples.Recovery.Trains.Topics;
 
 namespace Trax.Samples.Recovery.E2E.Utilities;
 
@@ -21,6 +22,7 @@ public sealed class CountingDecider : IDecider
             ResearchBrief brief => brief.RunId,
             Findings findings => findings.RunId,
             RefundCase refund => refund.RunId,
+            CoCitationEvidence evidence => evidence.RunId,
             _ => "unknown",
         };
 

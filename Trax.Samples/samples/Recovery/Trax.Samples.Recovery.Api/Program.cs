@@ -2,7 +2,8 @@
 // Trax Recovery: watch a train recover from a crash without asking the model again
 //
 // One process: GraphQL API + scheduler + local workers + dashboard, on Postgres.
-// Two scenario trains ask a decider (a stand-in model by default) and then crash on a later step.
+// Three scenario trains ask a decider (a stand-in model by default) and then crash on a later step;
+// the topic map runs three signals side by side and crashes one of the branches.
 // The manifest's automatic retry replays the recorded decisions instead of asking again, and every
 // junction, question and track is published live as a junction event.
 //
@@ -17,6 +18,7 @@
 //   X-Api-Key: recovery-viewer-key-do-not-use-in-production     (role Viewer: the broadcast view)
 // ─────────────────────────────────────────────────────────────────────────────
 
+using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
@@ -24,6 +26,7 @@ using Trax.Core.Decisions;
 using Trax.Dashboard.Extensions;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.DomainContext;
 using Trax.Effect.Decisions.SystemOne.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -31,6 +34,7 @@ using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Recovery;
 using Trax.Samples.Recovery.Auth;
+using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.Faults;
 using Trax.Samples.Recovery.Model;
 using Trax.Samples.Recovery.Records;
@@ -47,6 +51,11 @@ var pace = builder.Configuration.GetSection(DemoPace.Section).Get<DemoPace>() ??
 builder.Services.AddSingleton(pace);
 builder.Services.AddSingleton<FaultInjector>();
 builder.Services.AddSingleton<CaseFiles>();
+
+// The topic map's papers and the pairs it writes, in the topic_map schema beside Trax's tables.
+builder.Services.AddDomainDataContext<ITopicMapDbContext, TopicMapDbContext>(options =>
+    options.UseNpgsql(connectionString)
+);
 
 // ── The model ───────────────────────────────────────────────────────────────
 // "Demo" (the default) answers deterministically after 0.5 to 1.5 seconds. "Nimble" asks a Nimble
@@ -153,6 +162,9 @@ builder.Services.AddCors(options =>
 );
 
 var app = builder.Build();
+
+// Creates the topic_map schema and loads the canned corpus, skipping papers already there.
+await CorpusSeeder.SeedAsync(app.Services);
 
 app.UseCors();
 app.UseAuthentication();

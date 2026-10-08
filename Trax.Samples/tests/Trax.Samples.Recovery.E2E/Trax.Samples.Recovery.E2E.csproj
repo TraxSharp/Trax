@@ -6,6 +6,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <!-- TRAXEXP001: opts in to the experimental Parallel step, whose failure the topic map tests read. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

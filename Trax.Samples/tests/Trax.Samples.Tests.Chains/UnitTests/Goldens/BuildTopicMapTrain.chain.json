@@ -1,0 +1,169 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.Topics.BuildTopicMapTrain",
+  "input": "TopicMapInput",
+  "output": "TopicMap",
+  "nodes": [
+    {
+      "id": "LoadCorpus#0",
+      "kind": "Chain",
+      "junction": "LoadCorpus",
+      "in": "TopicMapInput",
+      "out": "CorpusSlice",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Parallel#0",
+      "kind": "Parallel",
+      "junction": null,
+      "in": null,
+      "out": null,
+      "opaque": false,
+      "tracks": [
+        {
+          "name": "embedding",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Parallel#0/embedding/EmbeddingSimilarity#0",
+              "kind": "Chain",
+              "junction": "EmbeddingSimilarity",
+              "in": "CorpusSlice",
+              "out": "EmbeddingSignal",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "cocitation",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Parallel#0/cocitation/CountSharedReferences#0",
+              "kind": "Chain",
+              "junction": "CountSharedReferences",
+              "in": "CorpusSlice",
+              "out": "CoCitationEvidence",
+              "opaque": false,
+              "tracks": []
+            },
+            {
+              "id": "Parallel#0/cocitation/Decide<YesNoDecision<SameTopic>>#0",
+              "kind": "Decide",
+              "junction": "IDecider",
+              "in": "CoCitationEvidence",
+              "out": "YesNoDecision<SameTopic>",
+              "opaque": false,
+              "tracks": []
+            },
+            {
+              "id": "Parallel#0/cocitation/Gate<SameTopic>#0",
+              "kind": "Gate",
+              "junction": null,
+              "in": "YesNoDecision<SameTopic>",
+              "out": "TrackTaken<SameTopic>",
+              "opaque": false,
+              "tracks": [
+                {
+                  "name": "Yes",
+                  "description": null,
+                  "isFallback": false,
+                  "nodes": [
+                    {
+                      "id": "Parallel#0/cocitation/Gate<SameTopic>#0/Yes/TrustCoCitation#0",
+                      "kind": "Chain",
+                      "junction": "TrustCoCitation",
+                      "in": "CoCitationEvidence",
+                      "out": "CoCitationSignal",
+                      "opaque": false,
+                      "tracks": []
+                    }
+                  ]
+                },
+                {
+                  "name": "No",
+                  "description": null,
+                  "isFallback": false,
+                  "nodes": [
+                    {
+                      "id": "Parallel#0/cocitation/Gate<SameTopic>#0/No/IgnoreCoCitation#0",
+                      "kind": "Chain",
+                      "junction": "IgnoreCoCitation",
+                      "in": "CoCitationEvidence",
+                      "out": "CoCitationSignal",
+                      "opaque": false,
+                      "tracks": []
+                    }
+                  ]
+                },
+                {
+                  "name": "Unsure",
+                  "description": null,
+                  "isFallback": true,
+                  "nodes": [
+                    {
+                      "id": "Parallel#0/cocitation/Gate<SameTopic>#0/Unsure/DampenCoCitation#0",
+                      "kind": "Chain",
+                      "junction": "DampenCoCitation",
+                      "in": "CoCitationEvidence",
+                      "out": "CoCitationSignal",
+                      "opaque": false,
+                      "tracks": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "authors",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Parallel#0/authors/AuthorOverlap#0",
+              "kind": "Chain",
+              "junction": "AuthorOverlap",
+              "in": "CorpusSlice",
+              "out": "AuthorSignal",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CombineSignals#0",
+      "kind": "Chain",
+      "junction": "CombineSignals",
+      "in": "ValueTuple<CorpusSlice, EmbeddingSignal, CoCitationSignal, AuthorSignal>",
+      "out": "CombinedSignals",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "FindHiddenTwins#0",
+      "kind": "Chain",
+      "junction": "FindHiddenTwins",
+      "in": "CombinedSignals",
+      "out": "TopicMap",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "TopicMap",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

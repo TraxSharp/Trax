@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Recovery
-description: "The Recovery sample: a train asks a model, a later step crashes, and the manifest's retry replays the decisions while a page shows every junction live."
+description: "The Recovery sample: a crashed run retries without asking its model twice, and a topic map runs three signals in parallel branches, shown live."
 parent: Samples & Deployment
 nav_order: 3
 ---
@@ -13,15 +13,18 @@ without paying for the model again. The Recovery sample makes that visible. Its 
 train's real C# with the running step highlighted, a console that narrates every junction event as
 it arrives, and a timeline with one lane per attempt. Attempt 2's lane reads **replayed: model not
 asked** for each question, and its question bars take milliseconds instead of the model's second or
-so. Progress pills follow the run through **Runs**, **Breaks** and **Recovers**.
+so. Progress pills follow the run through **Runs**, **Breaks** and **Recovers**. A third scenario,
+the topic map, runs three similarity signals side by side in parallel branches, and each lane draws
+its attempt on the train's declared graph with the branches next to each other.
 
-It proves three features working together, against Postgres, in one process:
+It proves four features working together, against Postgres, in one process:
 
 | Feature | What the sample shows | Page |
 |---|---|---|
 | Train decisions | A `Gate` (refund approval), a `Switch` and a `Scale` (research brief), answered by an `IDecider` | [Decisions](/docs/core/decisions) |
 | Retries replay decisions | The manifest's automatic retry replays every recorded answer whose state hashes the same, asks afresh when the data changed, and asks afresh on purpose with `askAfresh` | [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) |
 | Junction events | `onJunctionEvent` and `operations.junctionRuns` drive the page | [Junction Events](/docs/effect/junction-events) |
+| Parallel branches | The topic map's three signals run side by side; a failed branch fails the run by name, and only the step after the join writes | [The topic map](#the-topic-map) |
 
 The code is in `Trax.Samples/samples/Recovery`; its tests are in
 `Trax.Samples/tests/Trax.Samples.Recovery.E2E`.
@@ -71,6 +74,17 @@ on 5432, start the host with
    `requeueExecution(id, askAfresh: true)` on its last execution, a run of its own outside the
    manifest, shown as a `[requeue]` lane.
 
+7. **Topic map, crash once, Run.** Attempt 1 runs `LoadCorpus`, then three branches at once:
+   `embedding`, `cocitation` and `authors`. The `cocitation` branch counts shared references, asks
+   `SameTopic` (do papers that cite the same works share a topic in this slice?), and crashes in the
+   step on the track the answer picks. The run fails with a `BranchesFailedException` naming
+   `Parallel#0/cocitation`, and `CombineSignals`, the join, never runs, so nothing is written. The
+   retry replays the answer and completes. The lane's run graph shows the three branches side by
+   side; the gate inside `cocitation` shows its three tracks, with the one taken marked.
+   The three slices on the picker take the gate's three tracks with the demo model: 2016 to 2025
+   trusts shared references (`Yes`, 0.87), 2021 to 2025 is unsure (0.52) and dampens them, 2022 to
+   2025 ignores them (`No`, 0.28).
+
 Case files and armed crashes live in memory. A run started before the host restarts has lost its
 case file, so every retry fails and the manifest dead-letters. A requeue would fail the same way, so
 the page offers no re-run once a run is dead.
@@ -94,7 +108,20 @@ query {
 
 query {
   operations {
-    junctionRuns(metadataId: 42) { position kind name state answer replayed trackPosition attempt }
+    junctionRuns(metadataId: 42) { position kind name state answer replayed trackPosition attempt nodeId }
+  }
+}
+```
+
+The topic map starts the same way, with `scenario: TOPIC_MAP` and, optionally, `fields`, `fromYear`
+and `toYear`. Its run graph, the train's declared chain with the run's steps laid on it:
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 42) {
+      nodes { id kind state tracks { name taken nodes { id kind state trackTaken } } }
+    }
   }
 }
 ```
@@ -191,7 +218,7 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.ExposeOperationQueries().ExposeOperationMutations().GateOperations(roles: "Operator"));
 ```
 
-The two scenario trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
+The three scenario trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
 so the viewer key follows their steps through the broadcast view. Once a token scheme is
 registered, a subscription socket without a credential is refused at `connection_init`, so a
 "public" watcher still needs a key. The alternative to an operator key is
@@ -260,6 +287,7 @@ public async Task<DecisionResult> Decide(DecisionRequest request, CancellationTo
             (ResearchBrief brief, ChoiceQuestion) => ChooseSource(brief),   // ChoiceAnswer
             (Findings findings, ScoreQuestion) => ScoreDepth(findings),     // ScoreAnswer
             (RefundCase refund, YesNoQuestion) => ApproveRefund(refund),    // YesNoAnswer
+            (CoCitationEvidence e, YesNoQuestion) => SameTopic(e),          // YesNoAnswer
             _ => throw new InvalidOperationException($"Cannot answer {question.Key}."),
         };
     return new DecisionResult(answers);
@@ -347,6 +375,52 @@ refusal is stored as `replay_refused` in the new row's answer. The run is not ma
 `replay_abandoned`, which is kept for a replay that could not be honoured at all (the named run gone,
 a host that does not record).
 
+### The topic map
+
+The topic map reads a corpus of 28 made-up papers in three fields, shaped like works from a scholarly
+index (title, abstract, year, authors, the works each one cites, concepts). It makes no network
+calls. The papers and the pairs the map writes live in a `topic_map` schema beside Trax's tables,
+through a `DomainDataContext`; at startup the host creates the schema with
+`EnsureSchemaCreatedAsync` and adds every paper not already there, so a restart adds nothing.
+`EnsureSchemaCreatedAsync` is for demos and tests; a real application uses migrations.
+
+```csharp
+Chain<LoadCorpus>()
+    .Parallel(signals =>
+        signals
+            .Branch("embedding", b => b.Chain<EmbeddingSimilarity>())
+            .Branch("cocitation", b =>
+                b.Chain<CountSharedReferences>()
+                    .Gate<CoCitationEvidence, SameTopic>(gate =>
+                        gate.Yes(t => t.Chain<TrustCoCitation>(), atLeast: 0.8)
+                            .No(t => t.Chain<IgnoreCoCitation>(), below: 0.3)
+                            .Unsure(t => t.Chain<DampenCoCitation>())))
+            .Branch("authors", b => b.Chain<AuthorOverlap>()))
+    .Chain<CombineSignals>()
+    .Chain<FindHiddenTwins>()
+    .Resolve();
+```
+
+`Parallel` is experimental: the project opts in with `<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`. Each
+branch starts from a copy of Memory taken after `LoadCorpus`, runs in its own DI scope, and adds one
+signal: `EmbeddingSignal` (a bag-of-words cosine over title and abstract, standing in for an
+embedding model), `CoCitationSignal` (how many works two papers both cite, weighted by the track the
+model chose) and `AuthorSignal`. `CombineSignals` reads all three as a tuple once every branch has
+finished. The decision inside `cocitation` is the branch's own, recorded and replayed like any other.
+
+Branches compute; the join commits. Because each branch has its own scope, and so its own
+transaction, no branch writes. `CombineSignals` weighs the signals, keeps the pairs that score 0.3
+or more and writes them in one transaction, replacing any pairs the same run wrote before.
+`FindHiddenTwins` then lists the pairs that read alike (a similarity of 0.35 or more) but cite
+nothing in common: the stormwater paper filed under hydrology and the green-roof paper filed under
+urban ecology, and the two nitrate papers. A citation graph alone would never put them side by side.
+
+The crash fires in the step on whichever track the gate picks, after the model has answered. The
+branch fails, the default `CancelSiblings` policy stops any sibling still running, and the run
+fails with one `BranchesFailedException`. Its `failureJunction` is
+`Parallel#0/cocitation:<junction>`, so the execution names the branch. Every step a branch records
+carries a node id under it, `Parallel#0/<branch>/...`, which is how `operations.runGraph` places it.
+
 ### The page
 
 The page is React 19, Vite, Apollo Client and `graphql-ws`, with subscriptions split onto a
@@ -376,6 +450,15 @@ running step: `Chain<Name>` for a junction, the routing step for a question, and
 `Resolve()`, and sizes its font so the longest line fits unwrapped, so the code stays still while the
 highlight moves, and it shows the train the picker selects. The timeline gives each attempt a lane on
 one time axis: a junction's bar spans its run, a question's bar the time the answer took to arrive.
+A step that ran in a branch is labelled with the branch.
+
+Under each lane the page draws the attempt's run graph from `operations.runGraph(metadataId:)`,
+polled while the attempt runs and read once more when it ends. Each declared step is a node in the
+order the chain declares it, coloured by its state (completed, failed, running, not reached,
+skipped), with the state also given as text for screen readers. A routing step shows its tracks
+next to each other with the one taken marked, and a `Parallel` step shows its branches as columns
+side by side, since they ran at the same time. The page asks for three levels of nesting, as deep as
+the topic map goes and as deep as the server's cycle-depth limit allows.
 
 ## The tests
 
@@ -394,6 +477,11 @@ of the demo one, and asserts over GraphQL:
 | `DataChangedDuringTheBackoff_RetryAsksAfresh_AndTakesTheTrackTheNewDataCallsFor` | The retry stays linked, refuses the answer for a changed state, asks afresh and takes `Unsure` |
 | `ViewerSubscriber_SeesTheShape_ButNotTheAnswersOrTheTrack` | The broadcast view gets no answers, and every step on a track is `(withheld)` |
 | `TheSchedulersOwnRuns_AreSweptAfterTheirRetention` | The scheduler's own runs are deleted once past their retention |
+| `Seeding_Twice_AddsNoWorks` | Seeding the corpus again adds nothing |
+| `Run_OverTheWholeCorpus_MapsTopicsAndFindsTheHiddenTwins` | The map of the seeded corpus: 32 pairs written, the strongest pair, and exactly the two hidden twins |
+| `Run_OverASlice_TakesTheCoCitationTrackTheModelChooses` | The three slices take the gate's `Yes`, `Unsure` and `No` tracks |
+| `CrashedCoCitationBranch_FailsTheRunNamingIt_AndTheJoinWritesNothing` | The run throws a `BranchesFailedException` naming `Parallel#0/cocitation`, and no pair is written |
+| `ScheduledRun_CrashedOnce_FailsNamingTheBranch_ThenEveryBranchRecordsItsSteps` | Attempt 1 fails naming the branch with nothing written; the retry replays the branch's answer, writes the pairs, records steps under all three branches, and `runGraph` draws them |
 
 ```bash
 TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.Recovery.E2E
