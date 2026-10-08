@@ -50,6 +50,12 @@ public enum ChainStepKind
     /// merges what they produce. <see cref="ChainRecorder.TracksAt(int)"/> holds the branches.
     /// </summary>
     Parallel,
+
+    /// <summary>
+    /// Stores the state type in Memory the chain names, so a later run can resume after it. The
+    /// step's input is the state; it contributes nothing to Memory.
+    /// </summary>
+    Checkpoint,
 }
 
 /// <summary>
@@ -99,7 +105,17 @@ public sealed class ChainRecorder
     {
         _questionKeys = chain._questionKeys;
         InBranch = chain.InBranch;
+        _shortCircuitBefore = chain.AfterShortCircuit;
     }
+
+    private readonly bool _shortCircuitBefore;
+
+    /// <summary>
+    /// True when a <c>ShortCircuit</c> comes before the step about to be recorded, in this chain
+    /// or in the chain a track or branch of it belongs to.
+    /// </summary>
+    internal bool AfterShortCircuit =>
+        _shortCircuitBefore || _steps.Any(s => s.Kind == ChainStepKind.ShortCircuit);
 
     /// <summary>
     /// True while recording a branch of a <c>Parallel</c> step, or a track inside one, where a

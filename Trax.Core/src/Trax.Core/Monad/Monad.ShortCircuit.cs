@@ -66,6 +66,9 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return Task.FromResult(this);
 
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
+            return Task.FromResult(this);
+
         var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
         if (junctionInstance is null)
@@ -92,6 +95,9 @@ public partial class Monad<TInput, TReturn>
         where TJunction : class
     {
         if (Exception is not null)
+            return this;
+
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
             return this;
 
         var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();

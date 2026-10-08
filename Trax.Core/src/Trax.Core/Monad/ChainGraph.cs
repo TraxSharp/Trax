@@ -245,6 +245,28 @@ internal sealed class ChainNodeScope(string prefix)
 {
     private readonly Dictionary<string, int> _seen = [];
 
+    /// <summary>What every id in this chain or track starts with: empty for a train's own chain.</summary>
+    public string Prefix => prefix;
+
+    /// <summary>The id <see cref="Next"/> would give <paramref name="key"/>, without counting it.</summary>
+    public string Peek(string key) => $"{prefix}{key}#{_seen.GetValueOrDefault(key)}";
+
+    /// <summary>
+    /// The ids <see cref="Next"/> would give <paramref name="keys"/> in turn, without counting
+    /// them.
+    /// </summary>
+    public IReadOnlyList<string> PeekMany(IEnumerable<string> keys)
+    {
+        var counted = new Dictionary<string, int>();
+        return keys.Select(key =>
+            {
+                var ordinal = _seen.GetValueOrDefault(key) + counted.GetValueOrDefault(key);
+                counted[key] = counted.GetValueOrDefault(key) + 1;
+                return $"{prefix}{key}#{ordinal}";
+            })
+            .ToList();
+    }
+
     /// <summary>The id of the next node named <paramref name="key"/> in this chain or track.</summary>
     public string Next(string key)
     {
@@ -273,11 +295,15 @@ internal sealed class ChainNodeScope(string prefix)
                 $"Extract<{step.In?.ReadableName()}, {step.Out?.ReadableName()}>",
             ChainStepKind.Seed => $"Seed<{step.Out?.ReadableName()}>",
             ChainStepKind.Resolve => "Resolve",
+            ChainStepKind.Checkpoint => CheckpointKey(step.In),
             _ => step.Kind.ToString(),
         };
 
     /// <summary>The name a junction step is numbered under: the junction type.</summary>
     public static string JunctionKey(Type? junction) => junction?.ReadableName() ?? "Junction";
+
+    /// <summary>The name a checkpoint is numbered under: the state it stores.</summary>
+    public static string CheckpointKey(Type? state) => $"Checkpoint<{state?.ReadableName()}>";
 
     /// <summary>The name a question is numbered under: the decision it puts in Memory.</summary>
     public static string DecideKey(Type? decision) => $"Decide<{decision?.ReadableName()}>";

@@ -55,7 +55,7 @@ public readonly record struct ChainFault(
 /// subtype of the declared input implements reads as a fault, although the run would find it.
 /// Declaring the input as that subtype fixes both.</para>
 /// </remarks>
-public static class ChainVerification
+public static partial class ChainVerification
 {
     /// <summary>
     /// Replays <paramref name="chain"/> for a train taking <paramref name="input"/> and producing
@@ -128,7 +128,17 @@ public static class ChainVerification
                 new ChainFault(0, ChainStepKind.Seed, null, $"the train's input {inputShape}")
             );
 
-        Replay(chain, memory, faults, output, availableElsewhere, checkConstructors, track: null);
+        Replay(
+            chain,
+            memory,
+            faults,
+            output,
+            availableElsewhere,
+            checkConstructors,
+            track: null,
+            walk: null,
+            scope: null
+        );
 
         foreach (var refusal in chain.RecordedRefusals)
             faults.Add(
@@ -165,7 +175,9 @@ public static class ChainVerification
         Type output,
         Func<Type, bool>? availableElsewhere,
         bool checkConstructors,
-        TrackContext? track
+        TrackContext? track,
+        ResumeWalk? walk,
+        ChainNodeScope? scope
     )
     {
         var steps = chain.Steps;
@@ -180,9 +192,38 @@ public static class ChainVerification
         {
             var step = steps[i];
 
+            // A resumed run numbers every step as the original did and skips those before its
+            // resume point, adding nothing they would have added.
+            var id = walk is null ? null : scope!.Next(ChainNodeScope.KeyOf(step));
+
+            if (walk is { Skipping: true } && Skipped(i, step, id!))
+                continue;
+
+            if (step.Kind == ChainStepKind.Checkpoint)
+            {
+                // A checkpoint stores what the run produced, so only Memory counts, never the
+                // container.
+                if (step.In is { } state && !memory.Contains(state))
+                    faults.Add(
+                        Fault(
+                            i,
+                            step.Kind,
+                            null,
+                            walk?.ReadsStale(state) == true
+                                ? $"'{id}' checkpoints '{Name(state)}', which a step before the "
+                                    + "resume point overwrote and no checkpoint before it holds, "
+                                    + "so a resumed run would store an older value."
+                                : $"checkpoints '{Name(state)}', which nothing before it puts in "
+                                    + "Memory. Chain the junction that produces it first."
+                        )
+                    );
+
+                continue;
+            }
+
             if (step.Kind == ChainStepKind.Parallel)
             {
-                ReplayParallel(i, step);
+                ReplayParallel(i, step, id);
                 continue;
             }
 
@@ -242,7 +283,7 @@ public static class ChainVerification
                 case ChainStepKind.Switch:
                 case ChainStepKind.Gate:
                 case ChainStepKind.Scale:
-                    ReplayRouting(i, step);
+                    ReplayRouting(i, step, id);
                     continue;
 
                 case ChainStepKind.IChain:
@@ -317,8 +358,15 @@ public static class ChainVerification
                         i,
                         step.Kind,
                         step.Junction,
-                        $"needs '{Name(required)}' in Memory and nothing before it puts one "
-                            + "there. Chain a junction that produces it first."
+                        walk is null
+                                ? $"needs '{Name(required)}' in Memory and nothing before it puts one "
+                                    + "there. Chain a junction that produces it first."
+                            : walk.ReadsStale(required)
+                                ? $"'{id}' reads '{Name(required)}', which a step before the "
+                                    + "resume point overwrote and no checkpoint before it holds, "
+                                    + "so a resumed run would read an older value."
+                            : $"'{id}' needs '{Name(required)}'; no checkpoint before the resume "
+                                + "point holds one, and no step after it produces one."
                     )
                 );
 
@@ -333,6 +381,106 @@ public static class ChainVerification
                     faults.Add(
                         Fault(i, step.Kind, step.Junction, $"produces a value that {producedShape}")
                     );
+            }
+        }
+
+        // What a skipping walk does with one step: true when the step is skipped, false when the
+        // resume point is reached and the step is replayed as the run would run it.
+        bool Skipped(int i, ChainStep step, string id)
+        {
+            var w = walk!;
+
+            switch (step.Kind)
+            {
+                case ChainStepKind.Seed:
+                    // A value handed to the chain is handed to it again: Junctions() runs again.
+                    return false;
+
+                case ChainStepKind.Resolve:
+                    faults.Add(
+                        Fault(
+                            i,
+                            step.Kind,
+                            null,
+                            $"the resume point '{w.Target}' is never reached on this path."
+                        )
+                    );
+                    return true;
+
+                case ChainStepKind.Extract:
+                    Forget(step.Out);
+                    return true;
+
+                case ChainStepKind.Switch:
+                case ChainStepKind.Gate:
+                case ChainStepKind.Scale:
+                    if (!w.Inclusive && id == w.Target)
+                    {
+                        w.Skipping = false;
+                        return false;
+                    }
+
+                    if (!w.Target.StartsWith(id + "/", StringComparison.Ordinal))
+                    {
+                        foreach (var declared in chain.TracksAt(i))
+                        foreach (var written in Outputs(declared.Steps))
+                            Forget(written);
+                        return true;
+                    }
+
+                    // The run goes down the one track its resume point is in, and the chain after
+                    // the routing step continues from what that track produced.
+                    var name = w.Target[(id.Length + 1)..].Split('/')[0];
+                    if (chain.TracksAt(i).FirstOrDefault(t => t.Name == name) is { } taken)
+                        Replay(
+                            taken.Steps,
+                            memory,
+                            faults,
+                            output,
+                            availableElsewhere,
+                            checkConstructors,
+                            new TrackContext(
+                                track?.SwitchIndex ?? i,
+                                track?.Kind ?? step.Kind,
+                                $"{track?.Prefix}track '{name}', "
+                            ),
+                            walk,
+                            scope!.Track(id, name)
+                        );
+                    return true;
+
+                default:
+                    if (id != w.Target)
+                    {
+                        if (step.Kind == ChainStepKind.Parallel)
+                            foreach (var branch in chain.TracksAt(i))
+                            foreach (var written in Outputs(branch.Steps))
+                                Forget(written);
+                        else if (step.Kind != ChainStepKind.ShortCircuit)
+                            Forget(step.Out);
+
+                        return true;
+                    }
+
+                    w.Skipping = false;
+                    return w.Inclusive;
+            }
+        }
+
+        // A type a skipped step wrote holds, in a resumed run, whatever it held before that step
+        // (the train's input, say) or nothing; only what the checkpoint restores is as it was.
+        void Forget(Type? written)
+        {
+            if (written is null)
+                return;
+
+            foreach (var type in written.IsTuple() ? written.GetGenericArguments() : [written])
+            {
+                // Only a value the resumed run still holds is stale; one it never had is missing.
+                if (walk!.Restores.Contains(type) || !memory.Remove(type))
+                    continue;
+
+                walk.Stale.Add(type);
             }
         }
 
@@ -381,7 +529,7 @@ public static class ChainVerification
                 memory.Add(decision);
         }
 
-        void ReplayParallel(int i, ChainStep step)
+        void ReplayParallel(int i, ChainStep step, string? parallelId)
         {
             // Every branch starts from Memory as it is here, and the step after the join sees the
             // union of what they added. A type two branches both add has no single value to merge,
@@ -401,6 +549,9 @@ public static class ChainVerification
                     $"{track?.Prefix}branch '{declared.Name}', "
                 );
 
+                // A resumed run's branch with a checkpoint of its own starts from it.
+                var branchWalk = walk?.ForBranch($"{parallelId}/{declared.Name}", branchMemory);
+
                 Replay(
                     declared.Steps,
                     branchMemory,
@@ -408,7 +559,9 @@ public static class ChainVerification
                     output,
                     availableElsewhere,
                     checkConstructors,
-                    context
+                    context,
+                    branchWalk,
+                    branchWalk is null ? null : scope!.Track(parallelId!, declared.Name)
                 );
 
                 foreach (var written in Outputs(declared.Steps).Where(fork.Contains).Where(Merged))
@@ -474,7 +627,7 @@ public static class ChainVerification
                     memory.Add(added);
         }
 
-        void ReplayRouting(int i, ChainStep step)
+        void ReplayRouting(int i, ChainStep step, string? routingId)
         {
             if (step.In is { } decision && !memory.Contains(decision))
                 faults.Add(
@@ -508,7 +661,9 @@ public static class ChainVerification
                     output,
                     availableElsewhere,
                     checkConstructors,
-                    context
+                    context,
+                    walk,
+                    walk is null ? null : scope!.Track(routingId!, declared.Name)
                 );
 
                 if (afterEveryTrack is null)

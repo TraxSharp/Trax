@@ -6,8 +6,8 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- TRAXEXP001: these tests exercise the experimental Parallel step. -->
-    <NoWarn>$(NoWarn);CHAIN001;CHAIN002;TRAXEXP001</NoWarn>
+    <!-- TRAXEXP001, TRAXEXP003: these tests exercise the experimental Parallel and Checkpoint steps. -->
+    <NoWarn>$(NoWarn);CHAIN001;CHAIN002;TRAXEXP001;TRAXEXP003</NoWarn>
     <!-- StateDigestTests builds a state holding a fixed-size buffer, which only unsafe code can declare. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

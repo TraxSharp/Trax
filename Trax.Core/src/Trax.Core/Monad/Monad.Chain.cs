@@ -80,6 +80,9 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return this;
 
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
+            return this;
+
         var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>(missing =>
             MonadExtensions.NeedsJunctionInput(typeof(TJunction), missing, Train)
         );
@@ -138,6 +141,10 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return Task.FromResult(this);
 
+        // A resumed run skips the step before resolving anything for it.
+        if (SkipStep(ChainNodeScope.JunctionKey(junctionType)))
+            return Task.FromResult(this);
+
         var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>(missing =>
             $"IChain<{missing.ReadableName()}> (train '{Train.GetType().ReadableName()}') needs "
             + $"a junction implementing '{missing.ReadableName()}'"
@@ -162,6 +169,10 @@ public partial class Monad<TInput, TReturn>
         where TJunction : class
     {
         if (Exception is not null)
+            return Task.FromResult(this);
+
+        // A resumed run skips the step before building its junction.
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
             return Task.FromResult(this);
 
         var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();

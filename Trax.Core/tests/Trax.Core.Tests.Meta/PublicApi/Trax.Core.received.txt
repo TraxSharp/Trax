@@ -481,6 +481,7 @@ namespace Trax.Core.Monad
         Gate = 8,
         Scale = 9,
         Parallel = 10,
+        Checkpoint = 11,
     }
     public sealed class ChainTrack : System.IEquatable<Trax.Core.Monad.ChainTrack>
     {
@@ -521,6 +522,8 @@ namespace Trax.Core.Monad
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public Trax.Core.Train.MonadTask<TInput, TReturn> Checkpoint<TState>() { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Decide<TState>(System.Func<Trax.Core.Decisions.Questions<TState>, Trax.Core.Decisions.Questions<TState>> questions) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>() { }
         public Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input) { }
@@ -577,6 +580,8 @@ namespace Trax.Core.Train
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public Trax.Core.Train.MonadTask<TInput, TReturn> Checkpoint<TState>() { }
         public System.Runtime.CompilerServices.ConfiguredTaskAwaitable<Trax.Core.Monad.Monad<TInput, TReturn>> ConfigureAwait(bool continueOnCapturedContext) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Decide<TState>(System.Func<Trax.Core.Decisions.Questions<TState>, Trax.Core.Decisions.Questions<TState>> questions) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Extract<TIn, TOut>() { }
@@ -630,6 +635,8 @@ namespace Trax.Core.Train
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Checkpoint<TState>() { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Decide<TState>(System.Func<Trax.Core.Decisions.Questions<TState>, Trax.Core.Decisions.Questions<TState>> questions) { }
         public Trax.Core.Monad.ChainRecorder DeclaredChain() { }
         protected Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>() { }

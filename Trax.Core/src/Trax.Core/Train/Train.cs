@@ -59,6 +59,12 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     internal IBranchRunner BranchRunner { get; set; } = ThreadPoolBranchRunner.Instance;
 
     /// <summary>
+    /// What the next run restores and where it starts, when it resumes an earlier run of the same
+    /// input; null for a run from the top. Set by the host before <see cref="Run"/>.
+    /// </summary>
+    internal ResumePlan? Resume { get; set; }
+
+    /// <summary>
     /// Executes the train with the provided input.
     /// This method unwraps the Either result from RunEither and throws any exceptions.
     /// </summary>
@@ -110,6 +116,15 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     private async Task<Either<Exception, TReturn>> RunInternal(TInput input)
     {
         var monad = _monad = NewMonad().Activate(input);
+
+        if (Resume is { } resume)
+        {
+            if (resume.Restored.GetValueOrDefault("") is { } restored)
+                monad.Restore(restored);
+
+            if (resume.Target is { } target)
+                monad.Resuming = (target, resume.Inclusive);
+        }
 
         try
         {
@@ -339,6 +354,16 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
 #pragma warning disable TRAXEXP001 // The experimental feature's own entry point.
         Root("Parallel", true).Parallel(branches);
 #pragma warning restore TRAXEXP001
+
+    /// <summary>
+    /// Stores the state in Memory so a later run of the same input can resume here. See
+    /// <see cref="Monad{TInput, TReturn}.Checkpoint{TState}"/>.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Checkpoint)]
+    protected MonadTask<TInput, TReturn> Checkpoint<TState>() =>
+#pragma warning disable TRAXEXP003 // The experimental feature's own entry point.
+        Root("Checkpoint", true).Checkpoint<TState>();
+#pragma warning restore TRAXEXP003
 
     /// <summary>
     /// Ends a chain that declares no junctions, taking the train's return value from Memory.

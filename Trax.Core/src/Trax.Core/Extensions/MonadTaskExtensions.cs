@@ -241,6 +241,22 @@ public readonly struct MonadTask<TInput, TReturn>
 
     /// <summary>
     /// After the links before it, the asynchronous form of
+    /// <see cref="Monad{TInput, TReturn}.Checkpoint{TState}"/>: stores the state in Memory so a
+    /// later run of the same input can resume here.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Checkpoint)]
+    public MonadTask<TInput, TReturn> Checkpoint<TState>() => new(CheckpointAsync<TState>());
+
+#pragma warning disable TRAXEXP003 // The experimental feature's own entry point.
+    private async Task<Monad<TInput, TReturn>> CheckpointAsync<TState>()
+    {
+        var monad = await Source.ConfigureAwait(false);
+        return await monad.Checkpoint<TState>().ConfigureAwait(false);
+    }
+#pragma warning restore TRAXEXP003
+
+    /// <summary>
+    /// After the links before it, the asynchronous form of
     /// <see cref="Monad{TInput, TReturn}.Switch{TTrack}"/>.
     /// </summary>
     public MonadTask<TInput, TReturn> Switch<TTrack>(

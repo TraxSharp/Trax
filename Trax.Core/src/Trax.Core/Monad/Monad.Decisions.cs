@@ -276,6 +276,10 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return this;
 
+        // A resumed run counts the questions before its resume point without asking them.
+        if (SkipQuestions(questions.Specs))
+            return this;
+
         // A cancelled run neither decides nor tells anyone it did, as a junction does not run.
         CancellationToken.ThrowIfCancellationRequested();
 
@@ -1013,6 +1017,13 @@ public partial class Monad<TInput, TReturn>
         if (SwitchProblems(tracks).Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
             return Refuse(step, $"{step} {string.Join(" ", problems)}");
 
+        if (
+            await SkipRouting<TTrack>(ChainStepKind.Switch, step, tracks.Set)
+                .ConfigureAwait(false) is
+            { } skipped
+        )
+            return skipped;
+
         var decision = Decision<ChoiceDecision<TTrack>>(step);
 
         if (decision is null)
@@ -1043,6 +1054,13 @@ public partial class Monad<TInput, TReturn>
 
         if (gate.Problems.Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
             return Refuse(step, $"{step} {string.Join(" ", problems)}");
+
+        if (
+            await SkipRouting<TQuestion>(ChainStepKind.Gate, step, gate.Set)
+                .ConfigureAwait(false) is
+            { } skipped
+        )
+            return skipped;
 
         var decision = Decision<YesNoDecision<TQuestion>>(step);
 
@@ -1077,6 +1095,12 @@ public partial class Monad<TInput, TReturn>
 
         if (scale.Problems.Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
             return Refuse(step, $"{step} {string.Join(" ", problems)}");
+
+        if (
+            await SkipRouting<TLevel>(ChainStepKind.Scale, step, scale.Set).ConfigureAwait(false) is
+            { } skipped
+        )
+            return skipped;
 
         var decision = Decision<ScoreDecision<TLevel>>(step);
 

@@ -78,6 +78,11 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return this;
 
+        // A resumed run whose point is after this step skips it whole; one resuming at it runs
+        // it, each branch from its own checkpoint.
+        if (SkipStep(ChainNodeScope.KeyOf(new ChainStep(ChainStepKind.Parallel, null, null, null))))
+            return this;
+
         var step = Nodes.Next(
             ChainNodeScope.KeyOf(new ChainStep(ChainStepKind.Parallel, null, null, null))
         );
@@ -195,6 +200,13 @@ public partial class Monad<TInput, TReturn>
             child._askings[key] = count;
         foreach (var (key, type) in _askedAbout)
             child._askedAbout[key] = type;
+
+        // A resumed run's branch with a checkpoint of its own starts from it.
+        if (Train.Resume?.Restored.GetValueOrDefault(child.BranchPath) is { } restored)
+        {
+            child.Restore(restored);
+            child.Resuming = (restored.NodeId, true);
+        }
 
         if (Memory.GetValueOrDefault(typeof(IServiceProvider)) is not IServiceProvider run)
             return child;

@@ -17,6 +17,10 @@ public partial class Monad<TInput, TReturn>
             return this;
         }
 
+        // A resumed run skips an extraction before its resume point with the step it reads.
+        if (Resuming is not null)
+            return this;
+
         // Try to get the source object from Memory
         if (!Memory.TryGetValue(typeof(TIn), out var stored) || stored is not TIn typeFromMemory)
         {
