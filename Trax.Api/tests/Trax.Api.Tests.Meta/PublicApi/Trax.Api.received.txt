@@ -312,6 +312,7 @@ namespace Trax.Api.DTOs
         public Trax.Effect.Enums.JunctionRunKind Kind { get; init; }
         public string Name { get; init; }
         public bool NameWithheld { get; init; }
+        public string? NodeId { get; init; }
         public int Position { get; init; }
         public string? QuestionKey { get; init; }
         public bool Replayed { get; init; }
@@ -476,6 +477,52 @@ namespace Trax.Api.DTOs
         public int Skip { get; init; }
         public int Take { get; init; }
         public int TotalCount { get; init; }
+    }
+    public sealed class RunGraph : System.IEquatable<Trax.Api.DTOs.RunGraph>
+    {
+        public RunGraph(long MetadataId, string Train, bool HasGraph, string? Hash, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> UnmatchedSteps, bool MoreSteps) { }
+        public bool HasGraph { get; init; }
+        public string? Hash { get; init; }
+        public long MetadataId { get; init; }
+        public bool MoreSteps { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes { get; init; }
+        public string Train { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> UnmatchedSteps { get; init; }
+    }
+    public sealed class RunGraphNode : System.IEquatable<Trax.Api.DTOs.RunGraphNode>
+    {
+        public RunGraphNode(string Id, Trax.Core.Monad.ChainStepKind Kind, string? Junction, string? In, string? Out, bool Opaque, Trax.Api.DTOs.RunNodeState State, bool Replayed, string? TrackTaken, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> Steps, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphTrack> Tracks) { }
+        public string Id { get; init; }
+        public string? In { get; init; }
+        public string? Junction { get; init; }
+        public Trax.Core.Monad.ChainStepKind Kind { get; init; }
+        public bool Opaque { get; init; }
+        public string? Out { get; init; }
+        public bool Replayed { get; init; }
+        public Trax.Api.DTOs.RunNodeState State { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> Steps { get; init; }
+        public string? TrackTaken { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphTrack> Tracks { get; init; }
+    }
+    public sealed class RunGraphTrack : System.IEquatable<Trax.Api.DTOs.RunGraphTrack>
+    {
+        public RunGraphTrack(string Name, string? Description, bool IsFallback, bool Taken, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes) { }
+        public string? Description { get; init; }
+        public bool IsFallback { get; init; }
+        public string Name { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes { get; init; }
+        public bool Taken { get; init; }
+    }
+    public enum RunNodeState
+    {
+        NotReached = 0,
+        InProgress = 1,
+        Completed = 2,
+        Failed = 3,
+        Cancelled = 4,
+        Skipped = 5,
+        NotRecorded = 6,
+        Withheld = 7,
     }
     public class RunTrainResponse : System.IEquatable<Trax.Api.DTOs.RunTrainResponse>
     {
@@ -659,5 +706,14 @@ namespace Trax.Api.Services.Metrics
     {
         public ProcessCpuSampler() { }
         public double? SamplePercent() { }
+    }
+}
+namespace Trax.Api.Services.Runs
+{
+    public static class RunGraphs
+    {
+        public const int MaxSteps = 500;
+        public static Trax.Api.DTOs.RunGraph Match(long metadataId, string train, Trax.Core.Monad.ChainGraph? graph, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> steps, bool moreSteps = false) { }
+        public static System.Threading.Tasks.Task<Trax.Api.DTOs.RunGraph?> ReadAsync(Trax.Effect.Data.Services.DataContext.IDataContext context, Trax.Mediator.Services.ChainVerification.ITrainChainGraphs graphs, long metadataId, System.Threading.CancellationToken cancellationToken) { }
     }
 }

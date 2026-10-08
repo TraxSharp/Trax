@@ -423,6 +423,174 @@ public class JunctionEventsE2ETests
 
     #endregion
 
+    #region The declared graph
+
+    private static string DeclaredChainQuery(string train) =>
+        $"{{ operations {{ declaredChain(train: \"{train}\") {{ train hash nodes {{ id kind opaque tracks {{ name nodes {{ id }} }} }} }} }} }}";
+
+    private const string RunNodeFields = "id kind state replayed trackTaken steps { position }";
+
+    private static string RunGraphQuery(long metadataId) =>
+        $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ metadataId train hasGraph hash moreSteps "
+        + $"unmatchedSteps {{ position nodeId }} nodes {{ {RunNodeFields} tracks {{ name taken nodes {{ {RunNodeFields} }} }} }} }} }} }}";
+
+    [Test]
+    public async Task DeclaredChain_OfARegisteredTrain_IsReadableOnlyInTheOperationsView()
+    {
+        var train = typeof(IHiddenMarkerTrain).FullName!;
+
+        using var forAdmin = await PostAsync(DeclaredChainQuery(train), AdminKey);
+        var graph = forAdmin
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("declaredChain");
+        graph.GetProperty("hash").GetString().Should().HaveLength(64);
+        graph
+            .GetProperty("nodes")
+            .EnumerateArray()
+            .Select(n => n.GetProperty("id").GetString())
+            .Should()
+            .Equal(
+                "Seed<IDecider>#0",
+                nameof(HoldForRelease) + "#0",
+                "Decide<ChoiceDecision<MarkerLane>>#0",
+                "Switch<MarkerLane>#0",
+                "Decide<ChoiceDecision<MarkerTier>>#0",
+                "Switch<MarkerTier>#0",
+                nameof(FinishOrExplode) + "#0",
+                "Resolve#0"
+            );
+        graph
+            .GetProperty("nodes")[3]
+            .GetProperty("tracks")
+            .EnumerateArray()
+            .Select(t => t.GetProperty("name").GetString())
+            .Should()
+            .Equal("Fast", "Slow");
+
+        foreach (var key in new[] { PlayerKey, GuestKey, null })
+        {
+            using var refused = await PostAsync(DeclaredChainQuery(train), key);
+            Denied(refused)
+                .Should()
+                .BeTrue($"the graph names the train's types (caller {key ?? "anonymous"})");
+            refused.RootElement.GetRawText().Should().NotContain(nameof(HoldForRelease));
+        }
+    }
+
+    [Test]
+    public async Task DeclaredChain_OfANameNoTrainIsRegisteredUnder_IsNull()
+    {
+        foreach (var name in new[] { "System.String", typeof(MarkerTrainBase).FullName!, "Nope" })
+        {
+            using var doc = await PostAsync(DeclaredChainQuery(name), AdminKey);
+            doc.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
+            doc.RootElement.GetProperty("data")
+                .GetProperty("operations")
+                .GetProperty("declaredChain")
+                .ValueKind.Should()
+                .Be(JsonValueKind.Null, name);
+        }
+    }
+
+    [Test]
+    public async Task RunGraph_PlacesEveryRecordedStep_OnItsNodeOrAsUnmatched()
+    {
+        await using var run = await StartRunAsync<IHiddenMarkerTrain>(fail: true);
+        run.Release();
+        await run.Finished;
+        var timeline = await TimelineWhenCompleteAsync(run.MetadataId);
+
+        using var doc = await PostAsync(RunGraphQuery(run.MetadataId), AdminKey);
+        doc.RootElement.TryGetProperty("errors", out var errors)
+            .Should()
+            .BeFalse(errors.ValueKind == JsonValueKind.Undefined ? "" : errors.GetRawText());
+        var graph = doc
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("runGraph");
+
+        graph.GetProperty("hasGraph").GetBoolean().Should().BeTrue();
+        graph.GetProperty("train").GetString().Should().Be(typeof(IHiddenMarkerTrain).FullName);
+        var nodes = graph.GetProperty("nodes");
+        var byId = nodes.EnumerateArray().ToDictionary(n => n.GetProperty("id").GetString()!);
+        byId["Seed<IDecider>#0"].GetProperty("state").GetString().Should().Be("NOT_RECORDED");
+        byId[nameof(HoldForRelease) + "#0"]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("COMPLETED");
+        byId["Decide<ChoiceDecision<MarkerLane>>#0"]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("COMPLETED");
+
+        var lane = byId["Switch<MarkerLane>#0"];
+        lane.GetProperty("trackTaken").GetString().Should().Be(nameof(MarkerLane.Fast));
+        var fast = lane.GetProperty("tracks")[0];
+        fast.GetProperty("taken").GetBoolean().Should().BeTrue();
+        fast.GetProperty("nodes")[0].GetProperty("state").GetString().Should().Be("COMPLETED");
+        lane.GetProperty("tracks")[1]
+            .GetProperty("nodes")[0]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("SKIPPED");
+
+        // The sensitive route's track is not named, and nor is anything after it: each node there
+        // says its steps are withheld rather than that the run never reached it.
+        var tier = byId["Switch<MarkerTier>#0"];
+        tier.GetProperty("trackTaken").ValueKind.Should().Be(JsonValueKind.Null);
+        tier.GetProperty("tracks")
+            .EnumerateArray()
+            .SelectMany(t => t.GetProperty("nodes").EnumerateArray())
+            .Select(n => n.GetProperty("state").GetString())
+            .Should()
+            .OnlyContain(s => s == "WITHHELD");
+        byId[nameof(FinishOrExplode) + "#0"]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("WITHHELD");
+
+        // None is lost: every recorded step is on a node or listed unmatched.
+        var unmatched = graph.GetProperty("unmatchedSteps").EnumerateArray().ToList();
+        Positions(nodes)
+            .Concat(unmatched.Select(s => s.GetProperty("position").GetInt32()))
+            .Should()
+            .BeEquivalentTo(timeline.Select(s => s.GetProperty("position").GetInt32()));
+
+        // The steps after the sensitive route carry no node id, which would name its track.
+        unmatched
+            .Should()
+            .OnlyContain(s => s.GetProperty("nodeId").ValueKind == JsonValueKind.Null);
+
+        foreach (var key in new[] { PlayerKey, GuestKey, null })
+        {
+            using var refused = await PostAsync(RunGraphQuery(run.MetadataId), key);
+            Denied(refused).Should().BeTrue($"caller {key ?? "anonymous"}");
+        }
+    }
+
+    private static IEnumerable<int> Positions(JsonElement nodes) =>
+        nodes
+            .EnumerateArray()
+            .SelectMany(n =>
+                n.GetProperty("steps")
+                    .EnumerateArray()
+                    .Select(s => s.GetProperty("position").GetInt32())
+                    .Concat(
+                        n.TryGetProperty("tracks", out var tracks)
+                            ? tracks
+                                .EnumerateArray()
+                                .SelectMany(t => Positions(t.GetProperty("nodes")))
+                            : []
+                    )
+            );
+
+    #endregion
+
     #region Helpers
 
     private const string Withheld = JunctionStep.WithheldName;

@@ -1,8 +1,11 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.Services.Runs;
 using Trax.Api.Tests.Stress.Fixtures;
+using Trax.Core.Monad;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Mediator.Services.ChainVerification;
 
 namespace Trax.Api.Tests.Stress.IntegrationTests;
 
@@ -122,6 +125,79 @@ public class JunctionRunStressTests : StressTestSetup
                 steps[0].Position.Should().Be(Page);
             }
         );
+    }
+
+    [Test]
+    public async Task RunGraph_LongRun_AtScale_WithinBudget()
+    {
+        await MeasureAsync(
+            $"operations.runGraph (a run of {LongRunSteps} steps, the first {RunGraphs.MaxSteps} read)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var graph = await new OperationsQueries().GetRunGraph(
+                    LongRun,
+                    sp.GetRequiredService<IDataContextProviderFactory>(),
+                    new EveryTrainHasOneGraph(),
+                    ct
+                );
+                graph!.HasGraph.Should().BeTrue();
+                graph.MoreSteps.Should().BeTrue();
+                (graph.Nodes.Sum(n => n.Steps.Count) + graph.UnmatchedSteps.Count)
+                    .Should()
+                    .Be(RunGraphs.MaxSteps);
+            }
+        );
+    }
+
+    [Test]
+    public async Task RunGraph_ShortRun_AtScale_WithinBudget()
+    {
+        await MeasureAsync(
+            "operations.runGraph (a five-step run)",
+            ListBudget,
+            async (sp, ct) =>
+            {
+                var graph = await new OperationsQueries().GetRunGraph(
+                    1,
+                    sp.GetRequiredService<IDataContextProviderFactory>(),
+                    new EveryTrainHasOneGraph(),
+                    ct
+                );
+                graph!.MoreSteps.Should().BeFalse();
+                (graph.Nodes.Sum(n => n.Steps.Count) + graph.UnmatchedSteps.Count)
+                    .Should()
+                    .Be(StepsPerRun);
+            }
+        );
+    }
+
+    /// <summary>A graph for every train: one junction step, and a switch with two tracks.</summary>
+    private sealed class EveryTrainHasOneGraph : ITrainChainGraphs
+    {
+        private static readonly ChainGraph Graph = new(
+            "Acme.Train",
+            "In",
+            "Out",
+            [
+                new ChainGraphNode("Step0#0", ChainStepKind.Chain, "Step0", "In", "In", false, []),
+                new ChainGraphNode(
+                    "Switch<Lane>#0",
+                    ChainStepKind.Switch,
+                    null,
+                    "In",
+                    "Taken<Lane>",
+                    false,
+                    [
+                        new ChainGraphTrack("Fast", null, false, []),
+                        new ChainGraphTrack("Slow", null, false, []),
+                    ]
+                ),
+            ],
+            []
+        );
+
+        public ChainGraph? Find(string train) => Graph;
     }
 
     [Test]

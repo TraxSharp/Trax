@@ -135,6 +135,15 @@ ids for its own steps, and the outer id returns when the inner run does.
 The run numbers its steps the same way the graph does, so a running step's id is always the id of
 a node in that train's graph.
 
+## Reading it from a host
+
+A host serves the graph of each registered train through `ITrainChainGraphs.Find(name)`, by its
+canonical name, reading each chain once and keeping it. The operations API returns it as
+[`declaredChain`](/docs/sdk-reference/graphql-api/queries#declaredchain), and draws one run on it as
+[`runGraph`](/docs/sdk-reference/graphql-api/queries#rungraph), matching each recorded step to its
+node by the `nodeId` junction events record; the dashboard's run page shows the same
+[run graph](/docs/dashboard).
+
 ## Example
 
 A test that fails when a train's shape changes, by comparing its graph to a committed copy:

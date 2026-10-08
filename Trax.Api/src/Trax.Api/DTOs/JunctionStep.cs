@@ -60,6 +60,19 @@ public sealed record JunctionStep(
     int? TrackPosition = null
 )
 {
+    /// <summary>
+    /// The id of the declared node this step ran for, as the train's graph names it
+    /// (<c>operations.declaredChain</c>), such as <c>Switch&lt;Source&gt;#0/Papers/FetchPapers#0</c>.
+    /// A question carries the id of the <c>Decide</c> step that asked it, a route its routing
+    /// step's. Null for a step recorded
+    /// before node ids were, and for a step on a track whose answer is withheld, from this caller
+    /// or from everyone.
+    /// </summary>
+    /// <remarks>
+    /// An id names the track a step sits on, so it is withheld wherever the step's name is.
+    /// </remarks>
+    public string? NodeId { get; init; }
+
     /// <summary>What a withheld name reads as.</summary>
     internal const string WithheldName = JunctionEventPayload.WithheldName;
 
@@ -69,6 +82,7 @@ public sealed record JunctionStep(
         {
             Name = WithheldName,
             NameWithheld = true,
+            NodeId = null,
         };
 
     /// <summary>
@@ -116,7 +130,11 @@ public sealed record JunctionStep(
             payload.Attempt,
             payload.NameWithheld,
             payload.TrackPosition
-        );
+        )
+        {
+            // A withheld name keeps its node id withheld too: the id names the track.
+            NodeId = payload.NameWithheld ? null : payload.NodeId,
+        };
 
     /// <summary>The step a recorded <c>trax.junction_run</c> row holds.</summary>
     /// <param name="row">The row.</param>
@@ -140,5 +158,9 @@ public sealed record JunctionStep(
             row.Attempt,
             row.NameWithheld,
             row.TrackPosition
-        );
+        )
+        {
+            // A withheld name keeps its node id withheld too: the id names the track.
+            NodeId = row.NameWithheld ? null : row.NodeId,
+        };
 }

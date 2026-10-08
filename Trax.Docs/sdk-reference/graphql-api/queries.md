@@ -837,6 +837,112 @@ refused the other. The rows trail the live subscription by moments: a client fol
 execution subscribes first, then reads this, and keeps for each position whichever is further
 along.
 
+`nodeId` is the id of the declared node the step ran for, as [`declaredChain`](#declaredchain)
+names it: a junction carries its own node's id, a question the id of the `Decide` step that asked
+it, a route the id of its routing step. It is null for a step recorded before node ids were, and
+wherever the step's name is withheld, because the id names the track the step sits on.
+
+---
+
+### declaredChain
+
+The declared chain of a registered train as a graph: every step in the order the chain declares it,
+each routing step's tracks with their own steps, and a hash that changes whenever the chain does.
+Nothing runs to read it; see [ChainGraph](/docs/sdk-reference/train-methods/chain-graph).
+
+```graphql
+query {
+  operations {
+    declaredChain(train: "Acme.Orders.IShipOrderTrain") {
+      train
+      input
+      output
+      hash
+      refusals
+      nodes {
+        id
+        kind
+        junction
+        in
+        out
+        opaque
+        tracks { name description isFallback nodes { id kind junction opaque } }
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `train` | `String!` | none | The train's canonical name, the interface's full name, as `execution.name` carries it |
+
+**Returns**: `ChainGraph`, or null when no registered train has that name, or its chain cannot be
+read outside a request (it needs a dependency only a request supplies). Only registered trains are
+looked up, by name, so no name a caller sends makes the host load a type. `kind` is a
+`ChainStepKind` (`CHAIN`, `I_CHAIN`, `SHORT_CIRCUIT`, `EXTRACT`, `RESOLVE`, `SEED`, `DECIDE`,
+`SWITCH`, `GATE`, `SCALE`), and `opaque` is true for a step whose junction is decided only at run
+time. A node's `id` names the step and the routing step and track it sits in, as in
+`Switch<Lane>#0/Fast/Ship#0`, and is what a recorded step's `nodeId` refers to.
+
+The graph names the train's types, so it answers to the operations gate and nothing outside it.
+
+---
+
+### runGraph
+
+One execution drawn on its train's declared chain: each node with the steps the run recorded for it
+and where it stands, the track each routing step took, and the steps that match no node. It reads
+the run's first 500 steps through `JunctionRunQueries.ForRun`, as [`junctionRuns`](#junctionruns)
+does, and places them by `nodeId` through `RunGraphs.Match`, which the dashboard's run graph calls
+too.
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 100) {
+      train
+      hasGraph
+      hash
+      moreSteps
+      nodes {
+        id
+        kind
+        state
+        replayed
+        trackTaken
+        steps { position state failureClass }
+        tracks { name taken nodes { id state } }
+      }
+      unmatchedSteps { position name nodeId state }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metadataId` | `Long!` | none | The execution's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
+
+**Returns**: `RunGraph`, or null for an id with no execution. A node's `state` is one of:
+
+| State | Meaning |
+|-------|---------|
+| `COMPLETED`, `FAILED`, `CANCELLED`, `IN_PROGRESS` | From the steps recorded for it, the worst of them |
+| `SKIPPED` | It sits on a track the run did not take |
+| `NOT_REACHED` | Nothing was recorded for it |
+| `NOT_RECORDED` | An `Extract`, `Seed` or `Resolve`, which records nothing when it runs |
+| `WITHHELD` | It comes after a route whose answer is withheld, so the steps recorded there name no node |
+
+`trackTaken` is the route's recorded answer, or the one track holding recorded steps when the
+answer is missing. The graph is the chain as the host declares it now, so a step recorded before
+node ids were, after a withheld route, or for a node the chain no longer declares, is listed in
+`unmatchedSteps` rather than dropped. `hasGraph` is false when the host has no graph for the train;
+`nodes` is then empty and every step is unmatched. `moreSteps` says the run recorded more than 500
+steps, so a later node can show as not reached when it ran.
+
+It answers to the operations gate, as `junctionRuns` does.
+
 ---
 
 ### decisions
