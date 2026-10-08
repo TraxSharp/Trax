@@ -1,3 +1,4 @@
+using Trax.Core.Exceptions;
 using Trax.Effect.Enums;
 
 namespace Trax.Scheduler.Services.Operations;
@@ -119,3 +120,119 @@ public record MachineInstanceStateCount(
     SnapshotOwnerKind OwnerKind,
     long Count
 );
+
+/// <summary>
+/// One train run a state-machine instance invoked, as an operator reads it: the fields the run
+/// listings show, never its input or output.
+/// </summary>
+/// <param name="Id">The run's id (its metadata row), which the run's own page is keyed by.</param>
+/// <param name="ExternalId">The run's external id.</param>
+/// <param name="TrainName">The train that ran (the train interface's full name).</param>
+/// <param name="TrainState">Where the run is.</param>
+/// <param name="StartTime">When it started (UTC).</param>
+/// <param name="EndTime">When it ended (UTC), or null while it has not.</param>
+/// <param name="FailureClass">How its failure was classified, or <c>Unclassified</c>.</param>
+/// <param name="CancellationRequested">Whether a cancel has been requested for it.</param>
+/// <param name="IsLive">
+/// True for the run the instance's current state waits on: its external id is the instance's
+/// invoke token. At most one run of an instance is live.
+/// </param>
+public record MachineInstanceRun(
+    long Id,
+    string ExternalId,
+    string TrainName,
+    TrainState TrainState,
+    DateTime StartTime,
+    DateTime? EndTime,
+    FailureClass FailureClass,
+    bool CancellationRequested,
+    bool IsLive
+);
+
+/// <summary>
+/// The train runs one state-machine instance invoked, newest first, as
+/// <see cref="IOperationsService.GetMachineInstanceRunsAsync"/> returns them.
+/// </summary>
+/// <remarks>
+/// A run is linked to the instance that queued it by its machine, its instance id and its owner
+/// kind, which the run keeps after the instance has left the state. A system instance is unique
+/// by machine and id, so every run so linked is its own. A user's draft is not: several users can
+/// each hold a draft under one id, and a run does not record whose draft queued it. So a user's
+/// draft lists only its live run, the one whose external id is the draft's own invoke token, and
+/// never a run another user's draft under the same id may have queued.
+/// </remarks>
+/// <param name="Items">
+/// The runs, newest first, at most <see cref="OperationsService.MachineInstanceRunCap"/>.
+/// </param>
+/// <param name="Capped">True when the instance invoked more runs than are listed.</param>
+/// <param name="QueuedEntryId">
+/// The work queue entry of the live run while it is still queued and so has no run row yet;
+/// null otherwise.
+/// </param>
+public record MachineInstanceRuns(
+    IReadOnlyList<MachineInstanceRun> Items,
+    bool Capped,
+    long? QueuedEntryId
+);
+
+/// <summary>
+/// What <see cref="IOperationsService.CancelMachineInstanceAsync"/> did, or why it did nothing.
+/// The first three are successes; the rest are refusals and change nothing.
+/// </summary>
+public enum MachineInstanceCancelOutcome
+{
+    /// <summary>
+    /// The live run was still queued and is cancelled before it started, and this call moved the
+    /// instance through its <c>OnCancelled</c> edge.
+    /// </summary>
+    Moved,
+
+    /// <summary>
+    /// The live run was still queued and is cancelled before it started. The instance moves
+    /// through its <c>OnCancelled</c> edge when a host that registers the machine applies the
+    /// outcome (this host does not, or another delivery got there first).
+    /// </summary>
+    RunCancelled,
+
+    /// <summary>
+    /// The live run was already dispatched, and its cancel is requested: it stops at its next
+    /// junction, ends Cancelled, and the instance then moves through its <c>OnCancelled</c> edge.
+    /// </summary>
+    CancelRequested,
+
+    /// <summary>The instance is owned by a user; operators may cancel only system-owned instances.</summary>
+    UserOwned,
+
+    /// <summary>No system-owned instance has this machine and id.</summary>
+    NotFound,
+
+    /// <summary>The instance's state waits on no train run, so there is nothing to cancel.</summary>
+    NoLiveRun,
+
+    /// <summary>
+    /// The live run has already ended; its outcome is being applied, and a cancel cannot change it.
+    /// </summary>
+    RunEnded,
+}
+
+/// <summary>The result of an operator's cancel of a state-machine instance.</summary>
+/// <param name="Outcome">What happened, or why nothing did.</param>
+/// <param name="Message">
+/// The outcome in words. The dashboard and the API show this same text (central <c>docs/0022</c>).
+/// </param>
+/// <param name="State">
+/// The state the instance is in after <see cref="MachineInstanceCancelOutcome.Moved"/>; null otherwise.
+/// </param>
+public record MachineInstanceCancelResult(
+    MachineInstanceCancelOutcome Outcome,
+    string Message,
+    string? State = null
+)
+{
+    /// <summary>True when the run was cancelled or its cancel requested.</summary>
+    public bool Success =>
+        Outcome
+            is MachineInstanceCancelOutcome.Moved
+                or MachineInstanceCancelOutcome.RunCancelled
+                or MachineInstanceCancelOutcome.CancelRequested;
+}

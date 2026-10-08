@@ -137,6 +137,11 @@ namespace Trax.Effect.StateMachine.Persistence
         System.Threading.Tasks.Task Cancel(string invokeToken, System.Threading.CancellationToken cancellationToken = default);
     }
     [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public interface IInvokedRunOutcomes
+    {
+        System.Threading.Tasks.Task<string?> Deliver(string invokeToken, System.Threading.CancellationToken cancellationToken = default);
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public interface IInvokedTrainLauncher
     {
         System.Threading.Tasks.Task Launch(Trax.Effect.StateMachine.Persistence.InvokedTrainLaunch launch, Trax.Effect.Data.Services.DataContext.IDataContext context, System.Threading.CancellationToken cancellationToken = default);

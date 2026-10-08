@@ -133,6 +133,7 @@ public static class StateMachinesBuilderExtensions
         services.AddSingleton<InvokeOutcomeReconciler>();
         services.AddHostedService(sp => sp.GetRequiredService<InvokeOutcomeReconciler>());
         services.AddSingleton<ITrainLifecycleHookFactory, InvokeOutcomeHookFactory>();
+        services.AddSingleton<IInvokedRunOutcomes, InvokedRunOutcomes>();
 
         services.AddScopedTraxRoute<ISaveSnapshot, SaveSnapshot>();
         services.AddScopedTraxRoute<IAdvanceSnapshot, AdvanceSnapshot>();

@@ -570,6 +570,48 @@ public interface IOperationsService
         CancellationToken ct
     ) => throw NotImplementedBy(nameof(GetMachineInstanceStateCountsAsync));
 
+    /// <summary>
+    /// The train runs one state-machine instance invoked, newest first and capped at
+    /// <c>OperationsService.MachineInstanceRunCap</c>, with the run its state waits on marked
+    /// live; or <c>null</c> when no row matches <paramref name="key"/>. Each run carries the
+    /// fields the run listings show, never its input or output. A system instance lists every run
+    /// it invoked; a user's draft lists only its live run, because a run does not record which
+    /// user's draft queued it (see <see cref="MachineInstanceRuns"/>). The dashboard's instance
+    /// page and the API's <c>machineInstance { invokedRuns }</c> both read it here.
+    /// </summary>
+    /// <param name="key">The instance, named as for <see cref="GetMachineInstanceAsync"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="key"/> names a user's draft without a row id, or names no machine.
+    /// </exception>
+    Task<MachineInstanceRuns?> GetMachineInstanceRunsAsync(
+        MachineInstanceKey key,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceRunsAsync));
+
+    /// <summary>
+    /// An operator's cancel of a system-owned state-machine instance: cancels the train run its
+    /// state waits on, and the instance then moves through that state's <c>OnCancelled</c> edge.
+    /// A run still only queued is marked Cancelled and never starts, and the outcome is applied
+    /// in this call when this host registers the machine; a run already dispatched has its
+    /// cancel requested, stops at its next junction, and the instance moves when it ends. The
+    /// outcome is applied through the one conditional update every delivery makes, so it is
+    /// applied once whoever delivers it first. The dashboard's Cancel button and the API's
+    /// <c>cancelMachineInstance</c> both call it, and show its message.
+    /// </summary>
+    /// <remarks>
+    /// Refused, changing nothing: a user-owned instance (operators see users' drafts read-only),
+    /// an instance that does not exist, one whose state waits on no run, and one whose run has
+    /// already ended.
+    /// </remarks>
+    /// <param name="key">The instance. Only a system-owned instance can be cancelled.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException"><paramref name="key"/> names no machine.</exception>
+    Task<MachineInstanceCancelResult> CancelMachineInstanceAsync(
+        MachineInstanceKey key,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CancelMachineInstanceAsync));
+
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "
