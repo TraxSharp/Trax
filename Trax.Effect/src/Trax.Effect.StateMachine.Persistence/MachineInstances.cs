@@ -235,6 +235,12 @@ internal interface IMachineInternals
     /// <summary>Every state that invokes a train, as the startup check describes it to the launcher.</summary>
     IReadOnlyList<InvokedTrainDeclaration> InvokedTrains { get; }
 
+    /// <summary>
+    /// Every outcome edge of an invoking state whose target invokes a train of its own: entering that target would
+    /// queue the next run with no user present. Empty for a machine that chains no runs through outcomes.
+    /// </summary>
+    IReadOnlyList<ChainedOutcome> ChainedOutcomes { get; }
+
     /// <summary>The invoking state <paramref name="state"/> is, or null when it invokes nothing.</summary>
     EnteringInvoke? Entering(string state);
 
@@ -259,6 +265,12 @@ internal interface IMachineInternals
         InvokeRuntime? invokes
     );
 }
+
+/// <summary>An outcome edge of an invoking state that enters another invoking state.</summary>
+/// <param name="State">The invoking state the run belongs to.</param>
+/// <param name="Outcome">The outcome, <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c>.</param>
+/// <param name="Target">The state the outcome enters, which invokes a train of its own.</param>
+internal sealed record ChainedOutcome(string State, string Outcome, string Target);
 
 /// <summary>
 /// What a draft service of a machine that invokes trains writes through: the owner-aware store over the request's

@@ -29,13 +29,25 @@ internal static class InvokeOutcomeReasons
 
     /// <summary>The target invokes a train of its own, and that run could not be queued.</summary>
     public const string NextRunRefused = "invoke-next-run-refused";
+
+    /// <summary>
+    /// The run can no longer be found: neither its work queue entry nor its metadata row exists, so something
+    /// (metadata retention, an operator) deleted them before its outcome was delivered. How it ended is unknown.
+    /// </summary>
+    public const string RunMissing = "invoke-run-missing";
 }
 
 /// <summary>How an invoked run ended, as the machine that invoked it reads it.</summary>
 /// <param name="Kind">Done, Failed or Cancelled.</param>
 /// <param name="Output">A completed run's recorded output, or null.</param>
 /// <param name="Oversize">True when a completed run's output was too large to record.</param>
-internal sealed record InvokedRunEnd(InvokeOutcomeKind Kind, string? Output, bool Oversize);
+/// <param name="Reason">Why the end is applied as a failure the run did not report itself, one of <see cref="InvokeOutcomeReasons"/>; null otherwise.</param>
+internal sealed record InvokedRunEnd(
+    InvokeOutcomeKind Kind,
+    string? Output,
+    bool Oversize,
+    string? Reason = null
+);
 
 /// <summary>What one delivery of an invoked run's outcome did.</summary>
 internal abstract record InvokeDelivery
@@ -102,7 +114,9 @@ internal abstract record InvokeDelivery
 /// <c>metadata.output</c>. A dispatch that failed and was requeued is not an end: its entry is queued again.</para>
 /// <para>Fail-closed: a Done outcome that cannot be applied (its output too large, unaccepted by every
 /// <c>OnDone</c> guard, unrecorded, or reduced to a refused context, or its target's run refused) is applied as the
-/// state's <c>OnFailed</c> with a typed reason, so the instance never waits on a run that has finished.</para>
+/// state's <c>OnFailed</c> with a typed reason, so the instance never waits on a run that has finished. So is a run
+/// that can no longer be found (<see cref="InvokeOutcomeReasons.RunMissing"/>), so the instance never waits on a
+/// run whose records were deleted.</para>
 /// See <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c>.
 /// </remarks>
 [Experimental(ExperimentalIds.Invokes)]
@@ -226,14 +240,17 @@ internal sealed class InvokeOutcomeDelivery(
         {
             var runs = await context
                 .Metadatas.AsNoTracking()
-                .Where(m =>
-                    (runIds.Contains(m.Id) || unqueued.Contains(m.ExternalId))
-                    && Ended.Contains(m.TrainState)
-                )
-                .Select(m => m.ExternalId)
+                .Where(m => runIds.Contains(m.Id) || unqueued.Contains(m.ExternalId))
+                .Select(m => new { m.ExternalId, m.TrainState })
                 .ToListAsync(cancellationToken);
-            foreach (var run in runs)
-                ended.Add(run.Trim());
+            foreach (var run in runs.Where(r => Ended.Contains(r.TrainState)))
+                ended.Add(run.ExternalId.Trim());
+
+            // A token whose run can no longer be found at all has ended as far as its machine can tell; the
+            // delivery reads it again and applies it as a failure (see ReadEnd).
+            var found = runs.Select(r => r.ExternalId.Trim()).ToHashSet(StringComparer.Ordinal);
+            foreach (var token in unqueued.Where(t => !found.Contains(t)))
+                ended.Add(token);
         }
 
         return invokeTokens.Where(ended.Contains).ToList();
@@ -254,12 +271,30 @@ internal sealed class InvokeOutcomeDelivery(
 
         long? runId;
         if (entry is null)
+        {
             runId = await context
                 .Metadatas.AsNoTracking()
                 .Where(m => m.ExternalId == invokeToken)
                 .OrderByDescending(m => m.Id)
                 .Select(m => (long?)m.Id)
                 .FirstOrDefaultAsync(cancellationToken);
+
+            // Neither the entry nor the run exists. That is never a run still to come: the outbox writes the
+            // entry in the same transaction that sets the token, and every caller reads the token (the row that
+            // holds it) before this, so an entry that was ever written is visible here unless it was deleted.
+            // Dispatch only updates an entry, and no cleanup deletes an invoked run's entry on its own: it has no
+            // manifest (the manifest pruner), is never staged (the stranded-entry sweep) and never dead-lettered
+            // (dead letter cleanup). Metadata retention deletes a finished run together with its entry, and keeps
+            // an invoked run while an instance still holds its token. So this is a run whose records were deleted
+            // some other way; it can never end, so the machine treats it as failed.
+            if (runId is null)
+                return new InvokedRunEnd(
+                    InvokeOutcomeKind.Failed,
+                    null,
+                    false,
+                    InvokeOutcomeReasons.RunMissing
+                );
+        }
         else
             switch (entry.Status)
             {
@@ -312,7 +347,7 @@ internal sealed class InvokeOutcomeDelivery(
         CancellationToken cancellationToken
     )
     {
-        string? reason = null;
+        var reason = end.Reason;
         InvokeOutcome outcome = end.Kind switch
         {
             InvokeOutcomeKind.Failed => new InvokeOutcome.Failed(),

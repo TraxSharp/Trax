@@ -98,13 +98,14 @@ public sealed class InvokeCluster : IAsyncDisposable
     /// <summary>
     /// A host. <paramref name="machines"/> registers the state machines (their outcome hook and reconciler);
     /// <paramref name="scheduler"/> registers the scheduler, whose dispatcher hands runs to this host's
-    /// <see cref="ClusterHost.RunJob"/> instead of a worker.
+    /// <see cref="ClusterHost.RunJob"/> instead of a worker, configured further by <paramref name="scheduling"/>.
     /// </summary>
     public ClusterHost Host(
         bool machines,
         bool scheduler,
         Action<IServiceCollection>? configure = null,
-        Action<StateMachineOptions>? options = null
+        Action<StateMachineOptions>? options = null,
+        Action<SchedulerConfigurationBuilder>? scheduling = null
     )
     {
         var held = new HeldJobs();
@@ -129,8 +130,11 @@ public sealed class InvokeCluster : IAsyncDisposable
             );
             if (scheduler)
                 mediator.AddScheduler(s =>
-                    s.OverrideSubmitter(x => x.AddScoped<IJobSubmitter, HeldSubmitter>())
-                );
+                {
+                    s.OverrideSubmitter(x => x.AddScoped<IJobSubmitter, HeldSubmitter>());
+                    scheduling?.Invoke(s);
+                    return s;
+                });
         });
         configure?.Invoke(services);
 

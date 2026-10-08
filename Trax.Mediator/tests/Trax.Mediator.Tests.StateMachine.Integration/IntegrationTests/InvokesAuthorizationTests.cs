@@ -1,4 +1,9 @@
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Enums;
+using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Tests.StateMachine.Integration.Fakes;
 using Trax.Mediator.Tests.StateMachine.Integration.Fixtures;
@@ -143,5 +148,61 @@ public class InvokesAuthorizationTests(StoreProvider provider)
             .BeTrue(
                 $"a system-owned machine's train is authorized as a scheduled manifest run is. See {Adr}"
             );
+    }
+
+    [Test]
+    public async Task A_run_launched_from_an_outcome_of_a_user_owned_instance_is_refused()
+    {
+        // The startup check refuses a user-owned machine whose outcome enters an invoking state, so this launch
+        // never happens; if one does, the launcher refuses it rather than authorize it in the trusted scope.
+        TestPrincipal.Become(null);
+        var userRun = Guid.NewGuid().ToString("N");
+
+        var launch = () =>
+            LaunchFromOutcome(userRun, UserChainMachine.MachineId, SnapshotOwnerKind.User);
+
+        var refused = await launch.Should().ThrowAsync<UnauthorizedAccessException>();
+        refused
+            .Which.Message.Should()
+            .Contain("user-owned")
+            .And.Contain(UserChainMachine.MachineId);
+        RecordingAuthorization
+            .Calls.Should()
+            .BeEmpty($"nothing is authorized, in the trusted scope or out of it. See {Adr}");
+        (await Entries(userRun)).Should().Be(0);
+
+        // A system-owned instance's chained run is authorized in the trusted scope and queued.
+        var systemRun = Guid.NewGuid().ToString("N");
+        await LaunchFromOutcome(systemRun, SystemChainMachine.MachineId, SnapshotOwnerKind.System);
+        RecordingAuthorization.Calls.Should().ContainSingle().Which.Trusted.Should().BeTrue();
+        (await Entries(systemRun)).Should().Be(1);
+    }
+
+    private async Task LaunchFromOutcome(string externalId, string machine, SnapshotOwnerKind owner)
+    {
+        using var scope = _host.Scope();
+        await scope
+            .ServiceProvider.GetRequiredService<IInvokedTrainLauncher>()
+            .Launch(
+                new InvokedTrainLaunch(
+                    typeof(IGoodTrain),
+                    new GoodInput("repo"),
+                    externalId,
+                    new InvokedBy(machine, Guid.NewGuid(), owner)
+                )
+                {
+                    FromOutcome = true,
+                },
+                scope.ServiceProvider.GetRequiredService<IDataContext>()
+            );
+    }
+
+    private async Task<int> Entries(string externalId)
+    {
+        using var scope = _host.Scope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .WorkQueues.AsNoTracking()
+            .CountAsync(w => w.ExternalId == externalId);
     }
 }

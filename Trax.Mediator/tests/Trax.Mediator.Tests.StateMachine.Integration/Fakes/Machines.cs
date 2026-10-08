@@ -175,3 +175,92 @@ public sealed class SecretMachine : StageMachine<ISecretTrain, SecretInput, Secr
 
     protected override SecretInput Input(string source) => new(source);
 }
+
+public enum ChainState
+{
+    Idle,
+    Fetching,
+    Fetched,
+    Embedding,
+    Done,
+    Failed,
+    Cancelled,
+}
+
+public enum ChainTrigger
+{
+    Go,
+    Continue,
+    Retry,
+}
+
+/// <summary>
+/// Two stages: <c>Fetching</c> and <c>Embedding</c> each invoke <see cref="IGoodTrain"/>. When
+/// <see cref="ChainedByOutcome"/>, <c>Fetching</c>'s <c>OnDone</c> enters <c>Embedding</c> directly, so the outcome
+/// queues the next run; otherwise it enters <c>Fetched</c>, and the user's <c>Continue</c> enters <c>Embedding</c>.
+/// </summary>
+public abstract class ChainStageMachine : Machine<ChainState, ChainTrigger>
+{
+    protected abstract string Id { get; }
+
+    protected virtual bool System => false;
+
+    protected virtual bool ChainedByOutcome => true;
+
+    protected override void Configure(IMachineBuilder<ChainState, ChainTrigger> m)
+    {
+        m.Id(Id)
+            .Version(1)
+            .StartsAt(
+                System ? ChainState.Fetching : ChainState.Idle,
+                () => new JsonObject { ["source"] = "repo" }
+            );
+        if (System)
+            m.SystemOwned();
+
+        m.In(ChainState.Idle).On(ChainTrigger.Go).To(ChainState.Fetching);
+
+        m.In(ChainState.Fetching)
+            .Invokes<IGoodTrain, GoodInput, JobOutput>(ctx =>
+                new(ctx["source"]!.GetValue<string>())
+            )
+            .OnDone(ChainedByOutcome ? ChainState.Embedding : ChainState.Fetched)
+            .OnFailed(ChainState.Failed)
+            .OnCancelled(ChainState.Cancelled);
+
+        m.In(ChainState.Fetched).On(ChainTrigger.Continue).To(ChainState.Embedding);
+
+        m.In(ChainState.Embedding)
+            .Invokes<IGoodTrain, GoodInput, JobOutput>(ctx =>
+                new(ctx["source"]!.GetValue<string>())
+            )
+            .OnDone(ChainState.Done)
+            .OnFailed(ChainState.Failed)
+            .OnCancelled(ChainState.Cancelled);
+
+        m.In(ChainState.Failed).On(ChainTrigger.Retry).To(ChainState.Fetching);
+    }
+}
+
+/// <summary>A user's machine whose first stage's outcome enters the second stage, which invokes a train.</summary>
+public sealed class UserChainMachine : ChainStageMachine
+{
+    public const string MachineId = "user-chain-stage";
+    protected override string Id => MachineId;
+}
+
+/// <summary>The same chain, system-owned.</summary>
+public sealed class SystemChainMachine : ChainStageMachine
+{
+    public const string MachineId = "system-chain-stage";
+    protected override string Id => MachineId;
+    protected override bool System => true;
+}
+
+/// <summary>A user's machine that chains its stages through the user's <c>Continue</c>.</summary>
+public sealed class UserContinueMachine : ChainStageMachine
+{
+    public const string MachineId = "user-continue-stage";
+    protected override string Id => MachineId;
+    protected override bool ChainedByOutcome => false;
+}

@@ -184,6 +184,36 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
             .And.Contain("trusted execution scope");
 
     [Test]
+    public void A_user_owned_machine_whose_outcome_enters_an_invoking_state_is_refused() =>
+        _host
+            .Problems<UserChainMachine>()
+            .Should()
+            .ContainSingle(
+                "a run an outcome queues has no user present to authorize it, so only a system-owned "
+                    + $"machine chains runs through outcomes. See {Adr}"
+            )
+            .Which.Should()
+            .Contain("'user-chain-stage'")
+            .And.Contain("user-owned")
+            .And.Contain("OnDone outcome of Fetching")
+            .And.Contain("enters Embedding")
+            .And.Contain("Chain through an event the user sends")
+            .And.Contain("SystemOwned()");
+
+    [Test]
+    public void A_system_owned_machine_or_a_user_event_may_chain_invoking_states()
+    {
+        _host
+            .Problems<SystemChainMachine>()
+            .Should()
+            .BeEmpty("a system-owned machine's next run is authorized in the trusted scope");
+        _host
+            .Problems<UserContinueMachine>()
+            .Should()
+            .BeEmpty("a user's own event into an invoking state is authorized as that user");
+    }
+
+    [Test]
     public void An_output_reaching_a_sensitive_member_is_refused() =>
         _host
             .Problems<SecretMachine>()
@@ -227,6 +257,8 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
             .Which.Message.Should()
             .Contain("plain-junction-stage")
             .And.Contain("secret-stage")
+            .And.Contain("user-chain-stage")
+            .And.NotContain("system-chain-stage")
             .And.NotContain("good-stage");
     }
 }

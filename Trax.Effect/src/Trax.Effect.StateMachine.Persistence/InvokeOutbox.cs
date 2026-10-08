@@ -66,6 +66,12 @@ internal sealed class InvokeOutbox(
     public const string Forbidden = "invoke-forbidden";
 
     /// <summary>
+    /// The code an outcome is refused with when it enters an invoking state of a user-owned instance: only a
+    /// system-owned instance chains runs through outcomes.
+    /// </summary>
+    public const string ChainRefused = "invoke-chain-user-owned";
+
+    /// <summary>
     /// Writes <paramref name="next"/> over <paramref name="owner"/>'s row, guarded by <paramref name="expectedToken"/>,
     /// cancelling <paramref name="leavingToken"/>'s run and queueing <paramref name="entering"/>'s.
     /// </summary>
@@ -190,6 +196,20 @@ internal sealed class InvokeOutbox(
         await InTransaction(
             async () =>
             {
+                // No user is present for a run an outcome queues, so only a system-owned instance may chain one;
+                // the startup check refuses a user-owned machine that declares such an edge, and this refuses the
+                // write again rather than authorize it in the trusted scope.
+                if (entering is not null && owner.Kind != SnapshotOwnerKind.System)
+                    return new InvokeWrite.Refused(
+                        ChainRefused,
+                        "The step's work could not be started.",
+                        new InvalidOperationException(
+                            $"An outcome of '{next.Machine}' entered {next.State}, which invokes a train, but the "
+                                + "instance is user-owned: a run an outcome queues has no user to authorize it. "
+                                + "The startup check refuses such a machine."
+                        )
+                    );
+
                 if (
                     entering is not null
                     && await OverLimit(owner, next.Machine, id, entering.Limit, cancellationToken)

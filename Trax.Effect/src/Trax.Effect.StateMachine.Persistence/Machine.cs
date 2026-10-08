@@ -209,6 +209,18 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             ))
             .ToList();
 
+    IReadOnlyList<ChainedOutcome> IMachineInternals.ChainedOutcomes =>
+        Built
+            .Invokes.Values.SelectMany(i =>
+                i.Done.Select(e => (Outcome: "OnDone", e.To))
+                    .Append((Outcome: "OnFailed", i.Failed.To))
+                    .Append((Outcome: "OnCancelled", i.Cancelled.To))
+                    .Where(e => Built.Invokes.ContainsKey(e.To))
+                    .Select(e => new ChainedOutcome(i.State.ToString(), e.Outcome, e.To.ToString()))
+            )
+            .Distinct()
+            .ToList();
+
     EnteringInvoke? IMachineInternals.Entering(string state) =>
         Built.Invokes.Values.FirstOrDefault(i => i.State.ToString() == state) is { } invoke
             ? new EnteringInvoke(invoke.TrainType, invoke.CreateInput, Built.InvokedRunLimit)

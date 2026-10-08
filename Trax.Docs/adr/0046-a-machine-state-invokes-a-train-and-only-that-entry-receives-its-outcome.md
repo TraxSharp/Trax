@@ -81,6 +81,10 @@ for every other subscriber.
 **An outcome too large to store fails the state.** An outcome that would push the snapshot past its 64 KiB cap goes to
 `OnFailed` with a typed reason. It is never dropped.
 
+**A run that can no longer be found fails the state.** A token whose run has neither a work queue entry nor a
+metadata row was deleted before its outcome was delivered, and can never end, so it goes to `OnFailed` with a typed
+reason. Metadata retention keeps an invoked run while an instance holds its token, so this is a last resort.
+
 ### Queueing
 
 **The advance and the enqueue commit together.** The `work_queue` row is written through the caller's own `DbContext`,
@@ -142,7 +146,10 @@ forges no result, and that edge is how a chained stage is retried.
 refused a train whose `[TraxAuthorize]` is stricter than the machine's own mutations (entering the state would be a
 way around it), and any `[TraxBroadcast]` train, whose subscribers see every run's output. A system-owned machine's
 train runs under Trax's trusted execution scope, as a scheduled manifest run does, and may invoke only a train a
-scheduled manifest could run: no user-only requirements, checked at startup.
+scheduled manifest could run: no user-only requirements, checked at startup. Only a system-owned machine chains runs
+through outcomes: a run an outcome queues has no user present to authorize it, so a user-owned machine whose
+`OnDone`, `OnFailed` or `OnCancelled` enters an invoking state is refused at startup, and chains its stages through
+an event the user sends instead.
 
 **A user owner has at most 10 live invoked runs** by default, configurable per machine; entering an invoking state past
 the cap is refused with a typed reason. System owners are not capped here: the dispatcher's `MaxActiveJobs` bounds
@@ -206,6 +213,7 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Post
   `A_host_without_Mediator_is_refused`, `Deferred_promotion_or_an_OnQueue_hook_is_refused`,
   `Invokes_on_InMemory_is_refused`, `A_user_owned_machine_invoking_a_stricter_authorized_train_is_refused`,
   `A_user_owned_machine_invoking_a_broadcast_train_is_refused`,
+  `A_user_owned_machine_whose_outcome_enters_an_invoking_state_is_refused`,
   `A_system_owned_machine_invoking_a_train_with_user_only_requirements_is_refused`,
   `An_output_reaching_a_sensitive_member_is_refused`, `RailwayJunction_cannot_be_overridden`
 - `InvokedTrainOutboxTests.Entering_an_invoking_state_queues_one_run_and_sets_the_token_to_its_ExternalId`
@@ -218,6 +226,8 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Post
 - `InvokeOutcomeDeliveryTests.A_timed_out_run_and_an_operator_cancel_reach_OnCancelled`
 - `InvokeOutcomeDeliveryTests.Reentering_after_OnFailed_queues_a_new_run_and_the_old_completion_is_a_no_transition`
 - `InvokeOutcomeDeliveryTests.An_outcome_past_64_KiB_goes_to_OnFailed_with_its_reason`
+- `InvokeOutcomeDeliveryTests.A_run_whose_records_were_deleted_reaches_OnFailed`
+- `InvokeOutcomeDeliveryTests.Metadata_cleanup_keeps_an_invoked_run_while_its_token_is_live`
 - `InvokeOutcomeDeliveryTests.Leaving_the_invoking_state_cancels_the_run_on_another_host`
 - `SystemOwnedInstanceTests.Start_twice_with_one_key_returns_one_instance_and_queues_nothing_new`
 - `SystemOwnedInstanceTests.A_system_instance_refuses_advance_and_save_from_any_user`
@@ -262,6 +272,14 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: Only a system-owned machine chains runs through outcomes. A user-owned machine whose `OnDone`,
+  `OnFailed` or `OnCancelled` enters an invoking state is refused at startup, naming the machine, the state, the
+  outcome and the target, because the run would be queued with no user present to authorize it; it chains through a
+  user event instead, which is authorized as that user. The launcher refuses a launch from an outcome for a
+  user-owned instance as well, so the trusted scope is reachable only from a system-owned one. A token whose run can
+  no longer be found (no work queue entry and no metadata row) goes to `OnFailed` with the reason
+  `invoke-run-missing`, and metadata retention keeps an invoked run while an instance still holds its token.
+
 - **2026-10-08**: A completed invoked run writes the output its machine reads to `metadata.invoke_output` (or marks
   it `invoke_output_oversize`) in its own terminal write, so once the run is recorded completed its output is
   durable and no crash point loses or doubles an outcome; the column is internal and on no operator surface. The
@@ -269,8 +287,8 @@ follow the first.
   update; the sweep interval is `StateMachineOptions.InvokeOutcomeSweepInterval`, and Postgres migration 073's
   trigger wakes it. Fail-closed: a completed run whose output no `OnDone` accepts, or whose outcome cannot be
   applied, goes to `OnFailed` with a typed reason; if that cannot be applied either, the token is cleared and the
-  reason logged. A run queued because an outcome entered an invoking state is authorized in the trusted scope, since
-  no user is present. `InvokeOutcomeDeliveryTests` live in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`,
+  reason logged. A run queued because an outcome entered an invoking state was authorized in the trusted scope on
+  any machine, since no user is present; superseded the same day, see the entry above. `InvokeOutcomeDeliveryTests` live in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`,
   on Postgres and SQLite, where the dispatcher, the job runner and the reaper are reachable.
 
 - **2026-10-08**: The launcher port lives in Effect.StateMachine.Persistence, because it writes through the data

@@ -75,8 +75,9 @@ Invoking states and every `OnDone`, `OnFailed` and `OnCancelled` target join the
 alongside committed states and effect targets. An autosave cannot move a draft into or out of an invoking state,
 or into an outcome target. `Build` refuses an ordinary transition into an outcome target, because that state
 means "the train produced this"; a self-loop on the target does not enter it and is allowed, and so is an edge
-into a target that itself invokes a train, which only queues a new run (that is how a chained stage is retried). An outcome may not
-go to the target of the machine's `RunsOnce` effect.
+into a target that itself invokes a train, which only queues a new run (that is how a chained stage is retried, and
+how a user-owned machine chains its stages at all; see [Who a run belongs to](#who-a-run-belongs-to)). An outcome
+may not go to the target of the machine's `RunsOnce` effect.
 
 An invoked train does not count against the machine's one `RunsOnce` effect.
 
@@ -145,12 +146,12 @@ completed: there is no point at which a crash loses an outcome or applies one tw
 any operator surface, the execution views, the work queue views and the state machine views alike.
 
 **When the outcome target invokes a train,** applying the outcome queues that run in the same transaction, under
-the new token, exactly as entering the state from an advance does. No user is present to authorize it against, so
-it is authorized in the trusted execution scope, as a system-owned machine's run is. On a user-owned machine the
-startup check already limits the train to one that requires no more than an authenticated user.
+the new token, exactly as entering the state from an advance does. Only a system-owned machine may declare such an
+edge, and its run is authorized in the trusted execution scope like the machine's others; the startup check refuses
+a user-owned machine that does, because no user is present to authorize the run.
 
-**A finished run never leaves its instance waiting.** An outcome is applied as the state's `OnFailed`, with a
-reason, when its own outcome cannot be:
+**A finished run never leaves its instance waiting, and neither does a lost one.** An outcome is applied as the
+state's `OnFailed`, with a reason, when its own outcome cannot be, or when the run is gone:
 
 | Reason | When |
 | --- | --- |
@@ -159,11 +160,17 @@ reason, when its own outcome cannot be:
 | `invoke-output-unrecorded` | the output could not be serialized for the machine |
 | `invoke-outcome-rejected` | the chosen edge's reduction threw, or produced a context its target refuses |
 | `invoke-next-run-refused` | the target invokes a train of its own, and that run could not be queued |
+| `invoke-run-missing` | the run can no longer be found: neither its work queue entry nor its execution record exists, so it was deleted before its outcome was delivered and can never end |
 
 Each is logged at warning level with the run, the machine, the instance and both states, never with the output or
 the context. If even `OnFailed` (or `OnCancelled`) cannot be applied, the token is cleared and the instance stays
 in the invoking state with no live run, logged at error level with its reason; it leaves through one of its declared
 transitions.
+
+A run's records cannot vanish while it is still to come: its work queue entry is written in the same transaction
+that gives the instance its token, and nothing deletes a queued entry. Metadata retention keeps an invoked run, and
+its entry, while an instance still holds its token, so a run that outlives its retention before its outcome is
+delivered is still delivered; once the outcome is applied the run is deleted like any other expired run.
 
 ## Queued once, run at least once, applied once
 
@@ -183,8 +190,10 @@ A machine is user-owned unless it declares `SystemOwned()`, and that decides how
   operation reaches the machine. Its train is authorized inside Trax's trusted execution scope, as a scheduled
   manifest run is.
 
-A run queued because an outcome entered a state that invokes a train is authorized in the trusted scope on either
-kind of machine: the outcome, not a user, entered the state.
+Only a system-owned machine chains runs through outcomes. A run an outcome queues has no user present to authorize
+it, so a user-owned machine whose `OnDone`, `OnFailed` or `OnCancelled` enters a state that invokes a train is
+refused at startup; it chains its stages through an event the user sends instead (a "continue" or "retry" edge into
+the next stage), which is authorized as that user.
 
 One user holds at most 10 live invoked runs in a machine; entering an invoking state past that is refused as
 `invoke-limit-reached`. A machine sets its own limit with `InvokedRunLimit(n)`. A run is live from the entry that
@@ -210,6 +219,7 @@ at fault:
 | on a user-owned machine, a train whose `[TraxAuthorize]` names roles or a policy | entering the state would be a way around a requirement stricter than the machine's own mutations |
 | on a user-owned machine, a `[TraxBroadcast]` train | its subscribers see every run's output |
 | on a system-owned machine, a train that declares `[TraxAuthorize]` | the trusted scope does not check user requirements |
+| on a user-owned machine, an `OnDone`, `OnFailed` or `OnCancelled` that enters a state invoking a train | the next run would be queued with no user present to authorize it; chain through a user event, or declare `SystemOwned()` |
 | an output type that reaches a `[TraxSensitive]` member | the output is reduced into a context stored as plain JSON and returned by `loadSnapshot` |
 
 `EffectJunction`'s railway step is sealed, so a subclass cannot skip the check. Two limits remain: a slow decider in

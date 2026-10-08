@@ -1,13 +1,16 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.Scheduler.Trains.MetadataCleanup;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
 
@@ -432,6 +435,126 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
                 $"a finished run never leaves its instance waiting: unaccepted output is a failure. See {Adr}"
             );
         (await SystemRow(instance.Id)).InvokeToken.Should().BeNull();
+    }
+
+    [Test]
+    public async Task A_run_whose_records_were_deleted_reaches_OnFailed()
+    {
+        // A finished run whose outcome no host delivered, then deleted with its entry, its logs and all.
+        var finished = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var finishedToken = (await SystemRow(finished.Id)).InvokeToken!;
+        var runId = await _worker.DispatchAndRun(finishedToken);
+        await DeleteRun(runId);
+
+        // A run deleted while still queued.
+        var queued = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var queuedToken = (await SystemRow(queued.Id)).InvokeToken!;
+        await DeleteEntry(queuedToken);
+
+        var swept = await _api.Sweep();
+
+        swept
+            .Should()
+            .HaveCount(2)
+            .And.AllSatisfy(d =>
+                d.Should()
+                    .BeEquivalentTo(
+                        new
+                        {
+                            To = "Failed",
+                            Applied = "failed",
+                            Reason = InvokeOutcomeReasons.RunMissing,
+                        },
+                        $"a run that can no longer be found can never end, so the instance does not wait on "
+                            + $"it. See {Adr}"
+                    )
+            );
+        foreach (var id in new[] { finished.Id, queued.Id })
+        {
+            var row = await SystemRow(id);
+            row.State.Should().Be("Failed");
+            row.InvokeToken.Should().BeNull();
+        }
+        (await _api.Deliver(finishedToken)).Should().BeOfType<InvokeDelivery.NoTransition>();
+    }
+
+    [Test]
+    public async Task Metadata_cleanup_keeps_an_invoked_run_while_its_token_is_live()
+    {
+        await using var cleaner = _cluster.Host(
+            machines: false,
+            scheduler: true,
+            scheduling: s =>
+                s.AddMetadataCleanup(c => c.AddTrainType(typeof(IInvokedStepTrain).FullName!))
+        );
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "kept"));
+        var token = (await SystemRow(instance.Id)).InvokeToken!;
+        var runId = await _worker.DispatchAndRun(token);
+        await _worker.Age(runId, TimeSpan.FromDays(1));
+
+        await Cleanup(cleaner);
+
+        (await RunExists(runId))
+            .Should()
+            .BeTrue(
+                $"the run is past its retention, but its outcome has not been delivered and is read from it. See {Adr}"
+            );
+        (await _api.Entry(token)).Should().NotBeNull();
+        (await _api.Sweep())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { To = "Done", Applied = "done" });
+        Context(await SystemRow(instance.Id))["artifact"]!
+            .GetValue<string>()
+            .Should()
+            .Be("artifact:kept");
+
+        // Delivered, the token is cleared, and the run goes as any other expired run does.
+        await Cleanup(cleaner);
+
+        (await RunExists(runId)).Should().BeFalse();
+        (await _api.Entry(token)).Should().BeNull();
+    }
+
+    private static async Task Cleanup(ClusterHost host)
+    {
+        using var scope = host.Services.CreateScope();
+        await scope
+            .ServiceProvider.GetRequiredService<IMetadataCleanupTrain>()
+            .Run(new MetadataCleanupRequest());
+    }
+
+    private async Task<bool> RunExists(long runId)
+    {
+        using var scope = _api.Services.CreateScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .Metadatas.AsNoTracking()
+            .AnyAsync(m => m.Id == runId);
+    }
+
+    // Deletes a finished run with everything it owns, as metadata retention does, whoever holds its token.
+    private async Task DeleteRun(long runId)
+    {
+        using var scope = _api.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
+        await context.WorkQueues.Where(w => w.MetadataId == runId).ExecuteDeleteAsync();
+        await context.Logs.Where(l => l.MetadataId == runId).ExecuteDeleteAsync();
+        (await context.Metadatas.Where(m => m.Id == runId).ExecuteDeleteAsync()).Should().Be(1);
+    }
+
+    private async Task DeleteEntry(string token)
+    {
+        using var scope = _api.Services.CreateScope();
+        (
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .ExecuteDeleteAsync()
+        )
+            .Should()
+            .Be(1);
     }
 
     [Test]

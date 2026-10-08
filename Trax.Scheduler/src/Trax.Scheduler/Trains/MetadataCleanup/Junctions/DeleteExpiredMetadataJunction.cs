@@ -33,6 +33,8 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// <c>replay_decisions_of</c> (central <c>docs/0041</c>). A run that replays another is deleted only
 /// in the same transaction as the run it replays, or once that run is gone, so no run is ever
 /// kept while a replay of it has been deleted (docs/adr/0017).
+/// A run a state machine invoked is kept while an instance still holds its invoke token, so its
+/// outcome is still delivered from it (central <c>docs/0046</c>).
 /// A batch that fails (for example an unexpected foreign-key reference) is bisected to isolate the
 /// offending row, which is logged and skipped so one bad row can never abort the whole sweep.
 /// </remarks>
@@ -88,7 +90,15 @@ internal class DeleteExpiredMetadataJunction(
                     || m.TrainState == TrainState.Failed
                     || m.TrainState == TrainState.Cancelled
                 )
-                .Where(m => !skippedIds.Contains(m.Id));
+                .Where(m => !skippedIds.Contains(m.Id))
+                // A run a state machine invoked is kept while an instance still holds its token: its outcome
+                // has not been delivered, and the delivery reads how it ended from this row. A token is never
+                // set again once cleared (each entry mints a new run), so a run that passes this test cannot
+                // become held again before it is deleted, and the selection needs no recheck for it.
+                .Where(m =>
+                    m.InvokingMachine == null
+                    || !dataContext.SnapshotDrafts.Any(d => d.InvokeToken == m.ExternalId)
+                );
 
             while (true)
             {

@@ -12,7 +12,9 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// state that invokes a train is checked once, before any hosted service starts: the host registers Trax.Mediator
 /// (the launcher), stores drafts on a provider with transactions (not InMemory), registers the cancel-flag check that
 /// lets leaving a state cancel its run from any host (<c>AddJunctionProgress</c>), and the train's output reaches no
-/// <c>[TraxSensitive]</c> member, because the output is reduced into a context stored as plain JSON. The launcher then
+/// <c>[TraxSensitive]</c> member, because the output is reduced into a context stored as plain JSON. A user-owned
+/// machine may not chain runs through outcomes: no outcome of an invoking state enters another invoking state,
+/// since that run would be queued with no user present to authorize it. The launcher then
 /// checks the train itself: that it is a registered <c>ServiceTrain</c> built only from effect junctions, with no
 /// deferred promotion or <c>OnQueue</c> hook, and authorized compatibly with the machine's owner.
 /// </summary>
@@ -59,11 +61,26 @@ internal sealed class InvokesStartupValidator(
     /// </summary>
     internal static IReadOnlyList<string> Problems(IMachine machine, IServiceProvider services)
     {
-        if (machine is not IMachineInternals { InvokedTrains: { Count: > 0 } declarations })
+        if (
+            machine
+            is not IMachineInternals { InvokedTrains: { Count: > 0 } declarations } internals
+        )
             return [];
 
         var problems = new List<string>();
         var name = machine.Name;
+
+        // An outcome that enters another invoking state queues the next run with no user present, so it could be
+        // authorized only in Trax's trusted scope. A user owns this machine's instances, and their runs are
+        // authorized against them, so the chain goes through an event the user sends instead.
+        if (!internals.SystemOwned)
+            foreach (var chained in internals.ChainedOutcomes)
+                problems.Add(
+                    $"The machine '{name}' is user-owned, and the {chained.Outcome} outcome of {chained.State} "
+                        + $"enters {chained.Target}, which invokes a train of its own. Its run would be queued "
+                        + "with no user present to authorize it. Chain through an event the user sends (a "
+                        + $"continue or retry edge into {chained.Target}), or declare the machine SystemOwned()."
+                );
 
         var launcher = services.GetService<IInvokedTrainLauncher>();
         if (launcher is null)
