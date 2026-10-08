@@ -28,6 +28,8 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, Exception);
 
+        ChainGraph.Enter(Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction))));
+
         var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 
         if (result.IsLeft)

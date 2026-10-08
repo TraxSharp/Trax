@@ -390,6 +390,38 @@ namespace Trax.Core.Monad
         public string Reason { get; init; }
         public int StepIndex { get; init; }
     }
+    public sealed class ChainGraph : System.IEquatable<Trax.Core.Monad.ChainGraph>
+    {
+        public ChainGraph(string Train, string Input, string Output, System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<string> Refusals) { }
+        public string Hash { get; }
+        public string Input { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes { get; init; }
+        public string Output { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Refusals { get; init; }
+        public string Train { get; init; }
+        public static string? CurrentNodeId { get; }
+        public string ToJson() { }
+        public static Trax.Core.Monad.ChainGraph From(Trax.Core.Monad.ChainRecorder chain, System.Type train, System.Type input, System.Type output) { }
+    }
+    public sealed class ChainGraphNode : System.IEquatable<Trax.Core.Monad.ChainGraphNode>
+    {
+        public ChainGraphNode(string Id, Trax.Core.Monad.ChainStepKind Kind, string? Junction, string? In, string? Out, bool Opaque, System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphTrack> Tracks) { }
+        public string Id { get; init; }
+        public string? In { get; init; }
+        public string? Junction { get; init; }
+        public Trax.Core.Monad.ChainStepKind Kind { get; init; }
+        public bool Opaque { get; init; }
+        public string? Out { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphTrack> Tracks { get; init; }
+    }
+    public sealed class ChainGraphTrack : System.IEquatable<Trax.Core.Monad.ChainGraphTrack>
+    {
+        public ChainGraphTrack(string Name, string? Description, bool IsFallback, System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes) { }
+        public string? Description { get; init; }
+        public bool IsFallback { get; init; }
+        public string Name { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes { get; init; }
+    }
     public sealed class ChainRecorder
     {
         public System.Collections.Generic.IReadOnlyList<string> Refusals { get; }

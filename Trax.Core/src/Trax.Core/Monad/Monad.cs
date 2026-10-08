@@ -52,6 +52,12 @@ public partial class Monad<TInput, TReturn>
     internal ChainRecorder? Recorder { get; set; }
 
     /// <summary>
+    /// Numbers the steps of the chain or track running now, as <see cref="ChainGraph"/> numbers
+    /// the nodes it draws for them, so each step can say which node it is.
+    /// </summary>
+    internal ChainNodeScope Nodes { get; set; } = new("");
+
+    /// <summary>
     /// Creates a Monad for a pure Train (no ServiceProvider).
     /// </summary>
     internal Monad(Train<TInput, TReturn> train, CancellationToken cancellationToken)

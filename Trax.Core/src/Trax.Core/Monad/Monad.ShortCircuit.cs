@@ -25,6 +25,8 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, (Exception)Exception);
 
+        ChainGraph.Enter(Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction))));
+
         var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 
         // We skip the Left for Short Circuiting - only process Right results
