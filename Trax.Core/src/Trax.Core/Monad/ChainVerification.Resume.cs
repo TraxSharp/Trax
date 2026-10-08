@@ -154,6 +154,20 @@ public static partial class ChainVerification
                     $"'{resumeAt}' is not a step a run can start at. Resume at the step after it."
                 );
 
+            // A routing step that asks its own question records the question as a Decide just
+            // before it, and routes on what that asks: resuming at the routing step asks it again.
+            if (
+                point.Step.Kind is ChainStepKind.Switch or ChainStepKind.Gate or ChainStepKind.Scale
+                && point.Order > 0
+                && nodes[point.Order - 1] is { Step.Kind: ChainStepKind.Decide } question
+                && question.Scope == point.Scope
+                && question.Step.Out == point.Step.In
+            )
+            {
+                point = question;
+                resumeAt = question.Id;
+            }
+
             if (point.BranchPath is not null)
                 return ResumeOutcome.Refused(
                     ResumeRefusals.InsideABranch,

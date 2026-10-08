@@ -148,6 +148,17 @@ public class ResumeCheckTests : TestSetup
     }
 
     [Test]
+    public void A_point_on_a_routing_step_that_asks_its_own_question_asks_it_again()
+    {
+        // Found by the scheduler's tests: the Switch's own node routes on the decision its question,
+        // recorded as the Decide before it, puts in Memory, so resuming there must ask it again.
+        var outcome = Check(new AfterTheSwitchTrain(), ["Checkpoint<Brief>#0"], "Switch<Source>#0");
+
+        outcome.Refusal.Should().BeNull(Adr);
+        outcome.Target.Should().Be("Decide<ChoiceDecision<Source>>#0");
+    }
+
+    [Test]
     public void A_point_inside_a_branch_is_refused()
     {
         Check(new BranchKeepsTooLittleTrain(), [], "Parallel#0/web/SearchWeb#0")
