@@ -62,7 +62,9 @@ public partial class OperationsQueries
     }
 
     /// <summary>
-    /// One state-machine instance, or null when none matches. The owner kind is always named,
+    /// One state-machine instance with the train runs it invoked (<c>invokedRuns</c>, newest
+    /// first, at most 50, the one its state waits on marked <c>isLive</c>; a user's draft lists
+    /// only its live run), or null when none matches. The owner kind is always named,
     /// because a user can hold a draft under the same id as a system instance. A system instance
     /// is unique by machine and id; a user's draft is named by its <c>rowId</c> too (refused with
     /// <c>TRAX_ROW_ID_REQUIRED</c> without one), because several users can each hold a draft
@@ -104,11 +106,21 @@ public partial class OperationsQueries
                     .Build()
             );
 
-        var record = await operationsService.GetMachineInstanceAsync(
-            new MachineInstanceKey(machine, ownerKind, id, rowId),
+        var key = new MachineInstanceKey(machine, ownerKind, id, rowId);
+        var record = await operationsService.GetMachineInstanceAsync(key, ct);
+        if (record is null)
+            return null;
+
+        // The runs are read through the call the dashboard's instance page makes. Keyed by the
+        // row the lookup found, so the runs are that row's even when no row id was passed.
+        var runs = await operationsService.GetMachineInstanceRunsAsync(
+            key with
+            {
+                RowId = record.RowId,
+            },
             ct
         );
-        return record is null ? null : MachineInstanceDetail.From(record);
+        return MachineInstanceDetail.From(record, runs);
     }
 
     /// <summary>

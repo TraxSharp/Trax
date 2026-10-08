@@ -361,6 +361,14 @@ namespace Trax.Api.DTOs
         public System.DateTimeOffset UpdatedAt { get; init; }
         public int Version { get; init; }
     }
+    public class MachineInstanceCancelResponse : System.IEquatable<Trax.Api.DTOs.MachineInstanceCancelResponse>
+    {
+        public MachineInstanceCancelResponse(bool Success, Trax.Scheduler.Services.Operations.MachineInstanceCancelOutcome Outcome, string Message, string? State) { }
+        public string Message { get; init; }
+        public Trax.Scheduler.Services.Operations.MachineInstanceCancelOutcome Outcome { get; init; }
+        public string? State { get; init; }
+        public bool Success { get; init; }
+    }
     public class MachineInstanceCount : System.IEquatable<Trax.Api.DTOs.MachineInstanceCount>
     {
         public MachineInstanceCount(string Machine, string State, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, long Count) { }
@@ -375,12 +383,28 @@ namespace Trax.Api.DTOs
         public System.DateTimeOffset? CreatedAt { get; init; }
         public bool HasLiveInvokedRun { get; init; }
         public System.Guid Id { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineInstanceInvokedRun> InvokedRuns { get; init; }
+        public bool IsInvokedRunsCapped { get; init; }
         public string Machine { get; init; }
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long? QueuedInvokedRunEntryId { get; init; }
         public long RowId { get; init; }
         public string State { get; init; }
         public System.DateTimeOffset UpdatedAt { get; init; }
         public int Version { get; init; }
+    }
+    public class MachineInstanceInvokedRun : System.IEquatable<Trax.Api.DTOs.MachineInstanceInvokedRun>
+    {
+        public MachineInstanceInvokedRun(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, Trax.Core.Exceptions.FailureClass FailureClass, bool CancellationRequested, bool IsLive) { }
+        public bool CancellationRequested { get; init; }
+        public System.DateTime? EndTime { get; init; }
+        public string ExternalId { get; init; }
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; init; }
+        public long Id { get; init; }
+        public bool IsLive { get; init; }
+        public string Name { get; init; }
+        public System.DateTime StartTime { get; init; }
+        public Trax.Effect.Enums.TrainState TrainState { get; init; }
     }
     public class ManifestDetail : System.IEquatable<Trax.Api.DTOs.ManifestDetail>
     {

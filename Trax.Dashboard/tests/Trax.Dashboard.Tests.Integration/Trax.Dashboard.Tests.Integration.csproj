@@ -6,6 +6,8 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- TRAXEXP002: the state-machine page tests seed runs a machine's invoking state queued. -->
+    <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

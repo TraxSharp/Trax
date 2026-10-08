@@ -16,7 +16,8 @@ namespace Trax.Api.Tests.Stress.IntegrationTests;
 /// instance, and the counts by state. The list reads call the resolver, which reads its page and
 /// its capped total through <see cref="IOperationsService"/> exactly as the dashboard's State
 /// machines page does, so the measured cost is both surfaces' cost. One read runs through the
-/// schema to time the whole pipeline.
+/// schema to time the whole pipeline, as do one instance's invoked runs and the operator's cancel,
+/// each through the service method the dashboard's instance page calls.
 /// </summary>
 /// <remarks>
 /// The seed spreads <see cref="StressProfile.SnapshotDrafts"/> instances evenly over six machines
@@ -161,6 +162,122 @@ public class MachineInstanceStressTests : StressTestSetup
             }
         );
     }
+
+    // How many runs the invoked-runs read finds for its instance: past the 50 it lists, so the
+    // read stops at its cap.
+    private const int InvokedRunsPerInstance = 200;
+
+    [Test]
+    public async Task OneInstance_WithItsInvokedRuns_ThroughTheSchema_WithinBudget()
+    {
+        var first = await FirstSystemInstanceAsync();
+        var marker = "stress-invoked-" + first.Id.ToString("N")[..8];
+
+        await MeasureWriteAsync(
+            "operations.machineInstance { invokedRuns } (through the schema)",
+            ListBudget,
+            prepare: async () =>
+            {
+                await ExecSqlAsync(
+                    $"DELETE FROM trax.metadata WHERE invoking_instance_id = '{first.Id}'"
+                );
+                await ExecSqlAsync(
+                    "INSERT INTO trax.metadata (external_id, name, train_state, start_time, end_time, "
+                        + "failure_class, invoking_machine, invoking_instance_id, invoking_owner_kind) "
+                        + $"SELECT '{marker}-' || g, 'Stress.IInvokedTrain', 'completed', "
+                        + "now() - (g * interval '1 minute'), now() - (g * interval '1 minute') + interval '5 seconds', "
+                        + $"'unclassified', '{first.Machine}', '{first.Id}', 'system' "
+                        + $"FROM generate_series(1, {InvokedRunsPerInstance}) g"
+                );
+            },
+            action: async (_, ct) =>
+            {
+                var instance = await OperationsFieldAsync(
+                    "{ operations { machineInstance(machine: \""
+                        + first.Machine
+                        + "\", ownerKind: SYSTEM, id: \""
+                        + first.Id
+                        + "\") { rowId state isInvokedRunsCapped invokedRuns { id externalId name "
+                        + "trainState startTime endTime failureClass isLive } } } }",
+                    ct
+                );
+                instance.GetProperty("invokedRuns").GetArrayLength().Should().Be(50);
+                instance.GetProperty("isInvokedRunsCapped").GetBoolean().Should().BeTrue();
+                instance.GetRawText().Should().NotContain("stress-context-");
+            },
+            restore: () =>
+                ExecSqlAsync($"DELETE FROM trax.metadata WHERE invoking_instance_id = '{first.Id}'")
+        );
+    }
+
+    [Test]
+    public async Task CancelOneInstance_ThroughTheSchema_WithinBudget()
+    {
+        var first = await FirstSystemInstanceAsync();
+        var token = "stress-cancel-" + first.Id.ToString("N");
+
+        async Task Restore()
+        {
+            await ExecSqlAsync($"DELETE FROM trax.work_queue WHERE external_id = '{token}'");
+            await ExecSqlAsync(
+                $"UPDATE trax.snapshot_draft SET invoke_token = NULL WHERE row_id = {first.RowId}"
+            );
+        }
+
+        await MeasureWriteAsync(
+            "operations.cancelMachineInstance (through the schema)",
+            ListBudget,
+            prepare: async () =>
+            {
+                await Restore();
+                await ExecSqlAsync(
+                    "INSERT INTO trax.work_queue (external_id, train_name, status, priority, created_at, "
+                        + "invoking_machine, invoking_instance_id, invoking_owner_kind) "
+                        + $"VALUES ('{token}', 'Stress.IInvokedTrain', 'queued', 0, now(), "
+                        + $"'{first.Machine}', '{first.Id}', 'system')"
+                );
+                await ExecSqlAsync(
+                    $"UPDATE trax.snapshot_draft SET invoke_token = '{token}' WHERE row_id = {first.RowId}"
+                );
+            },
+            action: async (sp, ct) =>
+            {
+                var response = await ExecuteGraphQLAsync(
+                    "mutation { operations { cancelMachineInstance(machine: \""
+                        + first.Machine
+                        + "\", ownerKind: SYSTEM, id: \""
+                        + first.Id
+                        + "\") { success outcome message } } }",
+                    ct
+                );
+                response.TryGetProperty("errors", out _).Should().BeFalse(response.GetRawText());
+                var result = response
+                    .GetProperty("data")
+                    .GetProperty("operations")
+                    .GetProperty("cancelMachineInstance");
+                result.GetProperty("success").GetBoolean().Should().BeTrue();
+                result
+                    .GetProperty("outcome")
+                    .GetString()
+                    .Should()
+                    .Be("RUN_CANCELLED", "this host registers no machines to apply the outcome");
+            },
+            restore: Restore
+        );
+    }
+
+    private async Task<MachineInstanceRecord> FirstSystemInstanceAsync() =>
+        (
+            await Operations(Services)
+                .GetMachineInstancesAsync(
+                    new MachineInstanceQuery(
+                        SystemMachine,
+                        OwnerKind: SnapshotOwnerKind.System,
+                        Take: 1
+                    ),
+                    CancellationToken.None
+                )
+        ).Items.Single();
 
     [Test]
     public async Task CountsByState_WithinBudget()

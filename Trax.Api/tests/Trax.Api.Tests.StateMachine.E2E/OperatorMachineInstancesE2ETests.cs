@@ -184,6 +184,46 @@ public class OperatorMachineInstancesE2ETests
             .Be(JsonValueKind.Null, "the user's draft is not a system instance under the same id");
     }
 
+    [Test]
+    public async Task A_user_cannot_cancel_and_an_operator_cannot_cancel_a_users_draft()
+    {
+        var cancel = $$"""
+            mutation { operations { cancelMachineInstance(machine: "turnstile", ownerKind: USER, id: "{{_draftId}}") {
+                success outcome message
+            } } }
+            """;
+
+        using var asShopper = await _host.PostAsync(cancel, apiKey: ShopperKey);
+        ErrorCodes(asShopper)
+            .Should()
+            .Contain("TRAX_AUTHORIZATION", "the owner of a draft is not an operator");
+        NoOperationsData(asShopper).Should().BeTrue(asShopper.RootElement.GetRawText());
+
+        using var asOperator = await _host.PostAsync(cancel, apiKey: OperatorKey);
+        asOperator
+            .RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse(asOperator.RootElement.GetRawText());
+        var result = asOperator
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("cancelMachineInstance");
+        result.GetProperty("success").GetBoolean().Should().BeFalse();
+        result
+            .GetProperty("outcome")
+            .GetString()
+            .Should()
+            .Be("USER_OWNED", "operators see a user's draft read-only (central docs/0046)");
+        result
+            .GetProperty("message")
+            .GetString()
+            .Should()
+            .Be(OperationsService.UserOwnedCancelRefusal);
+
+        using var list = await _host.PostAsync(List, apiKey: OperatorKey);
+        list.RootElement.GetRawText().Should().Contain("Unlocked", "the draft did not move");
+    }
+
     private static async Task<IHost> StartAsync(string connectionString)
     {
         var host = new HostBuilder()
@@ -217,9 +257,25 @@ public class OperatorMachineInstancesE2ETests
                             sp.GetRequiredService<ITrainExecutionService>()
                         ));
 
+                        // The operations mutations need a job submitter and the scheduler's
+                        // facade; this host runs neither, and no test here calls them.
+                        services.AddScoped<
+                            Trax.Scheduler.Services.JobSubmitter.IJobSubmitter,
+                            NoJobSubmitter
+                        >();
+                        services.AddScoped(_ =>
+                            System.Reflection.DispatchProxy.Create<
+                                Trax.Scheduler.Services.TraxScheduler.ITraxScheduler,
+                                NoScheduler
+                            >()
+                        );
+
                         services.AddTraxApi();
                         services.AddTraxGraphQL(graphql =>
-                            graphql.ExposeOperationQueries().GateOperations(roles: "Operator")
+                            graphql
+                                .ExposeOperationQueries()
+                                .ExposeOperationMutations()
+                                .GateOperations(roles: "Operator")
                         );
                     })
                     .Configure(app =>
@@ -254,4 +310,22 @@ public class OperatorMachineInstancesE2ETests
                         : null
                 )
             : [];
+
+    private sealed class NoJobSubmitter : Trax.Scheduler.Services.JobSubmitter.IJobSubmitter
+    {
+        public Task<string> EnqueueAsync(long metadataId) =>
+            throw new InvalidOperationException("This host runs no trains.");
+
+        public Task<string> EnqueueAsync(long metadataId, object input) =>
+            throw new InvalidOperationException("This host runs no trains.");
+    }
+
+    /// <summary>A scheduler facade this host never calls: every member throws.</summary>
+    public class NoScheduler : System.Reflection.DispatchProxy
+    {
+        protected override object? Invoke(
+            System.Reflection.MethodInfo? targetMethod,
+            object?[]? args
+        ) => throw new InvalidOperationException("This host runs no scheduler.");
+    }
 }

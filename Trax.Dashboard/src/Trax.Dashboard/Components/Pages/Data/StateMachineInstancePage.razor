@@ -1,5 +1,6 @@
 @page "/trax/data/state-machines/{Machine}/{Owner}/{InstanceId:guid}"
 @inherits PollingComponentBase
+@using Trax.Scheduler.Services.Operations
 
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
     <RadzenButton Icon="arrow_back"
@@ -19,10 +20,55 @@
             <text>Instance Not Found</text>
         }
     </RadzenText>
-    @* An operator action on an instance (cancelling a system-owned one) goes here, beside the
-       title, as on the work queue entry's page, and calls IOperationsService with this page's
-       MachineInstanceKey. *@
+    @* Operators cancel only a system-owned instance whose state waits on a run; the service
+       refuses the rest with the reason the API gives. *@
+    @if (_instance is not null && _instance.OwnerKind == SnapshotOwnerKind.System && _instance.HasLiveInvokedRun && !_confirmingCancel)
+    {
+        <RadzenButton Text="Cancel"
+                      Icon="cancel"
+                      ButtonStyle="ButtonStyle.Danger"
+                      Variant="Variant.Outlined"
+                      Size="ButtonSize.Small"
+                      class="cs-machine-cancel"
+                      Click="@(() => { _confirmingCancel = true; _actionError = null; })"
+                      Disabled="@_cancelling"
+                      Style="margin-left: auto;" />
+    }
 </RadzenStack>
+
+@if (_confirmingCancel && _instance is not null)
+{
+    <RadzenCard class="rz-mb-4 cs-machine-cancel-confirm" Style="border-left: 4px solid var(--rz-danger);">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Cancel This Instance</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2">
+            Cancels the train run @_instance.Machine's '@_instance.State' state waits on. A queued
+            run never starts; a running one stops at its next junction. The instance then moves
+            through the state's OnCancelled edge.
+        </RadzenText>
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+            <RadzenButton Text="Confirm Cancel"
+                          Icon="check"
+                          ButtonStyle="ButtonStyle.Danger"
+                          Size="ButtonSize.Small"
+                          class="cs-machine-cancel-confirm-button"
+                          Click="@CancelInstance"
+                          IsBusy="@_cancelling"
+                          Disabled="@_cancelling" />
+            <RadzenButton Text="Keep It"
+                          Variant="Variant.Text"
+                          Size="ButtonSize.Small"
+                          Click="@(() => _confirmingCancel = false)"
+                          Disabled="@_cancelling" />
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@if (_actionError is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" class="rz-mb-4 cs-machine-action-error">
+        @_actionError
+    </RadzenAlert>
+}
 
 @if (IsLoading)
 {
@@ -82,5 +128,60 @@
     </RadzenRow>
 </RadzenCard>
 
-@* The runs this instance invoked are listed here, from the link a run keeps to the instance that
-   queued it, read through IOperationsService as the API's machineInstance detail reads them. *@
+@* ── Invoked Runs ── from the link a run keeps to the instance that queued it, read through
+   IOperationsService as the API's machineInstance { invokedRuns } reads them. No input or output. *@
+<RadzenCard class="rz-mb-4 cs-machine-runs">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Invoked Runs</RadzenText>
+    @if (_instance.OwnerKind == SnapshotOwnerKind.User)
+    {
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2">
+            A user's draft lists only the run its state waits on: a run does not record which
+            user's draft queued it, and several users can each hold a draft under one id.
+        </RadzenText>
+    }
+    @if (_runs?.QueuedEntryId is { } queuedEntryId)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2 cs-machine-queued-run">
+            The run its state waits on is still queued:
+            <RadzenLink Path="@($"trax/data/work-queue/{queuedEntryId}")" Text="@($"work queue entry {queuedEntryId}")" />.
+        </RadzenText>
+    }
+    @if (_runs is null || _runs.Items.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Body2">No runs to show.</RadzenText>
+    }
+    else
+    {
+        <RadzenDataGrid TItem="MachineInstanceRun" Data="@_runs.Items" AllowSorting="false" Density="Density.Compact">
+            <Columns>
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="Id" Title="Id" Width="90px">
+                    <Template Context="r">
+                        <RadzenLink Path="@($"trax/data/metadata/{r.Id}")" Text="@r.Id.ToString()" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="TrainName" Title="Train" Width="200px">
+                    <Template Context="r">@ShortName(r.TrainName)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="TrainState" Title="State" Width="140px">
+                    <Template Context="r">
+                        <RadzenBadge BadgeStyle="@GetStateBadgeStyle(r.TrainState)" Text="@r.TrainState.ToString()" />
+                        @if (r.IsLive)
+                        {
+                            <RadzenBadge BadgeStyle="BadgeStyle.Info" Variant="Variant.Outlined" Text="Live" class="cs-machine-live-run" />
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="StartTime" Title="Start Time" Width="170px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="EndTime" Title="End Time" Width="170px" FormatString="{0:yyyy-MM-dd HH:mm:ss}" />
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="FailureClass" Title="Failure Class" Width="140px" />
+                <RadzenDataGridColumn TItem="MachineInstanceRun" Property="ExternalId" Title="External Id" Width="200px" />
+            </Columns>
+        </RadzenDataGrid>
+        @if (_runs.Capped)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-mt-2">
+                Showing the newest @_runs.Items.Count runs; the instance invoked more.
+            </RadzenText>
+        }
+    }
+</RadzenCard>

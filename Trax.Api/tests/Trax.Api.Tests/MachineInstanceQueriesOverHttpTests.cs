@@ -65,6 +65,23 @@ public class MachineInstanceQueriesOverHttpTests
         "{ operations { machineInstanceCounts(machine: \"Acme.Fulfilment\") "
         + "{ machine state ownerKind count } } }";
 
+    private const string Cancel =
+        "mutation { operations { cancelMachineInstance(machine: \"Acme.Fulfilment\", "
+        + "ownerKind: SYSTEM, id: \"6f9619ff-8b86-d011-b42d-00c04fc964ff\") "
+        + "{ success outcome message state } } }";
+
+    private static readonly MachineInstanceRun LiveRun = new(
+        7,
+        "run-external-id",
+        "Acme.IShipTrain",
+        Trax.Effect.Enums.TrainState.InProgress,
+        new DateTime(2026, 10, 1, 9, 1, 0, DateTimeKind.Utc),
+        null,
+        Trax.Core.Exceptions.FailureClass.Unclassified,
+        CancellationRequested: false,
+        IsLive: true
+    );
+
     private IHost _host = null!;
     private IOperationsService _operations = null!;
 
@@ -84,6 +101,21 @@ public class MachineInstanceQueriesOverHttpTests
         _operations
             .GetMachineInstanceAsync(Arg.Any<MachineInstanceKey>(), Arg.Any<CancellationToken>())
             .Returns(UserDraft);
+        _operations
+            .GetMachineInstanceRunsAsync(
+                Arg.Any<MachineInstanceKey>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new MachineInstanceRuns([LiveRun], Capped: false, QueuedEntryId: null));
+        _operations
+            .CancelMachineInstanceAsync(Arg.Any<MachineInstanceKey>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new MachineInstanceCancelResult(
+                    MachineInstanceCancelOutcome.Moved,
+                    "moved",
+                    "Cancelled"
+                )
+            );
         _operations
             .GetMachineInstanceStateCountsAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns([
@@ -113,11 +145,17 @@ public class MachineInstanceQueriesOverHttpTests
                         services.AddSingleton(discovery);
                         services.AddSingleton(Substitute.For<IEffectRegistry>());
                         services.AddTraxGraphQL(graphql =>
-                            graphql.ExposeOperationQueries().GateOperations(roles: "Operator")
+                            graphql
+                                .ExposeOperationQueries()
+                                .ExposeOperationMutations()
+                                .GateOperations(roles: "Operator")
                         );
                         services.AddScoped(_ => _operations);
                         services.AddScoped(_ => Substitute.For<ITraxScheduler>());
                         services.AddScoped(_ => Substitute.For<ITrainExecutionService>());
+                        services.AddScoped(_ =>
+                            Substitute.For<Trax.Scheduler.Services.JobSubmitter.IJobSubmitter>()
+                        );
                     })
                     .Configure(app =>
                     {
@@ -144,6 +182,7 @@ public class MachineInstanceQueriesOverHttpTests
         yield return new TestCaseData(List).SetName("machineInstances");
         yield return new TestCaseData(One).SetName("machineInstance");
         yield return new TestCaseData(Counts).SetName("machineInstanceCounts");
+        yield return new TestCaseData(Cancel).SetName("cancelMachineInstance");
     }
 
     [TestCaseSource(nameof(Documents))]
@@ -217,6 +256,76 @@ public class MachineInstanceQueriesOverHttpTests
     }
 
     [Test]
+    public async Task The_detail_lists_the_services_invoked_runs()
+    {
+        var instance = Operations(
+            await PostAsync(
+                "{ operations { machineInstance(machine: \"Acme.Fulfilment\", ownerKind: USER, "
+                    + "id: \"6f9619ff-8b86-d011-b42d-00c04fc964ff\", rowId: 42) "
+                    + "{ invokedRuns { id externalId name trainState startTime endTime failureClass "
+                    + "cancellationRequested isLive } isInvokedRunsCapped queuedInvokedRunEntryId } } }",
+                OperatorKey
+            ),
+            "machineInstance"
+        );
+
+        var run = instance.GetProperty("invokedRuns")[0];
+        run.GetProperty("id").GetInt64().Should().Be(7);
+        run.GetProperty("name").GetString().Should().Be("Acme.IShipTrain");
+        run.GetProperty("trainState").GetString().Should().Be("IN_PROGRESS");
+        run.GetProperty("isLive").GetBoolean().Should().BeTrue();
+        instance.GetProperty("isInvokedRunsCapped").GetBoolean().Should().BeFalse();
+        await _operations
+            .Received()
+            .GetMachineInstanceRunsAsync(
+                new MachineInstanceKey(Machine, SnapshotOwnerKind.User, InstanceId, 42),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Test]
+    public async Task An_operators_cancel_is_the_services_result_for_the_system_instance()
+    {
+        var doc = await PostAsync(Cancel, OperatorKey);
+
+        doc.RootElement.TryGetProperty("errors", out _)
+            .Should()
+            .BeFalse(doc.RootElement.GetRawText());
+        var result = doc
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("cancelMachineInstance");
+        result.GetProperty("success").GetBoolean().Should().BeTrue();
+        result.GetProperty("outcome").GetString().Should().Be("MOVED");
+        result.GetProperty("message").GetString().Should().Be("moved");
+        result.GetProperty("state").GetString().Should().Be("Cancelled");
+        await _operations
+            .Received()
+            .CancelMachineInstanceAsync(
+                new MachineInstanceKey(Machine, SnapshotOwnerKind.System, InstanceId),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [TestCase(null)]
+    [TestCase(UserKey)]
+    public async Task A_caller_without_the_operations_role_cannot_cancel(string? apiKey)
+    {
+        _operations.ClearReceivedCalls();
+
+        var doc = await PostAsync(Cancel, apiKey);
+
+        doc.RootElement.TryGetProperty("errors", out _).Should().BeTrue();
+        NoOperationsData(doc).Should().BeTrue(doc.RootElement.GetRawText());
+        await _operations
+            .DidNotReceive()
+            .CancelMachineInstanceAsync(
+                Arg.Any<MachineInstanceKey>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Test]
     public async Task A_users_draft_looked_up_without_its_row_id_is_refused()
     {
         var doc = await PostAsync(
@@ -244,6 +353,8 @@ public class MachineInstanceQueriesOverHttpTests
     [TestCase("MachineInstance")]
     [TestCase("MachineInstanceDetail")]
     [TestCase("MachineInstanceCount")]
+    [TestCase("MachineInstanceInvokedRun")]
+    [TestCase("MachineInstanceCancelResponse")]
     public async Task No_type_the_view_returns_has_a_context_or_an_owner_key(string typeName)
     {
         var executor = await _host

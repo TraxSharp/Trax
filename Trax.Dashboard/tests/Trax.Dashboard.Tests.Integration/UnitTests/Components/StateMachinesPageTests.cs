@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Bunit;
 using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Api.GraphQL.Queries;
@@ -10,7 +11,11 @@ using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.SnapshotDraft;
+using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -192,6 +197,150 @@ public class StateMachinesPageTests
             .Be($"trax/data/state-machines/{Machine}/system/{id}");
     }
 
+    [Test]
+    public async Task The_instance_page_lists_the_runs_the_api_lists_each_linked_to_its_page()
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var instance = await SeedAsync(
+            SnapshotOwnerKind.System,
+            "Running",
+            DateTimeOffset.UtcNow,
+            invokeToken: token
+        );
+        var older = await SeedRunAsync(instance.Id, Guid.NewGuid().ToString("N"));
+        var live = await SeedRunAsync(instance.Id, token);
+
+        var page = RenderDetail(Machine, "system", instance.Id, rowId: null);
+
+        using var scope = _ctx.Services.CreateScope();
+        var api = (
+            await new OperationsQueries().GetMachineInstance(
+                Machine,
+                SnapshotOwnerKind.System,
+                instance.Id,
+                scope.ServiceProvider.GetRequiredService<IOperationsService>(),
+                default
+            )
+        )!;
+        api.InvokedRuns.Select(r => r.Id).Should().Equal(live, older);
+
+        page.WaitForAssertion(
+            () =>
+            {
+                var links = page.FindAll(".cs-machine-runs a")
+                    .Select(a => a.GetAttribute("href"))
+                    .ToList();
+                links
+                    .Should()
+                    .Equal(
+                        api.InvokedRuns.Select(r => $"trax/data/metadata/{r.Id}"),
+                        "the page lists the API's runs in its order, each linked to its run"
+                    );
+                page.FindAll(".cs-machine-live-run").Should().ContainSingle();
+            },
+            WaitTimeout
+        );
+    }
+
+    [Test]
+    public async Task Cancel_asks_for_confirmation_then_calls_the_shared_service()
+    {
+        var token = await SeedQueuedRunAsync();
+        var instance = await SeedAsync(
+            SnapshotOwnerKind.System,
+            "Running",
+            DateTimeOffset.UtcNow,
+            invokeToken: token
+        );
+        var page = RenderDetail(Machine, "system", instance.Id, rowId: null);
+        page.WaitForAssertion(() => page.Find(".cs-machine-cancel"), WaitTimeout);
+
+        page.Find(".cs-machine-cancel").Click();
+        (await EntryStatusAsync(token))
+            .Should()
+            .Be(WorkQueueStatus.Queued, "nothing is cancelled before the operator confirms");
+        page.Find(".cs-machine-cancel-confirm-button").Click();
+
+        page.WaitForAssertion(
+            () => page.FindAll(".cs-machine-cancel-confirm").Should().BeEmpty(),
+            WaitTimeout
+        );
+        (await EntryStatusAsync(token))
+            .Should()
+            .Be(
+                WorkQueueStatus.Cancelled,
+                "the button calls CancelMachineInstanceAsync, as cancelMachineInstance does"
+            );
+        page.FindAll(".cs-machine-action-error").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task No_cancel_is_offered_on_a_users_draft_or_an_instance_with_no_live_run_and_a_refusal_shows_the_services_words()
+    {
+        var draft = await SeedAsync(
+            SnapshotOwnerKind.User,
+            "Running",
+            DateTimeOffset.UtcNow,
+            invokeToken: Guid.NewGuid().ToString("N")
+        );
+        var idle = await SeedAsync(SnapshotOwnerKind.System, "Done", DateTimeOffset.UtcNow);
+
+        var userPage = RenderDetail(Machine, "user", draft.Id, draft.RowId);
+        userPage.WaitForAssertion(() => userPage.Markup.Should().Contain("Running"), WaitTimeout);
+        userPage
+            .FindAll(".cs-machine-cancel")
+            .Should()
+            .BeEmpty("operators see a user's draft read-only");
+
+        // Were the page to send one anyway, the service's refusal is shown word for word.
+        await userPage.InvokeAsync(() => userPage.Instance.CancelInstance());
+        userPage.WaitForAssertion(
+            () =>
+                userPage
+                    .Find(".cs-machine-action-error")
+                    .TextContent.Should()
+                    .Contain(OperationsService.UserOwnedCancelRefusal),
+            WaitTimeout
+        );
+
+        var idlePage = RenderDetail(Machine, "system", idle.Id, rowId: null);
+        idlePage.WaitForAssertion(() => idlePage.Markup.Should().Contain("Done"), WaitTimeout);
+        idlePage.FindAll(".cs-machine-cancel").Should().BeEmpty("there is no run to cancel");
+    }
+
+    private async Task<long> SeedRunAsync(Guid instance, string externalId)
+    {
+        await using var db = await _data.CreateDbContextAsync(default);
+        var run = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Acme.IShipTrain",
+                ExternalId = externalId,
+                Input = null,
+                InvokedBy = new InvokedBy(Machine, instance, SnapshotOwnerKind.System),
+            }
+        );
+        run.TrainState = TrainState.InProgress;
+        await db.Track(run);
+        await db.SaveChanges(default);
+        return run.Id;
+    }
+
+    private async Task<string> SeedQueuedRunAsync()
+    {
+        await using var db = await _data.CreateDbContextAsync(default);
+        var entry = WorkQueue.Create(new CreateWorkQueue { TrainName = "Acme.IShipTrain" });
+        await db.Track(entry);
+        await db.SaveChanges(default);
+        return entry.ExternalId;
+    }
+
+    private async Task<WorkQueueStatus> EntryStatusAsync(string externalId)
+    {
+        await using var db = await _data.CreateDbContextAsync(default);
+        return db.WorkQueues.AsNoTracking().Single(w => w.ExternalId == externalId).Status;
+    }
+
     private IRenderedComponent<StateMachineInstancePage> RenderDetail(
         string machine,
         string owner,
@@ -211,7 +360,8 @@ public class StateMachinesPageTests
         SnapshotOwnerKind owner,
         string state,
         DateTimeOffset updatedAt,
-        Guid? id = null
+        Guid? id = null,
+        string? invokeToken = null
     )
     {
         await using var db = await _data.CreateDbContextAsync(default);
@@ -227,6 +377,7 @@ public class StateMachinesPageTests
             ConcurrencyToken = Guid.NewGuid(),
             CreatedAt = updatedAt.AddMinutes(-1),
             UpdatedAt = updatedAt,
+            InvokeToken = invokeToken,
         };
         db.SnapshotDrafts.Add(row);
         await db.SaveChanges(default);

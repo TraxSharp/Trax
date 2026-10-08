@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Radzen;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
@@ -19,6 +20,9 @@ public partial class StateMachineInstancePage
 
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
+
+    [Inject]
+    private NotificationService NotificationService { get; set; } = default!;
 
     /// <summary>The machine's id, from the route.</summary>
     [Parameter]
@@ -46,6 +50,15 @@ public partial class StateMachineInstancePage
     // Why the route names no instance the service can look up, shown instead of "not found".
     private string? _refusal;
 
+    // The runs the instance invoked, as the API's machineInstance { invokedRuns } reads them.
+    private MachineInstanceRuns? _runs;
+
+    private bool _confirmingCancel;
+    private bool _cancelling;
+
+    // The cancel's refusal, in the service's words, which the API returns too.
+    private string? _actionError;
+
     /// <inheritdoc/>
     /// <remarks>The whole key: machine, owner kind, id and row id.</remarks>
     private protected override object? GetRouteKey() => (Machine, Owner, InstanceId, RowId);
@@ -55,7 +68,10 @@ public partial class StateMachineInstancePage
     private protected override void OnRouteKeyChanged()
     {
         _instance = null;
+        _runs = null;
         _refusal = null;
+        _confirmingCancel = false;
+        _actionError = null;
     }
 
     /// <summary>
@@ -86,6 +102,58 @@ public partial class StateMachineInstancePage
             return;
         }
 
-        _instance = await OperationsService.GetMachineInstanceAsync(key, cancellationToken);
+        var instance = await OperationsService.GetMachineInstanceAsync(key, cancellationToken);
+        _runs = instance is null
+            ? null
+            : await OperationsService.GetMachineInstanceRunsAsync(
+                key with
+                {
+                    RowId = instance.RowId,
+                },
+                cancellationToken
+            );
+        _instance = instance;
+    }
+
+    /// <summary>
+    /// Cancels the instance through <see cref="IOperationsService.CancelMachineInstanceAsync"/>,
+    /// the call the API's <c>cancelMachineInstance</c> makes, after the operator has confirmed.
+    /// A refusal is shown in the service's words.
+    /// </summary>
+    internal async Task CancelInstance()
+    {
+        if (_instance is null || Key() is not { } key)
+            return;
+
+        _actionError = null;
+        _cancelling = true;
+
+        try
+        {
+            var result = await OperationsService.CancelMachineInstanceAsync(key, DisposalToken);
+            _confirmingCancel = false;
+
+            if (!result.Success)
+            {
+                _actionError = result.Message;
+                return;
+            }
+
+            await LoadDataAsync(DisposalToken);
+            NotificationService.Notify(
+                NotificationSeverity.Success,
+                "Cancel Sent",
+                result.Message,
+                duration: 6000
+            );
+        }
+        catch (Exception ex)
+        {
+            _actionError = ex.Message;
+        }
+        finally
+        {
+            _cancelling = false;
+        }
     }
 }
