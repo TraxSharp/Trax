@@ -226,6 +226,10 @@ namespace Trax.Mediator.Services.TrainExecution
         public QueueTrainOptions() { }
         public int Priority { get; init; }
         public long? ReplayDecisionsOf { get; init; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public string? ResumeAt { get; init; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public long? ResumeFrom { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
     }
     public class QueueTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.QueueTrainResult>

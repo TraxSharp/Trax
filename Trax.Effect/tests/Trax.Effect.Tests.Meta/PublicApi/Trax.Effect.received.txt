@@ -778,6 +778,10 @@ namespace Trax.Effect.Models.Metadata.DTOs
         public required string Name { get; set; }
         public long? ParentId { get; set; }
         public long? ReplayDecisionsOf { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public string? ResumeAt { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public long? ResumeFrom { get; set; }
     }
 }
 namespace Trax.Effect.Models.Metadata
@@ -1107,6 +1111,10 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
         public long? ReplayDecisionsOf { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public string? ResumeAt { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public long? ResumeFrom { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
         public string? SubjectKey { get; set; }
         public required string TrainName { get; set; }
@@ -1231,6 +1239,30 @@ namespace Trax.Effect.Services.ChangeSignal
         public void Complete() { }
         public void Dispose() { }
         public void Notify(Trax.Effect.Services.ChangeSignal.ChangeDomain domain) { }
+    }
+}
+namespace Trax.Effect.Services.Checkpoints
+{
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public sealed class CheckpointOptions
+    {
+        public CheckpointOptions() { }
+        public int MaxStateBytes { get; set; }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public interface IRunResumes
+    {
+        System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeVerdict> Check(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, string? resumeAt, System.Threading.CancellationToken cancellationToken);
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public sealed class ResumeVerdict : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeVerdict>
+    {
+        public ResumeVerdict(bool CanResume, string? Code, string? Reason, string? Target, string? Checkpoint) { }
+        public bool CanResume { get; init; }
+        public string? Checkpoint { get; init; }
+        public string? Code { get; init; }
+        public string? Reason { get; init; }
+        public string? Target { get; init; }
     }
 }
 namespace Trax.Effect.Services.EffectJunction
