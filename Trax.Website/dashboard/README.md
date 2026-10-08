@@ -14,7 +14,12 @@ User settings), Executions (keyset list with failure-class, external id, parent 
 parent and running-junction columns, live feed; detail with parent/child tree, the run's junction
 timeline read from `junctionRuns` and kept live by `onJunctionEvent`, its recorded decisions with
 withheld answers and tracks, a replay that was abandoned, its log oldest first, cancel/re-queue
-including ask-afresh), Work queue (subject and manifest filters, staging, the run an entry replays;
+including ask-afresh, and its run graph from `runGraph`: the train's declared steps with where the
+run left each, the checkpoints it stored and the steps a resumed run restored, never what a
+checkpoint holds, with Resume after the latest checkpoint and "Resume from here" on a node, both
+through `resumeExecution`), State machines (instances by machine, state and owner with exact
+counts, newest first; an instance's details and the runs it invoked, never its context, and Cancel
+for a system-owned instance's live run through `cancelMachineInstance`), Work queue (subject and manifest filters, staging, the run an entry replays;
 detail with masked input and what an entry waits on), Dead letters (manifest filter;
 requeue/acknowledge single, selected or all, with ask-afresh; detail with the manifest, latest
 failed run and failed-run history), Manifests and manifest groups (edit, trigger, batch
@@ -77,6 +82,10 @@ then run `npm test` here.
   range, a name or message filter. Those are answered from the recorded list without that filter,
   filtered here the way the API filters it. A query nothing answers gets an error saying so; the
   demo never falls back to invented data, and it does not carry the auto-mock schema.
+- A page part whose read no recording holds is not offered (`src/lib/answerable.ts`): until the
+  recorder records the run graph and the state machines (`NOT_RECORDED_YET` in
+  `src/demo/harness.tsx`), the demo shows no run graph, so no resume, and no State machines page.
+  Once the recordings hold them they appear, and the strict check covers them.
 - A write goes through the mock's overlays (`src/mock/store/overlays.ts`), so the change reads
   back on every page until the tab reloads. Its answer is the host's: a write recorded with the
   same variables against the rows as the recording shows them answers with that recording, a
@@ -127,7 +136,9 @@ fallback:
    resolves to plausible fake data from the exported SDL, so nothing errors.
 2. **Fixtures** (`fixtures/index.ts`, replayed by `fixture-exchange.ts`) — a committed snapshot
    of real (anonymized) responses, keyed by a hash of the variables, so pages render realistic
-   data. Detail requests fall through to auto-mock rather than serve the wrong record.
+   data. Detail requests fall through to auto-mock rather than serve the wrong record. The
+   fixtures hold no run graphs or state machines, so `dev:mock` answers those from the scenarios
+   (`devMockSeed` in `seeds.ts`).
 3. **Stateful overlays** (`store/overlays.ts`) — mutations write an in-memory delta and reads
    merge it back, so a change sticks (read-after-write). Subscriptions are driven by a
    synthetic event `simulator.ts`, so the live feed animates offline.
