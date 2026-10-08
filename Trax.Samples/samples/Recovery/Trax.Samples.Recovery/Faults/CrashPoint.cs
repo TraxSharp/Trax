@@ -24,4 +24,11 @@ public enum CrashPoint
     /// the branches never writes.
     /// </summary>
     CoCitation,
+
+    /// <summary>
+    /// The ingest's upsert, before it writes, keyed by the partition (<c>Source/yyyy-MM</c>) rather
+    /// than a run id. Every track of the ingest's gate reaches it, so it fires whatever the model
+    /// answered, and the partition is left as it was.
+    /// </summary>
+    Ingest,
 }

@@ -1,4 +1,5 @@
 using Trax.Core.Decisions;
+using Trax.Samples.Recovery.Trains.Ingest;
 using Trax.Samples.Recovery.Trains.Refund;
 using Trax.Samples.Recovery.Trains.Research;
 using Trax.Samples.Recovery.Trains.Topics;
@@ -38,6 +39,7 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
                 (Findings findings, ScoreQuestion) => ScoreDepth(findings),
                 (RefundCase refund, YesNoQuestion) => ApproveRefund(refund),
                 (CoCitationEvidence evidence, YesNoQuestion) => SameTopic(evidence),
+                (MatchEvidence evidence, YesNoQuestion) => SameWork(evidence),
                 _ => throw new InvalidOperationException(
                     $"The demo model cannot answer {question.Key} about {request.State.GetType().Name}."
                 ),
@@ -80,6 +82,17 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         {
             Model = ModelName,
         };
+    }
+
+    // Titles that match word for word are the same paper; titles that are only close might not be.
+    // With nothing close, there is nothing to merge.
+    private static YesNoAnswer SameWork(MatchEvidence evidence)
+    {
+        var probability =
+            evidence.Candidates.Count == 0 ? 0.05
+            : evidence.Candidates.All(c => c.Similarity >= 0.9) ? 0.95
+            : 0.55;
+        return new YesNoAnswer(probability) { Model = ModelName };
     }
 
     private TimeSpan Latency()

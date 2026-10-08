@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.Discover.DiscoverPartitionsTrain",
+  "input": "DiscoverPartitionsInput",
+  "output": "DiscoveredPartitions",
+  "nodes": [
+    {
+      "id": "ListPartitions#0",
+      "kind": "Chain",
+      "junction": "ListPartitions",
+      "in": "DiscoverPartitionsInput",
+      "out": "DiscoveredPartitions",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "DiscoveredPartitions",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}
