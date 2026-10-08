@@ -272,6 +272,18 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The operator view lists an instance's invoked runs, and the operator's cancel ships, both through
+  `IOperationsService` (`GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync`) for the dashboard and GraphQL
+  (`machineInstance { invokedRuns }`, `cancelMachineInstance`). A run records the machine, instance id and owner
+  kind that queued it, not the user, so a user's draft lists only its live run (the one its own token names), never
+  every run under its id, which could be another user's; a system instance lists every run, at most 50. The cancel
+  reuses the operator's cancel of a run (a conditional statement on the queued entry, else the run's cancel flag) and
+  applies a queued run's outcome through `IInvokedRunOutcomes`, the reconciler's own delivery, so it is applied once.
+  Its result is a typed outcome (`Moved`, `RunCancelled`, `CancelRequested`, or refused as `UserOwned`, `NotFound`,
+  `NoLiveRun`, `RunEnded`) with one message on both surfaces. The race with dispatch and the cancel's end-to-end
+  tests are `InvokedRunOperationsTests` in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`, on Postgres and
+  SQLite, where the dispatcher and the reconciler are reachable; the surface tests (parity, the context, the
+  authorization matrix) stay in `Trax.Api/tests`.
 - **2026-10-08**: Only a system-owned machine chains runs through outcomes. A user-owned machine whose `OnDone`,
   `OnFailed` or `OnCancelled` enters an invoking state is refused at startup, naming the machine, the state, the
   outcome and the target, because the run would be queued with no user present to authorize it; it chains through a

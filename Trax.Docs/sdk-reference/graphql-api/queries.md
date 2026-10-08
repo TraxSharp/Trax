@@ -1140,7 +1140,34 @@ query {
 | `id` | `UUID!` | none | The instance or draft id |
 | `rowId` | `Long` | `null` | The row's key from the list. Required for `USER` (refused with `TRAX_ROW_ID_REQUIRED` without it); for `SYSTEM`, when given, it must match too |
 
-**Returns**: `MachineInstanceDetail`, with the fields of [`MachineInstance`](#machineinstance-fields).
+**Returns**: `MachineInstanceDetail`, with the fields of [`MachineInstance`](#machineinstance-fields)
+and the train runs the instance [invoked](/docs/statemachine/invoking-trains), which only this
+lookup reads:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `invokedRuns` | `[MachineInstanceInvokedRun!]!` | The runs, newest first, at most 50: `id`, `externalId`, `name` (the train), `trainState`, `startTime`, `endTime`, `failureClass`, `cancellationRequested`, and `isLive` for the run the instance's state waits on. Never a run's input or output; [`executionDetail(id)`](#executiondetail) reads the rest, masked |
+| `isInvokedRunsCapped` | `Boolean!` | True when the instance invoked more than 50 runs |
+| `queuedInvokedRunEntryId` | `Long` | The work queue entry of the run the state waits on while it is still queued, and so not yet a run |
+
+A system instance lists every run it invoked. A user's draft lists only its live run: a run
+records the machine, instance id and owner kind that queued it, not the user, and several users
+can each hold a draft under one id, so listing every run under the id could show another user's.
+
+```graphql
+query {
+  operations {
+    machineInstance(machine: "fulfilment", ownerKind: SYSTEM, id: "6f9619ff-8b86-d011-b42d-00c04fc964ff") {
+      state
+      invokedRuns { id name trainState startTime endTime failureClass isLive }
+      queuedInvokedRunEntryId
+    }
+  }
+}
+```
+
+The one operator action on an instance is
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance).
 
 ---
 

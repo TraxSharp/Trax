@@ -234,6 +234,30 @@ A failure goes to `OnFailed`, and the machine retries by entering the invoking s
 from the failure state, say), which queues a new run under a new token. The old run's late completion is then a
 `no-transition`. The state is the checkpoint.
 
+## Operators
+
+Operators see instances and act on one kind of them, under the operations gate. The dashboard's
+[State Machines pages](/docs/dashboard#state-machines) and the GraphQL
+[`machineInstances` and `machineInstance`](/docs/sdk-reference/graphql-api/queries#machineinstances)
+show every instance, system-owned and users' drafts alike: its state, timestamps, owner kind and
+the runs it invoked, newest first, with the one its state waits on marked live. Never its
+context, which is an untyped JSON object nothing can mask, and never a run's input or output.
+
+A run records the machine, the instance id and the owner kind that queued it, not the user. A
+system instance is unique by machine and id, so it lists every run it invoked. Several users can
+each hold a draft under one id, so a user's draft lists only its live run, the one its own token
+names, and never a run another user's draft under the same id may have queued.
+
+The one action is cancel, and only on a system-owned instance: the dashboard's Cancel button
+(after a confirmation) and
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) call one
+service method and return the same outcome and message. It cancels the live run, as an operator's
+cancel of the run itself does: a run still queued is marked Cancelled and never starts, and a
+dispatched run has its cancel requested and stops at its next junction. The instance then moves
+through its state's `OnCancelled` edge, applied once by the same conditional update every
+delivery makes. A user's draft is refused, as are an instance whose state waits on no run and one
+whose run has already ended. No surface creates or advances a system instance.
+
 ## Junctions must be idempotent
 
 Queueing a run is exactly once; running it is at least once. A run can execute more than once, so every

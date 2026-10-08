@@ -64,7 +64,9 @@ call it. As of this ADR's last changelog entry:
   list of manifests, a list of groups or every group, edit a group's settings, edit the scheduler
   settings, dead-letter re-queue and acknowledge, manifest and group trigger, manifest stats and
   group stats, the persisted-operations reads and writes (`IPersistedOperationsService`,
-  dashboard/0005), the dashboard metrics and the group dependency graphs. Re-queueing every dead
+  dashboard/0005), the dashboard metrics, the group dependency graphs, the state-machine instance
+  reads (an instance's invoked runs among them) and cancelling a system-owned instance
+  (`CancelMachineInstanceAsync`). Re-queueing every dead
   letter is shared too, but the dashboard awaits it inside the operator's circuit, which holds the
   page for as long as the call runs (about 36 s over 500,000 dead letters in the API's stress
   suite).
@@ -101,6 +103,8 @@ field. Parity is held by review and by the audit list, not by a guard.
 
 ## Changelog
 
+- **2026-10-08**: Listed the state-machine instance reads and the instance cancel as met
+  ([0046](./0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md)).
 - **2026-10-01**: The dashboard switched its run, run cancels, batch work queue cancel, batch
   enable and disable, stats reads and persisted-operations pages to the shared methods. Batch
   trigger and group cancel are recorded as a per-item stopgap. The dashboard's re-queue refuses

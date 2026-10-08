@@ -350,7 +350,7 @@ The replay links are plain columns read with the run and the entry: `Metadata.Re
 The operator's read-only view of `trax.snapshot_draft`: the dashboard's
 [State Machines pages](/docs/dashboard#state-machines) and the API's
 [`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries#machineinstances)
-read through these four methods.
+read through these four methods, and one instance's runs and its cancel through the two after them.
 
 ```csharp
 public record MachineInstanceQuery(
@@ -383,6 +383,38 @@ token, not what the token is. `CreatedAt` is null for a row written before migra
 `ix_snapshot_draft_machine_state_updated` in order, and any other page reads
 `ix_snapshot_draft_updated`; at two million instances every page measured took under 10 ms and the
 counts about 120 ms.
+
+Two more methods serve one instance's page and its one operator action, the dashboard's and the
+API's alike (`machineInstance { invokedRuns }` and
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance)):
+
+```csharp
+public record MachineInstanceRun(
+    long Id, string ExternalId, string TrainName, TrainState TrainState, DateTime StartTime,
+    DateTime? EndTime, FailureClass FailureClass, bool CancellationRequested, bool IsLive);
+
+public record MachineInstanceRuns(IReadOnlyList<MachineInstanceRun> Items, bool Capped, long? QueuedEntryId);
+
+public enum MachineInstanceCancelOutcome
+{
+    Moved, RunCancelled, CancelRequested, // the run was cancelled or its cancel requested
+    UserOwned, NotFound, NoLiveRun, RunEnded, // refused, nothing changed
+}
+
+public record MachineInstanceCancelResult(
+    MachineInstanceCancelOutcome Outcome, string Message, string? State = null)
+{
+    public bool Success { get; }
+}
+```
+
+| Method | Returns |
+|--------|---------|
+| `GetMachineInstanceRunsAsync(key, ct)` | The runs the instance invoked, newest first, at most `OperationsService.MachineInstanceRunCap` (50), with the one its state waits on marked `IsLive`; `QueuedEntryId` is that run's work queue entry while it is still queued. `null` when no row matches. A system instance lists every run linked to it (read through `ix_metadata_invoking_instance`); a user's draft lists only the run its own invoke token names, because a run does not record which user's draft queued it. Never a run's input or output. |
+| `CancelMachineInstanceAsync(key, ct)` | Cancels a system-owned instance's live run: a still-queued entry is marked Cancelled by one conditional statement, and a dispatched run is flagged as `CancelExecutionsAsync` flags one. The dispatcher claims an entry and writes its run in one transaction, so the run either never starts or is cancelled. When this host registers the machine (`IInvokedRunOutcomes`, from `AddStateMachines`), a queued run's Cancelled outcome is applied in the call (`Moved`); otherwise a host that does applies it (`RunCancelled`). Every delivery is the one conditional update on the token, so the outcome is applied once. A dispatched run's outcome is applied when it ends (`CancelRequested`). Refused, with a typed outcome and changing nothing: `UserOwned`, `NotFound`, `NoLiveRun`, `RunEnded`. |
+
+The messages are public (`OperationsService.UserOwnedCancelRefusal`, `NoLiveRunMessage(key, state)`
+and the rest), and both surfaces show them unchanged.
 
 ### Masking a stored input
 

@@ -90,6 +90,24 @@ surface does: a work queue entry still queued is marked cancelled, and a dispatc
 which it reads at its next junction on whichever host runs it. The delete that follows is conditional on the token
 that was cancelled, so a draft that entered an invoking state again in between keeps its new run.
 
+### IInvokedRunOutcomes
+
+Experimental (`TRAXEXP002`). Applies the outcome of an ended invoked run to the instance waiting on it, now, through
+the delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
+outcome is applied once however many callers deliver it. `AddStateMachines` registers it; the operations service calls
+it after an operator's
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued run,
+so the instance moves in that request on a host that registers the machine.
+
+```csharp
+public interface IInvokedRunOutcomes
+{
+    // The state this call moved the instance into, or null when it moved nothing: the run has not ended,
+    // no instance holds the token, or this host does not register or cannot read the machine.
+    Task<string?> Deliver(string invokeToken, CancellationToken cancellationToken = default);
+}
+```
+
 ### IInvokedTrainLauncher
 
 Experimental (`TRAXEXP002`). The port through which a state that
