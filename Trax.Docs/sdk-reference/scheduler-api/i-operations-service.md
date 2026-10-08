@@ -22,6 +22,8 @@ public interface IOperationsService
     Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, CancellationToken ct);
+    [Experimental("TRAXEXP003")]
+    Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
     Task<OperationResult> CancelExecutionsAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntriesAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> SetManifestsEnabledAsync(IReadOnlyCollection<long> ids, bool enabled, CancellationToken ct);
@@ -147,6 +149,51 @@ not implement the
 [`QueueAsync` overload that takes `QueueTrainOptions`](/docs/sdk-reference/mediator-api/train-execution),
 the mediator's `DecisionReplayNotSupportedException` is logged and thrown as a host
 misconfiguration rather than reported as `The enqueue was refused.`
+
+A requeue always runs the chain again from the top, whatever checkpoints the run stored. To carry
+on from a checkpoint instead, resume it.
+
+### ResumeExecutionAsync
+
+```csharp
+[Experimental("TRAXEXP003")]
+Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `metadataId` | `long` | The failed or cancelled run (metadata row) to resume |
+| `from` | `string?` | The node id of the step to resume at, as the run graph names it, or `null` for after the run's latest checkpoint |
+
+Queues a run that resumes a run from a
+[checkpoint](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md):
+it skips every step before the resume point and starts from the state the checkpoint stored. It is
+a requeue in every check but where the run starts. It refuses, with a failed result and nothing
+queued, when:
+
+- no run has the id (`Execution {id} not found.`);
+- the run is not `Failed` or `Cancelled` (`Execution {id} is {state}; only a failed or cancelled run can be resumed.`);
+- a state machine's invoking state queued it, which only the machine retries, by entering the state again (`Execution {id} was started by a step of the state machine '{machine}', ... so it cannot be resumed. ...`);
+- its saved input cannot be re-queued, for the reasons `RequeueExecutionAsync` gives;
+- a resume of it is already queued (`A resume of execution {id} is already queued ...`);
+- its train is no longer registered, or its chain cannot be read on this host;
+- the resume check refuses: the run stored no checkpoint before `from`, a step after the point needs
+  a value nothing restores, or the stored checkpoint no longer matches the running chain or the
+  state's shape. The check's own reason is the message, unchanged.
+
+Otherwise it enqueues through the mediator exactly as `RequeueExecutionAsync` does, with the run's
+saved input, so the train's `[TraxAuthorize]`, its `OnQueue` hook and its subject key apply, and an
+authorization failure propagates. The entry names the run in `ResumeFrom` and the step in
+`ResumeAt`, and, when the run has decisions to replay, in `ReplayDecisionsOf` as a requeue would, so
+a question asked after the resume point takes the track the run took. On success `Id` is the new
+work queue entry. The new run checks the resume again when it starts, and runs from the top, with a
+warning in its log, if it can no longer be trusted.
+
+A run has at most one queued resume. When a manifest's retry, which resumes after the failed run's
+latest checkpoint on its own (see
+[Retries resume from a checkpoint](/docs/scheduler/dead-letters-and-cleanup#retries-resume-from-a-checkpoint)),
+or another operator queues one between this call's checks and its insert, the database refuses the
+second, and this call returns the same refusal.
 
 ## Failures
 

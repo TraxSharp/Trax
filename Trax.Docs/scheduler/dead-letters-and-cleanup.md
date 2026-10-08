@@ -382,6 +382,32 @@ retry, a dead-letter requeue, a requeue-all and `RequeueExecutionAsync`; nothing
 requeue's message says it asked afresh.
 `Trax.Scheduler/docs/adr/0017` records why retries replay, and why only once.
 
+## Retries resume from a checkpoint
+
+A train whose chain declares a checkpoint (`Checkpoint<TState>()`, experimental under
+`TRAXEXP003`) stores that state when a run reaches it. A manifest's retry and a requeue of its dead
+letter then resume after the failed run's latest checkpoint instead of running every step again:
+the new entry names the failed run in `ResumeFrom`, and the run skips every step before the
+checkpoint, including the writes it already committed. Declaring the checkpoint is the opt-in; it
+does not depend on `ReplayDecisionsOnRetry`, which still decides whether the retry replays the
+failed run's decisions.
+
+The failed run is found as the replay finds it: the manifest's latest finished run, failed, a run of
+the manifest's train dispatched from an entry of the manifest with no subject key and exactly the
+input the retry is given; a dependent whose parent has succeeded again since is a new firing. The
+scheduler then asks whether the train's declared chain can resume after that run's latest
+checkpoint, following a run that was itself a resume back to the checkpoints it resumed from, so a
+second failure after a resume resumes from the same checkpoint. When the run stored no checkpoint,
+when a checkpoint no longer matches the chain or the state's shape after a deploy, or when the
+lookup fails, the retry reruns the chain from the top as before. A run a state machine invoked is
+never resumed this way.
+
+A run has at most one queued resume (the unique index `ix_work_queue_unique_queued_resume`). When an
+operator's [`resumeExecution`](/docs/sdk-reference/scheduler-api/i-operations-service#resumeexecutionasync)
+and a retry of the same run are queued in the same instant, one of them carries the resume: a retry
+that loses is queued without it and reruns from the top, and an operator's resume that loses is
+refused. `requeueExecution` always reruns from the top.
+
 ## Monitoring
 
 The **Trax.Core Dashboard** at `/trax/data/dead-letters` provides a real-time view of all dead letters with status badges and links to detail pages. The dead letter detail page surfaces the full failure context, stack traces, inputs, and execution history, so operators can make informed retry/acknowledge decisions without writing queries.
@@ -451,6 +477,14 @@ together in one transaction, so a batch can hold more rows than `DeleteBatchSize
 source stays is kept with it. Each batch is deleted all or nothing; when a run in it is linked for
 replay during the delete, the batch rolls back, is rechecked and tried again without that run, and
 after three such attempts it is logged as a warning and left for a later sweep.
+
+Resuming from a checkpoint adds the same three conditions for `resume_from`, since a run's
+checkpoints are deleted with it: a run is kept while a queued entry or a run that is kept resumes
+it, and a resumed run and the run it resumed are deleted together once both have expired. A work
+queue entry that is no longer queued (cancelled, or dispatched as a run of its own) and names a
+deleted run has its `resume_from` cleared, so no row names a run that is gone. A manifest's prune
+clears the link on a run or entry outside the manifest, such as an operator's resume, that names one
+of the manifest's runs; a queued one then runs from the top.
 
 Cancelled trains are treated as terminal, they are eligible for cleanup but are **not retried** and **do not create dead letters**. Cancellation is an explicit operator action, not a transient failure. A run that stopped because something inside it gave up, such as an `HttpClient` timeout, was not cancelled: it is recorded `Failed` and classified `Transient`, so it counts toward `MaxRetries` like any other failure.
 
