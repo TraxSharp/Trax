@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -9,12 +11,19 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvide
 /// <c>CurrentlyRunningJunction</c> and <c>JunctionStartedAt</c>, so the dashboard and API can show live
 /// progress. Registered by <c>AddJunctionProgress</c>; not intended to be constructed directly.
 /// </summary>
-/// <remarks>Does nothing for a train that has no metadata or no effect runner.</remarks>
-internal class JunctionProgressProvider : IJunctionProgressProvider
+/// <remarks>
+/// <para>Does nothing for a train that has no metadata.</para>
+/// <para>The two columns are written through a context of their own, never through the run's
+/// effect runner. Saving through the runner would commit everything else the run has tracked so
+/// far, so a train that failed later would leave its earlier writes behind, and every junction would
+/// pay for a full save of every provider. A run's own writes commit once, when it finishes.</para>
+/// </remarks>
+internal class JunctionProgressProvider(IDataContextProviderFactory dataContextFactory)
+    : IJunctionProgressProvider
 {
     /// <summary>
     /// Sets <c>CurrentlyRunningJunction</c> to the junction's name and <c>JunctionStartedAt</c> to now (UTC),
-    /// and saves the metadata immediately. A failing save propagates and fails the train.
+    /// and writes the two columns immediately. A failing write propagates and fails the train.
     /// </summary>
     /// <typeparam name="TIn">The junction's input type.</typeparam>
     /// <typeparam name="TOut">The junction's output type.</typeparam>
@@ -29,20 +38,19 @@ internal class JunctionProgressProvider : IJunctionProgressProvider
         CancellationToken cancellationToken
     )
     {
-        if (serviceTrain.Metadata is null || serviceTrain.EffectRunner is null)
+        if (serviceTrain.Metadata is null)
             return;
 
         serviceTrain.Metadata.CurrentlyRunningJunction = effectJunction.Metadata?.Name;
         serviceTrain.Metadata.JunctionStartedAt = DateTime.UtcNow;
 
-        await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
-        await serviceTrain.EffectRunner.SaveChanges(cancellationToken);
+        await Write(serviceTrain.Metadata, cancellationToken);
     }
 
     /// <summary>
-    /// Clears <c>CurrentlyRunningJunction</c> and <c>JunctionStartedAt</c> and saves the metadata. The save
-    /// ignores the caller's token and a failing save is only logged as a warning, so neither can change the
-    /// junction's result; the train's final write clears both columns again.
+    /// Clears <c>CurrentlyRunningJunction</c> and <c>JunctionStartedAt</c> and writes the two columns. The
+    /// write ignores the caller's token and a failing write is only logged as a warning, so neither can
+    /// change the junction's result; the train's final write clears both columns again.
     /// </summary>
     /// <typeparam name="TIn">The junction's input type.</typeparam>
     /// <typeparam name="TOut">The junction's output type.</typeparam>
@@ -57,7 +65,7 @@ internal class JunctionProgressProvider : IJunctionProgressProvider
         CancellationToken cancellationToken
     )
     {
-        if (serviceTrain.Metadata is null || serviceTrain.EffectRunner is null)
+        if (serviceTrain.Metadata is null)
             return;
 
         serviceTrain.Metadata.CurrentlyRunningJunction = null;
@@ -71,8 +79,7 @@ internal class JunctionProgressProvider : IJunctionProgressProvider
         // columns again with the outcome, so a skipped write leaves nothing stale behind.
         try
         {
-            await serviceTrain.EffectRunner.Update(serviceTrain.Metadata);
-            await serviceTrain.EffectRunner.SaveChanges(CancellationToken.None);
+            await Write(serviceTrain.Metadata, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -83,6 +90,47 @@ internal class JunctionProgressProvider : IJunctionProgressProvider
                 effectJunction.Metadata?.Name
             );
         }
+    }
+
+    /// <summary>
+    /// Writes the run's two progress columns, and only those, to its row. A row not saved yet has
+    /// nothing to write to.
+    /// </summary>
+    private async Task Write(Models.Metadata.Metadata metadata, CancellationToken cancellationToken)
+    {
+        if (metadata.Id <= 0)
+            return;
+
+        var junction = metadata.CurrentlyRunningJunction;
+        var startedAt = metadata.JunctionStartedAt;
+
+        await using var context = await dataContextFactory.CreateDbContextAsync(cancellationToken);
+
+        if (context is DbContext db && db.Database.IsRelational())
+        {
+            await context
+                .Metadatas.Where(m => m.Id == metadata.Id)
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.CurrentlyRunningJunction, junction)
+                            .SetProperty(m => m.JunctionStartedAt, startedAt),
+                    cancellationToken
+                );
+            return;
+        }
+
+        // The in-memory provider has no bulk update, so the row is read into this context and saved.
+        var row = await context.Metadatas.FirstOrDefaultAsync(
+            m => m.Id == metadata.Id,
+            cancellationToken
+        );
+
+        if (row is null)
+            return;
+
+        row.CurrentlyRunningJunction = junction;
+        row.JunctionStartedAt = startedAt;
+        await context.SaveChanges(cancellationToken);
     }
 
     /// <summary>Holds no resources; does nothing.</summary>
