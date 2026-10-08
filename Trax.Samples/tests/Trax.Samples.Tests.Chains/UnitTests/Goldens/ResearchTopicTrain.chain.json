@@ -131,6 +131,15 @@
       ]
     },
     {
+      "id": "Checkpoint<CheckedFindings>#0",
+      "kind": "Checkpoint",
+      "junction": null,
+      "in": "CheckedFindings",
+      "out": null,
+      "opaque": false,
+      "tracks": []
+    },
+    {
       "id": "Summarize#0",
       "kind": "Chain",
       "junction": "Summarize",

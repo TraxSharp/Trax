@@ -6,8 +6,10 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <!-- TRAXEXP001: opts in to the experimental Parallel step, which the topic map's signals run in.
          TRAXEXP002: opts in to the experimental Invokes and IMachineInstances, which the partition and
-         topic map machines use to run the ingest and the build. -->
-    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002</NoWarn>
+         topic map machines use to run the ingest and the build.
+         TRAXEXP003: opts in to the experimental Checkpoint step, which the research train stores its
+         checked findings in. -->
+    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002;TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

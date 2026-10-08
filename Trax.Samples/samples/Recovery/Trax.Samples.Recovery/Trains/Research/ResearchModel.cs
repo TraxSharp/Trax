@@ -14,7 +14,11 @@ public sealed record Findings(
     IReadOnlyList<string> Notes
 );
 
-/// <summary>The findings after the step the depth decision chose.</summary>
+/// <summary>
+/// The findings after the step the depth decision chose: the state the train's checkpoint stores, and
+/// all a resumed run starts from. It is stored as JSON and read back, so it and <see cref="Findings"/>
+/// stay sealed records of data.
+/// </summary>
 public sealed record CheckedFindings(Findings Findings, string Depth);
 
 /// <summary>The train's output.</summary>

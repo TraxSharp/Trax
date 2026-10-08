@@ -4,8 +4,10 @@ using Trax.Samples.Shared.Testing;
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 
 /// <summary>
-/// A run whose last step crashes once recovers on the manifest's automatic retry, and the retry
-/// replays the first attempt's decisions instead of asking the model again.
+/// A run whose last step crashes once recovers on the manifest's automatic retry without asking the
+/// model again. The research run declares a checkpoint after its Scale step, so its retry resumes
+/// there and writes only the report; the refund run declares none, so its retry runs the chain again
+/// and replays the first attempt's decision.
 /// </summary>
 [TestFixture]
 public class RetryReplayTests : RecoveryTestFixture
@@ -30,8 +32,11 @@ public class RetryReplayTests : RecoveryTestFixture
         attempt1.Should().OnlyContain(s => Attempt(s) == 1);
         attempt2.Should().OnlyContain(s => Attempt(s) == 2);
 
-        // Attempt 1 asked both questions and failed writing the report.
+        // Attempt 1 asked both questions, checkpointed its checked findings and failed writing the
+        // report.
+        Questions(attempt1).Should().HaveCount(2);
         Questions(attempt1).Should().OnlyContain(q => !q.GetProperty("replayed").GetBoolean());
+        Names(attempt1).Should().Contain("FetchFullTexts");
         attempt1.Last().GetProperty("name").GetString().Should().Be("Summarize");
         attempt1
             .Last()
@@ -40,38 +45,22 @@ public class RetryReplayTests : RecoveryTestFixture
             .Should()
             .Be("FAILED", "the armed crash fires in the report step");
 
-        // Attempt 2 replayed both answers, took the same tracks, and ran to the end.
-        Questions(attempt2).Should().HaveCount(2);
-        Questions(attempt2).Should().OnlyContain(q => q.GetProperty("replayed").GetBoolean());
+        // Attempt 2 resumed after the checkpoint: both questions and every search and fetch came
+        // before it, so it ran only the report step, from the stored findings.
         Names(attempt2)
             .Should()
             .Equal(
-                "PlanResearch",
-                "Source",
-                "Source",
-                "SearchPapers",
-                "Depth",
-                "Depth",
-                "FetchFullTexts",
-                "Summarize"
+                ["Summarize"],
+                "a manifest's retry resumes after the failed run's latest checkpoint"
             );
-
-        // The subscription itself carried the replayed decisions, with their answers.
-        Questions(Run.LiveSteps(second))
-            .Should()
-            .Contain(q =>
-                q.GetProperty("replayed").GetBoolean()
-                && q.GetProperty("questionKey").GetString() == "Source"
-                && q.GetProperty("answer").GetString() == "Papers"
-            );
+        Names(Run.LiveSteps(second)).Should().OnlyContain(n => n == "Summarize");
 
         var journal = await Run.JournalAsync(second);
-        journal.GetProperty("replayDecisionsOf").GetInt64().Should().Be(first);
         journal
             .GetProperty("decisions")
             .EnumerateArray()
             .Should()
-            .OnlyContain(d => d.GetProperty("replayed").GetBoolean());
+            .BeEmpty("no question comes after the checkpoint");
         Stream.Errors.Should().BeEmpty();
     }
 

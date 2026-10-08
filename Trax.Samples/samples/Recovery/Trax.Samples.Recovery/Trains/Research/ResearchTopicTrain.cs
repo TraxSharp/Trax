@@ -8,8 +8,9 @@ namespace Trax.Samples.Recovery.Trains.Research;
 
 /// <summary>
 /// A research brief: plan, ask the model where to look, search there, ask the model how deep to go,
-/// skim or cross-check, write the report. Writing the report is the step the page can crash. The retry
-/// runs the chain again from the top, but both model calls are replayed from the first attempt.
+/// skim or cross-check, store the checked findings, write the report. Writing the report is the step
+/// the page can crash. The retry resumes after the checkpoint, so it writes the report from the stored
+/// findings without searching, fetching or asking the model again.
 /// </summary>
 [TraxBroadcast]
 [TraxAuthorize(Roles = RecoveryRoles.Operator + "," + RecoveryRoles.Viewer)]
@@ -28,6 +29,9 @@ public class ResearchTopicTrain : ServiceTrain<ResearchInput, ResearchReport>, I
                     .AtLeast(Depth.Skim, t => t.Chain<SkimSources>())
                     .AtLeast(Depth.CrossCheck, t => t.Chain<FetchFullTexts>())
             )
+            // Stores the findings once they are checked. A retry, or an operator's resume, starts
+            // after it: nothing before it runs again and neither question is asked again.
+            .Checkpoint<CheckedFindings>()
             .Chain<Summarize>()
             .Resolve();
 }
