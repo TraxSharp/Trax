@@ -252,6 +252,12 @@ public sealed record TrackRouted(
 ///
 /// <para>Whatever it throws fails the step, classified as the exception says, because a replay
 /// that cannot be read cannot be told from a run with nothing to replay.</para>
+///
+/// <para>It is asked on the asking step's own flow, with <see cref="Monad.ChainGraph.CurrentNodeId"/>
+/// and <see cref="Monad.ChainGraph.CurrentBranchPath"/> already naming that step, as an observer
+/// is told. Inside a <c>Parallel</c> branch the occurrence counts on from the fork, so two
+/// branches asking the same question give the same occurrence: a host that replays keys its
+/// answers by the branch path as well.</para>
 /// </remarks>
 public interface IDecisionReplay
 {

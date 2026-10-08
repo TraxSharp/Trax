@@ -493,6 +493,8 @@ namespace Trax.Effect.Models.JunctionRun
         public bool AnswerWithheld { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("attempt")]
         public int? Attempt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("branch_path")]
+        public string? BranchPath { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("confidence")]
         public double? Confidence { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("ended_at")]
@@ -892,6 +894,8 @@ namespace Trax.Effect.Models.RecordedDecision
         public RecordedDecision() { }
         [System.ComponentModel.DataAnnotations.Schema.Column("answer")]
         public string? Answer { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("branch_path")]
+        public string BranchPath { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("decided_at")]
         public System.DateTime DecidedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("decider")]
@@ -1379,6 +1383,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public bool AnswerWithheld { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("attempt")]
         public int? Attempt { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("branchPath")]
+        public string? BranchPath { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("confidence")]
         public double? Confidence { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("decider")]

@@ -96,6 +96,9 @@ namespace Trax.Effect.Broadcaster.SignalR.Models
         [System.Text.Json.Serialization.JsonPropertyName("answerWithheld")]
         public bool AnswerWithheld { get; init; }
         [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("branchPath")]
+        public string? BranchPath { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         [System.Text.Json.Serialization.JsonPropertyName("confidence")]
         public double? Confidence { get; init; }
         [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

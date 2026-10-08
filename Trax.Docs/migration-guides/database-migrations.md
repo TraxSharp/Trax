@@ -195,7 +195,7 @@ Nothing is backfilled. A claim written before the upgrade has no fingerprint and
 on the previous version reads and writes the table unchanged, so a rolling deploy is safe. Adding a nullable column
 is a catalog change on both providers, not a rewrite of the table.
 
-## Junction runs (055, 057, 058, 060 and 067; SQLite 020, 022, 023, 025 and 030)
+## Junction runs (055, 057, 058, 060, 067 and 068; SQLite 020, 022, 023, 025, 030 and 031)
 
 `055_junction_run.sql` (SQLite `020_junction_run.sql`) creates `trax.junction_run`, one row per step
 of a run, written only by a host that calls
@@ -206,7 +206,9 @@ enum types. `057_junction_run_attempt.sql` (SQLite `022`) adds the nullable `att
 `060_junction_run_track.sql` (SQLite `025`) adds `name_withheld`, true for a step whose name is
 withheld after a `[TraxSensitive]` route, and the nullable `track_position`, the route a step ran
 after. `067_junction_run_node_id.sql` (SQLite `030`) adds the nullable `node_id`, the id of the
-declared node a step ran for; rows written before it have none.
+declared node a step ran for; rows written before it have none. `068_parallel_branch_path.sql`
+(SQLite `031`) adds the nullable `branch_path`, the `Parallel` branch a step ran in, described
+[below](#parallel-branch-path-068-sqlite-031).
 
 `058_metadata_manifest_id_id_index.sql` (SQLite `023`) adds `ix_metadata_manifest_id_id` on
 `trax.metadata (manifest_id, id DESC)` for rows with a manifest, so a run reads its attempt from
@@ -305,6 +307,24 @@ On Postgres the migration proves the column has no NULLs with a check constraint
 and then validated, which reads the table without blocking log writes, so `SET NOT NULL` takes its
 exclusive lock only briefly; the check is dropped afterwards. SQLite cannot change a column in place,
 so `029` rebuilds the `log` table with the same columns, ids and index.
+
+## Parallel branch path (068, SQLite 031)
+
+`068_parallel_branch_path.sql` (SQLite `031`) records which `Parallel` branch each decision was asked
+in and each step ran in. A branch counts its askings of a question on from where it forked, so two
+branches asking one question ask it under the same `occurrence`, and the old key
+`uq_decision_run_question` on `(metadata_id, question_key, occurrence)` refused the second. The
+migration adds `trax.decision.branch_path`, `text NOT NULL DEFAULT ''`, empty for a question asked
+outside any branch, builds the unique index `uq_decision_run_branch_question` on
+`(metadata_id, branch_path, question_key, occurrence)` and then drops the old constraint. A requeue
+replays an answer by branch, key and occurrence. It also adds the nullable
+`trax.junction_run.branch_path`.
+
+Every existing row is a decision asked outside any branch, so nothing is backfilled. On Postgres the
+new index is built `CONCURRENTLY`, so decisions keep being recorded while it builds, and the column
+default is a catalog change. SQLite cannot drop a table's unique constraint in place, so `031`
+rebuilds the `decision` table with the same columns, ids and index. A host on the previous version
+inserts without the column and gets the empty branch, so a rolling deploy is safe.
 
 ## Failure search (066)
 

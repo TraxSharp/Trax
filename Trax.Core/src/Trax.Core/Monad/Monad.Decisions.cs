@@ -346,6 +346,10 @@ public partial class Monad<TInput, TReturn>
                 if (replay is null)
                     continue;
 
+                // Entered before the lookup, so a replay can tell which branch is asking: two
+                // branches asking one question both count their askings on from the fork.
+                ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
+
                 var earlier = await replay
                     .Replay(train, Train.ExternalId, spec.Key, asking, CancellationToken)
                     .ConfigureAwait(false);

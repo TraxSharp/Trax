@@ -6,7 +6,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Effect.Tests.Data.Sqlite.Integration</RootNamespace>
-    <NoWarn>NETSDK1206</NoWarn>
+    <!-- TRAXEXP001: these tests run service trains with the experimental Parallel step. -->
+    <NoWarn>NETSDK1206;TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

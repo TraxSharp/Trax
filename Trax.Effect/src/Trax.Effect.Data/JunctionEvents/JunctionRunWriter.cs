@@ -284,6 +284,7 @@ internal sealed class JunctionRunWriter
         row.NameWithheld = step.NameWithheld;
         row.TrackPosition = step.TrackPosition;
         row.NodeId = step.NodeId;
+        row.BranchPath = step.BranchPath;
     }
 
     /// <inheritdoc />

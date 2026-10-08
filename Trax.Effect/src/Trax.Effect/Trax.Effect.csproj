@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <Description>The effect layer for Trax .NET trains: the ServiceTrain base class that records every run as a Metadata row (state, timing, input, output, failure), DI registration (AddTrax, AddEffects, AddScopedTraxRoute), lifecycle hooks and the UseBroadcaster event pipeline. Install it with one data provider (Trax.Effect.Data.Postgres, .Sqlite or .InMemory) to persist those runs.</Description>
     <AssemblyName>Trax.Effect</AssemblyName>
+    <!-- TRAXEXP001: a run records the failure of a Parallel step (BranchesFailedException) by
+         classifying each failed branch, so the effect layer reads the experimental step's types. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

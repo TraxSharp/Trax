@@ -101,6 +101,13 @@ Calling `AddDecisionRecording()` more than once registers these once.
 - Each decision is stored with the fingerprint Trax.Core reports for it, and a replay hands the
   fingerprint back with the answer, so an answer given to a different asking of the question is
   not replayed.
+- A question asked inside a `Parallel` branch is stored with the branch in `branch_path` (empty
+  outside any). A branch counts its askings on from where it forked, so two branches asking one
+  question ask it under the same occurrence; a row is keyed, and replayed, by branch, question and
+  occurrence, so each branch's asking gets its own answer back. A routing step adds its track to
+  the row of its own branch's latest asking, or, before its branch has asked, to the row asked
+  before the fork. The log withholds a branch's later decisions after a withheld track in that
+  branch, and every decision after the join, but not those of a sibling running beside it.
 - Each decision is stored with `DecisionMade.StateHash` in `state_hash`, and a replay hands it back
   as `RecordedAnswer.StateHash`, so Trax.Core replays the answer only into a state that hashes the
   same. A row with no hash (the state could not be hashed, or the row predates the column) is never

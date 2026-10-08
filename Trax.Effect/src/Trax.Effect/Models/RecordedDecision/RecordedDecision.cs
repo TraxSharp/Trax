@@ -12,7 +12,7 @@ namespace Trax.Effect.Models.RecordedDecision;
 /// with the reason in <see cref="Refused"/>; each track is added to <see cref="Routes"/> when
 /// a routing step takes one. Read back to replay a run's decisions when it is requeued. EF Core mapping lives in
 /// <c>Trax.Effect.Data.Models.RecordedDecision.PersistentRecordedDecision</c>; the table
-/// ships in the core migration set (Postgres <c>054</c>, Sqlite <c>019</c>) and is deleted with
+/// ships in the core migration set (Postgres <c>054</c> and <c>068</c>, Sqlite <c>019</c> and <c>031</c>) and is deleted with
 /// its run.
 /// </remarks>
 public class RecordedDecision
@@ -32,7 +32,19 @@ public class RecordedDecision
     [Column("question_key")]
     public string QuestionKey { get; set; } = null!;
 
-    /// <summary>Which asking of the question this was in the run, from 0.</summary>
+    /// <summary>
+    /// The <c>Parallel</c> branch that asked, as Trax.Core names it (<c>Parallel#0/cocitation</c>),
+    /// or empty for a question asked outside any branch. A branch counts its askings on from where
+    /// it forked, so two branches asking one question ask it under the same
+    /// <see cref="Occurrence"/>; an asking is told apart by its branch as well.
+    /// </summary>
+    [Column("branch_path")]
+    public string BranchPath { get; set; } = "";
+
+    /// <summary>
+    /// Which asking of the question this was in the run, from 0. Inside a <c>Parallel</c> branch
+    /// it counts on from where the branch forked.
+    /// </summary>
     [Column("occurrence")]
     public int Occurrence { get; set; }
 

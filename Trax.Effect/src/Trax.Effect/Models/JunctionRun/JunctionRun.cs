@@ -21,7 +21,7 @@ namespace Trax.Effect.Models.JunctionRun;
 /// marked <c>[TraxSensitive]</c> is not stored at all (<see cref="AnswerWithheld"/>).</para>
 ///
 /// EF Core mapping lives in <c>Trax.Effect.Data.Models.JunctionRun.PersistentJunctionRun</c>; the
-/// table ships in the core migration set (Postgres <c>055</c>, <c>057</c>, <c>060</c> and <c>067</c>, Sqlite <c>020</c>, <c>022</c>, <c>025</c> and <c>030</c>) and is deleted
+/// table ships in the core migration set (Postgres <c>055</c>, <c>057</c>, <c>060</c>, <c>067</c> and <c>068</c>, Sqlite <c>020</c>, <c>022</c>, <c>025</c>, <c>030</c> and <c>031</c>) and is deleted
 /// with its run.
 /// </remarks>
 public class JunctionRun
@@ -144,4 +144,13 @@ public class JunctionRun
     /// </summary>
     [Column("node_id")]
     public string? NodeId { get; set; }
+
+    /// <summary>
+    /// The <c>Parallel</c> branch the step ran in, as Trax.Core names it, such as
+    /// <c>Parallel#0/cocitation</c>, so a run's timeline can be drawn in a lane per branch. Null
+    /// for a step outside any branch, when <see cref="NameWithheld"/> is set, because a branch path
+    /// can name a track, and for rows written before the column existed.
+    /// </summary>
+    [Column("branch_path")]
+    public string? BranchPath { get; set; }
 }

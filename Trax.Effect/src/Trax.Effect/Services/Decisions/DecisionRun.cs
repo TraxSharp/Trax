@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Models.Metadata;
+using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Effect.Services.Decisions;
 
@@ -40,7 +41,7 @@ internal sealed class DecisionRun
         string runId,
         Type train,
         long? metadataId,
-        IReadOnlyDictionary<(string Key, int Occurrence), RecordedAnswer> replay
+        IReadOnlyDictionary<(string BranchPath, string Key, int Occurrence), RecordedAnswer> replay
     )
         : this(runId, NameOf(train), metadataId, replay) { }
 
@@ -52,7 +53,7 @@ internal sealed class DecisionRun
         string runId,
         string train,
         long? metadataId,
-        IReadOnlyDictionary<(string Key, int Occurrence), RecordedAnswer> replay
+        IReadOnlyDictionary<(string BranchPath, string Key, int Occurrence), RecordedAnswer> replay
     )
     {
         RunId = runId;
@@ -79,26 +80,83 @@ internal sealed class DecisionRun
 
     /// <summary>
     /// The answers of the run this one repeats, each with the fingerprint it was recorded under,
-    /// keyed as Trax.Core asks for them.
+    /// keyed as Trax.Core asks for them, by the <c>Parallel</c> branch that asked as well
+    /// (<see cref="BranchPaths.Run"/> outside any): branches count their askings on from the fork,
+    /// so two branches asking one question ask it under the same occurrence.
     /// </summary>
-    public IReadOnlyDictionary<(string Key, int Occurrence), RecordedAnswer> Replay { get; }
-
-    /// <summary>The id of the row written for each question's latest asking, for its routing.</summary>
-    public ConcurrentDictionary<string, long> Latest { get; } = new();
-
-    private volatile bool _onWithheldTrack;
+    public IReadOnlyDictionary<
+        (string BranchPath, string Key, int Occurrence),
+        RecordedAnswer
+    > Replay { get; }
 
     /// <summary>
-    /// True once the run has taken a track on a question whose answer is withheld. From then on
-    /// the decision journal's log withholds the keys, answers, tracks and deciders of the run's
-    /// later decisions and routings too, as junction events withhold the steps of such a track,
-    /// since they would give the track away. It is never cleared, because where a track rejoins
-    /// the chain is not reported.
+    /// The id of the row written for each question's latest asking, by the branch that asked it,
+    /// for its routing.
     /// </summary>
+    private readonly ConcurrentDictionary<(string BranchPath, string Key), long> _latest = new();
+
+    /// <summary>
+    /// The branches that have taken a track on a question whose answer is withheld.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _withheldTracks = new();
+
+    /// <summary>
+    /// Serialises adding a track to a recorded decision. Two branches can route on one decision
+    /// made before they forked, and each adds its track to that row's list by reading it and
+    /// writing it back.
+    /// </summary>
+    public SemaphoreSlim Routing { get; } = new(1, 1);
+
+    /// <summary>Notes the row written for the asking of <paramref name="key"/> on this flow.</summary>
+    public void Decided(string key, long recordId) =>
+        _latest[(BranchPaths.Current, key)] = recordId;
+
+    /// <summary>
+    /// The row of the latest asking of <paramref name="key"/> a routing step on this flow routes on:
+    /// its own branch's, or before its branch asked, that of the chain the branch was forked from.
+    /// A sibling's never is, because the sibling's decisions are not in this branch's Memory.
+    /// </summary>
+    public bool TryLatest(string key, out long recordId)
+    {
+        var path = BranchPaths.Current;
+        string? nearest = null;
+        recordId = 0;
+
+        foreach (var ((asked, asking), id) in _latest)
+            if (
+                asking == key
+                && BranchPaths.Encloses(asked, path)
+                && (nearest is null || asked.Length > nearest.Length)
+            )
+                (nearest, recordId) = (asked, id);
+
+        return nearest is not null;
+    }
+
+    /// <summary>
+    /// True once the step on this flow follows a track taken on a question whose answer is
+    /// withheld. From then on the decision journal's log withholds the keys, answers, tracks and
+    /// deciders of the run's later decisions and routings too, as junction events withhold the
+    /// steps of such a track, since they would give the track away. It is never cleared, because
+    /// where a track rejoins the chain is not reported. Setting it marks the branch on this flow.
+    /// </summary>
+    /// <remarks>
+    /// Inside a <c>Parallel</c> branch it follows <c>JunctionEventRun.WithholdsNames</c>: a
+    /// withheld track withholds its own branch's later steps, and every branch's after the join,
+    /// but not a sibling's running beside it.
+    /// </remarks>
     public bool OnWithheldTrack
     {
-        get => _onWithheldTrack;
-        set => _onWithheldTrack = _onWithheldTrack || value;
+        get
+        {
+            var path = BranchPaths.Current;
+            return _withheldTracks.Keys.Any(taken => !BranchPaths.Alongside(taken, path));
+        }
+        set
+        {
+            if (value)
+                _withheldTracks.TryAdd(BranchPaths.Current, 0);
+        }
     }
 
     /// <summary>

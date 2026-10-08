@@ -64,4 +64,13 @@ public record TraxJunctionClientEvent(
     [JsonPropertyName("nodeId")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? NodeId { get; init; }
+
+    /// <summary>
+    /// The <c>Parallel</c> branch the step ran in, such as <c>Parallel#0/cocitation</c>. Left off
+    /// for a step outside any branch, and, like the name, for a step whose name is withheld,
+    /// because a branch path can name a track.
+    /// </summary>
+    [JsonPropertyName("branchPath")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BranchPath { get; init; }
 }

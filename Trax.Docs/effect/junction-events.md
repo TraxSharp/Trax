@@ -77,6 +77,7 @@ a `JunctionEventPayload`:
 | `NameWithheld` | True for every step (a junction, a question or a route) after a route whose answer is withheld; its `Name` is `(withheld)` (`JunctionEventPayload.WithheldName`) |
 | `TrackPosition` | For any step, the position of the latest route the run took before it, or null before any route. `Decided`, `DecisionRefused` and `Routed` carry it as junctions do. |
 | `NodeId` | The id of the declared node the step ran for (see [below](#placing-a-step-on-the-trains-graph)); null when `NameWithheld` is set |
+| `BranchPath` | The `Parallel` branch the step ran in, such as `Parallel#0/cocitation` (see [below](#steps-in-parallel-branches)); null outside any branch and when `NameWithheld` is set |
 | `Attempt` | Which attempt of its manifest the run is, or null for a run with no manifest |
 
 A step never carries a junction's input or output, the train's input or output, a failure's
@@ -144,6 +145,25 @@ sits on, as in `Switch<Source>#0/Papers/FetchPapers#0`. A junction's start and e
 id, and a refused answer carries its question's. Read the train's graph once and lay a run's steps
 over it by id. A step on a withheld track carries none.
 
+### Steps in Parallel branches
+
+The junctions, questions and routes of a `Parallel` step's branches run side by side, so their
+steps interleave in the run's timeline. Each carries `BranchPath`, the branch it ran in, as Trax.Core
+names it: the `Parallel` step's id and the branch's name, as in `Parallel#0/cocitation`, with the
+path of an enclosing branch in front for a branch declared inside one. Draw a lane per branch by it.
+Positions stay unique across the run.
+
+A branch's tracks are its own. A route taken in one branch sets the `TrackPosition` of that branch's
+later steps only; a sibling's steps keep the track they had at the fork, and after the join the run
+is on the track it was on before the fork, because the branches' tracks end there.
+
+A withheld answer withholds by the same lines. A withheld route in a branch withholds that branch's
+later steps, and one taken before the fork withholds every branch. It does not withhold a sibling
+running beside it, whose steps run alongside that track rather than on it and so give nothing of it
+away. After the join everything is withheld, later branches included, because the steps after the
+join follow every branch, the withheld one too. `BranchPath` is withheld with the name, since a
+branch inside a track names the track.
+
 ## Where steps go
 
 Each step goes to the host's `IJunctionEventHandler`s and, when [`UseBroadcaster`](/docs/sdk-reference/configuration/use-broadcaster)
@@ -199,8 +219,8 @@ was not stored, not one still running.
 [metadata cleanup](/docs/scheduler/admin-trains/metadata-cleanup), manifest pruning and any other
 delete of metadata remove a run's steps with it.
 
-The table ships in the core migration set: Postgres `055`, `057`, `060` and `067`, Sqlite `020`,
-`022`, `025` and `030`.
+The table ships in the core migration set: Postgres `055`, `057`, `060`, `067` and `068`, Sqlite
+`020`, `022`, `025`, `030` and `031`.
 
 ### Attempt
 

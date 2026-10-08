@@ -113,4 +113,13 @@ public sealed record JunctionEventPayload(
     /// </summary>
     [JsonPropertyName("nodeId")]
     public string? NodeId { get; init; }
+
+    /// <summary>
+    /// The <c>Parallel</c> branch the step ran in, as Trax.Core names it, such as
+    /// <c>Parallel#0/cocitation</c>, so a subscriber can draw the steps of branches that ran side
+    /// by side in a lane each. Null for a step outside any branch, and when
+    /// <see cref="NameWithheld"/> is set, because a branch path can name a track.
+    /// </summary>
+    [JsonPropertyName("branchPath")]
+    public string? BranchPath { get; init; }
 }

@@ -25,15 +25,18 @@ public class PersistentRecordedDecision : BaseModel
                 .HasForeignKey(e => e.MetadataId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // One row per asking: two Parallel branches can ask one question under the same
+            // occurrence, so the branch is part of the key (Postgres migration 068, Sqlite 031).
             entity
                 .HasIndex(e => new
                 {
                     e.MetadataId,
+                    e.BranchPath,
                     e.QuestionKey,
                     e.Occurrence,
                 })
                 .IsUnique()
-                .HasDatabaseName("uq_decision_run_question");
+                .HasDatabaseName("uq_decision_run_branch_question");
 
             // A run's decisions in id order, for reading them a page at a time. Built by Postgres
             // migration 064 and Sqlite 028; declared here so a schema created from the model has it.
