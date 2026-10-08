@@ -96,6 +96,14 @@ public class SnapshotDraft
     public string? LastRequestFromState { get; set; }
 
     /// <summary>
+    /// When the row was created, set by the store to the UTC clock on insert and never changed after. Null on a
+    /// row written before the column existed, or by a host that predates it: nothing recorded when those were
+    /// created, and <see cref="UpdatedAt"/> is when they last changed, not when they began.
+    /// </summary>
+    [Column("created_at")]
+    public DateTimeOffset? CreatedAt { get; set; }
+
+    /// <summary>
     /// When the draft was last written, set by the store to the UTC clock on every insert and update. With a
     /// draft TTL configured, a draft whose value is older than the TTL is deleted on its next load.
     /// </summary>

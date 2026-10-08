@@ -201,6 +201,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             UserKey = owner.UserKey,
         };
         Apply(record, snapshot);
+        record.CreatedAt = record.UpdatedAt;
         db.SnapshotDrafts.Add(record);
         return await Save(record, cancellationToken);
     }

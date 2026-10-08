@@ -326,6 +326,20 @@ default is a catalog change. SQLite cannot drop a table's unique constraint in p
 rebuilds the `decision` table with the same columns, ids and index. A host on the previous version
 inserts without the column and gets the empty branch, so a rolling deploy is safe.
 
+## State-machine instance listing (071, SQLite 033)
+
+`071_snapshot_draft_operator_listing.sql` (SQLite `033`) serves the operator's list of state-machine
+instances (the API's [`machineInstances`](/docs/sdk-reference/graphql-api/queries#machineinstances)
+and the dashboard's [State Machines page](/docs/dashboard#state-machines)), which reads newest first
+by `updated_at`. It adds the nullable `trax.snapshot_draft.created_at`, which the store writes when it
+creates a row; a row created before the migration, or by a host still on the previous version, reads
+it as null, since nothing recorded when it began. It replaces the `(machine, state)` index with
+`ix_snapshot_draft_machine_state_updated` on `(machine, state, updated_at DESC, row_id DESC)`, which
+on Postgres includes `owner_kind` so the counts by state read the index alone, and adds
+`ix_snapshot_draft_updated` on `(updated_at DESC, row_id DESC)` for a list with no state filter. On
+Postgres both are built `CONCURRENTLY`, so drafts keep being saved while they build. At two million
+instances every page measured took under 10 ms.
+
 ## Failure search (066)
 
 `066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL

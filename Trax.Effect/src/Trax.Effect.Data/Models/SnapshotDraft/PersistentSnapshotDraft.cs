@@ -26,9 +26,23 @@ internal class PersistentSnapshotDraft : BaseModel
                 .HasIndex(e => e.InvokeToken)
                 .IsUnique()
                 .HasDatabaseName("ux_snapshot_draft_invoke_token");
+            // The operator listing reads newest first by updated_at, under one machine and state or across
+            // them all. Postgres's migration also includes owner_kind in the first, which the model cannot
+            // say for every provider.
             entity
-                .HasIndex(e => new { e.Machine, e.State })
-                .HasDatabaseName("ix_snapshot_draft_machine_state");
+                .HasIndex(e => new
+                {
+                    e.Machine,
+                    e.State,
+                    e.UpdatedAt,
+                    e.RowId,
+                })
+                .IsDescending(false, false, true, true)
+                .HasDatabaseName("ix_snapshot_draft_machine_state_updated");
+            entity
+                .HasIndex(e => new { e.UpdatedAt, e.RowId })
+                .IsDescending(true, true)
+                .HasDatabaseName("ix_snapshot_draft_updated");
             entity.Property(e => e.ConcurrencyToken).IsConcurrencyToken();
         });
     }

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Trax.Effect.Configuration.TraxEffectBuilder;
@@ -18,8 +19,8 @@ namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
 /// The other integration tests build the two tables with <c>EnsureCreated</c>. These build them with the
-/// SHIPPED migrations (Postgres <c>040_state_machine_snapshots.sql</c> through <c>070_snapshot_draft_owner_kind.sql</c>,
-/// SQLite <c>006_state_machine_snapshots.sql</c> through <c>032_snapshot_draft_owner_kind.sql</c>) and then round-trip through the real stores. A column added to
+/// SHIPPED migrations (Postgres <c>040_state_machine_snapshots.sql</c> through <c>071_snapshot_draft_operator_listing.sql</c>,
+/// SQLite <c>006_state_machine_snapshots.sql</c> through <c>033_snapshot_draft_operator_listing.sql</c>) and then round-trip through the real stores. A column added to
 /// <c>SnapshotDraft</c>/<c>EffectClaim</c> without updating the migration fails here, because the store's
 /// query hits a column the migration never created. This is the DDL-vs-EF-model drift guard, and it also
 /// proves the two providers auto-apply their tables (no EnsureCreated, no manual DDL).
@@ -226,6 +227,22 @@ public class MigrationSchemaTests
         (await With(ctx, c => new EfSnapshotStore(c, dialect).Get(userKey, id)))!
             .Json.Should()
             .Be(scoped.Json, "the user's draft under the same id is untouched");
+
+        // created_at (071 / 033): written on insert and left alone by every update since.
+        var rows = await With(
+            ctx,
+            c =>
+                c.SnapshotDrafts.AsNoTracking()
+                    .Where(x => x.Id == id)
+                    .Select(x => new { x.CreatedAt, x.UpdatedAt })
+                    .ToListAsync()
+        );
+        rows.Should().HaveCount(2);
+        rows.Should()
+            .OnlyContain(
+                x => x.CreatedAt != null && x.CreatedAt <= x.UpdatedAt,
+                "the store records when it created each row, and the updates since moved only updated_at"
+            );
 
         // effect_claim: claim, confirm in-flight (no receipt), fenced complete, receipt readable back.
         var key = $"charge:{id}";

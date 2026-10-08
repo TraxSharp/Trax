@@ -1009,6 +1009,8 @@ namespace Trax.Effect.Models.SnapshotDraft
         public System.Guid ConcurrencyToken { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("context", TypeName="jsonb")]
         public string Context { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTimeOffset? CreatedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("id")]
         public System.Guid Id { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoke_token")]
