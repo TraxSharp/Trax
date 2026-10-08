@@ -16,9 +16,10 @@ generators consume, so the C# machine is the source and the IR is the contract. 
 [canonical JSON](/docs/statemachine#two-runtimes-one-behavior), so the file is a stable golden.
 
 Export requires a declarative machine: `Export` throws `InvalidOperationException` if the machine made no
-declarative call at all (nothing to serialize). It does not refuse a machine that mixes the styles. An edge
-whose guard or reducer is a C# delegate is exported without that `guard` or `reduce`, which reads as an
-unconditional edge that keeps the context; see
+declarative call at all (nothing to serialize), or if it mixes the styles and any edge still has a C# delegate
+guard or reducer, or any state a `Holds` validator. The IR cannot carry a delegate, and an edge without its
+`guard` or `reduce` would read as an unconditional edge that keeps the context. The message names each
+offending edge and state; `Rule.Custom` and `Reduction.Custom` keep such logic exportable. See
 [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).
 
 ## Top level
@@ -48,9 +49,9 @@ Each transition carries its structure plus its guard and reducer as data:
 | Field | Type | Present when |
 | --- | --- | --- |
 | `from` / `trigger` / `to` | string | always |
-| `guard` | rule | the edge has a declarative guard (`When(Rule)`); absent for no guard and for a delegate guard alike |
+| `guard` | rule | the edge has a declarative guard (`When(Rule)`); absent when the edge has no guard |
 | `guardMessage` | string | `Because(...)` was set |
-| `reduce` | reduction | the edge has a declarative reducer (`Reduce(Reduction)`); absent for no reducer and for a delegate reducer alike, and absent means the context is kept |
+| `reduce` | reduction | the edge has a declarative reducer (`Reduce(Reduction)`); absent when the edge has no reducer, which means the context is kept |
 | `effect` | object | the edge binds `RunsOnce<T>`; `{ "type": <TEffect full name>, "keyPrefix": <string> }` |
 
 A rule is a tagged object keyed by `rule` (`present`, `absent`, `ofType`, `nonEmpty`, `oneOf`, `compare`,

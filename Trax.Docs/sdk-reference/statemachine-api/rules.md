@@ -95,7 +95,7 @@ The vocabulary covers the common guards and reducers on purpose: a small, fixed 
 declarative contract rather than a serialized-logic DSL. Logic that does not fit (a formula reducer, a
 multi-field invariant) has two homes. `Rule.Custom(name)` and `Reduction.Custom(name)` keep it in the IR by name,
 with a handler bound per runtime (`CustomGuard` / `CustomReducer` in C#). The delegate overloads,
-`When(Func...)` and `Reduce(Func...)`, run the same in C# but are lost to the export: the edge is exported
-with no guard or reducer, as an unconditional edge that keeps the context, so a generated twin disagrees with
-the server on it. Use the delegates only on a machine with no twin. See
+`When(Func...)` and `Reduce(Func...)`, run the same in C# but the IR cannot carry them, so export refuses a
+declarative machine that still uses one rather than emit an unconditional edge a generated twin would disagree
+with the server on. Use the delegates only on a machine with no twin. See
 [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).

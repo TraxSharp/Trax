@@ -243,6 +243,10 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
 
+    // States whose validator is a Holds delegate (not rebuilt from Context/Requires since), so the IR exporter
+    // can refuse a declarative machine that would export them with no validator.
+    private readonly HashSet<TState> _delegateValidators = [];
+
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> Id(string id)
     {
@@ -386,6 +390,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             )
             {
                 Differential = differential,
+                DelegateValidatedStates = _delegateValidators.ToHashSet(),
             }
             : null;
 
@@ -462,6 +467,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         public IStateBuilder<TState, TTrigger> Holds(Func<JsonObject, string?> validator)
         {
             owner._validators[state] = validator;
+            owner._delegateValidators.Add(state);
             return this;
         }
 
@@ -494,6 +500,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         {
             var schema = owner._contextSchemas.GetValueOrDefault(state);
             var invariants = owner._stateInvariants.GetValueOrDefault(state);
+            owner._delegateValidators.Remove(state);
             owner._validators[state] = ctx =>
             {
                 if (schema is not null)
@@ -537,7 +544,10 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
 
         public ITransitionBuilder<TState, TTrigger> When(Func<JsonObject, JsonNode?, bool> guard)
         {
+            // The edge's guard is now a delegate; drop any rule recorded earlier so the declarative model
+            // does not export a guard the engine no longer runs.
             _guard = guard;
+            _guardRule = null;
             return this;
         }
 
@@ -568,6 +578,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         )
         {
             _reduce = reduce;
+            _reduction = null;
             return this;
         }
 

@@ -96,12 +96,13 @@ reducer as data. From that one file the generators emit the frontend's state and
 type per state, the validators, and a runnable typed machine, so the only thing hand-written per frontend is
 the UI that drives it.
 
-Mixing styles is allowed (the delegate and data overloads live on one builder), which lets you migrate a
-machine edge by edge. But the export cannot see a delegate: an edge left on a delegate guard or reducer is
-still exported, with no guard or reducer, so the generated twin treats it as unconditional and keeps the
-context while the server runs the delegate. Nothing warns. A machine with a twin keeps every edge declarative,
-and for the rare case the vocabulary cannot express it names a custom rule (`Rule.Custom` with `CustomGuard`)
-rather than dropping to `When(Func...)`. See
+Mixing styles is allowed while you build and run a machine (the delegate and data overloads live on one
+builder), which lets you migrate a machine edge by edge. The export refuses it: the IR cannot carry a delegate,
+so once a machine makes any declarative call, `ExportIr()` throws `InvalidOperationException` while any edge
+still has a delegate guard or reducer, or any state a `Holds` validator, and the message names each one.
+Otherwise the generated twin would treat such an edge as unconditional and keep the context while the server
+runs the delegate. For the rare case the vocabulary cannot express, name a custom rule (`Rule.Custom` with
+`CustomGuard`, or `Reduction.Custom` with `CustomReducer`) rather than dropping to a delegate. See
 [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).
 
 ## SDK Reference

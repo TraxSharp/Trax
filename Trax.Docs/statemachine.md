@@ -69,8 +69,8 @@ A genuinely-custom guard or reducer is bound by name in the IR and hand-written 
 hatch): in C# with `CustomGuard(name, fn)` / `CustomReducer(name, fn)` on the builder, in TypeScript with
 `customGuards` / `customReducers`. A C# machine that names a custom rule or reduction with no handler bound
 fails at `Build()`, rather than refusing that edge forever. A guard or reducer written as a plain C# delegate
-(`When(Func...)`, `Reduce(Func...)`) is not bound at all: its edge reaches the IR with no guard or reducer, as
-an unconditional edge, and nothing warns (see
+(`When(Func...)`, `Reduce(Func...)`) cannot be carried by the IR at all, so export refuses a declarative machine
+that still has one, naming the edge, rather than emit it as an unconditional edge (see
 [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). The snapshot itself still carries only structure and data, never logic. A machine's structure and its
 declarative logic are generated for the frontend from that IR, and a drift check fails the build if a
 committed generated file goes stale.

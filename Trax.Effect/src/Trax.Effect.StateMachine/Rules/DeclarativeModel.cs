@@ -37,6 +37,12 @@ public sealed record DeclarativeModel<TState, TTrigger>(
     /// parameter, so existing construction stays source-compatible.
     /// </summary>
     public DifferentialModel<TState, TTrigger>? Differential { get; init; }
+
+    /// <summary>
+    /// The states whose validator is a <c>Holds</c> delegate rather than one built from
+    /// <c>Context</c>/<c>Requires</c>. The IR cannot carry a delegate, so the exporter refuses a machine with any.
+    /// </summary>
+    internal IReadOnlySet<TState> DelegateValidatedStates { get; init; } = new HashSet<TState>();
 }
 
 /// <summary>
