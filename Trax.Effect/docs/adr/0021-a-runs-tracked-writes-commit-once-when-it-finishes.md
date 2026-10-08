@@ -14,8 +14,9 @@ with a bulk update of those two columns.
 
 ## Status
 
-**Accepted.** A planned checkpoint step will be the one exception: a deliberate, declared point where a run's
-tracked writes commit so a retry can resume after it. Until it exists there is none.
+**Accepted.** There is no exception. A checkpoint (central 0047) was planned as one, a declared point where a run's
+tracked writes commit so a retry can resume after it; it writes its own row through a context of its own instead,
+and refuses to be taken over uncommitted work.
 
 ## Why this is written down
 
@@ -46,4 +47,6 @@ Not covered: nothing stops a new junction effect from saving through the runner;
 
 ## Changelog
 
+- **2026-10-08**: A checkpoint is not an exception after all: it writes its own row through a context of its own
+  (central 0047).
 - **2026-10-07**: Recorded.
