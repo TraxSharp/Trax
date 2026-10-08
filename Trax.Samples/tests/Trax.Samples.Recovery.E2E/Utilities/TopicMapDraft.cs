@@ -9,11 +9,12 @@ namespace Trax.Samples.Recovery.E2E.Utilities;
 /// One user's <c>topic-map</c> draft, driven through the four generic <c>stateMachine</c> mutations the
 /// way the page's twin drives it: save the first step, advance by triggers, load to come back.
 /// </summary>
-public sealed class TopicMapDraft(GraphQLClient graphQL, string apiKey)
+public sealed class TopicMapDraft(GraphQLClient graphQL, string apiKey, Guid? id = null)
 {
     public static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
 
-    public Guid Id { get; } = Guid.NewGuid();
+    /// <summary>The draft's id: a new one, or the one given to come back to a draft.</summary>
+    public Guid Id { get; } = id ?? Guid.NewGuid();
 
     /// <summary>A snapshot of the machine as a client writes it.</summary>
     public static string Snapshot(string state, JsonObject? context = null) =>

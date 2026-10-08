@@ -121,6 +121,7 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             // The failed run's outcome was applied once, under its own token; that token is gone, so it
             // can never move the instance again, however late a delivery of it comes. Give the outcome
             // sweep time to run and see that it does not.
+            // negative-wait: longer than the 5 second outcome sweep, for a move that must not come.
             await Task.Delay(TimeSpan.FromSeconds(6));
             (await PartitionMachines.OfAsync(source, month))!
                 .State.Should()

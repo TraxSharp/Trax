@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: trax
       POSTGRES_PASSWORD: trax123
       POSTGRES_DB: trax
-      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests,chat_e2e_tests,energyhub_e2e_tests,bookworm_e2e_tests,trax_api_operations,trax_api_workqueue,trax_api_logs,trax_api_health,trax_api_auth_http,trax_api_auth_model,trax_api_auth_sub,trax_api_auth_subprop,trax_api_auth_authorize,auth_e2e_tests,persisted_operations_e2e_tests,recovery_e2e_tests,scheduling_e2e_tests,contentshield_e2e_tests,statemachine_e2e_tests,trax_auth,trax_bookworm,trax_contentshield,trax_energyhub,trax_persisted_operations,trax_recovery,trax_scheduling,trax_statemachine
+      POSTGRES_MULTIPLE_DATABASES: trax_scheduler_tests,trax_data_tests,chat_e2e_tests,energyhub_e2e_tests,bookworm_e2e_tests,trax_api_operations,trax_api_workqueue,trax_api_logs,trax_api_health,trax_api_auth_http,trax_api_auth_model,trax_api_auth_sub,trax_api_auth_subprop,trax_api_auth_authorize,auth_e2e_tests,persisted_operations_e2e_tests,recovery_e2e_tests,recovery_restart_e2e_tests,scheduling_e2e_tests,contentshield_e2e_tests,statemachine_e2e_tests,trax_auth,trax_bookworm,trax_contentshield,trax_energyhub,trax_persisted_operations,trax_recovery,trax_scheduling,trax_statemachine
     tty: true
     ports:
       - "127.0.0.1:${TRAX_PG_PORT:-5432}:5432"
