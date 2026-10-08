@@ -6,7 +6,9 @@ using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Data.Sqlite.Services.QueuedWorkListener;
 using Trax.Effect.Data.Sqlite.Services.SqlDialect;
 using Trax.Effect.Data.Sqlite.Services.SqliteContextFactory;
 using Trax.Effect.Data.Sqlite.Utils;
@@ -45,11 +47,21 @@ public static class ServiceExtensions
         // Enable WAL mode for better concurrent read/write performance
         EnableWalMode(connectionString);
 
+        // The in-process notice a dispatcher in this host wakes on when a save commits queued
+        // work. It watches every context the factory below builds.
+        configurationBuilder.ServiceCollection.AddSingleton<SqliteQueuedWorkSignal>();
+        configurationBuilder.ServiceCollection.AddSingleton<IQueuedWorkListener>(sp =>
+            sp.GetRequiredService<SqliteQueuedWorkSignal>()
+        );
+
         // Register the DbContextFactory
         configurationBuilder.ServiceCollection.AddDbContextFactory<Services.SqliteContext.SqliteContext>(
-            (_, options) =>
+            (sp, options) =>
             {
-                options.UseSqlite(connectionString).UseLoggerFactory(new NullLoggerFactory());
+                options
+                    .UseSqlite(connectionString)
+                    .UseLoggerFactory(new NullLoggerFactory())
+                    .AddInterceptors(sp.GetRequiredService<SqliteQueuedWorkSignal>());
             }
         );
 

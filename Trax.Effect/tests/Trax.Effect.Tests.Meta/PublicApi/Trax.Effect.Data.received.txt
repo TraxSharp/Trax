@@ -249,6 +249,17 @@ namespace Trax.Effect.Data.Services.IDataContextFactory
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContext.IDataContext> CreateDbContextAsync(System.Threading.CancellationToken cancellationToken);
     }
 }
+namespace Trax.Effect.Data.Services.QueuedWorkListener
+{
+    public interface IQueuedWorkListener
+    {
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.QueuedWorkListener.IQueuedWorkSubscription> SubscribeAsync(System.Threading.CancellationToken cancellationToken);
+    }
+    public interface IQueuedWorkSubscription : System.IAsyncDisposable
+    {
+        System.Threading.Tasks.Task WaitAsync(System.Threading.CancellationToken cancellationToken);
+    }
+}
 namespace Trax.Effect.Data.Services.SqlDialect
 {
     public interface ISqlDialect

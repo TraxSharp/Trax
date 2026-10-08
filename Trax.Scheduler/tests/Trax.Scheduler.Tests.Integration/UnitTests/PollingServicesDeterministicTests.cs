@@ -107,6 +107,7 @@ public class PollingServicesDeterministicTests
             Provide(train),
             LongIntervalConfig(),
             new SchedulerLivenessMonitor(TimeProvider.System),
+            new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
@@ -124,6 +125,7 @@ public class PollingServicesDeterministicTests
             Provide(train),
             config,
             new SchedulerLivenessMonitor(TimeProvider.System),
+            new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 

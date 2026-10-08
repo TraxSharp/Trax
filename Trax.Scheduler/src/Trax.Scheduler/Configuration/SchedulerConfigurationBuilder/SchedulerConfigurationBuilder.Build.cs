@@ -17,6 +17,7 @@ using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.QueuedWorkListenerService;
 using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Services.SchedulerStartupService;
@@ -209,6 +210,14 @@ public partial class SchedulerConfigurationBuilder
         if (_parentBuilder.HasDatabaseProvider)
         {
             _parentBuilder.ServiceCollection.AddHostedService<JobDispatcherPollingService>();
+
+            // Ends the dispatcher's wait when the provider reports queued work: on Postgres from
+            // any host, on SQLite from this one. The poll stays the fallback.
+            _parentBuilder.ServiceCollection.AddSingleton<DispatcherWake>();
+            _parentBuilder.ServiceCollection.AddSingleton<QueuedWorkListenerService>();
+            _parentBuilder.ServiceCollection.AddHostedService(sp =>
+                sp.GetRequiredService<QueuedWorkListenerService>()
+            );
 
             if (_configuration.MetadataCleanup is not null)
             {

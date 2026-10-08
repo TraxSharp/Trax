@@ -61,6 +61,7 @@ public class PollingIntervalLiveTests
             sp,
             config,
             new SchedulerLivenessMonitor(TimeProvider.System),
+            new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 

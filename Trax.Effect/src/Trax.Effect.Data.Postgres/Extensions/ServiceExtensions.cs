@@ -9,12 +9,14 @@ using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
+using Trax.Effect.Data.Postgres.Services.QueuedWorkListener;
 using Trax.Effect.Data.Postgres.Services.SqlDialect;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -163,6 +165,12 @@ public static class ServiceExtensions
 
         // Register the SQL dialect for provider-specific raw SQL
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
+
+        // The notice a dispatcher on any host wakes on when work is queued. Built by the container
+        // so the provider that owns it disposes its data source.
+        configurationBuilder.ServiceCollection.AddSingleton<IQueuedWorkListener>(
+            _ => new PostgresQueuedWorkListener(connectionString, configureDataSource)
+        );
 
         // Configure a feature's own DbContext, if it brings one, against this same Postgres data source, so it needs no
         // host AddDbContext call. A feature table normally ships on IDataContext instead.
