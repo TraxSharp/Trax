@@ -267,9 +267,52 @@ internal sealed class TrainChainStartupValidator(
             ];
         }
 
-        return faults.Count == 0
+        var refused = Describe(chain, faults).Concat(RefusedCheckpoints(chain, false)).ToList();
+
+        return refused.Count == 0
             ? null
-            : Describe(chain, faults).Select(f => $"{registration.ServiceTypeName}: {f}").ToList();
+            : refused.Select(f => $"{registration.ServiceTypeName}: {f}").ToList();
+    }
+
+    /// <summary>
+    /// The checkpoints a host refuses to store: one whose state reaches a member marked
+    /// <c>[TraxSensitive]</c>, since a checkpoint is plain JSON, and one inside a track whose
+    /// routing key is sensitive, since that route is withheld from every record and a resumed run
+    /// could not find its way back into it. See
+    /// Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
+    /// </summary>
+    private static IEnumerable<string> RefusedCheckpoints(ChainRecorder chain, bool inWithheldTrack)
+    {
+        for (var i = 0; i < chain.Steps.Count; i++)
+        {
+            var step = chain.Steps[i];
+
+            if (step.Kind == ChainStepKind.Checkpoint && step.In is { } state)
+            {
+                if (Trax.Effect.Utils.TraxRedaction.ReachesSensitiveMember(state))
+                    yield return $"Checkpoint<{Readable(state)}> holds a state that reaches a "
+                        + "member marked [TraxSensitive]. A checkpoint is stored as plain JSON, "
+                        + "so a sensitive state is never stored. Checkpoint a state without it.";
+
+                if (inWithheldTrack)
+                    yield return $"Checkpoint<{Readable(state)}> is inside a track whose routing "
+                        + "key is marked [TraxSensitive]. That route is withheld from every "
+                        + "record, so a run could not resume into it. Checkpoint after the "
+                        + "routing step instead.";
+            }
+
+            var withheld =
+                inWithheldTrack
+                || step.Kind is ChainStepKind.Switch or ChainStepKind.Gate or ChainStepKind.Scale
+                    && step.Out is { IsGenericType: true } taken
+                    && Trax.Effect.Services.JunctionEvents.SensitiveQuestions.IsSensitive(
+                        taken.GetGenericArguments()[0]
+                    );
+
+            foreach (var track in chain.TracksAt(i))
+            foreach (var refusal in RefusedCheckpoints(track.Steps, withheld))
+                yield return refusal;
+        }
     }
 
     /// <summary>

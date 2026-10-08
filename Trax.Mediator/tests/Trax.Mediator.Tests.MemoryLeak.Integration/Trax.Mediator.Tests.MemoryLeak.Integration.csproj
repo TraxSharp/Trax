@@ -7,6 +7,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Mediator.Tests.MemoryLeak.Integration</RootNamespace>
+    <!-- TRAXEXP003: the checkpoint startup refusals are tested here. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

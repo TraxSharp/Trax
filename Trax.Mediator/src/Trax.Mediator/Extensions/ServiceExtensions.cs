@@ -123,6 +123,22 @@ public static class ServiceExtensions
         var configuration = mediatorBuilder.Build();
 
         builder.ServiceCollection.AddSingleton(configuration);
+
+        // A checkpoint's state is held to the cap a requeue's stored input is held to, so a run
+        // that can be repeated can be resumed under the same bound (Trax.Docs/adr/0047).
+        builder.ServiceCollection.Replace(
+            ServiceDescriptor.Singleton(
+                new Trax.Effect.Services.Checkpoints.CheckpointOptions
+                {
+                    MaxStateBytes = (int)
+                        Math.Min(
+                            (long)configuration.MaxInputJsonBytes
+                                * Services.TrainExecution.TrainInputReader.StoredInputGrowthFactor,
+                            int.MaxValue
+                        ),
+                }
+            )
+        );
         builder.ServiceCollection.AddServiceTrainBus(
             configuration.TrainLifetime,
             configuration.Assemblies
