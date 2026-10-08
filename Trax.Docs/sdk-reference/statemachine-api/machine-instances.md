@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Machine instances
-description: Reference for IMachineInstances.Start, which creates system-owned machine instances from code, and how their ids are derived from a key.
+description: Reference for IMachineInstances, which creates and advances system-owned machine instances from code, and how their ids are derived from a key.
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 13
@@ -26,6 +26,13 @@ public interface IMachineInstances
     Task<MachineInstance> Start<TMachine>(
         MachineKey key,
         JsonObject? context = null,
+        CancellationToken cancellationToken = default
+    ) where TMachine : IMachine;
+
+    Task<AdvanceOutcome> Advance<TMachine>(
+        MachineKey key,
+        string trigger,
+        JsonNode? input = null,
         CancellationToken cancellationToken = default
     ) where TMachine : IMachine;
 }
@@ -62,6 +69,32 @@ The instance is owned by the system, not a user. No GraphQL operation creates, r
 user holds a draft under the same id. See
 [persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) for how the rows are kept apart. A
 system instance is never expired by the draft TTL.
+
+## What Advance does
+
+It fires one trigger on the system instance for `key`, as the system: the code path through which a system
+instance moves other than by its trains' outcomes, such as a `Retry` out of a failure state back into the state
+that invokes the train.
+
+```csharp
+var outcome = await instances.Advance<IngestMachine>(MachineKey.Of("orders-db", "partition-7"), "Retry");
+// AdvanceOutcome.Advanced: the instance is in its invoking state again, with a new run under a new token
+```
+
+It is checked exactly as a user's advance is: the edge's guard, the target state's context rule and the 64 KiB
+cap. An invoked train's outcome trigger (`Ingesting.done`) is refused as `outcome-bound` and a trigger bound to the
+machine's effect as `effect-bound`, so the system cannot forge what a run or an effect produced. Leaving an
+invoking state cancels its run and entering one queues a new run, in the transaction that writes the snapshot,
+and that run is authorized in the trusted scope like every run of a system-owned machine.
+
+It returns an [`AdvanceOutcome`](/docs/sdk-reference/statemachine-api/persistence-ports): `Advanced` with the new
+snapshot, `NotFound` when no instance exists for the key, `Rejected` with the engine's reason (`no-transition`,
+`guard-failed`, `invalid-context`, ...), `LoadError` when the stored snapshot cannot be read, or `Conflict` when
+the instance was written while the call ran (an outcome landed, say). Nothing is written unless it is `Advanced`.
+A machine that is not registered, or not system-owned, throws `InvalidOperationException`.
+
+No GraphQL operation calls it. A host that lets a person retry a system instance writes its own operation over it,
+under its own authorization; the [Recovery sample](/docs/samples/recovery) does, for operators only.
 
 ## How the id is derived
 

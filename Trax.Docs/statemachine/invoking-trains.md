@@ -186,8 +186,9 @@ A machine is user-owned unless it declares `SystemOwned()`, and that decides how
   host's train authorization. A user the train refuses cannot enter the state (`invoke-forbidden`), and nothing is
   written.
 - **A system-owned machine's** instances are created only by
-  [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances), and no user's draft
-  operation reaches the machine. Its train is authorized inside Trax's trusted execution scope, as a scheduled
+  [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances), moved from code only by
+  its runs' outcomes and `IMachineInstances.Advance` (a `Retry`, say), and no user's draft operation reaches the
+  machine. Its train is authorized inside Trax's trusted execution scope, as a scheduled
   manifest run is.
 
 Only a system-owned machine chains runs through outcomes. A run an outcome queues has no user present to authorize

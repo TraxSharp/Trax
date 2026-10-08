@@ -233,6 +233,15 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     AdvanceResult IMachineInternals.ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome) =>
         Built.Engine.ApplyOutcome(snapshot, outcome);
 
+    AdvanceResult IMachineInternals.Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
+        Built.Engine.Advance(snapshot, trigger, input);
+
+    bool IMachineInternals.IsOutcomeTrigger(string trigger) =>
+        Built.Engine.IsOutcomeTrigger(trigger);
+
+    bool IMachineInternals.IsEffectBound(string state, string trigger) =>
+        Built.Effects.Any(e => e.From.ToString() == state && e.Trigger.ToString() == trigger);
+
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
         Built.Effects.Select(e => EffectClaimKey.ForUser(e.KeyPrefix, userKey, id));
 

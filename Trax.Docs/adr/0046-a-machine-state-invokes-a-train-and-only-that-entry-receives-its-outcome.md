@@ -272,6 +272,11 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: `IMachineInstances.Advance<TMachine>(key, trigger, input)` fires a trigger on a system instance
+  from code, so a system instance can be retried by re-entry (`Failed` --Retry--> its invoking state) without any
+  surface reaching it. It refuses the triggers a user's advance refuses (`outcome-bound`, `effect-bound`) and writes
+  through the same outbox. Still no GraphQL operation advances a system instance; a host that wants one writes it
+  under its own authorization. `SystemInstanceAdvanceTests` in `Trax.Mediator.Tests.StateMachine.Integration`.
 - **2026-10-08**: The operator view lists an instance's invoked runs, and the operator's cancel ships, both through
   `IOperationsService` (`GetMachineInstanceRunsAsync`, `CancelMachineInstanceAsync`) for the dashboard and GraphQL
   (`machineInstance { invokedRuns }`, `cancelMachineInstance`). A run records the machine, instance id and owner
