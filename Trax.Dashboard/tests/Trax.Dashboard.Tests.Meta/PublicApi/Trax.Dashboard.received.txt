@@ -357,6 +357,16 @@ namespace Trax.Dashboard.Components.Shared
         protected override System.Threading.Tasks.Task OnInitializedAsync() { }
         protected override System.Threading.Tasks.Task OnParametersSetAsync() { }
     }
+    public class RunGraphView : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public RunGraphView() { }
+        [Microsoft.AspNetCore.Components.EditorRequired]
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Api.DTOs.RunGraph Graph { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnAfterRender(bool firstRender) { }
+        protected override bool ShouldRender() { }
+    }
     public class StateTimeline : Microsoft.AspNetCore.Components.ComponentBase
     {
         public StateTimeline() { }

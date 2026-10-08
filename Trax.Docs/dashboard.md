@@ -211,6 +211,14 @@ When a detail page (metadata, dead letter, work queue entry, manifest or manifes
 
 **Replays Decisions Of.** When the run was queued to replay an earlier run's [decisions](/docs/effect/decisions#re-queued-and-retried-runs-replay-their-decisions), by a re-queue or by a manifest's retry, this field links to that run.
 
+**Run Graph.** Above the timeline, the page draws the train's [declared chain](/docs/sdk-reference/train-methods/chain-graph) with this run on it, through `RunGraphs.Match`, the matching the API's [`operations.runGraph`](/docs/sdk-reference/graphql-api/queries#rungraph) uses, over the same steps the timeline reads:
+- Each declared step in order, with its kind and name, and each routing step's tracks nested under it; the track the run took is marked "taken" and drawn with a solid rule, a fallback track is marked "fallback"
+- Each step's state in this run, in words as well as colour: completed, failed (with its failure class and exception type), cancelled, running, skipped (on a track the run did not take), not reached, not recorded (an `Extract`, `Seed` or `Resolve`, which records nothing), or withheld (after a route whose answer is withheld, where the recorded steps name no node)
+- An **opaque** badge on a step whose junction is decided only at run time, and a **replayed** badge where an answer came from an earlier run
+- **Steps not on the graph**: the steps that match no node, recorded before node ids were, after a withheld route, or for a step the chain no longer declares
+
+A run whose train has no graph on this host (not registered here, or its chain cannot be read outside a request) shows a short message instead. The graph is the chain as the host declares it now, not as it was when the run ran.
+
 **Junction Timeline.** On a host that calls [`AddJunctionEvents()`](/docs/effect/junction-events), the page draws one row per step the run took, read from `trax.junction_run` through `JunctionRunQueries.ForRun`, the query the API's `operations.junctionRuns` uses:
 - Each step's number, and for a step after a routing step, an indent and "on track of step #N"
 - A bar placed against the run's start and coloured by state; a running step extends to now on each refresh, and a step with no recorded end on a finished run (a host that crashed, a dropped write) is drawn to the run's end and labelled "end not recorded"

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Radzen;
 using Trax.Dashboard.Components.Pages.Data;
@@ -21,6 +22,7 @@ using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
@@ -62,6 +64,7 @@ public class ReadViewParityTests
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         services.AddSingleton<ITrainDiscoveryService>(discovery);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
+        services.TryAddSingleton<ITrainChainGraphs>(new FixedChainGraphs());
         services.AddSingleton(UnusedService<ITraxScheduler>.Create());
         services.AddScoped<ITrainExecutionService>(sp => new TrainExecutionService(
             discovery,

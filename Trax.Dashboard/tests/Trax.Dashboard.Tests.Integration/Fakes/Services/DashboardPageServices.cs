@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Dashboard.Services.DashboardSettings;
 using Trax.Dashboard.Services.LocalStorage;
@@ -6,6 +7,7 @@ using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
@@ -37,6 +39,7 @@ public static class DashboardPageServices
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         services.AddSingleton<ITrainDiscoveryService>(discovery);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
+        services.TryAddSingleton<ITrainChainGraphs>(new FixedChainGraphs());
         services.AddScoped<ITrainExecutionService>(sp => new TrainExecutionService(
             discovery,
             runExecutor: null!,

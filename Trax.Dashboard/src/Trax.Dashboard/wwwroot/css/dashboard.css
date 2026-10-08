@@ -437,6 +437,102 @@
     }
 }
 
+/* ── Run Graph (the train's declared nodes, each with where this run left it) ── */
+
+.cs-rg {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.cs-rg-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    padding: 0.15rem 0;
+}
+
+.cs-rg-node--dim > .cs-rg-row {
+    color: var(--rz-text-disabled-color, rgba(255, 255, 255, 0.4));
+}
+
+.cs-rg-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.cs-rg--idle {
+    background-color: transparent;
+    border: 2px solid var(--rz-base-400, rgba(255, 255, 255, 0.3));
+}
+
+.cs-rg-kind,
+.cs-rg-state-label,
+.cs-rg-fallback {
+    font-size: 0.7rem;
+    color: var(--rz-text-secondary-color, rgba(255, 255, 255, 0.6));
+}
+
+.cs-rg-name {
+    font-weight: 600;
+    font-family: monospace, var(--rz-body-font-family, sans-serif);
+}
+
+.cs-rg-tracks {
+    list-style: none;
+    margin: 0.15rem 0 0.25rem 0.3rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+/* Each track is indented under its routing step; the one the run took carries a solid rule. */
+.cs-rg-track {
+    padding-left: 1rem;
+    border-left: 2px dashed var(--rz-base-300, rgba(255, 255, 255, 0.15));
+}
+
+.cs-rg-track--taken {
+    border-left: 2px solid var(--rz-info, #1565C0);
+}
+
+.cs-rg-track-name {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.cs-rg-taken {
+    font-size: 0.7rem;
+    color: var(--rz-info, #1565C0);
+}
+
+.cs-rg-unmatched-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.cs-rg-unmatched-step {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+}
+
 /* ── Exception Viewer ── */
 
 .cs-exception-viewer {

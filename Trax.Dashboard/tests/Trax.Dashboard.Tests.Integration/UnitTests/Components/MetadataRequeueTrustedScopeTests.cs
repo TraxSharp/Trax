@@ -4,6 +4,7 @@ using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Radzen;
 using Trax.Api.Services.Authorization;
 using Trax.Core.Functional;
@@ -21,6 +22,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.RecordedDecision;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -90,6 +92,7 @@ public class MetadataRequeueTrustedScopeTests
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         services.AddSingleton<ITrainDiscoveryService>(discovery);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
+        services.TryAddSingleton<ITrainChainGraphs>(new FixedChainGraphs());
         if (withApiAuthorization)
         {
             services.AddLogging();

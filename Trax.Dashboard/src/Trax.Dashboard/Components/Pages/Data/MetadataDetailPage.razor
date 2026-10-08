@@ -192,6 +192,12 @@
     </RadzenCard>
 }
 
+@* ── Run Graph (the train's declared steps, with where this run left each) ── *@
+@if (_runGraph is not null)
+{
+    <RunGraphView Graph="@_runGraph" />
+}
+
 @* ── Junction Timeline (the run's steps, as AddJunctionEvents recorded them) ── *@
 <JunctionTimeline Metadata="@_metadata" Steps="@_junctionRuns" HasMoreSteps="@_moreJunctionSteps" />
 

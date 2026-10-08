@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
 using Trax.Api.DTOs;
+using Trax.Api.Services.Runs;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Models;
 using Trax.Dashboard.Utilities;
@@ -11,6 +12,7 @@ using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
 using Trax.Effect.Models.Metadata;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Scheduler.Services.Operations;
 using static Trax.Dashboard.Utilities.DashboardFormatters;
@@ -40,6 +42,9 @@ public partial class MetadataDetailPage
     [Inject]
     private IOperationsService OperationsService { get; set; } = default!;
 
+    [Inject]
+    private ITrainChainGraphs ChainGraphs { get; set; } = default!;
+
     /// <summary>The run's (metadata row's) database id, from the route.</summary>
     [Parameter]
     public long MetadataId { get; set; }
@@ -51,6 +56,9 @@ public partial class MetadataDetailPage
     private Metadata? _metadata;
     private IReadOnlyList<JunctionStep> _junctionRuns = [];
     private bool _moreJunctionSteps;
+
+    // The run on its train's graph, placed from the steps above; placed again only when they change.
+    private RunGraph? _runGraph;
 
     // How many loads have read the timeline since the run was first seen finished. A finished
     // run's steps are read in full twice, once when it is first seen finished and once more for a
@@ -81,6 +89,7 @@ public partial class MetadataDetailPage
         _metadata = null;
         _junctionRuns = [];
         _moreJunctionSteps = false;
+        _runGraph = null;
         _finishedTimelineReads = 0;
         _rerunError = null;
     }
@@ -108,6 +117,7 @@ public partial class MetadataDetailPage
             );
 
             await LoadJunctionStepsAsync(context, _metadata.TrainState, cancellationToken);
+            PlaceRunGraph(_metadata.Name);
 
             if (_logsGrid is not null)
                 await _logsGrid.ReloadAsync();
@@ -183,6 +193,37 @@ public partial class MetadataDetailPage
         if (finished)
             _finishedTimelineReads++;
     }
+
+    /// <summary>
+    /// Places the run's steps on its train's declared graph through <see cref="RunGraphs.Match"/>,
+    /// the matching the API's runGraph makes after reading the same steps the same way, so the two
+    /// show the same nodes in the same states. The graph comes from the registered train by name,
+    /// read once per train and kept by <see cref="ITrainChainGraphs"/>.
+    /// </summary>
+    /// <remarks>
+    /// The page reuses the steps its timeline polls rather than reading them again, and places
+    /// them only when they changed, so a poll of a finished run does no work here either.
+    /// </remarks>
+    private void PlaceRunGraph(string train)
+    {
+        if (
+            _runGraph is not null
+            && ReferenceEquals(_runGraphSteps, _junctionRuns)
+            && _runGraph.MoreSteps == _moreJunctionSteps
+        )
+            return;
+
+        _runGraphSteps = _junctionRuns;
+        _runGraph = RunGraphs.Match(
+            MetadataId,
+            train,
+            ChainGraphs.Find(train),
+            _junctionRuns,
+            _moreJunctionSteps
+        );
+    }
+
+    private IReadOnlyList<JunctionStep>? _runGraphSteps;
 
     // Through the operations service, as the API's cancelExecution is: a Pending or InProgress
     // run is flagged, and one that finished since the page last loaded is reported as not
