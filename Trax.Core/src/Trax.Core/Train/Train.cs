@@ -323,6 +323,18 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         Root("Chain", true).Chain<TJunction, TIn>();
 
     /// <summary>
+    /// Runs a fixed set of named branches side by side, each on its own copy of Memory, and
+    /// joins them before the next step. See <see cref="Monad{TInput, TReturn}.Parallel"/>.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Parallel)]
+    protected MonadTask<TInput, TReturn> Parallel(
+        Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
+    ) =>
+#pragma warning disable TRAXEXP001 // The experimental feature's own entry point.
+        Root("Parallel", true).Parallel(branches);
+#pragma warning restore TRAXEXP001
+
+    /// <summary>
     /// Ends a chain that declares no junctions, taking the train's return value from Memory.
     /// </summary>
     /// <remarks>

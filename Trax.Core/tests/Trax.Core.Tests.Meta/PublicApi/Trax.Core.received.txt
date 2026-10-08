@@ -640,6 +640,8 @@ namespace Trax.Core.Train
             where TJunction :  class { }
         protected virtual System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Junctions() { }
         protected virtual Trax.Core.Monad.Monad<TInput, TReturn> NewMonad() { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Parallel(System.Func<Trax.Core.Monad.Branches<TInput, TReturn>, Trax.Core.Monad.Branches<TInput, TReturn>> branches) { }
         protected Trax.Core.Functional.Either<System.Exception, TReturn> Resolve() { }
         public virtual System.Threading.Tasks.Task<TReturn> Run(TInput input, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> RunEither(TInput input) { }

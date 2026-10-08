@@ -108,6 +108,15 @@ public class ParallelTests : TestSetup
 
     #endregion
 
+    [Test]
+    public async Task AChain_MayStartWithAParallel()
+    {
+        var result = await new StartsWithParallelTrain().RunEither("abc").WaitAsync(Hang);
+
+        result.ValueUnsafe().Should().Be("embedding=3, cocitation=6");
+        Faults(new StartsWithParallelTrain()).Should().BeEmpty();
+    }
+
     #region Ids
 
     [Test]
@@ -942,6 +951,17 @@ public class ParallelTests : TestSetup
                             .Branch(name, b => b.Chain<ScoreCoCitation>())
                         : p.Branch(name, b => b.Chain<ScoreEmbedding>())
                 )
+                .Resolve();
+    }
+
+    private sealed class StartsWithParallelTrain : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Parallel(p =>
+                    p.Branch("embedding", b => b.Chain<ScoreEmbedding>())
+                        .Branch("cocitation", b => b.Chain<ScoreCoCitation>())
+                )
+                .Chain<Combine>()
                 .Resolve();
     }
 
