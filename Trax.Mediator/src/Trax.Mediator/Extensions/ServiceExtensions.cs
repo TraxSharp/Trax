@@ -283,6 +283,10 @@ public static class ServiceExtensions
             .AddSingleton<IServiceCollection>(serviceCollection)
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
+            .AddSingleton<
+                Services.ChainVerification.ITrainChainGraphs,
+                Services.ChainVerification.TrainChainGraphs
+            >()
             .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
             .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
             // Default null-returning principal provider. Hosts with an HTTP

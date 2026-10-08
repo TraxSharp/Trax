@@ -108,6 +108,13 @@ namespace Trax.Mediator.Extensions
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection RegisterServiceTrains(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, Microsoft.Extensions.DependencyInjection.ServiceLifetime serviceLifetime = 2, params System.Reflection.Assembly[] assemblies) { }
     }
 }
+namespace Trax.Mediator.Services.ChainVerification
+{
+    public interface ITrainChainGraphs
+    {
+        Trax.Core.Monad.ChainGraph? Find(string train);
+    }
+}
 namespace Trax.Mediator.Services.ConcurrencyLimiter
 {
     public class ConcurrencyLimiter : Trax.Mediator.Services.ConcurrencyLimiter.IConcurrencyLimiter
