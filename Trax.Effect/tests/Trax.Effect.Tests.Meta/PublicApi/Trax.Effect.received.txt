@@ -213,6 +213,11 @@ namespace Trax.Effect.Enums
         DormantDependent = 5,
         Once = 6,
     }
+    public enum SnapshotOwnerKind
+    {
+        User = 0,
+        System = 1,
+    }
     public enum TrainState
     {
         Pending = 0,
@@ -1006,6 +1011,8 @@ namespace Trax.Effect.Models.SnapshotDraft
         public string Context { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("id")]
         public System.Guid Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoke_token")]
+        public string? InvokeToken { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_from_state")]
         public string? LastRequestFromState { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_id")]
@@ -1014,12 +1021,16 @@ namespace Trax.Effect.Models.SnapshotDraft
         public string? LastRequestTrigger { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("machine")]
         public string Machine { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("owner_kind")]
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("row_id")]
+        public long RowId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("state")]
         public string State { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
         public System.DateTimeOffset UpdatedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("user_key")]
-        public string UserKey { get; set; }
+        public string? UserKey { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("version")]
         public int Version { get; set; }
     }

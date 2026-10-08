@@ -39,6 +39,7 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     private readonly IdempotentEffect _idempotent;
     private readonly IServiceProvider _services;
     private readonly TimeSpan? _draftTtl;
+    private readonly IInvokedRunCancellation? _runCancellation;
     private readonly Dictionary<string, ISnapshotDraftService> _serviceCache = new(
         StringComparer.Ordinal
     );
@@ -50,6 +51,7 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     /// <param name="idempotent">The exactly-once primitive handed to effect runners.</param>
     /// <param name="services">The container effect implementations are resolved from.</param>
     /// <param name="options">Supplies the draft TTL; null means drafts never expire.</param>
+    /// <param name="runCancellation">Cancels a draft's live invoked run before the draft is deleted.</param>
     /// <exception cref="ArgumentException">Two machines share a name.</exception>
     public SnapshotMachineRegistry(
         IEnumerable<IMachine> machines,
@@ -57,9 +59,11 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         IEffectClaimStore claims,
         IdempotentEffect idempotent,
         IServiceProvider services,
-        StateMachineOptions? options = null
+        StateMachineOptions? options = null,
+        IInvokedRunCancellation? runCancellation = null
     )
     {
+        _runCancellation = runCancellation;
         _machines = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
         _store = store;
         _claims = claims;
@@ -76,7 +80,9 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         if (!_machines.TryGetValue(machine, out var found))
             return null;
 
-        var service = found.CreateService(_store, _claims, _draftTtl);
+        var service = found is IMachineInternals internals
+            ? internals.CreateService(_store, _claims, _draftTtl, _runCancellation)
+            : found.CreateService(_store, _claims, _draftTtl);
         _serviceCache[machine] = service;
         return service;
     }

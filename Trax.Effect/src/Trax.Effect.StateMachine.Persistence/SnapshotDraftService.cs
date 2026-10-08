@@ -314,12 +314,22 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         }
     }
 
-    // Every draft deletion goes through here, so no deleted draft leaves its effect claims behind. The draft is
+    /// <summary>
+    /// Cancels the train run a draft's invoking state queued before the draft is deleted. Null (a service built
+    /// without one) cancels nothing, which is right only while no state can have queued a run.
+    /// </summary>
+    internal IInvokedRunCancellation? RunCancellation { get; init; }
+
+    // Every draft deletion goes through here, so no deleted draft leaves its effect claims, or a live invoked run,
+    // behind. A run the draft's state invoked is cancelled first: deleting the draft first would leave the run
+    // going with no state to deliver its outcome to, and a failed cancel throws, keeping the draft. The draft is
     // gone as a new intent's starting point, so its claims go whatever their state. The claims are released
-    // before the row is deleted, and neither write can be cancelled: a request that goes away between them would
-    // otherwise leave claims with no draft, which nothing would ever read or release again.
-    private async Task Delete(string userKey, Guid id)
+    // before the row is deleted, and none of these writes can be cancelled: a request that goes away between them
+    // would otherwise leave claims or a run with no draft, which nothing would ever read or release again.
+    private async Task Delete(string userKey, Guid id, string? invokeToken)
     {
+        if (invokeToken is not null && RunCancellation is not null)
+            await RunCancellation.Cancel(invokeToken, CancellationToken.None);
         if (effectClaims is not null && effectKeysOnReset is not null)
             foreach (var key in effectKeysOnReset(userKey, id))
                 await effectClaims.Release(key, CancellationToken.None);
@@ -400,7 +410,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         // allowed) is a new intent, and a kept claim would answer its effect with the old receipt.
         if (draftTtl is { } ttl && stored.UpdatedAt < DateTimeOffset.UtcNow - ttl)
         {
-            await Delete(userKey, id);
+            await Delete(userKey, id, stored.InvokeToken);
             return new LoadResult.NotFound();
         }
 

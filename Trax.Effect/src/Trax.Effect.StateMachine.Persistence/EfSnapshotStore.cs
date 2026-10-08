@@ -1,7 +1,9 @@
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Enums;
 using Trax.Effect.StateMachine;
 using SnapshotDraft = Trax.Effect.Models.SnapshotDraft.SnapshotDraft;
 
@@ -13,20 +15,44 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// SQLite) and optimistic concurrency via its concurrency token. Only EXPECTED races (an optimistic conflict,
 /// or a concurrent create the <paramref name="dialect"/> recognises as a unique violation) are returned as
 /// <c>false</c>; any other database error propagates, so it cannot masquerade as a benign conflict.
+///
+/// <para>Every <see cref="ISnapshotStore"/> member filters on <c>owner_kind = user</c> as well as the user's key,
+/// so no user path reads, writes, lists or expires a system-owned instance, even one under the same id. System
+/// rows and invoke tokens are reached only through the store's internal, owner-aware members.</para>
 /// </summary>
 /// <param name="db">The data context the table is reached through.</param>
 /// <param name="dialect">
 /// Recognises a unique violation on the configured provider. Without one, a concurrent create of the same draft
 /// throws instead of losing the race.
 /// </param>
-public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null) : ISnapshotStore
+public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null)
+    : ISnapshotStore,
+        IMachineInstanceStore
 {
+    // The rows one owner holds. Every owner-scoped query of the table starts here, so none of them can forget the
+    // owner kind. A user's key never matches a system row (whose key is null) anyway, but the kind is named so the
+    // rule does not rest on that.
+    private IQueryable<SnapshotDraft> Owned(DraftOwner owner)
+    {
+        if (owner.Kind == SnapshotOwnerKind.System)
+            return db.SnapshotDrafts.Where(x =>
+                x.OwnerKind == SnapshotOwnerKind.System && x.UserKey == null
+            );
+
+        var userKey =
+            owner.UserKey
+            ?? throw new ArgumentException("A user's draft needs the user's key.", nameof(owner));
+        return db.SnapshotDrafts.Where(x =>
+            x.OwnerKind == SnapshotOwnerKind.User && x.UserKey == userKey
+        );
+    }
+
     /// <inheritdoc/>
     public Task<StoredSnapshot?> Get(
         string userKey,
         Guid id,
         CancellationToken cancellationToken = default
-    ) => Read(db.SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey), cancellationToken);
+    ) => Read(Owned(DraftOwner.User(userKey)).Where(x => x.Id == id), cancellationToken);
 
     /// <inheritdoc/>
     public Task<StoredSnapshot?> Get(
@@ -34,13 +60,21 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         string machine,
         Guid id,
         CancellationToken cancellationToken = default
-    ) =>
-        Read(
-            db.SnapshotDrafts.Where(x =>
-                x.Id == id && x.UserKey == userKey && x.Machine == machine
-            ),
-            cancellationToken
-        );
+    ) => GetOwned(DraftOwner.User(userKey), machine, id, cancellationToken);
+
+    Task<StoredSnapshot?> IMachineInstanceStore.Get(
+        DraftOwner owner,
+        string machine,
+        Guid id,
+        CancellationToken cancellationToken
+    ) => GetOwned(owner, machine, id, cancellationToken);
+
+    private Task<StoredSnapshot?> GetOwned(
+        DraftOwner owner,
+        string machine,
+        Guid id,
+        CancellationToken cancellationToken
+    ) => Read(Owned(owner).Where(x => x.Id == id && x.Machine == machine), cancellationToken);
 
     private static async Task<StoredSnapshot?> Read(
         IQueryable<SnapshotDraft> query,
@@ -48,10 +82,11 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     )
     {
         var record = await query.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        return record is null ? null : ToStored(record);
+    }
 
-        if (record is null)
-            return null;
-
+    private static StoredSnapshot ToStored(SnapshotDraft record)
+    {
         var snapshot = new JsonObject
         {
             ["machine"] = record.Machine,
@@ -68,13 +103,14 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         {
             LastRequestTrigger = record.LastRequestTrigger,
             LastRequestFromState = record.LastRequestFromState,
+            InvokeToken = record.InvokeToken,
         };
     }
 
     /// <inheritdoc/>
     public Task Delete(string userKey, Guid id, CancellationToken cancellationToken = default) =>
-        db
-            .SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey)
+        Owned(DraftOwner.User(userKey))
+            .Where(x => x.Id == id)
             .ExecuteDeleteAsync(cancellationToken);
 
     /// <inheritdoc/>
@@ -84,16 +120,16 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Guid id,
         CancellationToken cancellationToken = default
     ) =>
-        db
-            .SnapshotDrafts.Where(x => x.Id == id && x.UserKey == userKey && x.Machine == machine)
+        Owned(DraftOwner.User(userKey))
+            .Where(x => x.Id == id && x.Machine == machine)
             .ExecuteDeleteAsync(cancellationToken);
 
     /// <summary>
     /// Inserts the draft of <paramref name="snapshot"/>'s machine, or overwrites its version, state and context,
-    /// with a fresh concurrency token and <c>updated_at</c>. It leaves the last-request columns untouched, and
-    /// never touches another machine's draft under the same id. Returns <c>false</c> when the row changed between
-    /// this call's read and its write, or a concurrent insert of the same <c>(user_key, machine, id)</c> won; any
-    /// other database error propagates.
+    /// with a fresh concurrency token and <c>updated_at</c>. It leaves the last-request columns and the invoke
+    /// token untouched, and never touches another machine's draft, or a system instance, under the same id.
+    /// Returns <c>false</c> when the row changed between this call's read and its write, or a concurrent insert
+    /// of the same <c>(user_key, machine, id)</c> won; any other database error propagates.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
     /// <param name="id">The client-minted draft id.</param>
@@ -107,10 +143,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     )
     {
         var machine = snapshot.Machine;
-        var record = await db.SnapshotDrafts.FirstOrDefaultAsync(
-            x => x.Id == id && x.UserKey == userKey && x.Machine == machine,
-            cancellationToken
-        );
+        var record = await Owned(DraftOwner.User(userKey))
+            .FirstOrDefaultAsync(x => x.Id == id && x.Machine == machine, cancellationToken);
         if (record is null)
             return await Insert(userKey, id, snapshot, cancellationToken);
 
@@ -121,7 +155,8 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// <summary>
     /// Inserts a new draft row in one statement. Returns <c>false</c> when a row with the same
     /// <c>(user_key, machine, id)</c> already exists, which is how a writer that lost the race to create a draft
-    /// finds out; any other database error propagates.
+    /// finds out; any other database error propagates. A system instance under the same id is not a conflict:
+    /// the user's draft is a row of its own.
     /// </summary>
     /// <param name="userKey">The owning user's key.</param>
     /// <param name="id">The client-minted draft id.</param>
@@ -132,12 +167,42 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         Guid id,
         Snapshot snapshot,
         CancellationToken cancellationToken = default
+    ) => InsertOwned(DraftOwner.User(userKey), id, snapshot, cancellationToken);
+
+    Task<bool> IMachineInstanceStore.Insert(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        CancellationToken cancellationToken
+    ) => InsertOwned(owner, id, snapshot, cancellationToken);
+
+    private async Task<bool> InsertOwned(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        CancellationToken cancellationToken
     )
     {
-        var record = new SnapshotDraft { Id = id, UserKey = userKey };
+        // The owner's unique index refuses a second row, and the dialect reads that as a lost race. A provider
+        // with no dialect (InMemory) enforces no unique index, so there the row is looked for first; the look and
+        // the insert are two steps, which is all InMemory offers.
+        var machine = snapshot.Machine;
+        if (
+            dialect is null
+            && await Owned(owner)
+                .AnyAsync(x => x.Id == id && x.Machine == machine, cancellationToken)
+        )
+            return false;
+
+        var record = new SnapshotDraft
+        {
+            Id = id,
+            OwnerKind = owner.Kind,
+            UserKey = owner.UserKey,
+        };
         Apply(record, snapshot);
         db.SnapshotDrafts.Add(record);
-        return Save(record, cancellationToken);
+        return await Save(record, cancellationToken);
     }
 
     private static void Apply(SnapshotDraft record, Snapshot snapshot)
@@ -164,7 +229,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         }
         catch (DbUpdateException ex) when (dialect?.IsUniqueViolation(ex) == true)
         {
-            // A concurrent create of the same (user_key, id): the other writer got there first. Any other
+            // A concurrent create of the same row for one owner: the other writer got there first. Any other
             // DbUpdateException (a NOT NULL or check-constraint violation from a real bug) is not swallowed.
             return false;
         }
@@ -209,7 +274,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         );
 
     /// <summary>
-    /// One atomic <c>UPDATE ... WHERE concurrency_token = expectedToken</c> on the draft of
+    /// One atomic <c>UPDATE ... WHERE concurrency_token = expectedToken</c> on the user's draft of
     /// <paramref name="snapshot"/>'s machine that bypasses the change tracker. It writes the snapshot, the
     /// request's id, trigger and from-state (all null when <paramref name="request"/> is
     /// null), a fresh token and <c>updated_at</c>. A write that lost the race, or targets a missing row, updates
@@ -221,13 +286,42 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
     /// <param name="expectedToken">The concurrency token read with the draft.</param>
     /// <param name="request">The applied request to record, or null to clear the last-request columns.</param>
     /// <param name="cancellationToken">Cancels the update.</param>
-    public async Task<bool> UpdateWithRequest(
+    public Task<bool> UpdateWithRequest(
         string userKey,
         Guid id,
         Snapshot snapshot,
         Guid expectedToken,
         AppliedRequest? request,
         CancellationToken cancellationToken = default
+    ) =>
+        UpdateOwned(
+            DraftOwner.User(userKey),
+            id,
+            snapshot,
+            expectedToken,
+            request,
+            invokeToken: null,
+            cancellationToken
+        );
+
+    Task<bool> IMachineInstanceStore.Update(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        Guid expectedToken,
+        AppliedRequest? request,
+        InvokeTokenWrite? invokeToken,
+        CancellationToken cancellationToken
+    ) => UpdateOwned(owner, id, snapshot, expectedToken, request, invokeToken, cancellationToken);
+
+    private Task<bool> UpdateOwned(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        Guid expectedToken,
+        AppliedRequest? request,
+        InvokeTokenWrite? invokeToken,
+        CancellationToken cancellationToken
     )
     {
         // Optimistic update as a single atomic statement that bypasses the change tracker. The token guard is
@@ -242,27 +336,168 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         var requestTrigger = request?.Trigger;
         var requestFromState = request?.FromState;
 
-        var rows = await db
-            .SnapshotDrafts.Where(x =>
-                x.Id == id
-                && x.UserKey == userKey
-                && x.Machine == machineId
-                && x.ConcurrencyToken == expectedToken
-            )
-            .ExecuteUpdateAsync(
-                setters =>
-                    setters
-                        .SetProperty(x => x.Version, version)
-                        .SetProperty(x => x.State, state)
-                        .SetProperty(x => x.Context, contextJson)
-                        .SetProperty(x => x.ConcurrencyToken, newToken)
-                        .SetProperty(x => x.LastRequestId, requestId)
-                        .SetProperty(x => x.LastRequestTrigger, requestTrigger)
-                        .SetProperty(x => x.LastRequestFromState, requestFromState)
-                        .SetProperty(x => x.UpdatedAt, now),
-                cancellationToken
-            );
-
-        return rows == 1;
+        return Write(
+            Owned(owner)
+                .Where(x =>
+                    x.Id == id && x.Machine == machineId && x.ConcurrencyToken == expectedToken
+                ),
+            setters =>
+            {
+                setters
+                    .SetProperty(x => x.Version, version)
+                    .SetProperty(x => x.State, state)
+                    .SetProperty(x => x.Context, contextJson)
+                    .SetProperty(x => x.ConcurrencyToken, newToken)
+                    .SetProperty(x => x.LastRequestId, requestId)
+                    .SetProperty(x => x.LastRequestTrigger, requestTrigger)
+                    .SetProperty(x => x.LastRequestFromState, requestFromState)
+                    .SetProperty(x => x.UpdatedAt, now);
+                if (invokeToken is { Value: var next })
+                    setters.SetProperty(x => x.InvokeToken, next);
+            },
+            cancellationToken
+        );
     }
+
+    Task<bool> IMachineInstanceStore.SetInvokeToken(
+        DraftOwner owner,
+        string machine,
+        Guid id,
+        Guid expectedToken,
+        InvokeTokenWrite invokeToken,
+        CancellationToken cancellationToken
+    )
+    {
+        var next = invokeToken.Value;
+        var newToken = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        return Write(
+            Owned(owner)
+                .Where(x =>
+                    x.Id == id && x.Machine == machine && x.ConcurrencyToken == expectedToken
+                ),
+            setters =>
+                setters
+                    .SetProperty(x => x.InvokeToken, next)
+                    .SetProperty(x => x.ConcurrencyToken, newToken)
+                    .SetProperty(x => x.UpdatedAt, now),
+            cancellationToken
+        );
+    }
+
+    async Task<StoredInstance?> IMachineInstanceStore.GetByInvokeToken(
+        string invokeToken,
+        CancellationToken cancellationToken
+    )
+    {
+        var record = await db
+            .SnapshotDrafts.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.InvokeToken == invokeToken, cancellationToken);
+        return record is null
+            ? null
+            : new StoredInstance(
+                new DraftOwner(record.OwnerKind, record.UserKey),
+                record.Machine,
+                record.Id,
+                ToStored(record)
+            );
+    }
+
+    Task<bool> IMachineInstanceStore.ApplyByInvokeToken(
+        string invokeToken,
+        Snapshot snapshot,
+        string? nextInvokeToken,
+        Guid? expectedToken,
+        CancellationToken cancellationToken
+    )
+    {
+        var machineId = snapshot.Machine;
+        var version = snapshot.Version;
+        var state = snapshot.State;
+        var contextJson = snapshot.Context.ToJsonString();
+        var newToken = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        var target = db.SnapshotDrafts.Where(x =>
+            x.InvokeToken == invokeToken && x.Machine == machineId
+        );
+        if (expectedToken is { } expected)
+            target = target.Where(x => x.ConcurrencyToken == expected);
+
+        return Write(
+            target,
+            setters =>
+                setters
+                    .SetProperty(x => x.Version, version)
+                    .SetProperty(x => x.State, state)
+                    .SetProperty(x => x.Context, contextJson)
+                    .SetProperty(x => x.InvokeToken, nextInvokeToken)
+                    .SetProperty(x => x.ConcurrencyToken, newToken)
+                    .SetProperty(x => x.UpdatedAt, now),
+            cancellationToken
+        );
+    }
+
+    async Task<IReadOnlyList<InvokingInstance>> IMachineInstanceStore.ListInvoking(
+        int limit,
+        string? afterToken,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        var query = db.SnapshotDrafts.AsNoTracking().Where(x => x.InvokeToken != null);
+        if (afterToken is not null)
+            query = query.Where(x => string.Compare(x.InvokeToken, afterToken) > 0);
+
+        var rows = await query
+            .OrderBy(x => x.InvokeToken)
+            .Take(limit)
+            .Select(x => new
+            {
+                x.OwnerKind,
+                x.UserKey,
+                x.Machine,
+                x.Id,
+                x.State,
+                x.InvokeToken,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(x => new InvokingInstance(
+                new DraftOwner(x.OwnerKind, x.UserKey),
+                x.Machine,
+                x.Id,
+                x.State,
+                x.InvokeToken!
+            ))
+            .ToList();
+    }
+
+    // One UPDATE that matches at most one row. A write that would give a second row the same invoke token is a
+    // unique violation, which the dialect reads as a lost race like any other conflict; anything else propagates.
+    // ExecuteUpdate throws the provider's exception unwrapped, so it is wrapped the way SaveChanges would wrap it
+    // before the dialect reads it. On Postgres the failed statement still aborts an enclosing transaction (there
+    // is no savepoint around it): a caller writing tokens inside its own transaction treats false as fatal to it.
+    private async Task<bool> Write(
+        IQueryable<SnapshotDraft> target,
+        Action<UpdateSettersBuilder<SnapshotDraft>> setters,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await target.ExecuteUpdateAsync(setters, cancellationToken) == 1;
+        }
+        catch (Exception ex) when (IsUniqueViolation(ex))
+        {
+            return false;
+        }
+    }
+
+    private bool IsUniqueViolation(Exception exception) =>
+        dialect is not null
+        && dialect.IsUniqueViolation(
+            exception as DbUpdateException ?? new DbUpdateException(exception.Message, exception)
+        );
 }

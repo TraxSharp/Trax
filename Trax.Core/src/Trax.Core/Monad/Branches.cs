@@ -95,9 +95,9 @@ internal static class ExperimentalIds
     public const string Parallel = "TRAXEXP001";
 
     /// <summary>
-    /// <c>Invokes</c>: a state-machine state that runs a train. The feature lives in
-    /// Trax.Effect.StateMachine, which does not see this class, so it declares the same id beside
-    /// its own builder; the two must stay equal.
+    /// <c>Invokes</c> and <c>IMachineInstances.Start</c>: a state-machine state that runs a train, and the
+    /// system-owned instances such states run in. The feature lives in Trax.Effect.StateMachine, which does not
+    /// see this class, so it declares the same id beside its own code; the two must stay equal.
     /// </summary>
     public const string Invokes = "TRAXEXP002";
 }

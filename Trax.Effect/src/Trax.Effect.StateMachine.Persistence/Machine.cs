@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trax.Effect.StateMachine.Persistence;
@@ -77,7 +79,7 @@ public interface IMachine
 /// }
 /// </code>
 /// </summary>
-public abstract class Machine<TState, TTrigger> : IMachine
+public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
@@ -159,8 +161,22 @@ public abstract class Machine<TState, TTrigger> : IMachine
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl = null
+    ) => BuildService(store, claims, draftTtl, runCancellation: null);
+
+    ISnapshotDraftService IMachineInternals.CreateService(
+        ISnapshotStore store,
+        IEffectClaimStore? claims,
+        TimeSpan? draftTtl,
+        IInvokedRunCancellation? runCancellation
+    ) => BuildService(store, claims, draftTtl, runCancellation);
+
+    private SnapshotDraftService<TState, TTrigger> BuildService(
+        ISnapshotStore store,
+        IEffectClaimStore? claims,
+        TimeSpan? draftTtl,
+        IInvokedRunCancellation? runCancellation
     ) =>
-        new SnapshotDraftService<TState, TTrigger>(
+        new(
             Built.Engine,
             store,
             Built.CommittedStates,
@@ -168,10 +184,40 @@ public abstract class Machine<TState, TTrigger> : IMachine
             EffectKeysOnReset,
             draftTtl,
             Built.Effects
-        );
+        )
+        {
+            RunCancellation = runCancellation,
+        };
 
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
-        Built.Effects.Select(e => $"{e.KeyPrefix}:{userKey}:{id}");
+        Built.Effects.Select(e => EffectClaimKey.ForUser(e.KeyPrefix, userKey, id));
+
+    Snapshot IMachineInternals.InitialSnapshot(JsonObject? context)
+    {
+        var engine = Built.Engine;
+        var definition = engine.Definition;
+        var initial = definition.CreateInitialSnapshot();
+        if (context is not null)
+            initial = initial with { Context = (JsonObject)context.DeepClone() };
+
+        // Validated exactly as a stored snapshot is read back, so nothing is stored that a later read refuses.
+        var json = engine.Serialize(initial);
+        if (Encoding.UTF8.GetByteCount(json) > SnapshotLimits.MaxSnapshotBytes)
+            throw new ArgumentException(
+                $"The initial snapshot of '{definition.Id}' exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit.",
+                nameof(context)
+            );
+        return engine.Rehydrate(json) switch
+        {
+            RehydrationResult.Ok ok => ok.Snapshot,
+            RehydrationResult.Error error => throw new ArgumentException(
+                $"The initial snapshot of '{definition.Id}' is not valid ({error.Code}): {error.Message}",
+                nameof(context),
+                error.Exception
+            ),
+            _ => throw new ArgumentException("Unknown rehydration result.", nameof(context)),
+        };
+    }
 
     /// <summary>
     /// Builds the exactly-once runner for the machine's first bound effect, resolving the effect type from
@@ -215,7 +261,7 @@ public abstract class Machine<TState, TTrigger> : IMachine
             binding.From,
             binding.Trigger,
             binding.To,
-            (userKey, id) => $"{binding.KeyPrefix}:{userKey}:{id}",
+            (userKey, id) => EffectClaimKey.ForUser(binding.KeyPrefix, userKey, id),
             receiptKey: "receipt"
         );
     }

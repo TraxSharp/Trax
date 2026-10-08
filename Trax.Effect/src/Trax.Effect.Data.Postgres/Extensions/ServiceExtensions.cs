@@ -145,6 +145,7 @@ public static class ServiceExtensions
                             o.MapEnum<MisfirePolicy>("misfire_policy", "trax");
                             o.MapEnum<JunctionRunKind>("junction_run_kind", "trax");
                             o.MapEnum<JunctionRunState>("junction_run_state", "trax");
+                            o.MapEnum<SnapshotOwnerKind>("snapshot_owner_kind", "trax");
                         }
                     )
                     .UseLoggerFactory(new NullLoggerFactory())

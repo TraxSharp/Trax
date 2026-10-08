@@ -131,6 +131,11 @@ namespace Trax.Effect.StateMachine.Persistence
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, string? contentFingerprint, System.Threading.CancellationToken cancellationToken = default);
     }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public interface IInvokedRunCancellation
+    {
+        System.Threading.Tasks.Task Cancel(string invokeToken, System.Threading.CancellationToken cancellationToken = default);
+    }
     public interface IMachine
     {
         string? Corpus { get; }
@@ -141,6 +146,12 @@ namespace Trax.Effect.StateMachine.Persistence
         Trax.Effect.StateMachine.Persistence.ISnapshotDraftService CreateService(Trax.Effect.StateMachine.Persistence.ISnapshotStore store, Trax.Effect.StateMachine.Persistence.IEffectClaimStore? claims, System.TimeSpan? draftTtl = default);
         string ExportIr();
         System.Collections.Generic.IReadOnlyList<string> SelfCheck();
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public interface IMachineInstances
+    {
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.MachineInstance> Start<TMachine>(Trax.Effect.StateMachine.Persistence.MachineKey key, System.Text.Json.Nodes.JsonObject? context = null, System.Threading.CancellationToken cancellationToken = default)
+            where TMachine : Trax.Effect.StateMachine.Persistence.IMachine;
     }
     public interface ISnapshotDraftService
     {
@@ -203,6 +214,33 @@ namespace Trax.Effect.StateMachine.Persistence
             public NotFound() { }
         }
     }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public sealed class MachineInstance : System.IEquatable<Trax.Effect.StateMachine.Persistence.MachineInstance>
+    {
+        public MachineInstance(System.Guid Id, string Machine, string State, bool Created) { }
+        public bool Created { get; init; }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public string State { get; init; }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public static class MachineInstanceId
+    {
+        public static readonly System.Guid Root;
+        public static System.Guid For(string machine, Trax.Effect.StateMachine.Persistence.MachineKey key) { }
+        public static System.Guid Namespace(string machine) { }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public sealed class MachineKey : System.IEquatable<Trax.Effect.StateMachine.Persistence.MachineKey>
+    {
+        public System.Collections.Generic.IReadOnlyList<string> Parts { get; }
+        public bool Equals(Trax.Effect.StateMachine.Persistence.MachineKey? other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public override string ToString() { }
+        public static Trax.Effect.StateMachine.Persistence.MachineKey Of(params string[] parts) { }
+        public static Trax.Effect.StateMachine.Persistence.MachineKey op_Implicit(string part) { }
+    }
     public abstract class Machine<TState, TTrigger> : Trax.Effect.StateMachine.Persistence.IMachine
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
@@ -254,6 +292,7 @@ namespace Trax.Effect.StateMachine.Persistence
     public sealed class StoredSnapshot : System.IEquatable<Trax.Effect.StateMachine.Persistence.StoredSnapshot>
     {
         public StoredSnapshot(string Json, System.Guid Token, string? LastRequestId, System.DateTimeOffset UpdatedAt) { }
+        public string? InvokeToken { get; init; }
         public string Json { get; init; }
         public Trax.Effect.StateMachine.Persistence.AppliedRequest? LastRequest { get; }
         public string? LastRequestFromState { get; init; }

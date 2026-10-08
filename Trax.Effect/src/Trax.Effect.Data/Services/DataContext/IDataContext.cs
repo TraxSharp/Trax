@@ -161,9 +161,9 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
         ((DbContext)this).Set<Effect.Models.JunctionRun.JunctionRun>();
 
     /// <summary>
-    /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft, written by
-    /// Trax.Effect.StateMachine.Persistence. Filter by <c>UserKey</c> when querying directly, because the draft
-    /// id alone is not unique across users.
+    /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft or system-owned instance,
+    /// written by Trax.Effect.StateMachine.Persistence. Filter by <c>OwnerKind</c> and <c>UserKey</c> when querying
+    /// directly, because the draft id alone is unique neither across users nor between a user and the system.
     /// </summary>
     /// <remarks>
     /// <see cref="DataContext{TDbContext}"/> declares this set. The default here keeps an implementation written

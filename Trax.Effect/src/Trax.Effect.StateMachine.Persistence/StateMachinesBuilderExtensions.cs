@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -108,6 +109,16 @@ public static class StateMachinesBuilderExtensions
         ));
         services.AddScoped<IdempotentEffect>();
         services.AddScoped<ISnapshotMachineRegistry, SnapshotMachineRegistry>();
+
+        // System-owned instances and invoke tokens: server-only, so reached through the provider's data context
+        // whatever ISnapshotStore a host substitutes. The launcher of invoked trains registers the cancellation
+        // after this, and the last registration wins; until then a draft holds no live run to cancel.
+        services.AddScoped<IMachineInstanceStore>(sp => new EfSnapshotStore(
+            sp.GetRequiredService<IDataContext>(),
+            sp.GetService<ISqlDialect>()
+        ));
+        services.AddScoped<IMachineInstances, MachineInstances>();
+        services.TryAddSingleton<IInvokedRunCancellation, NoInvokedRunCancellation>();
 
         services.AddScopedTraxRoute<ISaveSnapshot, SaveSnapshot>();
         services.AddScopedTraxRoute<IAdvanceSnapshot, AdvanceSnapshot>();

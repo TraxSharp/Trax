@@ -15,17 +15,20 @@ internal class PersistentSnapshotDraft : BaseModel
         modelBuilder.Entity<BaseModel>(entity =>
         {
             entity.ToTable("snapshot_draft", "trax");
-            // The client-chosen id is unique only per user and machine: two machines may give one user a
-            // draft under the same id. The key's leading column also serves the user-scoped reads, so no
-            // separate user_key index is needed.
+            // A system row has no user key, and a key column cannot be null, so the primary key is a surrogate.
+            // Identity is two partial unique indexes the migrations create: (user_key, machine, id) among user
+            // rows, where the client-chosen id is unique only per user and machine, and (machine, id) among
+            // system rows. Their filters differ by provider (an enum label on Postgres, an integer on Sqlite), so
+            // the model leaves them to the migrations rather than declaring a filter only one provider can read.
+            entity.HasKey(e => e.RowId).HasName("pk_snapshot_draft");
+            entity.Property(e => e.RowId).ValueGeneratedOnAdd();
             entity
-                .HasKey(e => new
-                {
-                    e.UserKey,
-                    e.Machine,
-                    e.Id,
-                })
-                .HasName("pk_snapshot_draft");
+                .HasIndex(e => e.InvokeToken)
+                .IsUnique()
+                .HasDatabaseName("ux_snapshot_draft_invoke_token");
+            entity
+                .HasIndex(e => new { e.Machine, e.State })
+                .HasDatabaseName("ix_snapshot_draft_machine_state");
             entity.Property(e => e.ConcurrencyToken).IsConcurrencyToken();
         });
     }

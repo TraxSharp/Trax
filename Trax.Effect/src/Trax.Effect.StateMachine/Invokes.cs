@@ -11,7 +11,7 @@ namespace Trax.Effect.StateMachine;
 /// </summary>
 internal static class ExperimentalIds
 {
-    /// <summary><c>Invokes</c>: a state that runs a train and routes its outcome.</summary>
+    /// <summary><c>Invokes</c>, and <c>IMachineInstances.Start</c> in the persistence package.</summary>
     public const string Invokes = "TRAXEXP002";
 }
 

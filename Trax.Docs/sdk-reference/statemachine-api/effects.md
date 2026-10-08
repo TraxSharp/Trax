@@ -69,7 +69,8 @@ services.AddScoped<ICharge, StripeCharge>();
 
 The effect runs through the persistence layer's idempotent path: a claim is taken before the effect, held
 under a lease with a fence token, and a crash mid-flight replays without re-running a completed effect. The
-key is `{keyPrefix}:{userKey}:{id}`, so it is scoped per draft per user. A draft deleted by the draft TTL releases
+key is `{keyPrefix}:{userKey}:{id}`, so it is scoped per draft per user. A system-owned instance's key is
+`{keyPrefix}::{id}`, which no user's can equal, because a user key is never empty. A draft deleted by the draft TTL releases
 the key, and so does a reset to the initial state once the effect's outcome is settled on the draft: a reset while
 the effect runs, or after a receipt that never reached the draft, keeps the claim, and the next send replays its
 receipt. See [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write).
