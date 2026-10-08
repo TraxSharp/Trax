@@ -11,6 +11,8 @@
     <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
     <!-- TRAXEXP002: these tests queue a run as a state machine's invoking state does. -->
     <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
+    <!-- TRAXEXP003: these tests checkpoint runs and resume them through retries, requeues and the operator's resume. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
