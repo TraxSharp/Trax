@@ -36,6 +36,7 @@ using Trax.Samples.Recovery;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.Faults;
+using Trax.Samples.Recovery.Index;
 using Trax.Samples.Recovery.Model;
 using Trax.Samples.Recovery.Records;
 using Trax.Scheduler.Extensions;
@@ -163,8 +164,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Creates the topic_map schema and loads the canned corpus, skipping papers already there.
+// Creates the topic_map schema and loads the canned corpus, skipping papers already there, then the
+// canned index records partitions are ingested from, skipping records already there.
 await CorpusSeeder.SeedAsync(app.Services);
+await IndexSeeder.SeedAsync(app.Services);
 
 app.UseCors();
 app.UseAuthentication();
