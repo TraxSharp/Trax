@@ -64,6 +64,10 @@ public class TraxInvariantsTests
         await SeedClaimAsync("effect-done", receipt: "sent");
         await SeedQueueEntryAsync("dispatched", await SeedRunAsync("failed"));
         await SeedQueueEntryAsync("queued", runId: null);
+        var failed = await SeedRunAsync("failed");
+        await SeedCheckpointAsync(failed);
+        await SeedQueueEntryAsync("queued", runId: null, resumeFrom: failed);
+        await SeedRunAsync("pending", resumeFrom: failed);
 
         (await TraxInvariants.FindViolationsAsync(ConnectionString)).Should().BeEmpty();
         await FluentActions
@@ -135,6 +139,73 @@ public class TraxInvariantsTests
                     orphan.ToString(),
                     $"queue entry {orphan} is dispatched but its run (null) does not exist"
                 )
+            );
+    }
+
+    [Test]
+    public async Task ACheckpointOfACompletedRun_IsReportedWithItsId()
+    {
+        var completed = await SeedRunAsync("completed");
+        var kept = await SeedCheckpointAsync(completed);
+        await SeedCheckpointAsync(await SeedRunAsync("failed"));
+        await SeedRunAsync("completed");
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString);
+
+        violations
+            .Should()
+            .ContainSingle(
+                "a failed run's checkpoint is what a resume reads, and a completed run with none is clean"
+            )
+            .Which.Should()
+            .Be(
+                new TraxInvariantViolation(
+                    TraxInvariants.CheckpointOfCompletedRun,
+                    "trax.checkpoint",
+                    kept.ToString(),
+                    $"checkpoint {kept} at Checkpoint<Findings>#0 of run {completed} of "
+                        + "Invariants.Train is kept, but that run completed"
+                )
+            );
+    }
+
+    [Test]
+    public async Task AResumeNamingNoRun_IsReportedOnTheEntryAndTheRun()
+    {
+        var source = await SeedRunAsync("failed");
+        var gone = await SeedRunAsync("failed");
+        await SqlAsync($"DELETE FROM trax.metadata WHERE id = {gone}");
+
+        var orphanEntry = await SeedQueueEntryAsync("queued", runId: null, resumeFrom: gone);
+        await SeedQueueEntryAsync(
+            "dispatched",
+            await SeedRunAsync("completed"),
+            resumeFrom: source
+        );
+        var orphanRun = await SeedRunAsync("pending", resumeFrom: gone);
+        await SeedRunAsync("pending", resumeFrom: source);
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString);
+
+        violations
+            .Should()
+            .BeEquivalentTo(
+                [
+                    new TraxInvariantViolation(
+                        TraxInvariants.ResumeFromMissingRun,
+                        "trax.work_queue",
+                        orphanEntry.ToString(),
+                        $"queue entry {orphanEntry} resumes run {gone}, which does not exist"
+                    ),
+                    new TraxInvariantViolation(
+                        TraxInvariants.ResumeFromMissingRun,
+                        "trax.metadata",
+                        orphanRun.ToString(),
+                        $"run {orphanRun} resumes run {gone}, which does not exist"
+                    ),
+                ],
+                o => o.WithStrictOrdering(),
+                "an entry and a run resuming a run that still exists are both fine"
             );
     }
 
@@ -273,18 +344,39 @@ public class TraxInvariantsTests
 
     private sealed class InheritsMarkedFixture : MarkedFixture;
 
-    private static async Task<long> SeedRunAsync(string state)
+    private static async Task<long> SeedRunAsync(string state, long? resumeFrom = null)
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO trax.metadata (external_id, name, train_state, start_time)
-            VALUES (@external, 'Invariants.Train', @state::trax.train_state, now())
+            INSERT INTO trax.metadata (external_id, name, train_state, start_time, resume_from)
+            VALUES (@external, 'Invariants.Train', @state::trax.train_state, now(), @resume)
             RETURNING id
             """;
         command.Parameters.AddWithValue("external", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("state", state);
+        command.Parameters.AddWithValue(
+            "resume",
+            NpgsqlTypes.NpgsqlDbType.Bigint,
+            (object?)resumeFrom ?? DBNull.Value
+        );
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    // A checkpoint row of run <paramref name="runId"/>; returns its id.
+    private static async Task<long> SeedCheckpointAsync(long runId)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO trax.checkpoint
+                (metadata_id, node_id, state_type, state, chain_hash, state_fingerprint)
+            VALUES (@run, 'Checkpoint<Findings>#0', 'Findings', '{}', repeat('a', 64), 'fp')
+            RETURNING id
+            """;
+        command.Parameters.AddWithValue("run", runId);
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
@@ -382,19 +474,28 @@ public class TraxInvariantsTests
         await command.ExecuteNonQueryAsync();
     }
 
-    private static async Task<long> SeedQueueEntryAsync(string status, long? runId)
+    private static async Task<long> SeedQueueEntryAsync(
+        string status,
+        long? runId,
+        long? resumeFrom = null
+    )
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO trax.work_queue (external_id, train_name, status, metadata_id)
-            VALUES (@external, 'Invariants.Train', @status::trax.work_queue_status, @run)
+            INSERT INTO trax.work_queue (external_id, train_name, status, metadata_id, resume_from)
+            VALUES (@external, 'Invariants.Train', @status::trax.work_queue_status, @run, @resume)
             RETURNING id
             """;
         command.Parameters.AddWithValue("external", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("status", status);
         command.Parameters.AddWithValue("run", (object?)runId ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            "resume",
+            NpgsqlTypes.NpgsqlDbType.Bigint,
+            (object?)resumeFrom ?? DBNull.Value
+        );
         return (long)(await command.ExecuteScalarAsync())!;
     }
 

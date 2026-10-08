@@ -67,11 +67,13 @@ namespace Trax.Effect.Data.Testing
     }
     public static class TraxInvariants
     {
+        public const string CheckpointOfCompletedRun = "checkpoint-of-completed-run";
         public const string DispatchedWithoutRun = "dispatched-without-run";
         public const string EffectClaimInFlight = "effect-claim-in-flight";
         public const string InvokeTokenOutsideInvokingState = "invoke-token-outside-invoking-state";
         public const string InvokeTokenWithoutRun = "invoke-token-without-run";
         public const string InvokingStateWithoutToken = "invoking-state-without-token";
+        public const string ResumeFromMissingRun = "resume-from-missing-run";
         public const string RunInProgress = "run-in-progress";
         public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
         public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }

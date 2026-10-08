@@ -6,9 +6,10 @@ namespace Trax.Effect.Data.Testing;
 /// <summary>
 /// Checks that a Trax Postgres database is consistent once every host using it has stopped: no run
 /// is still in progress, no state-machine effect is still claimed in flight, every dispatched
-/// queue entry has its run, and every machine instance's invoke token names a run that instance
-/// queued. While a host runs, the first three are normal transient states; once they have all
-/// stopped, each one is work that was started and then lost. The last holds at every moment.
+/// queue entry has its run, no completed run keeps a checkpoint, every resume names a run that
+/// exists, and every machine instance's invoke token names a run that instance queued. While a
+/// host runs, the first three are normal transient states; once they have all stopped, each one
+/// is work that was started and then lost. The rest hold at every moment.
 /// </summary>
 /// <remarks>
 /// <para>Call it from a test fixture's teardown, after the hosts the test started are disposed. A
@@ -30,6 +31,18 @@ public static class TraxInvariants
 
     /// <summary>A <c>trax.work_queue</c> row is <c>dispatched</c> but names no run that exists.</summary>
     public const string DispatchedWithoutRun = "dispatched-without-run";
+
+    /// <summary>
+    /// A <c>trax.checkpoint</c> row belongs to a run that completed. A run that completes deletes
+    /// its checkpoints, since nothing may resume it.
+    /// </summary>
+    public const string CheckpointOfCompletedRun = "checkpoint-of-completed-run";
+
+    /// <summary>
+    /// A <c>trax.work_queue</c> or <c>trax.metadata</c> row's <c>resume_from</c> names no run that
+    /// exists. The metadata cleanup keeps a run while something resumes it.
+    /// </summary>
+    public const string ResumeFromMissingRun = "resume-from-missing-run";
 
     /// <summary>
     /// A <c>trax.snapshot_draft</c> row holds an invoke token that names no run the instance
@@ -148,6 +161,74 @@ public static class TraxInvariants
                         "trax.work_queue",
                         id,
                         $"queue entry {id} is dispatched but its run ({run}) does not exist"
+                    ),
+                cancellationToken
+            )
+        );
+
+        // A run that completes deletes its own checkpoints in its terminal write: nothing may
+        // resume it, and a row left behind is run data kept for no purpose.
+        violations.AddRange(
+            await ReadAsync(
+                connection,
+                """
+                SELECT c.id::text, c.node_id || ' of run ' || m.id::text || ' of ' || m.name
+                FROM trax.checkpoint c
+                JOIN trax.metadata m ON m.id = c.metadata_id
+                WHERE m.train_state = 'completed'
+                ORDER BY c.id
+                """,
+                (id, what) =>
+                    new TraxInvariantViolation(
+                        CheckpointOfCompletedRun,
+                        "trax.checkpoint",
+                        id,
+                        $"checkpoint {id} at {what} is kept, but that run completed"
+                    ),
+                cancellationToken
+            )
+        );
+
+        // Not a foreign key, like replay_decisions_of, so nothing in the database holds it: the
+        // metadata cleanup keeps a run while a queued entry or a run that stays resumes it, and
+        // deletes a resumed run with its source.
+        violations.AddRange(
+            await ReadAsync(
+                connection,
+                """
+                SELECT w.id::text, w.resume_from::text
+                FROM trax.work_queue w
+                WHERE w.resume_from IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM trax.metadata m WHERE m.id = w.resume_from)
+                ORDER BY w.id
+                """,
+                (id, source) =>
+                    new TraxInvariantViolation(
+                        ResumeFromMissingRun,
+                        "trax.work_queue",
+                        id,
+                        $"queue entry {id} resumes run {source}, which does not exist"
+                    ),
+                cancellationToken
+            )
+        );
+
+        violations.AddRange(
+            await ReadAsync(
+                connection,
+                """
+                SELECT r.id::text, r.resume_from::text
+                FROM trax.metadata r
+                WHERE r.resume_from IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM trax.metadata m WHERE m.id = r.resume_from)
+                ORDER BY r.id
+                """,
+                (id, source) =>
+                    new TraxInvariantViolation(
+                        ResumeFromMissingRun,
+                        "trax.metadata",
+                        id,
+                        $"run {id} resumes run {source}, which does not exist"
                     ),
                 cancellationToken
             )
@@ -341,7 +422,7 @@ public sealed record InvokingState(string Machine, string State);
 /// <summary>One row that breaks one of <see cref="TraxInvariants"/>' checks.</summary>
 /// <param name="Invariant">Which check, one of the <see cref="TraxInvariants"/> constants.</param>
 /// <param name="Table">The table the row is in, schema-qualified.</param>
-/// <param name="Id">The row's id: the run, queue entry or snapshot row id, or the effect key.</param>
+/// <param name="Id">The row's id: the run, queue entry, checkpoint or snapshot row id, or the effect key.</param>
 /// <param name="Detail">What is wrong with the row, in a sentence.</param>
 public sealed record TraxInvariantViolation(
     string Invariant,
