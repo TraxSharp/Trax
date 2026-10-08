@@ -218,10 +218,13 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.ExposeOperationQueries().ExposeOperationMutations().GateOperations(roles: "Operator"));
 ```
 
-The three scenario trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
-so the viewer key follows their steps through the broadcast view. Once a token scheme is
-registered, a subscription socket without a credential is refused at `connection_init`, so a
-"public" watcher still needs a key. The alternative to an operator key is
+The research and refund trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
+so the viewer key follows their steps through the broadcast view. The topic map's train carries the
+same `[TraxAuthorize]` but not `[TraxBroadcast]`: a train a user's own state machine runs may not
+broadcast every run to every subscriber, and the page follows it through the operations view anyway.
+
+Once a token scheme is registered, a subscription socket without a credential is refused at
+`connection_init`, so a "public" watcher still needs a key. The alternative to an operator key is
 `AllowJunctionAnswersForBroadcastSubscribers()`, called inside `IsDevelopment()` only.
 
 Outside Development no key exists, the operations namespace answers no one and the dashboard is

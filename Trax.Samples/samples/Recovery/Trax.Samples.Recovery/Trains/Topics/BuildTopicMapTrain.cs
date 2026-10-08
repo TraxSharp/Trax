@@ -17,8 +17,13 @@ namespace Trax.Samples.Recovery.Trains.Topics;
 /// Branches compute; the join commits. Each branch runs in its own scope, so only
 /// <see cref="CombineSignals"/>, after every branch has finished, writes to the database, in one
 /// transaction. A failed branch fails the run before anything is written.
+/// <para>
+/// Unlike the other two scenario trains it is not <c>[TraxBroadcast]</c>: its steps reach the page
+/// through the operations view, and a train whose every run is broadcast to every subscriber is not
+/// one a user's own state machine may invoke. Every step is an <c>EffectJunction</c>, so a run can be
+/// cancelled from another host, and its output holds no sensitive member.
+/// </para>
 /// </remarks>
-[TraxBroadcast]
 [TraxAuthorize(Roles = RecoveryRoles.Operator + "," + RecoveryRoles.Viewer)]
 public class BuildTopicMapTrain : ServiceTrain<TopicMapInput, TopicMap>, IBuildTopicMapTrain
 {

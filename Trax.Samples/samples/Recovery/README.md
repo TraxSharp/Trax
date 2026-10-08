@@ -119,7 +119,7 @@ start anywhere else):
 | Key | Role | Sees |
 |---|---|---|
 | `recovery-operator-key-do-not-use-in-production` | `Operator` | The operations view: every answer and every step name. The page uses it. |
-| `recovery-viewer-key-do-not-use-in-production` | `Viewer` | The broadcast view of the scenario trains: the run's shape, with answers and the steps on a track withheld. |
+| `recovery-viewer-key-do-not-use-in-production` | `Viewer` | The broadcast view of the research and refund trains: the run's shape, with answers and the steps on a track withheld. |
 
 ## Demo-only settings
 
