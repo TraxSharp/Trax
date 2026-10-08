@@ -11,6 +11,8 @@
     <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
     <!-- TRAXEXP002: the invoked-run operations tests seed a run a state machine's invoking state queued. -->
     <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
+    <!-- TRAXEXP003: the resume tests checkpoint real runs and resume them on both surfaces. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
