@@ -22,7 +22,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `docker-compose.yml` | [0005](./docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md), every published port binds `127.0.0.1` because the credentials sit beside it |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-two name `samples`, three of them superseded: executable guards, the
+index lists them by folder. Twenty-three name `samples`, three of them superseded: executable guards, the
 dependency direction, the three test conventions, the canonical train name, the documentation
 lints, test frameworks staying out of shipped libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax
 owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced

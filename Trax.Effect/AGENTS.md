@@ -35,13 +35,14 @@ if your work contradicts one, say so rather than silently overriding it.
 | running a train instance more than once, `AddSingletonTraxRoute`, or how lifecycle hooks are built | [0011](./docs/adr/0011-a-service-train-instance-is-one-run.md), a train instance is one run at a time and never a singleton, and hooks come from the run's scope |
 | overriding `ServiceTrain.Run` or `NewMonad`, or their modifiers | [0009](./docs/adr/0009-a-service-train-does-its-work-in-junctions.md), `Run` and `NewMonad` are sealed so `Junctions()` is the only way a service train does work |
 | `trax.decision.state_hash`, or how long a recorded answer is replayed (`ReplayAnswersFor`) | [0020](./docs/adr/0020-a-recorded-answer-replays-only-while-it-is-fresh.md), an answer replays only into the same state and only while it is younger than the bound, counted from when a decider gave it |
+| `AddJunctionProgress`, or any junction effect that writes while a run is going | [0021](./docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md), a run's tracked writes commit once, when it finishes; a junction effect writes only its own columns, through its own context |
 | `AddJunctionEvents`, `IJunctionEventHandler`, the junction event types, `trax.junction_run`, or `[TraxSensitive]` on a question type | [0019](./docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md), junction events are opt-in, reach junction event handlers only, carry names, times, states and failure classes but never run data, and their rows go with their run |
 | `MapTraxTrainEventHub`, or the SignalR sink's default client payload | [0016](./docs/adr/0016-the-train-event-hub-carries-the-hosts-authorization.md), the hub is mapped with an authorization posture or the host does not start, and the default payload leaves the failure reason out |
 | a state-machine draft's `requestId` replay, or `ISnapshotStore.UpdateWithRequest` | [0013](./docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md), an id replays only for the trigger it recorded, and a request whose outcome was undone fires again |
 | what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Thirty name `effect`, three of them superseded: executable guards, the
+index lists them by folder. Thirty-one name `effect`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,

@@ -21,10 +21,11 @@ if your work contradicts one, say so rather than silently overriding it.
 | `Train.Junctions()`, `DeclaredChain()`, the chain recorder or `ChainVerification` | central `docs/0016`, a chain is a declaration, and the replay has to mirror how the runtime stores and finds values |
 | `Train.NewMonad()` or `ChainRecordedException`, or narrowing anything that shipped public | [0002](./docs/adr/0002-a-shipped-seam-stays-public-and-hidden.md), both stay public and hidden because the published Trax.Effect overrides `NewMonad()` |
 | `FailureClass`, or how a junction carries a failure's class in `TrainExceptionData` | central `docs/0020`, a failure is classified where it happens and the answer is carried |
+| `Parallel`, `Branches`, `BranchesFailedException`, or how `ChainVerification` replays branches | central `docs/0045`, a Parallel step runs a fixed set of branches on copies of Memory, and the join commits |
 | `Decide`, `Switch`, `Gate` or `Scale`, `IDecider`, or how `ChainVerification` replays tracks | central `docs/0040`, a chain declares every track and a decider chooses one per run; the tracks are part of the declaration `docs/0016` describes |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-four name `core`, three of them superseded: executable guards, the
+index lists them by folder. Twenty-five name `core`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the documentation lints, the public API baseline, test frameworks staying out of shipped
 libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax owning its vocabulary, tests owning their

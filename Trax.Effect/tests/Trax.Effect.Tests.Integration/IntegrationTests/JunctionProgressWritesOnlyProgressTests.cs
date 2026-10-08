@@ -21,9 +21,14 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 /// through the run's effect runner, which committed everything the run had tracked so far after
 /// every junction and saved every other effect provider each time; a run's own writes now commit
 /// once, when it finishes.
+///
+/// <para>Enforces <c>docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md</c>.</para>
 /// </summary>
+[Property("adr", "docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md")]
 public class JunctionProgressWritesOnlyProgressTests
 {
+    private const string Adr = "docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md";
+
     [Test]
     public async Task Progress_does_not_save_the_runs_other_effects_after_each_junction()
     {
@@ -41,7 +46,7 @@ public class JunctionProgressWritesOnlyProgressTests
             .Be(
                 withoutProgress,
                 "junction progress writes its own columns; it must not save the run's other "
-                    + "effects once per junction"
+                    + $"effects once per junction ({Adr})"
             );
     }
 

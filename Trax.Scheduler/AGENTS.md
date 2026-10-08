@@ -37,7 +37,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `RemoteRunResponse.PublicMessage`, `RemoteRunException`, or what a remote failure shows a client | central `docs/0028`, the runner offers only a plain `TrainException`'s message, and every remote failure is rebuilt as a `RemoteRunException` carrying it |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Thirty-four name `scheduler`, three of them superseded. Besides the repository-wide conventions and
+index lists them by folder. Thirty-five name `scheduler`, three of them superseded. Besides the repository-wide conventions and
 `0016` to `0020`, `0022` and `0041` (routed above), `0007` (the canonical train name is the
 interface FullName) is the one this folder touches most, since it is the string stored in
 `work_queue.train_name` and the one a remote run puts on the wire. The wire is lenient about
