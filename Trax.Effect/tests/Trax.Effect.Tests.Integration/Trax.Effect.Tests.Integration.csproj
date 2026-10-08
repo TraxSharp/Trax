@@ -8,7 +8,7 @@
     <IsTestProject>true</IsTestProject>
     <!-- TRAXEXP001: these tests run service trains with the experimental Parallel step. -->
     <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
-    <!-- TRAXEXP003: the checkpoint table tests write the experimental checkpoint rows and resume links. -->
+    <!-- TRAXEXP003: the checkpoint tests write and read the experimental checkpoint rows, resume links and options. -->
     <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
@@ -49,6 +49,8 @@
     <ProjectReference Include="../../src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <!-- The checkpoint tests run on every data provider. -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
     <!-- TraxInvariants, checked after every test that uses the shared Postgres. -->
     <ProjectReference Include="../../src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
