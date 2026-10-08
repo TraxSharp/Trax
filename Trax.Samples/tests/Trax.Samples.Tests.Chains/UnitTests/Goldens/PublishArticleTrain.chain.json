@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Auth.Trains.PublishArticleTrain",
+  "input": "PublishArticleInput",
+  "output": "PublishArticleOutput",
+  "nodes": [
+    {
+      "id": "SaveArticleJunction#0",
+      "kind": "Chain",
+      "junction": "SaveArticleJunction",
+      "in": "PublishArticleInput",
+      "out": "PublishArticleOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "PublishArticleOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

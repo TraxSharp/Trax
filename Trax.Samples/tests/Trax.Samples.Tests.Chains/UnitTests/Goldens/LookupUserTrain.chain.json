@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.PersistedOperations.Trains.Users.LookupUser.LookupUserTrain",
+  "input": "LookupUserInput",
+  "output": "UserProfile",
+  "nodes": [
+    {
+      "id": "FetchUserJunction#0",
+      "kind": "Chain",
+      "junction": "FetchUserJunction",
+      "in": "LookupUserInput",
+      "out": "UserProfile",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "UserProfile",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

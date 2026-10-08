@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Bookworm.Trains.Lending.BorrowBook.BorrowBookTrain",
+  "input": "BorrowBookInput",
+  "output": "BorrowBookOutput",
+  "nodes": [
+    {
+      "id": "BorrowBookJunction#0",
+      "kind": "Chain",
+      "junction": "BorrowBookJunction",
+      "in": "BorrowBookInput",
+      "out": "BorrowBookOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "BorrowBookOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

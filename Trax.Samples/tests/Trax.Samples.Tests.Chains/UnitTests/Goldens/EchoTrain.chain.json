@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Auth.Trains.EchoTrain",
+  "input": "EchoInput",
+  "output": "EchoOutput",
+  "nodes": [
+    {
+      "id": "EchoJunction#0",
+      "kind": "Chain",
+      "junction": "EchoJunction",
+      "in": "EchoInput",
+      "out": "EchoOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "EchoOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

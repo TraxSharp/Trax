@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.ContentShield.Trains.ContentReview.LookupModerationResult.LookupModerationResultTrain",
+  "input": "LookupModerationResultInput",
+  "output": "ModerationResult",
+  "nodes": [
+    {
+      "id": "FetchModerationResultJunction#0",
+      "kind": "Chain",
+      "junction": "FetchModerationResultJunction",
+      "in": "LookupModerationResultInput",
+      "out": "ModerationResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ModerationResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

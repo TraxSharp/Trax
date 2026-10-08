@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.Scheduling.Trains.RefreshExchangeRates.RefreshExchangeRatesTrain",
+  "input": "RefreshExchangeRatesInput",
+  "output": "RefreshExchangeRatesOutput",
+  "nodes": [
+    {
+      "id": "FetchRatesJunction#0",
+      "kind": "Chain",
+      "junction": "FetchRatesJunction",
+      "in": "RefreshExchangeRatesInput",
+      "out": "RateReading",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "FlagSpikeJunction#0",
+      "kind": "Chain",
+      "junction": "FlagSpikeJunction",
+      "in": "ValueTuple<RefreshExchangeRatesInput, RateReading>",
+      "out": "RefreshExchangeRatesOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "RefreshExchangeRatesOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

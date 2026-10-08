@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.EnergyHub.Trains.SolarProduction.MonitorSolarProduction.MonitorSolarProductionTrain",
+  "input": "MonitorSolarProductionInput",
+  "output": "MonitorSolarProductionOutput",
+  "nodes": [
+    {
+      "id": "ReadSolarSensorsJunction#0",
+      "kind": "Chain",
+      "junction": "ReadSolarSensorsJunction",
+      "in": "MonitorSolarProductionInput",
+      "out": "MonitorSolarProductionInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "CalculateOutputJunction#0",
+      "kind": "Chain",
+      "junction": "CalculateOutputJunction",
+      "in": "MonitorSolarProductionInput",
+      "out": "MonitorSolarProductionOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "MonitorSolarProductionOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

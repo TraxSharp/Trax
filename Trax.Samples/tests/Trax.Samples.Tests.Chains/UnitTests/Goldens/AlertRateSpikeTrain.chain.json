@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Scheduling.Trains.AlertRateSpike.AlertRateSpikeTrain",
+  "input": "AlertRateSpikeInput",
+  "output": "Unit",
+  "nodes": [
+    {
+      "id": "NotifyTreasuryJunction#0",
+      "kind": "Chain",
+      "junction": "NotifyTreasuryJunction",
+      "in": "AlertRateSpikeInput",
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Scheduling.Trains.RepriceCatalog.RepriceCatalogTrain",
+  "input": "RepriceCatalogInput",
+  "output": "Unit",
+  "nodes": [
+    {
+      "id": "ApplyRatesJunction#0",
+      "kind": "Chain",
+      "junction": "ApplyRatesJunction",
+      "in": "RepriceCatalogInput",
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

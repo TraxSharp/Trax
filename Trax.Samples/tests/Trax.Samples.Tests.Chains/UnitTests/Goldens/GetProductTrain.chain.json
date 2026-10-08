@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.GraphQLClient.InventoryServer.Trains.GetProductTrain",
+  "input": "GetProductInput",
+  "output": "GetProductOutput",
+  "nodes": [
+    {
+      "id": "GetProductJunction#0",
+      "kind": "Chain",
+      "junction": "GetProductJunction",
+      "in": "GetProductInput",
+      "out": "GetProductOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GetProductOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

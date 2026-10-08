@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Auth.Trains.WhoAmITrain",
+  "input": "WhoAmIInput",
+  "output": "WhoAmIOutput",
+  "nodes": [
+    {
+      "id": "DescribeCallerJunction#0",
+      "kind": "Chain",
+      "junction": "DescribeCallerJunction",
+      "in": "WhoAmIInput",
+      "out": "WhoAmIOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "WhoAmIOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

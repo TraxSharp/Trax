@@ -1,0 +1,102 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.Refund.ApproveRefundTrain",
+  "input": "RefundInput",
+  "output": "RefundResult",
+  "nodes": [
+    {
+      "id": "LoadRefundCase#0",
+      "kind": "Chain",
+      "junction": "LoadRefundCase",
+      "in": "RefundInput",
+      "out": "RefundCase",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Decide<YesNoDecision<ApproveRefund>>#0",
+      "kind": "Decide",
+      "junction": "IDecider",
+      "in": "RefundCase",
+      "out": "YesNoDecision<ApproveRefund>",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Gate<ApproveRefund>#0",
+      "kind": "Gate",
+      "junction": null,
+      "in": "YesNoDecision<ApproveRefund>",
+      "out": "TrackTaken<ApproveRefund>",
+      "opaque": false,
+      "tracks": [
+        {
+          "name": "Yes",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Gate<ApproveRefund>#0/Yes/IssuePayment#0",
+              "kind": "Chain",
+              "junction": "IssuePayment",
+              "in": "RefundCase",
+              "out": "RefundOutcome",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "No",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Gate<ApproveRefund>#0/No/DeclineRefund#0",
+              "kind": "Chain",
+              "junction": "DeclineRefund",
+              "in": "RefundCase",
+              "out": "RefundOutcome",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "Unsure",
+          "description": null,
+          "isFallback": true,
+          "nodes": [
+            {
+              "id": "Gate<ApproveRefund>#0/Unsure/QueueForReview#0",
+              "kind": "Chain",
+              "junction": "QueueForReview",
+              "in": "RefundCase",
+              "out": "RefundOutcome",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NotifyCustomer#0",
+      "kind": "Chain",
+      "junction": "NotifyCustomer",
+      "in": "RefundOutcome",
+      "out": "RefundResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "RefundResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.ChatService.Trains.SendMessage.SendMessageTrain",
+  "input": "SendMessageInput",
+  "output": "SendMessageOutput",
+  "nodes": [
+    {
+      "id": "ValidateSenderJunction#0",
+      "kind": "Chain",
+      "junction": "ValidateSenderJunction",
+      "in": "SendMessageInput",
+      "out": "SendMessageInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "PersistMessageJunction#0",
+      "kind": "Chain",
+      "junction": "PersistMessageJunction",
+      "in": "SendMessageInput",
+      "out": "SendMessageOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "SendMessageOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

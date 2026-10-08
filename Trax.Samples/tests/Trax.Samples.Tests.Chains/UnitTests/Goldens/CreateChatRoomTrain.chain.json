@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.ChatService.Trains.CreateChatRoom.CreateChatRoomTrain",
+  "input": "CreateChatRoomInput",
+  "output": "CreateChatRoomOutput",
+  "nodes": [
+    {
+      "id": "ValidateInputJunction#0",
+      "kind": "Chain",
+      "junction": "ValidateInputJunction",
+      "in": "CreateChatRoomInput",
+      "out": "CreateChatRoomInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "PersistRoomJunction#0",
+      "kind": "Chain",
+      "junction": "PersistRoomJunction",
+      "in": "CreateChatRoomInput",
+      "out": "CreateChatRoomOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "CreateChatRoomOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.ContentShield.Trains.Notices.SendViolationNotice.SendViolationNoticeTrain",
+  "input": "SendViolationNoticeInput",
+  "output": "SendViolationNoticeOutput",
+  "nodes": [
+    {
+      "id": "ComposeNoticeJunction#0",
+      "kind": "Chain",
+      "junction": "ComposeNoticeJunction",
+      "in": "SendViolationNoticeInput",
+      "out": "SendViolationNoticeInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "DeliverNoticeJunction#0",
+      "kind": "Chain",
+      "junction": "DeliverNoticeJunction",
+      "in": "SendViolationNoticeInput",
+      "out": "SendViolationNoticeOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "SendViolationNoticeOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

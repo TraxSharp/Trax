@@ -1,0 +1,153 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.Research.ResearchTopicTrain",
+  "input": "ResearchInput",
+  "output": "ResearchReport",
+  "nodes": [
+    {
+      "id": "PlanResearch#0",
+      "kind": "Chain",
+      "junction": "PlanResearch",
+      "in": "ResearchInput",
+      "out": "ResearchBrief",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Decide<ChoiceDecision<Source>>#0",
+      "kind": "Decide",
+      "junction": "IDecider",
+      "in": "ResearchBrief",
+      "out": "ChoiceDecision<Source>",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Switch<Source>#0",
+      "kind": "Switch",
+      "junction": null,
+      "in": "ChoiceDecision<Source>",
+      "out": "TrackTaken<Source>",
+      "opaque": false,
+      "tracks": [
+        {
+          "name": "Web",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Switch<Source>#0/Web/SearchWeb#0",
+              "kind": "Chain",
+              "junction": "SearchWeb",
+              "in": "ResearchBrief",
+              "out": "Findings",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "Papers",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Switch<Source>#0/Papers/SearchPapers#0",
+              "kind": "Chain",
+              "junction": "SearchPapers",
+              "in": "ResearchBrief",
+              "out": "Findings",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "Wiki",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Switch<Source>#0/Wiki/SearchWiki#0",
+              "kind": "Chain",
+              "junction": "SearchWiki",
+              "in": "ResearchBrief",
+              "out": "Findings",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Decide<ScoreDecision<Depth>>#0",
+      "kind": "Decide",
+      "junction": "IDecider",
+      "in": "Findings",
+      "out": "ScoreDecision<Depth>",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Scale<Depth>#0",
+      "kind": "Scale",
+      "junction": null,
+      "in": "ScoreDecision<Depth>",
+      "out": "TrackTaken<Depth>",
+      "opaque": false,
+      "tracks": [
+        {
+          "name": "Skim",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Scale<Depth>#0/Skim/SkimSources#0",
+              "kind": "Chain",
+              "junction": "SkimSources",
+              "in": "Findings",
+              "out": "CheckedFindings",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "CrossCheck",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Scale<Depth>#0/CrossCheck/FetchFullTexts#0",
+              "kind": "Chain",
+              "junction": "FetchFullTexts",
+              "in": "Findings",
+              "out": "CheckedFindings",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Summarize#0",
+      "kind": "Chain",
+      "junction": "Summarize",
+      "in": "CheckedFindings",
+      "out": "ResearchReport",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ResearchReport",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

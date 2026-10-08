@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.GraphQLClient.BillingServer.Trains.GetInvoiceTrain",
+  "input": "GetInvoiceInput",
+  "output": "GetInvoiceOutput",
+  "nodes": [
+    {
+      "id": "GetInvoiceJunction#0",
+      "kind": "Chain",
+      "junction": "GetInvoiceJunction",
+      "in": "GetInvoiceInput",
+      "out": "GetInvoiceOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GetInvoiceOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

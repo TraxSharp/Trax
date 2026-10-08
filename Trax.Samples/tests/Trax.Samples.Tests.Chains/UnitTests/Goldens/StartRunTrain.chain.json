@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.StartRun.StartRunTrain",
+  "input": "StartRunInput",
+  "output": "StartRunOutput",
+  "nodes": [
+    {
+      "id": "ScheduleDemoRun#0",
+      "kind": "Chain",
+      "junction": "ScheduleDemoRun",
+      "in": "StartRunInput",
+      "out": "StartRunOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "StartRunOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

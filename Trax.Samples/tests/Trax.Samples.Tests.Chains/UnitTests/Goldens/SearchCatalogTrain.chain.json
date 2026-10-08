@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Bookworm.Trains.Catalog.SearchCatalog.SearchCatalogTrain",
+  "input": "SearchCatalogInput",
+  "output": "SearchCatalogOutput",
+  "nodes": [
+    {
+      "id": "SearchCatalogJunction#0",
+      "kind": "Chain",
+      "junction": "SearchCatalogJunction",
+      "in": "SearchCatalogInput",
+      "out": "SearchCatalogOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "SearchCatalogOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

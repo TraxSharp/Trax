@@ -1,0 +1,44 @@
+{
+  "train": "Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent.ReviewContentTrain",
+  "input": "ReviewContentInput",
+  "output": "ReviewContentOutput",
+  "nodes": [
+    {
+      "id": "ClassifyContentJunction#0",
+      "kind": "Chain",
+      "junction": "ClassifyContentJunction",
+      "in": "ReviewContentInput",
+      "out": "ReviewContentInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "ScoreContentJunction#0",
+      "kind": "Chain",
+      "junction": "ScoreContentJunction",
+      "in": "ReviewContentInput",
+      "out": "ReviewContentInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "FlagContentJunction#0",
+      "kind": "Chain",
+      "junction": "FlagContentJunction",
+      "in": "ReviewContentInput",
+      "out": "ReviewContentOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ReviewContentOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

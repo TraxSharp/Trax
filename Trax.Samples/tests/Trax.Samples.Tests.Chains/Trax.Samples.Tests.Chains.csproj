@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <!-- Every sample project that defines a train, so each one's declared chain can be read.
+       SampleTrainGraphTests fails when a sample project with a train is missing from this list. -->
+  <ItemGroup>
+    <ProjectReference Include="../../samples/Auth/Trax.Samples.Auth/Trax.Samples.Auth.csproj" />
+    <ProjectReference Include="../../samples/Bookworm/Trax.Samples.Bookworm/Trax.Samples.Bookworm.csproj" />
+    <ProjectReference Include="../../samples/ChatService/Trax.Samples.ChatService/Trax.Samples.ChatService.csproj" />
+    <ProjectReference Include="../../samples/DistributedWorkers/Trax.Samples.EnergyHub/Trax.Samples.EnergyHub.csproj" />
+    <ProjectReference Include="../../samples/EphemeralWorkers/Trax.Samples.ContentShield/Trax.Samples.ContentShield.csproj" />
+    <ProjectReference Include="../../samples/GraphQLClient/Trax.Samples.GraphQLClient.BillingServer/Trax.Samples.GraphQLClient.BillingServer.csproj" />
+    <ProjectReference Include="../../samples/GraphQLClient/Trax.Samples.GraphQLClient.InventoryServer/Trax.Samples.GraphQLClient.InventoryServer.csproj" />
+    <ProjectReference Include="../../samples/PersistedOperations/Trax.Samples.PersistedOperations/Trax.Samples.PersistedOperations.csproj" />
+    <ProjectReference Include="../../samples/Recovery/Trax.Samples.Recovery/Trax.Samples.Recovery.csproj" />
+    <ProjectReference Include="../../samples/Scheduling/Trax.Samples.Scheduling/Trax.Samples.Scheduling.csproj" />
+    <ProjectReference Include="../../samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster/Trax.Samples.SignalRBroadcaster.csproj" />
+    <ProjectReference Include="../../samples/StateMachine/Trax.Samples.StateMachine/Trax.Samples.StateMachine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

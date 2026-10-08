@@ -82,6 +82,12 @@ repository, and the pack stamps the release version into the template.
 `tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs` is the consumer adoption
 path for the shipped guard packages, and has no test bodies by design.
 
+`tests/Trax.Samples.Tests.Chains/` holds a golden of every sample train's declared graph
+(`ChainGraph`), one `UnitTests/Goldens/<TrainName>.chain.json` per train. A change to a train's
+chain fails it and writes `<TrainName>.chain.json.received` beside the golden; review it and
+rename it over the golden. A new sample project with a train needs a reference there, and the
+test says so.
+
 The census is on `tests/Trax.Samples.Tests.Meta/`, the folder the `adr-guard` job passes as
 `--census-root`: every class there whose name ends in `Tests` is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason. A new guard is unclassified until you choose, and

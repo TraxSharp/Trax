@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.DecisionJournal.DecisionJournalTrain",
+  "input": "DecisionJournalInput",
+  "output": "DecisionJournalOutput",
+  "nodes": [
+    {
+      "id": "ReadDecisionJournal#0",
+      "kind": "Chain",
+      "junction": "ReadDecisionJournal",
+      "in": "DecisionJournalInput",
+      "out": "DecisionJournalOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "DecisionJournalOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

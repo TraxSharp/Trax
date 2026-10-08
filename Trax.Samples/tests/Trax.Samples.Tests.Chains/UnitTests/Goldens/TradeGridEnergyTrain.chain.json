@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.EnergyHub.Trains.GridTrading.TradeGridEnergy.TradeGridEnergyTrain",
+  "input": "TradeGridEnergyInput",
+  "output": "TradeGridEnergyOutput",
+  "nodes": [
+    {
+      "id": "CalculateExcessJunction#0",
+      "kind": "Chain",
+      "junction": "CalculateExcessJunction",
+      "in": "TradeGridEnergyInput",
+      "out": "TradeGridEnergyInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "SubmitToUbossJunction#0",
+      "kind": "Chain",
+      "junction": "SubmitToUbossJunction",
+      "in": "TradeGridEnergyInput",
+      "out": "TradeGridEnergyOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "TradeGridEnergyOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}
