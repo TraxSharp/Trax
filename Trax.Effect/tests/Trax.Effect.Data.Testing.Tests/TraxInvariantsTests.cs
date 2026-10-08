@@ -53,7 +53,8 @@ public class TraxInvariantsTests
     [SetUp]
     public Task Clean() =>
         SqlAsync(
-            "DELETE FROM trax.work_queue; DELETE FROM trax.effect_claim; DELETE FROM trax.metadata;"
+            "DELETE FROM trax.snapshot_draft; DELETE FROM trax.work_queue; "
+                + "DELETE FROM trax.effect_claim; DELETE FROM trax.metadata;"
         );
 
     [Test]
@@ -138,6 +139,86 @@ public class TraxInvariantsTests
     }
 
     [Test]
+    public async Task AnInvokeTokenNamingNoRunOfItsInstance_IsReportedWithItsRow()
+    {
+        var queued = Guid.NewGuid();
+        var token = await SeedInvokedEntryAsync(queued, runId: null);
+        await SeedSnapshotAsync(queued, "Building", token);
+
+        var dispatched = Guid.NewGuid();
+        var dispatchedToken = await SeedInvokedEntryAsync(
+            dispatched,
+            await SeedRunAsync("completed")
+        );
+        await SeedSnapshotAsync(dispatched, "Building", dispatchedToken);
+
+        var onlyRun = Guid.NewGuid();
+        var runToken = await SeedInvokedRunAsync(onlyRun);
+        await SeedSnapshotAsync(onlyRun, "Building", runToken);
+
+        var forged = await SeedSnapshotAsync(Guid.NewGuid(), "Building", "no-such-run");
+        var borrowed = await SeedSnapshotAsync(
+            Guid.NewGuid(),
+            "Building",
+            await SeedInvokedEntryAsync(Guid.NewGuid(), runId: null)
+        );
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString);
+
+        violations
+            .Should()
+            .OnlyContain(v => v.Invariant == TraxInvariants.InvokeTokenWithoutRun)
+            .And.Subject.Select(v => v.Id)
+            .Should()
+            .Equal(
+                [forged.ToString(), borrowed.ToString()],
+                "a token is good when its queue entry or, once that is gone, its run names the "
+                    + "instance; one naming no run, or another instance's run, is not"
+            );
+    }
+
+    [Test]
+    public async Task AnInvokingStateWithoutAToken_AndATokenOutsideOne_AreReported()
+    {
+        var invoking = new[] { new InvokingState(Machine, "Building") };
+
+        var live = Guid.NewGuid();
+        await SeedSnapshotAsync(live, "Building", await SeedInvokedEntryAsync(live, null));
+        await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
+        var bare = await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null);
+        var left = Guid.NewGuid();
+        var stale = await SeedSnapshotAsync(left, "Built", await SeedInvokedEntryAsync(left, null));
+        await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, machine: "Other");
+
+        (await TraxInvariants.FindViolationsAsync(ConnectionString))
+            .Should()
+            .BeEmpty("without the machine's invoking states, neither can be told");
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, invoking);
+
+        violations
+            .Should()
+            .BeEquivalentTo(
+                [
+                    new TraxInvariantViolation(
+                        TraxInvariants.InvokingStateWithoutToken,
+                        "trax.snapshot_draft",
+                        bare.ToString(),
+                        $"{Machine} {ReadId(bare)} is in Building, which invokes a train, and holds no invoke token"
+                    ),
+                    new TraxInvariantViolation(
+                        TraxInvariants.InvokeTokenOutsideInvokingState,
+                        "trax.snapshot_draft",
+                        stale.ToString(),
+                        $"{Machine} {left} is in Built and holds {ReadToken(stale)}, but that state invokes nothing"
+                    ),
+                ],
+                o => o.WithStrictOrdering(),
+                "a machine the caller did not describe is not checked"
+            );
+    }
+
+    [Test]
     public async Task AssertConsistent_ReportsEveryViolation_NotOnlyTheFirst()
     {
         var first = await SeedRunAsync("in_progress");
@@ -205,6 +286,85 @@ public class TraxInvariantsTests
         command.Parameters.AddWithValue("external", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("state", state);
         return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    private const string Machine = "Invariants.Machine";
+
+    private static readonly Dictionary<long, (Guid Id, string? Token)> Snapshots = [];
+
+    private static Guid ReadId(long row) => Snapshots[row].Id;
+
+    private static string? ReadToken(long row) => Snapshots[row].Token;
+
+    private static async Task<long> SeedSnapshotAsync(
+        Guid id,
+        string state,
+        string? token,
+        string machine = Machine
+    )
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO trax.snapshot_draft
+                (id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at, invoke_token)
+            VALUES (@id, NULL, 'system', @machine, 1, @state, gen_random_uuid(), now(), @token)
+            RETURNING row_id
+            """;
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("machine", machine);
+        command.Parameters.AddWithValue("state", state);
+        command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
+        var row = (long)(await command.ExecuteScalarAsync())!;
+        Snapshots[row] = (id, token);
+        return row;
+    }
+
+    // A queue entry an invoking state wrote for instance <paramref name="instance"/>; returns its
+    // external id, which is the instance's token.
+    private static async Task<string> SeedInvokedEntryAsync(Guid instance, long? runId)
+    {
+        var external = Guid.NewGuid().ToString("N");
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO trax.work_queue
+                (external_id, train_name, status, metadata_id,
+                 invoking_machine, invoking_instance_id, invoking_owner_kind)
+            VALUES (@external, 'Invariants.Train', @status::trax.work_queue_status, @run,
+                    @machine, @instance, 'system')
+            """;
+        command.Parameters.AddWithValue("external", external);
+        command.Parameters.AddWithValue("status", runId is null ? "queued" : "dispatched");
+        command.Parameters.AddWithValue("run", (object?)runId ?? DBNull.Value);
+        command.Parameters.AddWithValue("machine", Machine);
+        command.Parameters.AddWithValue("instance", instance);
+        await command.ExecuteNonQueryAsync();
+        return external;
+    }
+
+    // A run of instance <paramref name="instance"/> whose queue entry has since been deleted;
+    // returns its external id, which is the instance's token.
+    private static async Task<string> SeedInvokedRunAsync(Guid instance)
+    {
+        var external = Guid.NewGuid().ToString("N");
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO trax.metadata
+                (external_id, name, train_state, start_time,
+                 invoking_machine, invoking_instance_id, invoking_owner_kind)
+            VALUES (@external, 'Invariants.Train', 'completed'::trax.train_state, now(),
+                    @machine, @instance, 'system')
+            """;
+        command.Parameters.AddWithValue("external", external);
+        command.Parameters.AddWithValue("machine", Machine);
+        command.Parameters.AddWithValue("instance", instance);
+        await command.ExecuteNonQueryAsync();
+        return external;
     }
 
     private static async Task SeedClaimAsync(string key, string? receipt)

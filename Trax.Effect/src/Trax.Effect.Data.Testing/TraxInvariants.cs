@@ -5,15 +5,19 @@ namespace Trax.Effect.Data.Testing;
 
 /// <summary>
 /// Checks that a Trax Postgres database is consistent once every host using it has stopped: no run
-/// is still in progress, no state-machine effect is still claimed in flight, and every dispatched
-/// queue entry has its run. While a host runs, each of these is a normal transient state; once they
-/// have all stopped, each one is work that was started and then lost.
+/// is still in progress, no state-machine effect is still claimed in flight, every dispatched
+/// queue entry has its run, and every machine instance's invoke token names a run that instance
+/// queued. While a host runs, the first three are normal transient states; once they have all
+/// stopped, each one is work that was started and then lost. The last holds at every moment.
 /// </summary>
 /// <remarks>
 /// <para>Call it from a test fixture's teardown, after the hosts the test started are disposed. A
 /// test that leaves one of these states on purpose (a crash simulation, an abandoned claim) carries
 /// <see cref="LeavesStuckRunsAttribute"/>, and the fixture skips the check for it with
 /// <see cref="IsExempt"/>.</para>
+/// <para>The database does not know which states invoke a train, so whether an instance in an
+/// invoking state holds a token, and only one in such a state does, is checked only for the
+/// machines whose invoking states the caller passes as <see cref="InvokingState"/>s.</para>
 /// <para>It reads the <c>trax</c> schema the shipped migrations create, and only Postgres.</para>
 /// </remarks>
 public static class TraxInvariants
@@ -28,15 +32,53 @@ public static class TraxInvariants
     public const string DispatchedWithoutRun = "dispatched-without-run";
 
     /// <summary>
+    /// A <c>trax.snapshot_draft</c> row holds an invoke token that names no run the instance
+    /// queued: neither a queue entry nor a run with that id carries the instance as its invoker.
+    /// </summary>
+    public const string InvokeTokenWithoutRun = "invoke-token-without-run";
+
+    /// <summary>
+    /// A <c>trax.snapshot_draft</c> row is in a state that invokes a train and holds no invoke
+    /// token, so no outcome can ever move it on.
+    /// </summary>
+    public const string InvokingStateWithoutToken = "invoking-state-without-token";
+
+    /// <summary>
+    /// A <c>trax.snapshot_draft</c> row holds an invoke token in a state that invokes nothing:
+    /// leaving the invoking state did not clear it.
+    /// </summary>
+    public const string InvokeTokenOutsideInvokingState = "invoke-token-outside-invoking-state";
+
+    /// <summary>
     /// Every violation in the database at <paramref name="connectionString"/>, in a stable order:
     /// by invariant, then by id.
     /// </summary>
+    public static Task<IReadOnlyList<TraxInvariantViolation>> FindViolationsAsync(
+        string connectionString,
+        CancellationToken cancellationToken = default
+    ) => FindViolationsAsync(connectionString, [], cancellationToken);
+
+    /// <summary>
+    /// Every violation in the database at <paramref name="connectionString"/>, in a stable order:
+    /// by invariant, then by id. Instances of a machine named in <paramref name="invokingStates"/>
+    /// are also checked to hold a token exactly when they are in one of its invoking states.
+    /// </summary>
+    /// <param name="connectionString">The database to check.</param>
+    /// <param name="invokingStates">
+    /// Every state that invokes a train, for each machine to check. A machine with no entry here
+    /// is checked only for tokens that name no run.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the reads.</param>
     public static async Task<IReadOnlyList<TraxInvariantViolation>> FindViolationsAsync(
         string connectionString,
+        IEnumerable<InvokingState> invokingStates,
         CancellationToken cancellationToken = default
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ArgumentNullException.ThrowIfNull(invokingStates);
+
+        var invoking = invokingStates.Distinct().ToList();
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -111,6 +153,95 @@ public static class TraxInvariants
             )
         );
 
+        // Entering an invoking state writes the token and the queue entry that carries the
+        // instance as its invoker in one transaction, and the dispatcher copies the invoker onto
+        // the run. A token with neither was set without its run, or outlived it.
+        violations.AddRange(
+            await ReadAsync(
+                connection,
+                """
+                SELECT s.row_id::text, s.machine || ' ' || s.id::text || ' in ' || s.state || ' holds ' || s.invoke_token
+                FROM trax.snapshot_draft s
+                WHERE s.invoke_token IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM trax.work_queue w
+                      WHERE w.external_id = s.invoke_token
+                        AND w.invoking_machine = s.machine
+                        AND w.invoking_instance_id = s.id)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM trax.metadata m
+                      WHERE trim(m.external_id) = s.invoke_token
+                        AND m.invoking_machine = s.machine
+                        AND m.invoking_instance_id = s.id)
+                ORDER BY s.row_id
+                """,
+                (id, what) =>
+                    new TraxInvariantViolation(
+                        InvokeTokenWithoutRun,
+                        "trax.snapshot_draft",
+                        id,
+                        $"{what}, which names no run this instance queued"
+                    ),
+                cancellationToken
+            )
+        );
+
+        if (invoking.Count > 0)
+        {
+            var machines = invoking.Select(s => s.Machine).Distinct().ToArray();
+            var pairs = invoking.Select(s => s.Machine + "\n" + s.State).ToArray();
+
+            // The token is set as the state is entered and cleared as it is left, in the write
+            // that moves the instance, so the two always agree.
+            violations.AddRange(
+                await ReadAsync(
+                    connection,
+                    """
+                    SELECT s.row_id::text, s.machine || ' ' || s.id::text || ' is in ' || s.state
+                    FROM trax.snapshot_draft s
+                    WHERE s.machine = ANY(@machines)
+                      AND s.invoke_token IS NULL
+                      AND s.machine || E'\n' || s.state = ANY(@pairs)
+                    ORDER BY s.row_id
+                    """,
+                    (id, what) =>
+                        new TraxInvariantViolation(
+                            InvokingStateWithoutToken,
+                            "trax.snapshot_draft",
+                            id,
+                            $"{what}, which invokes a train, and holds no invoke token"
+                        ),
+                    cancellationToken,
+                    ("machines", machines),
+                    ("pairs", pairs)
+                )
+            );
+
+            violations.AddRange(
+                await ReadAsync(
+                    connection,
+                    """
+                    SELECT s.row_id::text, s.machine || ' ' || s.id::text || ' is in ' || s.state || ' and holds ' || s.invoke_token
+                    FROM trax.snapshot_draft s
+                    WHERE s.machine = ANY(@machines)
+                      AND s.invoke_token IS NOT NULL
+                      AND NOT (s.machine || E'\n' || s.state = ANY(@pairs))
+                    ORDER BY s.row_id
+                    """,
+                    (id, what) =>
+                        new TraxInvariantViolation(
+                            InvokeTokenOutsideInvokingState,
+                            "trax.snapshot_draft",
+                            id,
+                            $"{what}, but that state invokes nothing"
+                        ),
+                    cancellationToken,
+                    ("machines", machines),
+                    ("pairs", pairs)
+                )
+            );
+        }
+
         return violations;
     }
 
@@ -119,12 +250,27 @@ public static class TraxInvariants
     /// every one with its table and id rather than stopping at the first.
     /// </summary>
     /// <exception cref="InvalidOperationException">The database is not consistent.</exception>
+    public static Task AssertConsistentAsync(
+        string connectionString,
+        CancellationToken cancellationToken = default
+    ) => AssertConsistentAsync(connectionString, [], cancellationToken);
+
+    /// <summary>
+    /// Throws when the database at <paramref name="connectionString"/> has any violation, checking
+    /// the instances of the machines in <paramref name="invokingStates"/> against those states too.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The database is not consistent.</exception>
     public static async Task AssertConsistentAsync(
         string connectionString,
+        IEnumerable<InvokingState> invokingStates,
         CancellationToken cancellationToken = default
     )
     {
-        var violations = await FindViolationsAsync(connectionString, cancellationToken);
+        var violations = await FindViolationsAsync(
+            connectionString,
+            invokingStates,
+            cancellationToken
+        );
         if (violations.Count > 0)
             throw new InvalidOperationException(Describe(violations));
     }
@@ -169,11 +315,14 @@ public static class TraxInvariants
         NpgsqlConnection connection,
         string sql,
         Func<string, string, TraxInvariantViolation> violation,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        params (string Name, string[] Value)[] parameters
     )
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+        foreach (var (name, value) in parameters)
+            command.Parameters.AddWithValue(name, value);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var found = new List<TraxInvariantViolation>();
@@ -184,10 +333,15 @@ public static class TraxInvariants
     }
 }
 
+/// <summary>A state of a machine that invokes a train, as <see cref="TraxInvariants"/> checks it.</summary>
+/// <param name="Machine">The machine's name, as stored in <c>trax.snapshot_draft.machine</c>.</param>
+/// <param name="State">The state's name, as stored in <c>trax.snapshot_draft.state</c>.</param>
+public sealed record InvokingState(string Machine, string State);
+
 /// <summary>One row that breaks one of <see cref="TraxInvariants"/>' checks.</summary>
 /// <param name="Invariant">Which check, one of the <see cref="TraxInvariants"/> constants.</param>
 /// <param name="Table">The table the row is in, schema-qualified.</param>
-/// <param name="Id">The row's id: the run or queue entry id, or the effect key.</param>
+/// <param name="Id">The row's id: the run, queue entry or snapshot row id, or the effect key.</param>
 /// <param name="Detail">What is wrong with the row, in a sentence.</param>
 public sealed record TraxInvariantViolation(
     string Invariant,
