@@ -303,6 +303,7 @@ namespace Trax.Api.DTOs
         public string? Answer { get; init; }
         public bool AnswerWithheld { get; init; }
         public int? Attempt { get; init; }
+        public string? BranchPath { get; init; }
         public double? Confidence { get; init; }
         public string? Decider { get; init; }
         public double? DurationMs { get; init; }

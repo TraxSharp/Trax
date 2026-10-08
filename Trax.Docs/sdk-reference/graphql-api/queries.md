@@ -842,12 +842,18 @@ names it: a junction carries its own node's id, a question the id of the `Decide
 it, a route the id of its routing step. It is null for a step recorded before node ids were, and
 wherever the step's name is withheld, because the id names the track the step sits on.
 
+`branchPath` is the path of the `Parallel` branch the step ran in, as in `Parallel#0/cocitation`,
+or null outside any branch. Branches run side by side, so their steps interleave by position; group
+them by `branchPath` to read one branch on its own. It is withheld wherever the step's name is, for
+the same reason as `nodeId`: a branch inside a track names the track.
+
 ---
 
 ### declaredChain
 
 The declared chain of a registered train as a graph: every step in the order the chain declares it,
-each routing step's tracks with their own steps, and a hash that changes whenever the chain does.
+each routing step's tracks and each `Parallel` step's branches with their own steps, and a hash that
+changes whenever the chain does.
 Nothing runs to read it; see [ChainGraph](/docs/sdk-reference/train-methods/chain-graph).
 
 ```graphql
@@ -881,9 +887,14 @@ query {
 read outside a request (it needs a dependency only a request supplies). Only registered trains are
 looked up, by name, so no name a caller sends makes the host load a type. `kind` is a
 `ChainStepKind` (`CHAIN`, `I_CHAIN`, `SHORT_CIRCUIT`, `EXTRACT`, `RESOLVE`, `SEED`, `DECIDE`,
-`SWITCH`, `GATE`, `SCALE`), and `opaque` is true for a step whose junction is decided only at run
+`SWITCH`, `GATE`, `SCALE`, `PARALLEL`), and `opaque` is true for a step whose junction is decided only at run
 time. A node's `id` names the step and the routing step and track it sits in, as in
 `Switch<Lane>#0/Fast/Ship#0`, and is what a recorded step's `nodeId` refers to.
+
+A `PARALLEL` step's `tracks` are its branches, one per `Branch` in declared order, with
+`isFallback` false and no `description`. Unlike a routing step's tracks, every branch runs. A step
+inside a branch has the branch in its id, as in `Parallel#0/cocitation/ScoreCoCitation#0`, and a
+`Parallel` or routing step inside a branch nests the same way.
 
 The graph names the train's types, so it answers to the operations gate and nothing outside it.
 
@@ -892,7 +903,8 @@ The graph names the train's types, so it answers to the operations gate and noth
 ### runGraph
 
 One execution drawn on its train's declared chain: each node with the steps the run recorded for it
-and where it stands, the track each routing step took, and the steps that match no node. It reads
+and where it stands, the track each routing step took, each `Parallel` step's branches, and the
+steps that match no node. It reads
 the run's first 500 steps through `JunctionRunQueries.ForRun`, as [`junctionRuns`](#junctionruns)
 does, and places them by `nodeId` through `RunGraphs.Match`, which the dashboard's run graph calls
 too.
@@ -935,7 +947,17 @@ query {
 | `WITHHELD` | It comes after a route whose answer is withheld, so the steps recorded there name no node |
 
 `trackTaken` is the route's recorded answer, or the one track holding recorded steps when the
-answer is missing. The graph is the chain as the host declares it now, so a step recorded before
+answer is missing.
+
+A `PARALLEL` node runs every branch, so its `tracks` are its branches, none is `SKIPPED` for
+another having run, and each branch's nodes stand as the run recorded them. Every branch is `taken`
+once the step has started, and `trackTaken` is always null. The step records nothing of its own, so
+its `state` is read from its branches: `FAILED` when any branch failed, `CANCELLED` when one was
+stopped (a sibling's failure cancels the others, as does cancelling the run), `IN_PROGRESS` while
+any branch has a step running or still to reach, `COMPLETED` once every branch has finished, and
+`NOT_REACHED` when no branch has started. A route whose answer is withheld inside one branch
+withholds that branch's later nodes and every node after the join, but not the other branches,
+which ran on their own. The graph is the chain as the host declares it now, so a step recorded before
 node ids were, after a withheld route, or for a node the chain no longer declares, is listed in
 `unmatchedSteps` rather than dropped. `hasGraph` is false when the host has no graph for the train;
 `nodes` is then empty and every step is unmatched. `moreSteps` says the run recorded more than 500

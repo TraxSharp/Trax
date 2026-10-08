@@ -73,6 +73,17 @@ public sealed record JunctionStep(
     /// </remarks>
     public string? NodeId { get; init; }
 
+    /// <summary>
+    /// The path of the <c>Parallel</c> branch the step ran in, such as
+    /// <c>Parallel#0/cocitation</c>, or null for a step outside any branch. Withheld wherever the
+    /// step's name is, as <see cref="NodeId"/> is: a branch inside a track names the track.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="NodeId"/> already starts with the branch path, so a step is placed on its node
+    /// without it; it is here so a reader of the timeline can group a run's steps by branch.
+    /// </remarks>
+    public string? BranchPath { get; init; }
+
     /// <summary>What a withheld name reads as.</summary>
     internal const string WithheldName = JunctionEventPayload.WithheldName;
 
@@ -83,6 +94,7 @@ public sealed record JunctionStep(
             Name = WithheldName,
             NameWithheld = true,
             NodeId = null,
+            BranchPath = null,
         };
 
     /// <summary>
@@ -162,5 +174,6 @@ public sealed record JunctionStep(
         {
             // A withheld name keeps its node id withheld too: the id names the track.
             NodeId = row.NameWithheld ? null : row.NodeId,
+            BranchPath = null, // mapped from row.NameWithheld ? null : row.BranchPath once JunctionRun carries it
         };
 }

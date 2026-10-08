@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
@@ -15,17 +16,21 @@ using Trax.Api.Auth.ApiKey;
 using Trax.Api.DTOs;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.Services.Runs;
 using Trax.Core.Decisions;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Extensions;
+using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Mediator.Extensions;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Api.Tests.AuthE2E;
@@ -591,6 +596,183 @@ public class JunctionEventsE2ETests
 
     #endregion
 
+    #region Parallel
+
+    private const string Fork = "Parallel#0";
+    private const string NestedFork = "Parallel#0/right/Parallel#0";
+
+    private static string DeclaredParallelQuery(string train) =>
+        $"{{ operations {{ declaredChain(train: \"{train}\") {{ nodes {{ id kind tracks {{ name isFallback "
+        + "nodes { id kind tracks { name nodes { id kind } } } } } } } }";
+
+    // Deep enough for a Parallel inside a branch: step, branch, step, branch, step.
+    private static string ParallelRunGraphQuery(long metadataId) =>
+        $"{{ operations {{ runGraph(metadataId: {metadataId}) {{ unmatchedSteps {{ position }} "
+        + $"nodes {{ {ParallelNodeFields} tracks {{ name taken nodes {{ {ParallelNodeFields} "
+        + $"tracks {{ name taken nodes {{ {ParallelNodeFields} tracks {{ name }} }} }} }} }} }} }} }} }}";
+
+    private const string ParallelNodeFields = "id kind state trackTaken";
+
+    [Test]
+    public async Task DeclaredChain_OfAParallelTrain_HasTheStep_WithEveryBranchAsATrack()
+    {
+        using var doc = await PostAsync(
+            DeclaredParallelQuery(typeof(IParallelMarkerTrain).FullName!),
+            AdminKey
+        );
+        doc.RootElement.TryGetProperty("errors", out var errors)
+            .Should()
+            .BeFalse(errors.ValueKind == JsonValueKind.Undefined ? "" : errors.GetRawText());
+        var nodes = doc
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("declaredChain")
+            .GetProperty("nodes");
+
+        var fork = nodes.EnumerateArray().Single(n => n.GetProperty("id").GetString() == Fork);
+        fork.GetProperty("kind").GetString().Should().Be("PARALLEL");
+        var branches = fork.GetProperty("tracks").EnumerateArray().ToList();
+        branches.Select(b => b.GetProperty("name").GetString()).Should().Equal("left", "right");
+        branches.Should().OnlyContain(b => !b.GetProperty("isFallback").GetBoolean());
+        branches[0]
+            .GetProperty("nodes")
+            .EnumerateArray()
+            .Select(n => n.GetProperty("id").GetString())
+            .Should()
+            .Equal($"{Fork}/left/{nameof(ScoreLeft)}#0");
+
+        var nested = branches[1].GetProperty("nodes")[1];
+        nested.GetProperty("id").GetString().Should().Be(NestedFork);
+        nested.GetProperty("kind").GetString().Should().Be("PARALLEL");
+        nested
+            .GetProperty("tracks")
+            .EnumerateArray()
+            .Select(b => b.GetProperty("nodes")[0].GetProperty("id").GetString())
+            .Should()
+            .Equal($"{NestedFork}/x/{nameof(CountX)}#0", $"{NestedFork}/y/{nameof(CountY)}#0");
+    }
+
+    [TestCase(false, "COMPLETED")]
+    [TestCase(true, "FAILED")]
+    public async Task RunGraph_OfAParallelRun_ShowsEachBranch_AsTheDashboardDoes(
+        bool fail,
+        string forkState
+    )
+    {
+        await using var run = await StartRunAsync<IParallelMarkerTrain>(fail);
+        run.Release();
+        await run.Finished;
+        var rows = await StableStepsAsync(run.MetadataId, fail ? 2 : 6);
+
+        using var doc = await PostAsync(ParallelRunGraphQuery(run.MetadataId), AdminKey);
+        doc.RootElement.TryGetProperty("errors", out var errors)
+            .Should()
+            .BeFalse(errors.ValueKind == JsonValueKind.Undefined ? "" : errors.GetRawText());
+        var graph = doc
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("runGraph");
+
+        // The dashboard's run page places the steps it reads through RunGraphs.Match, against the
+        // graph the host's registry holds: the same read, done its way, must agree node for node.
+        var train = typeof(IParallelMarkerTrain).FullName!;
+        var dashboard = RunGraphs.Match(
+            run.MetadataId,
+            train,
+            _host.Services.GetRequiredService<ITrainChainGraphs>().Find(train),
+            rows
+        );
+        NodeStates(graph.GetProperty("nodes"))
+            .Should()
+            .Equal(DashboardStates(dashboard.Nodes), "the API and the dashboard share one read");
+        graph.GetProperty("unmatchedSteps").GetArrayLength().Should().Be(0);
+
+        var fork = graph
+            .GetProperty("nodes")
+            .EnumerateArray()
+            .Single(n => n.GetProperty("id").GetString() == Fork);
+        fork.GetProperty("state").GetString().Should().Be(forkState);
+        fork.GetProperty("trackTaken").ValueKind.Should().Be(JsonValueKind.Null);
+        fork.GetProperty("tracks")
+            .EnumerateArray()
+            .Should()
+            .OnlyContain(b => b.GetProperty("taken").GetBoolean(), "every branch runs");
+
+        var states = NodeStates(graph.GetProperty("nodes")).ToDictionary(s => s.Id, s => s.State);
+        states[$"{Fork}/left/{nameof(ScoreLeft)}#0"].Should().Be(fail ? "FAILED" : "COMPLETED");
+        states[$"{nameof(JoinScores)}#0"].Should().Be(fail ? "NOT_REACHED" : "COMPLETED");
+        if (!fail)
+            states[NestedFork].Should().Be("COMPLETED");
+    }
+
+    /// <summary>
+    /// The run's steps as the dashboard reads them, once the writer has caught up: at least
+    /// <paramref name="atLeast"/> of them, none in progress, and the same on two reads in a row.
+    /// </summary>
+    private async Task<List<JunctionStep>> StableStepsAsync(long metadataId, int atLeast)
+    {
+        var factory = _host.Services.GetRequiredService<IDataContextProviderFactory>();
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        List<JunctionStep>? last = null;
+        while (true)
+        {
+            using var context = await factory.CreateDbContextAsync(default);
+            var steps = (await context.JunctionRuns.AsNoTracking().ForRun(metadataId).ToListAsync())
+                .Select(JunctionStep.From)
+                .ToList();
+
+            var settled =
+                steps.Count >= atLeast && steps.All(s => s.State != JunctionRunState.InProgress);
+            if (
+                settled
+                && last is not null
+                && steps
+                    .Select(s => (s.Position, s.State))
+                    .SequenceEqual(last.Select(s => (s.Position, s.State)))
+            )
+                return steps;
+            last = settled ? steps : null;
+
+            if (DateTime.UtcNow > deadline)
+                Assert.Fail($"The steps of run {metadataId} were not recorded in time.");
+
+            // allowed-delay: polls the background writer, bounded by the 15s deadline above.
+            await Task.Delay(200);
+        }
+    }
+
+    private static IEnumerable<(string Id, string State)> NodeStates(JsonElement nodes) =>
+        nodes
+            .EnumerateArray()
+            .SelectMany(n =>
+                new[]
+                {
+                    (n.GetProperty("id").GetString()!, n.GetProperty("state").GetString()!),
+                }.Concat(
+                    n.GetProperty("tracks")
+                        .EnumerateArray()
+                        .SelectMany(t => NodeStates(t.GetProperty("nodes")))
+                )
+            );
+
+    // The dashboard writes a node's state as the enum's name; the schema as its GraphQL value.
+    private static IEnumerable<(string Id, string State)> DashboardStates(
+        IEnumerable<RunGraphNode> nodes
+    ) =>
+        nodes.SelectMany(n =>
+            new[] { (n.Id, GraphQLName(n.State)) }.Concat(
+                n.Tracks.SelectMany(t => DashboardStates(t.Nodes))
+            )
+        );
+
+    private static string GraphQLName(RunNodeState state) =>
+        string.Concat(
+                state.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? $"_{c}" : $"{c}")
+            )
+            .ToUpperInvariant();
+
+    #endregion
+
     #region Helpers
 
     private const string Withheld = JunctionStep.WithheldName;
@@ -697,7 +879,7 @@ public class JunctionEventsE2ETests
             {
                 await train.Run(new MarkerInput(key, Marker, fail));
             }
-            catch (InvalidOperationException) when (fail)
+            catch (Exception) when (fail)
             {
                 // The failing run fails by design.
             }

@@ -71,5 +71,11 @@ internal sealed class JunctionStepGraphType : ObjectType<JunctionStep>
                     + "it. Null for a step recorded before node ids were, and wherever the step's "
                     + "name is withheld, since the id names the track."
             );
+        descriptor
+            .Field(s => s.BranchPath)
+            .Description(
+                "The path of the Parallel branch the step ran in, such as Parallel#0/cocitation, "
+                    + "or null outside any branch. Withheld wherever the step's name is."
+            );
     }
 }

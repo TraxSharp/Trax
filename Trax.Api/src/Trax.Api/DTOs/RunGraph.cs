@@ -48,10 +48,19 @@ public sealed record RunGraph(
 /// <param name="TrackTaken">
 /// For a routing step, the track the run took: the answer its route recorded, or the one track
 /// holding steps the run recorded when the answer is withheld. Null when it took none or it cannot
-/// be told.
+/// be told, and always null for a <c>Parallel</c> step, which runs every branch.
 /// </param>
 /// <param name="Steps">The run's steps recorded for this node, in position order.</param>
-/// <param name="Tracks">The tracks of a routing step, in declared order; empty for any other step.</param>
+/// <param name="Tracks">
+/// The tracks of a routing step, or the branches of a <c>Parallel</c> step, in declared order;
+/// empty for any other step.
+/// </param>
+/// <remarks>
+/// A <c>Parallel</c> step records no step of its own, so its <paramref name="State"/> is read from
+/// its branches: failed when any branch failed, cancelled when one was stopped (by a sibling's
+/// failure or by the run's cancel), in progress while any branch has a node running or still to
+/// reach, completed once every branch has finished, and not reached when none has started.
+/// </remarks>
 public sealed record RunGraphNode(
     string Id,
     ChainStepKind Kind,
@@ -66,11 +75,16 @@ public sealed record RunGraphNode(
     IReadOnlyList<RunGraphTrack> Tracks
 );
 
-/// <summary>One track of a routing node in a <see cref="RunGraph"/>.</summary>
-/// <param name="Name">The track's name.</param>
-/// <param name="Description">What the track is for, as offered to the decider.</param>
-/// <param name="IsFallback">True for the <c>Otherwise</c> or <c>Unsure</c> track.</param>
-/// <param name="Taken">True when the run took this track.</param>
+/// <summary>
+/// One track of a routing node, or one branch of a <c>Parallel</c> node, in a <see cref="RunGraph"/>.
+/// </summary>
+/// <param name="Name">The track's or branch's name.</param>
+/// <param name="Description">What the track is for, as offered to the decider; null for a branch.</param>
+/// <param name="IsFallback">True for the <c>Otherwise</c> or <c>Unsure</c> track; never for a branch.</param>
+/// <param name="Taken">
+/// True when the run took this track. Every branch of a <c>Parallel</c> step runs, so each is taken
+/// once the step has started.
+/// </param>
 /// <param name="Nodes">The track's nodes, in declared order.</param>
 public sealed record RunGraphTrack(
     string Name,
@@ -98,7 +112,10 @@ public enum RunNodeState
     /// <summary>A step recorded for it stopped because the run was asked to cancel.</summary>
     Cancelled,
 
-    /// <summary>It sits on a track the run did not take.</summary>
+    /// <summary>
+    /// It sits on a track the run did not take. A branch of a <c>Parallel</c> step is never passed
+    /// over, so a node there is skipped only when the step itself sits on such a track.
+    /// </summary>
     Skipped,
 
     /// <summary>

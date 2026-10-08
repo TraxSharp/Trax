@@ -63,7 +63,11 @@ internal sealed class ChainGraphNodeType : ObjectType<ChainGraphNode>
             .Description("True when what runs is decided only at run time.");
         descriptor
             .Field(n => n.Tracks)
-            .Type<NonNullType<ListType<NonNullType<ChainGraphTrackType>>>>();
+            .Type<NonNullType<ListType<NonNullType<ChainGraphTrackType>>>>()
+            .Description(
+                "A routing step's tracks, of which a run takes one, or a PARALLEL step's "
+                    + "branches, which all run side by side. Empty for any other step."
+            );
     }
 }
 
@@ -139,15 +143,30 @@ internal sealed class RunGraphNodeType : ObjectType<RunGraphNode>
         descriptor.Field(n => n.In);
         descriptor.Field(n => n.Out);
         descriptor.Field(n => n.Opaque);
-        descriptor.Field(n => n.State);
+        descriptor
+            .Field(n => n.State)
+            .Description(
+                "Where the node stands in this run. A PARALLEL step records nothing itself: it is "
+                    + "FAILED when any branch failed, CANCELLED when one was stopped, IN_PROGRESS "
+                    + "while any branch is still going, and COMPLETED once every branch has finished."
+            );
         descriptor.Field(n => n.Replayed);
-        descriptor.Field(n => n.TrackTaken);
+        descriptor
+            .Field(n => n.TrackTaken)
+            .Description(
+                "The track a routing step took, or null when it took none or it cannot be told. "
+                    + "Always null for a PARALLEL step, which runs every branch."
+            );
         descriptor
             .Field(n => n.Steps)
             .Type<NonNullType<ListType<NonNullType<JunctionStepGraphType>>>>();
         descriptor
             .Field(n => n.Tracks)
-            .Type<NonNullType<ListType<NonNullType<RunGraphTrackType>>>>();
+            .Type<NonNullType<ListType<NonNullType<RunGraphTrackType>>>>()
+            .Description(
+                "A routing step's tracks, or a PARALLEL step's branches, in declared order. "
+                    + "Empty for any other step."
+            );
     }
 }
 
@@ -163,7 +182,12 @@ internal sealed class RunGraphTrackType : ObjectType<RunGraphTrack>
         descriptor.Field(t => t.Name);
         descriptor.Field(t => t.Description);
         descriptor.Field(t => t.IsFallback);
-        descriptor.Field(t => t.Taken);
+        descriptor
+            .Field(t => t.Taken)
+            .Description(
+                "True when the run took this track. Every branch of a PARALLEL step is taken once "
+                    + "the step has started."
+            );
         descriptor.Field(t => t.Nodes).Type<NonNullType<ListType<NonNullType<RunGraphNodeType>>>>();
     }
 }

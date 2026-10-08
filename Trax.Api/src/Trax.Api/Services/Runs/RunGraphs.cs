@@ -142,6 +142,9 @@ public static class RunGraphs
         bool skipped
     )
     {
+        if (node.Kind == ChainStepKind.Parallel)
+            return OverlayParallel(node, byNode, walk, skipped);
+
         IReadOnlyList<JunctionStep> steps = byNode.TryGetValue(node.Id, out var matched)
             ? matched
             : [];
@@ -193,6 +196,113 @@ public static class RunGraphs
             tracks
         );
     }
+
+    /// <summary>
+    /// A <c>Parallel</c> step: unlike a routing step's tracks, every branch runs, so none is passed
+    /// over and each branch's nodes stand as the run recorded them. The step records nothing of its
+    /// own, so where it stands is read from its branches.
+    /// </summary>
+    /// <remarks>
+    /// Each branch is walked on its own: a withheld route inside one branch withholds that branch's
+    /// later nodes, which is the path its steps' withheld ids came from, and not its siblings'.
+    /// Past the join every branch has run, so the walk after the step is withheld when any branch's
+    /// was.
+    /// </remarks>
+    private static RunGraphNode OverlayParallel(
+        ChainGraphNode node,
+        Dictionary<string, List<JunctionStep>> byNode,
+        Walk walk,
+        bool skipped
+    )
+    {
+        IReadOnlyList<JunctionStep> steps = byNode.TryGetValue(node.Id, out var matched)
+            ? matched
+            : [];
+
+        var withheldBefore = walk.Withheld;
+        var branches = new List<(ChainGraphTrack Branch, List<RunGraphNode> Nodes)>();
+        foreach (var branch in node.Tracks)
+        {
+            var path = new Walk { Withheld = withheldBefore };
+            branches.Add((branch, Overlay(branch.Nodes, byNode, path, skipped)));
+            walk.Withheld |= path.Withheld;
+        }
+
+        var state = skipped
+            ? RunNodeState.Skipped
+            : ParallelStateOf(steps, branches.Select(b => b.Nodes).ToList(), withheldBefore);
+
+        // Every branch runs once the step does; before it does, or when the step sits on a track
+        // the run did not take, none has.
+        var started = Started(state);
+
+        return new RunGraphNode(
+            node.Id,
+            node.Kind,
+            node.Junction,
+            node.In,
+            node.Out,
+            node.Opaque,
+            state,
+            steps.Any(s => s.Replayed),
+            null,
+            steps,
+            branches
+                .Select(b => new RunGraphTrack(
+                    b.Branch.Name,
+                    b.Branch.Description,
+                    b.Branch.IsFallback,
+                    started,
+                    b.Nodes
+                ))
+                .ToList()
+        );
+    }
+
+    // Where a Parallel step stands, from its branches: failed when any branch failed, cancelled
+    // when one was (a sibling's failure or the run's cancel stopped it), running while any node is
+    // running or any branch has a node still to reach, completed once every branch has, and not
+    // reached when no branch recorded anything.
+    private static RunNodeState ParallelStateOf(
+        IReadOnlyList<JunctionStep> steps,
+        IReadOnlyList<List<RunGraphNode>> branches,
+        bool withheldBefore
+    )
+    {
+        var states = branches
+            .SelectMany(Descendants)
+            .Select(n => n.State)
+            .Concat(steps.Count > 0 ? [StateOf(steps)] : [])
+            .ToList();
+
+        if (!states.Any(Started))
+            return withheldBefore ? RunNodeState.Withheld : RunNodeState.NotReached;
+
+        if (states.Contains(RunNodeState.Failed))
+            return RunNodeState.Failed;
+        if (states.Contains(RunNodeState.Cancelled))
+            return RunNodeState.Cancelled;
+        if (states.Contains(RunNodeState.InProgress))
+            return RunNodeState.InProgress;
+
+        // A branch is done when none of its own nodes is still to reach. A node on a track it did
+        // not take is skipped, one that records nothing says so, and one past a withheld route
+        // cannot be told, so none of them holds the step open.
+        return branches.All(b => b.All(n => n.State != RunNodeState.NotReached))
+            ? RunNodeState.Completed
+            : RunNodeState.InProgress;
+    }
+
+    // A state only a recorded step gives a node.
+    private static bool Started(RunNodeState state) =>
+        state
+            is RunNodeState.InProgress
+                or RunNodeState.Completed
+                or RunNodeState.Failed
+                or RunNodeState.Cancelled;
+
+    private static IEnumerable<RunGraphNode> Descendants(IEnumerable<RunGraphNode> nodes) =>
+        nodes.SelectMany(n => n.Tracks.SelectMany(t => Descendants(t.Nodes)).Prepend(n));
 
     /// <summary>What the walk over the graph, in declared order, has passed so far.</summary>
     private sealed class Walk
