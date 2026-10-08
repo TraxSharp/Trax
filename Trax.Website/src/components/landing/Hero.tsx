@@ -10,16 +10,21 @@ export default function Hero() {
             MIT licensed. .NET 10. Runs inside your ASP.NET app.
           </p>
           <h1 className="mt-4 text-4xl font-bold leading-[1.15] tracking-tight text-text-primary sm:text-5xl">
-            Business logic you can call, schedule, or serve as an API
+            A headless web framework for .NET
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-text-secondary">
-            A train is a typed pipeline of small steps. Call it from a
-            controller, put it on a cron schedule, send it to a worker on
-            another machine, or publish it as a GraphQL mutation.
+            Every mutation in your app is an event on a state machine you
+            define once in C#. Trax applies each event on the server and
+            generates the client from the same definition, so your frontend is
+            only views.
           </p>
           <p className="mt-4 text-text-muted">
-            It is the same class each time, and every run is written to your
-            Postgres: when it started, how it ended, and which step failed.
+            Behind it, Trax serves the GraphQL API with auth and live updates,
+            runs the work on schedules and workers, and records every run in
+            your Postgres. The client is generated for React today.{" "}
+            <Link href="/roadmap" className="text-accent hover:text-accent-bright">
+              More frameworks are on the roadmap &rarr;
+            </Link>
           </p>
           <div className="mt-10 flex items-center gap-4">
             <Link
@@ -42,34 +47,27 @@ export default function Hero() {
           </p>
         </div>
 
-        {/* Right: visual pipeline diagram */}
+        {/* Right: one machine, applied on the server and generated into the client */}
         <div className="mt-12 lg:mt-2 lg:flex-1">
           <pre className="overflow-x-auto font-mono text-[13px] leading-relaxed text-text-muted">
-            <span className="text-accent">{"  Input"}</span>
+            <span className="text-accent">{"  Your state machine"}</span>
             {`
     │
-    ▼`}
-            {"\n"}
-            <span className="text-accent-bright">{"  ┌─ CheckInventory ─┐"}</span>
+    ├──▶ `}
+            <span className="text-accent-bright">{"Server"}</span>
+            {"      applies each event"}
             {`
-  │                   │`}
-            {"\n"}
-            <span className="text-accent-bright">{"  ├─ ChargePayment ──┤"}</span>
+    │
+    └──▶ `}
+            <span className="text-accent-bright">{"Client"}</span>
+            {"      generated"}
             {`
-  │                   │`}
-            {"\n"}
-            <span className="text-accent-bright">{"  ├─ CreateShipment ─┤"}</span>
-            {`
-  │                   │`}
-            {"\n"}
-            <span className="text-accent-bright">{"  ▼"}</span>{"                   "}
-            <span className="text-derail">{"▼"}</span>
-            {"\n"}
-            <span className="text-accent-bright">{"  Output"}</span>
-            {"             "}
-            <span className="text-derail">{"Exception"}</span>
+           │
+           ▼
+         `}
+            <span className="text-accent">{"Your views"}</span>
             {"\n\n"}
-            <span className="text-text-muted/60">{"  success             failure"}</span>
+            <span className="text-text-muted/60">{"  you write the first and the last"}</span>
           </pre>
         </div>
       </div>

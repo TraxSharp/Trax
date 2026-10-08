@@ -9,6 +9,7 @@ const navLinks = [
   { href: "/", label: "Home" },
   { href: "/docs", label: "Docs" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/roadmap", label: "Roadmap" },
 ];
 
 export default function Header() {

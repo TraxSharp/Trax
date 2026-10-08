@@ -10,8 +10,7 @@ export default function Footer() {
               Trax <span className="text-text-secondary">.NET</span>
             </span>
             <p className="mt-1 max-w-xs text-sm text-text-muted">
-              Business logic you can call, schedule, or serve as an API. MIT
-              licensed.
+              A headless web framework for .NET. MIT licensed.
             </p>
           </div>
 
