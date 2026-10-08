@@ -56,10 +56,12 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Core.Tests.Meta/` holds eleven convention guards, and **all eleven are shared** with
-the other folders. Trax.Core owns no guard of its own, which is expected: the conventions it
-would enforce are repository-wide, and the engines behind several of them ship from here in
-`Trax.Core.Testing` for consumers to subclass.
+`tests/Trax.Core.Tests.Meta/` holds twelve convention guards. Eleven are shared with the other
+folders: the conventions they enforce are repository-wide, and the engines behind several of them
+ship from here in `Trax.Core.Testing` for consumers to subclass. The twelfth,
+`InteractionMatrixTests`, is this folder's own: a new `ChainStepKind` member needs a row in
+[`docs/interaction-matrix.md`](./docs/interaction-matrix.md) naming the test that covers it with
+each existing feature (requeue, cancel, junction events and the rest).
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is
