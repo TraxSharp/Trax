@@ -1,5 +1,7 @@
 using AwesomeAssertions;
 using Bunit;
+using Bunit.TestDoubles;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Trax.Api.DTOs;
@@ -11,11 +13,13 @@ using Trax.Dashboard.Components.Pages.Data;
 using Trax.Dashboard.Components.Shared;
 using Trax.Dashboard.Tests.Integration.Fakes.Data;
 using Trax.Dashboard.Tests.Integration.Fakes.Services;
+using Trax.Dashboard.Tests.Integration.Fakes.Trains;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Mediator.Services.ChainVerification;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
@@ -218,6 +222,63 @@ public class RunGraphViewTests
             .Select(s => s.GetAttribute("data-position"))
             .Should()
             .Equal(api.UnmatchedSteps.Select(s => s.Position.ToString()));
+    }
+
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md"
+    )]
+    public async Task A_failed_runs_nodes_offer_Resume_from_here_only_where_the_check_allows()
+    {
+        var resumes = new ScriptedRunResumes();
+        resumes.AllowedAt.Add(ResumeGraphTrain.Summarize);
+        resumes.Checkpoints.Add(ResumeGraphTrain.Checkpoint);
+        var calls = new List<(string Method, bool Trusted)>();
+        ResumablePage.AddServices(_ctx.Services, _data, resumes, calls);
+        var runId = await ResumablePage.SeedFailedRunAsync(_data);
+
+        var page = _ctx.RenderComponent<MetadataDetailPage>(p => p.Add(x => x.MetadataId, runId));
+
+        var offered = page.WaitForElement(
+            $"li[data-node-id='{ResumeGraphTrain.Summarize}'] .cs-rg-resume",
+            WaitTimeout
+        );
+        offered.TextContent.Should().Contain("Resume from here");
+        page.FindAll("li.cs-rg-node")
+            .Where(n => n.GetAttribute("data-can-resume") == "true")
+            .Select(n => n.GetAttribute("data-node-id"))
+            .Should()
+            .Equal(
+                [ResumeGraphTrain.Summarize],
+                "a node offers a resume only where the resume check allows one"
+            );
+        page.FindAll(".cs-rg-resume")
+            .Should()
+            .ContainSingle("no other node offers one, the steps before the checkpoint included");
+        page.Find($"li[data-node-id='{ResumeGraphTrain.Checkpoint}'] .cs-rg-checkpoint")
+            .TextContent.Should()
+            .Contain("checkpoint", "the run shows where its checkpoint is, never what it holds");
+        StateOf(page, ResumeGraphTrain.Checkpoint).Should().Be(nameof(RunNodeState.Completed));
+
+        await page.Find($"li[data-node-id='{ResumeGraphTrain.Summarize}'] .cs-rg-resume")
+            .ClickAsync(new());
+
+        var navigation = _ctx.Services.GetRequiredService<FakeNavigationManager>();
+        page.WaitForAssertion(
+            () => navigation.Uri.Should().Contain("trax/data/work-queue/"),
+            WaitTimeout
+        );
+        calls
+            .Should()
+            .Equal(
+                [(nameof(IOperationsService.ResumeExecutionAsync), true)],
+                "Resume from here makes the API's resumeExecution call, in the trusted scope"
+            );
+        await using var db = await _data.CreateDbContextAsync(default);
+        var entry = await db.WorkQueues.AsNoTracking().SingleAsync();
+        entry.ResumeFrom.Should().Be(runId);
+        entry.ResumeAt.Should().Be(ResumeGraphTrain.Summarize, "it resumes at the node clicked");
     }
 
     private const string Fork = "Parallel#0";
