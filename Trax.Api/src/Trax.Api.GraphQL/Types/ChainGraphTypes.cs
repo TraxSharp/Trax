@@ -125,6 +125,15 @@ internal sealed class RunGraphType : ObjectType<RunGraph>
                 "True when the run recorded more steps than one read matches (500), so a later "
                     + "node can show as not reached when it ran."
             );
+        descriptor
+            .Field(g => g.CanResume)
+            .Description(
+                "True when resumeExecution without from can resume the run after its latest "
+                    + "checkpoint: it failed or was cancelled, no state machine's step started it, "
+                    + "and the resume check over the declared chain allows it. The mutation can "
+                    + "still refuse the run for its saved input or a resume already queued. "
+                    + "Experimental (TRAXEXP003)."
+            );
     }
 }
 
@@ -148,7 +157,22 @@ internal sealed class RunGraphNodeType : ObjectType<RunGraphNode>
             .Description(
                 "Where the node stands in this run. A PARALLEL step records nothing itself: it is "
                     + "FAILED when any branch failed, CANCELLED when one was stopped, IN_PROGRESS "
-                    + "while any branch is still going, and COMPLETED once every branch has finished."
+                    + "while any branch is still going, and COMPLETED once every branch has finished. "
+                    + "A CHECKPOINT is COMPLETED once the run stored it. In a resumed run, a node "
+                    + "before the point it resumed at is RESTORED: the run skipped it."
+            );
+        descriptor
+            .Field(n => n.CanResume)
+            .Description(
+                "True when resumeExecution(id, from) can resume the run at this node: the run "
+                    + "failed or was cancelled and a checkpoint before the node lets it run on "
+                    + "what that checkpoint restores. Experimental (TRAXEXP003)."
+            );
+        descriptor
+            .Field(n => n.Checkpointed)
+            .Description(
+                "True when a checkpoint the run can resume from is stored at this node. Only that "
+                    + "it exists: what it holds is never returned. Experimental (TRAXEXP003)."
             );
         descriptor.Field(n => n.Replayed);
         descriptor

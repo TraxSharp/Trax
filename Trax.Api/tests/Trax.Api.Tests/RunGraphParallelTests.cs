@@ -8,7 +8,7 @@ using Trax.Effect.Models.JunctionRun;
 namespace Trax.Api.Tests;
 
 /// <summary>
-/// <see cref="RunGraphs.Match"/> on a <c>Parallel</c> step. Unlike a routing step's tracks, every
+/// <c>RunGraphs.Match</c> on a <c>Parallel</c> step. Unlike a routing step's tracks, every
 /// branch runs: no branch is passed over, each branch's nodes stand as the run recorded them, and
 /// the step itself, which records nothing, stands where its branches do. A withheld route inside
 /// one branch withholds that branch and everything after the join, never a sibling branch.

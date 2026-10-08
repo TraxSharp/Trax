@@ -4,6 +4,7 @@ using Trax.Core.Monad;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Mediator.Services.ChainVerification;
 
 namespace Trax.Api.Services.Runs;
@@ -36,9 +37,29 @@ public static class RunGraphs
     /// <param name="graphs">The registered trains' graphs.</param>
     /// <param name="metadataId">The run's id.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    public static Task<RunGraph?> ReadAsync(
+        IDataContext context,
+        ITrainChainGraphs graphs,
+        long metadataId,
+        CancellationToken cancellationToken
+    ) => ReadAsync(context, graphs, null, metadataId, cancellationToken);
+
+    /// <summary>
+    /// Reads run <paramref name="metadataId"/> and its first <see cref="MaxSteps"/> steps, matches
+    /// them to its train's graph, and, through <paramref name="resumes"/>, says where the run can
+    /// resume, which nodes hold its checkpoints and, for a resumed run, which nodes it restored.
+    /// Null when no run has the id.
+    /// </summary>
+    /// <param name="context">The data context to read the run and its steps from.</param>
+    /// <param name="graphs">The registered trains' graphs.</param>
+    /// <param name="resumes">The resume check, or null to read no resumes or checkpoints.</param>
+    /// <param name="metadataId">The run's id.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public static async Task<RunGraph?> ReadAsync(
         IDataContext context,
         ITrainChainGraphs graphs,
+        IRunResumes? resumes,
         long metadataId,
         CancellationToken cancellationToken
     )
@@ -46,13 +67,19 @@ public static class RunGraphs
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(graphs);
 
-        var train = await context
+        var run = await context
             .Metadatas.AsNoTracking()
             .Where(m => m.Id == metadataId)
-            .Select(m => m.Name)
+            .Select(m => new
+            {
+                m.Name,
+                m.TrainState,
+                m.InvokingMachine,
+                m.ResumeFrom,
+            })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (train is null)
+        if (run is null)
             return null;
 
         // One more than the cap, so a run with more steps says so.
@@ -64,8 +91,104 @@ public static class RunGraphs
 
         var more = rows.Count > MaxSteps;
         var steps = rows.Take(MaxSteps).Select(JunctionStep.From).ToList();
+        var graph = graphs.Find(run.Name);
 
-        return Match(metadataId, train, graphs.Find(train), steps, more);
+        var checks = ReadsResumes(run.TrainState, run.ResumeFrom)
+            ? await ReadResumesAsync(
+                resumes,
+                graphs,
+                metadataId,
+                run.Name,
+                graph,
+                cancellationToken
+            )
+            : null;
+
+        return Match(
+            metadataId,
+            run.Name,
+            graph,
+            steps,
+            more,
+            checks,
+            Resumable(run.TrainState, run.InvokingMachine)
+        );
+    }
+
+    /// <summary>
+    /// True when a run in <paramref name="state"/> has resumes or checkpoints worth reading: it
+    /// failed or was cancelled, so it may resume, or it is itself a resumed run, which restored
+    /// nodes. A run that completed keeps no checkpoints, and one still going cannot resume yet.
+    /// </summary>
+    /// <param name="state">The run's state.</param>
+    /// <param name="resumeFrom">The run it resumed, or null.</param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public static bool ReadsResumes(TrainState state, long? resumeFrom) =>
+        state is TrainState.Failed or TrainState.Cancelled || resumeFrom is not null;
+
+    /// <summary>
+    /// True when an operator may resume a run in <paramref name="state"/>: it failed or was
+    /// cancelled, and no state machine's step started it, whose outcome only that step receives
+    /// (central ADR 0046).
+    /// </summary>
+    /// <param name="state">The run's state.</param>
+    /// <param name="invokingMachine">The machine whose step started it, or null.</param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public static bool Resumable(TrainState state, string? invokingMachine) =>
+        state is TrainState.Failed or TrainState.Cancelled && invokingMachine is null;
+
+    /// <summary>
+    /// <see cref="Resumable(TrainState, string)"/> for a run read whole, as the dashboard's run page
+    /// reads it.
+    /// </summary>
+    /// <param name="run">The run.</param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public static bool Resumable(Effect.Models.Metadata.Metadata run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return Resumable(run.TrainState, run.InvokingMachine);
+    }
+
+    /// <summary>
+    /// Asks <paramref name="resumes"/>, with one read of the run's checkpoint lineage, whether run
+    /// <paramref name="metadataId"/> can resume after its latest checkpoint and at each node of
+    /// <paramref name="graph"/>, which nodes hold its checkpoints, and which it restored. Null when
+    /// there is no check, no graph, or the train's declared chain cannot be read here. It names
+    /// nodes only, never what a checkpoint holds.
+    /// </summary>
+    /// <param name="resumes">The resume check, or null.</param>
+    /// <param name="graphs">The registered trains' graphs and declared chains.</param>
+    /// <param name="metadataId">The run's id.</param>
+    /// <param name="train">The run's train name.</param>
+    /// <param name="graph">The train's graph, or null.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public static async Task<ResumeChecks?> ReadResumesAsync(
+        IRunResumes? resumes,
+        ITrainChainGraphs graphs,
+        long metadataId,
+        string train,
+        ChainGraph? graph,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(graphs);
+
+        if (resumes is null || graph is null || graphs.FindDeclared(train) is not { } declared)
+            return null;
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        CollectIds(graph.Nodes, ids);
+
+        return await resumes.CheckMany(
+            declared.Train,
+            declared.Chain,
+            declared.Input,
+            declared.Output,
+            metadataId,
+            ids,
+            cancellationToken
+        );
     }
 
     /// <summary>
@@ -82,6 +205,33 @@ public static class RunGraphs
         ChainGraph? graph,
         IReadOnlyList<JunctionStep> steps,
         bool moreSteps = false
+    ) => Match(metadataId, train, graph, steps, moreSteps, null, false);
+
+    /// <summary>
+    /// Matches a run's steps to its train's graph, and places what <paramref name="resumes"/>
+    /// read on it: which nodes hold a checkpoint, which the run restored rather than ran because
+    /// it resumed, and, when <paramref name="resumable"/>, where it can resume. With no graph,
+    /// every step is unmatched.
+    /// </summary>
+    /// <param name="metadataId">The run's id.</param>
+    /// <param name="train">The run's train name.</param>
+    /// <param name="graph">The train's graph, or null when the host has none for it.</param>
+    /// <param name="steps">The run's steps, in position order.</param>
+    /// <param name="moreSteps">True when the run recorded more steps than <paramref name="steps"/> holds.</param>
+    /// <param name="resumes">What <see cref="ReadResumesAsync"/> read, or null.</param>
+    /// <param name="resumable">
+    /// True when an operator may resume the run (<see cref="Resumable(TrainState, string)"/>); otherwise no node offers
+    /// a resume, whatever the check says.
+    /// </param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public static RunGraph Match(
+        long metadataId,
+        string train,
+        ChainGraph? graph,
+        IReadOnlyList<JunctionStep> steps,
+        bool moreSteps,
+        ResumeChecks? resumes,
+        bool resumable
     )
     {
         ArgumentNullException.ThrowIfNull(train);
@@ -107,15 +257,20 @@ public static class RunGraphs
                 unmatched.Add(step);
         }
 
+        var resume = new ResumeView(resumes, resumable && resumes is not null);
+
         return new RunGraph(
             metadataId,
             train,
             true,
             graph.Hash,
-            Overlay(graph.Nodes, byNode, new Walk(), skipped: false),
+            Overlay(graph.Nodes, byNode, new Walk { Resume = resume }, skipped: false),
             unmatched,
             moreSteps
-        );
+        )
+        {
+            CanResume = resume.Offers && resumes!.Latest.CanResume,
+        };
     }
 
     private static void CollectIds(IReadOnlyList<ChainGraphNode> nodes, HashSet<string> ids)
@@ -149,11 +304,19 @@ public static class RunGraphs
             ? matched
             : [];
 
+        // A checkpoint records no step of its own: the row it stored says the run reached it,
+        // unless a withheld route came before it, which the walk keeps withholding.
         var state =
             steps.Count > 0 ? StateOf(steps)
             : skipped ? RunNodeState.Skipped
+            : walk.Resume.Restored(node.Id) ? RunNodeState.Restored
             : walk.Withheld ? RunNodeState.Withheld
-            : node.Kind is ChainStepKind.Extract or ChainStepKind.Seed or ChainStepKind.Resolve
+            : walk.Resume.Wrote(node.Id) ? RunNodeState.Completed
+            : node.Kind
+                is ChainStepKind.Extract
+                    or ChainStepKind.Seed
+                    or ChainStepKind.Resolve
+                    or ChainStepKind.Checkpoint
                 ? RunNodeState.NotRecorded
             : RunNodeState.NotReached;
 
@@ -194,7 +357,11 @@ public static class RunGraphs
             taken,
             steps,
             tracks
-        );
+        )
+        {
+            CanResume = walk.Resume.CanResumeAt(node.Id),
+            Checkpointed = walk.Resume.Holds(node.Id),
+        };
     }
 
     /// <summary>
@@ -223,7 +390,7 @@ public static class RunGraphs
         var branches = new List<(ChainGraphTrack Branch, List<RunGraphNode> Nodes)>();
         foreach (var branch in node.Tracks)
         {
-            var path = new Walk { Withheld = withheldBefore };
+            var path = new Walk { Withheld = withheldBefore, Resume = walk.Resume };
             branches.Add((branch, Overlay(branch.Nodes, byNode, path, skipped)));
             walk.Withheld |= path.Withheld;
         }
@@ -231,6 +398,10 @@ public static class RunGraphs
         var state = skipped
             ? RunNodeState.Skipped
             : ParallelStateOf(steps, branches.Select(b => b.Nodes).ToList(), withheldBefore);
+
+        // A resumed run that skipped the whole step ran none of its branches.
+        if (state == RunNodeState.NotReached && walk.Resume.Restored(node.Id))
+            state = RunNodeState.Restored;
 
         // Every branch runs once the step does; before it does, or when the step sits on a track
         // the run did not take, none has.
@@ -256,7 +427,11 @@ public static class RunGraphs
                     b.Nodes
                 ))
                 .ToList()
-        );
+        )
+        {
+            CanResume = walk.Resume.CanResumeAt(node.Id),
+            Checkpointed = walk.Resume.Holds(node.Id),
+        };
     }
 
     // Where a Parallel step stands, from its branches: failed when any branch failed, cancelled
@@ -309,6 +484,47 @@ public static class RunGraphs
     {
         /// <summary>True once the walk has passed a route whose answer is withheld.</summary>
         public bool Withheld { get; set; }
+
+        /// <summary>Where the run can resume and what it restored, the same for every path.</summary>
+        public ResumeView Resume { get; init; } = ResumeView.None;
+    }
+
+    /// <summary>
+    /// What <see cref="IRunResumes.CheckMany"/> read about a run, as each node asks it: node ids
+    /// only, never a checkpoint's state or tracks.
+    /// </summary>
+    /// <param name="checks">What was read, or null when nothing was.</param>
+    /// <param name="offers">True when the run may be resumed, so a node's verdict is shown.</param>
+    private sealed class ResumeView(ResumeChecks? checks, bool offers)
+    {
+        public static readonly ResumeView None = new(null, false);
+
+        private readonly HashSet<string> _restored = new(
+            checks?.Restored ?? [],
+            StringComparer.Ordinal
+        );
+
+        private readonly HashSet<string> _written = new(
+            checks?.Written ?? [],
+            StringComparer.Ordinal
+        );
+
+        private readonly HashSet<string> _checkpoints = new(
+            checks?.Checkpoints ?? [],
+            StringComparer.Ordinal
+        );
+
+        /// <summary>True when the run may be resumed and a check was read.</summary>
+        public bool Offers => offers;
+
+        public bool Restored(string id) => _restored.Contains(id);
+
+        public bool Wrote(string id) => _written.Contains(id);
+
+        public bool Holds(string id) => _checkpoints.Contains(id);
+
+        public bool CanResumeAt(string id) =>
+            offers && checks!.At.TryGetValue(id, out var verdict) && verdict.CanResume;
     }
 
     // The worst state any of the node's steps reached, should a node have more than one: it fails

@@ -8,7 +8,7 @@ using Trax.Effect.Models.JunctionRun;
 namespace Trax.Api.Tests;
 
 /// <summary>
-/// <see cref="RunGraphs.Match"/>, the overlay <c>operations.runGraph</c> and the dashboard's run
+/// <c>RunGraphs.Match</c>, the overlay <c>operations.runGraph</c> and the dashboard's run
 /// graph share: a step lands on the node its node id names and nowhere else, a node's state is the
 /// worst of its steps, the track taken is the route's answer or the one track that ran, the tracks
 /// not taken are skipped, and a step that names no node is kept as unmatched.

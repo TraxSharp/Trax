@@ -34,7 +34,18 @@ public sealed record RunGraph(
     IReadOnlyList<RunGraphNode> Nodes,
     IReadOnlyList<JunctionStep> UnmatchedSteps,
     bool MoreSteps
-);
+)
+{
+    /// <summary>
+    /// True when the run can resume after its latest checkpoint: it failed or was cancelled, no
+    /// state machine's step started it, and a checkpoint it wrote (or, for a resumed run, one the
+    /// run it resumed wrote) lets the steps after it run on what it restores. What the dashboard's
+    /// Resume button and <c>resumeExecution</c> without <c>from</c> act on; the operation can still
+    /// refuse the run as a whole, for its saved input or a resume already queued, with the reason.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public bool CanResume { get; init; }
+}
 
 /// <summary>One declared node of a <see cref="RunGraph"/>, with what the run did there.</summary>
 /// <param name="Id">The node's id; see <see cref="ChainGraph"/>.</param>
@@ -73,7 +84,25 @@ public sealed record RunGraphNode(
     string? TrackTaken,
     IReadOnlyList<JunctionStep> Steps,
     IReadOnlyList<RunGraphTrack> Tracks
-);
+)
+{
+    /// <summary>
+    /// True when the run can resume at this node, as <see cref="RunGraph.CanResume"/> says for its
+    /// latest checkpoint: the resume check over the declared chain allows it from a checkpoint
+    /// before it. The dashboard offers "Resume from here" on such a node, and
+    /// <c>resumeExecution(id, from)</c> takes its id.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public bool CanResume { get; init; }
+
+    /// <summary>
+    /// True when a checkpoint the run can resume from is stored at this node: one the run wrote,
+    /// or for a resumed run, one the run it resumed wrote before the point it resumed at. Only
+    /// that it exists: what it holds is never on an operator surface.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public bool Checkpointed { get; init; }
+}
 
 /// <summary>
 /// One track of a routing node, or one branch of a <c>Parallel</c> node, in a <see cref="RunGraph"/>.
@@ -130,4 +159,12 @@ public enum RunNodeState
     /// Those steps are in <see cref="RunGraph.UnmatchedSteps"/>.
     /// </summary>
     Withheld,
+
+    /// <summary>
+    /// The run resumed from a checkpoint, and this node comes before the point it resumed at, so
+    /// the run skipped it and recorded no step for it: what the steps before the checkpoint
+    /// produced was restored from it instead.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    Restored,
 }

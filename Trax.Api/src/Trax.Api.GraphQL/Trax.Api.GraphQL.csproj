@@ -6,6 +6,9 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Api.GraphQL</AssemblyName>
     <PackageDescription>GraphQL API for Trax .NET on HotChocolate: runs and queues trains, exposes executions, manifests and the work queue, and generates queries from [TraxQueryModel] entities. Install it to give a Trax host a GraphQL endpoint (AddTraxGraphQL, UseTraxGraphQL).</PackageDescription>
+    <!-- TRAXEXP003: resumeExecution resumes a run from a checkpoint, and runGraph says where a run
+         can resume and which nodes a resumed run restored. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

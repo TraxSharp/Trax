@@ -15,6 +15,7 @@ using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
@@ -1117,26 +1118,32 @@ public partial class OperationsQueries
     /// id with no execution.
     /// </summary>
     /// <remarks>
-    /// Read through <see cref="RunGraphs.ReadAsync"/>, the read the dashboard's run graph makes.
+    /// Read through <c>RunGraphs.ReadAsync</c>, the read the dashboard's run graph makes.
     /// Steps are matched by node id; a step recorded without one, or for a node the current chain
     /// no longer declares, is in <c>unmatchedSteps</c>. At most the first 500 steps are read
-    /// (<c>moreSteps</c> says when there were more).
+    /// (<c>moreSteps</c> says when there were more). For a failed or cancelled execution, and a
+    /// resumed one, the checkpoints it can resume from are read too, once per graph: each node
+    /// says whether <c>resumeExecution</c> can resume there (<c>canResume</c>) and whether a
+    /// checkpoint is stored at it (<c>checkpointed</c>), and a resumed execution's nodes before its
+    /// resume point are <c>RESTORED</c>. What a checkpoint holds is never returned.
     /// </remarks>
     /// <param name="metadataId">The execution's id.</param>
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="chainGraphs">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
+    /// <param name="resumes">Resolved from DI; not a GraphQL argument. Without it no resume is offered.</param>
     public async Task<RunGraph?> GetRunGraph(
         long metadataId,
         [Service] IDataContextProviderFactory dataContextFactory,
         [Service] ITrainChainGraphs chainGraphs,
-        CancellationToken ct
+        CancellationToken ct,
+        [Service] IRunResumes? resumes = null
     )
     {
         RunIdArgument.Require(metadataId);
 
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
-        return await RunGraphs.ReadAsync(db, chainGraphs, metadataId, ct);
+        return await RunGraphs.ReadAsync(db, chainGraphs, resumes, metadataId, ct);
     }
 
     // Names and enum spellings follow the options the queue and run paths deserialize input
