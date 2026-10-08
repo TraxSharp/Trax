@@ -27,7 +27,8 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 [Property("adr", "docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md")]
 public class JunctionProgressWritesOnlyProgressTests
 {
-    private const string Adr = "docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md";
+    private const string Adr =
+        "docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md";
 
     [Test]
     public async Task Progress_does_not_save_the_runs_other_effects_after_each_junction()
