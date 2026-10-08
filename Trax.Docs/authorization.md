@@ -465,7 +465,7 @@ The admin and operations surface (the GraphQL `operations` namespace and the das
 
 | Action | What decides the train and input | Authorized by |
 |---|---|---|
-| `queueTrain`, `requeueExecution` | The caller | The train's own `[TraxAuthorize]` requirements, through `ITrainExecutionService.QueueAsync`, **plus** the operations gate |
+| `queueTrain`, `requeueExecution`, `resumeExecution` | The caller | The train's own `[TraxAuthorize]` requirements, through `ITrainExecutionService.QueueAsync`, **plus** the operations gate |
 | The dashboard's queue dialog and **Re-queue** button | The dashboard user | The dashboard host's own gate. They go through `IOperationsService.QueueTrainAsync`, and so `QueueAsync`, inside a trusted scope (`"dashboard"`), so per-train `[TraxAuthorize]` does not apply; `OnQueue`, the subject key and the input cap do |
 | `triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, re-queueing dead letters | A manifest | The operations gate only (`GateOperations`, `RequireAuthorization`, or `AllowAnonymousOperations`), not per-train requirements |
 | The dashboard's **Run** dialog | The dashboard user | The dashboard host's own gate. It calls `IOperationsService.RunTrainAsync` inside the dashboard's trusted scope, the call behind `runTrain`, which runs the train's `OnQueue` hook, applies the input cap and submits to the job submitter the train is routed to. `QueueSubjectKey` does not apply, so the run is not serialized against other work for its subject (`Trax.Docs/adr/0019`); outside a trusted scope a subject-keyed train is refused and must be queued |

@@ -216,7 +216,7 @@ The response type still uses the unified format, but `metadataId` and `output` w
 
 ## Operations Mutations
 
-The whole namespace sits behind the operations gate (`GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations`; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). Mutations that enqueue a train and input the caller chose (`requeueExecution`, `workQueue.queueTrain`) also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) are governed by the gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+The whole namespace sits behind the operations gate (`GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations`; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). Mutations that enqueue a train and input the caller chose (`requeueExecution`, `resumeExecution`, `workQueue.queueTrain`) also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) are governed by the gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
 The five mutations that take a manifest's `externalId` (`triggerManifest`, `triggerManifestDelayed`, `disableManifest`, `enableManifest`, `cancelManifest`) answer an id no manifest has with `success: false` and the message `Manifest '<externalId>' not found.`, and change nothing. It is a refusal, not a GraphQL error.
 
@@ -644,6 +644,57 @@ query {
   operations { workQueue { workQueue(id: 7) { status metadataId } } }
 }
 ```
+
+---
+
+### resumeExecution
+
+Resumes a failed or cancelled execution from a
+[checkpoint](/docs/sdk-reference/train-methods/checkpoint) instead of running every step again: it
+queues a run of the same train, with the input the execution recorded, that skips every step
+before the resume point and starts from the state the checkpoint stored. With `from`, the run
+resumes at that step, named by its node id as [`runGraph`](/docs/sdk-reference/graphql-api/queries#rungraph)
+gives it; without it, after the execution's latest checkpoint. It is the GraphQL counterpart of the
+dashboard's **Resume** and **Resume from here** buttons. All three call
+[`IOperationsService.ResumeExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#resumeexecutionasync),
+so they refuse the same runs with the same messages. Experimental (`TRAXEXP003`).
+
+A resume is a requeue in every check but where the run starts. It enqueues through the same path
+as [`requeueExecution`](#requeueexecution), so a caller past the operations gate who may not run the
+train gets a GraphQL error with code `TRAX_AUTHORIZATION` (`"Not authorized."`), and the new run
+replays the execution's decisions as a requeue's would. It needs no role a requeue does not.
+
+It is refused with `success: false`, the reason as the message, and nothing queued when:
+
+- no execution has the id, or it is not `FAILED` or `CANCELLED` (`"Execution 100 is Completed; only a failed or cancelled run can be resumed."`);
+- a state machine's step started it, since only that step receives its outcome;
+- its saved input is missing, a placeholder or masked, for the reasons `requeueExecution` gives;
+- a resume of it is already queued (`"A resume of execution 100 is already queued (WorkQueue 7); a run is resumed once at a time. Nothing was queued."`);
+- its train is no longer registered here, or its chain cannot be read;
+- no checkpoint it wrote lets it resume at that step: none comes before it, a step from the point
+  on needs a value nothing restores, or the stored checkpoint no longer matches the running chain
+  or the state's shape. The resume check's own reason is the message, for example
+  `"No checkpoint the run wrote comes before 'FetchSources#0', so it can only run again from the top."`
+
+`runGraph` says beforehand where a run can resume: `canResume` on the graph for a resume after the
+latest checkpoint, and on each node for a resume there.
+
+```graphql
+mutation {
+  operations {
+    resumeExecution(id: 100, from: "SummarizeSources#0") { success message id }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The execution's metadata id |
+| `from` | `String` | No | The node id of the step to resume at. Omitted, the run resumes after its latest checkpoint |
+
+**Returns**: `OperationResponse`. On success, `id` is the new **work queue entry**'s id, as for
+`requeueExecution`. The entry names the execution it resumes and the step (`resume_from` and
+`resume_at` on the work queue row), and the run copies both when it is dispatched.
 
 ---
 
@@ -1178,5 +1229,5 @@ Shared response type for operations mutations.
 |-------|------|-------------|
 | `success` | `Boolean!` | Whether the operation succeeded |
 | `count` | `Int` | Number of affected records, for a mutation that acts on a set or patches fields; `null` otherwise |
-| `id` | `Long` | The one row the operation acted on, when there is one: the work queue entry `queueTrain` and `requeueExecution` created, the execution `runTrain` started, the group `updateManifestGroup` patched. `null` otherwise |
+| `id` | `Long` | The one row the operation acted on, when there is one: the work queue entry `queueTrain`, `requeueExecution` and `resumeExecution` created, the execution `runTrain` started, the group `updateManifestGroup` patched. `null` otherwise |
 | `message` | `String` | Human-readable status message |

@@ -81,7 +81,7 @@ A run resumes from an earlier run of the same input that failed or was cancelled
 | A manifest's retry | After the failed run's latest checkpoint, when it has one. Otherwise from the top, as before. |
 | A dead letter's requeue | The same. |
 | `requeueExecution` | Never: it runs the train again from the top. |
-| `resumeExecution(id, from)` | At the step `from` names, or after the latest checkpoint when `from` is omitted. |
+| [`resumeExecution(id, from)`](/docs/sdk-reference/graphql-api/mutations#resumeexecution), or the dashboard's **Resume** and **Resume from here** | At the step `from` names, or after the latest checkpoint when `from` is omitted. |
 | A state machine entering an invoking state again | Never: the state is the stage's checkpoint. |
 
 The resumed run runs `Junctions()` again and skips every step before its resume point in place: no

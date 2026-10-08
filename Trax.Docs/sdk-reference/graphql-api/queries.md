@@ -917,12 +917,15 @@ query {
       hasGraph
       hash
       moreSteps
+      canResume
       nodes {
         id
         kind
         state
         replayed
         trackTaken
+        canResume
+        checkpointed
         steps { position state failureClass }
         tracks { name taken nodes { id state } }
       }
@@ -943,8 +946,12 @@ query {
 | `COMPLETED`, `FAILED`, `CANCELLED`, `IN_PROGRESS` | From the steps recorded for it, the worst of them |
 | `SKIPPED` | It sits on a track the run did not take |
 | `NOT_REACHED` | Nothing was recorded for it |
-| `NOT_RECORDED` | An `Extract`, `Seed` or `Resolve`, which records nothing when it runs |
+| `NOT_RECORDED` | An `Extract`, `Seed` or `Resolve`, which records nothing when it runs, or a `CHECKPOINT` the run did not store |
 | `WITHHELD` | It comes after a route whose answer is withheld, so the steps recorded there name no node |
+| `RESTORED` | The run resumed from a checkpoint, and the node comes before the point it resumed at: the run skipped it, recorded nothing for it, and took what the steps before the checkpoint produced from the checkpoint |
+
+A `CHECKPOINT` node records no step of its own: it is `COMPLETED` once the run stored it, unless a
+withheld route came before it.
 
 `trackTaken` is the route's recorded answer, or the one track holding recorded steps when the
 answer is missing.
@@ -962,6 +969,18 @@ node ids were, after a withheld route, or for a node the chain no longer declare
 `unmatchedSteps` rather than dropped. `hasGraph` is false when the host has no graph for the train;
 `nodes` is then empty and every step is unmatched. `moreSteps` says the run recorded more than 500
 steps, so a later node can show as not reached when it ran.
+
+**Where a run can resume.** For a failed or cancelled execution, and for one that itself
+resumed, the read also asks the [resume check](/docs/sdk-reference/train-methods/checkpoint#what-can-resume-where)
+once, over the run's checkpoints and those of the runs it resumed, rather than once per node.
+`canResume` on a node is true when
+[`resumeExecution(id, from)`](/docs/sdk-reference/graphql-api/mutations#resumeexecution) can resume
+the run there, and `canResume` on the graph when it can resume after the latest checkpoint, with
+`from` omitted. Both are false for a run that did not fail or was not cancelled, and for one a state
+machine's step started. The mutation can still refuse a run the graph offers, for its saved input or
+a resume already queued, with the reason. `checkpointed` is true on a node holding a checkpoint the
+run can resume from. The graph says only that a checkpoint exists and where: what it holds, and the
+tracks stored with it, are on no operator surface. Experimental (`TRAXEXP003`).
 
 It answers to the operations gate, as `junctionRuns` does.
 
