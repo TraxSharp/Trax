@@ -12,6 +12,8 @@
          this project's tests count for nothing in the coverage report. -->
     <PreserveCompilationContext>true</PreserveCompilationContext>
     <RootNamespace>Trax.Scheduler.Tests</RootNamespace>
+    <!-- TRAXEXP001: these tests run trains with the experimental Parallel step. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -7,6 +7,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Scheduler.Tests.Integration</RootNamespace>
+    <!-- TRAXEXP001: these tests run trains with the experimental Parallel step. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
