@@ -703,6 +703,14 @@ public class JunctionEventsE2ETests
         states[$"{nameof(JoinScores)}#0"].Should().Be(fail ? "NOT_REACHED" : "COMPLETED");
         if (!fail)
             states[NestedFork].Should().Be("COMPLETED");
+
+        // Each recorded step says which branch it ran in, from the column Effect writes.
+        rows.Single(r => r.NodeId == $"{Fork}/left/{nameof(ScoreLeft)}#0")
+            .BranchPath.Should()
+            .Be($"{Fork}/left");
+        rows.Where(r => r.NodeId?.StartsWith(Fork + "/") != true)
+            .Should()
+            .OnlyContain(r => r.BranchPath == null, "a step outside the Parallel is in no branch");
     }
 
     /// <summary>

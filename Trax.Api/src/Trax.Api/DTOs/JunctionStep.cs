@@ -146,6 +146,7 @@ public sealed record JunctionStep(
         {
             // A withheld name keeps its node id withheld too: the id names the track.
             NodeId = payload.NameWithheld ? null : payload.NodeId,
+            BranchPath = payload.NameWithheld ? null : payload.BranchPath,
         };
 
     /// <summary>The step a recorded <c>trax.junction_run</c> row holds.</summary>
@@ -174,6 +175,6 @@ public sealed record JunctionStep(
         {
             // A withheld name keeps its node id withheld too: the id names the track.
             NodeId = row.NameWithheld ? null : row.NodeId,
-            BranchPath = null, // mapped from row.NameWithheld ? null : row.BranchPath once JunctionRun carries it
+            BranchPath = row.NameWithheld ? null : row.BranchPath,
         };
 }
