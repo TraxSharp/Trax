@@ -22,7 +22,7 @@ internal interface ICheckpointStore
 }
 
 /// <summary>A checkpoint a run reached, as the store is handed it.</summary>
-/// <param name="Train">The train's type.</param>
+/// <param name="Train">The train running, for a store that records which run took it.</param>
 /// <param name="ExternalId">The run's external id.</param>
 /// <param name="NodeId">The checkpoint's node id, with the branch's path inside it.</param>
 /// <param name="BranchPath">The <c>Parallel</c> branch it is in, or null.</param>
@@ -31,7 +31,7 @@ internal interface ICheckpointStore
 /// <param name="Tracks">Every <see cref="TrackTaken{TKey}"/> in Memory: the routes taken before it.</param>
 /// <param name="Services">The scope the step runs in, for a store that must look at it.</param>
 internal sealed record CheckpointTaken(
-    Type Train,
+    object Train,
     string ExternalId,
     string NodeId,
     string? BranchPath,
@@ -142,7 +142,7 @@ public partial class Monad<TInput, TReturn>
             await store
                 .Write(
                     new CheckpointTaken(
-                        Train.GetType(),
+                        Train,
                         Train.ExternalId,
                         nodeId,
                         BranchPath,
