@@ -157,6 +157,70 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public IReadOnlyList<JsonElement> LiveSteps(long metadataId) =>
         stream.StepsOf(metadataId).Select(e => e.GetProperty("junction")).ToList();
 
+    /// <summary>
+    /// The run the work queue entry <paramref name="entryId"/> was dispatched as, once it is: a
+    /// requeue or a resume answers with its entry, and is not one of the manifest's executions.
+    /// </summary>
+    public async Task<long> RunOfEntryAsync(long entryId)
+    {
+        long runId = 0;
+        var dispatched = await Polling.WaitUntilAsync(
+            async () =>
+            {
+                var entry = await graphQL.SendAsync(
+                    $$"""{ operations { workQueue { workQueue(id: {{entryId}}) { metadataId } } } }""",
+                    apiKey
+                );
+                var id = entry.GetData("operations", "workQueue", "workQueue", "metadataId");
+                if (id.ValueKind != JsonValueKind.Number)
+                    return false;
+                runId = id.GetInt64();
+                return true;
+            },
+            Patience,
+            TimeSpan.FromMilliseconds(100)
+        );
+        dispatched.Should().BeTrue($"work queue entry {entryId} should be dispatched");
+        return runId;
+    }
+
+    /// <summary>
+    /// The execution drawn on its train's declared chain, through <c>operations.runGraph</c>: every
+    /// node by id, with nodes on a track or in a branch listed beside the top-level ones.
+    /// </summary>
+    public async Task<(bool CanResume, Dictionary<string, JsonElement> Nodes)> RunGraphAsync(
+        long metadataId
+    )
+    {
+        const string node = "id kind junction state canResume checkpointed";
+        var response = await graphQL.SendAsync(
+            $$"""
+            { operations { runGraph(metadataId: {{metadataId}}) {
+                canResume
+                nodes { {{node}} tracks { name nodes { {{node}} tracks { name nodes { {{node}} } } } } }
+            } } }
+            """,
+            apiKey
+        );
+        response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
+        var graph = response.GetData("operations", "runGraph");
+
+        var nodes = new Dictionary<string, JsonElement>();
+        void Add(JsonElement list)
+        {
+            foreach (var n in list.EnumerateArray())
+            {
+                nodes[n.GetProperty("id").GetString()!] = n;
+                if (n.TryGetProperty("tracks", out var tracks))
+                    foreach (var track in tracks.EnumerateArray())
+                        if (track.TryGetProperty("nodes", out var inner))
+                            Add(inner);
+            }
+        }
+        Add(graph.GetProperty("nodes"));
+        return (graph.GetProperty("canResume").GetBoolean(), nodes);
+    }
+
     /// <summary>What decision recording wrote for the execution, through the sample's query.</summary>
     public async Task<JsonElement> JournalAsync(long metadataId)
     {

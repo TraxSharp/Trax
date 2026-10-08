@@ -7,13 +7,16 @@
     <IsTestProject>true</IsTestProject>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <!-- TRAXEXP001: opts in to the experimental Parallel step, whose failure the topic map tests read.
-         TRAXEXP002: opts in to the experimental machine instance ids, which the machine tests read. -->
-    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002</NoWarn>
+         TRAXEXP002: opts in to the experimental machine instance ids, which the machine tests read.
+         TRAXEXP003: opts in to the experimental ResumeExecutionAsync, which the resume tests call as
+         the dashboard does. -->
+    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002;TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\samples\Recovery\Trax.Samples.Recovery.Api\Trax.Samples.Recovery.Api.csproj" />
     <ProjectReference Include="..\..\lib\Trax.Samples.Shared.Testing\Trax.Samples.Shared.Testing.csproj" />
+    <ProjectReference Include="..\..\..\Trax.Effect\src\Trax.Effect.Data.Testing\Trax.Effect.Data.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
