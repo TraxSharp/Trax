@@ -128,12 +128,16 @@ export function createDraftSession(options: DraftSessionOptions): DraftSession {
         messages.advanceUnavailable,
       ),
 
-    load: () =>
-      settle(
+    // The server answers a draft that does not exist yet with a `not-found` problem; to a caller
+    // that is no draft, as this method's contract says, not a failure.
+    load: async () => {
+      const loaded = await settle(
         () => client.load(machine, id, schemaHash),
         messages.loadUnavailable,
         messages.loadUnavailable,
-      ),
+      );
+      return !loaded.ok && loaded.code === 'not-found' ? { ok: true, snapshot: null } : loaded;
+    },
 
     send: (requestId) =>
       settle(

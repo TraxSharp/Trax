@@ -131,6 +131,16 @@ describe('createDraftSession', () => {
     await expect(session(execute).load()).resolves.toEqual({ ok: true, snapshot: null });
   });
 
+  it('reads the server\'s not-found answer to a load as "no draft yet"', async () => {
+    // The server answers a draft that does not exist yet with this problem; a caller that saves the
+    // first step when there is no draft must see ok with a null snapshot, not a failure.
+    const { execute } = recorder({
+      snapshot: null,
+      problem: { code: 'not-found', message: 'No draft to resume.' },
+    });
+    await expect(session(execute).load()).resolves.toEqual({ ok: true, snapshot: null });
+  });
+
   it('surfaces a typed problem, preferring the server message over the fallback', async () => {
     const { execute } = recorder({
       snapshot: null,
