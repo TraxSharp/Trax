@@ -37,6 +37,7 @@ offending edge and state; `Rule.Custom` and `Reduction.Custom` keep such logic e
 | `inputs` | object | trigger name to its input schema (only triggers that declared `WithInput<T>`) |
 | `invariants` | object | state name to a per-state policy rule (the `.Requires(...)` on top of the schema); omitted when the machine has none |
 | `transitions` | object[] | the edges, sorted by `(from, trigger, to)` |
+| `outcomes` | object | outcome trigger name to its outcome, for states that [invoke a train](#outcomes); omitted when the machine invokes nothing |
 | `differential` | object | the test-only fuzzing inputs authored with `.Differential(...)`: `samples` (per trigger), `seeds` (per state), and `contexts` (probes). Omitted when the machine declares none, and stripped from the generated runtime machine (it drives only the cross-language differential test). |
 
 A schema (under `context` or `inputs`) is `{ "fields": [ { "name", "type", "nullable", "constraints" } ] }`,
@@ -58,6 +59,42 @@ A rule is a tagged object keyed by `rule` (`present`, `absent`, `ofType`, `nonEm
 `count`, `length`, `boolEquals`, `arrayOf`, `all`, `any`, `custom`); a reduction is keyed by `reduce` (`keep`,
 `clear`, `reset`, `set`, `custom`).
 See the [data model](/docs/sdk-reference/statemachine-api/declarative-data-model) for each shape.
+
+## Outcomes
+
+A state that [invokes a train](/docs/statemachine/invoking-trains) (experimental) adds three triggers of their own
+kind, named `<State>.done`, `<State>.failed` and `<State>.cancelled`. A trigger enum member cannot contain a dot,
+so they never collide with `triggers`, which lists only the machine's own. Each is an entry of `outcomes`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `state` | string | the invoking state |
+| `outcome` | string | `done`, `failed` or `cancelled` |
+| `train` | string | the train's canonical name, its interface's full name |
+| `edges` | object[] | `{ "to", "guard"?, "reduce"? }` in declaration order, which is the order they are tried in; `failed` and `cancelled` have exactly one, without a guard |
+
+`inputs["<State>.done"]` is the schema of the train's output, the success outcome's input; `failed` and
+`cancelled` carry none. A runtime applies an outcome like any trigger, through its own edges: the first edge whose
+guard holds is taken, and when none does the result is `no-transition`, not `guard-failed`. The run's input
+mapping is not exported; the twin never starts a train. `differential.samples` may hold sample outputs under
+`<State>.done`. A machine that invokes nothing has no `outcomes` key, so its IR is unchanged.
+
+```json
+"outcomes": {
+  "Fetching.done": { "state": "Fetching", "outcome": "done", "train": "Ingest.Contracts.IFetchTrain",
+    "edges": [
+      { "to": "NeedsReview",
+        "guard": { "rule": "boolEquals", "source": "input", "field": "unsure", "value": true },
+        "reduce": { "reduce": "set", "steps": [ { "field": "fingerprint", "value": { "input": "fingerprint" } } ] } },
+      { "to": "Fetched",
+        "reduce": { "reduce": "set", "steps": [ { "field": "fingerprint", "value": { "input": "fingerprint" } } ] } }
+    ] },
+  "Fetching.failed": { "state": "Fetching", "outcome": "failed", "train": "Ingest.Contracts.IFetchTrain",
+    "edges": [ { "to": "FetchFailed" } ] },
+  "Fetching.cancelled": { "state": "Fetching", "outcome": "cancelled", "train": "Ingest.Contracts.IFetchTrain",
+    "edges": [ { "to": "Cancelled" } ] }
+}
+```
 
 ## Example
 

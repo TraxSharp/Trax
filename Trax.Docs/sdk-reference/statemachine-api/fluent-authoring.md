@@ -56,6 +56,24 @@ override them.
 | `Requires(Rule constraint)` | A per-state policy layered on the schema (composed, ANDed, chainable): what the state demands beyond its shape, e.g. a complete draft or an absent receipt. Exports as the state's `invariants` entry. Build the rule with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
 | `Committed()` | Marks the state as completed. A soft autosave can neither put a draft into it nor move a draft out of it (except a reset to the initial state); only the effect runner puts a draft there. See [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write). |
 | `On(TTrigger trigger)` | Starts a transition out of this state. Returns an `ITransitionBuilder`. |
+| `Invokes<TTrain, TInput, TOutput>(Func<JsonObject, TInput> input)` | **Experimental (`TRAXEXP002`).** Runs the train `TTrain` (its interface, an `IServiceTrain<TInput, TOutput>`) whenever the machine enters this state; `input` builds the run's input from the context, on the server only. Returns an [`IInvokeBuilder`](#iinvokebuilder). A state invokes at most one train. See [Invoking a train](/docs/statemachine/invoking-trains). |
+
+## IInvokeBuilder
+
+**Experimental (`TRAXEXP002`).** Says where an invoked train's outcome goes. It is also the state's
+`IStateBuilder`, so the state's transitions follow it. Every target joins the machine's reserved states.
+
+| Method | Description |
+|--------|-------------|
+| `OnDone(TState target, Rule? when = null, Reduction? reduce = null)` | Where a successful run goes. Declare one or more; they are tried in declaration order and the first whose `when` holds for the output is taken (null: every output). `when` reads the output as the outcome's input (`Input((MyOutput o) => o.Field)`); `reduce` builds the target's context from it (null keeps the context). An output no edge accepts is a `no-transition`. |
+| `OnFailed(TState target, Reduction? reduce = null)` | Where a failed run goes, a reaped run included. Exactly once. The outcome carries no input. |
+| `OnCancelled(TState target, Reduction? reduce = null)` | Where a cancelled run goes. Required, exactly once. The outcome carries no input. |
+
+`Build()` throws `InvalidOperationException`, naming the state, when an invoking state lacks `OnDone`, `OnFailed`
+or `OnCancelled`, declares either of the last two twice, invokes a second train, or names the train by a class
+rather than its interface. It also throws when an outcome goes to the target of the `RunsOnce` effect, or when an
+ordinary transition enters a state an outcome goes to (a self-loop is allowed). An invoked train does not count
+against the one `RunsOnce` effect.
 
 ## ITransitionBuilder
 
@@ -86,6 +104,7 @@ raw `JsonObject` overloads give exact control.
 | `EmptySample(TTrigger trigger)` | An empty (`{}`) input for a trigger, distinct from the always-added no-input case. |
 | `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. |
 | `Probe<TContext>(TContext context)` / `Probe(JsonObject context)` | A dense probe context crossed with every state, exercising guards and validators on unreachable-but-sendable snapshots. |
+| `OutcomeSample<TOutput>(TState invokingState, TOutput output)` | **Experimental (`TRAXEXP002`).** A representative output of the train the state invokes, fired as its `<State>.done` outcome trigger. Every outcome trigger is also fired with no input. `Build` refuses a sample for a state that invokes nothing. |
 
 ## Delegate vs declarative
 

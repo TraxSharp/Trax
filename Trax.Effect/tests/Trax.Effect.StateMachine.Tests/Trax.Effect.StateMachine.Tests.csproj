@@ -6,6 +6,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Effect.StateMachine.Tests</RootNamespace>
+    <!-- TRAXEXP002: these tests declare states that invoke a train, the experimental Invokes. -->
+    <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

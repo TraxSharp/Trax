@@ -20,6 +20,8 @@ export interface DifferentialSpec {
   version: number;
   states: string[];
   triggers: string[];
+  /** The IR's outcome triggers (`Fetching.done`), fired like triggers; their samples are train outputs. */
+  outcomes?: Record<string, unknown>;
   differential?: {
     samples?: Record<string, unknown[]>;
     seeds?: Record<string, Record<string, unknown>>;
@@ -56,7 +58,12 @@ export function enumerate<S extends string, T extends string>(
   machine: SnapshotMachine<S, T>,
   spec: DifferentialSpec,
 ): DifferentialCorpus {
-  const triggers = spec.triggers;
+  // Outcome triggers are events the twin applies, so they are enumerated after the user's own triggers; the
+  // corpus covers only the pure half (the twin holds no token, so it cannot tell a stale outcome from a live one).
+  const triggers = [
+    ...spec.triggers,
+    ...Object.keys(spec.outcomes ?? {}).sort(),
+  ];
   const samples = spec.differential?.samples ?? {};
   const seeds = spec.differential?.seeds ?? {};
   const contexts = spec.differential?.contexts ?? [];

@@ -39,6 +39,20 @@ public sealed record BuiltMachine<TState, TTrigger>(
     /// rehydrate or serialize snapshots in memory (for example in tests) without any persistence.
     /// </summary>
     public SnapshotMachine<TState, TTrigger> Engine { get; } = new(Definition);
+
+    /// <summary>The states that invoke a train, keyed by state. Empty for a machine that invokes nothing.</summary>
+    internal IReadOnlyDictionary<TState, InvokeDefinition<TState>> Invokes => Definition.Invokes;
+
+    /// <summary>
+    /// The states only the server may put a draft in or take it out of, so a soft autosave may not: committed
+    /// states, effect targets, states that invoke a train, and every target an invoked train's outcome reaches.
+    /// </summary>
+    internal IReadOnlySet<TState> ReservedStates =>
+        CommittedStates
+            .Concat(Effects.Select(e => e.To))
+            .Concat(Invokes.Keys)
+            .Concat(Invokes.Values.SelectMany(i => i.Targets))
+            .ToHashSet();
 }
 
 /// <summary>The root of the fluent configuration. See <see cref="MachineBuilder{TState,TTrigger}"/>.</summary>
@@ -140,6 +154,17 @@ public interface IDifferentialBuilder<TState, TTrigger>
 
     /// <summary>A dense probe context, as a raw JSON object.</summary>
     IDifferentialBuilder<TState, TTrigger> Probe(JsonObject context);
+
+    /// <summary>
+    /// A representative output of the train <paramref name="invokingState"/> invokes, fired as that state's
+    /// <c>done</c> outcome trigger (<c>&lt;State&gt;.done</c>), from a typed record. The harness also fires every
+    /// outcome trigger with no input.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
+    IDifferentialBuilder<TState, TTrigger> OutcomeSample<TOutput>(
+        TState invokingState,
+        TOutput output
+    ) => throw new NotSupportedException($"{GetType().Name} does not support outcome samples.");
 }
 
 /// <summary>Per-state configuration: its context validator, whether it is committed, and its transitions.</summary>
@@ -173,6 +198,29 @@ public interface IStateBuilder<TState, TTrigger>
 
     /// <summary>Begin a transition out of this state on a trigger.</summary>
     ITransitionBuilder<TState, TTrigger> On(TTrigger trigger);
+
+    /// <summary>
+    /// Run a train whenever the machine enters this state, and route its outcome with the returned builder's
+    /// <c>OnDone</c>, <c>OnFailed</c> and <c>OnCancelled</c>. A state invokes at most one train. The run belongs
+    /// to the state: leaving the state cancels it, and its outcome is applied only to the entry that queued it.
+    /// The scheduler never retries it; a machine retries by entering the state again.
+    ///
+    /// <para>The train runs at least once, so its junctions must be idempotent; an irreversible step inside it
+    /// takes its own claim. An invoked train does not count against the machine's one <c>RunsOnce</c> effect.</para>
+    /// </summary>
+    /// <typeparam name="TTrain">The train's interface, which is its canonical name.</typeparam>
+    /// <typeparam name="TInput">The train's input type.</typeparam>
+    /// <typeparam name="TOutput">The train's output type; a successful run's output is the <c>OnDone</c> outcome's input.</typeparam>
+    /// <param name="input">
+    /// Builds the run's input from the context the state was entered with. It runs on the server only: the IR
+    /// does not carry it, and the TypeScript twin never starts a train.
+    /// </param>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
+    IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(
+        Func<JsonObject, TInput> input
+    )
+        where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput> =>
+        throw new NotSupportedException($"{GetType().Name} does not support Invokes.");
 }
 
 /// <summary>A single transition: its guard, message, reducer, optional exactly-once effect, and destination.</summary>
@@ -242,6 +290,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private readonly Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>> _customReducers =
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
+    private readonly List<InvokeDraft> _invokes = [];
+    private readonly Dictionary<TState, List<JsonNode>> _diffOutcomeSamples = [];
 
     // States whose validator is a Holds delegate (not rebuilt from Context/Requires since), so the IR exporter
     // can refuse a declarative machine that would export them with no validator.
@@ -325,7 +375,10 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     /// <summary>Compile the configuration into an engine-ready definition + host metadata.</summary>
     /// <exception cref="InvalidOperationException">
     /// The machine has no id or no start state, names a custom rule or reduction with no handler bound, binds
-    /// more than one effect with <c>RunsOnce</c>, or enters an effect's target state by any other transition.
+    /// more than one effect with <c>RunsOnce</c>, or enters an effect's target state by any other transition. Or
+    /// a state invokes more than one train, invokes one by a class rather than its interface, or lacks
+    /// <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c> (or declares either of the last two twice); an
+    /// outcome goes to an effect's target; or an ordinary transition enters a state an outcome goes to.
     /// </exception>
     public BuiltMachine<TState, TTrigger> Build()
     {
@@ -349,6 +402,9 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
 
         RefuseOtherEdgesIntoEffectTargets();
 
+        var invokes = BuildInvokes();
+        RefuseOtherEdgesIntoOutcomeTargets(invokes);
+
         var definition = new MachineDefinition<TState, TTrigger>
         {
             Id = _id,
@@ -358,10 +414,14 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             Transitions = _transitions,
             ContextValidators = _validators,
             Migrations = _migrations,
+            Invokes = invokes,
         };
 
         var differential =
-            _diffSamples.Count > 0 || _diffSeeds.Count > 0 || _diffContexts.Count > 0
+            _diffSamples.Count > 0
+            || _diffSeeds.Count > 0
+            || _diffContexts.Count > 0
+            || _diffOutcomeSamples.Count > 0
                 ? new DifferentialModel<TState, TTrigger>(
                     _diffSamples.ToDictionary(
                         kv => kv.Key,
@@ -370,6 +430,12 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     _diffSeeds,
                     _diffContexts
                 )
+                {
+                    OutcomeSamples = _diffOutcomeSamples.ToDictionary(
+                        kv => kv.Key,
+                        kv => (IReadOnlyList<JsonNode>)kv.Value
+                    ),
+                }
                 : null;
 
         if (differential is not null && !_usedDeclarative)
@@ -422,14 +488,139 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         }
     }
 
+    // Every invoking state says where each outcome goes, and invokes one train. A missing OnCancelled would leave
+    // a cancelled run with no declared edge, and an operator's cancel is not "the failure state" once a machine
+    // has several; a second Invokes on one state would give one entry two runs and one token.
+    private Dictionary<TState, InvokeDefinition<TState>> BuildInvokes()
+    {
+        var problems = new List<string>();
+        foreach (var group in _invokes.GroupBy(i => i.State))
+        {
+            var drafts = group.ToList();
+            if (drafts.Count > 1)
+                problems.Add(
+                    $"the state {group.Key} invokes {drafts.Count} trains "
+                        + $"({string.Join(", ", drafts.Select(d => d.TrainType.Name))}), but a state invokes at "
+                        + "most one. Give each train a state of its own."
+                );
+        }
+        foreach (var draft in _invokes)
+        {
+            var state = draft.State;
+            var train = draft.TrainType.Name;
+            if (!draft.TrainType.IsInterface)
+                problems.Add(
+                    $"the state {state} invokes {train}, which is a class. Name the train by its interface "
+                        + "(Invokes<IMyTrain, TInput, TOutput>), which is the train's canonical name."
+                );
+            if (draft.Done.Count == 0)
+                problems.Add(
+                    $"the state {state} invokes {train} but declares no OnDone. Add `.OnDone({typeof(TState).Name}.X)` "
+                        + "for where a successful run goes."
+                );
+            problems.AddRange(
+                ExactlyOnce(draft.Failed.Count, state, train, "OnFailed", "a failed")
+            );
+            problems.AddRange(
+                ExactlyOnce(draft.Cancelled.Count, state, train, "OnCancelled", "a cancelled")
+            );
+            foreach (var target in draft.Done.Concat(draft.Failed).Concat(draft.Cancelled))
+            {
+                var effect = _effects.FirstOrDefault(e =>
+                    EqualityComparer<TState>.Default.Equals(e.To, target.To)
+                );
+                if (effect is not null)
+                    problems.Add(
+                        $"the state {state} sends an outcome of {train} to {target.To}, which is the target of the "
+                            + $"effect bound with RunsOnce on {effect.From} -> {effect.Trigger}. Only the effect may "
+                            + "enter the state that records its receipt; send the outcome to another state."
+                    );
+            }
+        }
+
+        foreach (
+            var state in _diffOutcomeSamples.Keys.Where(s => _invokes.All(i => !i.State.Equals(s)))
+        )
+            problems.Add(
+                $"the differential declares an outcome sample for {state}, which invokes no train. Declare "
+                    + "OutcomeSample only for a state with Invokes."
+            );
+
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"The machine '{_id}' cannot be built: "
+                    + string.Join(
+                        " ",
+                        problems.Distinct().Select(p => char.ToUpperInvariant(p[0]) + p[1..])
+                    )
+            );
+
+        return _invokes.ToDictionary(
+            d => d.State,
+            d => new InvokeDefinition<TState>(
+                d.State,
+                d.TrainType,
+                d.InputType,
+                d.OutputType,
+                d.CreateInput,
+                d.Done,
+                d.Failed[0],
+                d.Cancelled[0]
+            )
+        );
+    }
+
+    private static IEnumerable<string> ExactlyOnce(
+        int count,
+        TState state,
+        string train,
+        string method,
+        string run
+    )
+    {
+        if (count == 0)
+            yield return $"the state {state} invokes {train} but declares no {method}. Every invoking state says "
+                + $"where {run} run goes; add `.{method}({typeof(TState).Name}.X)`.";
+        else if (count > 1)
+            yield return $"the state {state} declares {method} {count} times. Declare it exactly once.";
+    }
+
+    // An outcome target means "the train produced this": the draft reaches it with the context its outcome
+    // reduced. An ordinary transition into it would let a client put a draft there with no run, carrying whatever
+    // its own input reduced, so the machine is refused, as it is for an effect's target. A self-loop on the
+    // target does not enter it and is allowed.
+    private void RefuseOtherEdgesIntoOutcomeTargets(
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
+    )
+    {
+        foreach (var invoke in invokes.Values)
+        foreach (var target in invoke.Targets)
+        foreach (var t in _transitions)
+        {
+            if (!EqualityComparer<TState>.Default.Equals(t.To, target))
+                continue;
+            if (EqualityComparer<TState>.Default.Equals(t.From, target))
+                continue;
+            throw new InvalidOperationException(
+                $"The machine '{_id}' enters {target} from {t.From} on {t.Trigger}, but {target} is where the "
+                    + $"outcome of {invoke.TrainType.Name}, invoked in {invoke.State}, goes. Only the outcome may "
+                    + "enter it; route the other edge to another state."
+            );
+        }
+    }
+
     // A custom rule or reduction with no C# handler would compile to a guard that is always false and a
     // reducer that silently keeps the context, while a TypeScript twin given its handler behaves otherwise.
     // Refuse the machine instead. Handlers may be bound before or after the rules that name them.
     private void RefuseUnboundCustomNames()
     {
+        var outcomeEdges = _invokes
+            .SelectMany(i => i.Done.Concat(i.Failed).Concat(i.Cancelled))
+            .ToList();
         var rules = _declarativeTransitions
             .Select(t => t.Guard)
             .Concat(_stateInvariants.Values.SelectMany(list => list))
+            .Concat(outcomeEdges.Select(e => e.Guard))
             .OfType<Rule>();
         foreach (var name in rules.SelectMany(CustomNames).Distinct(StringComparer.Ordinal))
             if (!_customGuards.ContainsKey(name))
@@ -441,6 +632,7 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         foreach (
             var name in _declarativeTransitions
                 .Select(t => t.Reduce)
+                .Concat(outcomeEdges.Select(e => e.Reduce))
                 .OfType<Reduction.Custom>()
                 .Select(c => c.Name)
                 .Distinct(StringComparer.Ordinal)
@@ -525,7 +717,113 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
 
         public ITransitionBuilder<TState, TTrigger> On(TTrigger trigger) =>
             new TransitionBuilder(owner, this, state, trigger);
+
+#pragma warning disable TRAXEXP002 // The experimental feature's own implementation.
+        public IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(
+            Func<JsonObject, TInput> input
+        )
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput>
+        {
+            ArgumentNullException.ThrowIfNull(input);
+            var draft = new InvokeDraft(
+                state,
+                typeof(TTrain),
+                typeof(TInput),
+                typeof(TOutput),
+                context => input(context)
+            );
+            owner._invokes.Add(draft);
+            return new InvokeBuilder(owner, this, draft);
+        }
+#pragma warning restore TRAXEXP002
     }
+
+    // One Invokes as declared, before Build checks it.
+    private sealed record InvokeDraft(
+        TState State,
+        Type TrainType,
+        Type InputType,
+        Type OutputType,
+        Func<JsonObject, object?> CreateInput
+    )
+    {
+        public List<OutcomeEdge<TState>> Done { get; } = [];
+        public List<OutcomeEdge<TState>> Failed { get; } = [];
+        public List<OutcomeEdge<TState>> Cancelled { get; } = [];
+    }
+
+#pragma warning disable TRAXEXP002 // The experimental feature's own implementation.
+    private sealed class InvokeBuilder(
+        MachineBuilder<TState, TTrigger> owner,
+        IStateBuilder<TState, TTrigger> state,
+        InvokeDraft draft
+    ) : IInvokeBuilder<TState, TTrigger>
+    {
+        public IInvokeBuilder<TState, TTrigger> OnDone(
+            TState target,
+            Rule? when = null,
+            Reduction? reduce = null
+        )
+        {
+            draft.Done.Add(Edge(target, when, reduce));
+            return this;
+        }
+
+        public IInvokeBuilder<TState, TTrigger> OnFailed(TState target, Reduction? reduce = null)
+        {
+            draft.Failed.Add(Edge(target, null, reduce));
+            return this;
+        }
+
+        public IInvokeBuilder<TState, TTrigger> OnCancelled(TState target, Reduction? reduce = null)
+        {
+            draft.Cancelled.Add(Edge(target, null, reduce));
+            return this;
+        }
+
+        // Compiled the way a transition's declarative When/Reduce are, so an outcome edge runs the same rule and
+        // reduction interpreters as every other edge, and exports as the same data.
+        private OutcomeEdge<TState> Edge(TState target, Rule? when, Reduction? reduce) =>
+            new(
+                target,
+                when,
+                reduce,
+                when is null
+                    ? null
+                    : (ctx, input) => RuleEvaluator.Evaluate(when, ctx, input, owner._customGuards),
+                reduce is null
+                    ? null
+                    : (ctx, input) =>
+                        ReductionEvaluator.Apply(
+                            reduce,
+                            ctx,
+                            input,
+                            owner._initialContext?.Invoke() ?? new JsonObject(),
+                            owner._customReducers
+                        )
+            );
+
+        public IStateBuilder<TState, TTrigger> Holds(Func<JsonObject, string?> validator) =>
+            state.Holds(validator);
+
+        public IStateBuilder<TState, TTrigger> Context<TContext>() => state.Context<TContext>();
+
+        public IStateBuilder<TState, TTrigger> Context() => state.Context();
+
+        public IStateBuilder<TState, TTrigger> Requires(Rule constraint) =>
+            state.Requires(constraint);
+
+        public IStateBuilder<TState, TTrigger> Committed() => state.Committed();
+
+        public ITransitionBuilder<TState, TTrigger> On(TTrigger trigger) => state.On(trigger);
+
+        public IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(
+            Func<JsonObject, TInput> input
+        )
+            where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput> =>
+            state.Invokes<TTrain, TInput, TOutput>(input);
+    }
+#pragma warning restore TRAXEXP002
 
     private sealed class TransitionBuilder(
         MachineBuilder<TState, TTrigger> owner,
@@ -685,6 +983,17 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         public IDifferentialBuilder<TState, TTrigger> Probe(JsonObject context)
         {
             owner._diffContexts.Add(context);
+            return this;
+        }
+
+        public IDifferentialBuilder<TState, TTrigger> OutcomeSample<TOutput>(
+            TState invokingState,
+            TOutput output
+        )
+        {
+            if (!owner._diffOutcomeSamples.TryGetValue(invokingState, out var list))
+                owner._diffOutcomeSamples[invokingState] = list = [];
+            list.Add(ToObject(output));
             return this;
         }
 

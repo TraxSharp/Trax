@@ -64,5 +64,13 @@ public sealed record DifferentialModel<TState, TTrigger>(
     /// True when no samples, seeds or probe contexts were authored. The IR exporter omits the
     /// <c>differential</c> section for an empty model, so the IR matches a machine without one.
     /// </summary>
-    public bool IsEmpty => Samples.Count == 0 && Seeds.Count == 0 && Contexts.Count == 0;
+    public bool IsEmpty =>
+        Samples.Count == 0 && Seeds.Count == 0 && Contexts.Count == 0 && OutcomeSamples.Count == 0;
+
+    /// <summary>
+    /// Representative outputs per invoking state, fired as that state's <c>done</c> outcome trigger. Exported under
+    /// <c>samples</c> keyed by the outcome trigger (<c>Fetching.done</c>).
+    /// </summary>
+    internal IReadOnlyDictionary<TState, IReadOnlyList<JsonNode>> OutcomeSamples { get; init; } =
+        new Dictionary<TState, IReadOnlyList<JsonNode>>();
 }

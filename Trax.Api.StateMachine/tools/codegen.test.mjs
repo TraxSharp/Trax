@@ -44,6 +44,11 @@ const committedCorpus = join(
 
 const read = (path) => readFileSync(path, "utf8");
 
+// A machine whose state invokes a train: its IR carries outcome triggers, which the twin and the corpus
+// generators must carry through to the committed artifacts unchanged.
+const ingestIr = join(repoRoot, "machines", "ingest", "ingest.ir.json");
+const ingestTwin = join(repoRoot, "src", "machines", "ingest");
+
 describe("generate-twin entrypoint", () => {
   let out;
   beforeEach(() => {
@@ -62,6 +67,16 @@ describe("generate-twin entrypoint", () => {
     });
     expect(read(contextsPath)).toBe(read(committedContexts));
     expect(read(machinePath)).toBe(read(committedMachine));
+  });
+
+  it("reproduces the committed ingest twin, outcome triggers included", async () => {
+    const { contextsPath, machinePath } = await generateTwin({
+      irPath: ingestIr,
+      engineSrc,
+      outDir: out,
+    });
+    expect(read(contextsPath)).toBe(read(join(ingestTwin, "ingest.contexts.g.ts")));
+    expect(read(machinePath)).toBe(read(join(ingestTwin, "ingest.machine.g.ts")));
   });
 
   it("derives the filenames from the IR id", async () => {
@@ -131,6 +146,15 @@ describe("generate-corpus entrypoint", () => {
     });
     expect(result.outPath).toBe(outPath);
     expect(read(outPath)).toBe(read(committedCorpus));
+  });
+
+  it("reproduces the committed ingest corpus, which fires its outcome triggers", async () => {
+    const outPath = join(out, "differential.json");
+    await generateCorpus({ irPath: ingestIr, engineSrc, outPath });
+    expect(read(outPath)).toBe(
+      read(join(repoRoot, "machines", "ingest", "differential.json")),
+    );
+    expect(read(outPath)).toContain(`"trigger": "Fetching.done"`);
   });
 });
 

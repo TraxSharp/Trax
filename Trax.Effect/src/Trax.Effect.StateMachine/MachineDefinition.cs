@@ -53,6 +53,14 @@ public sealed class MachineDefinition<TState, TTrigger>
         Func<string, JsonObject, MigrationResult>
     > Migrations { get; init; } = new Dictionary<int, Func<string, JsonObject, MigrationResult>>();
 
+    /// <summary>
+    /// The states that invoke a train, keyed by state, with where each outcome goes. Empty for a machine that
+    /// invokes nothing. Only <see cref="SnapshotMachine{TState,TTrigger}.ApplyOutcome"/> reaches these edges;
+    /// <see cref="SnapshotMachine{TState,TTrigger}.Advance"/> never fires them.
+    /// </summary>
+    internal IReadOnlyDictionary<TState, InvokeDefinition<TState>> Invokes { get; init; } =
+        new Dictionary<TState, InvokeDefinition<TState>>();
+
     /// <summary>Builds the snapshot a brand-new instance begins with.</summary>
     public Snapshot CreateInitialSnapshot() =>
         new()

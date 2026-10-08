@@ -8,6 +8,7 @@ import {
 import { differentialFile, irFile } from "./fixtures";
 import type { SnapshotMachine } from "./machine";
 import { checkoutCore } from "./machines/checkout/checkout";
+import { ingestCore } from "./machines/ingest/ingest";
 import { turnstileCore } from "./machines/turnstile/turnstile";
 
 // TypeScript is the oracle. It re-enumerates the corpus from the machine's IR (the single source authored in
@@ -46,4 +47,7 @@ describe("differential corpus (TypeScript oracle)", () => {
     assertCorpus("turnstile", turnstileCore));
   it("checkout matches its committed corpus", () =>
     assertCorpus("checkout", checkoutCore));
+  // A machine whose state invokes a train: its outcome triggers are enumerated as events (pure half only).
+  it("ingest matches its committed corpus", () =>
+    assertCorpus("ingest", ingestCore));
 });

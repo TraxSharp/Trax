@@ -93,6 +93,13 @@ internal static class ExperimentalIds
 {
     /// <summary><c>Parallel</c>: branches that run side by side within one run.</summary>
     public const string Parallel = "TRAXEXP001";
+
+    /// <summary>
+    /// <c>Invokes</c>: a state-machine state that runs a train. The feature lives in
+    /// Trax.Effect.StateMachine, which does not see this class, so it declares the same id beside
+    /// its own builder; the two must stay equal.
+    /// </summary>
+    public const string Invokes = "TRAXEXP002";
 }
 
 /// <summary>One declared branch: its name and its chain.</summary>

@@ -44,6 +44,11 @@ public static class IrExporter
         foreach (var (trigger, schema) in declarative.TriggerInputs)
             inputs[trigger.ToString()!] = WriteSchema(schema);
 
+        // An invoking state's success outcome takes the train's output as its input, so its schema is the
+        // output type's. Failure and cancel carry no input.
+        foreach (var invoke in def.Invokes.Values)
+            inputs[invoke.TriggerName(InvokeOutcomeKind.Done)] = WriteSchema(OutputSchema(invoke));
+
         var transitions = BuildTransitions(machine, declarative);
 
         var ir = new JsonObject
@@ -74,6 +79,11 @@ public static class IrExporter
                 invariants[state.ToString()!] = WriteRule(rule);
             ir["invariants"] = invariants;
         }
+
+        // The outcome triggers of states that invoke a train, a trigger kind of their own. Omitted when the machine
+        // invokes nothing, so its IR is unchanged.
+        if (def.Invokes.Count > 0)
+            ir["outcomes"] = WriteOutcomes(def.Invokes);
 
         // The differential fuzzing inputs (test-only), if authored via .Differential(...). Carries the
         // samples/seeds/contexts the cross-language harness enumerates, so it reads this one IR instead of a
@@ -150,16 +160,13 @@ public static class IrExporter
     {
         var obj = new JsonObject();
 
-        if (diff.Samples.Count > 0)
+        if (diff.Samples.Count > 0 || diff.OutcomeSamples.Count > 0)
         {
             var samples = new JsonObject();
             foreach (var (trigger, inputs) in diff.Samples)
-            {
-                var arr = new JsonArray();
-                foreach (var input in inputs)
-                    arr.Add(input.DeepClone());
-                samples[trigger.ToString()!] = arr;
-            }
+                samples[trigger.ToString()!] = Copy(inputs);
+            foreach (var (state, outputs) in diff.OutcomeSamples)
+                samples[OutcomeTriggers.Name(state, InvokeOutcomeKind.Done)] = Copy(outputs);
             obj["samples"] = samples;
         }
 
@@ -180,6 +187,65 @@ public static class IrExporter
         }
 
         return obj;
+    }
+
+    private static JsonArray Copy(IEnumerable<JsonNode> nodes)
+    {
+        var arr = new JsonArray();
+        foreach (var node in nodes)
+            arr.Add(node.DeepClone());
+        return arr;
+    }
+
+    private static ContextSchema OutputSchema<TState>(InvokeDefinition<TState> invoke)
+        where TState : struct, Enum
+    {
+        try
+        {
+            return SchemaReflection.For(invoke.OutputType);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(
+                $"IR export cannot describe the output of {invoke.TrainType.Name}, invoked in {invoke.State}: "
+                    + ex.Message,
+                ex
+            );
+        }
+    }
+
+    // One entry per outcome trigger (Fetching.done, Fetching.failed, Fetching.cancelled): the invoking state, the
+    // outcome, the train's canonical name, and the edges in declaration order, which is the order they are tried
+    // in, so a guarded edge before an unguarded fallback stays before it. The input mapping is server-only and
+    // is not exported: the twin never starts a train.
+    private static JsonObject WriteOutcomes<TState>(
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
+    )
+        where TState : struct, Enum
+    {
+        var outcomes = new JsonObject();
+        foreach (var invoke in invokes.Values)
+        foreach (var kind in Enum.GetValues<InvokeOutcomeKind>())
+        {
+            var edges = new JsonArray();
+            foreach (var edge in invoke.EdgesFor(kind))
+            {
+                var e = new JsonObject { ["to"] = edge.To.ToString() };
+                if (edge.Guard is not null)
+                    e["guard"] = WriteRule(edge.Guard);
+                if (edge.Reduce is not null)
+                    e["reduce"] = WriteReduction(edge.Reduce);
+                edges.Add(e);
+            }
+            outcomes[invoke.TriggerName(kind)] = new JsonObject
+            {
+                ["state"] = invoke.State.ToString(),
+                ["outcome"] = OutcomeTriggers.Suffix(kind),
+                ["train"] = invoke.TrainName,
+                ["edges"] = edges,
+            };
+        }
+        return outcomes;
     }
 
     private static JsonArray BuildTransitions<TState, TTrigger>(

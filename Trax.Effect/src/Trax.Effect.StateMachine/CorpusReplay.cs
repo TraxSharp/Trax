@@ -45,7 +45,12 @@ public static class CorpusReplay
             var trigger = when["trigger"]!.GetValue<string>();
             var input = when["input"]?.DeepClone();
 
-            var (outcome, wire, reason) = machine.Advance(snap, trigger, input) switch
+            // The twin applies an invoked train's outcome as an ordinary trigger (Fetching.done). The server
+            // never takes one from Advance, so its cases are replayed through the outcome path instead.
+            var result = machine.IsOutcomeTrigger(trigger)
+                ? machine.AdvanceOutcome(snap, trigger, input)
+                : machine.Advance(snap, trigger, input);
+            var (outcome, wire, reason) = result switch
             {
                 AdvanceResult.Transitioned t => (
                     "transitioned",

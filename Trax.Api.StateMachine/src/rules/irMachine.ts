@@ -28,6 +28,25 @@ export interface IrTransition {
   effect?: { type: string | null; keyPrefix: string };
 }
 
+/** One edge an invoked train's outcome can take; `guard` reads the train's output as the input. */
+export interface IrOutcomeEdge {
+  to: string;
+  guard?: Rule;
+  reduce?: Reduction;
+}
+
+/**
+ * An outcome trigger of a state that invokes a train, keyed in `IrDocument.outcomes` by its name
+ * (`<state>.done`, `.failed`, `.cancelled`). `edges` are in declaration order, which is the order they are
+ * tried in. `train` is the train's canonical name; the twin never starts it.
+ */
+export interface IrOutcome {
+  state: string;
+  outcome: "done" | "failed" | "cancelled";
+  train: string;
+  edges: IrOutcomeEdge[];
+}
+
 export interface IrDocument {
   id: string;
   version: number;
@@ -40,6 +59,9 @@ export interface IrDocument {
   inputs: Record<string, ContextSchema>;
   invariants?: Record<string, Rule>;
   transitions: IrTransition[];
+  // The outcome triggers of states that invoke a train, a trigger kind of their own. Absent when the machine
+  // invokes nothing. The success outcome's input schema (the train's output) is under `inputs`.
+  outcomes?: Record<string, IrOutcome>;
   // Differential fuzzing inputs (test-only), authored in C# via .Differential(...) and exported here so the
   // cross-language differential harness enumerates off this IR instead of a hand-written machine.json. Absent
   // on machines with no cross-language differential. Structurally the same block DifferentialSpec carries, so
@@ -63,27 +85,47 @@ export function machineFromIr(
   const createInitialContext = (): Record<string, unknown> =>
     ir.initialContext ? { ...ir.initialContext } : defaultsFor(initialSchema);
 
+  const edge = (
+    from: string,
+    trigger: string,
+    to: string,
+    guard: Rule | undefined,
+    reduce: Reduction | undefined,
+    guardMessage?: string,
+  ): TransitionDefinition<string, string> => ({
+    from,
+    trigger,
+    to,
+    guard: guard
+      ? (ctx, input) => evaluateRule(guard, ctx, input, customGuards)
+      : undefined,
+    guardMessage,
+    reduce: reduce
+      ? (ctx, input) =>
+          applyReduction(
+            reduce,
+            ctx,
+            input,
+            createInitialContext(),
+            customReducers,
+          )
+      : undefined,
+  });
+
   const transitions: TransitionDefinition<string, string>[] =
-    ir.transitions.map((t) => ({
-      from: t.from,
-      trigger: t.trigger,
-      to: t.to,
-      guard: t.guard
-        ? (ctx, input) =>
-            evaluateRule(t.guard as Rule, ctx, input, customGuards)
-        : undefined,
-      guardMessage: t.guardMessage,
-      reduce: t.reduce
-        ? (ctx, input) =>
-            applyReduction(
-              t.reduce as Reduction,
-              ctx,
-              input,
-              createInitialContext(),
-              customReducers,
-            )
-        : undefined,
-    }));
+    ir.transitions.map((t) =>
+      edge(t.from, t.trigger, t.to, t.guard, t.reduce, t.guardMessage),
+    );
+
+  // An outcome is an event the twin applies like any trigger, through its own edges in declaration order (the
+  // first whose guard accepts the train's output wins, as on the server). Its name has a dot, which no C#
+  // trigger can, so it never collides with one.
+  const outcomeTriggers = Object.keys(ir.outcomes ?? {}).sort();
+  for (const name of outcomeTriggers) {
+    const outcome = (ir.outcomes as Record<string, IrOutcome>)[name];
+    for (const e of outcome.edges)
+      transitions.push(edge(outcome.state, name, e.to, e.guard, e.reduce));
+  }
 
   const contextValidators: Partial<Record<string, ContextValidator>> = {};
   const validatedStates = new Set([
@@ -114,6 +156,7 @@ export function machineFromIr(
     states: ir.states,
     transitions,
     committedStates: ir.committedStates,
+    outcomeTriggers,
     contextValidators,
   };
 }

@@ -404,7 +404,10 @@
         }
       },
       "trax.effect.statemachine": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )"
+        }
       },
       "trax.effect.statemachine.persistence": {
         "type": "Project",

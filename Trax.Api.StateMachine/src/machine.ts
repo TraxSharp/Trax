@@ -21,9 +21,11 @@ import type {
  */
 export class SnapshotMachine<S extends string, T extends string> {
   private readonly stateSet: ReadonlySet<string>;
+  private readonly outcomeTriggers: ReadonlySet<string>;
 
   constructor(private readonly def: MachineDefinition<S, T>) {
     this.stateSet = new Set<string>(def.states);
+    this.outcomeTriggers = new Set<string>(def.outcomeTriggers ?? []);
   }
 
   get definition(): MachineDefinition<S, T> {
@@ -63,6 +65,13 @@ export class SnapshotMachine<S extends string, T extends string> {
         guardPasses(t, snapshot.context, input),
       );
       if (!chosen) {
+        // An output no OnDone edge accepts has nowhere to go; it is not a guard a caller could satisfy by
+        // sending something else, so it is a no-transition, as on the server.
+        if (this.outcomeTriggers.has(trigger))
+          return rejected(
+            RejectionReasons.NoTransition,
+            `No OnDone edge from '${snapshot.state}' accepts the train's output.`,
+          );
         const message =
           matches.map((m) => m.guardMessage).find((m) => m != null) ??
           `A transition from '${snapshot.state}' on '${trigger}' exists but its guard rejected the input.`;
@@ -197,6 +206,8 @@ export class SnapshotMachine<S extends string, T extends string> {
 
   canFire(snapshot: Snapshot, trigger: string, input?: unknown): boolean {
     if (!this.stateSet.has(snapshot.state)) return false;
+    // An outcome is not an action a caller fires, as on the server; `advance` still applies one.
+    if (this.outcomeTriggers.has(trigger)) return false;
     return this.def.transitions.some(
       (t) =>
         t.from === snapshot.state &&
@@ -207,9 +218,11 @@ export class SnapshotMachine<S extends string, T extends string> {
 
   availableTriggers(snapshot: Snapshot): string[] {
     if (!this.stateSet.has(snapshot.state)) return [];
+    // An outcome trigger is something the server applies when a train finishes, never an action to offer.
     const seen = new Set<string>();
     for (const t of this.def.transitions)
-      if (t.from === snapshot.state) seen.add(t.trigger);
+      if (t.from === snapshot.state && !this.outcomeTriggers.has(t.trigger))
+        seen.add(t.trigger);
     return [...seen];
   }
 
