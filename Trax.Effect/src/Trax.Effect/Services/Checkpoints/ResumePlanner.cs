@@ -53,7 +53,71 @@ public interface IRunResumes
         string? resumeAt,
         CancellationToken cancellationToken
     );
+
+    /// <summary>
+    /// Whether the run <paramref name="runId"/> of <paramref name="train"/> can resume after its
+    /// latest checkpoint and at each of <paramref name="points"/>, from one read of its lineage,
+    /// with the nodes that hold a checkpoint it can resume from and, when it is itself a resumed
+    /// run, the nodes it restored rather than ran. What an operator's run graph shows; each verdict
+    /// is the one <see cref="Check"/> gives for that point.
+    /// </summary>
+    /// <remarks>
+    /// An implementation that predates it asks <see cref="Check"/> once per point and reports no
+    /// checkpoints and no restored nodes.
+    /// </remarks>
+    /// <param name="train">The train's class.</param>
+    /// <param name="chain">Its declared chain.</param>
+    /// <param name="input">Its input type.</param>
+    /// <param name="output">Its output type.</param>
+    /// <param name="runId">The run.</param>
+    /// <param name="points">The node ids to check a resume at.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    async Task<ResumeChecks> CheckMany(
+        Type train,
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        long runId,
+        IReadOnlyCollection<string> points,
+        CancellationToken cancellationToken
+    )
+    {
+        var latest = await Check(train, chain, input, output, runId, null, cancellationToken)
+            .ConfigureAwait(false);
+        var at = new Dictionary<string, ResumeVerdict>(StringComparer.Ordinal);
+
+        foreach (var point in points)
+            at[point] = await Check(train, chain, input, output, runId, point, cancellationToken)
+                .ConfigureAwait(false);
+
+        return new ResumeChecks(latest, at, [], [], []);
+    }
 }
+
+/// <summary>
+/// A run's resume verdicts and checkpoints, as <see cref="IRunResumes.CheckMany"/> reads them. It
+/// names nodes only: never a checkpoint's stored state or the tracks stored with it.
+/// </summary>
+/// <param name="Latest">Whether the run can resume after its latest checkpoint.</param>
+/// <param name="At">Whether it can resume at each point asked about, by node id.</param>
+/// <param name="Checkpoints">
+/// The nodes holding a checkpoint the run can resume from: those it wrote, and for a resumed run,
+/// those the runs it resumed wrote before the point it resumed at.
+/// </param>
+/// <param name="Written">The nodes at which the run itself wrote a checkpoint.</param>
+/// <param name="Restored">
+/// For a resumed run, the nodes before the point it resumed at, which it skipped and whose work
+/// the checkpoint restored; empty for any other run, or when the resume can no longer be planned
+/// against the running chain.
+/// </param>
+[Experimental("TRAXEXP003")]
+public sealed record ResumeChecks(
+    ResumeVerdict Latest,
+    IReadOnlyDictionary<string, ResumeVerdict> At,
+    IReadOnlyCollection<string> Checkpoints,
+    IReadOnlyCollection<string> Written,
+    IReadOnlyCollection<string> Restored
+);
 
 /// <inheritdoc />
 internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProvider services)
@@ -85,6 +149,46 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
                 resumeAt
             )
             .Verdict;
+    }
+
+    public async Task<ResumeChecks> CheckMany(
+        Type train,
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        long runId,
+        IReadOnlyCollection<string> points,
+        CancellationToken cancellationToken
+    )
+    {
+        if (rows.FirstOrDefault() is not { } store)
+            return new ResumeChecks(
+                ResumePlanner.NoRows,
+                points
+                    .Distinct(StringComparer.Ordinal)
+                    .ToDictionary(p => p, _ => ResumePlanner.NoRows, StringComparer.Ordinal),
+                [],
+                [],
+                []
+            );
+
+        // One lineage read for every point.
+        var lineage = await store.Lineage(runId, cancellationToken).ConfigureAwait(false);
+        var hash = ChainGraph.From(chain, train, input, output).Hash;
+        var container = services.GetService<IServiceProviderIsService>();
+
+        ResumeVerdict At(string? point) =>
+            ResumePlanner.Plan(chain, hash, input, output, container, lineage, point).Verdict;
+
+        return new ResumeChecks(
+            At(null),
+            points
+                .Distinct(StringComparer.Ordinal)
+                .ToDictionary(p => p, p => At(p), StringComparer.Ordinal),
+            ResumePlanner.Chosen(chain, lineage).Keys.ToList(),
+            lineage.Count > 0 ? lineage[0].Rows.Select(r => r.NodeId).Distinct().ToList() : [],
+            ResumePlanner.Restored(chain, input, output, container, lineage)
+        );
     }
 }
 
@@ -122,25 +226,7 @@ internal static class ResumePlanner
         string? resumeAt
     )
     {
-        var order = ChainVerification
-            .NodeOrder(chain)
-            .Select((id, i) => (id, i))
-            .ToDictionary(n => n.id, n => n.i);
-
-        // A resumed run wrote only the checkpoints after its own point, so the run it resumed
-        // counts for what came before that point. The nearest run's row wins for one node.
-        var chosen = new Dictionary<string, Models.Checkpoint.Checkpoint>();
-        var limit = int.MaxValue;
-
-        foreach (var run in lineage)
-        {
-            foreach (var row in run.Rows)
-                if (order.TryGetValue(row.NodeId, out var at) && at < limit)
-                    chosen.TryAdd(row.NodeId, row);
-
-            if (run.ResumeAt is { } point && order.TryGetValue(point, out var resumedAt))
-                limit = Math.Min(limit, resumedAt);
-        }
+        var chosen = Chosen(chain, lineage);
 
         var outcome = ChainVerification.CheckResume(
             chain,
@@ -207,6 +293,89 @@ internal static class ResumePlanner
             new ResumePlan(outcome.Target, outcome.Inclusive, restored)
         );
     }
+
+    /// <summary>
+    /// The checkpoints a resume of the first run of <paramref name="lineage"/> can restore, by
+    /// node id. A resumed run wrote only the checkpoints after its own point, so the run it resumed
+    /// counts for what came before that point. The nearest run's row wins for one node.
+    /// </summary>
+    internal static Dictionary<string, Models.Checkpoint.Checkpoint> Chosen(
+        ChainRecorder chain,
+        IReadOnlyList<ResumedRun> lineage
+    )
+    {
+        var order = Order(chain);
+        var chosen = new Dictionary<string, Models.Checkpoint.Checkpoint>();
+        var limit = int.MaxValue;
+
+        foreach (var run in lineage)
+        {
+            foreach (var row in run.Rows)
+                if (order.TryGetValue(row.NodeId, out var at) && at < limit)
+                    chosen.TryAdd(row.NodeId, row);
+
+            if (run.ResumeAt is { } point && order.TryGetValue(point, out var resumedAt))
+                limit = Math.Min(limit, resumedAt);
+        }
+
+        return chosen;
+    }
+
+    /// <summary>
+    /// The nodes the first run of <paramref name="lineage"/> skipped because it resumed: every
+    /// node before the point it resumed at, the point too when it is the checkpoint it restored,
+    /// and in a branch that resumed from its own checkpoint, the branch's nodes up to that
+    /// checkpoint. Planned as the run planned it when it started; empty for a run that did not
+    /// resume, or whose resume the running chain no longer allows.
+    /// </summary>
+    internal static IReadOnlyCollection<string> Restored(
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        IServiceProviderIsService? container,
+        IReadOnlyList<ResumedRun> lineage
+    )
+    {
+        if (lineage.Count < 2 || lineage[0].ResumeFrom is null)
+            return [];
+
+        var outcome = ChainVerification.CheckResume(
+            chain,
+            input,
+            output,
+            container is null ? null : container.IsService,
+            Chosen(chain, lineage.Skip(1).ToList()).Keys.ToList(),
+            lineage[0].ResumeAt
+        );
+
+        if (!outcome.CanResume)
+            return [];
+
+        var order = Order(chain);
+        var target = outcome.Target is { } t && order.TryGetValue(t, out var at) ? at : -1;
+        var restored = new List<string>();
+
+        foreach (var (id, index) in order)
+        {
+            var before = index < target || (index == target && outcome.Inclusive);
+            var inRestoredBranch = outcome.BranchCheckpoints.Any(b =>
+                id.StartsWith(b.Key + "/", StringComparison.Ordinal)
+                && order.TryGetValue(b.Value, out var checkpoint)
+                && index <= checkpoint
+            );
+
+            if (before || inRestoredBranch)
+                restored.Add(id);
+        }
+
+        return restored;
+    }
+
+    private static Dictionary<string, int> Order(ChainRecorder chain) =>
+        ChainVerification
+            .NodeOrder(chain)
+            .Select((id, i) => (id, i))
+            .ToDictionary(n => n.id, n => n.i);
 
     /// <summary>
     /// The stored routes read back as the <c>TrackTaken</c> values the chain declares. A route

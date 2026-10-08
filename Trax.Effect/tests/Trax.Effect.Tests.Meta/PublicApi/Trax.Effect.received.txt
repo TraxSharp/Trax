@@ -1253,6 +1253,17 @@ namespace Trax.Effect.Services.Checkpoints
     public interface IRunResumes
     {
         System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeVerdict> Check(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, string? resumeAt, System.Threading.CancellationToken cancellationToken);
+        System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeChecks> CheckMany(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, System.Collections.Generic.IReadOnlyCollection<string> points, System.Threading.CancellationToken cancellationToken);
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public sealed class ResumeChecks : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeChecks>
+    {
+        public ResumeChecks(Trax.Effect.Services.Checkpoints.ResumeVerdict Latest, System.Collections.Generic.IReadOnlyDictionary<string, Trax.Effect.Services.Checkpoints.ResumeVerdict> At, System.Collections.Generic.IReadOnlyCollection<string> Checkpoints, System.Collections.Generic.IReadOnlyCollection<string> Written, System.Collections.Generic.IReadOnlyCollection<string> Restored) { }
+        public System.Collections.Generic.IReadOnlyDictionary<string, Trax.Effect.Services.Checkpoints.ResumeVerdict> At { get; init; }
+        public System.Collections.Generic.IReadOnlyCollection<string> Checkpoints { get; init; }
+        public Trax.Effect.Services.Checkpoints.ResumeVerdict Latest { get; init; }
+        public System.Collections.Generic.IReadOnlyCollection<string> Restored { get; init; }
+        public System.Collections.Generic.IReadOnlyCollection<string> Written { get; init; }
     }
     [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public sealed class ResumeVerdict : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeVerdict>
