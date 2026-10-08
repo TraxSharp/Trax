@@ -40,7 +40,16 @@ public sealed record StressProfile(
             // Only runs whose trains ask deciders record decisions, a few each, so the table is a
             // fraction of the run table's size.
             Decisions: EnvLong("TRAX_STRESS_DECISIONS", 1_000_000)
-        );
+        )
+        {
+            SnapshotDrafts = EnvLong("TRAX_STRESS_SNAPSHOT_DRAFTS", 2_000_000),
+        };
+
+    /// <summary>
+    /// State-machine instances (<c>trax.snapshot_draft</c> rows) to seed. A profile built by hand
+    /// seeds none unless it says so.
+    /// </summary>
+    public long SnapshotDrafts { get; init; }
 
     private static long EnvLong(string name, long fallback) =>
         long.TryParse(Environment.GetEnvironmentVariable(name), out var v) && v > 0 ? v : fallback;
@@ -117,6 +126,7 @@ public static class BulkSeeder
             );
             // A seed from before decisions were seeded gets them without reseeding the rest.
             await SeedDecisionsAsync(conn, profile, log, ct);
+            await SeedSnapshotDraftsAsync(conn, profile, log, ct);
             return;
         }
 
@@ -281,6 +291,7 @@ public static class BulkSeeder
         );
 
         await SeedDecisionsAsync(conn, profile, log, ct);
+        await SeedSnapshotDraftsAsync(conn, profile, log, ct);
 
         // VACUUM (not just ANALYZE) so the visibility map is set and the metrics
         // covering indexes serve heap-free Index Only Scans immediately, the way
@@ -400,6 +411,61 @@ public static class BulkSeeder
             ct
         );
         await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.decision", ct);
+    }
+
+    /// <summary>The machines the seeded instances belong to; the first two are system-owned.</summary>
+    public const int SnapshotMachines = 6;
+
+    /// <summary>The states the seeded instances are spread across, evenly.</summary>
+    public const int SnapshotStates = 8;
+
+    /// <summary>The id of the <c>g</c>th seeded machine.</summary>
+    public static string SnapshotMachine(int g) => $"Stress.Machines.Machine{g}";
+
+    /// <summary>The name of the <c>g</c>th seeded state.</summary>
+    public static string SnapshotState(int g) => $"State{g}";
+
+    /// <summary>
+    /// Seeds <see cref="StressProfile.SnapshotDrafts"/> state-machine instances over
+    /// <see cref="SnapshotMachines"/> machines and <see cref="SnapshotStates"/> states, written
+    /// over the last fourteen days, each with a context an operator must never be shown. Machines
+    /// 0 and 1 are system-owned (a third of the rows); the rest are users' drafts, a thousand
+    /// users each. One instance in a hundred holds an invoke token. Skipped when the table
+    /// already holds the profile's count.
+    /// </summary>
+    private static async Task SeedSnapshotDraftsAsync(
+        NpgsqlConnection conn,
+        StressProfile profile,
+        Action<string> log,
+        CancellationToken ct
+    )
+    {
+        if (profile.SnapshotDrafts <= 0)
+            return;
+        var existing = await ScalarLong(conn, "SELECT count(*) FROM trax.snapshot_draft", ct);
+        if (existing >= profile.SnapshotDrafts * 0.95)
+            return;
+
+        log($"Seeding {profile.SnapshotDrafts:N0} snapshot_draft...");
+        await Exec(conn, "TRUNCATE trax.snapshot_draft RESTART IDENTITY", ct);
+        await SeedTable(
+            conn,
+            profile.SnapshotDrafts,
+            "INSERT INTO trax.snapshot_draft (id, user_key, owner_kind, machine, version, state, "
+                + "context, concurrency_token, created_at, updated_at, invoke_token) "
+                + "SELECT md5(g::text)::uuid, "
+                + $"       CASE WHEN g % {SnapshotMachines} < 2 THEN NULL ELSE 'stress-user-' || (g % 1000) END, "
+                + $"       CASE WHEN g % {SnapshotMachines} < 2 THEN 'system'::trax.snapshot_owner_kind ELSE 'user'::trax.snapshot_owner_kind END, "
+                + $"       'Stress.Machines.Machine' || (g % {SnapshotMachines}), 1, "
+                + $"       'State' || ((g / {SnapshotMachines}) % {SnapshotStates}), "
+                + "       jsonb_build_object('secret', 'stress-context-' || g), md5(g::text || 'token')::uuid, "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute') - interval '1 hour', "
+                + $"       now() - ((g % {MinuteSpread}) * interval '1 minute'), "
+                + "       CASE WHEN g % 100 = 0 THEN 'stress-run-' || g ELSE NULL END "
+                + "FROM generate_series(@lo, @hi) g",
+            ct
+        );
+        await Exec(conn, "VACUUM (ANALYZE, PARALLEL 0) trax.snapshot_draft", ct);
     }
 
     private static async Task<bool> AlreadySeeded(

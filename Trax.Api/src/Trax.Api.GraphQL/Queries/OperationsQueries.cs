@@ -29,7 +29,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// Predefined operational queries: health, trains, manifests, manifest groups, execution
 /// history, and the nested <c>deadLetters</c> namespace.
 /// </summary>
-public class OperationsQueries
+public partial class OperationsQueries
 {
     /// <summary>
     /// Nested namespace exposing dead letter queries (<c>deadLetters</c>, <c>deadLetter</c>).

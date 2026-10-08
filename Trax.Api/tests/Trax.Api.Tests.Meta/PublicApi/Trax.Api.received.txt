@@ -348,6 +348,40 @@ namespace Trax.Api.DTOs
         public string Category { get; init; }
         public Microsoft.Extensions.Logging.LogLevel Level { get; init; }
     }
+    public class MachineInstance : System.IEquatable<Trax.Api.DTOs.MachineInstance>
+    {
+        public MachineInstance(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }
+        public System.DateTimeOffset? CreatedAt { get; init; }
+        public bool HasLiveInvokedRun { get; init; }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long RowId { get; init; }
+        public string State { get; init; }
+        public System.DateTimeOffset UpdatedAt { get; init; }
+        public int Version { get; init; }
+    }
+    public class MachineInstanceCount : System.IEquatable<Trax.Api.DTOs.MachineInstanceCount>
+    {
+        public MachineInstanceCount(string Machine, string State, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, long Count) { }
+        public long Count { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public string State { get; init; }
+    }
+    public class MachineInstanceDetail : System.IEquatable<Trax.Api.DTOs.MachineInstanceDetail>
+    {
+        public MachineInstanceDetail(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }
+        public System.DateTimeOffset? CreatedAt { get; init; }
+        public bool HasLiveInvokedRun { get; init; }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long RowId { get; init; }
+        public string State { get; init; }
+        public System.DateTimeOffset UpdatedAt { get; init; }
+        public int Version { get; init; }
+    }
     public class ManifestDetail : System.IEquatable<Trax.Api.DTOs.ManifestDetail>
     {
         public ManifestDetail(
