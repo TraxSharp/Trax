@@ -492,6 +492,9 @@ function execDetail(id: number, name: string, state: string, childCount: number)
     hostLabels: id === 902 ? '{"region":"eu-west","pool":"blue"}' : null,
     replayDecisionsOf: id === 902 ? 899 : id === 951 ? 902 : null,
     replayAbandoned: id === 951,
+    // 952 resumed 902 at Summarize, the step after its checkpoint.
+    resumeFrom: id === 952 ? 902 : null,
+    resumeAt: id === 952 ? "Summarize#2" : null,
   };
 }
 

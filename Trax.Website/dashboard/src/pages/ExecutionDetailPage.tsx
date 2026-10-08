@@ -253,6 +253,21 @@ export function ExecutionDetailPage() {
                   ],
                 ] as [string, React.ReactNode][])
               : []),
+            ...(e.resumeFrom != null
+              ? ([
+                  [
+                    "Resumes",
+                    <>
+                      <DetailLink to={`/executions/${e.resumeFrom}`}>
+                        {e.resumeFrom}
+                      </DetailLink>
+                      {e.resumeAt != null
+                        ? ` at ${e.resumeAt}`
+                        : " after its latest checkpoint"}
+                    </>,
+                  ],
+                ] as [string, React.ReactNode][])
+              : []),
           ]}
         />
       </DetailPanel>

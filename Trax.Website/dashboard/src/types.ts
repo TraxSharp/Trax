@@ -142,6 +142,10 @@ export interface ExecutionDetail extends ExecutionSummary {
   // True when the run was queued to replay replayDecisionsOf and asked its deciders afresh
   // instead, because that replay could not be honoured.
   replayAbandoned?: boolean;
+  // The run this one resumed from a checkpoint, and the step it resumed at (null for after the
+  // latest checkpoint); both null for a run that ran from the top.
+  resumeFrom?: number | null;
+  resumeAt?: string | null;
   failureException: string | null;
   stackTrace: string | null;
   input: string | null;

@@ -272,6 +272,8 @@ export const EXECUTION_DETAIL = gql`
         hostLabels
         replayDecisionsOf
         replayAbandoned
+        resumeFrom
+        resumeAt
       }
     }
   }
