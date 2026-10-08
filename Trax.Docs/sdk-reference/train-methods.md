@@ -36,6 +36,7 @@ that used to sit above the chain belongs in a junction at the head of it.
 | [Decide](/docs/sdk-reference/train-methods/decide) | Asks a decider several typed questions about a value in Memory, in one call, and stores the typed decisions |
 | [Switch](/docs/sdk-reference/train-methods/switch) | Sends the train down one of several declared tracks, chosen by a decision |
 | [Parallel](/docs/sdk-reference/train-methods/parallel) | Runs a fixed set of named branches side by side, each on its own copy of Memory, and joins them (experimental) |
+| [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | Stores a state the chain declares, so a later run of the same input resumes after it (experimental) |
 | [Gate](/docs/sdk-reference/train-methods/gate) | Routes on the probability that a yes/no answer is yes |
 | [Scale](/docs/sdk-reference/train-methods/scale) | Routes on where the state falls on an ordered scale |
 | [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) | Reads the declared chain without running it, and verifies it with `ChainVerification.Verify` |
