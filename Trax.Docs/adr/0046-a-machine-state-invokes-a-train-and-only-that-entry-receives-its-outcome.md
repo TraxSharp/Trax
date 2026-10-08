@@ -18,7 +18,8 @@ the scheduler.
 
 **Accepted.** `Invokes` and `IMachineInstances.Start` ship behind `[Experimental("TRAXEXP002")]`, following the
 convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md) set, until
-the invoking-state row of the interaction matrix (`Trax.Core/docs/interaction-matrix.md`) is complete.
+the `Invokes` row of the interaction matrix's machine-features table (`Trax.Core/docs/interaction-matrix.md`) is complete. A
+machine feature is not a chain step kind, so it gets a table of its own with the same columns.
 
 ## Why this is written down
 
@@ -250,7 +251,8 @@ In `Trax.Api/tests`, on GraphQL and the dashboard alike:
 
 **Enforced elsewhere:** the tests listed under *Tests*, in Trax.Effect's state machine test projects, Trax.Scheduler's
 and Trax.Api's tests, each written red before the code it covers; `InteractionMatrixTests` in `Trax.Core.Tests.Meta`,
-which requires the invoking-state row of the interaction matrix to name a test for every existing feature.
+which requires the `Invokes` row of the interaction matrix's machine-features table to name a test for every existing
+feature.
 
 Not covered: nothing can check that an invoked train's junctions are idempotent, or that a snapshot holds pointers
 rather than data. Both are conventions the docs state, and the at-least-once guarantee holds only while junctions
