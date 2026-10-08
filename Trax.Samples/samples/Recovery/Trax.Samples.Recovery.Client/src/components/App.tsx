@@ -6,6 +6,7 @@ import { useRecoveryRun } from "../useRecoveryRun";
 import { CodePanel } from "./CodePanel";
 import { ConsolePanel } from "./ConsolePanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { TopicMapWizard } from "./TopicMapWizard";
 
 // The host retries a failed run after four seconds and polls every second (see the README's demo-only
 // settings), so the retry starts four to five seconds after the failure.
@@ -125,6 +126,12 @@ export function App() {
             Crash once ({picker.crashAt})
           </label>
         </Group>
+
+        {scenario === "TOPIC_MAP" && (
+          <Group label="Build my map: a state machine">
+            <TopicMapWizard />
+          </Group>
+        )}
 
         <Group label="Actions">
           <button className="primary" onClick={runIt} disabled={locked}>
