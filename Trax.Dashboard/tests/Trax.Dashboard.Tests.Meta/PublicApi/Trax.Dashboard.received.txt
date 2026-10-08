@@ -195,6 +195,26 @@ namespace Trax.Dashboard.Components.Pages.Data
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override System.Threading.Tasks.Task OnInitializedAsync() { }
     }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/state-machines/{Machine}/{Owner}/{InstanceId:guid}")]
+    public class StateMachineInstancePage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public StateMachineInstancePage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public System.Guid InstanceId { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Machine { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Owner { get; set; }
+        [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name="row")]
+        public long? RowId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/state-machines")]
+    public class StateMachinesPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public StateMachinesPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
     [Microsoft.AspNetCore.Components.Route("/trax/data/work-queue/{WorkQueueId:long}")]
     public class WorkQueueDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {

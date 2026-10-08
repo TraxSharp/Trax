@@ -28,6 +28,9 @@
             <RadzenPanelMenuItem Text="Logs"
                                 Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/logs")"
                                 Icon="list_alt" />
+            <RadzenPanelMenuItem Text="State Machines"
+                                Path="@($"{Options.RoutePrefix.TrimStart('/')}/data/state-machines")"
+                                Icon="device_hub" />
             @if (_persistedOperationsAvailable)
             {
                 <RadzenPanelMenuItem Text="Persisted Operations"

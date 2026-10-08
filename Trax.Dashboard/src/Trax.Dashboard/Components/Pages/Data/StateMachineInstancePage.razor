@@ -1,0 +1,86 @@
+@page "/trax/data/state-machines/{Machine}/{Owner}/{InstanceId:guid}"
+@inherits PollingComponentBase
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-4">
+    <RadzenButton Icon="arrow_back"
+                  Variant="Variant.Text"
+                  Click="@(() => Navigation.NavigateTo(MachineInstanceRoutes.List))" />
+    <RadzenText TextStyle="TextStyle.H4" Style="margin: 0;">
+        @if (_instance is not null)
+        {
+            @_instance.Machine
+        }
+        else if (!IsLoading && (LoadError is not null || _refusal is not null))
+        {
+            <text>Could Not Load</text>
+        }
+        else if (!IsLoading)
+        {
+            <text>Instance Not Found</text>
+        }
+    </RadzenText>
+    @* An operator action on an instance (cancelling a system-owned one) goes here, beside the
+       title, as on the work queue entry's page, and calls IOperationsService with this page's
+       MachineInstanceKey. *@
+</RadzenStack>
+
+@if (IsLoading)
+{
+    <RadzenProgressBarCircular ShowValue="true" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Large" />
+    return;
+}
+
+@if (_refusal is not null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" class="cs-machine-refusal">
+        @_refusal
+    </RadzenAlert>
+    return;
+}
+
+@if (_instance is null)
+{
+    @if (LoadError is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
+            Could not load instance @InstanceId: @LoadError. The page keeps retrying.
+        </RadzenAlert>
+        return;
+    }
+    <RadzenText TextStyle="TextStyle.Body1">No @Owner instance of @Machine has id @InstanceId.</RadzenText>
+    return;
+}
+
+@* ── Details ── no context: an operator sees where an instance is, never what it holds. *@
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Details</RadzenText>
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Machine" Value="@_instance.Machine" />
+                <FieldDisplay Label="Id" Value="@_instance.Id.ToString()" />
+                <FieldDisplay Label="Owner" Value="@(_instance.OwnerKind == SnapshotOwnerKind.System ? "System" : "A user")" />
+                <FieldDisplay Label="Row" Value="@_instance.RowId.ToString()" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="State">
+                    <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="@_instance.State" />
+                </FieldDisplay>
+                <FieldDisplay Label="Machine Version" Value="@_instance.Version.ToString()" />
+                <FieldDisplay Label="Waiting On A Run"
+                              Value="@(_instance.HasLiveInvokedRun ? "Yes: its state invoked a train run and waits for its outcome" : "No")" />
+            </RadzenStack>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenStack Gap="0.75rem">
+                <FieldDisplay Label="Created At" Value="@(_instance.CreatedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "Not recorded")" />
+                <FieldDisplay Label="Updated At" Value="@_instance.UpdatedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")" />
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenCard>
+
+@* The runs this instance invoked are listed here, from the link a run keeps to the instance that
+   queued it, read through IOperationsService as the API's machineInstance detail reads them. *@
