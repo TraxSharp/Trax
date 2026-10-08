@@ -37,13 +37,25 @@
             }
             @if (!string.IsNullOrWhiteSpace(_metadata.Input))
             {
+                @if (_runGraph?.CanResume == true)
+                {
+                    <RadzenButton Text="Resume"
+                                  Icon="play_arrow"
+                                  ButtonStyle="ButtonStyle.Secondary"
+                                  Variant="Variant.Outlined"
+                                  Size="ButtonSize.Small"
+                                  title="Queue a run that skips to the step after this run's latest checkpoint, instead of running every step again."
+                                  Click="@(() => ResumeTrain(from: null))"
+                                  IsBusy="@(_busy == Busy.Resume)"
+                                  Disabled="@_rerunning" />
+                }
                 <RadzenButton Text="Re-queue"
                               Icon="queue"
                               ButtonStyle="ButtonStyle.Secondary"
                               Variant="Variant.Outlined"
                               Size="ButtonSize.Small"
                               Click="@(() => RequeueTrain(askAfresh: false))"
-                              IsBusy="@(_rerunning && !_rerunningAskAfresh)"
+                              IsBusy="@(_busy == Busy.Requeue)"
                               Disabled="@_rerunning" />
                 <RadzenButton Text="Re-queue, Ask Afresh"
                               Icon="psychology_alt"
@@ -52,7 +64,7 @@
                               Size="ButtonSize.Small"
                               title="Re-queue; the new run asks the model afresh instead of replaying this run's decisions."
                               Click="@(() => RequeueTrain(askAfresh: true))"
-                              IsBusy="@(_rerunning && _rerunningAskAfresh)"
+                              IsBusy="@(_busy == Busy.RequeueAfresh)"
                               Disabled="@_rerunning" />
             }
         </RadzenStack>
@@ -144,6 +156,13 @@
                         <RadzenLink Path="@($"trax/data/metadata/{_metadata.ReplayDecisionsOf}")" Text="@_metadata.ReplayDecisionsOf.ToString()" />
                     </FieldDisplay>
                 }
+                @if (_metadata.ResumeFrom.HasValue)
+                {
+                    <FieldDisplay Label="Resumes">
+                        <RadzenLink Path="@($"trax/data/metadata/{_metadata.ResumeFrom}")" Text="@_metadata.ResumeFrom.ToString()" />
+                        <span class="cs-resume-at">@(_metadata.ResumeAt is { } at ? $" at {at}" : " after its latest checkpoint")</span>
+                    </FieldDisplay>
+                }
             </RadzenStack>
         </RadzenColumn>
     </RadzenRow>
@@ -195,7 +214,10 @@
 @* ── Run Graph (the train's declared steps, with where this run left each) ── *@
 @if (_runGraph is not null)
 {
-    <RunGraphView Graph="@_runGraph" />
+    <RunGraphView Graph="@_runGraph"
+                  OnResume="@(string.IsNullOrWhiteSpace(_metadata.Input) ? default : EventCallback.Factory.Create<string>(this, from => ResumeTrain(from)))"
+                  ResumingNode="@_resumingNode"
+                  ResumeDisabled="@_rerunning" />
 }
 
 @* ── Junction Timeline (the run's steps, as AddJunctionEvents recorded them) ── *@

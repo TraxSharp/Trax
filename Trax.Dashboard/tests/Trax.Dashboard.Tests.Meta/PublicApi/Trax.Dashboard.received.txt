@@ -383,6 +383,12 @@ namespace Trax.Dashboard.Components.Shared
         [Microsoft.AspNetCore.Components.EditorRequired]
         [Microsoft.AspNetCore.Components.Parameter]
         public Trax.Api.DTOs.RunGraph Graph { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback<string> OnResume { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool ResumeDisabled { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ResumingNode { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override void OnAfterRender(bool firstRender) { }
         protected override bool ShouldRender() { }

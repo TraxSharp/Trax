@@ -6,6 +6,9 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
     <AssemblyName>Trax.Dashboard</AssemblyName>
     <PackageDescription>Blazor Server operations dashboard for Trax .NET, mounted into your existing ASP.NET Core host at /trax: trains, run metadata and logs, scheduler manifests and groups, dead letters, the work queue, and runtime effect settings. Install it in the app that already calls AddTrax, then call builder.AddTraxDashboard() and app.UseTraxDashboard().</PackageDescription>
+    <!-- TRAXEXP003: the run page resumes a failed run from a checkpoint and draws where it can
+         resume and what a resumed run restored. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

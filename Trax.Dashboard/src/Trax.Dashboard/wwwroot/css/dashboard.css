@@ -473,6 +473,12 @@
     border: 2px solid var(--rz-base-400, rgba(255, 255, 255, 0.3));
 }
 
+/* A node a resumed run skipped: its work came back from the checkpoint rather than running. */
+.cs-rg--restored {
+    background-color: transparent;
+    border: 2px solid var(--rz-success, #4caf50);
+}
+
 .cs-rg-kind,
 .cs-rg-state-label,
 .cs-rg-fallback {

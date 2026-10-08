@@ -61,15 +61,41 @@
     [Parameter, EditorRequired]
     public RunGraph Graph { get; set; } = default!;
 
+    /// <summary>
+    /// Called with a node's id when the operator asks to resume the run there. Without it, no
+    /// node offers "Resume from here". The page resumes through
+    /// <c>IOperationsService.ResumeExecutionAsync</c>, the call the API's <c>resumeExecution</c> makes.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnResume { get; set; }
+
+    /// <summary>The node whose resume is in flight, whose button shows busy, or null.</summary>
+    [Parameter]
+    public string? ResumingNode { get; set; }
+
+    /// <summary>True while any of the page's re-queues or resumes is in flight.</summary>
+    [Parameter]
+    public bool ResumeDisabled { get; set; }
+
     // A poll that hands the same graph back renders nothing again.
     private RunGraph? _rendered;
+    private string? _renderedResuming;
+    private bool _renderedDisabled;
 
-    protected override bool ShouldRender() => !ReferenceEquals(Graph, _rendered);
+    protected override bool ShouldRender() =>
+        !ReferenceEquals(Graph, _rendered)
+        || ResumingNode != _renderedResuming
+        || ResumeDisabled != _renderedDisabled;
 
-    protected override void OnAfterRender(bool firstRender) => _rendered = Graph;
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _rendered = Graph;
+        _renderedResuming = ResumingNode;
+        _renderedDisabled = ResumeDisabled;
+    }
 
     private RenderFragment RenderNode(RunGraphNode node) =>
-        @<li class="cs-rg-node @(node.State is RunNodeState.Skipped or RunNodeState.NotReached ? "cs-rg-node--dim" : "")" data-node-id="@node.Id" data-kind="@node.Kind" data-state="@node.State">
+        @<li class="cs-rg-node @(node.State is RunNodeState.Skipped or RunNodeState.NotReached ? "cs-rg-node--dim" : "")" data-node-id="@node.Id" data-kind="@node.Kind" data-state="@node.State" data-can-resume="@(node.CanResume ? "true" : "false")">
             <div class="cs-rg-row" title="@node.Id">
                 <span class="cs-rg-dot @NodeClass(node.State)" aria-hidden="true"></span>
                 <span class="cs-rg-kind">@KindLabel(node.Kind)</span>
@@ -83,6 +109,25 @@
                 @if (node.Replayed)
                 {
                     <RadzenBadge class="cs-rg-replayed" BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Outlined" Text="replayed" />
+                }
+                @if (node.Checkpointed)
+                {
+                    @* That a checkpoint is stored here, never what it holds. *@
+                    <RadzenBadge class="cs-rg-checkpoint" BadgeStyle="BadgeStyle.Info" Variant="Variant.Outlined" Text="checkpoint"
+                                 title="A checkpoint the run can resume from is stored here" />
+                }
+                @if (node.CanResume && OnResume.HasDelegate)
+                {
+                    <RadzenButton class="cs-rg-resume"
+                                  Text="Resume from here"
+                                  Icon="play_arrow"
+                                  ButtonStyle="ButtonStyle.Secondary"
+                                  Variant="Variant.Text"
+                                  Size="ButtonSize.ExtraSmall"
+                                  title="Queue a run that skips to this step, on what the checkpoint before it restores."
+                                  Click="@(() => OnResume.InvokeAsync(node.Id))"
+                                  IsBusy="@(ResumingNode == node.Id)"
+                                  Disabled="@ResumeDisabled" />
                 }
                 @if (node.Steps.FirstOrDefault(s => s.State is JunctionRunState.Failed or JunctionRunState.Cancelled) is { } failed)
                 {
@@ -177,6 +222,7 @@
             RunNodeState.Skipped => "skipped",
             RunNodeState.NotRecorded => "not recorded",
             RunNodeState.Withheld => "withheld",
+            RunNodeState.Restored => "restored",
             _ => state.ToString(),
         };
 
@@ -187,6 +233,7 @@
             RunNodeState.Completed => "cs-jt--completed",
             RunNodeState.Failed => "cs-jt--failed",
             RunNodeState.Cancelled => "cs-jt--cancelled",
+            RunNodeState.Restored => "cs-rg--restored",
             _ => "cs-rg--idle",
         };
 
