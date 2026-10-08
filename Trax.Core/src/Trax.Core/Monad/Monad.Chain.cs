@@ -28,7 +28,26 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, Exception);
 
-        ChainGraph.Enter(Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction))), BranchPath);
+        var node = Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction)));
+        ChainGraph.Enter(node, BranchPath);
+
+        if (BranchPath is not null)
+        {
+            // Where a test's branch runner holds a branch, or fails it, between junctions.
+            try
+            {
+                await Train.BranchRunner.BeforeJunction(BranchPath, node).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                Exception ??= e;
+                return (this, e);
+            }
+        }
 
         var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 

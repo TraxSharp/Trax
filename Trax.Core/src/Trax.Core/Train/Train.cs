@@ -53,6 +53,12 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     private Monad<TInput, TReturn>? _monad;
 
     /// <summary>
+    /// Starts this train's <c>Parallel</c> branches. Always the thread pool in a shipped host;
+    /// Trax's own tests substitute a runner that controls how branches interleave.
+    /// </summary>
+    internal IBranchRunner BranchRunner { get; set; } = ThreadPoolBranchRunner.Instance;
+
+    /// <summary>
     /// Executes the train with the provided input.
     /// This method unwraps the Either result from RunEither and throws any exceptions.
     /// </summary>
