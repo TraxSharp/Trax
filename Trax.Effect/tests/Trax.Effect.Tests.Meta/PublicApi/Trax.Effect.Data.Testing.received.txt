@@ -33,6 +33,12 @@ namespace Trax.Effect.Data.Testing
         [NUnit.Framework.Test]
         public void Query_code_does_not_switch_an_owner_scope_filter_off() { }
     }
+    public sealed class InvokingState : System.IEquatable<Trax.Effect.Data.Testing.InvokingState>
+    {
+        public InvokingState(string Machine, string State) { }
+        public string Machine { get; init; }
+        public string State { get; init; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Method, Inherited=true)]
     public sealed class LeavesStuckRunsAttribute : System.Attribute
     {
@@ -63,10 +69,15 @@ namespace Trax.Effect.Data.Testing
     {
         public const string DispatchedWithoutRun = "dispatched-without-run";
         public const string EffectClaimInFlight = "effect-claim-in-flight";
+        public const string InvokeTokenOutsideInvokingState = "invoke-token-outside-invoking-state";
+        public const string InvokeTokenWithoutRun = "invoke-token-without-run";
+        public const string InvokingStateWithoutToken = "invoking-state-without-token";
         public const string RunInProgress = "run-in-progress";
         public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static string Describe(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Data.Testing.TraxInvariantViolation> violations) { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static bool IsExempt(System.Type fixture, string? methodName) { }
     }
 }

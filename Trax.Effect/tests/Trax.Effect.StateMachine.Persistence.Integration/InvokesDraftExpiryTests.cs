@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
@@ -86,6 +87,9 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "seeds a draft holding a token with no run behind it, and its failed cancel leaves the draft holding it"
+    )]
     public async Task A_cancel_that_fails_keeps_the_draft()
     {
         var cancellation = new RecordingCancellation { Fail = true };

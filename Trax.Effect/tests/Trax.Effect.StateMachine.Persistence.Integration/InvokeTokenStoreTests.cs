@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using SnapshotDraft = Trax.Effect.Models.SnapshotDraft.SnapshotDraft;
@@ -59,6 +60,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "writes invoke tokens straight into the store, with no queued run behind them, to test the column itself"
+    )]
     public async Task The_token_unique_index_refuses_a_second_row_with_the_same_token()
     {
         var token = NewToken();
@@ -94,6 +98,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "writes invoke tokens straight into the store, with no queued run behind them, to test the column itself"
+    )]
     public async Task The_database_refuses_a_duplicate_token_written_directly()
     {
         var token = NewToken();
@@ -198,6 +205,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "writes invoke tokens straight into the store, with no queued run behind them, to test the column itself"
+    )]
     public async Task A_replaced_token_does_not_match_and_an_expected_concurrency_token_is_honoured()
     {
         var stale = NewToken();
@@ -238,6 +248,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "writes invoke tokens straight into the store, with no queued run behind them, to test the column itself"
+    )]
     public async Task Rows_holding_a_token_are_listed_for_the_reconciler_whoever_owns_them()
     {
         var userId = Guid.NewGuid();
@@ -306,6 +319,9 @@ public class InvokeTokenStoreTests(StoreProvider provider)
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "writes invoke tokens straight into the store, with no queued run behind them, to test the column itself"
+    )]
     public async Task A_users_update_never_writes_or_clears_the_invoke_token()
     {
         var id = Guid.NewGuid();
