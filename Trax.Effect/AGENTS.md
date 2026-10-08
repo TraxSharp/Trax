@@ -103,7 +103,11 @@ owns a distinct schema, a migration-based context has no pending model changes, 
 entity holding per-user data is filtered through the principal and exposed only as a bare
 `[TraxAuthorize]` (the owner-scope census, [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md)).
 `DomainDataLayerGuardFixture.cs` next to it is the turnkey fixture a consumer subclasses to
-run all five without writing a test body. `tests/Trax.Effect.Data.Testing.Tests/` is their
+run all five without writing a test body. `TraxInvariants.cs` beside them checks a database once
+every host has stopped (no run in progress, no effect claim left without a receipt, no dispatched
+queue entry without its run); `CheckTraxInvariantsAttribute` runs it after every test in
+`Trax.Effect.Tests.Integration` and `Trax.Effect.StateMachine.Persistence.Integration`, and a test
+that leaves such a row on purpose says why with `[LeavesStuckRuns]`. `tests/Trax.Effect.Data.Testing.Tests/` is their
 own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
 consumer would. Changing either file changes what every consumer enforces, so treat
 them as published API, not as test helpers.

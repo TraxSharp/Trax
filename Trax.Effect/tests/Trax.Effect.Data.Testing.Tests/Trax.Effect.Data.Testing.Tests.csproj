@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
+    <!-- TraxInvariantsTests builds its database with the shipped Postgres migrations. -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
   </ItemGroup>
 
   <ItemGroup>

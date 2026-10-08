@@ -45,6 +45,8 @@
     <ProjectReference Include="../../src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <!-- TraxInvariants, checked after every test that uses the shared Postgres. -->
+    <ProjectReference Include="../../src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
     <ProjectReference Include="../../src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
   </ItemGroup>

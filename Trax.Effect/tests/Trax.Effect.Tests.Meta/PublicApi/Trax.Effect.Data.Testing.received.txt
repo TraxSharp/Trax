@@ -33,6 +33,12 @@ namespace Trax.Effect.Data.Testing
         [NUnit.Framework.Test]
         public void Query_code_does_not_switch_an_owner_scope_filter_off() { }
     }
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Method, Inherited=true)]
+    public sealed class LeavesStuckRunsAttribute : System.Attribute
+    {
+        public LeavesStuckRunsAttribute(string reason) { }
+        public string Reason { get; }
+    }
     public sealed class OwnerScopeCensusOptions : System.IEquatable<Trax.Effect.Data.Testing.OwnerScopeCensusOptions>
     {
         public OwnerScopeCensusOptions() { }
@@ -43,5 +49,24 @@ namespace Trax.Effect.Data.Testing
         public System.Collections.Generic.IReadOnlySet<string> OwnerIdProperties { get; init; }
         public required System.Type OwnerType { get; init; }
         public required System.Type PrincipalAccessorType { get; init; }
+    }
+    public sealed class TraxInvariantViolation : System.IEquatable<Trax.Effect.Data.Testing.TraxInvariantViolation>
+    {
+        public TraxInvariantViolation(string Invariant, string Table, string Id, string Detail) { }
+        public string Detail { get; init; }
+        public string Id { get; init; }
+        public string Invariant { get; init; }
+        public string Table { get; init; }
+        public override string ToString() { }
+    }
+    public static class TraxInvariants
+    {
+        public const string DispatchedWithoutRun = "dispatched-without-run";
+        public const string EffectClaimInFlight = "effect-claim-in-flight";
+        public const string RunInProgress = "run-in-progress";
+        public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
+        public static string Describe(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Data.Testing.TraxInvariantViolation> violations) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
+        public static bool IsExempt(System.Type fixture, string? methodName) { }
     }
 }

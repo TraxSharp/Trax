@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using Trax.Effect.StateMachine.Persistence.Mutations;
@@ -233,6 +234,9 @@ public class EffectCommitIntegrityTests
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "a cancelled effect's outcome is unknown, so its claim stays in flight until the lease passes (IdempotentEffect)"
+    )]
     public async Task An_effect_cancelled_after_charging_does_not_run_again()
     {
         var id = await SeedReview(1);
@@ -267,6 +271,7 @@ public class EffectCommitIntegrityTests
     }
 
     [Test]
+    [LeavesStuckRuns("ends by claiming the key to prove it is free, and keeps that claim")]
     public async Task Ttl_expiry_cancelled_midway_leaves_no_orphan_claim()
     {
         var id = await SeedReview(1);
@@ -297,6 +302,9 @@ public class EffectCommitIntegrityTests
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "a cancelled effect's outcome is unknown, so its claim stays in flight until the lease passes (IdempotentEffect)"
+    )]
     public async Task Send_reports_an_effect_that_timed_out_as_a_failed_delivery()
     {
         var registry = new SnapshotMachineRegistry(
