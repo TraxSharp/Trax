@@ -72,6 +72,14 @@ namespace Trax.Effect.Data.Junctions.CommitTransaction
         public override System.Threading.Tasks.Task<Trax.Core.Functional.Unit> Run(Trax.Core.Functional.Unit input) { }
     }
 }
+namespace Trax.Effect.Data.Models.Checkpoint
+{
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public class PersistentCheckpoint : Trax.Effect.Models.Checkpoint.Checkpoint
+    {
+        public PersistentCheckpoint() { }
+    }
+}
 namespace Trax.Effect.Data.Models
 {
     public interface IEntityReference { }
@@ -98,6 +106,8 @@ namespace Trax.Effect.Data.Services.DataContext
         public DataContext(Microsoft.EntityFrameworkCore.DbContextOptions<TDbContext> options) { }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; set; }
         public int Changes { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
@@ -129,6 +139,8 @@ namespace Trax.Effect.Data.Services.DataContext
     {
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; }
         int Changes { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; }

@@ -339,6 +339,32 @@ public class Metadata : IModel, IDisposable
     public long? ReplayDecisionsOf { get; set; }
 
     /// <summary>
+    /// The run this run resumes, or null for a run that ran its chain from the top.
+    /// </summary>
+    /// <remarks>
+    /// Carried from the work queue entry at dispatch. A resumed run writes only the checkpoints after its
+    /// resume point, so the latest checkpoint is followed back through this link: a run's checkpoints are
+    /// its own rows and those of the run it resumed. Not a foreign key, mirroring
+    /// <see cref="ReplayDecisionsOf"/>: metadata cleanup keeps a run while a queued entry or a run that
+    /// stays names it here, and deletes a resumed run with its source when both have expired.
+    /// </remarks>
+    [Column("resume_from")]
+    [JsonPropertyName("resume_from")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public long? ResumeFrom { get; set; }
+
+    /// <summary>
+    /// The node id this run resumed at, or null for after the latest checkpoint of the run named by
+    /// <see cref="ResumeFrom"/>. Carried from the work queue entry at dispatch.
+    /// </summary>
+    [Column("resume_at")]
+    [JsonPropertyName("resume_at")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public string? ResumeAt { get; set; }
+
+    /// <summary>
     /// The machine whose invoking state queued this run, carried from its work queue entry at dispatch; null for
     /// every other run. The scheduler never retries such a run and an operator cannot requeue it: its machine
     /// retries by entering the state again, which queues a new run.

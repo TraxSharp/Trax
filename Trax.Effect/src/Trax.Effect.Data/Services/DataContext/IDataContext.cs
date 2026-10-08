@@ -183,6 +183,18 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims =>
         ((DbContext)this).Set<Effect.Models.EffectClaim.EffectClaim>();
 
+    /// <summary>
+    /// The <c>trax.checkpoint</c> table: the state a train declared with <c>Checkpoint&lt;TState&gt;()</c>,
+    /// one row per run and node, from which a later run of the same input resumes. Deleted with its run.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
+    /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints =>
+        ((DbContext)this).Set<Effect.Models.Checkpoint.Checkpoint>();
+
     #endregion
 
     /// <summary>

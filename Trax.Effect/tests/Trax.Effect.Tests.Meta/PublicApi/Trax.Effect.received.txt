@@ -353,6 +353,34 @@ namespace Trax.Effect.Models.BackgroundJob.DTOs
         public int Priority { get; set; }
     }
 }
+namespace Trax.Effect.Models.Checkpoint
+{
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public class Checkpoint
+    {
+        public Checkpoint() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("branch_path")]
+        public string? BranchPath { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("chain_hash")]
+        public string ChainHash { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTime CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        public long MetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("node_id")]
+        public string NodeId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state")]
+        public string State { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state_fingerprint")]
+        public string StateFingerprint { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state_type")]
+        public string StateType { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("tracks")]
+        public string Tracks { get; set; }
+    }
+}
 namespace Trax.Effect.Models.DeadLetter.DTOs
 {
     public class CreateDeadLetter
@@ -837,6 +865,16 @@ namespace Trax.Effect.Models.Metadata
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("replay_decisions_of")]
         public long? ReplayDecisionsOf { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_at")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("resume_at")]
+        public string? ResumeAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_from")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("resume_from")]
+        public long? ResumeFrom { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_time")]
         public System.DateTime? ScheduledTime { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("stack_trace")]
@@ -1134,6 +1172,12 @@ namespace Trax.Effect.Models.WorkQueue
         public int Priority { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_of")]
         public long? ReplayDecisionsOf { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_at")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public string? ResumeAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_from")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        public long? ResumeFrom { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
         public System.DateTime? ScheduledAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("status")]

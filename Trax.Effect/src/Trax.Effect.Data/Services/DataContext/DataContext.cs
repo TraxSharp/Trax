@@ -145,6 +145,13 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </summary>
     public DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DbSet for the states trains stored at a declared <c>Checkpoint&lt;TState&gt;()</c>,
+    /// from which a later run resumes.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; set; }
+
     #endregion
 
     /// <summary>
@@ -179,6 +186,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         Models.JunctionRun.PersistentJunctionRun.OnModelCreating(modelBuilder);
         Models.SnapshotDraft.PersistentSnapshotDraft.OnModelCreating(modelBuilder);
         Models.EffectClaim.PersistentEffectClaim.OnModelCreating(modelBuilder);
+        Models.Checkpoint.PersistentCheckpoint.OnModelCreating(modelBuilder);
     }
 
     /// <summary>

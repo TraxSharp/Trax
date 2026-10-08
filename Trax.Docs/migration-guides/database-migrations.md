@@ -340,6 +340,27 @@ on Postgres includes `owner_kind` so the counts by state read the index alone, a
 Postgres both are built `CONCURRENTLY`, so drafts keep being saved while they build. At two million
 instances every page measured took under 10 ms.
 
+## Checkpoints and resume links (074, SQLite 036)
+
+`074_checkpoint.sql` (SQLite `036_checkpoint.sql`) creates `trax.checkpoint`, one row per run and
+declared `Checkpoint<TState>()` node: the run's `metadata_id`, the `node_id` and `branch_path` it was
+taken at, the declared state as JSON in `state` with its readable `state_type`, the `tracks` the
+routing steps before it took, and the `chain_hash` and `state_fingerprint` a resume compares with the
+running code. A unique key on `(metadata_id, node_id)` keeps one row per node. Its `metadata_id`
+foreign key cascades, so every delete of metadata removes a run's checkpoints with it.
+
+It also adds the nullable `resume_from` and `resume_at` to `trax.work_queue` and `trax.metadata`: the
+run an entry resumes and the node it resumes at, null for after that run's latest checkpoint. Like
+`replay_decisions_of`, `resume_from` is not a foreign key. The unique partial index
+`ix_work_queue_unique_queued_resume` on `trax.work_queue (resume_from)` for queued entries allows one
+queued resume per run, and the partial `ix_metadata_resume_from` serves the cleanup's lookup of the
+runs that resume another. On Postgres both are built `CONCURRENTLY`, so enqueue, dispatch and run
+writes carry on while they build.
+
+The columns are new and nothing is backfilled. A host on the previous version never reads or writes
+them, so a rolling deploy is safe. The model, `IDataContext.Checkpoints`, and the new properties are
+experimental (`TRAXEXP003`).
+
 ## Failure search (066)
 
 `066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL
