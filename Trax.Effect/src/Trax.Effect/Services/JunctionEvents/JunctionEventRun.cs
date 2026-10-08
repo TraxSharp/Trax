@@ -1,3 +1,4 @@
+using Trax.Core.Monad;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.Decisions;
@@ -102,8 +103,14 @@ internal sealed class JunctionEventRun
     /// question or a routing step. While <see cref="WithholdsNames"/> is set, its name is withheld,
     /// and so are a question's or a routing step's key, answer, confidence and decider, because
     /// what a track asks and how it routes would give the track away as much as its junctions'
-    /// names.
+    /// names. The node id is withheld with them, since it names the track and the step.
     /// </summary>
+    /// <remarks>
+    /// Called on the step's own flow, while Trax.Core holds the step's node in
+    /// <see cref="ChainGraph.CurrentNodeId"/>: a junction's start and end from inside its
+    /// <c>RailwayJunction</c>, a question's or routing step's from the decision observer Trax.Core
+    /// tells before it moves on.
+    /// </remarks>
     public JunctionEventPayload OnTrack(JunctionEventPayload step) =>
         WithholdsNames
             ? step with
@@ -116,10 +123,12 @@ internal sealed class JunctionEventRun
                 Decider = null,
                 AnswerWithheld = step.AnswerWithheld || step.Kind != JunctionRunKind.Junction,
                 TrackPosition = TrackPosition,
+                NodeId = null,
             }
             : step with
             {
                 TrackPosition = TrackPosition,
+                NodeId = ChainGraph.CurrentNodeId,
             };
 
     /// <summary>The next position in the run's timeline.</summary>

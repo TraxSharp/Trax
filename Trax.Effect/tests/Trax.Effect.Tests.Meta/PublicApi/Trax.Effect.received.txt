@@ -511,6 +511,8 @@ namespace Trax.Effect.Models.JunctionRun
         public string Name { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("name_withheld")]
         public bool NameWithheld { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("node_id")]
+        public string? NodeId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("position")]
         public int Position { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("question_key")]
@@ -1397,6 +1399,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public string Name { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("nameWithheld")]
         public bool NameWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("nodeId")]
+        public string? NodeId { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("position")]
         public int Position { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("questionKey")]

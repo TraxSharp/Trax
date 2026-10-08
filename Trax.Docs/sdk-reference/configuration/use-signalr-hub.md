@@ -154,6 +154,7 @@ By default each step is projected to a `TraxJunctionClientEvent` and sent throug
 | `AnswerWithheld` | `bool` | True for a question about a `[TraxSensitive]` type, and for a question or route the run withheld after one |
 | `NameWithheld` | `bool` | True when `Name` is withheld |
 | `TrackPosition` | `int?` | For any step, the position of the route whose track it is on; left off the wire when null |
+| `NodeId` | `string?` | The id of the declared node the step ran for. Null, and left off the wire, whenever `Name` is withheld. |
 
 Every client the hub admits receives every train's events, so the default payload carries no
 answer or confidence, and no name or question key for a step on a track, since which steps ran

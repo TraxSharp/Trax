@@ -76,6 +76,7 @@ a `JunctionEventPayload`:
 | `AnswerWithheld` | True when the question is about a `[TraxSensitive]` type, and for every question or route on a withheld track |
 | `NameWithheld` | True for every step (a junction, a question or a route) after a route whose answer is withheld; its `Name` is `(withheld)` (`JunctionEventPayload.WithheldName`) |
 | `TrackPosition` | For any step, the position of the latest route the run took before it, or null before any route. `Decided`, `DecisionRefused` and `Routed` carry it as junctions do. |
+| `NodeId` | The id of the declared node the step ran for (see [below](#placing-a-step-on-the-trains-graph)); null when `NameWithheld` is set |
 | `Attempt` | Which attempt of its manifest the run is, or null for a run with no manifest |
 
 A step never carries a junction's input or output, the train's input or output, a failure's
@@ -104,7 +105,8 @@ all withheld.
 
 Withholding the answer withholds the path too. The steps a track runs would say which track it
 took, so every step after a withheld route, whatever its kind, is published, handed to local
-handlers and stored with its name as `(withheld)` and `NameWithheld` set. A later question or route
+handlers and stored with its name as `(withheld)`, `NameWithheld` set and no `NodeId`, since a
+node id names the track and the step. A later question or route
 also has its `QuestionKey`, `Answer`, `Confidence` and `Decider` left out, with `AnswerWithheld`
 set. `trax.decision` keeps the full answer either way, because a requeue replays it from there; the
 journal's log writes it as withheld, and also withholds the question key, answer, track and decider
@@ -132,6 +134,15 @@ A consumer that does not show a reader the answers should not show the names or 
 steps with a `TrackPosition` either, since they name the track: the SignalR sink and the GraphQL
 broadcast view withhold them by default, as below. This errs toward hiding: a step that runs on
 every track after the rejoin is hidden too.
+
+### Placing a step on the train's graph
+
+Each step carries `NodeId`, the id of the node `ChainGraph.From(train.DeclaredChain(), …)` draws for
+the junction, question or route it ran for. An id names the step rather than its position: the
+junction, decision or routing key, numbered within its chain or track, under the route and track it
+sits on, as in `Switch<Source>#0/Papers/FetchPapers#0`. A junction's start and end carry the same
+id, and a refused answer carries its question's. Read the train's graph once and lay a run's steps
+over it by id. A step on a withheld track carries none.
 
 ## Where steps go
 
@@ -188,8 +199,8 @@ was not stored, not one still running.
 [metadata cleanup](/docs/scheduler/admin-trains/metadata-cleanup), manifest pruning and any other
 delete of metadata remove a run's steps with it.
 
-The table ships in the core migration set: Postgres `055`, `057` and `060`, Sqlite `020`, `022` and
-`025`.
+The table ships in the core migration set: Postgres `055`, `057`, `060` and `067`, Sqlite `020`,
+`022`, `025` and `030`.
 
 ### Attempt
 

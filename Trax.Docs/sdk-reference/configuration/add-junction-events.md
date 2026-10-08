@@ -95,6 +95,8 @@ public sealed record JunctionEventPayload(
 )
 {
     public const string WithheldName = "(withheld)";
+
+    public string? NodeId { get; init; }
 }
 ```
 
@@ -117,6 +119,7 @@ public sealed record JunctionEventPayload(
 | `Attempt` | Which attempt of its manifest the run is, or null for a run with no manifest |
 | `NameWithheld` | True for every step (a junction, a question or a route) after a route whose answer is withheld, because which steps ran would give the track away. A question's or route's key, answer, confidence and decider are left out with the name. |
 | `TrackPosition` | For any step, the position of the latest route the run took before it, or null before any route. Every step after a route counts as on its track. A consumer that does not show a reader answers should not show these steps' names or question keys either. |
+| `NodeId` | The id of the declared node the step ran for, as [`ChainGraph.From`](/docs/effect/junction-events#placing-a-step-on-the-trains-graph) draws it, such as `Switch<Source>#0/Papers/FetchPapers#0`. Null when `NameWithheld` is set, because the id names the track and the step. |
 
 It never carries a junction's input or output, the train's input or output, a failure's message,
 or the state, instructions or criteria of a question. On a withheld track the number, kinds,

@@ -10,7 +10,7 @@ internal static class DefaultTraxJunctionClientEventProjection
     /// output and failure fields, which a junction event leaves empty anyway, never are, and neither
     /// is the decider's name. A question's answer and confidence are copied only when
     /// <paramref name="answers"/> is set, and never when the step withheld them. Without answers,
-    /// a step on a decision's track, of any kind, is sent without its name or question key.
+    /// a step on a decision's track, of any kind, is sent without its name, question key or node id.
     /// </summary>
     public static TraxJunctionClientEvent Project(TrainLifecycleEventMessage message, bool answers)
     {
@@ -43,6 +43,9 @@ internal static class DefaultTraxJunctionClientEventProjection
             AnswerWithheld: step.AnswerWithheld,
             NameWithheld: nameWithheld,
             TrackPosition: step.TrackPosition
-        );
+        )
+        {
+            NodeId = nameWithheld ? null : step.NodeId,
+        };
     }
 }

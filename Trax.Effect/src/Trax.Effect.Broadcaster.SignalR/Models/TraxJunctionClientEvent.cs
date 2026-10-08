@@ -55,4 +55,13 @@ public record TraxJunctionClientEvent(
     [property: JsonPropertyName("trackPosition")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         int? TrackPosition
-);
+)
+{
+    /// <summary>
+    /// The id of the declared node the step ran for, as <c>ChainGraph</c> draws it. Left off, like
+    /// the name, for a step whose name is withheld, because the id names the track and the step.
+    /// </summary>
+    [JsonPropertyName("nodeId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? NodeId { get; init; }
+}

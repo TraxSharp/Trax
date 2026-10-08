@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
 using Trax.Core.Functional;
+using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -184,6 +185,41 @@ public class PostgresJunctionRunTests
                 r => r.State == JunctionRunState.Completed && r.EndedAt != null,
                 $"an end updates the row its start wrote. See {Adr}."
             );
+
+        await Delete(metadataId);
+    }
+
+    [Test]
+    public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
+    {
+        ChainGraph graph;
+        using (var scope = _provider.CreateScope())
+        {
+            var fresh = (PgStepsTrain)scope.ServiceProvider.GetRequiredService<IPgStepsTrain>();
+            graph = ChainGraph.From(
+                fresh.DeclaredChain(),
+                fresh.GetType(),
+                typeof(PgItem),
+                typeof(string)
+            );
+        }
+
+        var metadataId = await Run();
+
+        var rows = await Rows(metadataId);
+        rows.Select(r => r.NodeId)
+            .Should()
+            .Equal(
+                graph.Nodes[0].Id,
+                graph.Nodes.Single(n => n.Kind == ChainStepKind.Decide).Id,
+                graph.Nodes.Single(n => n.Kind == ChainStepKind.Switch).Id,
+                graph
+                    .Nodes.Single(n => n.Kind == ChainStepKind.Switch)
+                    .Tracks.Single(t => t.Name == nameof(PgBin.Small))
+                    .Nodes[0]
+                    .Id
+            );
+        rows[3].NodeId.Should().Be("Switch<PgBin>#0/Small/PgBreak#0");
 
         await Delete(metadataId);
     }

@@ -122,6 +122,9 @@ namespace Trax.Effect.Broadcaster.SignalR.Models
         public string Name { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("nameWithheld")]
         public bool NameWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        [System.Text.Json.Serialization.JsonPropertyName("nodeId")]
+        public string? NodeId { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("position")]
         public int Position { get; init; }
         [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

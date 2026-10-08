@@ -582,6 +582,8 @@ public partial class Monad<TInput, TReturn>
                         QuestionType = spec.On,
                     };
 
+                    ChainGraph.Enter(nodeIds[spec.Key]);
+
                     // The step fails on the refusal either way, so an observer that cannot record
                     // it is only logged: its failure would hide why the step failed.
                     if (
