@@ -17,6 +17,7 @@ using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -105,6 +106,10 @@ public partial class SchedulerConfigurationBuilder
         // in-memory SchedulerConfiguration singleton, then keeps checking it so a save made on
         // any host reaches this one within seconds.
         _parentBuilder.ServiceCollection.AddHostedService<SchedulerConfigBootstrapHostedService>();
+
+        // Holds the lifecycle events of the runs a ManifestManager cycle fails until its
+        // transaction commits.
+        _parentBuilder.ServiceCollection.TryAddScoped<DeferredOutcomeEvents>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
         // (for RunScheduledTrainJunction.Initialize) and interface (for user steps)

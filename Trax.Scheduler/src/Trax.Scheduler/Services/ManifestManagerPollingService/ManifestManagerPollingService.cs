@@ -6,6 +6,7 @@ using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Trains.ManifestManager;
 using Trax.Scheduler.Utilities;
 
@@ -100,6 +101,10 @@ internal class ManifestManagerPollingService(
                 logger.LogDebug("ManifestManager polling cycle completed");
 
                 await dataContext.CommitTransaction();
+
+                // The runs the cycle failed are committed now, so their lifecycle events go out.
+                if (scope.ServiceProvider.GetService<DeferredOutcomeEvents>() is { } outcomeEvents)
+                    await outcomeEvents.FlushAsync();
             }
             else
             {

@@ -7,6 +7,7 @@ using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.ManifestPruning;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Scheduler.Services.SchedulerStartupService;
@@ -71,7 +72,8 @@ internal class SchedulerStartupService(
     /// Nothing records which process owns a run, so "started before this host" is the whole
     /// test. When one process runs everything, that is exactly the runs a crash or restart
     /// orphaned. Where several hosts or remote workers share the database, a run still executing
-    /// on one of them is failed too. The recovery itself requeues nothing.
+    /// on one of them is failed too. The recovery itself requeues nothing. Each run it fails is
+    /// published to the lifecycle hooks as <c>Failed</c>, once.
     /// </remarks>
     private async Task RecoverStuckJobs(CancellationToken cancellationToken)
     {
@@ -98,24 +100,38 @@ internal class SchedulerStartupService(
 
             var now = DateTime.UtcNow;
 
-            await dataContext
-                .Metadatas.Where(m =>
-                    stuckIds.Contains(m.Id) && m.TrainState == TrainState.InProgress
-                )
-                .ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(m => m.TrainState, TrainState.Failed)
-                            .SetProperty(m => m.EndTime, now)
-                            .SetProperty(
-                                m => m.FailureReason,
-                                "Server restarted while job was in progress"
-                            )
-                            .SetProperty(m => m.FailureException, "ServerRestart")
-                            .SetProperty(m => m.FailureJunction, nameof(SchedulerStartupService)),
-                    cancellationToken
-                );
+            // One conditional write per run, so only the runs this recovery failed are published:
+            // a run that finished meanwhile matches nothing.
+            var recovered = new List<long>(stuckIds.Count);
 
-            totalRecovered += stuckIds.Count;
+            foreach (var id in stuckIds)
+            {
+                var failed = await dataContext
+                    .Metadatas.Where(m => m.Id == id && m.TrainState == TrainState.InProgress)
+                    .ExecuteUpdateAsync(
+                        s =>
+                            s.SetProperty(m => m.TrainState, TrainState.Failed)
+                                .SetProperty(m => m.EndTime, now)
+                                .SetProperty(
+                                    m => m.FailureReason,
+                                    "Server restarted while job was in progress"
+                                )
+                                .SetProperty(m => m.FailureException, "ServerRestart")
+                                .SetProperty(
+                                    m => m.FailureJunction,
+                                    nameof(SchedulerStartupService)
+                                ),
+                        cancellationToken
+                    );
+
+                if (failed > 0)
+                    recovered.Add(id);
+            }
+
+            // Committed: no transaction is open. No train is left to publish these outcomes.
+            await OutOfTrainOutcomes.PublishFailedAsync(serviceProvider, recovered, logger);
+
+            totalRecovered += recovered.Count;
         }
 
         if (totalRecovered > 0)

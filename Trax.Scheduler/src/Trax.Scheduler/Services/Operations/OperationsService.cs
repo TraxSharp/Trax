@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.Services.DataContext;
@@ -29,6 +30,8 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RunOutcomes;
+using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 using SchedulerTrigger = Trax.Scheduler.Services.TraxScheduler.TraxScheduler;
 
@@ -640,6 +643,16 @@ public class OperationsService : IOperationsService
             // dispatcher does when a dispatch fails, and the failure is the server's, not a
             // refusal, so it is thrown (scheduler/0004).
             var failed = await FailUnsubmittedRunAsync(metadata.Id, ex);
+
+            // Failed here, before any runner started it, so no train publishes the outcome. It is
+            // published as a failed dispatch is, without the submitter's detail.
+            if (failed > 0)
+                await OutOfTrainOutcomes.PublishFailedAsync(
+                    services,
+                    [metadata.Id],
+                    (ILogger?)_logger ?? NullLogger.Instance,
+                    DispatchFailure.PublishedAndShown
+                );
 
             if (failed == 0)
             {

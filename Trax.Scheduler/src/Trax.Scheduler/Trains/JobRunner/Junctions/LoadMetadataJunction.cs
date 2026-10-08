@@ -8,6 +8,7 @@ using Trax.Effect.Services.EffectJunction;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.RunOutcomes;
 
 namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 
@@ -24,6 +25,7 @@ namespace Trax.Scheduler.Trains.JobRunner.Junctions;
 internal class LoadMetadataJunction(
     IDataContext dataContext,
     ITrainDiscoveryService trainDiscovery,
+    IServiceProvider services,
     ILogger<LoadMetadataJunction> logger
 ) : EffectJunction<RunJobRequest, (Metadata, ResolvedTrainInput)>
 {
@@ -80,7 +82,8 @@ internal class LoadMetadataJunction(
     /// <c>Cancelled</c>, so the train is not run. The write matches only a row still Pending and
     /// still flagged, so a delivery that claimed the run meanwhile keeps it; the tracked row is
     /// then read back and the next junction sees its state either way. Bookkeeping for a run that
-    /// will not start, so it is written on <see cref="CancellationToken.None"/>.
+    /// will not start, so it is written on <see cref="CancellationToken.None"/>. The write commits
+    /// at once, and the run is then published to the lifecycle hooks as <c>Cancelled</c>.
     /// </summary>
     /// <remarks>
     /// The flag is set by the batch, manifest and group cancels on Pending rows. Before this
@@ -114,13 +117,19 @@ internal class LoadMetadataJunction(
         if (dataContext is DbContext db)
             await db.Entry(metadata).ReloadAsync(CancellationToken.None);
 
-        if (cancelled > 0)
-            logger.LogInformation(
-                "Metadata {MetadataId} ({TrainName}) was cancelled before it started; recorded it "
-                    + "cancelled and did not run it",
-                metadata.Id,
-                metadata.Name
-            );
+        if (cancelled == 0)
+            return;
+
+        logger.LogInformation(
+            "Metadata {MetadataId} ({TrainName}) was cancelled before it started; recorded it "
+                + "cancelled and did not run it",
+            metadata.Id,
+            metadata.Name
+        );
+
+        // Its train never runs, so nothing else publishes the outcome. Only the delivery whose
+        // write matched publishes it, so a second delivery of the same job does not.
+        await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadata.Id], logger);
     }
 
     private static TrainException SchedulerTrain(long metadataId, string trainName) =>
