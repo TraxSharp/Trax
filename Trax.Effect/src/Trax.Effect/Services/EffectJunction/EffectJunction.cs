@@ -44,7 +44,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     /// <param name="previousOutput">The previous junction's result, or the train input.</param>
     /// <param name="train">The running train; must be a <see cref="ServiceTrain{TIn,TOut}"/>.</param>
     /// <exception cref="TrainException"><paramref name="train"/> is not a <see cref="ServiceTrain{TIn,TOut}"/>.</exception>
-    public override Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
+    public sealed override Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         Train<TTrainIn, TTrainOut> train
     )

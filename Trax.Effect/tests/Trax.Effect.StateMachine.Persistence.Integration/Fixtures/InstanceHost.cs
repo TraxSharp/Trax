@@ -36,7 +36,8 @@ public sealed class InstanceHost : IDisposable
     public static InstanceHost Create(
         StoreProvider provider,
         TimeSpan? draftTtl = null,
-        IInvokedRunCancellation? runCancellation = null
+        IInvokedRunCancellation? runCancellation = null,
+        IInvokedTrainLauncher? launcher = null
     )
     {
         var file =
@@ -56,6 +57,8 @@ public sealed class InstanceHost : IDisposable
         );
         if (runCancellation is not null)
             services.AddSingleton(runCancellation);
+        if (launcher is not null)
+            services.AddSingleton(launcher);
 
         return new InstanceHost(services.BuildServiceProvider(), file);
     }
@@ -86,6 +89,17 @@ public sealed class InstanceHost : IDisposable
         using var scope = Scope();
         var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
         return await db.SnapshotDrafts.AsNoTracking().Where(x => x.Id == id).ToListAsync();
+    }
+
+    /// <summary>Every work queue entry with <paramref name="externalId"/>, read straight from the table.</summary>
+    public async Task<List<Trax.Effect.Models.WorkQueue.WorkQueue>> Entries(string externalId)
+    {
+        using var scope = Scope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .WorkQueues.AsNoTracking()
+            .Where(x => x.ExternalId == externalId)
+            .ToListAsync();
     }
 
     public async Task<int> WorkQueueCount()

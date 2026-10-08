@@ -43,4 +43,8 @@ public class CreateMetadata
 
     /// <summary>The run whose recorded decisions the new run replays, if any.</summary>
     public long? ReplayDecisionsOf { get; set; }
+
+    /// <summary>The state-machine instance whose invoking state queued the run, or null.</summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
 }

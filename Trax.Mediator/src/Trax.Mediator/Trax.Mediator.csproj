@@ -4,6 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Trax.Mediator</AssemblyName>
+    <!-- TRAXEXP002: the mediator implements the experimental launcher of a state's invoked train. -->
+    <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
     <PackageDescription>Decoupled dispatch for Trax .NET trains: ITrainBus runs the train registered for an input's type, so callers never reference a concrete train. Adds assembly scanning, the train registry, [TraxAuthorize] train authorization and concurrency limits. Install it when callers should hand over an input rather than inject a specific train.</PackageDescription>
   </PropertyGroup>
 
@@ -15,5 +17,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <!-- The state machine declares the port that queues a state's invoked train (IInvokedTrainLauncher); the
+         mediator implements it, so the enqueue goes through train authorization like any caller's. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
   </ItemGroup>
 </Project>

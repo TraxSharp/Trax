@@ -804,6 +804,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestAsync(long id, Trax.Scheduler.Services.Operations.ManifestUpdate update, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct) { }
+        public static string InvokedRunRequeueRefusal(long metadataId, string machine) { }
     }
     public class QueueTrainInput : System.IEquatable<Trax.Scheduler.Services.Operations.QueueTrainInput>
     {

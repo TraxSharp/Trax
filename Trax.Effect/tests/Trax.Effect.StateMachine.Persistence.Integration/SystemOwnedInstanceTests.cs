@@ -8,9 +8,10 @@ using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 namespace Trax.Effect.StateMachine.Persistence.Integration;
 
 /// <summary>
-/// Instances the system owns: created only by <see cref="IMachineInstances.Start{TMachine}"/>, keyed by an id
-/// derived from the key, and out of reach of every user path (load, save, advance, send), even a user holding
-/// the same id. See <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c>.
+/// Instances the system owns: created only by <see cref="IMachineInstances.Start{TMachine}"/> for a machine that
+/// declares <c>SystemOwned()</c>, keyed by an id derived from the key, and out of reach of every user path (load,
+/// save, advance, send), even a user holding the same id. See
+/// <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c>.
 /// </summary>
 [TestFixture(StoreProvider.Postgres)]
 [TestFixture(StoreProvider.Sqlite)]
@@ -18,6 +19,8 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
 {
     private const string Adr =
         "Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md";
+
+    private const string Machine = "system-turnstile";
 
     private InstanceHost _host = null!;
 
@@ -29,8 +32,14 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
 
     private static MachineKey NewKey() => MachineKey.Of("source", Guid.NewGuid().ToString());
 
-    private static string UnlockedJson =>
-        """{"machine":"turnstile","version":1,"state":"Unlocked","context":{"paidWith":"quarter"}}""";
+    private static Snapshot Unlocked =>
+        new()
+        {
+            Machine = Machine,
+            Version = 1,
+            State = "Unlocked",
+            Context = new JsonObject { ["paidWith"] = "quarter" },
+        };
 
     [Test]
     public async Task Start_twice_with_one_key_returns_one_instance_and_queues_nothing_new()
@@ -38,14 +47,14 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
         var key = NewKey();
         var queued = await _host.WorkQueueCount();
 
-        var first = await _host.Start<TurnstileMachine>(key);
-        var second = await _host.Start<TurnstileMachine>(key);
+        var first = await _host.Start<SystemTurnstileMachine>(key);
+        var second = await _host.Start<SystemTurnstileMachine>(key);
 
         first.Created.Should().BeTrue();
         second
             .Should()
             .Be(first with { Created = false }, $"one key names one instance. See {Adr}");
-        first.Id.Should().Be(MachineInstanceId.For("turnstile", key));
+        first.Id.Should().Be(MachineInstanceId.For(Machine, key));
         first.State.Should().Be("Locked");
 
         var rows = await _host.Rows(first.Id);
@@ -62,7 +71,9 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
         var key = NewKey();
 
         var results = await Task.WhenAll(
-            Enumerable.Range(0, 8).Select(_ => Task.Run(() => _host.Start<TurnstileMachine>(key)))
+            Enumerable
+                .Range(0, 8)
+                .Select(_ => Task.Run(() => _host.Start<SystemTurnstileMachine>(key)))
         );
 
         results.Select(r => r.Id).Distinct().Should().ContainSingle();
@@ -73,7 +84,7 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     [Test]
     public async Task Start_uses_the_given_context_and_refuses_an_invalid_one()
     {
-        var created = await _host.Start<OrderMachine>(
+        var created = await _host.Start<SystemOrderMachine>(
             NewKey(),
             new JsonObject { ["items"] = new JsonArray(1, 2), ["receipt"] = null }
         );
@@ -83,7 +94,7 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
             .Be("[1,2]");
 
         var invalid = () =>
-            _host.Start<TurnstileMachine>(NewKey(), new JsonObject { ["stray"] = 1 });
+            _host.Start<SystemTurnstileMachine>(NewKey(), new JsonObject { ["stray"] = 1 });
         await invalid
             .Should()
             .ThrowAsync<ArgumentException>()
@@ -91,32 +102,41 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     }
 
     [Test]
+    public async Task Start_refuses_a_user_owned_machine()
+    {
+        var start = () => _host.Start<TurnstileMachine>(NewKey());
+
+        await start
+            .Should()
+            .ThrowAsync<InvalidOperationException>(
+                $"only a machine that declares SystemOwned() has system instances. See {Adr}"
+            )
+            .WithMessage("*user-owned*SystemOwned()*");
+    }
+
+    [Test]
     public async Task A_system_instance_refuses_advance_and_save_from_any_user()
     {
-        var instance = await _host.Start<TurnstileMachine>(NewKey());
+        var instance = await _host.Start<SystemTurnstileMachine>(NewKey());
         var before = (await _host.Rows(instance.Id)).Single();
 
         using (var scope = _host.Scope())
         {
-            var turnstile = _host.Service(scope, "turnstile");
-
-            (
-                await turnstile.Advance(
-                    "u1",
-                    instance.Id,
-                    "Coin",
-                    new JsonObject { ["coin"] = "quarter" }
-                )
-            )
+            var registry = scope.ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>();
+            registry
+                .Service(Machine)
                 .Should()
-                .BeOfType<AdvanceOutcome.NotFound>(
-                    $"a user's advance never reaches a system row, and does not learn it exists. See {Adr}"
+                .BeNull(
+                    $"no user's draft operation reaches a system-owned machine, which the mutations answer as "
+                        + $"unknown-machine. See {Adr}"
                 );
 
-            // A save under the id writes the user's own draft, never the system row.
-            (await turnstile.Autosave("u1", instance.Id, UnlockedJson))
+            // Below the draft service, a user's own writes under the id never reach the system row.
+            var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+            (await store.Update("u1", instance.Id, Unlocked, before.ConcurrencyToken))
                 .Should()
-                .BeOfType<AutosaveResult.Saved>();
+                .BeFalse("a user's update never matches a system row");
+            (await store.Upsert("u1", instance.Id, Unlocked)).Should().BeTrue();
         }
 
         var after = await _host.Rows(instance.Id);
@@ -131,92 +151,73 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
     [Test]
     public async Task A_system_instance_refuses_send_from_any_user()
     {
-        var instance = await _host.Start<OrderMachine>(
+        var instance = await _host.Start<SystemOrderMachine>(
             NewKey(),
             new JsonObject { ["items"] = new JsonArray(1), ["receipt"] = null }
         );
 
-        // Move the system row to Review, the effect's from-state, the way only server code can.
         using (var scope = _host.Scope())
         {
-            var store = _host.Instances(scope);
-            var stored = await store.Get(DraftOwner.System, "order", instance.Id);
-            (
-                await store.Update(
-                    DraftOwner.System,
-                    instance.Id,
-                    new Snapshot
-                    {
-                        Machine = "order",
-                        Version = 1,
-                        State = "Review",
-                        Context = new JsonObject
-                        {
-                            ["items"] = new JsonArray(1),
-                            ["receipt"] = null,
-                        },
-                    },
-                    stored!.Token,
-                    request: null
-                )
-            ).Should().BeTrue();
-        }
-
-        using (var scope = _host.Scope())
-        {
-            var runner = scope
+            scope
                 .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
-                .EffectRunner("order")!;
-            (await runner.Run("u1", instance.Id, "req-1"))
+                .EffectRunner("system-order")
                 .Should()
-                .BeOfType<AdvanceOutcome.NotFound>();
+                .BeNull("no user can send a system-owned machine's effect");
             ((CountingEffect)scope.ServiceProvider.GetRequiredService<IOrderCharge>())
                 .Calls.Should()
-                .Be(0, "no effect runs for a draft the user does not own");
+                .Be(0);
         }
 
-        (await _host.Rows(instance.Id)).Single().State.Should().Be("Review");
+        (await _host.Rows(instance.Id)).Single().State.Should().Be("Draft");
     }
 
     [Test]
     public async Task A_system_instance_never_appears_in_a_users_load()
     {
-        var instance = await _host.Start<TurnstileMachine>(NewKey());
+        var instance = await _host.Start<SystemTurnstileMachine>(NewKey());
 
         using var scope = _host.Scope();
-        (await _host.Service(scope, "turnstile").Load("u1", instance.Id))
+        scope
+            .ServiceProvider.GetRequiredService<ISnapshotMachineRegistry>()
+            .Service(Machine)
             .Should()
-            .BeOfType<LoadResult.NotFound>($"a user's load never returns a system row. See {Adr}");
+            .BeNull($"a user's load never reaches a system-owned machine. See {Adr}");
 
         var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
         (await store.Get("u1", instance.Id)).Should().BeNull();
-        (await store.Get("u1", "turnstile", instance.Id)).Should().BeNull();
+        (await store.Get("u1", Machine, instance.Id)).Should().BeNull();
     }
 
     [Test]
     public async Task A_user_holding_the_same_id_does_not_reach_the_system_row()
     {
-        var instance = await _host.Start<TurnstileMachine>(NewKey());
+        var instance = await _host.Start<SystemTurnstileMachine>(NewKey());
 
         using (var scope = _host.Scope())
         {
-            var turnstile = _host.Service(scope, "turnstile");
-            await turnstile.Autosave("u1", instance.Id, UnlockedJson);
-
-            // The user's load, advance and delete act on the user's own row only.
-            (await turnstile.Load("u1", instance.Id))
-                .Should()
-                .BeOfType<LoadResult.Loaded>()
-                .Which.Snapshot.State.Should()
-                .Be("Unlocked");
-            (await turnstile.Advance("u1", instance.Id, "Push"))
-                .Should()
-                .BeOfType<AdvanceOutcome.Advanced>()
-                .Which.Snapshot.State.Should()
-                .Be("Locked");
-
             var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-            await store.Delete("u1", "turnstile", instance.Id);
+            (await store.Insert("u1", instance.Id, Unlocked)).Should().BeTrue();
+
+            // The user's read, write and delete act on the user's own row only.
+            var own = await store.Get("u1", Machine, instance.Id);
+            own.Should().NotBeNull();
+            JsonNode.Parse(own!.Json)!["state"]!.GetValue<string>().Should().Be("Unlocked");
+            (
+                await store.Update(
+                    "u1",
+                    instance.Id,
+                    Unlocked with
+                    {
+                        State = "Locked",
+                        Context = new JsonObject(),
+                    },
+                    own.Token
+                )
+            )
+                .Should()
+                .BeTrue();
+
+            await store.Delete("u1", Machine, instance.Id);
             await store.Delete("u1", instance.Id);
         }
 
@@ -227,7 +228,7 @@ public class SystemOwnedInstanceTests(StoreProvider provider)
             .Be(SnapshotOwnerKind.System);
 
         using var check = _host.Scope();
-        (await _host.Instances(check).Get(DraftOwner.System, "turnstile", instance.Id))
+        (await _host.Instances(check).Get(DraftOwner.System, Machine, instance.Id))
             .Should()
             .NotBeNull();
     }

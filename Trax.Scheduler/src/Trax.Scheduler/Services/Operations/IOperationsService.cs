@@ -161,7 +161,9 @@ public interface IOperationsService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// <c>OperationResult(true, Id: newEntryId, Count: 1, ...)</c> on success. A failed result,
-    /// with a message, when no run has the id (<c>"Execution {id} not found."</c>), its train is
+    /// with a message, when no run has the id (<c>"Execution {id} not found."</c>), a state
+    /// machine's invoking state queued the run (<c>OperationsService.InvokedRunRequeueRefusal</c>:
+    /// the machine retries it by entering the state again), its train is
     /// no longer registered (<c>"Train {name} is no longer registered, ..."</c>), its saved input
     /// cannot be re-queued or no longer reads as the train's input type (<c>"The saved input of
     /// run {id} no longer reads as {type}: ..."</c>), or the enqueue is refused as

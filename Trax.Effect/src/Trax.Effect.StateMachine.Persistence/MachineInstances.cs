@@ -27,7 +27,10 @@ public interface IMachineInstances
     /// </param>
     /// <param name="cancellationToken">Cancels the database calls.</param>
     /// <returns>The instance: its id, its machine, the state it is in now, and whether this call created it.</returns>
-    /// <exception cref="InvalidOperationException"><typeparamref name="TMachine"/> is not registered.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// <typeparamref name="TMachine"/> is not registered, does not declare <c>SystemOwned()</c>, or its initial state
+    /// invokes a train whose run could not be queued.
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="context"/> is not a valid context for the initial state, or makes the snapshot larger than
     /// <see cref="SnapshotLimits.MaxSnapshotBytes"/>.
@@ -194,9 +197,9 @@ public static class MachineInstanceId
 
 /// <summary>
 /// Cancels the train run an invoking state queued, given the run's invoke token. A draft that holds a live token is
-/// never deleted until this has returned, so draft expiry cannot strand a run. The package that launches invoked
-/// trains registers the implementation; until one is registered the default does nothing, because no state can have
-/// queued a run.
+/// never deleted until this has returned, so draft expiry cannot strand a run. <c>AddStateMachines</c> registers the
+/// implementation, which cancels as the operations surface does: a still-queued work queue entry is marked
+/// cancelled, and a dispatched run has its cancel flag set, which it reads at its next junction on any host.
 /// </summary>
 [Experimental(ExperimentalIds.Invokes)]
 public interface IInvokedRunCancellation
@@ -213,17 +216,9 @@ public interface IInvokedRunCancellation
     Task Cancel(string invokeToken, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The default <see cref="IInvokedRunCancellation"/> before a launcher registers one: nothing to cancel.</summary>
-[Experimental(ExperimentalIds.Invokes)]
-internal sealed class NoInvokedRunCancellation : IInvokedRunCancellation
-{
-    public Task Cancel(string invokeToken, CancellationToken cancellationToken = default) =>
-        Task.CompletedTask;
-}
-
 /// <summary>
 /// What a <see cref="Machine{TState,TTrigger}"/> offers this package beyond <see cref="IMachine"/>: its validated
-/// initial snapshot, and a draft service that cancels a live invoked run before it deletes a draft.
+/// initial snapshot, its ownership and invoked trains, and a draft service wired to the invoke outbox.
 /// </summary>
 internal interface IMachineInternals
 {
@@ -234,19 +229,43 @@ internal interface IMachineInternals
     /// <exception cref="ArgumentException">The context is invalid for the initial state, or too large.</exception>
     Snapshot InitialSnapshot(JsonObject? context);
 
-    /// <summary><see cref="IMachine.CreateService"/>, with the cancellation a draft deletion calls first.</summary>
+    /// <summary>Whether the machine declares <c>SystemOwned()</c>: only the system holds its instances.</summary>
+    bool SystemOwned { get; }
+
+    /// <summary>Every state that invokes a train, as the startup check describes it to the launcher.</summary>
+    IReadOnlyList<InvokedTrainDeclaration> InvokedTrains { get; }
+
+    /// <summary>The invoking state <paramref name="state"/> is, or null when it invokes nothing.</summary>
+    EnteringInvoke? Entering(string state);
+
+    /// <summary>
+    /// <see cref="IMachine.CreateService"/>, with the cancellation a draft deletion calls first, and the runtime a
+    /// machine that invokes trains writes through (null for one that invokes none).
+    /// </summary>
     ISnapshotDraftService CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl,
-        IInvokedRunCancellation? runCancellation
+        IInvokedRunCancellation? runCancellation,
+        InvokeRuntime? invokes
     );
 }
 
+/// <summary>
+/// What a draft service of a machine that invokes trains writes through: the owner-aware store over the request's
+/// data context, and the outbox that writes a snapshot together with the runs it queues or cancels.
+/// </summary>
+/// <param name="Store">The owner-aware store the draft service reads and writes, over the request's data context.</param>
+/// <param name="Outbox">Writes a snapshot entering or leaving an invoking state in one transaction.</param>
+internal sealed record InvokeRuntime(IMachineInstanceStore Store, InvokeOutbox Outbox);
+
 /// <summary>The default <see cref="IMachineInstances"/>, registered scoped by <c>AddStateMachines</c>.</summary>
 [Experimental(ExperimentalIds.Invokes)]
-internal sealed class MachineInstances(IEnumerable<IMachine> machines, IMachineInstanceStore store)
-    : IMachineInstances
+internal sealed class MachineInstances(
+    IEnumerable<IMachine> machines,
+    IMachineInstanceStore store,
+    InvokeOutbox outbox
+) : IMachineInstances
 {
     public async Task<MachineInstance> Start<TMachine>(
         MachineKey key,
@@ -268,6 +287,12 @@ internal sealed class MachineInstances(IEnumerable<IMachine> machines, IMachineI
                 $"{typeof(TMachine).Name} does not derive from Machine<TState, TTrigger>, so it has no initial "
                     + "snapshot to start an instance from."
             );
+        if (!internals.SystemOwned)
+            throw new InvalidOperationException(
+                $"{typeof(TMachine).Name} ('{machine.Name}') is a user-owned machine, so the system cannot start an "
+                    + "instance of it. Declare SystemOwned() in its Configure for its instances to belong to the "
+                    + "system; its users then reach none of them."
+            );
 
         var name = machine.Name;
         var id = MachineInstanceId.For(name, key);
@@ -276,10 +301,25 @@ internal sealed class MachineInstances(IEnumerable<IMachine> machines, IMachineI
             return Existing(id, name, existing);
 
         var initial = internals.InitialSnapshot(context);
-        if (await store.Insert(DraftOwner.System, id, initial, cancellationToken))
+
+        // Entering an invoking initial state queues its run and sets the row's invoke token, in the transaction
+        // that inserts the row, so a lost race to create the instance queues nothing.
+        var created = await outbox.Insert(
+            DraftOwner.System,
+            id,
+            initial,
+            internals.Entering(initial.State),
+            cancellationToken
+        );
+        switch (created)
         {
-            await EnterInitialState(name, id, initial, cancellationToken);
-            return new MachineInstance(id, name, initial.State, Created: true);
+            case InvokeWrite.Written:
+                return new MachineInstance(id, name, initial.State, Created: true);
+            case InvokeWrite.Refused refused:
+                throw new InvalidOperationException(
+                    $"The system instance {id} of '{name}' could not be started ({refused.Code}): {refused.Message}",
+                    refused.Exception
+                );
         }
 
         // Another Start for the same key created the row between the read and the insert: return that one.
@@ -289,15 +329,6 @@ internal sealed class MachineInstances(IEnumerable<IMachine> machines, IMachineI
                 $"The system instance {id} of '{name}' could not be created, and none exists."
             );
     }
-
-    // Entering an invoking initial state queues its run and sets the row's invoke token, in the transaction that
-    // inserts the row. Nothing is queued yet: this is where the launcher hooks in.
-    private static Task EnterInitialState(
-        string machine,
-        Guid id,
-        Snapshot initial,
-        CancellationToken cancellationToken
-    ) => Task.CompletedTask;
 
     private static MachineInstance Existing(Guid id, string machine, StoredSnapshot stored) =>
         new(

@@ -85,8 +85,29 @@ never through `ISnapshotStore`. `invoke_token` is unique where set.
 
 The draft TTL applies to user drafts only: a system instance never expires. Deleting a draft that holds a live
 `invoke_token` cancels its run first, through `IInvokedRunCancellation` (experimental, `TRAXEXP002`), and a cancel
-that throws keeps the draft. The package that launches invoked trains registers the implementation; until one is
-registered the default does nothing, because no state can have queued a run.
+that throws keeps the draft. `AddStateMachines` registers the implementation, which cancels the way the operations
+surface does: a work queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set,
+which it reads at its next junction on whichever host runs it. The delete that follows is conditional on the token
+that was cancelled, so a draft that entered an invoking state again in between keeps its new run.
+
+### IInvokedTrainLauncher
+
+Experimental (`TRAXEXP002`). The port through which a state that
+[invokes a train](/docs/statemachine/invoking-trains) queues its run. Trax.Mediator implements it and
+`AddMediator` registers it; a host does not implement or call it.
+
+```csharp
+public interface IInvokedTrainLauncher
+{
+    IReadOnlyList<string> Refusals(InvokedTrainDeclaration declaration, IServiceProvider services);
+    Task Launch(InvokedTrainLaunch launch, IDataContext context, CancellationToken cancellationToken = default);
+}
+```
+
+`Launch` authorizes the run and writes its work queue entry into the caller's data context, inside the transaction
+that moves the snapshot, so the two commit together; it commits nothing itself. `Refusals` tells the startup check
+what about a train stops a machine from invoking it. It lives in the persistence package rather than the engine
+because it writes through `IDataContext`, and the engine depends on no data provider.
 
 ### StoredSnapshot
 
@@ -136,7 +157,10 @@ effect-bound transition lands in, because only send knows the effect ran:
 | Path | Refuses | Code |
 | --- | --- | --- |
 | advance | a trigger bound to the machine's effect from the stored state | `effect-bound` |
-| autosave | creating a draft in, or moving one into, a committed state or an effect's target | `state-reserved` |
+| advance | an invoked train's outcome trigger | `outcome-bound` |
+| advance | entering an invoking state past the user's live-run limit, or for a user the train refuses | `invoke-limit-reached`, `invoke-forbidden` |
+| autosave | any change to a draft in an invoking state or holding a live run | `draft-invoking` |
+| autosave | creating a draft in, or moving one into, a committed state, an effect's target, an invoking state or an invoked train's outcome target | `state-reserved` |
 | autosave | any change to a draft already in a committed state or an effect's target, except a reset to the initial state that the machine declares from that state | `draft-committed` |
 | autosave | overwriting a stored draft that fails rehydration with anything but the initial state | `draft-unreadable` |
 | send | recording the receipt on a draft that was written while the effect ran | `conflict` |

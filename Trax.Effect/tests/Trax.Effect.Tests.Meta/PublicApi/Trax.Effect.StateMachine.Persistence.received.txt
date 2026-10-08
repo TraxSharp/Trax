@@ -136,6 +136,12 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         System.Threading.Tasks.Task Cancel(string invokeToken, System.Threading.CancellationToken cancellationToken = default);
     }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public interface IInvokedTrainLauncher
+    {
+        System.Threading.Tasks.Task Launch(Trax.Effect.StateMachine.Persistence.InvokedTrainLaunch launch, Trax.Effect.Data.Services.DataContext.IDataContext context, System.Threading.CancellationToken cancellationToken = default);
+        System.Collections.Generic.IReadOnlyList<string> Refusals(Trax.Effect.StateMachine.Persistence.InvokedTrainDeclaration declaration, System.IServiceProvider services);
+    }
     public interface IMachine
     {
         string? Corpus { get; }
@@ -195,6 +201,26 @@ namespace Trax.Effect.StateMachine.Persistence
         public IdempotentEffect(Trax.Effect.StateMachine.Persistence.IEffectClaimStore claims) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, string? contentFingerprint, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public sealed class InvokedTrainDeclaration : System.IEquatable<Trax.Effect.StateMachine.Persistence.InvokedTrainDeclaration>
+    {
+        public InvokedTrainDeclaration(string Machine, string State, System.Type TrainType, System.Type InputType, System.Type OutputType, bool SystemOwned) { }
+        public System.Type InputType { get; init; }
+        public string Machine { get; init; }
+        public System.Type OutputType { get; init; }
+        public string State { get; init; }
+        public bool SystemOwned { get; init; }
+        public System.Type TrainType { get; init; }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public sealed class InvokedTrainLaunch : System.IEquatable<Trax.Effect.StateMachine.Persistence.InvokedTrainLaunch>
+    {
+        public InvokedTrainLaunch(System.Type TrainType, object Input, string ExternalId, Trax.Effect.Models.WorkQueue.DTOs.InvokedBy InvokedBy) { }
+        public string ExternalId { get; init; }
+        public object Input { get; init; }
+        public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy InvokedBy { get; init; }
+        public System.Type TrainType { get; init; }
     }
     public abstract class LoadResult : System.IEquatable<Trax.Effect.StateMachine.Persistence.LoadResult>
     {

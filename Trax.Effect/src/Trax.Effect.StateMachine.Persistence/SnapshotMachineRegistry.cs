@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
@@ -80,9 +82,34 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         if (!_machines.TryGetValue(machine, out var found))
             return null;
 
-        var service = found is IMachineInternals internals
-            ? internals.CreateService(_store, _claims, _draftTtl, _runCancellation)
-            : found.CreateService(_store, _claims, _draftTtl);
+        // A system-owned machine's instances are created and driven from code only: no user's draft operation
+        // reaches it, so it is answered as no machine at all.
+        if (found is IMachineInternals { SystemOwned: true })
+            return null;
+
+        ISnapshotDraftService service;
+        if (found is IMachineInternals internals)
+        {
+            // A machine that invokes trains reads and writes its drafts through the owner-aware store over the
+            // request's data context, the one the outbox writes the run's entry through, so the snapshot and the
+            // run commit in one transaction whatever ISnapshotStore the host registered.
+            var invokes =
+                internals.InvokedTrains.Count > 0
+                    ? new InvokeRuntime(
+                        _services.GetRequiredService<IMachineInstanceStore>(),
+                        _services.GetRequiredService<InvokeOutbox>()
+                    )
+                    : null;
+            service = internals.CreateService(
+                invokes?.Store as ISnapshotStore ?? _store,
+                _claims,
+                _draftTtl,
+                _runCancellation,
+                invokes
+            );
+        }
+        else
+            service = found.CreateService(_store, _claims, _draftTtl);
         _serviceCache[machine] = service;
         return service;
     }
@@ -90,7 +117,11 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     /// <inheritdoc/>
     public ISnapshotEffectRunner? EffectRunner(string machine)
     {
-        if (!_machines.TryGetValue(machine, out var found) || !found.HasEffect)
+        if (
+            !_machines.TryGetValue(machine, out var found)
+            || !found.HasEffect
+            || found is IMachineInternals { SystemOwned: true }
+        )
             return null;
 
         return found.CreateEffectRunner(Service(machine)!, _idempotent, _services);

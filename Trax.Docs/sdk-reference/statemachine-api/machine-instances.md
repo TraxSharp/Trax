@@ -43,8 +43,15 @@ var instance = await instances.Start<IngestMachine>(MachineKey.Of("orders-db", "
 It creates the instance in the machine's initial state with `context` (or the context the machine declares in
 `StartsAt` when `context` is null), or returns the instance that already exists for the key. The context is
 validated against the initial state as any stored snapshot is, and an invalid one, or one that makes the snapshot
-larger than 64 KiB, throws `ArgumentException`. A machine that is not registered throws
-`InvalidOperationException`.
+larger than 64 KiB, throws `ArgumentException`. A machine that is not registered, or that does not declare
+`SystemOwned()` in its `Configure`, throws `InvalidOperationException`.
+
+When the initial state [invokes a train](/docs/statemachine/invoking-trains), the run is queued in the
+transaction that inserts the row, and the row's invoke token names it; a `Start` that loses the race to create the
+instance queues nothing.
+
+A machine that declares `SystemOwned()` belongs to the system only: no user's draft operation reaches it, and the
+four `stateMachine` mutations answer `unknown-machine` for it.
 
 Calling `Start` twice with one key, from one host or from several at once, creates one row: the losing insert is a
 lost race, and the call returns the winner's instance with `Created` false. The context of a call that finds an

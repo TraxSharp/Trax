@@ -9,6 +9,8 @@
     <RootNamespace>Trax.Api.Tests</RootNamespace>
     <!-- TRAXEXP001: the run graph tests run a real train with the experimental Parallel step. -->
     <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
+    <!-- TRAXEXP002: the invoked-run operations tests seed a run a state machine's invoking state queued. -->
+    <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

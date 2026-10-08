@@ -78,11 +78,78 @@ go to the target of the machine's `RunsOnce` effect.
 
 An invoked train does not count against the machine's one `RunsOnce` effect.
 
+An autosave of a draft in an invoking state is refused as `draft-invoking` unless it is identical to what is
+stored: a save could neither leave the state, which would strand the run, nor rewrite the context the run was
+started from. An `advanceSnapshot` with an outcome trigger is refused as `outcome-bound`.
+
+## Entering and leaving the state
+
+Entering an invoking state, by an advance, a send, or `IMachineInstances.Start` when the initial state invokes,
+writes three things in one transaction on the request's data context: the snapshot, the run's work queue entry,
+and the row's server-only invoke token, which is the entry's external id. A crash or a refusal anywhere in between
+leaves none of them, so no machine waits on a run that was never queued and no run is queued for a machine that
+never moved. On Postgres the entry's insert wakes the dispatchers on every host when the transaction commits; on
+SQLite a dispatcher in the same process is woken.
+
+The enqueue goes through the mediator like any caller's: the train is found by its canonical name, authorized, its
+input capped and its subject key stamped. The entry and the run it becomes record which machine, instance and owner
+kind queued them (`invoking_machine`, `invoking_instance_id`, `invoking_owner_kind` on `trax.work_queue` and
+`trax.metadata`), so a run stays linked to its instance after the token is cleared.
+
+Leaving the state through any declared transition (a user's own "stop" event, say) clears the token in the same
+write and cancels the run: a run still queued is marked cancelled, and one already dispatched has its cancel flag
+set, which it reads at its next junction on whichever host runs it. A self-loop on the invoking state neither
+leaves nor enters it, and the state keeps its run.
+
+## Who a run belongs to
+
+A machine is user-owned unless it declares `SystemOwned()`, and that decides how its runs are authorized:
+
+- **A user-owned machine's** train is authorized against the user entering the state, at entry, through the
+  host's train authorization. A user the train refuses cannot enter the state (`invoke-forbidden`), and nothing is
+  written.
+- **A system-owned machine's** instances are created only by
+  [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances), and no user's draft
+  operation reaches the machine. Its train is authorized inside Trax's trusted execution scope, as a scheduled
+  manifest run is.
+
+One user holds at most 10 live invoked runs in a machine; entering an invoking state past that is refused as
+`invoke-limit-reached`. A machine sets its own limit with `InvokedRunLimit(n)`. A run is live from the entry that
+queued it until its state is left or its outcome is applied. System owners are not capped here: the dispatcher's
+`MaxActiveJobs` bounds them.
+
+## What the host must provide
+
+The host refuses to start when a machine invokes a train it cannot queue in the advance's transaction, cancel from
+another host, or authorize as declared. Each refusal names the machine, the state and the train, junction or member
+at fault:
+
+| Refused | Why |
+| --- | --- |
+| a plain `Junction` anywhere in the train's chain, inside a `Parallel` branch or a routing step's tracks too | only an `EffectJunction` reads the run's cancel flag, so leaving the state could not stop it on another host |
+| an `IChain<I>` whose registered class is not an `EffectJunction`, or that the container builds with a factory | the same; the junction it runs must be known |
+| a train that is not a `ServiceTrain` | only a `ServiceTrain`'s run is sealed to its junctions |
+| anything the chain recorder refuses, or a chain that cannot be read outside a request | the chain cannot be checked |
+| no `AddJunctionProgress()` | it registers the junction effect that reads the cancel flag |
+| no `AddMediator(...)` | nothing can queue the runs |
+| an `OnQueue` hook or `DeferQueuePromotion` on the train | both commit on their own, outside the transaction that enters the state |
+| the InMemory provider | it has no transactions |
+| on a user-owned machine, a train whose `[TraxAuthorize]` names roles or a policy | entering the state would be a way around a requirement stricter than the machine's own mutations |
+| on a user-owned machine, a `[TraxBroadcast]` train | its subscribers see every run's output |
+| on a system-owned machine, a train that declares `[TraxAuthorize]` | the trusted scope does not check user requirements |
+| an output type that reaches a `[TraxSensitive]` member | the output is reduced into a context stored as plain JSON and returned by `loadSnapshot` |
+
+`EffectJunction`'s railway step is sealed, so a subclass cannot skip the check. Two limits remain: a slow decider in
+`Decide` or `Gate` runs outside any junction, so no cancel check happens while it runs, and a train started from
+inside a junction is not cancelled with its parent.
+
 ## Retry by entering the state again
 
-The scheduler never retries an invoked run, and an operator cannot requeue one. A failure goes to `OnFailed`, and
-the machine retries by entering the invoking state again (a `Retry` transition from the failure state, say),
-which queues a new run. The old run's late completion is then a `no-transition`. The state is the checkpoint.
+The scheduler never retries an invoked run: it has no manifest, so it is never retried or dead-lettered. An
+operator cannot requeue one either: `requeueExecution` and the dashboard's Re-queue refuse it with the same reason.
+A failure goes to `OnFailed`, and the machine retries by entering the invoking state again (a `Retry` transition
+from the failure state, say), which queues a new run under a new token. The old run's late completion is then a
+`no-transition`. The state is the checkpoint.
 
 ## Junctions must be idempotent
 
@@ -98,4 +165,4 @@ of steps, not with the amount of data each step handles.
 
 ## SDK Reference
 
-> [Invokes](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [OnDone / OnFailed / OnCancelled](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder) | [OutcomeSample](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder) | [IR outcomes](/docs/sdk-reference/statemachine-api/ir-format#outcomes)
+> [Invokes](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [SystemOwned / InvokedRunLimit](/docs/sdk-reference/statemachine-api/fluent-authoring#imachinebuilder) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [IInvokedTrainLauncher](/docs/sdk-reference/statemachine-api/persistence-ports#iinvokedtrainlauncher) | [Result codes](/docs/sdk-reference/statemachine-api/result-codes) | [OnDone / OnFailed / OnCancelled](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder) | [OutcomeSample](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder) | [IR outcomes](/docs/sdk-reference/statemachine-api/ir-format#outcomes)

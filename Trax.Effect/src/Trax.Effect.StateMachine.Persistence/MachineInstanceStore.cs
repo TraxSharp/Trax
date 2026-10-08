@@ -79,6 +79,32 @@ internal interface IMachineInstanceStore
         Guid id,
         Snapshot snapshot,
         CancellationToken cancellationToken = default
+    ) => Insert(owner, id, snapshot, invokeToken: null, cancellationToken);
+
+    /// <summary>
+    /// <see cref="Insert(DraftOwner, Guid, Snapshot, CancellationToken)"/> that also stores
+    /// <paramref name="invokeToken"/>, the run the new row's initial state invoked.
+    /// </summary>
+    Task<bool> Insert(
+        DraftOwner owner,
+        Guid id,
+        Snapshot snapshot,
+        string? invokeToken,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Deletes <paramref name="owner"/>'s row for <paramref name="machine"/> under <paramref name="id"/> only while it
+    /// still holds <paramref name="invokeToken"/> (none, when null): a draft whose run was cancelled before it is
+    /// deleted, and which has since entered an invoking state again, keeps its new run. False when nothing was
+    /// deleted.
+    /// </summary>
+    Task<bool> DeleteHolding(
+        DraftOwner owner,
+        string machine,
+        Guid id,
+        string? invokeToken,
+        CancellationToken cancellationToken = default
     );
 
     /// <summary>

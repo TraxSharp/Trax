@@ -179,11 +179,26 @@ public partial class OperationsService : IOperationsService
             var source = await db
                 .Metadatas.AsNoTracking()
                 .Where(m => m.Id == metadataId)
-                .Select(m => new { m.Name, m.Input })
+                .Select(m => new
+                {
+                    m.Name,
+                    m.Input,
+                    m.InvokingMachine,
+                })
                 .FirstOrDefaultAsync(ct);
 
             if (source is null)
                 return new OperationResult(false, Message: $"Execution {metadataId} not found.");
+
+            // A run a state machine's invoking state queued belongs to that entry of the state: its
+            // outcome is applied only through the instance's invoke token, and a retry is the
+            // machine entering the state again, which queues a new run. A requeued copy would run
+            // with no state to deliver to (ADR 0046).
+            if (source.InvokingMachine is { } machine)
+                return new OperationResult(
+                    false,
+                    Message: InvokedRunRequeueRefusal(metadataId, machine)
+                );
 
             // Re-queueing reads the saved input back as the train's input. Nothing saved, a
             // placeholder saved in its place, or masked [TraxSensitive] members would all read
@@ -354,6 +369,19 @@ public partial class OperationsService : IOperationsService
                     + "ITrainAuthorizationService is registered."
             );
     }
+
+    /// <summary>
+    /// The one reason <see cref="RequeueExecutionAsync(long, bool, CancellationToken)"/> refuses a
+    /// run a state machine's invoking state queued, on GraphQL and the dashboard alike (central
+    /// ADR 0022): such a run is retried by its machine entering the state again, never by a
+    /// requeue.
+    /// </summary>
+    /// <param name="metadataId">The run that was asked to be re-queued.</param>
+    /// <param name="machine">The machine whose invoking state queued it.</param>
+    public static string InvokedRunRequeueRefusal(long metadataId, string machine) =>
+        $"Execution {metadataId} was started by a step of the state machine '{machine}', and only "
+        + "that step receives its outcome, so it cannot be re-queued. The machine retries it by "
+        + "entering the step again.";
 
     /// <summary>
     /// What a queueing operation answers on a host with no database provider, where nothing

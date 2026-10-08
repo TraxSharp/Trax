@@ -161,20 +161,22 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl = null
-    ) => BuildService(store, claims, draftTtl, runCancellation: null);
+    ) => BuildService(store, claims, draftTtl, runCancellation: null, invokes: null);
 
     ISnapshotDraftService IMachineInternals.CreateService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl,
-        IInvokedRunCancellation? runCancellation
-    ) => BuildService(store, claims, draftTtl, runCancellation);
+        IInvokedRunCancellation? runCancellation,
+        InvokeRuntime? invokes
+    ) => BuildService(store, claims, draftTtl, runCancellation, invokes);
 
     private SnapshotDraftService<TState, TTrigger> BuildService(
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl,
-        IInvokedRunCancellation? runCancellation
+        IInvokedRunCancellation? runCancellation,
+        InvokeRuntime? invokes
     ) =>
         new(
             Built.Engine,
@@ -187,7 +189,30 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
         )
         {
             RunCancellation = runCancellation,
+            ReservedStates = Built.ReservedStates,
+            InvokingStates = Built.Invokes.Keys.ToHashSet(),
+            Invokes = invokes,
+            InvokedRunLimit = Built.InvokedRunLimit,
         };
+
+    bool IMachineInternals.SystemOwned => Built.SystemOwned;
+
+    IReadOnlyList<InvokedTrainDeclaration> IMachineInternals.InvokedTrains =>
+        Built
+            .Invokes.Values.Select(i => new InvokedTrainDeclaration(
+                Built.Definition.Id,
+                i.State.ToString(),
+                i.TrainType,
+                i.InputType,
+                i.OutputType,
+                Built.SystemOwned
+            ))
+            .ToList();
+
+    EnteringInvoke? IMachineInternals.Entering(string state) =>
+        Built.Invokes.Values.FirstOrDefault(i => i.State.ToString() == state) is { } invoke
+            ? new EnteringInvoke(invoke.TrainType, invoke.CreateInput, Built.InvokedRunLimit)
+            : null;
 
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
         Built.Effects.Select(e => EffectClaimKey.ForUser(e.KeyPrefix, userKey, id));

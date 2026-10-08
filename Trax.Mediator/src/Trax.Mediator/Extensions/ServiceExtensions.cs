@@ -304,6 +304,14 @@ public static class ServiceExtensions
             .AddSingleton<IEnqueueContextAccessor, EnqueueContextAccessor>()
             .AddSingleton<IWorkQueuePromotion, WorkQueuePromotion>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
+            // Queues the train a state machine's invoking state runs, through the execution service
+            // above and into the caller's transaction. Registered whether or not the host has
+            // machines; AddStateMachines' startup check refuses a machine that invokes trains
+            // without it.
+            .AddScoped<
+                Trax.Effect.StateMachine.Persistence.IInvokedTrainLauncher,
+                Services.InvokedTrains.InvokedTrainLauncher
+            >()
             .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
     }
 }

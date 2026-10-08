@@ -262,6 +262,15 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The launcher port lives in Effect.StateMachine.Persistence, because it writes through the data
+  context the engine package does not depend on. A machine is system-owned by declaring `SystemOwned()`, which
+  makes it system-only: `Start` refuses any other machine, and no user's draft operation reaches one. Because
+  `IEffectJunction` is internal, an `IChain<I>` is checked by the class the container registers for `I`. The tests
+  that need the mediator's launcher (`InvokesStartupRefusalTests`, `InvokedTrainOutboxTests`,
+  `InvokesAuthorizationTests`) live in `Trax.Mediator/tests/Trax.Mediator.Tests.StateMachine.Integration`, on
+  Postgres and Sqlite, since Effect's tests cannot reference the mediator; the scheduler's retry test is
+  `InvokedRunIsNeverRetriedTests`.
+
 - **2026-10-08**: An outcome target that itself invokes a train may be entered by an ordinary edge, so a chained
   stage can be retried; the builder method's signature names the train's input and output types.
 - **2026-10-07**: Recorded.

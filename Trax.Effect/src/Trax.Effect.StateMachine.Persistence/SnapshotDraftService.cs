@@ -247,10 +247,52 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         effects?.Select(e => (e.From.ToString()!, e.Trigger.ToString()!)).ToHashSet() ?? [];
 
     // The states the soft path may not create or move a draft into: every committed state and every state an
-    // effect-bound transition lands in. A draft reaches them through the effect runner only.
-    private readonly HashSet<string> _reservedStates = BuildStateSet(committedStates)
-        .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
-        .ToHashSet();
+    // effect-bound transition lands in, which a draft reaches through the effect runner only; and, for a machine
+    // that invokes trains, every invoking state and every state an invoked train's outcome reaches, which a draft
+    // reaches through an advance or an outcome only. Built on first use, after the init-only members are set.
+    private HashSet<string>? _reservedCache;
+
+    private HashSet<string> ReservedNames =>
+        _reservedCache ??= ReservedStates is { } reserved
+            ? reserved.Select(s => s.ToString()!).ToHashSet()
+            : BuildStateSet(committedStates)
+                .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
+                .ToHashSet();
+
+    // The states the soft path may not take a draft out of or rewrite: committed states and effect targets (a
+    // reset the machine declares excepted), and invoking states, which only a declared transition or an outcome
+    // leaves, so autosave never strands or forges a run.
+    private HashSet<string>? _lockedCache;
+
+    private HashSet<string> LockedNames =>
+        _lockedCache ??= BuildStateSet(committedStates)
+            .Concat(effects?.Select(e => e.To.ToString()!) ?? [])
+            .Concat(InvokingNames)
+            .ToHashSet();
+
+    private HashSet<string>? _invokingCache;
+
+    private HashSet<string> InvokingNames =>
+        _invokingCache ??= InvokingStates?.Select(s => s.ToString()!).ToHashSet() ?? [];
+
+    /// <summary>
+    /// Every state the soft path may not move a draft into (see <c>BuiltMachine.ReservedStates</c>). Null keeps the
+    /// committed states and effect targets only, for a service built without the machine's invoke declarations.
+    /// </summary>
+    internal IReadOnlySet<TState>? ReservedStates { get; init; }
+
+    /// <summary>The states that invoke a train. Entering one queues a run; leaving one cancels it.</summary>
+    internal IReadOnlySet<TState>? InvokingStates { get; init; }
+
+    /// <summary>
+    /// The store and outbox a machine that invokes trains writes through. Null for a service built without them,
+    /// which refuses to enter or leave an invoking state rather than write one without its run.
+    /// </summary>
+    internal InvokeRuntime? Invokes { get; init; }
+
+    /// <summary>The most live invoked runs one user may hold in this machine.</summary>
+    internal int InvokedRunLimit { get; init; } =
+        BuiltMachine<TState, TTrigger>.DefaultInvokedRunLimit;
 
     private static HashSet<string> BuildStateSet(IReadOnlyCollection<TState>? states)
     {
@@ -326,6 +368,10 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     // gone as a new intent's starting point, so its claims go whatever their state. The claims are released
     // before the row is deleted, and none of these writes can be cancelled: a request that goes away between them
     // would otherwise leave claims or a run with no draft, which nothing would ever read or release again.
+    //
+    // The delete itself is conditional on the token that was cancelled (none, when the draft held none), so a draft
+    // that entered an invoking state again between the read and the delete keeps the run it queued then: deleting
+    // it would leave that run with no state to deliver to. Nothing is deleted then, and the next load expires it.
     private async Task Delete(string userKey, Guid id, string? invokeToken)
     {
         if (invokeToken is not null && RunCancellation is not null)
@@ -333,7 +379,16 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         if (effectClaims is not null && effectKeysOnReset is not null)
             foreach (var key in effectKeysOnReset(userKey, id))
                 await effectClaims.Release(key, CancellationToken.None);
-        await store.Delete(userKey, _machineId, id, CancellationToken.None);
+        if (Invokes is { } invokes)
+            await invokes.Store.DeleteHolding(
+                DraftOwner.User(userKey),
+                _machineId,
+                id,
+                invokeToken,
+                CancellationToken.None
+            );
+        else
+            await store.Delete(userKey, _machineId, id, CancellationToken.None);
     }
 
     private async Task<AutosaveResult> Persisted(
@@ -385,6 +440,12 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         new(
             "state-reserved",
             "This step is completed by its action, not by saving the draft. Send it instead."
+        );
+
+    private static AutosaveResult.Rejected Invoking() =>
+        new(
+            "draft-invoking",
+            "This step is running. It moves on when its work finishes, or through one of its actions."
         );
 
     /// <inheritdoc/>
@@ -450,7 +511,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             case RehydrationResult.Ok ok:
                 // Fast path: nothing to protect => blind last-writer-wins autosave. A store that does not key by
                 // machine is read first, so a draft of another machine under this id is never overwritten.
-                if (_reservedStates.Count == 0)
+                if (ReservedNames.Count == 0)
                 {
                     var upserted =
                         KeysByMachine(store)
@@ -466,7 +527,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 // the effect produced for exactly that content, so the only write allowed is a reset the machine
                 // itself declares, and a save identical to what is stored is answered without writing.
                 var stored = await store.Get(userKey, _machineId, id, cancellationToken);
-                var entering = _reservedStates.Contains(ok.Snapshot.State);
+                var entering = ReservedNames.Contains(ok.Snapshot.State);
                 if (stored is null)
                 {
                     if (entering)
@@ -477,8 +538,27 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                     return await Persisted(inserted, userKey, id, ok.Snapshot, replacedJson: null);
                 }
 
+                var readable = machine.Rehydrate(stored.Json) as RehydrationResult.Ok;
+                var unchanged =
+                    readable is not null
+                    && string.Equals(
+                        machine.Serialize(ok.Snapshot),
+                        machine.Serialize(readable.Snapshot),
+                        StringComparison.Ordinal
+                    );
+
+                // A draft whose state invoked a train holds that run: the soft path neither leaves the state, which
+                // would strand the run, nor rewrites the context it was started from. Only a declared transition
+                // or the run's outcome moves it on. Decided by the token as well as the state, so an unreadable
+                // draft holding a run is not reset from under it either.
+                if (
+                    stored.InvokeToken is not null
+                    || (readable is not null && InvokingNames.Contains(readable.Snapshot.State))
+                )
+                    return unchanged ? new AutosaveResult.Saved(readable!.Snapshot) : Invoking();
+
                 // A stored draft that cannot be read may be committed, so nothing but a reset overwrites it.
-                if (machine.Rehydrate(stored.Json) is not RehydrationResult.Ok current)
+                if (readable is not { } current)
                 {
                     if (ok.Snapshot.State != _initialState)
                         return new AutosaveResult.Rejected(
@@ -486,15 +566,9 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                             "The saved draft can't be read, so it can only be started over."
                         );
                 }
-                else if (_reservedStates.Contains(current.Snapshot.State))
+                else if (LockedNames.Contains(current.Snapshot.State))
                 {
-                    if (
-                        string.Equals(
-                            machine.Serialize(ok.Snapshot),
-                            machine.Serialize(current.Snapshot),
-                            StringComparison.Ordinal
-                        )
-                    )
+                    if (unchanged)
                         return new AutosaveResult.Saved(current.Snapshot);
                     if (
                         ok.Snapshot.State != _initialState
@@ -506,7 +580,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                         );
                 }
                 else if (entering)
-                    return Reserved();
+                    return unchanged ? new AutosaveResult.Saved(current.Snapshot) : Reserved();
 
                 // Atomic overwrite guarded by the token we just read: a commit that lands between this read
                 // and this write makes the soft save LOSE (Conflict) instead of resurrecting the draft.
@@ -648,6 +722,14 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
                 "This action runs an irreversible effect. Send it instead of advancing."
             );
 
+        // An outcome trigger records what an invoked train produced. Fired from here, its input would be whatever
+        // the caller sent and no run would have produced it, so only the run's outcome applies it.
+        if (machine.IsOutcomeTrigger(trigger))
+            return new AdvanceOutcome.Rejected(
+                "outcome-bound",
+                "This step is completed by the outcome of its work, not by an action."
+            );
+
         switch (Retry(stored.LastRequest, requestId, trigger, current.State))
         {
             case RetryKind.Replay:
@@ -689,6 +771,23 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         if (Checked(wire, clientResult) is { } divergence)
             return divergence;
 
+        // Entering or leaving an invoking state writes the snapshot together with the run it queues or cancels.
+        // A self-loop neither leaves nor enters: the state keeps its run.
+        var leaving = InvokingNames.Contains(current.State) && next.State != current.State;
+        var enteringInvoke = InvokingNames.Contains(next.State) && next.State != current.State;
+        if (leaving || enteringInvoke)
+            return await AdvanceInvoking(
+                userKey,
+                id,
+                current,
+                next,
+                stored,
+                requestId is null ? null : new AppliedRequest(requestId, trigger, current.State),
+                leaving,
+                enteringInvoke,
+                cancellationToken
+            );
+
         var updated = await store.UpdateWithRequest(
             userKey,
             id,
@@ -703,6 +802,68 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
             await ReleaseSettledClaims(userKey, id, stored.Json);
         return new AdvanceOutcome.Advanced(next);
     }
+
+    // The outbox write of an advance that enters or leaves an invoking state: the snapshot, the old run's cancel and
+    // the new run's work queue entry commit together or not at all.
+    private async Task<AdvanceOutcome> AdvanceInvoking(
+        string userKey,
+        Guid id,
+        Snapshot current,
+        Snapshot next,
+        StoredSnapshot stored,
+        AppliedRequest? request,
+        bool leaving,
+        bool entering,
+        CancellationToken cancellationToken
+    )
+    {
+        var invokes =
+            Invokes
+            ?? throw new InvalidOperationException(
+                $"The machine '{_machineId}' invokes a train in {(entering ? next.State : current.State)}, but this "
+                    + "draft service was built without the invoke outbox, so it cannot queue or cancel the run. "
+                    + "Get the service from ISnapshotMachineRegistry."
+            );
+
+        var write = await invokes.Outbox.Advance(
+            DraftOwner.User(userKey),
+            id,
+            next,
+            stored.Token,
+            request,
+            leaving ? stored.InvokeToken : null,
+            entering
+                ? new EnteringInvoke(
+                    InvokeTrain(next.State),
+                    InvokeInput(next.State),
+                    InvokedRunLimit
+                )
+                : null,
+            cancellationToken
+        );
+
+        switch (write)
+        {
+            case InvokeWrite.Written:
+                if (next.State == _initialState)
+                    await ReleaseSettledClaims(userKey, id, stored.Json);
+                return new AdvanceOutcome.Advanced(next);
+            case InvokeWrite.Refused refused:
+                return new AdvanceOutcome.Rejected(refused.Code, refused.Message)
+                {
+                    Exception = refused.Exception,
+                };
+            default:
+                return new AdvanceOutcome.Conflict();
+        }
+    }
+
+    private InvokeDefinition<TState> Invoke(string state) =>
+        machine.Definition.Invokes.Values.First(i => i.State.ToString() == state);
+
+    private Type InvokeTrain(string state) => Invoke(state).TrainType;
+
+    private Func<JsonObject, object?> InvokeInput(string state) => Invoke(state).CreateInput;
 
     /// <summary>
     /// Whether <paramref name="requestId"/> is one the draft recorded for a different trigger, so an advance

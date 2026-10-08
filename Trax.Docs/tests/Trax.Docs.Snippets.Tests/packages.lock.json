@@ -606,6 +606,11 @@
           "Microsoft.Extensions.Options": "10.0.12"
         }
       },
+      "Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "oN4AYFq+50m7a65GgRxRqjdynWS6kVQAH6gHKRTfsrLP/aH7RvxIQ7139fjbnrxBwzfZQtZRhlcjvEIiRzihrg=="
+      },
       "Microsoft.Extensions.FileProviders.Abstractions": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -916,12 +921,31 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
+      "trax.effect.statemachine": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "trax.effect.statemachine.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
+          "Microsoft.Extensions.Diagnostics.HealthChecks": "[10.0.12, )",
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Effect.StateMachine": "[1.99.99, )"
+        }
+      },
       "trax.mediator": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Trax.Effect": "[1.99.99, )",
-          "Trax.Effect.Data": "[1.99.99, )"
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "trax.scheduler": {
@@ -1137,6 +1161,18 @@
         "requested": "[10.0.12, )",
         "resolved": "10.0.12",
         "contentHash": "9/qymSh7hVDMGTGwrLz8MRp5zRyXy9adGDOs4HwRdnLil3oZGYuWeZjbmHgCQ9BL1qBroVfgUK3U/nb61617Cw=="
+      },
+      "Microsoft.Extensions.Diagnostics.HealthChecks": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "Ck8nkBxEYPOGtUCp0whKwfE4qAHBnsK0DY1kgZLKvzf7s9xyr4lASa4K4AKNN1VHy7r3Z1Z57U6C0TMzFjD8ig==",
+        "dependencies": {
+          "Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Hosting.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.12",
+          "Microsoft.Extensions.Options": "10.0.12"
+        }
       },
       "Microsoft.Extensions.Hosting.Abstractions": {
         "type": "CentralTransitive",

@@ -744,6 +744,8 @@ namespace Trax.Effect.Models.Metadata.DTOs
         public CreateMetadata() { }
         public required string ExternalId { get; set; }
         public required object? Input { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
         public long? ManifestId { get; set; }
         public required string Name { get; set; }
         public long? ParentId { get; set; }
@@ -794,6 +796,21 @@ namespace Trax.Effect.Models.Metadata
         [System.ComponentModel.DataAnnotations.Schema.Column("input")]
         [System.Text.Json.Serialization.JsonIgnore]
         public string? Input { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("invoking_instance_id")]
+        public System.Guid? InvokingInstanceId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("invoking_machine")]
+        public string? InvokingMachine { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("invoking_owner_kind")]
+        public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; set; }
         public bool IsChild { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("junction_started_at")]
         public System.DateTime? JunctionStartedAt { get; set; }
@@ -1047,12 +1064,22 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public bool ExplicitTrigger { get; set; }
         public string? Input { get; set; }
         public string? InputTypeName { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
         public long? ReplayDecisionsOf { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
         public string? SubjectKey { get; set; }
         public required string TrainName { get; set; }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public sealed class InvokedBy : System.IEquatable<Trax.Effect.Models.WorkQueue.DTOs.InvokedBy>
+    {
+        public InvokedBy(string Machine, System.Guid InstanceId, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind) { }
+        public System.Guid InstanceId { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
     }
 }
 namespace Trax.Effect.Models.WorkQueue
@@ -1083,6 +1110,18 @@ namespace Trax.Effect.Models.WorkQueue
         public string? Input { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("input_type_name")]
         public string? InputTypeName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        [System.Text.Json.Serialization.JsonInclude]
+        public System.Guid? InvokingInstanceId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        [System.Text.Json.Serialization.JsonInclude]
+        public string? InvokingMachine { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        [System.Text.Json.Serialization.JsonInclude]
+        public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("is_explicit_trigger")]
         public bool IsExplicitTrigger { get; set; }
         public Trax.Effect.Models.Manifest.Manifest? Manifest { get; set; }
@@ -1156,7 +1195,7 @@ namespace Trax.Effect.Services.EffectJunction
     {
         protected EffectJunction() { }
         public Trax.Effect.Models.JunctionMetadata.JunctionMetadata? Metadata { get; }
-        public override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
+        public override sealed System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
         public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain) { }
         public abstract override System.Threading.Tasks.Task<TOut> Run(TIn input) { }
     }

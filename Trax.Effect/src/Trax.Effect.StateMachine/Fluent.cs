@@ -53,6 +53,22 @@ public sealed record BuiltMachine<TState, TTrigger>(
             .Concat(Invokes.Keys)
             .Concat(Invokes.Values.SelectMany(i => i.Targets))
             .ToHashSet();
+
+    /// <summary>
+    /// Whether the machine's instances belong to the system: <c>IMachineInstances.Start</c> creates them, and no
+    /// user's draft operation reaches the machine. Declared with <see cref="IMachineBuilder{TState,TTrigger}.SystemOwned"/>.
+    /// </summary>
+    internal bool SystemOwned { get; init; }
+
+    /// <summary>
+    /// The most invoked runs one user may have live in this machine at once; entering an invoking state past it is
+    /// refused. Declared with <see cref="IMachineBuilder{TState,TTrigger}.InvokedRunLimit"/>; system owners are not
+    /// capped.
+    /// </summary>
+    internal int InvokedRunLimit { get; init; } = DefaultInvokedRunLimit;
+
+    /// <summary>The per-user live invoked run limit a machine has when it declares none.</summary>
+    internal const int DefaultInvokedRunLimit = 10;
 }
 
 /// <summary>The root of the fluent configuration. See <see cref="MachineBuilder{TState,TTrigger}"/>.</summary>
@@ -93,6 +109,29 @@ public interface IMachineBuilder<TState, TTrigger>
 
     /// <summary>Begin configuring transitions and rules for a state.</summary>
     IStateBuilder<TState, TTrigger> In(TState state);
+
+    /// <summary>
+    /// Declare that the machine's instances belong to the system rather than to users. Only
+    /// <c>IMachineInstances.Start</c> creates one, from a train or at startup; no user's draft operation (load,
+    /// save, advance, send) reaches the machine, which answers them as an unknown machine. A train a system-owned
+    /// machine invokes runs under Trax's trusted execution scope, so the host refuses one that declares
+    /// <c>[TraxAuthorize]</c>. A machine without this is user-owned, and <c>Start</c> refuses it.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
+    IMachineBuilder<TState, TTrigger> SystemOwned() =>
+        throw new NotSupportedException($"{GetType().Name} does not support SystemOwned.");
+
+    /// <summary>
+    /// The most invoked runs one user may have live in this machine at once: entering an invoking state when the
+    /// user already holds that many is refused with <c>invoke-limit-reached</c>, and nothing is written. A run is
+    /// live from the entry that queued it until its state is left or its outcome is applied. Defaults to 10.
+    /// System-owned instances are not capped here; the dispatcher's <c>MaxActiveJobs</c> bounds them.
+    /// </summary>
+    /// <param name="limit">The limit, at least 1.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than 1.</exception>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
+    IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit) =>
+        throw new NotSupportedException($"{GetType().Name} does not support InvokedRunLimit.");
 
     /// <summary>
     /// Bind the C# handler for a <see cref="Rule.Custom"/> named <paramref name="name"/>, wherever the
@@ -290,6 +329,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     private readonly Dictionary<string, Func<JsonObject, JsonNode?, JsonObject>> _customReducers =
         new(StringComparer.Ordinal);
     private bool _usedDeclarative;
+    private bool _systemOwned;
+    private int _invokedRunLimit = BuiltMachine<TState, TTrigger>.DefaultInvokedRunLimit;
     private readonly List<InvokeDraft> _invokes = [];
     private readonly Dictionary<TState, List<JsonNode>> _diffOutcomeSamples = [];
 
@@ -351,6 +392,23 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
 
     /// <inheritdoc/>
     public IStateBuilder<TState, TTrigger> In(TState state) => new StateBuilder(this, state);
+
+#pragma warning disable TRAXEXP002 // The experimental feature's own implementation.
+    /// <inheritdoc/>
+    public IMachineBuilder<TState, TTrigger> SystemOwned()
+    {
+        _systemOwned = true;
+        return this;
+    }
+
+    /// <inheritdoc/>
+    public IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        _invokedRunLimit = limit;
+        return this;
+    }
+#pragma warning restore TRAXEXP002
 
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> CustomGuard(
@@ -460,7 +518,11 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             }
             : null;
 
-        return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative);
+        return new BuiltMachine<TState, TTrigger>(definition, _committed, _effects, declarative)
+        {
+            SystemOwned = _systemOwned,
+            InvokedRunLimit = _invokedRunLimit,
+        };
     }
 
     // An effect's target state means "the effect ran": the draft reaches it with the receipt the effect produced.

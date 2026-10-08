@@ -237,6 +237,29 @@ public class WorkQueue : IModel
     /// </summary>
     public DeadLetter.DeadLetter? DeadLetter { get; set; }
 
+    /// <summary>
+    /// The machine whose invoking state queued this entry, or null for every other entry. Set only by
+    /// <see cref="Create"/>, from <see cref="CreateWorkQueue.InvokedBy"/>, and carried to the run's metadata at
+    /// dispatch. An invoked run is never retried by the scheduler and an operator cannot requeue it: the machine
+    /// retries by entering its state again.
+    /// </summary>
+    [Column("invoking_machine")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public string? InvokingMachine { get; private set; }
+
+    /// <summary>The id of the instance whose invoking state queued this entry; null unless <see cref="InvokingMachine"/> is set.</summary>
+    [Column("invoking_instance_id")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public Guid? InvokingInstanceId { get; private set; }
+
+    /// <summary>Whether a user or the system owns the instance that queued this entry; null unless <see cref="InvokingMachine"/> is set.</summary>
+    [Column("invoking_owner_kind")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
+
     #endregion
 
     #region Functions
@@ -269,6 +292,9 @@ public class WorkQueue : IModel
             CreatedAt = DateTime.UtcNow,
             ConfirmedAt = dto.DeferPromotion ? null : DateTime.UtcNow,
             SubjectKey = dto.SubjectKey,
+            InvokingMachine = dto.InvokedBy?.Machine,
+            InvokingInstanceId = dto.InvokedBy?.InstanceId,
+            InvokingOwnerKind = dto.InvokedBy?.OwnerKind,
         };
     }
 

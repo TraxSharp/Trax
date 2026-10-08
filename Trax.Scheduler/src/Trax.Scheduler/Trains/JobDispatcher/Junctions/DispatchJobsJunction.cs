@@ -147,6 +147,20 @@ internal class DispatchJobsJunction(
     }
 
     /// <summary>
+    /// The state-machine instance whose invoking state queued the entry, carried to the run so the
+    /// run stays linked to it after the instance has left the state; null for every other entry.
+    /// </summary>
+    private static Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy(WorkQueue claimed) =>
+        claimed
+            is {
+                InvokingMachine: { } machine,
+                InvokingInstanceId: { } instance,
+                InvokingOwnerKind: { } owner,
+            }
+            ? new(machine, instance, owner)
+            : null;
+
+    /// <summary>
     /// Atomically claims a work queue entry using FOR UPDATE SKIP LOCKED,
     /// creates its Metadata record, and enqueues to the job submitter.
     /// </summary>
@@ -246,6 +260,7 @@ internal class DispatchJobsJunction(
                 Input = null,
                 ManifestId = claimed.ManifestId,
                 ReplayDecisionsOf = claimed.ReplayDecisionsOf,
+                InvokedBy = InvokedBy(claimed),
             }
         );
 
@@ -481,6 +496,7 @@ internal class DispatchJobsJunction(
                 Input = null,
                 ManifestId = claimed.ManifestId,
                 ReplayDecisionsOf = claimed.ReplayDecisionsOf,
+                InvokedBy = InvokedBy(claimed),
             }
         );
         metadata.TrainState = TrainState.Failed;

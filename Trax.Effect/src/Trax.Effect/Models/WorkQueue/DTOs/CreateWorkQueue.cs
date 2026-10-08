@@ -70,4 +70,11 @@ public class CreateWorkQueue
     /// a crash in between strands a detectable row rather than an invisible side-effect.
     /// </remarks>
     public bool DeferPromotion { get; set; }
+
+    /// <summary>
+    /// The state-machine instance whose invoking state queues this entry, or null. Only the mediator's
+    /// invoked-train enqueue sets it.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public InvokedBy? InvokedBy { get; set; }
 }

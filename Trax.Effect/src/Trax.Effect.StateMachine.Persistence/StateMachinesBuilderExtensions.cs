@@ -111,14 +111,18 @@ public static class StateMachinesBuilderExtensions
         services.AddScoped<ISnapshotMachineRegistry, SnapshotMachineRegistry>();
 
         // System-owned instances and invoke tokens: server-only, so reached through the provider's data context
-        // whatever ISnapshotStore a host substitutes. The launcher of invoked trains registers the cancellation
-        // after this, and the last registration wins; until then a draft holds no live run to cancel.
+        // whatever ISnapshotStore a host substitutes. The outbox writes a snapshot entering or leaving an invoking
+        // state together with its run, through the launcher Trax.Mediator registers; the cancellation cancels a
+        // run by its token, as the operations surface does. The startup check refuses a host whose machines
+        // invoke a train it cannot run, cancel or authorize as declared.
         services.AddScoped<IMachineInstanceStore>(sp => new EfSnapshotStore(
             sp.GetRequiredService<IDataContext>(),
             sp.GetService<ISqlDialect>()
         ));
+        services.AddScoped<InvokeOutbox>();
         services.AddScoped<IMachineInstances, MachineInstances>();
-        services.TryAddSingleton<IInvokedRunCancellation, NoInvokedRunCancellation>();
+        services.AddScoped<IInvokedRunCancellation, InvokedRunCancellation>();
+        services.AddHostedService<InvokesStartupValidator>();
 
         services.AddScopedTraxRoute<ISaveSnapshot, SaveSnapshot>();
         services.AddScopedTraxRoute<IAdvanceSnapshot, AdvanceSnapshot>();

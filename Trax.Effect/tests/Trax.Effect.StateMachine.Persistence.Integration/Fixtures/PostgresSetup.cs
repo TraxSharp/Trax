@@ -22,7 +22,10 @@ public class PostgresSetup
     // Postgres has `postgres`.
     private static readonly string Maintenance =
         $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database=postgres;Include Error Detail=true";
-    private const string Database = "trax_statemachine_it";
+
+    // One per test run: two runs on one Postgres (two worktrees, or two sessions sharing a Docker daemon) would
+    // otherwise drop each other's database out from under their tests.
+    private static readonly string Database = $"trax_statemachine_it_{Environment.ProcessId}";
 
     public static string ConnectionString { get; } =
         $"Host=localhost;Port={TestPostgres.Port};Username=trax;Password=trax123;Database={Database};Include Error Detail=true;Maximum Pool Size=40";

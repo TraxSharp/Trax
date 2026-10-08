@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Trax.Mediator.Tests.StateMachine.Integration</RootNamespace>
+    <!-- TRAXEXP001: a refused train declares a Parallel step. TRAXEXP002: these tests declare machines that
+         invoke trains, start system-owned instances, and wrap the launcher. -->
+    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
+    <!-- AddJunctionProgress registers the cancel-flag check an invoked train needs. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
+  </ItemGroup>
+</Project>

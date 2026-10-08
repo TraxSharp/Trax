@@ -173,14 +173,27 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         DraftOwner owner,
         Guid id,
         Snapshot snapshot,
+        string? invokeToken,
         CancellationToken cancellationToken
-    ) => InsertOwned(owner, id, snapshot, cancellationToken);
+    ) => InsertOwned(owner, id, snapshot, cancellationToken, invokeToken);
+
+    async Task<bool> IMachineInstanceStore.DeleteHolding(
+        DraftOwner owner,
+        string machine,
+        Guid id,
+        string? invokeToken,
+        CancellationToken cancellationToken
+    ) =>
+        await Owned(owner)
+            .Where(x => x.Id == id && x.Machine == machine && x.InvokeToken == invokeToken)
+            .ExecuteDeleteAsync(cancellationToken) > 0;
 
     private async Task<bool> InsertOwned(
         DraftOwner owner,
         Guid id,
         Snapshot snapshot,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? invokeToken = null
     )
     {
         // The owner's unique index refuses a second row, and the dialect reads that as a lost race. A provider
@@ -199,6 +212,7 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
             Id = id,
             OwnerKind = owner.Kind,
             UserKey = owner.UserKey,
+            InvokeToken = invokeToken,
         };
         Apply(record, snapshot);
         record.CreatedAt = record.UpdatedAt;

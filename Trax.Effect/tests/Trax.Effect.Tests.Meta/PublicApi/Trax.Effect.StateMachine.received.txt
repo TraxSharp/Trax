@@ -146,8 +146,12 @@ namespace Trax.Effect.StateMachine
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.Effect.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id);
         Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> In(TState state);
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> MigrateFrom(int fromVersion, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.Effect.StateMachine.MigrationResult> migrate);
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> StartsAt(TState state, System.Func<System.Text.Json.Nodes.JsonObject> initialContext);
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned();
         Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version);
     }
     public interface IStateBuilder<TState, TTrigger>
@@ -202,8 +206,10 @@ namespace Trax.Effect.StateMachine
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Differential(System.Action<Trax.Effect.StateMachine.IDifferentialBuilder<TState, TTrigger>> configure) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Id(string id) { }
         public Trax.Effect.StateMachine.IStateBuilder<TState, TTrigger> In(TState state) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> MigrateFrom(int fromVersion, System.Func<string, System.Text.Json.Nodes.JsonObject, Trax.Effect.StateMachine.MigrationResult> migrate) { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> StartsAt(TState state, System.Func<System.Text.Json.Nodes.JsonObject> initialContext) { }
+        public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> SystemOwned() { }
         public Trax.Effect.StateMachine.IMachineBuilder<TState, TTrigger> Version(int version) { }
     }
     public sealed class MachineDefinition<TState, TTrigger>

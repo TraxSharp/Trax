@@ -29,5 +29,8 @@
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests.Stress" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests" />
+    <!-- The mediator implements the launcher; its tests run the startup check per machine and read the
+         owner-aware store, which this folder's tests cannot reach without the mediator. -->
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.StateMachine.Integration" />
   </ItemGroup>
 </Project>

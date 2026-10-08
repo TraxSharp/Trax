@@ -339,6 +339,31 @@ public class Metadata : IModel, IDisposable
     public long? ReplayDecisionsOf { get; set; }
 
     /// <summary>
+    /// The machine whose invoking state queued this run, carried from its work queue entry at dispatch; null for
+    /// every other run. The scheduler never retries such a run and an operator cannot requeue it: its machine
+    /// retries by entering the state again, which queues a new run.
+    /// </summary>
+    [Column("invoking_machine")]
+    [JsonPropertyName("invoking_machine")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public string? InvokingMachine { get; set; }
+
+    /// <summary>The instance whose invoking state queued this run; null unless <see cref="InvokingMachine"/> is set.</summary>
+    [Column("invoking_instance_id")]
+    [JsonPropertyName("invoking_instance_id")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public Guid? InvokingInstanceId { get; set; }
+
+    /// <summary>Whether a user or the system owns the instance that queued this run; null unless <see cref="InvokingMachine"/> is set.</summary>
+    [Column("invoking_owner_kind")]
+    [JsonPropertyName("invoking_owner_kind")]
+    [JsonInclude]
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+    public SnapshotOwnerKind? InvokingOwnerKind { get; set; }
+
+    /// <summary>
     /// True when the run started on a host that records decisions (<c>AddDecisionRecording</c>),
     /// so every decision it made is in <c>trax.decision</c>; false when what it decided, if
     /// anything, was never recorded.
@@ -447,6 +472,9 @@ public class Metadata : IModel, IDisposable
             ParentId = metadata.ParentId,
             ManifestId = metadata.ManifestId,
             ReplayDecisionsOf = metadata.ReplayDecisionsOf,
+            InvokingMachine = metadata.InvokedBy?.Machine,
+            InvokingInstanceId = metadata.InvokedBy?.InstanceId,
+            InvokingOwnerKind = metadata.InvokedBy?.OwnerKind,
             HostName = host?.HostName,
             HostEnvironment = host?.HostEnvironment,
             HostInstanceId = host?.HostInstanceId,

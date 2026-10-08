@@ -31,7 +31,7 @@ public class InvokesDraftExpiryTests(StoreProvider provider)
     public async Task Draft_expiry_leaves_system_rows_alone()
     {
         using var host = InstanceHost.Create(provider, draftTtl: Ttl);
-        var instance = await host.Start<TurnstileMachine>(
+        var instance = await host.Start<SystemTurnstileMachine>(
             MachineKey.Of("expiry", Guid.NewGuid().ToString())
         );
 

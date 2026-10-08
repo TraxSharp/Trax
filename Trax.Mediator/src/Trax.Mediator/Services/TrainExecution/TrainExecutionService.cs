@@ -16,6 +16,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.ConcurrencyLimiter;
@@ -235,6 +236,88 @@ public class TrainExecutionService(
 
             throw;
         }
+
+        return new QueueTrainResult(entry.Id, entry.ExternalId);
+    }
+
+    /// <summary>
+    /// The enqueue of a run a state machine's invoking state queues: through the mediator like any
+    /// caller's enqueue (central ADR 0017), so the train is found by its canonical name, authorized,
+    /// its input capped and its subject key stamped, but written into the caller's
+    /// <paramref name="context"/> and flushed inside the transaction the caller holds, which commits
+    /// it with the snapshot or not at all. A user-owned instance's run is authorized against the
+    /// current caller, the user entering the state; a system-owned instance's inside the trusted
+    /// execution scope, as a scheduled manifest run is.
+    /// </summary>
+    /// <remarks>
+    /// An invoked train may not stage its entry (central ADR 0018) or run an <c>OnQueue</c> hook:
+    /// both commit on their own, outside the caller's transaction. The state-machine startup check
+    /// refuses such a train; this refuses it again rather than queue it any other way.
+    /// </remarks>
+    /// <exception cref="UnauthorizedAccessException">The caller may not run the train.</exception>
+    /// <exception cref="InvalidOperationException">The train defers promotion or has an <c>OnQueue</c> hook.</exception>
+    internal async Task<QueueTrainResult> QueueInvokedAsync(
+        InvokedTrainLaunch launch,
+        IDataContext context,
+        CancellationToken ct
+    )
+    {
+        ArgumentNullException.ThrowIfNull(launch);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var registration = FindTrain(launch.TrainType.FullName ?? launch.TrainType.Name);
+
+        if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
+            throw new InvalidOperationException(
+                $"{registration.ServiceTypeName} has an OnQueue hook, which commits on its own, so a "
+                    + "state machine cannot queue it in the transaction that enters its state."
+            );
+
+        if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System)
+        {
+            using (
+                serviceProvider
+                    .GetRequiredService<ITrustedExecutionScope>()
+                    .BeginTrusted("state machine")
+            )
+                await AuthorizeAsync(registration, ct);
+        }
+        else
+            await AuthorizeAsync(registration, ct);
+
+        if (!registration.InputType.IsInstanceOfType(launch.Input))
+            throw new InvalidOperationException(
+                $"The input built for {registration.ServiceTypeName} is a "
+                    + $"{launch.Input.GetType().Name}, not its input type "
+                    + $"{registration.InputType.Name}."
+            );
+
+        registration.ServiceType.FullName.AssertLoaded();
+
+        var serializedInput = TrainInputReader.WriteForStorage(
+            launch.Input,
+            registration,
+            mediatorConfiguration.MaxInputJsonBytes
+        );
+
+        await using var train = new EnqueueTrain(serviceProvider, registration);
+        var subjectKey = ResolveSubjectKey(registration, train, launch.Input, launch.ExternalId);
+
+        var entry = CreateEntry(
+            registration,
+            new CreateWorkQueue
+            {
+                TrainName = registration.ServiceType.FullName,
+                Input = serializedInput,
+                InputTypeName = registration.InputType.FullName,
+                SubjectKey = subjectKey,
+                InvokedBy = launch.InvokedBy,
+            }
+        );
+        entry.ExternalId = launch.ExternalId;
+
+        await context.Track(entry);
+        await context.SaveChanges(ct);
 
         return new QueueTrainResult(entry.Id, entry.ExternalId);
     }
