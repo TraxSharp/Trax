@@ -53,6 +53,24 @@ tests with `#region {FeatureOrMethod}`.
 are rejected by `NoLegacyAssertTests`. The reason is the `because` argument: it is where a
 failing test explains the rule it was protecting, and the legacy forms have nowhere to put it.
 
+## Property tests
+
+A statement that has to hold for every input (ids are unique, the same graph serialises to the
+same text) is tested over generated cases with [CsCheck](https://www.nuget.org/packages/CsCheck),
+not over a few hand-picked ones:
+
+```csharp
+Keys.Sample(keys => Number(keys).Should().OnlyHaveUniqueItems());
+```
+
+When a property fails, CsCheck shrinks the input to a small failing case and prints its seed.
+Pin that seed as its own test with `Sample(..., seed: "...")` before fixing the code, so the case
+keeps running after the generators change.
+
+Only a test project, one that sets `<IsTestProject>true</IsTestProject>`, may reference CsCheck;
+a shipped package or a `Trax.*.Testing` package never does. `NoTestFrameworkInSrcTests` fails the
+build otherwise, and `Trax.Docs/adr/0044` records why.
+
 ## Coverage
 
 A feature is not done until its tests cover the happy path, the boundaries (empty, single,

@@ -41,11 +41,11 @@ if your work contradicts one, say so rather than silently overriding it.
 | what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-nine name `effect`, three of them superseded: executable guards, the
+index lists them by folder. Thirty name `effect`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,
-test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax owning
+test frameworks staying out of shipped libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax owning
 its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
 a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
 queued work running one at a time (`0019`), failures being classified where they happen

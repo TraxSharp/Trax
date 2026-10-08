@@ -24,10 +24,10 @@ if your work contradicts one, say so rather than silently overriding it.
 | `Decide`, `Switch`, `Gate` or `Scale`, `IDecider`, or how `ChainVerification` replays tracks | central `docs/0040`, a chain declares every track and a decider chooses one per run; the tracks are part of the declaration `docs/0016` describes |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-three name `core`, three of them superseded: executable guards, the
+index lists them by folder. Twenty-four name `core`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the documentation lints, the public API baseline, test frameworks staying out of shipped
-libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
+libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
 (`0016`), failures being classified where they happen (`0020`), a warning failing the CI build
 (`0032`), packages validating against their last release (`0033`), a chain declaring every track a decider

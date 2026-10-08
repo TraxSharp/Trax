@@ -22,7 +22,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `TrainChainStartupValidator`, or `SkipChainVerification()` | central `docs/0016`, a chain is a declaration the host reads at startup |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-nine name `mediator`, three of them superseded. Besides the repository-wide conventions, the
+index lists them by folder. Thirty name `mediator`, three of them superseded. Besides the repository-wide conventions, the
 ones most likely to reach a change here are `0016` to `0019` (routed above) and `0007`, the canonical train name being the interface FullName, which
 `InterfaceFullNameInvariantTests` in this folder enforces at the point of registration, and `0040`/`0041`,
 which a train's decision steps and a requeue's replay link follow. `0042` covers how this
