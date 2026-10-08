@@ -1,0 +1,261 @@
+---
+authors: [Theauxm]
+repos: [core, effect, mediator, scheduler, api, dashboard, cli, samples]
+areas: [platform, data-model, graphql]
+status: accepted
+---
+
+# A machine state invokes a train, and only that entry of the state receives its outcome
+
+Long-running work with several stages (fetch, normalise, resolve, embed) had nowhere durable to record where each unit
+of work was, so it became one large train or hand-written glue. A state machine now runs trains: a state declares
+`Invokes<TTrain>(ctx => input)`, entering it queues one run in the same transaction as the advance, and the run's
+outcome comes back as a trigger that only the entry which queued it can apply. Leaving the state cancels the run. A
+state is therefore a durable checkpoint between stages: a failed stage is retried by entering its state again, never by
+the scheduler.
+
+## Status
+
+**Accepted.** `Invokes` and `IMachineInstances.Start` ship behind `[Experimental("TRAXEXP002")]`, following the
+convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md) set, until
+the invoking-state row of the interaction matrix (`Trax.Core/docs/interaction-matrix.md`) is complete.
+
+## Why this is written down
+
+Because a machine and a train were separate engines that never referred to each other, and joining them opens four
+holes at once: a run orphaned by a crash, a stale or forged completion moving a machine, a caller starting work they
+may not start, and a client twin that disagrees with the server. Each rule below closes one of them. The model is
+XState's `invoke` and the Elm architecture: the transition stays pure and returns a command, the runtime runs the
+command, and its single `Either` is fed back in as the next message.
+
+### Shape
+
+**A run belongs to a state, not to a transition.** A run fired from a transition and forgotten would outlive the state
+that wanted it and deliver late results into whatever state the machine had moved on to. Tied to the state, leaving
+the state ends it, and a late completion has nowhere to land.
+
+**Every invoking state says where each outcome goes.** One or more `OnDone(target)` edges, each with an optional
+declarative guard on the train's output and a declarative `Reduction` into the context; one `OnFailed(target)`; and
+an `OnCancelled(target)` that is required, so a cancel always has a declared edge (and an operator's cancel is never
+"its failure state", which is undefined once a machine has several).
+
+**There is no `OnDecisionUnsure`.** A run ends in one `Either`, so "unsure" is not an outcome of its own. A train that
+can be unsure says so in its output, and a guarded `OnDone` routes it (`out is Unsure` to `NeedsReview`).
+
+**The machine package does not depend on the mediator.** Effect.StateMachine declares an `IInvokedTrainLauncher` port
+and Mediator implements it. A host that declares `Invokes` without registering Mediator fails at startup. A new
+package above Scheduler was the other place it could live, and would have been one more package for a single port.
+
+### Ownership and identity
+
+**Some machines belong to the system.** Large fan-out (one instance per partition of a source) needs instances no user
+owns. `IMachineInstances.Start<TMachine>(key, context)` creates them, from trains or at startup; GraphQL cannot. Owner
+is an `owner_kind` column on `snapshot_draft` (`user` or `system`), with `user_key` null on system rows, and every
+user query of the snapshot store filters `owner_kind = user`. A reserved owner key string was the first answer and was
+dropped: each host maps principals to keys in its own `ISnapshotPrincipal`, so any host's mapping could produce the
+reserved string. For the same reason a null, empty or whitespace user key is no principal at all: such a caller is
+`unauthenticated`, rather than one owner shared by every caller the mapping could not name.
+
+**A system instance's id is derived from its key.** UUIDv5 of the machine's fixed namespace UUID and a canonical,
+injective encoding of the key, so `("a|b", "c")` and `("a", "b|c")` differ, and `Start` twice finds the same instance
+and queues nothing new. Because a user could hold the same id under their own key, every lookup by id names the owner
+kind as well.
+
+### Correlation and delivery
+
+**An outcome is correlated by a server-only token.** Entering an invoking state sets `invoke_token` (a column with a
+unique index) to the queued `work_queue` row's `ExternalId`; leaving the state clears it. It is never in the context,
+which a client can rewrite. An outcome is applied by `UPDATE … WHERE invoke_token = @token`, so a completion whose token
+was cleared or replaced is a typed `no-transition`, a duplicate delivery applies once, and one token per entry means
+at most one live run per entry.
+
+**A sweep guarantees delivery; the lifecycle hook is the fast path.** Lifecycle hooks run in the process that ran the
+train and swallow exceptions, and a run failed by the reaper publishes nothing from a train at all, so a hook alone
+can lose an outcome. A reconciler, a hosted service in Effect.StateMachine.Persistence started on every host that
+registers machines (it needs their definitions), sweeps snapshots whose token names a finished run and applies the
+outcome. Several hosts sweeping at once is harmless, because the conditional update applies once. A cancelled run maps
+to `OnCancelled`; a reaped one reaches `OnFailed` through the sweep, and the reaper publishes its own terminal event
+for every other subscriber.
+
+**An outcome too large to store fails the state.** An outcome that would push the snapshot past its 64 KiB cap goes to
+`OnFailed` with a typed reason. It is never dropped.
+
+### Queueing
+
+**The advance and the enqueue commit together.** The `work_queue` row is written through the caller's own `DbContext`,
+in the transaction that advances the snapshot, so a crash leaves neither half: no machine waiting on a run that was
+never queued, and no run whose machine never moved. The point between the two writes is the fault the design is built
+around. It follows that an invoked train may not use deferred promotion or an `OnQueue` hook (both commit separately),
+that the advance's own progress saves must not commit or abort that transaction part-way
+(effect/0021), and that
+`Invokes` is refused on the InMemory provider, which has no transactions. On Postgres a `pg_notify` sent in the same
+transaction wakes the dispatchers on every host when it commits, and not at all if it rolls back; API hosts, where
+machines advance, are usually not the scheduler hosts, so a same-process wake would rarely help. Sqlite gets a
+same-process wake.
+
+**Queueing is exactly once; running is at least once.** The outbox makes the enqueue exactly once. The train itself can
+run more than once, so its junctions are idempotent, and an irreversible step inside it takes its own claim. An invoked
+train does not count against a machine's single irreversible effect.
+
+**The scheduler never retries an invoked run, and an operator cannot requeue one.** A failure goes to `OnFailed`, and
+the machine retries by entering the invoking state again, which mints a new run and a new token; the old run's late
+completion is then a `no-transition`. The state is the checkpoint. Carrying the token through manifest retries, dead
+letters and requeue was the alternative, and would have given one entry several runs over time, each able to deliver.
+Requeue is refused with the same reason on GraphQL and the dashboard
+([0022](./0022-the-dashboard-and-the-api-share-one-operation-per-action.md)).
+
+### Cancellation
+
+**Leaving the state cancels the run, from any host.** A machine advances on an API host while its train runs on a
+scheduler host, so the cancel has to cross hosts. It does that today only through the database cancel flag, which is
+read by `CancellationCheckProvider`, a junction effect that only `EffectJunction` runs and that ships in the opt-in
+`Trax.Effect.JunctionProvider.Progress` package. Core's plain `Junction` checks only the in-process token. Cross-host
+cancel therefore keeps requiring `EffectJunction`. Moving the flag check into Core's train loop was the other option;
+it was not chosen here, to keep this change inside Effect, and remains open as a decision of its own.
+
+So `Invokes<TTrain>` refuses at startup a train it cannot cancel: one containing a plain `Junction`; an `IChain<I>`
+whose interface does not derive from `IEffectJunction`; a train that is not a `ServiceTrain` (its `Run` can be
+overridden); any refusal the chain recorder reports; a `Parallel` branch containing any of these; and a host without
+`CancellationCheckProvider` registered. `EffectJunction.RailwayJunction` is sealed, so a subclass cannot skip the
+check. Two limits remain and are stated rather than fixed: a slow decider in `Decide` or `Gate` runs outside any
+junction, so no cancel check happens while it runs; and a train started from inside a junction is not cancelled with
+its parent.
+
+**A machine leaves an invoking state only through a declared transition**: a user's own event (such as "cancel
+build"), `OnCancelled`, or an operator's cancel. Never through autosave (below).
+
+**Draft expiry never strands a run.** System rows are exempt from the draft time-to-live, and deleting any draft that
+holds a live token cancels its run first.
+
+### Security
+
+**An outcome cannot be forged, on user-owned machines too.** A user-owned machine that invokes a train (a wizard whose
+`Building` state runs the build) is exactly where a client would like to skip the work. Invoking states and every
+`OnDone`, `OnFailed` and `OnCancelled` target join the reserved set: autosave cannot enter or leave an invoking state
+or enter an outcome target, `advanceSnapshot` refuses the outcome triggers as it refuses `effect-bound`, and the
+startup refusal of other edges into effect targets extends to outcome targets.
+
+**The train is authorized against the user who entered the state, at entry.** At startup a user-owned machine is
+refused a train whose `[TraxAuthorize]` is stricter than the machine's own mutations (entering the state would be a
+way around it), and any `[TraxBroadcast]` train, whose subscribers see every run's output. A system-owned machine's
+train runs under Trax's trusted execution scope, as a scheduled manifest run does, and may invoke only a train a
+scheduled manifest could run: no user-only requirements, checked at startup.
+
+**A user owner has at most 10 live invoked runs** by default, configurable per machine; entering an invoking state past
+the cap is refused with a typed reason. System owners are not capped here: the dispatcher's `MaxActiveJobs` bounds
+them.
+
+**A sensitive output is refused at startup.** The output is reduced into the context, stored as plain `jsonb` and
+returned by `loadSnapshot`, so an output type that reaches a `[TraxSensitive]` member is refused. `OnDone` is never
+built on the run's recorded output, which is redacted, size-limited and can be null.
+
+**A snapshot holds pointers, not data**: fingerprints and dataset URIs, never rows. Trax's database writes grow with
+the number of steps, not the number of rows.
+
+### Operators and the TypeScript twin
+
+**Operators see instances read-only, without the context.** Under the operations gate they see system and user
+instances: state, timestamps, owner kind and the runs each invoked. Not the context: it is an untyped `JsonObject`, so
+nothing can mask its sensitive parts. They can cancel a system-owned instance, which cancels its live run (or marks a
+still-queued row cancelled, racing dispatch cleanly) and moves it through `OnCancelled`. No surface creates or advances
+a system instance.
+
+**There is one engine, and the twin sees outcomes as events.** Outcomes are a new IR trigger kind, scoped per invoke
+edge, whose input schema comes from the train's output type. Because `OnDone`'s reduction is declarative, the twin
+applies it exactly as the server does; a delegate guard or reducer cannot be exported, so a machine mixing one with
+declarative edges is refused export rather than exported as an unconditional edge. The twin never runs a train. The
+differential corpus claims parity only for the pure half: the twin holds no token, so it cannot tell a stale completion
+from a live one.
+
+## Considered options
+
+**A run fired from a transition.** Rejected: it orphans runs and lets late results through (above).
+
+**A reserved owner key for system instances.** Rejected for `owner_kind`: any host's principal mapping could produce
+the key.
+
+**Delivery by lifecycle hook only.** Rejected: hooks are in-process, swallow exceptions, and miss reaped runs.
+
+**Scheduler retries carrying the token.** Rejected: retry by re-entry keeps one run per entry, and makes the state the
+checkpoint.
+
+**An `OnDecisionUnsure` outcome.** Rejected: a run has one `Either`; a guarded `OnDone` routes "unsure".
+
+**The cancel check in Core's train loop.** Not chosen: requiring `EffectJunction` keeps this change inside Effect.
+
+## Tests
+
+Written first, red, before the code they cover. Each names the class and method it will have.
+
+In `Trax.Effect/tests/Trax.Effect.StateMachine.Tests`:
+- `InvokesDeclarationTests.An_invoking_state_without_OnCancelled_is_refused_at_build`
+- `InvokesDeclarationTests.A_guarded_OnDone_routes_an_unsure_output_to_its_own_target`
+- `InvokesDeclarationTests.Outcomes_export_as_their_own_trigger_kind_per_invoke_edge_with_the_output_schema`
+- `IrExporterTests.A_machine_mixing_a_delegate_guard_with_a_declarative_one_is_refused_export`
+- `MachineInstanceIdTests.Keys_a_b_c_split_differently_give_different_ids`
+- `DifferentialCorpusReplayTests.Outcome_triggers_apply_the_same_reduction_in_the_twin`
+
+In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Postgres and Sqlite:
+- `InvokesStartupRefusalTests`, one test per refusal, each naming the offending junction, train or member:
+  `A_plain_Junction_is_refused`, `An_IChain_over_a_non_effect_interface_is_refused`,
+  `A_train_that_is_not_a_ServiceTrain_is_refused`, `A_recorder_refusal_is_refused`,
+  `A_plain_Junction_inside_a_Parallel_branch_is_refused`, `A_host_without_CancellationCheckProvider_is_refused`,
+  `A_host_without_Mediator_is_refused`, `Deferred_promotion_or_an_OnQueue_hook_is_refused`,
+  `Invokes_on_InMemory_is_refused`, `A_user_owned_machine_invoking_a_stricter_authorized_train_is_refused`,
+  `A_user_owned_machine_invoking_a_broadcast_train_is_refused`,
+  `A_system_owned_machine_invoking_a_train_with_user_only_requirements_is_refused`,
+  `An_output_reaching_a_sensitive_member_is_refused`, `RailwayJunction_cannot_be_overridden`
+- `InvokedTrainOutboxTests.Entering_an_invoking_state_queues_one_run_and_sets_the_token_to_its_ExternalId`
+- `InvokedTrainOutboxTests.A_fault_between_the_advance_and_the_enqueue_commits_neither`
+- `InvokedTrainOutboxTests.Progress_saves_cannot_commit_or_abort_the_outbox_part_way`
+- `InvokeOutcomeDeliveryTests.A_crash_after_the_run_finishes_and_before_the_hook_is_applied_once_by_the_reconciler`
+- `InvokeOutcomeDeliveryTests.Two_hosts_delivering_one_completion_apply_it_once`
+- `InvokeOutcomeDeliveryTests.A_completion_after_the_state_was_left_is_a_no_transition`
+- `InvokeOutcomeDeliveryTests.A_run_failed_by_the_reaper_reaches_OnFailed`
+- `InvokeOutcomeDeliveryTests.A_timed_out_run_and_an_operator_cancel_reach_OnCancelled`
+- `InvokeOutcomeDeliveryTests.Reentering_after_OnFailed_queues_a_new_run_and_the_old_completion_is_a_no_transition`
+- `InvokeOutcomeDeliveryTests.An_outcome_past_64_KiB_goes_to_OnFailed_with_its_reason`
+- `InvokeOutcomeDeliveryTests.Leaving_the_invoking_state_cancels_the_run_on_another_host`
+- `SystemOwnedInstanceTests.Start_twice_with_one_key_returns_one_instance_and_queues_nothing_new`
+- `SystemOwnedInstanceTests.A_system_instance_refuses_advance_and_save_from_any_user`
+- `SystemOwnedInstanceTests.A_system_instance_never_appears_in_a_users_load`
+- `SystemOwnedInstanceTests.A_user_holding_the_same_id_does_not_reach_the_system_row`
+- `InvokesReservedStateTests.Autosave_into_an_invoking_state_is_refused`
+- `InvokesReservedStateTests.Autosave_out_of_an_invoking_state_is_refused`
+- `InvokesReservedStateTests.Autosave_into_an_outcome_target_is_refused`
+- `InvokesReservedStateTests.Advance_with_an_outcome_trigger_is_refused`
+- `InvokesReservedStateTests.A_rewritten_context_does_not_change_correlation`
+- `SnapshotOwnerKeyTests.An_empty_or_whitespace_key_is_unauthenticated_for_every_mutation_and_writes_nothing`
+- `InvokesDraftExpiryTests.Draft_expiry_leaves_system_rows_alone`
+- `InvokesDraftExpiryTests.Deleting_a_draft_with_a_live_token_cancels_its_run_first`
+- `InvokesAuthorizationTests.The_eleventh_live_run_for_one_user_is_refused_with_its_reason`
+- `InvokesAuthorizationTests.System_owners_are_not_capped`
+- `InvokesAuthorizationTests.A_user_owned_machines_train_runs_as_the_entering_user`
+- `InvokesAuthorizationTests.A_system_owned_machines_train_runs_under_the_trusted_scope`
+- `InvokesModelTests.Generated_triggers_autosaves_and_completions_keep_every_snapshot_valid_and_orphan_no_run`: a
+  CsCheck model-based property over late, duplicated and out-of-order completions, completions after a cancel, from
+  two hosts and after a reap; each entry into a state has at most one live run.
+
+In `Trax.Scheduler/tests`, on Postgres:
+- `DispatcherWakeTests.A_run_queued_on_another_host_starts_within_a_second_despite_a_30_second_poll`
+- `DispatcherWakeTests.A_rolled_back_enqueue_sends_no_notification`
+- `OutOfTrainLifecycleEventTests.A_reaped_InProgress_run_and_a_reaped_Pending_run_each_publish_Failed_once`
+
+In `Trax.Api/tests`, on GraphQL and the dashboard alike:
+- `InvokedRunOperationsTests.Requeue_of_an_invoked_run_is_refused_with_one_reason_on_both_surfaces`
+- `InvokedRunOperationsTests.An_operator_cancel_racing_dispatch_of_a_queued_run_ends_exactly_one_way`
+- `InvokedRunOperationsTests.No_operator_surface_returns_a_snapshots_context`
+
+## Exemplars
+
+**Enforced elsewhere:** the tests listed under *Tests*, in Trax.Effect's state machine test projects, Trax.Scheduler's
+and Trax.Api's tests, each written red before the code it covers; `InteractionMatrixTests` in `Trax.Core.Tests.Meta`,
+which requires the invoking-state row of the interaction matrix to name a test for every existing feature.
+
+Not covered: nothing can check that an invoked train's junctions are idempotent, or that a snapshot holds pointers
+rather than data. Both are conventions the docs state, and the at-least-once guarantee holds only while junctions
+follow the first.
+
+## Changelog
+
+- **2026-10-07**: Recorded.
