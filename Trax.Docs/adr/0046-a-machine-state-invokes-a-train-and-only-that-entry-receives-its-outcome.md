@@ -272,6 +272,10 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The interaction matrix's machine-features table has its `Invokes` row, which
+  `InteractionMatrixTests` checks as it checks the step kinds' rows. Filling it found that a tuple output read as
+  nothing: a tuple's elements are fields, which neither the stored output nor the exported schema carries, so every
+  guard read false and every reduction wrote null. `Build` now refuses a tuple output, naming the state.
 - **2026-10-08**: `IMachineInstances.Advance<TMachine>(key, trigger, input)` fires a trigger on a system instance
   from code, so a system instance can be retried by re-entry (`Failed` --Retry--> its invoking state) without any
   surface reaching it. It refuses the triggers a user's advance refuses (`outcome-bound`, `effect-bound`) and writes

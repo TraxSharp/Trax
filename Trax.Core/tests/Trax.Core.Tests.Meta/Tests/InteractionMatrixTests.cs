@@ -8,6 +8,11 @@ namespace Trax.Core.Tests.Meta.Tests;
 /// does not exist, claims coverage nobody wrote; a <see cref="ChainStepKind"/> member with no row
 /// is a step kind shipped without saying how it behaves with the rest of Trax.
 ///
+/// <para>The file's second table, <i>Machine features</i>, holds the same columns for each state-machine feature
+/// in <see cref="MachineFeatures"/>, checked the same way. A machine feature is not a <see cref="ChainStepKind"/>
+/// member, so the list of them is kept here; central ADR 0046 keeps <c>Invokes</c> experimental until its row
+/// is complete.</para>
+///
 /// <para>Not ADR-enforcing: it keeps a coverage table honest, and the table is the record itself;
 /// there was no choice between alternatives for an ADR to explain, only a list to keep complete.</para>
 /// </summary>
@@ -34,6 +39,16 @@ public class InteractionMatrixTests
         nameof(ChainStepKind.Scale),
     };
 
+    private const string Adr0046 =
+        "Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md";
+
+    /// <summary>
+    /// Every state-machine feature that needs a row in the machine-features table. Core cannot see the state
+    /// machine, so the list is declared here: adding a machine feature means adding it to this list, and the
+    /// test then fails until the feature has a row.
+    /// </summary>
+    private static readonly string[] MachineFeatures = ["Invokes"];
+
     private static readonly Regex TestCell = new(
         @"^`(?<class>[A-Za-z_][A-Za-z0-9_]*)\.(?<method>[A-Za-z_][A-Za-z0-9_]*)`$",
         RegexOptions.Compiled
@@ -55,6 +70,25 @@ public class InteractionMatrixTests
             .BeEmpty(
                 $"{MatrixPath} must give every step kind added after the baseline a row, each "
                     + "cell naming an existing test as `Class.Method` or saying `n/a: <why>`:\n  "
+                    + string.Join("\n  ", problems)
+            );
+    }
+
+    [Test]
+    public void TheMachineFeaturesTable_CoversEveryMachineFeature_WithTestsThatExist()
+    {
+        var problems = MachineFeatureProblems(
+            File.ReadAllText(RepoRoot.Combine(MatrixPath)),
+            MachineFeatures,
+            new TestIndex(MonorepoRoot.Path).Exists
+        );
+
+        problems
+            .Should()
+            .BeEmpty(
+                $"{MatrixPath} must give every machine feature a row in its 'Machine feature' table, with the "
+                    + "step-kind table's columns, each cell naming an existing test as `Class.Method` or saying "
+                    + $"`n/a: <why>`. {Adr0046} keeps Invokes experimental until its row is complete:\n  "
                     + string.Join("\n  ", problems)
             );
     }
@@ -197,6 +231,96 @@ public class InteractionMatrixTests
             .Should()
             .Contain(p => p.Contains("no table"));
 
+    private static string WithMachineTable(params string[] rows) =>
+        Matrix("| Parallel | `ParallelReplayTests.Replays` | `ParallelCancelTests.Cancels` |")
+        + string.Join(
+            "\n",
+            new[]
+            {
+                "",
+                "## Machine features",
+                "",
+                "| Machine feature | Decision replay | Dashboard cancel |",
+                "|---|---|---|",
+            }.Concat(rows)
+        )
+        + "\n";
+
+    private static readonly string[] Features = ["Invokes"];
+
+    [Test]
+    public void AFullMachineFeatureRow_Passes() =>
+        MachineFeatureProblems(
+                WithMachineTable(
+                    "| Invokes | `ParallelReplayTests.Replays` | n/a: an invoked run is cancelled through its state |"
+                ),
+                Features,
+                Known
+            )
+            .Should()
+            .BeEmpty();
+
+    [Test]
+    public void AMachineFeatureWithNoRow_Fails() =>
+        MachineFeatureProblems(WithMachineTable(), Features, Known)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("Invokes")
+            .And.Contain("no row");
+
+    [Test]
+    public void AMachineFeatureRowNamingAMissingTestOrNoReason_Fails() =>
+        MachineFeatureProblems(
+                WithMachineTable("| Invokes | `ParallelReplayTests.Vanished` | n/a: |"),
+                Features,
+                Known
+            )
+            .Should()
+            .HaveCount(2)
+            .And.Contain(p =>
+                p.Contains("ParallelReplayTests.Vanished") && p.Contains("does not exist")
+            )
+            .And.Contain(p => p.Contains("'n/a:'"));
+
+    [Test]
+    public void ARowForAMachineFeatureNotDeclared_Fails() =>
+        MachineFeatureProblems(
+                WithMachineTable(
+                    "| Invokes | `ParallelReplayTests.Replays` | `ParallelCancelTests.Cancels` |",
+                    "| Spawns | `ParallelReplayTests.Replays` | `ParallelCancelTests.Cancels` |"
+                ),
+                Features,
+                Known
+            )
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("'Spawns'");
+
+    [Test]
+    public void AMachineFeatureTableWithOtherColumnsThanTheStepKinds_Fails() =>
+        MachineFeatureProblems(
+                Matrix(
+                    "| Parallel | `ParallelReplayTests.Replays` | `ParallelCancelTests.Cancels` |"
+                )
+                    + "\n| Machine feature | Decision replay |\n|---|---|\n| Invokes | `ParallelReplayTests.Replays` |\n",
+                Features,
+                Known
+            )
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("columns");
+
+    [Test]
+    public void AMatrixWithNoMachineFeatureTable_Fails() =>
+        MachineFeatureProblems(Matrix(), Features, Known)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("no table whose first column is 'Machine feature'");
+
     #endregion
 
     /// <summary>
@@ -211,31 +335,106 @@ public class InteractionMatrixTests
     )
     {
         var problems = new List<string>();
-        var lines = markdown.Split('\n').Select(l => l.Trim()).ToArray();
-        var start = Array.FindIndex(
-            lines,
-            l => l.StartsWith("| Step kind |", StringComparison.Ordinal)
-        );
-        if (start < 0 || start + 1 >= lines.Length)
+        if (Table.Find(markdown, "Step kind") is not { } table)
         {
             problems.Add("the file has no table whose first column is 'Step kind'");
             return problems;
         }
 
-        var header = Cells(lines[start]);
-        var rows = new Dictionary<string, int>(StringComparer.Ordinal);
+        var rows = CheckRows(
+            table,
+            testExists,
+            problems,
+            kind =>
+                !kinds.Contains(kind) ? $"'{kind}' is not a ChainStepKind member"
+                : BaselineKinds.Contains(kind) ? $"'{kind}' is a baseline kind and needs no row"
+                : null
+        );
 
-        for (var i = start + 2; i < lines.Length && lines[i].StartsWith('|'); i++)
+        problems.AddRange(
+            kinds
+                .Where(k => !BaselineKinds.Contains(k) && !rows.Contains(k))
+                .Select(k =>
+                    $"ChainStepKind.{k} has no row: say how it behaves with each existing feature"
+                )
+        );
+
+        return problems;
+    }
+
+    /// <summary>
+    /// Every problem with the <i>Machine features</i> table of <paramref name="markdown"/> for the features
+    /// <paramref name="features"/>: the same cell rules as the step kinds' table, the same columns as it, and
+    /// one row for each feature and no other.
+    /// </summary>
+    private static List<string> MachineFeatureProblems(
+        string markdown,
+        IReadOnlyCollection<string> features,
+        Func<string, string, bool> testExists
+    )
+    {
+        var problems = new List<string>();
+        if (Table.Find(markdown, "Machine feature") is not { } table)
         {
-            var line = i + 1;
-            var cells = Cells(lines[i]);
+            problems.Add("the file has no table whose first column is 'Machine feature'");
+            return problems;
+        }
+
+        if (
+            Table.Find(markdown, "Step kind") is { } steps
+            && !steps.Header.Skip(1).SequenceEqual(table.Header.Skip(1))
+        )
+        {
+            problems.Add(
+                $"line {table.HeaderLine}: the machine-features table's columns are "
+                    + $"'{string.Join(" | ", table.Header.Skip(1))}', not the step kinds' "
+                    + $"'{string.Join(" | ", steps.Header.Skip(1))}'"
+            );
+            return problems;
+        }
+
+        var rows = CheckRows(
+            table,
+            testExists,
+            problems,
+            feature =>
+                features.Contains(feature)
+                    ? null
+                    : $"'{feature}' is not a declared machine feature (MachineFeatures)"
+        );
+
+        problems.AddRange(
+            features
+                .Where(f => !rows.Contains(f))
+                .Select(f =>
+                    $"the machine feature {f} has no row: say how it behaves with each existing feature"
+                )
+        );
+
+        return problems;
+    }
+
+    /// <summary>
+    /// Checks every row of <paramref name="table"/>: its name by <paramref name="nameProblem"/>, its width,
+    /// and each cell a test that exists or a reason. Returns the row names seen.
+    /// </summary>
+    private static HashSet<string> CheckRows(
+        Table table,
+        Func<string, string, bool> testExists,
+        List<string> problems,
+        Func<string, string?> nameProblem
+    )
+    {
+        var header = table.Header;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var (line, cells) in table.Rows)
+        {
             var kind = cells[0].Trim('`');
 
-            if (!kinds.Contains(kind))
-                problems.Add($"line {line}: '{kind}' is not a ChainStepKind member");
-            else if (BaselineKinds.Contains(kind))
-                problems.Add($"line {line}: '{kind}' is a baseline kind and needs no row");
-            rows[kind] = line;
+            if (nameProblem(kind) is { } bad)
+                problems.Add($"line {line}: {bad}");
+            seen.Add(kind);
 
             if (cells.Length != header.Length)
             {
@@ -265,15 +464,32 @@ public class InteractionMatrixTests
             }
         }
 
-        problems.AddRange(
-            kinds
-                .Where(k => !BaselineKinds.Contains(k) && !rows.ContainsKey(k))
-                .Select(k =>
-                    $"ChainStepKind.{k} has no row: say how it behaves with each existing feature"
-                )
-        );
+        return seen;
+    }
 
-        return problems;
+    /// <summary>A markdown table: its header's cells and line, and each row's line and cells.</summary>
+    private sealed record Table(
+        string[] Header,
+        int HeaderLine,
+        List<(int Line, string[] Cells)> Rows
+    )
+    {
+        /// <summary>The first table whose first column is <paramref name="firstColumn"/>, or null.</summary>
+        public static Table? Find(string markdown, string firstColumn)
+        {
+            var lines = markdown.Split('\n').Select(l => l.Trim()).ToArray();
+            var start = Array.FindIndex(
+                lines,
+                l => l.StartsWith($"| {firstColumn} |", StringComparison.Ordinal)
+            );
+            if (start < 0 || start + 1 >= lines.Length)
+                return null;
+
+            var rows = new List<(int, string[])>();
+            for (var i = start + 2; i < lines.Length && lines[i].StartsWith('|'); i++)
+                rows.Add((i + 1, Cells(lines[i])));
+            return new Table(Cells(lines[start]), start + 1, rows);
+        }
     }
 
     private static string[] Cells(string line) =>

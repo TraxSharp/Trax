@@ -62,7 +62,8 @@ folders: the conventions they enforce are repository-wide, and the engines behin
 ship from here in `Trax.Core.Testing` for consumers to subclass. The twelfth,
 `InteractionMatrixTests`, is this folder's own: a new `ChainStepKind` member needs a row in
 [`docs/interaction-matrix.md`](./docs/interaction-matrix.md) naming the test that covers it with
-each existing feature (requeue, cancel, junction events and the rest).
+each existing feature (requeue, cancel, junction events and the rest), and so does each
+state-machine feature the test lists in `MachineFeatures`, in the file's machine-features table.
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is
