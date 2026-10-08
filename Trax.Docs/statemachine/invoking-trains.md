@@ -51,6 +51,9 @@ Every invoking state says where each outcome goes, and `Build` refuses one that 
 - **`OnFailed`**, exactly once. A run the scheduler reaps arrives here too.
 - **`OnCancelled`**, exactly once, and required: a timeout or an operator's cancel always has a declared edge.
 
+The output is a record with properties. `Build` refuses a tuple output, naming the state: a tuple's elements are
+fields, which the output's stored JSON does not carry, so no guard or reduction could read them.
+
 There is no "unsure" outcome. A train that can be unsure says so in its output, and a guarded `OnDone` routes it,
 as `NeedsReview` does above.
 

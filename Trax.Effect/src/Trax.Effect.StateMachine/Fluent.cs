@@ -575,6 +575,15 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                     $"the state {state} invokes {train}, which is a class. Name the train by its interface "
                         + "(Invokes<IMyTrain, TInput, TOutput>), which is the train's canonical name."
                 );
+            // A value tuple's elements are fields, which neither the output's stored JSON nor its exported schema
+            // carries: every guard and reduction would read nothing, and the run would take whichever OnDone edge
+            // has no guard, its reductions writing null.
+            if (IsValueTuple(draft.OutputType))
+                problems.Add(
+                    $"the state {state} invokes {train}, whose output {draft.OutputType.Name} is a tuple. A tuple's "
+                        + "elements are fields, which the output's JSON does not carry, so no OnDone guard or "
+                        + "reduction could read them. Return a record with properties instead."
+                );
             if (draft.Done.Count == 0)
                 problems.Add(
                     $"the state {state} invokes {train} but declares no OnDone. Add `.OnDone({typeof(TState).Name}.X)` "
@@ -630,6 +639,13 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
                 d.Cancelled[0]
             )
         );
+    }
+
+    private static bool IsValueTuple(Type type)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+        return underlying.IsValueType
+            && typeof(System.Runtime.CompilerServices.ITuple).IsAssignableFrom(underlying);
     }
 
     private static IEnumerable<string> ExactlyOnce(

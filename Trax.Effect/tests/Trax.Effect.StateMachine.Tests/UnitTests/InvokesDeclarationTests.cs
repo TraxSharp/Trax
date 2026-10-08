@@ -146,6 +146,36 @@ public class InvokesDeclarationTests
     }
 
     [Test]
+    public void A_tuple_output_is_refused_at_build()
+    {
+        // A tuple's elements are fields, which the stored output does not carry: built, an unsure output took the
+        // unguarded OnDone to Fetched and its reduction wrote a null fingerprint.
+        var m = new MachineBuilder<IngestState, IngestTrigger>();
+        m.Id("ingest").StartsAt(IngestState.Idle, () => new JsonObject());
+        m.In(IngestState.Idle).On(IngestTrigger.Start).To(IngestState.Fetching);
+        m.In(IngestState.Fetching)
+            .Invokes<ITupleFetchTrain, FetchInput, (string Fingerprint, bool Unsure)>(
+                _ => new FetchInput("s")
+            )
+            .OnDone(
+                IngestState.NeedsReview,
+                when: Input(((string Fingerprint, bool Unsure) o) => o.Unsure).IsTrue()
+            )
+            .OnDone(IngestState.Fetched)
+            .OnFailed(IngestState.FetchFailed)
+            .OnCancelled(IngestState.Cancelled);
+
+        var build = () => m.Build();
+
+        build
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage(
+                "*Fetching invokes ITupleFetchTrain, whose output*is a tuple*Return a record*"
+            );
+    }
+
+    [Test]
     public void A_user_edge_into_an_outcome_target_is_refused_at_build()
     {
         var m = Builder(i =>
@@ -547,4 +577,11 @@ public class InvokesDeclarationTests
 
         public abstract void Dispose();
     }
+
+    /// <summary>A train whose output is a tuple; never constructed.</summary>
+    public interface ITupleFetchTrain
+        : Trax.Effect.Services.ServiceTrain.IServiceTrain<
+            FetchInput,
+            (string Fingerprint, bool Unsure)
+        >;
 }

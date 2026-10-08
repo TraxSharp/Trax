@@ -72,8 +72,9 @@ override them.
 | `OnCancelled(TState target, Reduction? reduce = null)` | Where a cancelled run goes. Required, exactly once. The outcome carries no input. |
 
 `Build()` throws `InvalidOperationException`, naming the state, when an invoking state lacks `OnDone`, `OnFailed`
-or `OnCancelled`, declares either of the last two twice, invokes a second train, or names the train by a class
-rather than its interface. It also throws when an outcome goes to the target of the `RunsOnce` effect, or when an
+or `OnCancelled`, declares either of the last two twice, invokes a second train, names the train by a class
+rather than its interface, or names a tuple as the output (its elements are fields, which no guard or reduction can
+read). It also throws when an outcome goes to the target of the `RunsOnce` effect, or when an
 ordinary transition enters a state an outcome goes to (a self-loop is allowed). An invoked train does not count
 against the one `RunsOnce` effect.
 
