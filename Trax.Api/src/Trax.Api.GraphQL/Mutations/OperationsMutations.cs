@@ -339,6 +339,31 @@ public partial class OperationsMutations
         );
 
     /// <summary>
+    /// Resumes a failed or cancelled execution from a checkpoint instead of running every step
+    /// again: queues a run of the same train, with the input the execution recorded, that skips
+    /// to the step <c>from</c> names (a node id, as <c>runGraph</c> gives it), or to the step after
+    /// the execution's latest checkpoint when <c>from</c> is omitted. Through
+    /// <see cref="IOperationsService.ResumeExecutionAsync"/>, the same call the dashboard's Resume
+    /// and Resume from here buttons make. It is a requeue in every check but where the run starts,
+    /// so it enqueues through the mediator and the train's <c>[TraxAuthorize]</c> applies, and the
+    /// new run replays the execution's decisions. Fails without queueing, with the reason, when
+    /// the execution does not exist, is not failed or cancelled, was started by a state machine's
+    /// step, has a saved input a requeue would refuse, already has a queued resume, or when no
+    /// checkpoint it wrote lets it resume at that step. Experimental (<c>TRAXEXP003</c>).
+    /// </summary>
+    /// <param name="id">The execution (metadata) id.</param>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the request.</param>
+    /// <param name="from">The node id of the step to resume at, or null for after the latest checkpoint.</param>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public async Task<OperationResponse> ResumeExecution(
+        long id,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct,
+        string? from = null
+    ) => ToResponse(await operationsService.ResumeExecutionAsync(id, from, ct));
+
+    /// <summary>
     /// Patches mutable settings on a single manifest (enabled, retries, priority, timeout,
     /// schedule). Each field on <paramref name="input"/> is independent; <c>null</c> leaves it
     /// unchanged. See <see cref="UpdateManifestInput"/> for the clear-timeout semantics.
