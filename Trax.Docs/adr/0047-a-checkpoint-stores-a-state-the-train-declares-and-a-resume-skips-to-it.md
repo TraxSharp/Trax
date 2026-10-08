@@ -2,7 +2,7 @@
 authors: [Theauxm]
 repos: [core, effect, mediator, scheduler, api, dashboard, samples]
 areas: [platform, data-model, graphql]
-status: proposed
+status: accepted
 ---
 
 # A checkpoint stores a state the train declares, and a resumed run skips to it
@@ -15,7 +15,7 @@ before anything runs.
 
 ## Status
 
-**Proposed.** `Checkpoint<TState>()` and the resume operation ship behind `[Experimental("TRAXEXP003")]`, following
+**Accepted.** `Checkpoint<TState>()` and the resume operation ship behind `[Experimental("TRAXEXP003")]`, following
 the convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md) set,
 until the `Checkpoint` row of the interaction matrix (`Trax.Core/docs/interaction-matrix.md`) is complete.
 
@@ -242,4 +242,9 @@ other than Trax's own has committed its work when a checkpoint is written. Both 
 
 ## Changelog
 
+- **2026-10-08**: Accepted after review. The user confirmed each contested point: a checkpoint refuses
+  uncommitted work rather than committing the run's writes; manifest retries and dead-letter requeues resume
+  automatically while `requeueExecution` reruns from the top; branches resume from checkpoints their author
+  declares; an over-cap state fails the step; a machine's re-entry starts fresh; an operator may resume at any step
+  the check allows; decision records are not stored; both surfaces ship, the dashboard recording no actor.
 - **2026-10-08**: Recorded.
