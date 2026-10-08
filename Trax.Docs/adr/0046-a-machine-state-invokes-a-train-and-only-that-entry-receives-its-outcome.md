@@ -272,6 +272,11 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: `InvokesModelTests` lives in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`, on Postgres
+  and SQLite, beside the delivery tests: its operations need the dispatcher, the job runner, the reaper and the
+  reconciler, and it drives them through the same cluster of hosts, against a model of each instance's state, token
+  and runs. Besides the completions above it generates user leaves racing a delivery, a dispatch or the run itself,
+  two hosts starting one system instance, operator cancels, and draft expiry.
 - **2026-10-08**: The interaction matrix's machine-features table has its `Invokes` row, which
   `InteractionMatrixTests` checks as it checks the step kinds' rows. Filling it found that a tuple output read as
   nothing: a tuple's elements are fields, which neither the stored output nor the exported schema carries, so every
