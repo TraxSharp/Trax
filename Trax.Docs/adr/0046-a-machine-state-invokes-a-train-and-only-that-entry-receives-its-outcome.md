@@ -9,7 +9,7 @@ status: accepted
 
 Long-running work with several stages (fetch, normalise, resolve, embed) had nowhere durable to record where each unit
 of work was, so it became one large train or hand-written glue. A state machine now runs trains: a state declares
-`Invokes<TTrain>(ctx => input)`, entering it queues one run in the same transaction as the advance, and the run's
+`Invokes<TTrain, TInput, TOutput>(ctx => input)` (C# cannot infer the output type from the train's interface), entering it queues one run in the same transaction as the advance, and the run's
 outcome comes back as a trigger that only the entry which queued it can apply. Leaving the state cancels the run. A
 state is therefore a durable checkpoint between stages: a failed stage is retried by entering its state again, never by
 the scheduler.
@@ -134,7 +134,9 @@ holds a live token cancels its run first.
 `Building` state runs the build) is exactly where a client would like to skip the work. Invoking states and every
 `OnDone`, `OnFailed` and `OnCancelled` target join the reserved set: autosave cannot enter or leave an invoking state
 or enter an outcome target, `advanceSnapshot` refuses the outcome triggers as it refuses `effect-bound`, and the
-startup refusal of other edges into effect targets extends to outcome targets.
+startup refusal of other edges into effect targets extends to outcome targets. One exception: an outcome
+target that itself invokes a train may be entered by an ordinary edge, because entering it only queues a new run and
+forges no result, and that edge is how a chained stage is retried.
 
 **The train is authorized against the user who entered the state, at entry.** At startup a user-owned machine is
 refused a train whose `[TraxAuthorize]` is stricter than the machine's own mutations (entering the state would be a
@@ -260,4 +262,6 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: An outcome target that itself invokes a train may be entered by an ordinary edge, so a chained
+  stage can be retried; the builder method's signature names the train's input and output types.
 - **2026-10-07**: Recorded.

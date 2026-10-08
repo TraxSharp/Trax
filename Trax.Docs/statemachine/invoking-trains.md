@@ -72,7 +72,8 @@ that queued the run can receive its outcome: a completion that arrives after the
 Invoking states and every `OnDone`, `OnFailed` and `OnCancelled` target join the machine's reserved states,
 alongside committed states and effect targets. An autosave cannot move a draft into or out of an invoking state,
 or into an outcome target. `Build` refuses an ordinary transition into an outcome target, because that state
-means "the train produced this"; a self-loop on the target does not enter it and is allowed. An outcome may not
+means "the train produced this"; a self-loop on the target does not enter it and is allowed, and so is an edge
+into a target that itself invokes a train, which only queues a new run (that is how a chained stage is retried). An outcome may not
 go to the target of the machine's `RunsOnce` effect.
 
 An invoked train does not count against the machine's one `RunsOnce` effect.

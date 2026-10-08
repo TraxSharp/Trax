@@ -588,7 +588,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     // An outcome target means "the train produced this": the draft reaches it with the context its outcome
     // reduced. An ordinary transition into it would let a client put a draft there with no run, carrying whatever
     // its own input reduced, so the machine is refused, as it is for an effect's target. A self-loop on the
-    // target does not enter it and is allowed.
+    // target does not enter it and is allowed. So is an edge into a target that itself invokes a train: entering
+    // it only queues a new run and forges no result, and it is how a chained stage is retried.
     private void RefuseOtherEdgesIntoOutcomeTargets(
         IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
     )
@@ -600,6 +601,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             if (!EqualityComparer<TState>.Default.Equals(t.To, target))
                 continue;
             if (EqualityComparer<TState>.Default.Equals(t.From, target))
+                continue;
+            if (invokes.ContainsKey(target))
                 continue;
             throw new InvalidOperationException(
                 $"The machine '{_id}' enters {target} from {t.From} on {t.Trigger}, but {target} is where the "

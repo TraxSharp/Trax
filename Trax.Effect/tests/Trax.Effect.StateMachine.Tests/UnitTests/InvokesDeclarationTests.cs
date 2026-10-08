@@ -166,6 +166,28 @@ public class InvokesDeclarationTests
     }
 
     [Test]
+    public void A_user_edge_into_an_outcome_target_that_itself_invokes_a_train_is_allowed()
+    {
+        // A chained stage: Fetching's outcome enters Fetched, which invokes the next run. Retrying that stage
+        // re-enters Fetched by a user edge, which only queues a new run and forges no result.
+        var m = Builder(i =>
+            i.OnDone(IngestState.Fetched)
+                .OnFailed(IngestState.FetchFailed)
+                .OnCancelled(IngestState.Cancelled)
+        );
+        m.In(IngestState.Fetched)
+            .Invokes<IFetchTrain, FetchInput, FetchOutput>(_ => new FetchInput("next"))
+            .OnDone(IngestState.NeedsReview)
+            .OnFailed(IngestState.FetchFailed)
+            .OnCancelled(IngestState.Cancelled);
+        m.In(IngestState.FetchFailed).On(IngestTrigger.Approve).To(IngestState.Fetched);
+
+        var build = () => m.Build();
+
+        build.Should().NotThrow();
+    }
+
+    [Test]
     public void A_self_loop_on_an_outcome_target_is_allowed()
     {
         var m = Builder(i =>
