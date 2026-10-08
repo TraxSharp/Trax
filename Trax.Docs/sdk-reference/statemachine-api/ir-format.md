@@ -62,7 +62,7 @@ See the [data model](/docs/sdk-reference/statemachine-api/declarative-data-model
 
 ## Outcomes
 
-A state that [invokes a train](/docs/statemachine/invoking-trains) (experimental) adds three triggers of their own
+A state that [invokes a train](/docs/statemachine/invoking-trains) adds three triggers of their own
 kind, named `<State>.done`, `<State>.failed` and `<State>.cancelled`. A trigger enum member cannot contain a dot,
 so they never collide with `triggers`, which lists only the machine's own. Each is an entry of `outcomes`:
 

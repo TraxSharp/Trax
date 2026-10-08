@@ -32,8 +32,8 @@ public abstract class Machine<TState, TTrigger>
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
 | `Differential(Action<IDifferentialBuilder> configure)` | Authors the cross-language differential fuzzing inputs (test-only): per-trigger input samples, per-state seed contexts, and dense probe contexts. Exported into the IR's `differential` block so the differential harness enumerates off the one C# source, with no hand-written machine.json. Only valid on a declaratively-authored machine. See [IDifferentialBuilder](#idifferentialbuilder). |
 | `In(TState state)` | Opens a state to declare its context rule and outgoing transitions. Returns an `IStateBuilder`. |
-| `SystemOwned()` | **Experimental (`TRAXEXP002`).** The machine's instances belong to the system: only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances) creates one, and no user's draft operation reaches the machine (they answer `unknown-machine`). A train it invokes is authorized in the trusted execution scope, so the host refuses one that declares `[TraxAuthorize]`. Without it a machine is user-owned and `Start` refuses it. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
-| `InvokedRunLimit(int limit)` | **Experimental (`TRAXEXP002`).** The most invoked runs one user may have live in this machine at once; past it, entering an invoking state is refused with `invoke-limit-reached`. Defaults to 10; at least 1. System owners are not capped. |
+| `SystemOwned()` | The machine's instances belong to the system: only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances) creates one, and no user's draft operation reaches the machine (they answer `unknown-machine`). A train it invokes is authorized in the trusted execution scope, so the host refuses one that declares `[TraxAuthorize]`. Without it a machine is user-owned and `Start` refuses it. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
+| `InvokedRunLimit(int limit)` | The most invoked runs one user may have live in this machine at once; past it, entering an invoking state is refused with `invoke-limit-reached`. Defaults to 10; at least 1. System owners are not capped. |
 | `CustomGuard(string name, Func<JsonObject, JsonNode?, bool> guard)` | Binds the C# handler for `Rule.Custom(name)`, wherever the machine uses it (a `When` or a `Requires`, nested or not). The TypeScript twin's `customGuards` is the other half. |
 | `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
 
@@ -58,11 +58,11 @@ override them.
 | `Requires(Rule constraint)` | A per-state policy layered on the schema (composed, ANDed, chainable): what the state demands beyond its shape, e.g. a complete draft or an absent receipt. Exports as the state's `invariants` entry. Build the rule with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
 | `Committed()` | Marks the state as completed. A soft autosave can neither put a draft into it nor move a draft out of it (except a reset to the initial state); only the effect runner puts a draft there. See [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write). |
 | `On(TTrigger trigger)` | Starts a transition out of this state. Returns an `ITransitionBuilder`. |
-| `Invokes<TTrain, TInput, TOutput>(Func<JsonObject, TInput> input)` | **Experimental (`TRAXEXP002`).** Runs the train `TTrain` (its interface, an `IServiceTrain<TInput, TOutput>`) whenever the machine enters this state; `input` builds the run's input from the context, on the server only. Returns an [`IInvokeBuilder`](#iinvokebuilder). A state invokes at most one train. See [Invoking a train](/docs/statemachine/invoking-trains). |
+| `Invokes<TTrain, TInput, TOutput>(Func<JsonObject, TInput> input)` | Runs the train `TTrain` (its interface, an `IServiceTrain<TInput, TOutput>`) whenever the machine enters this state; `input` builds the run's input from the context, on the server only. Returns an [`IInvokeBuilder`](#iinvokebuilder). A state invokes at most one train. See [Invoking a train](/docs/statemachine/invoking-trains). |
 
 ## IInvokeBuilder
 
-**Experimental (`TRAXEXP002`).** Says where an invoked train's outcome goes. It is also the state's
+Says where an invoked train's outcome goes. It is also the state's
 `IStateBuilder`, so the state's transitions follow it. Every target joins the machine's reserved states.
 
 | Method | Description |
@@ -107,7 +107,7 @@ raw `JsonObject` overloads give exact control.
 | `EmptySample(TTrigger trigger)` | An empty (`{}`) input for a trigger, distinct from the always-added no-input case. |
 | `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. |
 | `Probe<TContext>(TContext context)` / `Probe(JsonObject context)` | A dense probe context crossed with every state, exercising guards and validators on unreachable-but-sendable snapshots. |
-| `OutcomeSample<TOutput>(TState invokingState, TOutput output)` | **Experimental (`TRAXEXP002`).** A representative output of the train the state invokes, fired as its `<State>.done` outcome trigger. Every outcome trigger is also fired with no input. `Build` refuses a sample for a state that invokes nothing. |
+| `OutcomeSample<TOutput>(TState invokingState, TOutput output)` | A representative output of the train the state invokes, fired as its `<State>.done` outcome trigger. Every outcome trigger is also fired with no input. `Build` refuses a sample for a state that invokes nothing. |
 
 ## Delegate vs declarative
 

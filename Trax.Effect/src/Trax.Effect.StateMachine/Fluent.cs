@@ -117,7 +117,6 @@ public interface IMachineBuilder<TState, TTrigger>
     /// machine invokes runs under Trax's trusted execution scope, so the host refuses one that declares
     /// <c>[TraxAuthorize]</c>. A machine without this is user-owned, and <c>Start</c> refuses it.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
     IMachineBuilder<TState, TTrigger> SystemOwned() =>
         throw new NotSupportedException($"{GetType().Name} does not support SystemOwned.");
 
@@ -129,7 +128,6 @@ public interface IMachineBuilder<TState, TTrigger>
     /// </summary>
     /// <param name="limit">The limit, at least 1.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than 1.</exception>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
     IMachineBuilder<TState, TTrigger> InvokedRunLimit(int limit) =>
         throw new NotSupportedException($"{GetType().Name} does not support InvokedRunLimit.");
 
@@ -199,7 +197,6 @@ public interface IDifferentialBuilder<TState, TTrigger>
     /// <c>done</c> outcome trigger (<c>&lt;State&gt;.done</c>), from a typed record. The harness also fires every
     /// outcome trigger with no input.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
     IDifferentialBuilder<TState, TTrigger> OutcomeSample<TOutput>(
         TState invokingState,
         TOutput output
@@ -254,7 +251,6 @@ public interface IStateBuilder<TState, TTrigger>
     /// Builds the run's input from the context the state was entered with. It runs on the server only: the IR
     /// does not carry it, and the TypeScript twin never starts a train.
     /// </param>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
     IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(
         Func<JsonObject, TInput> input
     )
@@ -393,7 +389,6 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     /// <inheritdoc/>
     public IStateBuilder<TState, TTrigger> In(TState state) => new StateBuilder(this, state);
 
-#pragma warning disable TRAXEXP002 // The experimental feature's own implementation.
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> SystemOwned()
     {
@@ -408,7 +403,6 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         _invokedRunLimit = limit;
         return this;
     }
-#pragma warning restore TRAXEXP002
 
     /// <inheritdoc/>
     public IMachineBuilder<TState, TTrigger> CustomGuard(
@@ -799,7 +793,6 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         public ITransitionBuilder<TState, TTrigger> On(TTrigger trigger) =>
             new TransitionBuilder(owner, this, state, trigger);
 
-#pragma warning disable TRAXEXP002 // The experimental feature's own implementation.
         public IInvokeBuilder<TState, TTrigger> Invokes<TTrain, TInput, TOutput>(
             Func<JsonObject, TInput> input
         )
@@ -816,7 +809,6 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             owner._invokes.Add(draft);
             return new InvokeBuilder(owner, this, draft);
         }
-#pragma warning restore TRAXEXP002
     }
 
     // One Invokes as declared, before Build checks it.
@@ -833,7 +825,6 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         public List<OutcomeEdge<TState>> Cancelled { get; } = [];
     }
 
-#pragma warning disable TRAXEXP002 // The experimental feature's own implementation.
     private sealed class InvokeBuilder(
         MachineBuilder<TState, TTrigger> owner,
         IStateBuilder<TState, TTrigger> state,
@@ -904,7 +895,6 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
             where TTrain : Trax.Effect.Services.ServiceTrain.IServiceTrain<TInput, TOutput> =>
             state.Invokes<TTrain, TInput, TOutput>(input);
     }
-#pragma warning restore TRAXEXP002
 
     private sealed class TransitionBuilder(
         MachineBuilder<TState, TTrigger> owner,

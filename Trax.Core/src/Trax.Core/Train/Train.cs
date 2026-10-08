@@ -359,11 +359,8 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// Stores the state in Memory so a later run of the same input can resume here. See
     /// <see cref="Monad{TInput, TReturn}.Checkpoint{TState}"/>.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Checkpoint)]
     protected MonadTask<TInput, TReturn> Checkpoint<TState>() =>
-#pragma warning disable TRAXEXP003 // The experimental feature's own entry point.
         Root("Checkpoint", true).Checkpoint<TState>();
-#pragma warning restore TRAXEXP003
 
     /// <summary>
     /// Ends a chain that declares no junctions, taking the train's return value from Memory.

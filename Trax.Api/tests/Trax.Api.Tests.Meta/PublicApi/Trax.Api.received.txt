@@ -540,7 +540,6 @@ namespace Trax.Api.DTOs
     public sealed class RunGraph : System.IEquatable<Trax.Api.DTOs.RunGraph>
     {
         public RunGraph(long MetadataId, string Train, bool HasGraph, string? Hash, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> UnmatchedSteps, bool MoreSteps) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public bool CanResume { get; init; }
         public bool HasGraph { get; init; }
         public string? Hash { get; init; }
@@ -553,9 +552,7 @@ namespace Trax.Api.DTOs
     public sealed class RunGraphNode : System.IEquatable<Trax.Api.DTOs.RunGraphNode>
     {
         public RunGraphNode(string Id, Trax.Core.Monad.ChainStepKind Kind, string? Junction, string? In, string? Out, bool Opaque, Trax.Api.DTOs.RunNodeState State, bool Replayed, string? TrackTaken, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> Steps, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphTrack> Tracks) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public bool CanResume { get; init; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public bool Checkpointed { get; init; }
         public string Id { get; init; }
         public string? In { get; init; }
@@ -588,7 +585,6 @@ namespace Trax.Api.DTOs
         Skipped = 5,
         NotRecorded = 6,
         Withheld = 7,
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         Restored = 8,
     }
     public class RunTrainResponse : System.IEquatable<Trax.Api.DTOs.RunTrainResponse>
@@ -781,18 +777,12 @@ namespace Trax.Api.Services.Runs
     {
         public const int MaxSteps = 500;
         public static Trax.Api.DTOs.RunGraph Match(long metadataId, string train, Trax.Core.Monad.ChainGraph? graph, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> steps, bool moreSteps = false) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public static Trax.Api.DTOs.RunGraph Match(long metadataId, string train, Trax.Core.Monad.ChainGraph? graph, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> steps, bool moreSteps, Trax.Effect.Services.Checkpoints.ResumeChecks? resumes, bool resumable) { }
         public static System.Threading.Tasks.Task<Trax.Api.DTOs.RunGraph?> ReadAsync(Trax.Effect.Data.Services.DataContext.IDataContext context, Trax.Mediator.Services.ChainVerification.ITrainChainGraphs graphs, long metadataId, System.Threading.CancellationToken cancellationToken) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public static System.Threading.Tasks.Task<Trax.Api.DTOs.RunGraph?> ReadAsync(Trax.Effect.Data.Services.DataContext.IDataContext context, Trax.Mediator.Services.ChainVerification.ITrainChainGraphs graphs, Trax.Effect.Services.Checkpoints.IRunResumes? resumes, long metadataId, System.Threading.CancellationToken cancellationToken) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public static System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeChecks?> ReadResumesAsync(Trax.Effect.Services.Checkpoints.IRunResumes? resumes, Trax.Mediator.Services.ChainVerification.ITrainChainGraphs graphs, long metadataId, string train, Trax.Core.Monad.ChainGraph? graph, System.Threading.CancellationToken cancellationToken) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public static bool ReadsResumes(Trax.Effect.Enums.TrainState state, long? resumeFrom) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public static bool Resumable(Trax.Effect.Models.Metadata.Metadata run) { }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public static bool Resumable(Trax.Effect.Enums.TrainState state, string? invokingMachine) { }
     }
 }

@@ -5,8 +5,6 @@
     <Nullable>enable</Nullable>
     <Description>PostgreSQL data provider for Trax.Effect. Adds UsePostgres(connectionString) to the AddEffects builder, which persists train runs to Postgres and applies the Trax .NET schema migrations on startup. The production choice.</Description>
     <AssemblyName>Trax.Effect.Data.Postgres</AssemblyName>
-    <!-- TRAXEXP002: the provider registers the notice that wakes a state machine's outcome reconciler. -->
-    <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

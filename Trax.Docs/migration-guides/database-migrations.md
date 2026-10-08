@@ -358,8 +358,7 @@ runs that resume another. On Postgres both are built `CONCURRENTLY`, so enqueue,
 writes carry on while they build.
 
 The columns are new and nothing is backfilled. A host on the previous version never reads or writes
-them, so a rolling deploy is safe. The model, `IDataContext.Checkpoints`, and the new properties are
-experimental (`TRAXEXP003`).
+them, so a rolling deploy is safe.
 
 ## Failure search (066)
 

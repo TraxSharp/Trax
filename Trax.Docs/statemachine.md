@@ -19,7 +19,7 @@ produce an unhandled exception.
 To author a machine and wire it into a host, start with [Authoring a machine](/docs/statemachine/authoring).
 To author it as data (guards and reducers the engine can export to an IR and generate the frontend from), see
 [Declarative authoring](/docs/statemachine/declarative-authoring). For a state that runs a train and routes its
-outcome (experimental), see [Invoking a train](/docs/statemachine/invoking-trains).
+outcome, see [Invoking a train](/docs/statemachine/invoking-trains).
 
 ## The two-document model
 

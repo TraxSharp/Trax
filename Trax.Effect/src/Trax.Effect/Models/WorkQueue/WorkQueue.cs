@@ -238,7 +238,6 @@ public class WorkQueue : IModel
     /// operator's resume. One queued entry at a time may resume a given run.
     /// </summary>
     [Column("resume_from")]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public long? ResumeFrom { get; set; }
 
     /// <summary>
@@ -246,7 +245,6 @@ public class WorkQueue : IModel
     /// <see cref="ResumeFrom"/>. Carried to the run's metadata when it is dispatched.
     /// </summary>
     [Column("resume_at")]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public string? ResumeAt { get; set; }
 
     /// <summary>
@@ -262,19 +260,16 @@ public class WorkQueue : IModel
     /// </summary>
     [Column("invoking_machine")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public string? InvokingMachine { get; private set; }
 
     /// <summary>The id of the instance whose invoking state queued this entry; null unless <see cref="InvokingMachine"/> is set.</summary>
     [Column("invoking_instance_id")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public Guid? InvokingInstanceId { get; private set; }
 
     /// <summary>Whether a user or the system owns the instance that queued this entry; null unless <see cref="InvokingMachine"/> is set.</summary>
     [Column("invoking_owner_kind")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
 
     #endregion

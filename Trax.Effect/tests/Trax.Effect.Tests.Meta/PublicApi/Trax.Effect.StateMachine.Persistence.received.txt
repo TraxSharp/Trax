@@ -131,17 +131,14 @@ namespace Trax.Effect.StateMachine.Persistence
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken = default);
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.ClaimResult> TryClaim(string effectKey, System.TimeSpan lease, string? contentFingerprint, System.Threading.CancellationToken cancellationToken = default);
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public interface IInvokedRunCancellation
     {
         System.Threading.Tasks.Task Cancel(string invokeToken, System.Threading.CancellationToken cancellationToken = default);
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public interface IInvokedRunOutcomes
     {
         System.Threading.Tasks.Task<string?> Deliver(string invokeToken, System.Threading.CancellationToken cancellationToken = default);
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public interface IInvokedTrainLauncher
     {
         System.Threading.Tasks.Task Launch(Trax.Effect.StateMachine.Persistence.InvokedTrainLaunch launch, Trax.Effect.Data.Services.DataContext.IDataContext context, System.Threading.CancellationToken cancellationToken = default);
@@ -158,7 +155,6 @@ namespace Trax.Effect.StateMachine.Persistence
         string ExportIr();
         System.Collections.Generic.IReadOnlyList<string> SelfCheck();
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public interface IMachineInstances
     {
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance<TMachine>(Trax.Effect.StateMachine.Persistence.MachineKey key, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default)
@@ -209,7 +205,6 @@ namespace Trax.Effect.StateMachine.Persistence
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.EffectOutcome> RunOnce(string effectKey, string? contentFingerprint, System.Func<System.Threading.Tasks.Task<string>> effect, System.TimeSpan? lease = default, System.Threading.CancellationToken cancellationToken = default) { }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public sealed class InvokedTrainDeclaration : System.IEquatable<Trax.Effect.StateMachine.Persistence.InvokedTrainDeclaration>
     {
         public InvokedTrainDeclaration(string Machine, string State, System.Type TrainType, System.Type InputType, System.Type OutputType, bool SystemOwned) { }
@@ -220,7 +215,6 @@ namespace Trax.Effect.StateMachine.Persistence
         public bool SystemOwned { get; init; }
         public System.Type TrainType { get; init; }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public sealed class InvokedTrainLaunch : System.IEquatable<Trax.Effect.StateMachine.Persistence.InvokedTrainLaunch>
     {
         public InvokedTrainLaunch(System.Type TrainType, object Input, string ExternalId, Trax.Effect.Models.WorkQueue.DTOs.InvokedBy InvokedBy) { }
@@ -248,7 +242,6 @@ namespace Trax.Effect.StateMachine.Persistence
             public NotFound() { }
         }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public sealed class MachineInstance : System.IEquatable<Trax.Effect.StateMachine.Persistence.MachineInstance>
     {
         public MachineInstance(System.Guid Id, string Machine, string State, bool Created) { }
@@ -257,14 +250,12 @@ namespace Trax.Effect.StateMachine.Persistence
         public string Machine { get; init; }
         public string State { get; init; }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public static class MachineInstanceId
     {
         public static readonly System.Guid Root;
         public static System.Guid For(string machine, Trax.Effect.StateMachine.Persistence.MachineKey key) { }
         public static System.Guid Namespace(string machine) { }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public sealed class MachineKey : System.IEquatable<Trax.Effect.StateMachine.Persistence.MachineKey>
     {
         public System.Collections.Generic.IReadOnlyList<string> Parts { get; }
@@ -317,7 +308,6 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public StateMachineOptions() { }
         public System.TimeSpan? DraftTtl { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         public System.TimeSpan InvokeOutcomeSweepInterval { get; set; }
     }
     public static class StateMachinesBuilderExtensions

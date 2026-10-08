@@ -349,13 +349,12 @@ public partial class OperationsMutations
     /// new run replays the execution's decisions. Fails without queueing, with the reason, when
     /// the execution does not exist, is not failed or cancelled, was started by a state machine's
     /// step, has a saved input a requeue would refuse, already has a queued resume, or when no
-    /// checkpoint it wrote lets it resume at that step. Experimental (<c>TRAXEXP003</c>).
+    /// checkpoint it wrote lets it resume at that step.
     /// </summary>
     /// <param name="id">The execution (metadata) id.</param>
     /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the request.</param>
     /// <param name="from">The node id of the step to resume at, or null for after the latest checkpoint.</param>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public async Task<OperationResponse> ResumeExecution(
         long id,
         [Service] IOperationsService operationsService,

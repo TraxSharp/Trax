@@ -6,9 +6,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Mediator.Tests.StateMachine.Integration</RootNamespace>
-    <!-- TRAXEXP001: a refused train declares a Parallel step. TRAXEXP002: these tests declare machines that
-         invoke trains, start system-owned instances, and wrap the launcher. -->
-    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002</NoWarn>
+    <!-- TRAXEXP001: a refused train declares a Parallel step. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

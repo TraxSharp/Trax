@@ -131,8 +131,7 @@ internal sealed class RunGraphType : ObjectType<RunGraph>
                 "True when resumeExecution without from can resume the run after its latest "
                     + "checkpoint: it failed or was cancelled, no state machine's step started it, "
                     + "and the resume check over the declared chain allows it. The mutation can "
-                    + "still refuse the run for its saved input or a resume already queued. "
-                    + "Experimental (TRAXEXP003)."
+                    + "still refuse the run for its saved input or a resume already queued."
             );
     }
 }
@@ -166,13 +165,13 @@ internal sealed class RunGraphNodeType : ObjectType<RunGraphNode>
             .Description(
                 "True when resumeExecution(id, from) can resume the run at this node: the run "
                     + "failed or was cancelled and a checkpoint before the node lets it run on "
-                    + "what that checkpoint restores. Experimental (TRAXEXP003)."
+                    + "what that checkpoint restores."
             );
         descriptor
             .Field(n => n.Checkpointed)
             .Description(
                 "True when a checkpoint the run can resume from is stored at this node. Only that "
-                    + "it exists: what it holds is never returned. Experimental (TRAXEXP003)."
+                    + "it exists: what it holds is never returned."
             );
         descriptor.Field(n => n.Replayed);
         descriptor

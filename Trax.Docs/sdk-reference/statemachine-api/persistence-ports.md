@@ -84,7 +84,7 @@ never through `ISnapshotStore`. `invoke_token` is unique where set.
 ### Draft expiry and live runs
 
 The draft TTL applies to user drafts only: a system instance never expires. Deleting a draft that holds a live
-`invoke_token` cancels its run first, through `IInvokedRunCancellation` (experimental, `TRAXEXP002`), and a cancel
+`invoke_token` cancels its run first, through `IInvokedRunCancellation`, and a cancel
 that throws keeps the draft. `AddStateMachines` registers the implementation, which cancels the way the operations
 surface does: a work queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set,
 which it reads at its next junction on whichever host runs it. The delete that follows is conditional on the token
@@ -92,7 +92,7 @@ that was cancelled, so a draft that entered an invoking state again in between k
 
 ### IInvokedRunOutcomes
 
-Experimental (`TRAXEXP002`). Applies the outcome of an ended invoked run to the instance waiting on it, now, through
+Applies the outcome of an ended invoked run to the instance waiting on it, now, through
 the delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
 outcome is applied once however many callers deliver it. `AddStateMachines` registers it; the operations service calls
 it after an operator's
@@ -110,7 +110,7 @@ public interface IInvokedRunOutcomes
 
 ### IInvokedTrainLauncher
 
-Experimental (`TRAXEXP002`). The port through which a state that
+The port through which a state that
 [invokes a train](/docs/statemachine/invoking-trains) queues its run. Trax.Mediator implements it and
 `AddMediator` registers it; a host does not implement or call it.
 

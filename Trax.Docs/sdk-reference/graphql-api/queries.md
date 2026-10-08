@@ -980,7 +980,7 @@ the run there, and `canResume` on the graph when it can resume after the latest 
 machine's step started. The mutation can still refuse a run the graph offers, for its saved input or
 a resume already queued, with the reason. `checkpointed` is true on a node holding a checkpoint the
 run can resume from. The graph says only that a checkpoint exists and where: what it holds, and the
-tracks stored with it, are on no operator surface. Experimental (`TRAXEXP003`).
+tracks stored with it, are on no operator surface.
 
 It answers to the operations gate, as `junctionRuns` does.
 

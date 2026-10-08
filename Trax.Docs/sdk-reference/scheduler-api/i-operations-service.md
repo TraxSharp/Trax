@@ -22,7 +22,6 @@ public interface IOperationsService
     Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, CancellationToken ct);
-    [Experimental("TRAXEXP003")]
     Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
     Task<OperationResult> CancelExecutionsAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntriesAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
@@ -156,7 +155,6 @@ on from a checkpoint instead, resume it.
 ### ResumeExecutionAsync
 
 ```csharp
-[Experimental("TRAXEXP003")]
 Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
 ```
 

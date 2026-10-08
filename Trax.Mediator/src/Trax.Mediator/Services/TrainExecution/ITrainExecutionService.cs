@@ -145,11 +145,9 @@ public sealed record QueueTrainOptions
     /// checkpoint (or to <see cref="ResumeAt"/>) instead of running every step again. See
     /// Trax.Docs/adr/0047.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public long? ResumeFrom { get; init; }
 
     /// <summary>The step the new run resumes at, or null for after the latest checkpoint.</summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public string? ResumeAt { get; init; }
 }
 

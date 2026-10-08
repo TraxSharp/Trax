@@ -149,7 +149,6 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// Gets or sets the DbSet for the states trains stored at a declared <c>Checkpoint&lt;TState&gt;()</c>,
     /// from which a later run resumes.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; set; }
 
     #endregion

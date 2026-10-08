@@ -351,7 +351,6 @@ public class Metadata : IModel, IDisposable
     [Column("resume_from")]
     [JsonPropertyName("resume_from")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public long? ResumeFrom { get; set; }
 
     /// <summary>
@@ -361,7 +360,6 @@ public class Metadata : IModel, IDisposable
     [Column("resume_at")]
     [JsonPropertyName("resume_at")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public string? ResumeAt { get; set; }
 
     /// <summary>
@@ -372,21 +370,18 @@ public class Metadata : IModel, IDisposable
     [Column("invoking_machine")]
     [JsonPropertyName("invoking_machine")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public string? InvokingMachine { get; set; }
 
     /// <summary>The instance whose invoking state queued this run; null unless <see cref="InvokingMachine"/> is set.</summary>
     [Column("invoking_instance_id")]
     [JsonPropertyName("invoking_instance_id")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public Guid? InvokingInstanceId { get; set; }
 
     /// <summary>Whether a user or the system owns the instance that queued this run; null unless <see cref="InvokingMachine"/> is set.</summary>
     [Column("invoking_owner_kind")]
     [JsonPropertyName("invoking_owner_kind")]
     [JsonInclude]
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public SnapshotOwnerKind? InvokingOwnerKind { get; set; }
 
     /// <summary>

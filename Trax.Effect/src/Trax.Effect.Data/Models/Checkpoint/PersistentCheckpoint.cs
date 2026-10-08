@@ -8,7 +8,6 @@ namespace Trax.Effect.Data.Models.Checkpoint;
 /// Provides EF Core configuration for <see cref="Trax.Effect.Models.Checkpoint.Checkpoint"/>,
 /// the <c>trax.checkpoint</c> table.
 /// </summary>
-[System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
 public class PersistentCheckpoint : BaseModel
 {
     internal static void OnModelCreating(ModelBuilder modelBuilder)

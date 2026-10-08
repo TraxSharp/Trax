@@ -18,7 +18,6 @@ namespace Trax.Effect.Data.Services.InvokedRunListener;
 /// <para>Infrastructure for <c>Trax.Effect.StateMachine.Persistence</c>; a host does not implement or call it.</para>
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Never)]
-[Experimental("TRAXEXP002")]
 public interface IInvokedRunListener
 {
     /// <summary>
@@ -30,7 +29,6 @@ public interface IInvokedRunListener
 
 /// <summary>One listening session opened by <see cref="IInvokedRunListener.SubscribeAsync"/>.</summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-[Experimental("TRAXEXP002")]
 public interface IInvokedRunSubscription : IAsyncDisposable
 {
     /// <summary>

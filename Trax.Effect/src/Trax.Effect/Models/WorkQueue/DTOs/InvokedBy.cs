@@ -11,5 +11,4 @@ namespace Trax.Effect.Models.WorkQueue.DTOs;
 /// <param name="Machine">The machine's id.</param>
 /// <param name="InstanceId">The draft or system instance id.</param>
 /// <param name="OwnerKind">Whether a user or the system owns the instance.</param>
-[Experimental("TRAXEXP002")]
 public sealed record InvokedBy(string Machine, Guid InstanceId, SnapshotOwnerKind OwnerKind);

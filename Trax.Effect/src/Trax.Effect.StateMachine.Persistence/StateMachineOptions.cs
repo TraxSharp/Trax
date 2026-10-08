@@ -22,7 +22,6 @@ public sealed class StateMachineOptions
     /// notification wakes every host's reconciler sooner. It decides how long an outcome waits when both of those
     /// miss it (a crash after the run, a run the reaper failed, a cancel before dispatch). Must be positive.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Invokes)]
     public TimeSpan InvokeOutcomeSweepInterval
     {
         get;

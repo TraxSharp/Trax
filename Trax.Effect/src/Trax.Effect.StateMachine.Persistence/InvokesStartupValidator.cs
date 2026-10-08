@@ -23,7 +23,6 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <c>StartAsync</c>, so a refused host never starts a dispatcher. Something that starts hosted services itself and
 /// calls only <c>StartAsync</c> gets the check from there.
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokesStartupValidator(
     IEnumerable<IMachine> machines,
     IServiceScopeFactory scopeFactory

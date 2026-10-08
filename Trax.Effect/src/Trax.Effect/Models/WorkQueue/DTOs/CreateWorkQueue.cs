@@ -45,11 +45,9 @@ public class CreateWorkQueue
     public long? ReplayDecisionsOf { get; set; }
 
     /// <summary>The failed run the queued run resumes from a checkpoint, if any.</summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public long? ResumeFrom { get; set; }
 
     /// <summary>The step the queued run resumes at, or null for after its source's latest checkpoint.</summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public string? ResumeAt { get; set; }
 
     /// <summary>
@@ -83,6 +81,5 @@ public class CreateWorkQueue
     /// The state-machine instance whose invoking state queues this entry, or null. Only the mediator's
     /// invoked-train enqueue sets it.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public InvokedBy? InvokedBy { get; set; }
 }

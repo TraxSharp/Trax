@@ -94,15 +94,8 @@ internal static class ExperimentalIds
     /// <summary><c>Parallel</c>: branches that run side by side within one run.</summary>
     public const string Parallel = "TRAXEXP001";
 
-    /// <summary>
-    /// <c>Invokes</c> and <c>IMachineInstances.Start</c>: a state-machine state that runs a train, and the
-    /// system-owned instances such states run in. The feature lives in Trax.Effect.StateMachine, which does not
-    /// see this class, so it declares the same id beside its own code; the two must stay equal.
-    /// </summary>
-    public const string Invokes = "TRAXEXP002";
-
-    /// <summary><c>Checkpoint</c>: a stored state a later run of the same input resumes after.</summary>
-    public const string Checkpoint = "TRAXEXP003";
+    // TRAXEXP002 (Invokes, Trax.Docs/adr/0046) and TRAXEXP003 (Checkpoint, Trax.Docs/adr/0047) were
+    // lifted once their rows of the interaction matrix were complete. Ids are never reused.
 }
 
 /// <summary>One declared branch: its name and its chain.</summary>

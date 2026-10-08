@@ -10,7 +10,6 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// each driven by the trains its states invoke. They are created only from code (a train, or startup); no GraphQL
 /// operation creates, reads or advances one, and no user's request reaches one, even under the same id.
 /// </summary>
-[Experimental(ExperimentalIds.Invokes)]
 public interface IMachineInstances
 {
     /// <summary>
@@ -84,7 +83,6 @@ public interface IMachineInstances
 /// <param name="Machine">The machine's name.</param>
 /// <param name="State">The state the instance is in now.</param>
 /// <param name="Created">True when this call created the instance, false when it already existed.</param>
-[Experimental(ExperimentalIds.Invokes)]
 public sealed record MachineInstance(Guid Id, string Machine, string State, bool Created);
 
 /// <summary>
@@ -92,7 +90,6 @@ public sealed record MachineInstance(Guid Id, string Machine, string State, bool
 /// equal when their parts are equal in order. Parts are encoded so no two different keys share an encoding:
 /// <c>("a|b", "c")</c> and <c>("a", "b|c")</c> are different keys with different ids.
 /// </summary>
-[Experimental(ExperimentalIds.Invokes)]
 public sealed class MachineKey : IEquatable<MachineKey>
 {
     // Strict: a string with an unpaired surrogate has no UTF-8 form, and the lenient encoder would replace it
@@ -193,7 +190,6 @@ public sealed class MachineKey : IEquatable<MachineKey>
 /// changes if the machine is renamed, as every other draft of the machine does. These ids are fixed: changing
 /// <see cref="Root"/> or the encoding would orphan every system instance already stored.
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 public static class MachineInstanceId
 {
     /// <summary>Trax's root namespace for machine instance ids. Fixed forever.</summary>
@@ -237,7 +233,6 @@ public static class MachineInstanceId
 /// implementation, which cancels as the operations surface does: a still-queued work queue entry is marked
 /// cancelled, and a dispatched run has its cancel flag set, which it reads at its next junction on any host.
 /// </summary>
-[Experimental(ExperimentalIds.Invokes)]
 public interface IInvokedRunCancellation
 {
     /// <summary>
@@ -326,7 +321,6 @@ internal sealed record ChainedOutcome(string State, string Outcome, string Targe
 internal sealed record InvokeRuntime(IMachineInstanceStore Store, InvokeOutbox Outbox);
 
 /// <summary>The default <see cref="IMachineInstances"/>, registered scoped by <c>AddStateMachines</c>.</summary>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class MachineInstances(
     IEnumerable<IMachine> machines,
     IMachineInstanceStore store,

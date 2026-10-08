@@ -75,7 +75,6 @@ internal sealed record RestoredCheckpoint(
     IReadOnlyList<object> Tracks
 );
 
-#pragma warning disable TRAXEXP003 // The implementation of the experimental feature itself.
 public partial class Monad<TInput, TReturn>
 {
     /// <summary>
@@ -97,7 +96,6 @@ public partial class Monad<TInput, TReturn>
     /// whose members are data, which the chain refuses otherwise when it is read. A run with no
     /// store (a plain <c>Train</c>) takes no checkpoint.</para>
     /// </remarks>
-    [Experimental(ExperimentalIds.Checkpoint)]
     public MonadTask<TInput, TReturn> Checkpoint<TState>() =>
         Recorder is not null ? RecordCheckpoint<TState>() : new(CheckpointAsync<TState>());
 
@@ -331,4 +329,3 @@ public partial class Monad<TInput, TReturn>
 
     #endregion
 }
-#pragma warning restore TRAXEXP003

@@ -56,7 +56,7 @@ train whose output is a tuple.
 `InteractionMatrixTests` checks this table as well. Core cannot see the state machine, so the
 features that need a row are listed in the test (`MachineFeatures`): adding a machine feature
 means adding it there, and the test then fails until the feature has a row here with the step
-kinds' columns. `Invokes` stays experimental (`TRAXEXP002`) until its row is complete
+kinds' columns. `Invokes` stayed experimental (`TRAXEXP002`) until its row was complete
 (`Trax.Docs/adr/0046`).
 
 | Machine feature | Decision replay | Ask afresh | ShortCircuit | Requeue | Dead letters | Cross-host cancel | Dashboard cancel | Job timeout | Junction events | Progress | Sensitive and withheld | AddServices before the fork | Same junction twice | Tuple outputs | Same Switch enum twice | Remote workers | Retry backoff |

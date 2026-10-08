@@ -52,7 +52,6 @@ internal abstract record InvokeWrite
 /// <para>On Postgres a failed statement aborts the transaction, a unique violation on the invoke token included, so
 /// every lost write is followed by a rollback and reported as a conflict; nothing is written after it.</para>
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokeOutbox(
     IDataContext context,
     IMachineInstanceStore store,

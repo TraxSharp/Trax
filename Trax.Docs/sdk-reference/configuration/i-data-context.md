@@ -35,7 +35,7 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable  // IEffectPro
     DbSet<JunctionRun> JunctionRuns { get; }
     DbSet<SnapshotDraft> SnapshotDrafts { get; }
     DbSet<EffectClaim> EffectClaims { get; }
-    DbSet<Checkpoint> Checkpoints { get; }  // experimental, TRAXEXP003
+    DbSet<Checkpoint> Checkpoints { get; }
 
     int Changes { get; set; }
 
@@ -78,7 +78,7 @@ From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveCh
 | `JunctionRuns` | `trax.junction_run` | Each step of a run, written by [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events). Read one run's steps in order with `ForRun(metadataId)`. |
 | `SnapshotDrafts` | `trax.snapshot_draft` | State-machine drafts, one per user and draft id |
 | `EffectClaims` | `trax.effect_claim` | Exactly-once state-machine effect intents |
-| `Checkpoints` | `trax.checkpoint` | The state a train declared with `Checkpoint<TState>()`, one row per run and node, from which a later run resumes. Experimental (`TRAXEXP003`). |
+| `Checkpoints` | `trax.checkpoint` | The state a train declared with `Checkpoint<TState>()`, one row per run and node, from which a later run resumes. |
 
 `RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts`, `EffectClaims` and `Checkpoints` have default implementations on the interface, so an implementation written before they existed still loads.
 

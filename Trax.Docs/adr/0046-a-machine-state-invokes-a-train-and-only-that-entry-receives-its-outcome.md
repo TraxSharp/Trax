@@ -16,10 +16,11 @@ the scheduler.
 
 ## Status
 
-**Accepted.** `Invokes` and `IMachineInstances.Start` ship behind `[Experimental("TRAXEXP002")]`, following the
-convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md) set, until
-the `Invokes` row of the interaction matrix's machine-features table (`Trax.Core/docs/interaction-matrix.md`) is complete. A
-machine feature is not a chain step kind, so it gets a table of its own with the same columns.
+**Accepted.** `Invokes` and `IMachineInstances.Start` shipped behind `[Experimental("TRAXEXP002")]`, following the
+convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md) set,
+until the `Invokes` row of the interaction matrix's machine-features table (`Trax.Core/docs/interaction-matrix.md`)
+was complete; it is complete and the attribute is gone. A machine feature is not a chain step kind, so it gets a
+table of its own with the same columns.
 
 ## Why this is written down
 
@@ -271,6 +272,8 @@ rather than data. Both are conventions the docs state, and the at-least-once gua
 follow the first.
 
 ## Changelog
+
+- **2026-10-08**: `[Experimental("TRAXEXP002")]` lifted: the `Invokes` row of the interaction matrix is complete.
 
 - **2026-10-08**: `InvokesModelTests` lives in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`, on Postgres
   and SQLite, beside the delivery tests: its operations need the dispatcher, the job runner, the reaper and the

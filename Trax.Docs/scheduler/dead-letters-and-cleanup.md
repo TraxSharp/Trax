@@ -384,8 +384,7 @@ requeue's message says it asked afresh.
 
 ## Retries resume from a checkpoint
 
-A train whose chain declares a checkpoint (`Checkpoint<TState>()`, experimental under
-`TRAXEXP003`) stores that state when a run reaches it. A manifest's retry and a requeue of its dead
+A train whose chain declares a checkpoint (`Checkpoint<TState>()`) stores that state when a run reaches it. A manifest's retry and a requeue of its dead
 letter then resume after the failed run's latest checkpoint instead of running every step again:
 the new entry names the failed run in `ResumeFrom`, and the run skips every step before the
 checkpoint, including the writes it already committed. Declaring the checkpoint is the opt-in; it

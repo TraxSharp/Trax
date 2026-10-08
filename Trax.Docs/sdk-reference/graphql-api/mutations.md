@@ -657,7 +657,7 @@ resumes at that step, named by its node id as [`runGraph`](/docs/sdk-reference/g
 gives it; without it, after the execution's latest checkpoint. It is the GraphQL counterpart of the
 dashboard's **Resume** and **Resume from here** buttons. All three call
 [`IOperationsService.ResumeExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#resumeexecutionasync),
-so they refuse the same runs with the same messages. Experimental (`TRAXEXP003`).
+so they refuse the same runs with the same messages.
 
 A resume is a requeue in every check but where the run starts. It enqueues through the same path
 as [`requeueExecution`](#requeueexecution), so a caller past the operations gate who may not run the

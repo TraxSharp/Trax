@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Invoking a train
-description: "A state that runs a train with the experimental Invokes: where each outcome goes, retry by re-entry, idempotent junctions, and pointers not data."
+description: "A state that runs a train with Invokes: where each outcome goes, retry by re-entry, idempotent junctions, and pointers not data."
 parent: State Machines
 nav_order: 4
 ---
@@ -12,14 +12,6 @@ A state can run a train. Entering the state queues one run; the run's outcome co
 that entry of the state can apply. The state is a durable checkpoint between stages of long-running work (fetch,
 normalise, resolve, embed), so a stage that fails is retried by entering its state again, not by rerunning
 everything before it.
-
-`Invokes` is experimental. Using it reports the diagnostic `TRAXEXP002` as an error; opt in by suppressing it in
-the project that declares the machine:
-
-```xml
-<!-- TRAXEXP002: this project declares states that invoke a train, the experimental Invokes. -->
-<NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
-```
 
 ## Declare it
 

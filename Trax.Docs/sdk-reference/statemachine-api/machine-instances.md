@@ -9,12 +9,6 @@ nav_order: 13
 
 # Machine instances
 
-**Experimental.** `IMachineInstances` and the types beside it ship under the diagnostic `TRAXEXP002`, which
-reports as an error until you opt in:
-
-```xml
-<NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
-```
 
 Most drafts belong to a user. Some work needs instances no user owns: one per partition of a source, say, each
 moving through its stages on its own. `IMachineInstances.Start` creates those, from a train or at startup.

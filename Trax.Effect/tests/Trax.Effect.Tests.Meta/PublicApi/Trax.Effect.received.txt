@@ -355,7 +355,6 @@ namespace Trax.Effect.Models.BackgroundJob.DTOs
 }
 namespace Trax.Effect.Models.Checkpoint
 {
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public class Checkpoint
     {
         public Checkpoint() { }
@@ -772,15 +771,12 @@ namespace Trax.Effect.Models.Metadata.DTOs
         public CreateMetadata() { }
         public required string ExternalId { get; set; }
         public required object? Input { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
         public long? ManifestId { get; set; }
         public required string Name { get; set; }
         public long? ParentId { get; set; }
         public long? ReplayDecisionsOf { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public string? ResumeAt { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public long? ResumeFrom { get; set; }
     }
 }
@@ -829,17 +825,14 @@ namespace Trax.Effect.Models.Metadata
         [System.Text.Json.Serialization.JsonIgnore]
         public string? Input { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("invoking_instance_id")]
         public System.Guid? InvokingInstanceId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("invoking_machine")]
         public string? InvokingMachine { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("invoking_owner_kind")]
         public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; set; }
@@ -870,12 +863,10 @@ namespace Trax.Effect.Models.Metadata
         [System.Text.Json.Serialization.JsonPropertyName("replay_decisions_of")]
         public long? ReplayDecisionsOf { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("resume_at")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("resume_at")]
         public string? ResumeAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("resume_from")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("resume_from")]
         public long? ResumeFrom { get; set; }
@@ -1106,20 +1097,16 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public bool ExplicitTrigger { get; set; }
         public string? Input { get; set; }
         public string? InputTypeName { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
         public long? ReplayDecisionsOf { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public string? ResumeAt { get; set; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public long? ResumeFrom { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
         public string? SubjectKey { get; set; }
         public required string TrainName { get; set; }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public sealed class InvokedBy : System.IEquatable<Trax.Effect.Models.WorkQueue.DTOs.InvokedBy>
     {
         public InvokedBy(string Machine, System.Guid InstanceId, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind) { }
@@ -1157,15 +1144,12 @@ namespace Trax.Effect.Models.WorkQueue
         [System.ComponentModel.DataAnnotations.Schema.Column("input_type_name")]
         public string? InputTypeName { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         [System.Text.Json.Serialization.JsonInclude]
         public System.Guid? InvokingInstanceId { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         [System.Text.Json.Serialization.JsonInclude]
         public string? InvokingMachine { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
         [System.Text.Json.Serialization.JsonInclude]
         public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("is_explicit_trigger")]
@@ -1181,10 +1165,8 @@ namespace Trax.Effect.Models.WorkQueue
         [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_of")]
         public long? ReplayDecisionsOf { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("resume_at")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public string? ResumeAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("resume_from")]
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public long? ResumeFrom { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
         public System.DateTime? ScheduledAt { get; set; }
@@ -1243,19 +1225,16 @@ namespace Trax.Effect.Services.ChangeSignal
 }
 namespace Trax.Effect.Services.Checkpoints
 {
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public sealed class CheckpointOptions
     {
         public CheckpointOptions() { }
         public int MaxStateBytes { get; set; }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public interface IRunResumes
     {
         System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeVerdict> Check(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, string? resumeAt, System.Threading.CancellationToken cancellationToken);
         System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeChecks> CheckMany(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, System.Collections.Generic.IReadOnlyCollection<string> points, System.Threading.CancellationToken cancellationToken);
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public sealed class ResumeChecks : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeChecks>
     {
         public ResumeChecks(Trax.Effect.Services.Checkpoints.ResumeVerdict Latest, System.Collections.Generic.IReadOnlyDictionary<string, Trax.Effect.Services.Checkpoints.ResumeVerdict> At, System.Collections.Generic.IReadOnlyCollection<string> Checkpoints, System.Collections.Generic.IReadOnlyCollection<string> Written, System.Collections.Generic.IReadOnlyCollection<string> Restored) { }
@@ -1265,7 +1244,6 @@ namespace Trax.Effect.Services.Checkpoints
         public System.Collections.Generic.IReadOnlyCollection<string> Restored { get; init; }
         public System.Collections.Generic.IReadOnlyCollection<string> Written { get; init; }
     }
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public sealed class ResumeVerdict : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeVerdict>
     {
         public ResumeVerdict(bool CanResume, string? Code, string? Reason, string? Target, string? Checkpoint) { }

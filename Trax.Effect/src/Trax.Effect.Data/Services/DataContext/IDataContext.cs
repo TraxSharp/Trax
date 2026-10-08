@@ -191,7 +191,6 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
     /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints =>
         ((DbContext)this).Set<Effect.Models.Checkpoint.Checkpoint>();
 

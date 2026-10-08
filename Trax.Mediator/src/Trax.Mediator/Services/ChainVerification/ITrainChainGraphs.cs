@@ -33,7 +33,6 @@ public interface ITrainChainGraphs
     /// needs (<c>IRunResumes.Check</c>, Trax.Docs/adr/0047).
     /// </summary>
     /// <remarks>An implementation that predates it answers null, and no run is resumed through it.</remarks>
-    [Experimental("TRAXEXP003")]
     DeclaredTrainChain? FindDeclared(string train) => null;
 }
 
@@ -42,5 +41,4 @@ public interface ITrainChainGraphs
 /// <param name="Chain">Its declared chain.</param>
 /// <param name="Input">Its input type.</param>
 /// <param name="Output">Its output type.</param>
-[Experimental("TRAXEXP003")]
 public sealed record DeclaredTrainChain(Type Train, ChainRecorder Chain, Type Input, Type Output);

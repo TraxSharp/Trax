@@ -15,9 +15,10 @@ before anything runs.
 
 ## Status
 
-**Accepted.** `Checkpoint<TState>()` and the resume operation ship behind `[Experimental("TRAXEXP003")]`, following
-the convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md) set,
-until the `Checkpoint` row of the interaction matrix (`Trax.Core/docs/interaction-matrix.md`) is complete.
+**Accepted.** `Checkpoint<TState>()` and the resume operation shipped behind `[Experimental("TRAXEXP003")]`,
+following the convention [0045](./0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md)
+set, until the `Checkpoint` row of the interaction matrix (`Trax.Core/docs/interaction-matrix.md`) was complete; it
+is complete and the attribute is gone.
 
 The plan put this decision in Trax.Effect, beside effect/0019. It is central because the scheduler's retries, the
 mediator's enqueue, both operator surfaces and the samples each have a part of it that they could break without
@@ -241,6 +242,9 @@ Not covered: nothing can check that the steps after a checkpoint are idempotent,
 other than Trax's own has committed its work when a checkpoint is written. Both are conventions the docs state.
 
 ## Changelog
+
+- **2026-10-08**: `[Experimental("TRAXEXP003")]` lifted: the `Checkpoint` row of the interaction matrix is
+  complete, every cell a test.
 
 - **2026-10-08**: Accepted after review. The user confirmed each contested point: a checkpoint refuses
   uncommitted work rather than committing the run's writes; manifest retries and dead-letter requeues resume

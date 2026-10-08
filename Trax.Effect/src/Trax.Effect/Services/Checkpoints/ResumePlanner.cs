@@ -15,7 +15,6 @@ namespace Trax.Effect.Services.Checkpoints;
 /// <param name="Reason">Why it cannot, phrased for an operator, or null.</param>
 /// <param name="Target">The step the resumed run skips to, or null to run its main chain from the top.</param>
 /// <param name="Checkpoint">The checkpoint its main chain restores, or null.</param>
-[Experimental("TRAXEXP003")]
 public sealed record ResumeVerdict(
     bool CanResume,
     string? Code,
@@ -30,7 +29,6 @@ public sealed record ResumeVerdict(
 /// queue a resumed run; the resumed run asks again when it starts.
 /// </summary>
 /// <remarks>See Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.</remarks>
-[Experimental("TRAXEXP003")]
 public interface IRunResumes
 {
     /// <summary>
@@ -110,7 +108,6 @@ public interface IRunResumes
 /// the checkpoint restored; empty for any other run, or when the resume can no longer be planned
 /// against the running chain.
 /// </param>
-[Experimental("TRAXEXP003")]
 public sealed record ResumeChecks(
     ResumeVerdict Latest,
     IReadOnlyDictionary<string, ResumeVerdict> At,

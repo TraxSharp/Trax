@@ -14,7 +14,6 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// instance moves through its <c>OnCancelled</c> edge in the operator's request when this host can read the
 /// machine. See <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c>.
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 public interface IInvokedRunOutcomes
 {
     /// <summary>
@@ -33,7 +32,6 @@ public interface IInvokedRunOutcomes
 }
 
 /// <summary>The default <see cref="IInvokedRunOutcomes"/>: the reconciler's own delivery of one run.</summary>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokedRunOutcomes(InvokeOutcomeReconciler reconciler) : IInvokedRunOutcomes
 {
     public async Task<string?> Deliver(

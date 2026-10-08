@@ -53,7 +53,7 @@ database), or if `AddMediator` has already run (the mutations would arrive too l
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `DraftTtl` | `TimeSpan?` | `null` | How long a draft survives without activity before the next load discards it and the user starts fresh (a sliding window on the row's last update). The stale row is deleted, so an abandoned or completed draft can't linger or block a new one. `null` never expires a draft. Recommended: 7 to 30 days for a form-style flow. |
-| `InvokeOutcomeSweepInterval` | `TimeSpan` | 5 seconds | Experimental (`TRAXEXP002`). How often this host's outcome reconciler sweeps for [invoked runs](/docs/statemachine/invoking-trains#how-an-outcome-comes-back) that have ended and applies each one's outcome. The run's own host applies an outcome as soon as it is recorded, and on Postgres a notification wakes every host's reconciler sooner, so this bounds only how long an outcome waits when both miss it: a crash after the run, a run the scheduler reaped or cancelled, a cancel before dispatch. Must be positive. |
+| `InvokeOutcomeSweepInterval` | `TimeSpan` | 5 seconds | How often this host's outcome reconciler sweeps for [invoked runs](/docs/statemachine/invoking-trains#how-an-outcome-comes-back) that have ended and applies each one's outcome. The run's own host applies an outcome as soon as it is recorded, and on Postgres a notification wakes every host's reconciler sooner, so this bounds only how long an outcome waits when both miss it: a crash after the run, a run the scheduler reaped or cancelled, a cancel before dispatch. Must be positive. |
 
 ```csharp
 trax.AddStateMachines(

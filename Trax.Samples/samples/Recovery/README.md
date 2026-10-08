@@ -119,8 +119,7 @@ query { operations { runGraph(metadataId: 42) {
 
 ## The state machines
 
-Both live in `Trax.Samples.Recovery/Machines/` and use the experimental `Invokes` and `IMachineInstances`, so the
-project opts in with `TRAXEXP002` beside `TRAXEXP001`. A state that invokes a train queues one run when it is
+Both live in `Trax.Samples.Recovery/Machines/` and use `Invokes` and `IMachineInstances`. A state that invokes a train queues one run when it is
 entered, and only that entry receives the run's outcome.
 
 **`source-partition`, one instance per index partition, owned by the system.** The host seeds 18 canned

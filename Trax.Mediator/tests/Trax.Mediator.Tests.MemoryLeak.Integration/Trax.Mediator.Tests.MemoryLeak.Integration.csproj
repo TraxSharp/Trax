@@ -7,9 +7,6 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Trax.Mediator.Tests.MemoryLeak.Integration</RootNamespace>
-    <!-- TRAXEXP003: the checkpoint startup refusals and the declared-chain lookup a resume is
-         checked against are tested here. -->
-    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -395,8 +395,7 @@ it found. A crash in `Summarize` used to repeat all of it, because a retry runs 
 top. `.Checkpoint<CheckedFindings>()` stores the `CheckedFindings` in Memory when the run reaches it,
 with the track each routing step took, in `trax.checkpoint`. Nothing else is stored. The state must
 come back from JSON as the same value, so `CheckedFindings` and the `Findings` inside it are sealed
-records of data; the host refuses to start otherwise and names the member. `Checkpoint` is
-experimental: the project opts in with `TRAXEXP003` in its `NoWarn`.
+records of data; the host refuses to start otherwise and names the member.
 
 **A manifest's retry now resumes by itself.** When the failed run has a checkpoint, the retry is
 queued to resume after it: it runs `Junctions()` again, skips every step before the checkpoint in
@@ -492,10 +491,10 @@ carries a node id under it, `Parallel#0/<branch>/...`, which is how `operations.
 
 ### The state machines
 
-Two state machines run trains through the [experimental `Invokes`](/docs/statemachine/invoking-trains): a
+Two state machines run trains through the [`Invokes`](/docs/statemachine/invoking-trains): a
 state names a train, entering the state queues one run in the transaction that moves the machine, and only
-that entry of the state receives the run's outcome. The project opts in with
-`<NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002</NoWarn>`, and the host adds `AddStateMachines(...)` before
+that entry of the state receives the run's outcome. The project opts in to the experimental `Parallel` with
+`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`, and the host adds `AddStateMachines(...)` before
 `AddMediator(...)`, `AddJunctionProgress()` so a run can be cancelled from any host, and an
 `ISnapshotPrincipal` that maps each demo key to a user.
 

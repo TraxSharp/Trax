@@ -20,7 +20,6 @@ namespace Trax.Effect.Models.Checkpoint;
 /// A run that completes deletes its own rows, since nothing may resume it. See
 /// <c>Trax.Docs/adr/0047</c>.
 /// </remarks>
-[System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
 public class Checkpoint
 {
     /// <summary>The row's identity.</summary>

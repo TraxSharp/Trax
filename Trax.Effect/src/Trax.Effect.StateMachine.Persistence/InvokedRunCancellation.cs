@@ -18,7 +18,6 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <para>The flag is the cross-host request. Same-host immediate cancellation through the scheduler's cancellation
 /// registry is not reachable from here; the run stops at its next junction instead.</para>
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokedRunCancellation(IDataContext context) : IInvokedRunCancellation
 {
     /// <inheritdoc/>

@@ -119,7 +119,6 @@ internal abstract record InvokeDelivery
 /// run whose records were deleted.</para>
 /// See <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c>.
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokeOutcomeDelivery(
     IDataContext context,
     IMachineInstanceStore store,

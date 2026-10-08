@@ -43,7 +43,6 @@ public sealed record RunGraph(
     /// Resume button and <c>resumeExecution</c> without <c>from</c> act on; the operation can still
     /// refuse the run as a whole, for its saved input or a resume already queued, with the reason.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public bool CanResume { get; init; }
 }
 
@@ -92,7 +91,6 @@ public sealed record RunGraphNode(
     /// before it. The dashboard offers "Resume from here" on such a node, and
     /// <c>resumeExecution(id, from)</c> takes its id.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public bool CanResume { get; init; }
 
     /// <summary>
@@ -100,7 +98,6 @@ public sealed record RunGraphNode(
     /// or for a resumed run, one the run it resumed wrote before the point it resumed at. Only
     /// that it exists: what it holds is never on an operator surface.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public bool Checkpointed { get; init; }
 }
 
@@ -165,6 +162,5 @@ public enum RunNodeState
     /// the run skipped it and recorded no step for it: what the steps before the checkpoint
     /// produced was restored from it instead.
     /// </summary>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     Restored,
 }

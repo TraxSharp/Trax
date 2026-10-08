@@ -247,7 +247,6 @@ public interface IOperationsService
     /// The caller may not queue the train. It propagates, as from <see cref="QueueTrainAsync"/>.
     /// </exception>
     /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     Task<OperationResult> ResumeExecutionAsync(
         long metadataId,
         string? from,

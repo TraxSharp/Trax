@@ -24,7 +24,6 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <para>Any number of hosts may sweep at once. Each delivery is one conditional update on the token, so the
 /// outcome is applied by whichever matches first and is a no-transition for every other.</para>
 /// </remarks>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokeOutcomeReconciler(
     IEnumerable<IMachine> machines,
     IServiceScopeFactory scopes,
@@ -247,7 +246,6 @@ internal sealed class InvokeOutcomeReconciler(
 /// nothing ambient from the run (its log scope, its caller) reaches the delivery. Never throws: the reconciler's
 /// sweep delivers whatever this misses.
 /// </summary>
-[Experimental(ExperimentalIds.Invokes)]
 internal sealed class InvokeOutcomeHookFactory(InvokeOutcomeReconciler reconciler)
     : ITrainLifecycleHookFactory
 {

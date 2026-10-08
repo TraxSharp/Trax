@@ -294,7 +294,6 @@ public partial class OperationsService : IOperationsService
     }
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public async Task<OperationResult> ResumeExecutionAsync(
         long metadataId,
         string? from,

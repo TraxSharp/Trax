@@ -13,14 +13,6 @@ Stores a state the chain declares, so a later run of the same input resumes afte
 running every step before it again. A run that fails at its last junction no longer repeats the
 expensive ones before it.
 
-`Checkpoint` is experimental. Using it reports the diagnostic `TRAXEXP003` as an error; opt in by
-adding it to the project's `NoWarn`:
-
-```xml
-<!-- TRAXEXP003: this project uses the experimental Checkpoint step. -->
-<NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
-```
-
 ## Checkpoint\<TState\>()
 
 ```csharp

@@ -39,7 +39,6 @@ internal sealed record ResumedRun(
 );
 
 /// <summary>How large a checkpoint's state may be.</summary>
-[System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
 public sealed class CheckpointOptions
 {
     /// <summary>

@@ -6,16 +6,6 @@ using System.Text.Json.Serialization;
 namespace Trax.Effect.StateMachine;
 
 /// <summary>
-/// The diagnostic ids this package's experimental features ship under. <c>TRAXEXP002</c> is also declared beside
-/// <c>TRAXEXP001</c> in Trax.Core, which this package cannot see; the two must stay equal.
-/// </summary>
-internal static class ExperimentalIds
-{
-    /// <summary><c>Invokes</c>, and <c>IMachineInstances.Start</c> in the persistence package.</summary>
-    public const string Invokes = "TRAXEXP002";
-}
-
-/// <summary>
 /// Declares where the outcome of a state's invoked train goes. Returned by
 /// <see cref="IStateBuilder{TState,TTrigger}.Invokes{TTrain,TInput,TOutput}"/>; it is also the state's builder,
 /// so the state's other transitions follow it.
@@ -25,7 +15,6 @@ internal static class ExperimentalIds
 /// state missing either of the last two, naming it. Every target joins the machine's reserved states, and no
 /// ordinary transition may enter one.</para>
 /// </summary>
-[Experimental(ExperimentalIds.Invokes)]
 public interface IInvokeBuilder<TState, TTrigger> : IStateBuilder<TState, TTrigger>
     where TState : struct, Enum
     where TTrigger : struct, Enum

@@ -5,8 +5,6 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- TRAXEXP002: a fake machine declares a state that invokes a train, the experimental Invokes. -->
-    <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

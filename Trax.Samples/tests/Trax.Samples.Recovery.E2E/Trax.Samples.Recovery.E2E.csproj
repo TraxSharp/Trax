@@ -6,11 +6,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
-    <!-- TRAXEXP001: opts in to the experimental Parallel step, whose failure the topic map tests read.
-         TRAXEXP002: opts in to the experimental machine instance ids, which the machine tests read.
-         TRAXEXP003: opts in to the experimental ResumeExecutionAsync, which the resume tests call as
-         the dashboard does. -->
-    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002;TRAXEXP003</NoWarn>
+    <!-- TRAXEXP001: opts in to the experimental Parallel step, whose failure the topic map tests read. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

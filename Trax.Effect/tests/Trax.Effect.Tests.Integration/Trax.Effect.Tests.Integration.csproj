@@ -8,8 +8,6 @@
     <IsTestProject>true</IsTestProject>
     <!-- TRAXEXP001: these tests run service trains with the experimental Parallel step. -->
     <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
-    <!-- TRAXEXP003: the checkpoint tests write and read the experimental checkpoint rows, resume links and options. -->
-    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

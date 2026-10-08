@@ -110,7 +110,6 @@ namespace Trax.Mediator.Extensions
 }
 namespace Trax.Mediator.Services.ChainVerification
 {
-    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
     public sealed class DeclaredTrainChain : System.IEquatable<Trax.Mediator.Services.ChainVerification.DeclaredTrainChain>
     {
         public DeclaredTrainChain(System.Type Train, Trax.Core.Monad.ChainRecorder Chain, System.Type Input, System.Type Output) { }
@@ -122,7 +121,6 @@ namespace Trax.Mediator.Services.ChainVerification
     public interface ITrainChainGraphs
     {
         Trax.Core.Monad.ChainGraph? Find(string train);
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         Trax.Mediator.Services.ChainVerification.DeclaredTrainChain? FindDeclared(string train);
     }
 }
@@ -237,9 +235,7 @@ namespace Trax.Mediator.Services.TrainExecution
         public QueueTrainOptions() { }
         public int Priority { get; init; }
         public long? ReplayDecisionsOf { get; init; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public string? ResumeAt { get; init; }
-        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
         public long? ResumeFrom { get; init; }
         public System.DateTime? ScheduledAt { get; init; }
     }
