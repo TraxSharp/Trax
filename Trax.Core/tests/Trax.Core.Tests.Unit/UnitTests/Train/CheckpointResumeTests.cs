@@ -142,6 +142,62 @@ public class CheckpointResumeTests : TestSetup
     }
 
     [Test]
+    public async Task Questions_after_the_point_are_asked_afresh_when_nothing_replays_them()
+    {
+        var store = new Store();
+        var crash = new Crash { Failing = true };
+        await new AsksTwiceTrain(
+            new Ran(),
+            crash,
+            With(store, new ScriptedDecider().Choose(Source.Papers))
+        ).RunEither("graphs");
+
+        crash.Failing = false;
+        var ran = new Ran();
+        var decider = new ScriptedDecider().Choose(Source.Web);
+        var resumed = new AsksTwiceTrain(ran, crash, With(new Store(), decider));
+        resumed.Resume = PlanFor(resumed, store, resumeAt: null);
+
+        var result = await resumed.RunEither("graphs");
+
+        result.ValueUnsafe().Should().Be(new Report("graphs from web, 12 pages"));
+        decider
+            .Requests.Should()
+            .ContainSingle("only the question after the checkpoint is asked, and asked afresh");
+        ran.Junctions.Should().Equal(["SearchWeb", "FetchFullTexts", "Summarize"], Adr);
+    }
+
+    [Test]
+    public async Task A_value_handed_to_AddServices_is_handed_again_on_resume()
+    {
+        var store = new Store();
+        var crash = new Crash { Failing = true };
+        await new TaggedTrain(
+            new Tag("first"),
+            crash,
+            new Services().With<ICheckpointStore>(store)
+        ).RunEither("graphs");
+
+        crash.Failing = false;
+        var resumed = new TaggedTrain(
+            new Tag("second"),
+            crash,
+            new Services().With<ICheckpointStore>(new Store())
+        );
+        resumed.Resume = PlanFor(resumed, store, resumeAt: null);
+
+        var result = await resumed.RunEither("graphs");
+
+        result
+            .ValueUnsafe()
+            .Should()
+            .Be(
+                new Report("graphs, tagged second"),
+                $"Junctions() runs again, so a value handed to it is the resumed run's own ({Adr})"
+            );
+    }
+
+    [Test]
     public async Task A_routing_step_before_the_point_takes_the_stored_track()
     {
         var store = new Store();
@@ -380,6 +436,36 @@ public class CheckpointResumeTests : TestSetup
                         )
                 )
                 .Chain<Combine>()
+                .Resolve();
+    }
+
+    public interface ITag
+    {
+        string Name { get; }
+    }
+
+    public sealed record Tag(string Name) : ITag;
+
+    private sealed class TagReport(ITag tag, Crash crash) : Junction<Brief, Report>
+    {
+        public override Task<Report> Run(Brief input)
+        {
+            if (crash.Failing)
+                throw new TimeoutException("tagging timed out");
+
+            return Task.FromResult(new Report($"{input.Topic}, tagged {tag.Name}"));
+        }
+    }
+
+    /// <summary>A value handed to AddServices before a checkpoint, read by a step after it.</summary>
+    private sealed class TaggedTrain(ITag tag, Crash crash, Services services)
+        : Train<string, Report>
+    {
+        protected override Task<Either<Exception, Report>> Junctions() =>
+            AddServices<IServiceProvider, ITag>(services.With(new Ran()).With(crash), tag)
+                .Chain<PlanResearch>()
+                .Checkpoint<Brief>()
+                .Chain<TagReport>()
                 .Resolve();
     }
 
