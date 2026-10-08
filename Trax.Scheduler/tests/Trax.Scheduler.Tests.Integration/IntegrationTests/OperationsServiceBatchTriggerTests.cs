@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -445,6 +446,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
 
     #region CancelManifestGroupsAsync
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task Cancel_groups_flags_the_running_work_of_every_given_group()
     {
@@ -477,6 +479,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
         _signal.Domains.Should().Equal([ChangeDomain.Execution], "the change is signalled once");
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task Cancel_groups_message_counts_groups_not_their_manifests_or_runs()
     {
@@ -498,6 +501,7 @@ public class OperationsServiceBatchTriggerTests : TestSetup
             .Be("Cancellation requested for 3 execution(s) across 1 of 2 manifest group(s).");
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task Cancel_groups_cancels_the_runs_of_those_groups_running_on_this_host()
     {

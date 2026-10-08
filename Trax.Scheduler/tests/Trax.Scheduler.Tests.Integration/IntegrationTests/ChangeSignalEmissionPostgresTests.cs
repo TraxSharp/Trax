@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -153,6 +154,7 @@ public class ChangeSignalEmissionPostgresTests
         recording.Domains.Should().ContainSingle().Which.Should().Be(ChangeDomain.WorkQueue);
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running; the cancel only flags it.")]
     [Test]
     public async Task CancelManifest_WithARunInProgress_EmitsExecution()
     {

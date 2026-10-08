@@ -8,6 +8,7 @@ using Npgsql;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -268,6 +269,7 @@ public class OrphanManifestPruningTests : TestSetup
         (await DataContext.Metadatas.AnyAsync(m => m.ManifestId == leftover.Id)).Should().BeTrue();
     }
 
+    [LeavesStuckRuns("Seeds an active run that no host is running, which the prune must keep.")]
     [TestCase(TrainState.InProgress)]
     [TestCase(TrainState.Pending)]
     public async Task StartAsync_WithAnOrphanWhoseRunIsActive_KeepsTheOrphanAndItsRun(

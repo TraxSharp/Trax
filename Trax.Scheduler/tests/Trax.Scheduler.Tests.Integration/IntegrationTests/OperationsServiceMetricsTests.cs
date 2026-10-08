@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -106,6 +107,7 @@ public class OperationsServiceMetricsTests : TestSetup
         metrics.ThroughputSeries.Should().BeEmpty();
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, for the metrics to count.")]
     [Test]
     public async Task GetDashboardMetrics_TodayKpis_ReflectStateCounts()
     {
@@ -128,6 +130,7 @@ public class OperationsServiceMetricsTests : TestSetup
         metrics.Kpis.CurrentlyRunning.Should().Be(1);
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, for the metrics to count.")]
     [Test]
     public async Task GetDashboardMetrics_NoTerminal_SuccessRateIsZero()
     {
@@ -158,6 +161,7 @@ public class OperationsServiceMetricsTests : TestSetup
         metrics.Kpis.UnresolvedDeadLetters.Should().Be(2);
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, for the metrics to count.")]
     [Test]
     public async Task GetDashboardMetrics_HideAdminTrains_ExcludesAdminTrainsFromCounts()
     {

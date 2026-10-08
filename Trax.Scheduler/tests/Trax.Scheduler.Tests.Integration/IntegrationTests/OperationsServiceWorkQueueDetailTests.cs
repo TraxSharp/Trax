@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -117,6 +118,9 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
         detail!.Input.Should().Be("""{"_redacted":true}""");
     }
 
+    [LeavesStuckRuns(
+        "Seeds a run in flight by hand (an in-progress run, a dispatched entry) that no host is running."
+    )]
     [Test]
     public async Task A_subject_with_a_run_in_flight_names_the_entry_holding_it()
     {
@@ -175,6 +179,9 @@ public class OperationsServiceWorkQueueDetailTests : TestSetup
             .BeNull("dispatch does not offer an entry before it is due");
     }
 
+    [LeavesStuckRuns(
+        "Seeds a run in flight by hand (an in-progress run, a dispatched entry) that no host is running."
+    )]
     [Test]
     public async Task An_entry_with_no_subject_or_not_queued_names_nothing()
     {

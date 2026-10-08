@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -37,6 +38,7 @@ public class TraxSchedulerCancelTests : TestSetup
 
     #region CancelAsync Tests
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task CancelAsync_WithInProgressMetadata_SetsCancellationRequested()
     {
@@ -69,6 +71,7 @@ public class TraxSchedulerCancelTests : TestSetup
         count.Should().Be(0);
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task CancelAsync_WithMultipleInProgress_CancelsAll()
     {
@@ -103,6 +106,7 @@ public class TraxSchedulerCancelTests : TestSetup
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task CancelAsync_CallsRegistryTryCancel()
     {
@@ -132,6 +136,7 @@ public class TraxSchedulerCancelTests : TestSetup
         }
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task CancelAsync_FlagsAPendingRun_AsCancelExecutionsDoes()
     {
@@ -181,6 +186,7 @@ public class TraxSchedulerCancelTests : TestSetup
             .BeTrue();
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task CancelGroupAsync_CancelsAllInProgressInGroup()
     {
@@ -226,6 +232,7 @@ public class TraxSchedulerCancelTests : TestSetup
         count.Should().Be(0);
     }
 
+    [LeavesStuckRuns("Seeds in-progress runs that no host is running; the cancel only flags them.")]
     [Test]
     public async Task CancelGroupAsync_OnlyCancelsInProgress_NotCompletedOrFailed()
     {

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -60,6 +61,7 @@ public class DependentRunsAfterEachParentSuccessTests : TestSetup
         (await QueuedCount(dependent)).Should().Be(0, "nothing new happened since it started");
     }
 
+    [LeavesStuckRuns("Marks a queue entry dispatched by hand, with no run behind it.")]
     [Test]
     public async Task The_extra_run_is_queued_once_and_not_again_after_it_succeeds()
     {

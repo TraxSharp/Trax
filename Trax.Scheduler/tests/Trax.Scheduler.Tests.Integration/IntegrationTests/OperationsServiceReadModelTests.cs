@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -36,6 +37,7 @@ public class OperationsServiceReadModelTests : TestSetup
 
     #region Manifest stats
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, for the stats to count.")]
     [Test]
     public async Task Manifest_stats_count_runs_by_state_and_find_the_last_runs()
     {
@@ -89,6 +91,7 @@ public class OperationsServiceReadModelTests : TestSetup
 
     #region Group stats
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, for the stats to count.")]
     [Test]
     public async Task Group_stats_are_one_row_per_distinct_id_in_the_order_given()
     {

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -46,6 +47,9 @@ public class JobTimeoutCoverageTests : TestSetup
         _config.ExcludedTrainTypeNames.Remove(typeof(SchedulerTestTrain).FullName!);
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_queued_run_with_no_manifest_past_DefaultJobTimeout_is_cancelled()
     {
@@ -60,6 +64,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .BeTrue("the run has been InProgress for 30 minutes against a 20 minute default");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_run_of_a_manifest_disabled_while_it_runs_is_still_timed_out()
     {
@@ -74,6 +81,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .BeTrue("disabling a manifest stops new runs; it does not exempt a running one");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_run_started_outside_the_scheduler_is_not_cancelled_at_DefaultJobTimeout()
     {
@@ -88,6 +98,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .BeFalse("DefaultJobTimeout bounds only the runs a scheduler dispatched");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_nested_run_inside_a_long_manifest_timeout_is_not_cancelled_at_DefaultJobTimeout()
     {
@@ -109,6 +122,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .BeFalse("the nested run is part of a run inside its 2 hour timeout");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_nested_run_is_cancelled_once_its_root_manifest_timeout_passes()
     {
@@ -127,6 +143,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .BeTrue("the nested run takes its root's 10 minute timeout");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task An_excluded_train_past_DefaultJobTimeout_is_not_cancelled()
     {
@@ -141,6 +160,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .BeFalse("a train the host excluded is left alone, as the stale reaper leaves it");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_run_inside_a_long_DefaultJobTimeout_is_not_reaped_as_stale()
     {
@@ -155,6 +177,9 @@ public class JobTimeoutCoverageTests : TestSetup
             .Be(TrainState.InProgress, "61 minutes is inside the 2 hour default job timeout");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, to time it out or leave it; a cancel only flags it."
+    )]
     [Test]
     public async Task A_nested_run_inside_a_long_manifest_timeout_is_not_reaped_as_stale()
     {

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -178,6 +179,7 @@ public class DispatchConcurrencyTests : TestSetup
             .NotThrowAsync("manual entries (null ManifestId) are excluded from the unique index");
     }
 
+    [LeavesStuckRuns("Marks a queue entry dispatched by hand, with no run behind it.")]
     [Test]
     public async Task UniquePartialIndex_AllowsNewQueuedEntry_AfterPreviousDispatched()
     {

@@ -12,6 +12,7 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Data.Sqlite.Extensions;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Models.Metadata;
@@ -52,7 +53,10 @@ public sealed class InvokeCluster : IAsyncDisposable
 {
     private static int _clusters;
 
+    private static readonly ConcurrentDictionary<InvokeCluster, byte> Open = new();
+
     private readonly List<ClusterHost> _hosts = [];
+    private readonly ConcurrentDictionary<InvokingState, byte> _invokingStates = new();
     private readonly string? _sqliteFile;
     private readonly string? _database;
 
@@ -72,6 +76,15 @@ public sealed class InvokeCluster : IAsyncDisposable
     public ClusterStore Store { get; }
 
     public string ConnectionString { get; }
+
+    /// <summary>
+    /// The Postgres clusters created and not yet disposed, whose databases
+    /// <see cref="CheckTraxInvariantsAttribute"/> checks after each test.
+    /// </summary>
+    internal static IReadOnlyList<InvokeCluster> OpenOnPostgres => Open.Keys.ToList();
+
+    /// <summary>Every state that invokes a train, of the machines this cluster's hosts register.</summary>
+    internal IReadOnlyList<InvokingState> InvokingStates => _invokingStates.Keys.ToList();
 
     public static async Task<InvokeCluster> Create(ClusterStore store)
     {
@@ -93,7 +106,14 @@ public sealed class InvokeCluster : IAsyncDisposable
             await Exec(admin, $"CREATE DATABASE {database}");
         }
 
-        return new InvokeCluster(store, TestPostgres.ConnectionStringFor(database), null, database);
+        var cluster = new InvokeCluster(
+            store,
+            TestPostgres.ConnectionStringFor(database),
+            null,
+            database
+        );
+        Open[cluster] = 0;
+        return cluster;
     }
 
     /// <summary>
@@ -144,6 +164,11 @@ public sealed class InvokeCluster : IAsyncDisposable
 
         var host = new ClusterHost(services.BuildServiceProvider(), held, Store);
         _hosts.Add(host);
+
+        // Read now, while the host is up: a test may dispose a host before the cluster's last check.
+        foreach (var machine in host.Services.GetServices<IMachine>().Cast<IMachineInternals>())
+        foreach (var invoked in machine.InvokedTrains)
+            _invokingStates[new InvokingState(invoked.Machine, invoked.State)] = 0;
         return host;
     }
 
@@ -159,6 +184,8 @@ public sealed class InvokeCluster : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Open.TryRemove(this, out _);
+
         foreach (var host in _hosts)
             await host.DisposeAsync();
 
