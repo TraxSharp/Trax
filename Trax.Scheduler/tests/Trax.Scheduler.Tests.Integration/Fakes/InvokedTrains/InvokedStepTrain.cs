@@ -21,6 +21,9 @@ public static class InvokedStepModes
     public const string Grow = "grow";
     public const string Gate = "gate";
 
+    /// <summary>Short-circuits, in <see cref="IInvokedShortCircuitTrain"/>.</summary>
+    public const string Short = "short";
+
     /// <summary>Succeeds with an artifact that is the note reversed, so it appears in no input.</summary>
     public const string Secret = "secret";
 

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Trax.Core.Functional;
+using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
@@ -99,13 +100,15 @@ public sealed class InvokeCluster : IAsyncDisposable
     /// A host. <paramref name="machines"/> registers the state machines (their outcome hook and reconciler);
     /// <paramref name="scheduler"/> registers the scheduler, whose dispatcher hands runs to this host's
     /// <see cref="ClusterHost.RunJob"/> instead of a worker, configured further by <paramref name="scheduling"/>.
+    /// <paramref name="data"/> adds effects over the data provider, such as junction events or decision recording.
     /// </summary>
     public ClusterHost Host(
         bool machines,
         bool scheduler,
         Action<IServiceCollection>? configure = null,
         Action<StateMachineOptions>? options = null,
-        Action<SchedulerConfigurationBuilder>? scheduling = null
+        Action<SchedulerConfigurationBuilder>? scheduling = null,
+        Func<TraxEffectBuilderWithData, TraxEffectBuilderWithData>? data = null
     )
     {
         var held = new HeldJobs();
@@ -115,12 +118,13 @@ public sealed class InvokeCluster : IAsyncDisposable
         services.AddTrax(trax =>
         {
             var effects = trax.AddEffects(e =>
-                (
+            {
+                var withData =
                     Store == ClusterStore.Postgres
                         ? e.UsePostgres(ConnectionString)
-                        : e.UseSqlite(ConnectionString)
-                ).AddJunctionProgress()
-            );
+                        : e.UseSqlite(ConnectionString);
+                return (data?.Invoke(withData) ?? withData).AddJunctionProgress();
+            });
             var withMachines = machines
                 ? effects.AddStateMachines(options, typeof(StepMachine).Assembly)
                 : effects;
@@ -302,6 +306,14 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held, Cluster
             // Recorded on the run's row.
         }
     }
+
+    /// <summary>The input this host's dispatcher handed over with the run <paramref name="metadataId"/>.</summary>
+    public object? HeldInput(long metadataId) =>
+        held.Inputs.TryGetValue(metadataId, out var input)
+            ? input
+            : throw new InvalidOperationException(
+                $"Run {metadataId} was not dispatched to this host."
+            );
 
     /// <summary>Dispatches <paramref name="token"/>'s entry and runs it here to its end.</summary>
     public async Task<long> DispatchAndRun(string token)
