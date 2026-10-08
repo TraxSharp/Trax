@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Recovery
-description: "The Recovery sample: a crashed run retries without asking its model twice, a topic map runs signals in parallel, and state machines run trains."
+description: "The Recovery sample: a crashed run resumes without asking its model twice, a topic map runs signals in parallel, and state machines run trains."
 parent: Samples & Deployment
 nav_order: 3
 ---
@@ -11,20 +11,23 @@ nav_order: 3
 A train asks a model which track to take, a later step crashes, and the retry takes the same tracks
 without paying for the model again. The Recovery sample makes that visible. Its page shows the
 train's real C# with the running step highlighted, a console that narrates every junction event as
-it arrives, and a timeline with one lane per attempt. Attempt 2's lane reads **replayed: model not
-asked** for each question, and its question bars take milliseconds instead of the model's second or
-so. Progress pills follow the run through **Runs**, **Breaks** and **Recovers**. A third scenario,
+it arrives, and a timeline with one lane per attempt. A refund's attempt 2 lane reads **replayed:
+model not asked** for its question, and its question bar takes milliseconds instead of the model's
+second or so. The research brief stores its checked findings in a checkpoint, so its attempt 2
+resumes there and its lane holds only the report step. Progress pills follow the run through
+**Runs**, **Breaks** and **Recovers**. A third scenario,
 the topic map, runs three similarity signals side by side in parallel branches, and each lane draws
 its attempt on the train's declared graph with the branches next to each other. Two state machines
 run trains as well: one system-owned instance per partition of a scholarly index ingests it, and each
 user builds their own topic map through a wizard whose `Building` state runs the map's train.
 
-It proves five features working together, against Postgres, in one process:
+It proves six features working together, against Postgres, in one process:
 
 | Feature | What the sample shows | Page |
 |---|---|---|
 | Train decisions | A `Gate` (refund approval), a `Switch` and a `Scale` (research brief), answered by an `IDecider` | [Decisions](/docs/core/decisions) |
 | Retries replay decisions | The manifest's automatic retry replays every recorded answer whose state hashes the same, asks afresh when the data changed, and asks afresh on purpose with `askAfresh` | [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) |
+| Checkpoints and resume | The research brief checkpoints its checked findings; the manifest's retry resumes after it, and an operator resumes the failed run at `Summarize` with `resumeExecution` or the dashboard's **Resume** | [Resuming from a checkpoint](#resuming-from-a-checkpoint) |
 | Junction events | `onJunctionEvent` and `operations.junctionRuns` drive the page | [Junction Events](/docs/effect/junction-events) |
 | Parallel branches | The topic map's three signals run side by side; a failed branch fails the run by name, and only the step after the join writes | [The topic map](#the-topic-map) |
 | State machines that invoke trains | System-owned instances started from a train, an unsure output routed by a guarded `OnDone`, a failed ingest retried by entering its state again, a user's wizard whose result no client can forge, and a draft rebuilt after its host is killed mid-run | [The state machines](#the-state-machines) |
@@ -58,9 +61,11 @@ on 5432, start the host with
 
 1. **Research, crash once, Run.** Attempt 1 runs `PlanResearch`, asks `Source` (where to look) and
    `Depth` (how far to dig), runs a step on each chosen track, and crashes in `Summarize` while
-   writing the report. The sidebar counts down to the retry. A few seconds later the manifest's
-   retry starts as a new execution: `PlanResearch` runs again, but both questions arrive with
-   `replayed: true` in a few milliseconds, the retry takes the same tracks, and the run completes.
+   writing the report. Before it did, the run stored its `CheckedFindings` in a checkpoint. The
+   sidebar counts down to the retry. A few seconds later the manifest's retry starts as a new
+   execution and resumes after the checkpoint: its lane holds only `Summarize`, its run graph marks
+   every step before the checkpoint **restored**, neither question is asked again, and the run
+   completes.
 2. **Refund, A-1001, Run.** Attempt 1 runs `LoadRefundCase`, asks `ApproveRefund` (yes at 0.93) and
    crashes in `IssuePayment`. The retry replays the answer and takes the same `Yes` track.
 3. **Change the data during the backoff.** Pressed while the retry counts down, it records an
@@ -68,16 +73,23 @@ on 5432, start the host with
    it reads no longer hashes the same, so the replay is refused, the model is asked again (0.58,
    between the bars), and the refund takes the `Unsure` track to a person instead of being paid.
    The lane reads **asked afresh: state changed**.
-4. **Ask afresh during the backoff.** It calls `triggerManifest(externalId, askAfresh: true)`, so
-   the retry starts at once and asks afresh; the lane reads **asked afresh: on purpose**.
+4. **Ask afresh during the backoff.** On a refund it calls
+   `triggerManifest(externalId, askAfresh: true)`, so the retry starts at once and asks afresh; the
+   lane reads **asked afresh: on purpose**. A research run does not offer it: its retry resumes after
+   both of its questions, so there is nothing left to ask.
 5. **Another track.** Orders A-1002 and A-1003 crash too: the model is unsure about A-1002 and
    declines A-1003, so their runs take the review and decline tracks, the step on that track crashes
    the same way, and the retry reuses the answer and takes the same track.
 6. **Ask afresh after a run.** Once a run has completed, **Ask afresh** calls
    `requeueExecution(id, askAfresh: true)` on its last execution, a run of its own outside the
-   manifest, shown as a `[requeue]` lane.
+   manifest, shown as a `[requeue]` lane. A requeue runs the chain from the top, so a research run
+   asks both questions again.
+7. **Resume from Summarize.** Once a research run is over, **Resume from Summarize** calls
+   `resumeExecution(id, from: "Summarize#0")` on its failed attempt, the operation behind the
+   dashboard's **Resume from here**. The `[resume]` lane runs only `Summarize`, from the findings the
+   checkpoint stored, and writes the same report the retry did.
 
-7. **Topic map, crash once, Run.** Attempt 1 runs `LoadCorpus`, then three branches at once:
+8. **Topic map, crash once, Run.** Attempt 1 runs `LoadCorpus`, then three branches at once:
    `embedding`, `cocitation` and `authors`. The `cocitation` branch counts shared references, asks
    `SameTopic` (do papers that cite the same works share a topic in this slice?), and crashes in the
    step on the track the answer picks. The run fails with a `BranchesFailedException` naming
@@ -89,8 +101,9 @@ on 5432, start the host with
    2025 ignores them (`No`, 0.28).
 
 Case files and armed crashes live in memory. A run started before the host restarts has lost its
-case file, so every retry fails and the manifest dead-letters. A requeue would fail the same way, so
-the page offers no re-run once a run is dead.
+case file, so every retry that reads it again fails and the manifest dead-letters (a research run
+that reached its checkpoint does not read it again). A requeue would fail the same way, so the page
+offers no re-run once a run is dead.
 
 The same over GraphQL, with the header `X-Api-Key: recovery-operator-key-do-not-use-in-production`:
 
@@ -253,14 +266,17 @@ public class ResearchTopicTrain : ServiceTrain<ResearchInput, ResearchReport>, I
                 scale
                     .AtLeast(Depth.Skim, t => t.Chain<SkimSources>())
                     .AtLeast(Depth.CrossCheck, t => t.Chain<FetchFullTexts>()))
+            .Checkpoint<CheckedFindings>()
             .Chain<Summarize>()
             .Resolve();
 }
 ```
 
 Every `Switch` track produces `Findings` and every `Scale` track `CheckedFindings`, because after a
-routing step the chain can rely only on what every track produces. The refund approval asks one
-yes/no question:
+routing step the chain can rely only on what every track produces. `CheckedFindings` is also all
+`Summarize` reads, which is why the checkpoint stores it; see
+[Resuming from a checkpoint](#resuming-from-a-checkpoint). The refund approval asks one yes/no
+question:
 
 ```csharp
 Chain<LoadRefundCase>()
@@ -371,6 +387,53 @@ after the manifest is scheduled.
 
 Killing the worker process would not show a recovery: a killed run is failed by stuck-job recovery
 much later, or at the next start, not resumed.
+
+### Resuming from a checkpoint
+
+Before the checkpoint, a research run has planned, asked the model twice, searched and checked what
+it found. A crash in `Summarize` used to repeat all of it, because a retry runs the chain from the
+top. `.Checkpoint<CheckedFindings>()` stores the `CheckedFindings` in Memory when the run reaches it,
+with the track each routing step took, in `trax.checkpoint`. Nothing else is stored. The state must
+come back from JSON as the same value, so `CheckedFindings` and the `Findings` inside it are sealed
+records of data; the host refuses to start otherwise and names the member. `Checkpoint` is
+experimental: the project opts in with `TRAXEXP003` in its `NoWarn`.
+
+**A manifest's retry now resumes by itself.** When the failed run has a checkpoint, the retry is
+queued to resume after it: it runs `Junctions()` again, skips every step before the checkpoint in
+place, puts the stored `CheckedFindings` back in Memory and runs only `Summarize`. Neither question
+is asked: both come before the checkpoint. That is also why the page offers no **Ask afresh** during
+a research run's backoff. A dead letter's requeue resumes the same way; `requeueExecution` still
+reruns from the top.
+
+**What the operator sees.** On the failed run, `operations.runGraph` sets `canResume`, marks the
+checkpoint's node `checkpointed` and every node after it that a resume can start at `canResume`;
+nothing before the checkpoint can. The dashboard's Metadata Detail page offers **Resume** beside
+**Re-queue**, puts a **checkpoint** badge on the stored step of its run graph and a **Resume from
+here** on each step the graph allows; both call `IOperationsService.ResumeExecutionAsync`, the call
+behind `resumeExecution`. On the resumed run, every node before its resume point is `RESTORED`: it
+was skipped, not run. Neither surface ever shows what a checkpoint holds.
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 42) { canResume nodes { id kind state canResume checkpointed } }
+  }
+}
+
+mutation {
+  operations {
+    resumeExecution(id: 42, from: "Summarize#0") { success message id }
+  }
+}
+```
+
+`resumeExecution` resumes a failed or cancelled run, at the step `from` names or, without it, after
+its latest checkpoint. It answers with the work queue entry's id, like a requeue, and the run is not
+one of the manifest's executions. One resume of a run may be queued at a time: while the manifest's
+retry is queued it already resumes the failed run, and a second resume is refused. The page offers
+**Resume from Summarize** once the run is over for that reason. See
+[Checkpoint](/docs/sdk-reference/train-methods/checkpoint) for what may be stored and where a run
+can resume.
 
 ### Changing the data during the backoff
 
@@ -585,6 +648,12 @@ next to each other with the one taken marked, and a `Parallel` step shows its br
 side by side, since they ran at the same time. The page asks for three levels of nesting, as deep as
 the topic map goes and as deep as the server's cycle-depth limit allows.
 
+A run that resumed records only the steps after its resume point, so its lane holds those alone and
+its graph draws the rest as restored, with a badge counting them. **Resume from Summarize** sends
+`resumeExecution` with the node id `Summarize#0` for the latest failed research attempt, then reads
+the work queue entry it answers with until the entry names its run, and follows that run in a
+`[resume]` lane, as **Ask afresh** follows a requeue.
+
 ## The tests
 
 `Trax.Samples.Recovery.E2E` boots the real host with `WebApplicationFactory` against the
@@ -594,11 +663,12 @@ the other, on the `recovery_restart_e2e_tests` database, so it can kill the firs
 
 | Test | Proves |
 |---|---|
-| `ResearchRun_CrashedOnce_CompletesOnAttempt2_WithoutAskingTheModelAgain` | Attempt 2 completes; the decider was asked each question once across both attempts; attempt 2's decision events have `replayed: true`, live and stored |
+| `ResearchRun_CrashedOnce_CompletesOnAttempt2_WithoutAskingTheModelAgain` | Attempt 2 resumes after the checkpoint and completes; its junction events, live and stored, hold only `Summarize`; the decider was asked each question once across both attempts |
+| `A_crash_in_Summarize_resumes_from_CheckedFindings_without_fetching_again` | The failed run's graph offers `Summarize#0`; `resumeExecution` and the dashboard's resume each run only `Summarize`, write the retry's report and draw the steps before as `RESTORED`; `TraxInvariants` finds nothing new |
 | `RefundRun_PaymentTimedOutOnce_RetryTakesTheSameTrackWithoutAskingAgain` | The gate replays its answer; the state hash is keyed (`k1:`) |
 | `RefundRun_OnAnotherTrack_CrashesOnce_AndTheRetryReplaysTheDecision` | Orders A-1002 (review) and A-1003 (decline) crash once on their track, and the retry replays the answer |
 | `RunWithNoCrashArmed_CompletesInOneAttempt` | One attempt, and the once manifest disables itself |
-| `TriggerWithAskAfresh_DuringTheBackoff_RetryAsksTheModelAgain` | `triggerManifest(askAfresh: true)` makes the retry ask again |
+| `TriggerWithAskAfresh_DuringTheBackoff_RetryAsksTheModelAgain` | `triggerManifest(askAfresh: true)` makes a refund's retry ask again |
 | `RequeueExecution_ReplaysByDefault_AndAsksAgainWithAskAfresh` | `requeueExecution` replays; with `askAfresh: true` it asks again |
 | `DataChangedDuringTheBackoff_RetryAsksAfresh_AndTakesTheTrackTheNewDataCallsFor` | The retry stays linked, refuses the answer for a changed state, asks afresh and takes `Unsure` |
 | `ViewerSubscriber_SeesTheShape_ButNotTheAnswersOrTheTrack` | The broadcast view gets no answers, and every step on a track is `(withheld)` |
@@ -623,4 +693,4 @@ TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.Recovery.E2E
 
 ## SDK Reference
 
-> [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider) | [Switch](/docs/sdk-reference/train-methods/switch) | [Scale](/docs/sdk-reference/train-methods/scale) | [Gate](/docs/sdk-reference/train-methods/gate) | [ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Queries](/docs/sdk-reference/graphql-api/queries) | [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances)
+> [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider) | [Switch](/docs/sdk-reference/train-methods/switch) | [Scale](/docs/sdk-reference/train-methods/scale) | [Gate](/docs/sdk-reference/train-methods/gate) | [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | [ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Queries](/docs/sdk-reference/graphql-api/queries) | [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances)

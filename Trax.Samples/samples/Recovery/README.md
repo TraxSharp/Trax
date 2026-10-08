@@ -55,16 +55,20 @@ follow the run: **Runs**, **Breaks** when an attempt crashes, **Recovers** when 
 
 1. Leave **Research**, the first topic and **Crash once** selected and press **Run**. Attempt 1 runs
    `PlanResearch`, asks the model `Source` and `Depth`, takes the tracks they pick and crashes in `Summarize`
-   while it writes the report. The sidebar counts down to the retry. A few seconds later the manifest's retry
-   runs the train again: its lane reads **replayed: model not asked** for both questions, the console says
-   `MODEL not asked`, and the retry takes the same tracks.
+   while it writes the report. The train stores its checked findings in a checkpoint before `Summarize`, so a
+   few seconds later the manifest's retry resumes there: its lane holds only `Summarize`, its run graph marks
+   every step before the checkpoint **restored**, and neither question is put to the model again. Once it has
+   completed, **Resume from Summarize** calls `resumeExecution(id, from: "Summarize#0")` on the failed attempt,
+   as the dashboard's **Resume from here** does: a `[resume]` lane that writes the report from the same stored
+   findings.
 2. Pick **Refund**, order **A-1001**, and press **Run**. Attempt 1 asks `ApproveRefund` and crashes in
    `IssuePayment`. While the retry counts down, press **Change the data during the backoff**: it adds an
    earlier refund to the order, so the retry's state no longer hashes the same. The replay is refused, the
    model is asked again (**asked afresh: state changed**) and the refund goes to a person (the `Unsure` track)
    instead of being paid.
-3. Press **Run** again and, during the countdown, press **Ask afresh**. The retry starts at once and asks the
-   model again (**asked afresh: on purpose**).
+3. Press **Run** on a refund again and, during the countdown, press **Ask afresh**. The retry starts at once and
+   asks the model again (**asked afresh: on purpose**). A research run offers no ask afresh during its backoff:
+   its retry resumes after both questions, so it has none left to ask.
 4. Try orders A-1002 and A-1003. The model is unsure about A-1002 and declines A-1003, so their runs take the
    review and decline tracks; the step on that track crashes the same way, and the retry reuses the answer and
    takes the same track.
@@ -199,7 +203,8 @@ belongs in production: keep the scheduler defaults, and keep the key with your o
 
 Case files and armed crashes live in memory; the machines' drafts and instances, and the seeded data, are in
 Postgres. A run started before the host restarts has lost its
-case file, so every retry fails and the manifest dead-letters. A re-queue would fail the same way,
+case file, so every retry that reads it again fails and the manifest dead-letters (a research run that
+reached its checkpoint does not read it again). A re-queue would fail the same way,
 so the page offers no re-run once a run is dead.
 
 ## Using Nimble
