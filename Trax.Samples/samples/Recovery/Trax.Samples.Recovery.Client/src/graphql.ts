@@ -146,7 +146,21 @@ export const REQUEUE = gql`
   }
 `;
 
-// requeueExecution answers with the work queue entry's id; its run appears once dispatched.
+// Resumes a failed or cancelled run at a step (a node id from the run graph), restoring the checkpoint
+// before it: the steps before the point are skipped, not run. Answers with the work queue entry's id.
+export const RESUME = gql`
+  mutation Resume($id: Long!, $from: String) {
+    operations {
+      resumeExecution(id: $id, from: $from) {
+        success
+        message
+        id
+      }
+    }
+  }
+`;
+
+// requeueExecution and resumeExecution answer with the work queue entry's id; its run appears once dispatched.
 export const WORK_QUEUE_ENTRY = gql`
   query WorkQueueEntry($id: Long!) {
     operations {
@@ -164,7 +178,7 @@ export const WORK_QUEUE_ENTRY = gql`
 // The run drawn on its train's declared chain: every node, its state, each routing step's tracks
 // and each Parallel step's branches. Three levels of nodes, as deep as the sample's trains go (the gate
 // inside the co-citation branch) and as deep as the server's cycle-depth limit allows.
-const NODE = `id kind junction state replayed trackTaken`;
+const NODE = `id kind junction state replayed trackTaken canResume checkpointed`;
 export const RUN_GRAPH = gql`
   query RunGraph($metadataId: Long!) {
     operations {

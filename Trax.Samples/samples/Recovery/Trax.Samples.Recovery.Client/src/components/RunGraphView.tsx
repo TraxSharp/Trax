@@ -9,6 +9,7 @@ const STATE_TEXT: Record<NodeState, string> = {
   SKIPPED: "skipped",
   NOT_RECORDED: "not recorded",
   WITHHELD: "withheld",
+  RESTORED: "restored from the checkpoint, not run",
 };
 
 // Steps that record nothing when they run, so the graph has nothing to say about them.
@@ -54,6 +55,7 @@ function Node({ node }: { node: GraphNode }) {
     <span className={`graph-node ${node.state.toLowerCase()}`} title={`${node.id}: ${state}`}>
       {nameOf(node)}
       {node.replayed && <span className="graph-replayed">replayed</span>}
+      {node.checkpointed && <span className="graph-replayed">stored</span>}
       <span className="sr-only">, {state}</span>
     </span>
   );

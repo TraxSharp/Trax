@@ -32,7 +32,9 @@ export type NodeState =
   | "CANCELLED"
   | "SKIPPED"
   | "NOT_RECORDED"
-  | "WITHHELD";
+  | "WITHHELD"
+  /** In a resumed run, a step before the point it resumed at: skipped, its result restored from the checkpoint. */
+  | "RESTORED";
 
 /** One declared node of a run graph, with where the run stands there. */
 export interface GraphNode {
@@ -42,6 +44,10 @@ export interface GraphNode {
   state: NodeState;
   replayed: boolean;
   trackTaken: string | null;
+  /** Whether resumeExecution can resume the run at this node. */
+  canResume: boolean;
+  /** Whether a checkpoint the run can resume from is stored at this node (never what it holds). */
+  checkpointed: boolean;
   tracks: GraphTrack[];
 }
 
@@ -76,10 +82,10 @@ export interface Journal {
 
 export interface Attempt {
   id: number;
-  /** "retry" for the manifest's runs, "requeue" for a requeueExecution. */
-  origin: "manifest" | "requeue";
+  /** "manifest" for the manifest's runs, "requeue" for a requeueExecution, "resume" for a resumeExecution. */
+  origin: "manifest" | "requeue" | "resume";
   /** What started it, when it was not the first run or the manifest's own retry. */
-  startedBy: "askAfresh" | "requeue" | null;
+  startedBy: "askAfresh" | "requeue" | "resume" | null;
   trainState: string;
   startTime: string;
   endTime: string | null;
@@ -111,6 +117,19 @@ export interface ConsoleLine {
 }
 
 export type Phase = "idle" | "starting" | "running" | "backoff" | "retrying" | "done" | "requeue" | "dead";
+
+/** The node the page resumes a research run at: the step after its checkpoint, as operations.runGraph names it. */
+export const RESUME_AT = "Summarize#0";
+
+/** How many nodes a resumed run skipped and restored from its checkpoint, at any depth of its graph. */
+export const restoredIn = (graph: RunGraph | null | undefined): number => {
+  const count = (nodes: GraphNode[] | undefined): number =>
+    (nodes ?? []).reduce(
+      (n, node) => n + (node.state === "RESTORED" ? 1 : 0) + node.tracks.reduce((t, track) => t + count(track.nodes), 0),
+      0,
+    );
+  return count(graph?.nodes);
+};
 
 /** What the reader did during the backoff, if anything. */
 export type Fork = "none" | "askAfresh" | "changeData";

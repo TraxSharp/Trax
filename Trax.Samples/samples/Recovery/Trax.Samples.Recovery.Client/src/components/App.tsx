@@ -25,7 +25,7 @@ export function App() {
   const [slice, setSlice] = useState(SLICES[0].key);
   const [crash, setCrash] = useState(true);
   const recovery = useRecoveryRun();
-  const { phase, attempts, run, forkTaken } = recovery;
+  const { phase, attempts, run, forkTaken, resumable } = recovery;
 
   const locked = phase === "starting" || phase === "running" || phase === "backoff" || phase === "retrying" || phase === "requeue";
 
@@ -79,7 +79,12 @@ export function App() {
   const shown = run?.scenario ?? scenario;
   const reached = PHASES.findIndex((p) => p.phases.includes(phase));
   const crashed = attempts.some((a) => a.trainState === "FAILED");
-  const canAskAfresh = (phase === "backoff" && forkTaken === "none") || phase === "done";
+  // The research run's retry resumes after its checkpoint, which comes after both of its questions,
+  // so there is nothing left to ask afresh during its backoff; once it is over, a requeue reruns it.
+  const research = run?.scenario === "RESEARCH";
+  const canAskAfresh = (phase === "backoff" && forkTaken === "none" && !research) || phase === "done";
+  // While a retry is queued it already resumes the failed run, and a run has one queued resume at a time.
+  const canResume = resumable != null && phase === "done";
 
   return (
     <div className="app">
@@ -148,15 +153,30 @@ export function App() {
             <button className="action" onClick={recovery.askAfresh} disabled={!canAskAfresh}>
               Ask afresh
             </button>
-            <button className="action" onClick={recovery.reset} disabled={!run || locked}>
-              Reset
+            <button
+              className="action"
+              onClick={recovery.resumeFromSummarize}
+              disabled={!canResume}
+              title='resumeExecution(id, from: "Summarize#0") on the failed research attempt'
+            >
+              Resume from Summarize
             </button>
           </div>
+          <button className="action" onClick={recovery.reset} disabled={!run || locked}>
+            Reset
+          </button>
           <p className="hint">
-            {retryIn != null && forkTaken === "none" ? (
+            {retryIn != null && forkTaken === "none" && research ? (
+              <span className="signal">
+                In the backoff: the retry starts in {retryIn.toFixed(1)} s and resumes after the CheckedFindings checkpoint,
+                so it writes the report from the stored findings without searching or asking the model again.
+              </span>
+            ) : retryIn != null && forkTaken === "none" ? (
               <span className="signal">
                 In the backoff: the retry starts in {retryIn.toFixed(1)} s. Change the data or ask afresh before it does.
               </span>
+            ) : phase === "done" && canResume ? (
+              "The run is over. Ask afresh to run it again from the top with every question put to the model, or resume the failed attempt from Summarize, as the dashboard's Resume from here does."
             ) : phase === "done" ? (
               "The run is over. Ask afresh to run it again with every question put to the model."
             ) : phase === "dead" ? (

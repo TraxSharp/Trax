@@ -8,6 +8,7 @@ import {
   JUNCTION_RUNS,
   ON_JUNCTION_EVENT,
   REQUEUE,
+  RESUME,
   RUN_GRAPH,
   START_RUN,
   TRIGGER_ASK_AFRESH,
@@ -15,6 +16,8 @@ import {
 } from "./graphql";
 import {
   branchOf,
+  restoredIn,
+  RESUME_AT,
   shownAnswer,
   type Attempt,
   type ConsoleLine,
@@ -75,6 +78,7 @@ export function useRecoveryRun() {
 
   const labelOf = useCallback((attempt: Pick<Attempt, "id" | "origin">) => {
     if (attempt.origin === "requeue") return "[requeue]";
+    if (attempt.origin === "resume") return "[resume]";
     const index = order.current.filter((a) => a.origin === "manifest").findIndex((a) => a.id === attempt.id);
     return `[attempt ${index + 1}]`;
   }, []);
@@ -161,6 +165,7 @@ export function useRecoveryRun() {
       const { data } = await client.query({ query: RUN_GRAPH, variables: { metadataId: attemptId } });
       const graph = data.operations.runGraph as RunGraph | null;
       setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, graph } : a)));
+      return graph;
     },
     [client],
   );
@@ -169,7 +174,13 @@ export function useRecoveryRun() {
     (row: ExecutionRow, origin: Attempt["origin"]) => {
       if (subscriptions.current.has(row.id)) return;
       const startedBy: Attempt["startedBy"] =
-        origin === "requeue" ? "requeue" : forkRef.current === "askAfresh" && order.current.length > 0 ? "askAfresh" : null;
+        origin === "requeue"
+          ? "requeue"
+          : origin === "resume"
+            ? "resume"
+            : forkRef.current === "askAfresh" && order.current.length > 0
+              ? "askAfresh"
+              : null;
       order.current.push({ id: row.id, origin });
       setAttempts((all) =>
         all.some((a) => a.id === row.id) ? all : [...all, { ...row, origin, startedBy, steps: {}, journal: null, graph: null }],
@@ -180,7 +191,9 @@ export function useRecoveryRun() {
       const text =
         startedBy === "requeue"
           ? `RUN execution ${row.id} started by the requeue`
-          : startedBy === "askAfresh"
+          : startedBy === "resume"
+            ? `RUN execution ${row.id} started by the resume: it restores the CheckedFindings checkpoint and runs from Summarize`
+            : startedBy === "askAfresh"
             ? `RUN execution ${row.id} started by the trigger, without waiting out the backoff`
             : index === 0
               ? `RUN execution ${row.id} started`
@@ -207,11 +220,17 @@ export function useRecoveryRun() {
       if (known?.origin === "manifest" && row.trainState === "FAILED") {
         const index = order.current.filter((a) => a.origin === "manifest").findIndex((a) => a.id === row.id);
         const max = runRef.current?.maxRetries ?? 2;
+        // The research train checkpoints its checked findings, so its retry resumes there instead
+        // of running the chain again; the other scenarios declare no checkpoint.
+        const retry =
+          runRef.current?.scenario === "RESEARCH"
+            ? `resuming execution ${row.id} after its CheckedFindings checkpoint: only the report is written again.`
+            : `naming execution ${row.id} as the run to replay.`;
         say(
           `${row.id}:end`,
           "system",
           index < max
-            ? `${labelOf(known)} # FAILED. The scheduler retries after its backoff (a few seconds here), naming execution ${row.id} as the run to replay.`
+            ? `${labelOf(known)} # FAILED. The scheduler retries after its backoff (a few seconds here), ${retry}`
             : `${labelOf(known)} # FAILED. Every retry is spent, so the manifest is dead-lettered.`,
         );
       }
@@ -261,11 +280,19 @@ export function useRecoveryRun() {
       void (async () => {
         await readStored(a.id);
         graphed.current.add(a.id);
-        await readGraph(a.id);
+        const graph = await readGraph(a.id);
         const { data } = await client.query({ query: DECISION_JOURNAL, variables: { metadataId: a.id } });
         const journal = data.discover.decisionJournal as Journal;
         setAttempts((all) => all.map((x) => (x.id === a.id ? { ...x, journal } : x)));
-        if (a.trainState === "COMPLETED") say(`${a.id}:end`, "success", `${labelOf(a)} # COMPLETED. ${describeJournal(journal)}`);
+        const restored = restoredIn(graph);
+        if (a.trainState === "COMPLETED")
+          say(
+            `${a.id}:end`,
+            "success",
+            restored > 0
+              ? `${labelOf(a)} # COMPLETED. Resumed after the checkpoint: ${restored} step(s) before it were restored from the stored findings, not run, and no question was put to the model.`
+              : `${labelOf(a)} # COMPLETED. ${describeJournal(journal)}`,
+          );
       })();
     }
   }, [attempts, client, labelOf, readStored, readGraph, say]);
@@ -326,7 +353,7 @@ export function useRecoveryRun() {
   const phase: Phase = useMemo(() => {
     if (starting) return "starting";
     if (!run) return "idle";
-    const requeued = [...attempts].reverse().find((a) => a.origin === "requeue");
+    const requeued = [...attempts].reverse().find((a) => a.origin === "requeue" || a.origin === "resume");
     if (requeued) return requeued.trainState === "IN_PROGRESS" || requeued.trainState === "PENDING" ? "requeue" : "done";
     const manifestRuns = attempts.filter((a) => a.origin === "manifest");
     const last = manifestRuns[manifestRuns.length - 1];
@@ -335,6 +362,23 @@ export function useRecoveryRun() {
     if (last.trainState === "FAILED") return manifestRuns.length > (run.maxRetries ?? 2) ? "dead" : "backoff";
     return manifestRuns.length > 1 ? "retrying" : "running";
   }, [attempts, run, starting]);
+
+  /** Waits for a requeued or resumed work queue entry to be dispatched, then follows its run. */
+  const followEntry = useCallback(
+    async (entryId: number, origin: "requeue" | "resume") => {
+      for (let i = 0; i < 60; i++) {
+        const entry = await client.query({ query: WORK_QUEUE_ENTRY, variables: { id: entryId } });
+        const metadataId = entry.data.operations.workQueue.workQueue?.metadataId;
+        if (metadataId) {
+          const one = await client.query({ query: EXECUTION, variables: { id: metadataId } });
+          follow(one.data.operations.execution as ExecutionRow, origin);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    },
+    [client, follow],
+  );
 
   const askAfresh = useCallback(async () => {
     if (!run) return;
@@ -350,18 +394,29 @@ export function useRecoveryRun() {
     const { data } = await client.mutate({ mutation: REQUEUE, variables: { id: last.id, askAfresh: true } });
     const result = data.operations.requeueExecution;
     say(`action:requeue:${last.id}`, "system", `# ASK AFRESH: requeueExecution(${last.id}, askAfresh: true) says "${result.message}"`);
-    if (!result.success || result.id == null) return;
-    for (let i = 0; i < 60; i++) {
-      const entry = await client.query({ query: WORK_QUEUE_ENTRY, variables: { id: result.id } });
-      const metadataId = entry.data.operations.workQueue.workQueue?.metadataId;
-      if (metadataId) {
-        const one = await client.query({ query: EXECUTION, variables: { id: metadataId } });
-        follow(one.data.operations.execution as ExecutionRow, "requeue");
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 250));
-    }
-  }, [attempts, client, follow, phase, run, say]);
+    if (result.success && result.id != null) await followEntry(result.id, "requeue");
+  }, [attempts, client, followEntry, phase, run, say]);
+
+  /** The failed or cancelled research attempt "Resume from Summarize" resumes: the latest one. */
+  const resumable = useMemo(
+    () =>
+      run?.scenario === "RESEARCH"
+        ? [...attempts].reverse().find((a) => a.trainState === "FAILED" || a.trainState === "CANCELLED") ?? null
+        : null,
+    [attempts, run],
+  );
+
+  const resumeFromSummarize = useCallback(async () => {
+    if (!resumable) return;
+    const { data } = await client.mutate({ mutation: RESUME, variables: { id: resumable.id, from: RESUME_AT } });
+    const result = data.operations.resumeExecution;
+    say(
+      `action:resume:${resumable.id}:${Date.now()}`,
+      result.success ? "system" : "error",
+      `# RESUME: resumeExecution(${resumable.id}, from: "${RESUME_AT}") says "${result.message}"`,
+    );
+    if (result.success && result.id != null) await followEntry(result.id, "resume");
+  }, [client, followEntry, resumable, say]);
 
   const changeData = useCallback(async () => {
     if (!run) return;
@@ -374,7 +429,21 @@ export function useRecoveryRun() {
   /** Milliseconds since Run was pressed, for a timestamp the host sent. */
   const sinceStart = useCallback((iso: string | null | undefined) => (iso ? Date.parse(iso) - base.current : undefined), []);
 
-  return { run, attempts, lines, phase, forkTaken, start, reset, askAfresh, changeData, labelOf, sinceStart };
+  return {
+    run,
+    attempts,
+    lines,
+    phase,
+    forkTaken,
+    resumable,
+    start,
+    reset,
+    askAfresh,
+    resumeFromSummarize,
+    changeData,
+    labelOf,
+    sinceStart,
+  };
 }
 
 function describeJournal(journal: Journal): string {
