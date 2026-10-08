@@ -1,0 +1,86 @@
+{
+  "today": [
+    { "label": "Trains: typed pipelines of small steps", "href": "/docs/core/trains-and-junctions" },
+    { "label": "Scheduling, retries and remote workers", "href": "/docs/scheduler" },
+    { "label": "GraphQL API with persisted operations", "href": "/docs/persisted-operations" },
+    { "label": "Subscriptions over WebSockets", "href": "/docs/sdk-reference/graphql-api/subscriptions" },
+    { "label": "State machines shared by the browser and the server", "href": "/docs/samples/state-machine" },
+    { "label": "A CLI that reads OpenAPI or GraphQL", "href": "/docs/reference/cli" },
+    { "label": "An operations dashboard", "href": "/docs/dashboard" }
+  ],
+  "milestones": [
+    {
+      "key": "composition",
+      "status": "building",
+      "title": "Composition",
+      "outcome": "Trains run branches in parallel, state machine states start trains, and a failed run resumes from a checkpoint instead of starting over.",
+      "points": [
+        "Parallel branches inside one run, recorded per branch",
+        "A machine state that invokes a train and moves on when it finishes or fails",
+        "Checkpoints, and resuming a run from a chosen step",
+        "All of it visible in GraphQL and the dashboard"
+      ],
+      "code": {
+        "caption": "Sketch, not final",
+        "text": "Chain<LoadCorpus>()\n    .Parallel(p => p\n        .Branch(b => b.Chain<EmbeddingSimilarity>())\n        .Branch(b => b.Chain<CoCitationOverlap>()))\n    .Chain<CombineSignals>()\n    .Resolve();\n\nm.In(Partition.Ingesting)\n    .Invokes<IIngestPartitionTrain>(ctx => new IngestInput(ctx.Source))\n    .OnDone(Partition.Ingested)\n    .OnFailed(Partition.Failed);"
+      }
+    },
+    {
+      "key": "machines-api",
+      "status": "next",
+      "title": "Machines become the API",
+      "outcome": "Each state machine is served as its own typed API. The server applies every transition, and pushes each new snapshot to the client over the socket.",
+      "points": [
+        "One typed mutation per event, generated from the machine",
+        "Authorization per event, checked on the server",
+        "Every operation persisted, so production can refuse ad-hoc queries",
+        "Snapshot changes pushed over a subscription, including ones the server made itself"
+      ],
+      "code": {
+        "caption": "Sketch, not final",
+        "text": "mutation {\n  checkout {\n    submit(id: $id, input: { address: $address }) {\n      state\n      context { total }\n    }\n  }\n}\n\nsubscription {\n  checkoutChanged(id: $id) { state version }\n}"
+      }
+    },
+    {
+      "key": "clients",
+      "status": "next",
+      "title": "Generated clients",
+      "outcome": "The CLI generates the whole client side for a frontend framework: the machines, a typed function per operation, and live progress. Your frontend code is the views.",
+      "points": [
+        "React first, on a framework-neutral core",
+        "Calls send persisted operation hashes, never query text",
+        "Typed progress for trains as they run"
+      ],
+      "code": {
+        "caption": "Sketch, not final",
+        "text": "$ trax client --target react --out ./web/src/trax\n\nconst checkout = useCheckout(id);\nif (checkout.state === \"Address\")\n  return <AddressForm onSubmit={checkout.submit} />;"
+      }
+    },
+    {
+      "key": "spec-to-app",
+      "status": "later",
+      "title": "From a spec to a running app",
+      "outcome": "Give the CLI an OpenAPI or GraphQL spec, choose your security and which schemas become tables, and get an API that runs, not one full of stubs.",
+      "points": [
+        "Auth from the shipped packages (API key, JWT, Cognito, OIDC), closed by default",
+        "Postgres or SQLite tables with migrations, from the spec's schemas",
+        "Working create, read, update and delete operations",
+        "Re-running after the spec changes keeps the code you wrote"
+      ],
+      "code": {
+        "caption": "Sketch, not final",
+        "text": "$ trax generate --schema ./shop-api.yaml \\\n    --auth jwt --database postgres \\\n    --tables Product,Order --output ./Shop"
+      }
+    },
+    {
+      "key": "proof",
+      "status": "later",
+      "title": "One app, end to end",
+      "outcome": "A complete sample app built only with the CLI, and a guide that takes you from a spec to the same result.",
+      "points": [
+        "A full working app, not a feature demo",
+        "A guide checked to work from top to bottom"
+      ]
+    }
+  ]
+}

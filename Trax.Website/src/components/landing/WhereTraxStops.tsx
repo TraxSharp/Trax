@@ -1,7 +1,15 @@
-const limits = [
+import Link from "next/link";
+
+// `roadmap` links a limit to the milestone on /roadmap that lifts it.
+const limits: {
+  title: string;
+  body: string;
+  roadmap?: { key: string; label: string };
+}[] = [
   {
     title: "A crash restarts the train",
     body: "If a process dies halfway through a run, the run is marked failed and a scheduled train is retried from its first junction. A decider's recorded answers are replayed rather than asked again, unless the state they were about has changed, but every junction runs again, so junctions that call other systems should be safe to repeat.",
+    roadmap: { key: "composition", label: "Resuming from a checkpoint is being built" },
   },
   {
     title: "Postgres in production",
@@ -23,7 +31,7 @@ const limits = [
 
 export default function WhereTraxStops() {
   return (
-    <section className="border-b border-border py-24">
+    <section id="where-trax-stops" className="scroll-mt-16 border-b border-border py-24">
       <div className="mx-auto max-w-6xl px-6 sm:px-8">
         <h2 className="text-2xl font-semibold text-text-primary">
           Where Trax stops
@@ -41,9 +49,24 @@ export default function WhereTraxStops() {
               <p className="mt-2 text-sm leading-relaxed text-text-secondary">
                 {limit.body}
               </p>
+              {limit.roadmap && (
+                <Link
+                  href={`/roadmap#${limit.roadmap.key}`}
+                  className="mt-2 inline-block text-sm text-accent hover:text-accent-bright"
+                >
+                  {limit.roadmap.label} &rarr;
+                </Link>
+              )}
             </div>
           ))}
         </div>
+
+        <p className="mt-12 text-sm text-text-muted">
+          Where Trax is going next:{" "}
+          <Link href="/roadmap" className="text-accent hover:text-accent-bright">
+            the roadmap &rarr;
+          </Link>
+        </p>
       </div>
     </section>
   );
