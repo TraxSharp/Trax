@@ -39,6 +39,10 @@ public interface IOperationsService
     Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct);
     Task<RecordedDecisionPage> GetRecordedDecisionsAsync(long metadataId, long? afterId, int take, CancellationToken ct);
     Task<WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, CancellationToken ct);
+    Task<MachineInstancePage> GetMachineInstancesAsync(MachineInstanceQuery query, CancellationToken ct);
+    Task<MachineInstanceTotal> CountMachineInstancesAsync(MachineInstanceQuery query, CancellationToken ct);
+    Task<MachineInstanceRecord?> GetMachineInstanceAsync(MachineInstanceKey key, CancellationToken ct);
+    Task<IReadOnlyList<MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(string? machine, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct);
     Task<OperationResult> UpdateManifestAsync(long id, ManifestUpdate update, CancellationToken ct);
     Task<OperationResult> UpdateManifestGroupAsync(long id, UpdateManifestGroupInput input, CancellationToken ct);
@@ -253,7 +257,7 @@ On a relational provider each batch is one `UPDATE` with its state test in it, s
 ## Read models
 
 The numbers behind a manifest's detail cards, the manifest groups list, the logs pages, a
-run's recorded decisions and a work queue entry's page.
+run's recorded decisions, a work queue entry's page and the State Machines pages.
 
 | Method | Returns |
 |--------|---------|
@@ -340,6 +344,45 @@ a key two types share is withheld when either is marked.
 
 The replay links are plain columns read with the run and the entry: `Metadata.ReplayDecisionsOf`,
 `Metadata.ReplayAbandoned` and `WorkQueue.ReplayDecisionsOf`.
+
+### State-machine instances
+
+The operator's read-only view of `trax.snapshot_draft`: the dashboard's
+[State Machines pages](/docs/dashboard#state-machines) and the API's
+[`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries#machineinstances)
+read through these four methods.
+
+```csharp
+public record MachineInstanceQuery(
+    string? Machine = null, string? State = null, SnapshotOwnerKind? OwnerKind = null,
+    int Skip = 0, int Take = 25);
+
+public record MachineInstanceKey(string Machine, SnapshotOwnerKind OwnerKind, Guid Id, long? RowId = null);
+
+public record MachineInstanceRecord(
+    long RowId, string Machine, SnapshotOwnerKind OwnerKind, Guid Id, string State, int Version,
+    DateTimeOffset? CreatedAt, DateTimeOffset UpdatedAt, bool HasLiveInvokedRun);
+
+public record MachineInstancePage(IReadOnlyList<MachineInstanceRecord> Items, int Skip, int Take);
+public record MachineInstanceTotal(int Count, bool Capped);
+public record MachineInstanceStateCount(string Machine, string State, SnapshotOwnerKind OwnerKind, long Count);
+```
+
+| Method | Returns |
+|--------|---------|
+| `GetMachineInstancesAsync(query, ct)` | A page of instances matching the query's machine, state and owner kind (each optional), newest first by `UpdatedAt`, then by row. `Take` is clamped to 1 through 500. |
+| `CountMachineInstancesAsync(query, ct)` | How many match, counted up to `OperationsService.MachineInstanceCountCap` (10,000): more give `Count = 10000, Capped = true`. |
+| `GetMachineInstanceAsync(key, ct)` | One instance, or `null`. The owner kind is part of every lookup, so a user's draft never answers for a system instance under the same id. A user's draft also needs `RowId`, because several users can hold a draft under one id: without it the method throws `ArgumentException`. |
+| `GetMachineInstanceStateCountsAsync(machine, ct)` | Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. |
+
+A record never carries the snapshot's context or the owning user's key. The context is an untyped
+JSON object, so nothing could mask its sensitive parts; an operator sees where an instance is and
+when it got there, never what it holds. `HasLiveInvokedRun` says whether the instance holds an invoke
+token, not what the token is. `CreatedAt` is null for a row written before migration 071 (Sqlite
+033) added it. On Postgres a page under one machine and state reads
+`ix_snapshot_draft_machine_state_updated` in order, and any other page reads
+`ix_snapshot_draft_updated`; at two million instances every page measured took under 10 ms and the
+counts about 120 ms.
 
 ### Masking a stored input
 

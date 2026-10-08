@@ -38,7 +38,7 @@ using SchedulerTrigger = Trax.Scheduler.Services.TraxScheduler.TraxScheduler;
 namespace Trax.Scheduler.Services.Operations;
 
 /// <inheritdoc />
-public class OperationsService : IOperationsService
+public partial class OperationsService : IOperationsService
 {
     private readonly ITrainDiscoveryService _discoveryService;
     private readonly IDataContextProviderFactory _dataContextFactory;

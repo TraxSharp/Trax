@@ -515,6 +515,59 @@ public interface IOperationsService
     Task<WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, CancellationToken ct) =>
         throw NotImplementedBy(nameof(GetWorkQueueEntryDetailAsync));
 
+    /// <summary>
+    /// A page of state-machine instances, system-owned and user-owned alike, filtered by machine,
+    /// state and owner kind (each optional), newest first by when each was last written. Each
+    /// carries its state, timestamps, owner kind and whether it waits on an invoked run; never
+    /// its context or its owner's key (see <see cref="MachineInstanceRecord"/>). The page size is
+    /// clamped to 1 through <c>OperationsService.MaxPageSize</c>. The dashboard's State machines
+    /// page and the API's <c>operations.machineInstances</c> both read it here.
+    /// </summary>
+    /// <param name="query">The filter and the page.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<MachineInstancePage> GetMachineInstancesAsync(
+        MachineInstanceQuery query,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstancesAsync));
+
+    /// <summary>
+    /// How many instances match the query's filter, counted up to
+    /// <c>OperationsService.MachineInstanceCountCap</c>; its paging fields are ignored.
+    /// </summary>
+    /// <param name="query">The filter.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<MachineInstanceTotal> CountMachineInstancesAsync(
+        MachineInstanceQuery query,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CountMachineInstancesAsync));
+
+    /// <summary>
+    /// One state-machine instance as an operator reads it, or <c>null</c> when no row matches
+    /// <paramref name="key"/>. The owner kind is part of every lookup, so a system instance and a
+    /// user's draft under the same id are never confused; a user's draft is named by its row id
+    /// as well, because several users can hold one id.
+    /// </summary>
+    /// <param name="key">The machine, owner kind, id and, for a user's draft, row id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="key"/> names a user's draft without a row id, or names no machine.
+    /// </exception>
+    Task<MachineInstanceRecord?> GetMachineInstanceAsync(
+        MachineInstanceKey key,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceAsync));
+
+    /// <summary>
+    /// How many instances each machine has in each state, for each owner kind, ordered by
+    /// machine, state and owner kind. Exact, never capped.
+    /// </summary>
+    /// <param name="machine">Only this machine's counts; null counts every machine.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(
+        string? machine,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceStateCountsAsync));
+
     private NotSupportedException NotImplementedBy(string member) =>
         new(
             $"{GetType().Name} does not implement {member}. It was added to IOperationsService "
