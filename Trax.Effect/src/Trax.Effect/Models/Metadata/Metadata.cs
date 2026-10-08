@@ -364,6 +364,47 @@ public class Metadata : IModel, IDisposable
     public SnapshotOwnerKind? InvokingOwnerKind { get; set; }
 
     /// <summary>
+    /// The output of a completed invoked run, serialized as its machine's <c>OnDone</c> edges read it
+    /// (<see cref="Utils.InvokedRunOutput"/>), and written in the run's terminal write so the outcome survives
+    /// any crash after it. Null on every other run, on a run that has not completed, on one whose output was
+    /// <see cref="InvokeOutputOversize"/>, and on one whose output could not be serialized. Internal and never
+    /// serialized: it is not part of any operator view, broadcast or lifecycle payload.
+    /// </summary>
+    internal string? InvokeOutput { get; set; }
+
+    /// <summary>
+    /// True when a completed invoked run's output was larger than <see cref="Utils.InvokedRunOutput.MaxBytes"/>,
+    /// so it was not stored and the invoking state fails instead. Internal, like <see cref="InvokeOutput"/>.
+    /// </summary>
+    internal bool InvokeOutputOversize { get; set; }
+
+    /// <summary>
+    /// Records <paramref name="output"/> for the machine that invoked this run, when one did: the copy its
+    /// <c>OnDone</c> edges read, or the mark that it was too large. An output that cannot be serialized is left
+    /// unrecorded, which the machine treats as a failure, and the exception is returned for the log.
+    /// </summary>
+    internal Exception? RecordInvokeOutput(object? output, Type declaredType)
+    {
+        if (InvokingMachine is null)
+            return null;
+
+        try
+        {
+            (InvokeOutput, InvokeOutputOversize) = Utils.InvokedRunOutput.Serialize(
+                output,
+                declaredType
+            );
+            return null;
+        }
+        catch (Exception ex)
+        {
+            InvokeOutput = null;
+            InvokeOutputOversize = false;
+            return ex;
+        }
+    }
+
+    /// <summary>
     /// True when the run started on a host that records decisions (<c>AddDecisionRecording</c>),
     /// so every decision it made is in <c>trax.decision</c>; false when what it decided, if
     /// anything, was never recorded.

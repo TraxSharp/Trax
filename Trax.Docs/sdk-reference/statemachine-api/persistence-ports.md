@@ -105,7 +105,10 @@ public interface IInvokedTrainLauncher
 ```
 
 `Launch` authorizes the run and writes its work queue entry into the caller's data context, inside the transaction
-that moves the snapshot, so the two commit together; it commits nothing itself. `Refusals` tells the startup check
+that moves the snapshot, so the two commit together; it commits nothing itself. A user-owned instance's run is
+authorized against the current caller. A system-owned instance's run, and one whose `InvokedTrainLaunch.FromOutcome`
+is set (the previous run's outcome entered a state that invokes a train, so no user is present), are authorized in
+Trax's trusted execution scope. `Refusals` tells the startup check
 what about a train stops a machine from invoking it. It lives in the persistence package rather than the engine
 because it writes through `IDataContext`, and the engine depends on no data provider.
 

@@ -218,6 +218,7 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public InvokedTrainLaunch(System.Type TrainType, object Input, string ExternalId, Trax.Effect.Models.WorkQueue.DTOs.InvokedBy InvokedBy) { }
         public string ExternalId { get; init; }
+        public bool FromOutcome { get; init; }
         public object Input { get; init; }
         public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy InvokedBy { get; init; }
         public System.Type TrainType { get; init; }
@@ -309,6 +310,8 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public StateMachineOptions() { }
         public System.TimeSpan? DraftTtl { get; set; }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
+        public System.TimeSpan InvokeOutcomeSweepInterval { get; set; }
     }
     public static class StateMachinesBuilderExtensions
     {

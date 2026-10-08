@@ -238,6 +238,15 @@ internal interface IMachineInternals
     /// <summary>The invoking state <paramref name="state"/> is, or null when it invokes nothing.</summary>
     EnteringInvoke? Entering(string state);
 
+    /// <summary>Reads stored snapshot JSON, migrating it as a load does. Never throws.</summary>
+    RehydrationResult Rehydrate(string json);
+
+    /// <summary>The canonical JSON <paramref name="snapshot"/> is stored and measured as.</summary>
+    string Serialize(Snapshot snapshot);
+
+    /// <summary>Applies an invoked run's <paramref name="outcome"/> to <paramref name="snapshot"/>. Never throws.</summary>
+    AdvanceResult ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome);
+
     /// <summary>
     /// <see cref="IMachine.CreateService"/>, with the cancellation a draft deletion calls first, and the runtime a
     /// machine that invokes trains writes through (null for one that invokes none).

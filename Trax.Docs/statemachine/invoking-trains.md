@@ -45,7 +45,9 @@ Every invoking state says where each outcome goes, and `Build` refuses one that 
 - **`OnDone`**, one or more. They are tried in the order declared, and the first whose guard holds for the train's
   output is taken, so an unguarded `OnDone` after the guarded ones is the fallback. The guard reads the output as
   the outcome's input (`Input((FetchOutput o) => ...)`), and the reduction copies what the next state needs into
-  the context. An output no `OnDone` accepts moves nothing: the outcome is a `no-transition`.
+  the context. To the engine, and to the TypeScript twin, an output no `OnDone` accepts is a `no-transition`. On
+  the server the run has finished, so the instance must not wait on it: such an output is applied as the state's
+  `OnFailed`, with the reason `invoke-output-unaccepted` (see [How an outcome comes back](#how-an-outcome-comes-back)).
 - **`OnFailed`**, exactly once. A run the scheduler reaps arrives here too.
 - **`OnCancelled`**, exactly once, and required: a timeout or an operator's cancel always has a declared edge.
 
@@ -101,6 +103,74 @@ write and cancels the run: a run still queued is marked cancelled, and one alrea
 set, which it reads at its next junction on whichever host runs it. A self-loop on the invoking state neither
 leaves nor enters it, and the state keeps its run.
 
+## How an outcome comes back
+
+When the run ends, its outcome is applied to the one row whose invoke token is the run's external id, by a single
+conditional update (`UPDATE ... WHERE invoke_token = @token`) that also replaces or clears the token. Whichever
+delivery matches first applies it; every other delivery of the same run, from any host, matches nothing and is a
+typed `no-transition` that writes nothing. A run whose state was left, or whose state was entered again under a
+new token, has nowhere to land, which is how a late completion after a cancel or a retry is ignored.
+
+How the run ended decides the outcome:
+
+| The run | Outcome |
+| --- | --- |
+| completed | `OnDone`, with the output the run recorded for its machine |
+| failed by its train, or by the scheduler (a run reaped as stale, failed at dispatch or on startup recovery) | `OnFailed` |
+| cancelled: a timeout, an operator's cancel of the run, or an operator's cancel of its entry before it was dispatched | `OnCancelled` |
+| cancelled because its state was left | nothing: the token was cleared when the state was left |
+| still queued, requeued after a failed dispatch, or running | nothing yet |
+
+**Two paths deliver it.** The host that ran the train delivers the outcome as soon as the run's terminal write has
+committed, through a lifecycle hook, when that host registers the machine. Every host that registers machines also
+runs an outcome reconciler, a hosted service that sweeps the rows holding a live token, finds those whose run has
+ended, and delivers each. The hook is the fast path; the sweep is the guarantee, and covers a host that died after
+the run's terminal write and before its hook, a run the scheduler failed or cancelled itself, a cancel before
+dispatch, and a train run on a host that registers no machines (a dedicated scheduler host, typically). On Postgres
+a trigger notifies every host when an invoked run ends, and each reconciler delivers that run at once; on SQLite
+the sweep runs at its interval. Set the interval with `StateMachineOptions.InvokeOutcomeSweepInterval` (5 seconds
+by default):
+
+```csharp
+trax.AddStateMachines(
+    o => o.InvokeOutcomeSweepInterval = TimeSpan.FromSeconds(10),
+    typeof(IngestMachine).Assembly);
+```
+
+**The output survives any crash.** A completed run writes the output its machine reads in its own terminal write,
+in the same statement that records it completed, serialized with the names the machine's guards and reductions
+use. It is not the run's recorded `output`, which a host may redact, bound or not keep at all. So once a run is
+recorded completed, its output is there for whichever host applies the outcome, and until it is, the run has not
+completed: there is no point at which a crash loses an outcome or applies one twice. The copy is never shown on
+any operator surface, the execution views, the work queue views and the state machine views alike.
+
+**When the outcome target invokes a train,** applying the outcome queues that run in the same transaction, under
+the new token, exactly as entering the state from an advance does. No user is present to authorize it against, so
+it is authorized in the trusted execution scope, as a system-owned machine's run is. On a user-owned machine the
+startup check already limits the train to one that requires no more than an authenticated user.
+
+**A finished run never leaves its instance waiting.** An outcome is applied as the state's `OnFailed`, with a
+reason, when its own outcome cannot be:
+
+| Reason | When |
+| --- | --- |
+| `invoke-outcome-too-large` | the output is past 64 KiB, so it was never stored; or the snapshot its reduction produces is past the 64 KiB snapshot cap |
+| `invoke-output-unaccepted` | no `OnDone` guard accepts the output |
+| `invoke-output-unrecorded` | the output could not be serialized for the machine |
+| `invoke-outcome-rejected` | the chosen edge's reduction threw, or produced a context its target refuses |
+| `invoke-next-run-refused` | the target invokes a train of its own, and that run could not be queued |
+
+Each is logged at warning level with the run, the machine, the instance and both states, never with the output or
+the context. If even `OnFailed` (or `OnCancelled`) cannot be applied, the token is cleared and the instance stays
+in the invoking state with no live run, logged at error level with its reason; it leaves through one of its declared
+transitions.
+
+## Queued once, run at least once, applied once
+
+The run is queued exactly once, with the advance that enters the state. It runs at least once: a run can execute
+more than once (see below), so its junctions must be idempotent. Its outcome is applied exactly once, by the
+conditional update on the token, however many hosts deliver it and however often.
+
 ## Who a run belongs to
 
 A machine is user-owned unless it declares `SystemOwned()`, and that decides how its runs are authorized:
@@ -112,6 +182,9 @@ A machine is user-owned unless it declares `SystemOwned()`, and that decides how
   [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances), and no user's draft
   operation reaches the machine. Its train is authorized inside Trax's trusted execution scope, as a scheduled
   manifest run is.
+
+A run queued because an outcome entered a state that invokes a train is authorized in the trusted scope on either
+kind of machine: the outcome, not a user, entered the state.
 
 One user holds at most 10 live invoked runs in a machine; entering an invoking state past that is refused as
 `invoke-limit-reached`. A machine sets its own limit with `InvokedRunLimit(n)`. A run is live from the entry that
@@ -165,4 +238,4 @@ of steps, not with the amount of data each step handles.
 
 ## SDK Reference
 
-> [Invokes](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [SystemOwned / InvokedRunLimit](/docs/sdk-reference/statemachine-api/fluent-authoring#imachinebuilder) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [IInvokedTrainLauncher](/docs/sdk-reference/statemachine-api/persistence-ports#iinvokedtrainlauncher) | [Result codes](/docs/sdk-reference/statemachine-api/result-codes) | [OnDone / OnFailed / OnCancelled](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder) | [OutcomeSample](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder) | [IR outcomes](/docs/sdk-reference/statemachine-api/ir-format#outcomes)
+> [Invokes](/docs/sdk-reference/statemachine-api/fluent-authoring#istatebuilder) | [SystemOwned / InvokedRunLimit](/docs/sdk-reference/statemachine-api/fluent-authoring#imachinebuilder) | [InvokeOutcomeSweepInterval](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances) | [IInvokedTrainLauncher](/docs/sdk-reference/statemachine-api/persistence-ports#iinvokedtrainlauncher) | [Result codes](/docs/sdk-reference/statemachine-api/result-codes) | [OnDone / OnFailed / OnCancelled](/docs/sdk-reference/statemachine-api/fluent-authoring#iinvokebuilder) | [OutcomeSample](/docs/sdk-reference/statemachine-api/fluent-authoring#idifferentialbuilder) | [IR outcomes](/docs/sdk-reference/statemachine-api/ir-format#outcomes)

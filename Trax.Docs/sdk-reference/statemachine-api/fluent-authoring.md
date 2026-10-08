@@ -67,7 +67,7 @@ override them.
 
 | Method | Description |
 |--------|-------------|
-| `OnDone(TState target, Rule? when = null, Reduction? reduce = null)` | Where a successful run goes. Declare one or more; they are tried in declaration order and the first whose `when` holds for the output is taken (null: every output). `when` reads the output as the outcome's input (`Input((MyOutput o) => o.Field)`); `reduce` builds the target's context from it (null keeps the context). An output no edge accepts is a `no-transition`. |
+| `OnDone(TState target, Rule? when = null, Reduction? reduce = null)` | Where a successful run goes. Declare one or more; they are tried in declaration order and the first whose `when` holds for the output is taken (null: every output). `when` reads the output as the outcome's input (`Input((MyOutput o) => o.Field)`); `reduce` builds the target's context from it (null keeps the context). An output no edge accepts is a `no-transition` to the engine; on the server the finished run is applied as `OnFailed` with the reason `invoke-output-unaccepted`. |
 | `OnFailed(TState target, Reduction? reduce = null)` | Where a failed run goes, a reaped run included. Exactly once. The outcome carries no input. |
 | `OnCancelled(TState target, Reduction? reduce = null)` | Where a cancelled run goes. Required, exactly once. The outcome carries no input. |
 

@@ -262,6 +262,17 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: A completed invoked run writes the output its machine reads to `metadata.invoke_output` (or marks
+  it `invoke_output_oversize`) in its own terminal write, so once the run is recorded completed its output is
+  durable and no crash point loses or doubles an outcome; the column is internal and on no operator surface. The
+  hook on the run's host and the reconciler on every host that registers machines deliver through one conditional
+  update; the sweep interval is `StateMachineOptions.InvokeOutcomeSweepInterval`, and Postgres migration 073's
+  trigger wakes it. Fail-closed: a completed run whose output no `OnDone` accepts, or whose outcome cannot be
+  applied, goes to `OnFailed` with a typed reason; if that cannot be applied either, the token is cleared and the
+  reason logged. A run queued because an outcome entered an invoking state is authorized in the trusted scope, since
+  no user is present. `InvokeOutcomeDeliveryTests` live in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`,
+  on Postgres and SQLite, where the dispatcher, the job runner and the reaper are reachable.
+
 - **2026-10-08**: The launcher port lives in Effect.StateMachine.Persistence, because it writes through the data
   context the engine package does not depend on. A machine is system-owned by declaring `SystemOwned()`, which
   makes it system-only: `Start` refuses any other machine, and no user's draft operation reaches one. Because

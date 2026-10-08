@@ -33,8 +33,9 @@ public interface IInvokeBuilder<TState, TTrigger> : IStateBuilder<TState, TTrigg
     /// <summary>
     /// When the run succeeds, go to <paramref name="target"/>. Declare several to route on the output: they are
     /// tried in declaration order and the first whose <paramref name="when"/> holds is taken, so an unguarded
-    /// edge after the guarded ones is the fallback. An output no edge accepts moves nothing (a typed
-    /// <c>no-transition</c>).
+    /// edge after the guarded ones is the fallback. To the engine, an output no edge accepts moves nothing (a typed
+    /// <c>no-transition</c>); on the server the run has finished, so such an output is applied as the state's
+    /// <see cref="OnFailed"/>, with the reason <c>invoke-output-unaccepted</c>.
     /// </summary>
     /// <param name="target">The state the machine enters.</param>
     /// <param name="when">
@@ -135,14 +136,6 @@ internal sealed record InvokeDefinition<TState>(
 )
     where TState : struct, Enum
 {
-    // The same naming the declarative schema reflects (camelCase members, enums as camelCase strings), so the
-    // fields a guard or reduction names exist in the serialized output.
-    private static readonly JsonSerializerOptions OutputJson = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-    };
-
     /// <summary>The train's canonical name: its interface's full name.</summary>
     public string TrainName => TrainType.FullName ?? TrainType.Name;
 
@@ -163,8 +156,13 @@ internal sealed record InvokeDefinition<TState>(
         };
 
     /// <summary>Serializes a run's output into the JSON an outcome's guard and reduction read.</summary>
+    /// <remarks>
+    /// The same naming the declarative schema reflects (camelCase members, enums as camelCase strings), and the
+    /// same options a run stores its output with for the machine (<see cref="Utils.InvokedRunOutput"/>), so the
+    /// fields a guard or reduction names exist in the output whichever produced it.
+    /// </remarks>
     public JsonNode? SerializeOutput(object? output) =>
-        JsonSerializer.SerializeToNode(output, OutputType, OutputJson);
+        JsonSerializer.SerializeToNode(output, OutputType, Utils.InvokedRunOutput.Json);
 }
 
 /// <summary>

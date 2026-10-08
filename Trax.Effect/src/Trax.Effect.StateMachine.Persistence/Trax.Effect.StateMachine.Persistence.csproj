@@ -32,5 +32,8 @@
     <!-- The mediator implements the launcher; its tests run the startup check per machine and read the
          owner-aware store, which this folder's tests cannot reach without the mediator. -->
     <InternalsVisibleTo Include="Trax.Mediator.Tests.StateMachine.Integration" />
+    <!-- The outcome delivery tests drive the reconciler's sweep against a real dispatcher, job runner and reaper,
+         which only the scheduler's tests reach. -->
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
   </ItemGroup>
 </Project>

@@ -74,4 +74,14 @@ public sealed record InvokedTrainLaunch(
     object Input,
     string ExternalId,
     InvokedBy InvokedBy
-);
+)
+{
+    /// <summary>
+    /// True when the state was entered by the outcome of the run before it rather than by a caller: an
+    /// <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c> target that itself invokes a train. No user is present
+    /// to authorize against, so the run is authorized in Trax's trusted execution scope, as a system-owned
+    /// instance's is. The startup check already limits a user-owned machine's trains to ones that require no more
+    /// than an authenticated user, which the owner was when they entered the first state.
+    /// </summary>
+    public bool FromOutcome { get; init; }
+}

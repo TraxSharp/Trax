@@ -214,6 +214,13 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
             ? new EnteringInvoke(invoke.TrainType, invoke.CreateInput, Built.InvokedRunLimit)
             : null;
 
+    RehydrationResult IMachineInternals.Rehydrate(string json) => Built.Engine.Rehydrate(json);
+
+    string IMachineInternals.Serialize(Snapshot snapshot) => Built.Engine.Serialize(snapshot);
+
+    AdvanceResult IMachineInternals.ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome) =>
+        Built.Engine.ApplyOutcome(snapshot, outcome);
+
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
         Built.Effects.Select(e => EffectClaimKey.ForUser(e.KeyPrefix, userKey, id));
 

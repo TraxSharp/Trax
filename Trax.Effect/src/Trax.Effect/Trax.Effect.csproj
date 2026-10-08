@@ -49,6 +49,12 @@
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
   </ItemGroup>
 
+  <!-- The engine serializes an invoked run's output with the options a run stores it with (InvokedRunOutput), so the
+       two cannot drift. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine" />
+  </ItemGroup>
+
   <!-- Decision recording binds each run's decisions to its row through ServiceTrain.Run. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.Data" />

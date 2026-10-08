@@ -63,6 +63,12 @@ internal class PersistentMetadata : Effect.Models.Metadata.Metadata
                 .HasColumnType("jsonb");
 
             entity.Property(e => e.HostLabels).HasConversion(v => v, v => v).HasColumnType("jsonb");
+
+            // An invoked run's output as its machine reads it (Postgres 073, SQLite 035). Internal members,
+            // mapped by name here because convention maps only public ones; text rather than jsonb, so the
+            // bytes stored are the bytes the size cap counted.
+            entity.Property(e => e.InvokeOutput).HasColumnName("invoke_output");
+            entity.Property(e => e.InvokeOutputOversize).HasColumnName("invoke_output_oversize");
         });
     }
 }

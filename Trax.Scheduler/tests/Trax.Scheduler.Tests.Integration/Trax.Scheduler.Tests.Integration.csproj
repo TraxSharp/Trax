@@ -36,6 +36,8 @@
     <ProjectReference Include="../Trax.Scheduler.Tests.ArrayLogger/Trax.Scheduler.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <!-- The invoked-train outcome tests run on SQLite as well as Postgres. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />

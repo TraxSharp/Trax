@@ -246,8 +246,9 @@ public class TrainExecutionService(
     /// its input capped and its subject key stamped, but written into the caller's
     /// <paramref name="context"/> and flushed inside the transaction the caller holds, which commits
     /// it with the snapshot or not at all. A user-owned instance's run is authorized against the
-    /// current caller, the user entering the state; a system-owned instance's inside the trusted
-    /// execution scope, as a scheduled manifest run is.
+    /// current caller, the user entering the state; a system-owned instance's, and one entered by
+    /// the outcome of the run before it (<see cref="InvokedTrainLaunch.FromOutcome"/>), inside the
+    /// trusted execution scope, as a scheduled manifest run is.
     /// </summary>
     /// <remarks>
     /// An invoked train may not stage its entry (central ADR 0018) or run an <c>OnQueue</c> hook:
@@ -273,7 +274,9 @@ public class TrainExecutionService(
                     + "state machine cannot queue it in the transaction that enters its state."
             );
 
-        if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System)
+        // A system-owned instance's run, and a run entered by the outcome of the run before it, which no
+        // user is present for, are authorized as a scheduled manifest run is.
+        if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System || launch.FromOutcome)
         {
             using (
                 serviceProvider

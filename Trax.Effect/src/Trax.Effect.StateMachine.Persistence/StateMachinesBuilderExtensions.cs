@@ -5,6 +5,7 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Extensions;
+using Trax.Effect.Services.TrainLifecycleHookFactory;
 using Trax.Effect.StateMachine.Persistence.Mutations;
 
 namespace Trax.Effect.StateMachine.Persistence;
@@ -123,6 +124,15 @@ public static class StateMachinesBuilderExtensions
         services.AddScoped<IMachineInstances, MachineInstances>();
         services.AddScoped<IInvokedRunCancellation, InvokedRunCancellation>();
         services.AddHostedService<InvokesStartupValidator>();
+
+        // An invoked run's outcome comes back to the state that queued it: the hook applies it on the host that ran
+        // the train, and the reconciler, on every host that registers machines, sweeps for the ones the hook missed.
+        // Both deliver through one conditional update on the token, so an outcome is applied once however many
+        // hosts deliver it. The hook is not toggleable: the registry leaves an untracked factory enabled.
+        services.AddScoped<InvokeOutcomeDelivery>();
+        services.AddSingleton<InvokeOutcomeReconciler>();
+        services.AddHostedService(sp => sp.GetRequiredService<InvokeOutcomeReconciler>());
+        services.AddSingleton<ITrainLifecycleHookFactory, InvokeOutcomeHookFactory>();
 
         services.AddScopedTraxRoute<ISaveSnapshot, SaveSnapshot>();
         services.AddScopedTraxRoute<IAdvanceSnapshot, AdvanceSnapshot>();

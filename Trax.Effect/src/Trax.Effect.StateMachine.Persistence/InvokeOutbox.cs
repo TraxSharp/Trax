@@ -171,13 +171,68 @@ internal sealed class InvokeOutbox(
             cancellationToken
         );
 
+    /// <summary>
+    /// Applies a finished run's outcome: writes <paramref name="next"/> over the row that still holds
+    /// <paramref name="invokeToken"/> and <paramref name="expectedToken"/> (<c>UPDATE ... WHERE invoke_token =</c>),
+    /// replacing the token with the run <paramref name="entering"/> queues, or clearing it. The finished run needs
+    /// no cancel. <see cref="InvokeWrite.Conflict"/> when the row no longer holds both tokens: the outcome was
+    /// applied already, the state was left, or the row changed since it was read.
+    /// </summary>
+    public async Task<InvokeWrite> Deliver(
+        DraftOwner owner,
+        Guid id,
+        string invokeToken,
+        Snapshot next,
+        Guid expectedToken,
+        EnteringInvoke? entering,
+        CancellationToken cancellationToken
+    ) =>
+        await InTransaction(
+            async () =>
+            {
+                if (
+                    entering is not null
+                    && await OverLimit(owner, next.Machine, id, entering.Limit, cancellationToken)
+                        is { } refused
+                )
+                    return refused;
+
+                var launch = entering is null
+                    ? null
+                    : Prepare(entering, owner, next, id, fromOutcome: true);
+                if (launch is InvokeWrite.Refused bad)
+                    return bad;
+                var run = launch as PreparedLaunch;
+
+                // The conditional update is the one write that can lose, to another host applying the same
+                // outcome or to the state being left; losing it writes nothing else.
+                if (
+                    !await store.ApplyByInvokeToken(
+                        invokeToken,
+                        next,
+                        run?.Launch.ExternalId,
+                        expectedToken,
+                        cancellationToken
+                    )
+                )
+                    return new InvokeWrite.Conflict();
+
+                if (run is not null)
+                    await Launcher().Launch(run.Launch, context, cancellationToken);
+
+                return new InvokeWrite.Written(run?.Launch.ExternalId);
+            },
+            cancellationToken
+        );
+
     private sealed record PreparedLaunch(InvokedTrainLaunch Launch);
 
     private static object Prepare(
         EnteringInvoke entering,
         DraftOwner owner,
         Snapshot snapshot,
-        Guid id
+        Guid id,
+        bool fromOutcome = false
     )
     {
         object? input;
@@ -211,6 +266,9 @@ internal sealed class InvokeOutbox(
                 Guid.NewGuid().ToString("N"),
                 new InvokedBy(snapshot.Machine, id, owner.Kind)
             )
+            {
+                FromOutcome = fromOutcome,
+            }
         );
     }
 

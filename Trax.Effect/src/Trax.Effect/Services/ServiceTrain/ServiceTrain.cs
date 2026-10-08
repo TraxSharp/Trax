@@ -534,6 +534,18 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Logger?.LogTrace("({TrainName}) completed successfully.", TrainName);
         Metadata.SetOutputObject(output);
 
+        // A run a machine state invoked carries the output its OnDone edges read, in this same
+        // terminal write: once the row says Completed, the output is there for whichever host
+        // applies the outcome, after any crash. Never metadata.Output, which is redacted and
+        // bounded by host policy. See Trax.Docs/adr/0046.
+        if (Metadata.RecordInvokeOutput(output, typeof(TOut)) is { } unserializable)
+            Logger?.LogError(
+                unserializable,
+                "The output of train ({TrainName}) could not be recorded for the state machine that "
+                    + "invoked it; the machine treats the run as failed.",
+                TrainName
+            );
+
         // A failure to record a completed run propagates as it is. It is not turned into a
         // Failed outcome: the work happened, and recording that it failed would be false.
         await EffectRunner.Update(Metadata);

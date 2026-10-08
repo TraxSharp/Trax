@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.Postgres.Services.InvokedRunListener;
 using Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
@@ -16,6 +17,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.InvokedRunListener;
 using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
@@ -171,6 +173,11 @@ public static class ServiceExtensions
         // so the provider that owns it disposes its data source.
         configurationBuilder.ServiceCollection.AddSingleton<IQueuedWorkListener>(
             _ => new PostgresQueuedWorkListener(connectionString, configureDataSource)
+        );
+
+        // The notice a state machine's outcome reconciler on any host wakes on when a run it waits on ends.
+        configurationBuilder.ServiceCollection.AddSingleton<IInvokedRunListener>(
+            _ => new PostgresInvokedRunListener(connectionString, configureDataSource)
         );
 
         // Configure a feature's own DbContext, if it brings one, against this same Postgres data source, so it needs no
