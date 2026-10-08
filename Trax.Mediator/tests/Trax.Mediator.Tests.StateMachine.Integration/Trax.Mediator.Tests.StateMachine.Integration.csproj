@@ -31,6 +31,8 @@
     <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <!-- TraxInvariants, checked after every test against the throwaway database. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <!-- AddJunctionProgress registers the cancel-flag check an invoked train needs. -->

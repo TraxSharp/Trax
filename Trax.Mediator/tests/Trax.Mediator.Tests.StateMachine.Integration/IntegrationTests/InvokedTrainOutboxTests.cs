@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.QueuedWorkListener;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
@@ -253,6 +254,9 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         (await _host.Row(id, GoodMachine.MachineId))!.InvokeToken.Should().Be(runs[1].ExternalId);
     }
 
+    [LeavesStuckRuns(
+        "Dispatches the run by hand and marks it in progress, with no runner; leaving the state only flags its cancel."
+    )]
     [Test]
     public async Task Leaving_an_invoking_state_flags_its_dispatched_run_for_cancellation()
     {
