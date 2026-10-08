@@ -8,6 +8,8 @@ import {
   DEAD_LETTERS,
   DEAD_LETTER_DETAIL,
   EXECUTIONS,
+  MACHINE_INSTANCE,
+  MACHINE_INSTANCES,
   MANIFESTS,
   MANIFEST_DETAIL,
   MANIFEST_GROUPS,
@@ -17,6 +19,7 @@ import {
 } from "../src/graphql/queries";
 import {
   ACKNOWLEDGE_DEAD_LETTER,
+  CANCEL_MACHINE_INSTANCE,
   RESUME_EXECUTION,
   UPDATE_MANIFEST,
   UPDATE_MANIFEST_GROUP,
@@ -97,6 +100,21 @@ function check(label: string, cond: boolean) {
   check("resumeExecution -> queued entry", get(entry.data, "operations.workQueue.detail.status") === "QUEUED");
   const again = await client.mutation(RESUME_EXECUTION, { id: failed.id, from: null }).toPromise();
   check("resumeExecution again -> refused", get(again.data, "operations.resumeExecution.success") === false);
+}
+
+// ── State machines: cancel a system instance's live run -> its run shows the cancel request ──
+{
+  const list = await client.query(MACHINE_INSTANCES, { skip: 0, take: 20, ownerKind: "SYSTEM" }, NET).toPromise();
+  const live = (get(list.data, "operations.machineInstances.items") as { machine: string; id: string; hasLiveInvokedRun: boolean }[]).find(
+    (i) => i.hasLiveInvokedRun,
+  )!;
+  const vars = { machine: live.machine, ownerKind: "SYSTEM", id: live.id, rowId: null };
+  await client.query(MACHINE_INSTANCE, vars, NET).toPromise();
+  const ack = await client.mutation(CANCEL_MACHINE_INSTANCE, { machine: live.machine, ownerKind: "SYSTEM", id: live.id }).toPromise();
+  check("cancelMachineInstance -> accepted", get(ack.data, "operations.cancelMachineInstance.success") === true);
+  const after = await client.query(MACHINE_INSTANCE, vars, NET).toPromise();
+  const runs = get(after.data, "operations.machineInstance.invokedRuns") as { isLive: boolean; cancellationRequested: boolean }[];
+  check("machineInstance -> live run cancel requested", runs.some((r) => r.isLive && r.cancellationRequested));
 }
 
 console.log(results.join("\n"));

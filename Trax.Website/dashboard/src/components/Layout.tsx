@@ -21,8 +21,10 @@ import {
   Sparkles,
   TrainFront,
   User,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
+import { useAnswers } from "../lib/answerable";
 import { clearCredential } from "../lib/auth";
 import { getGlobalMockStore } from "../mock/global-store";
 import { ConnectionIndicator } from "./ConnectionIndicator";
@@ -41,7 +43,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   // Shown only when the host exposes the feature (see Layout).
-  feature?: "persistedOperations";
+  feature?: "persistedOperations" | "stateMachines";
 }
 interface NavGroup {
   label: string;
@@ -67,6 +69,7 @@ const GROUPS: NavGroup[] = [
       { path: "/manifests", label: "Manifests", icon: FileCog },
       { path: "/groups", label: "Manifest groups", icon: Layers },
       { path: "/logs", label: "Logs", icon: ScrollText },
+      { path: "/state-machines", label: "State machines", icon: Workflow, feature: "stateMachines" },
       { path: "/persisted-operations", label: "Persisted ops", icon: Pin, feature: "persistedOperations" },
     ],
   },
@@ -95,10 +98,12 @@ export function Layout() {
   // Persisted operations appear only on a host that calls UsePersistedOperations, as in the
   // Blazor sidebar.
   const persistedOps = usePersistedOperationsAvailable().available;
-  const groups = GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((i) => i.feature !== "persistedOperations" || persistedOps),
-  }));
+  // Every host has state machines in the Blazor sidebar; only the demo, before its recordings hold
+  // them, cannot show the page (lib/answerable.ts).
+  const stateMachines = useAnswers("MachineInstances");
+  const shown = (i: NavItem) =>
+    i.feature === "persistedOperations" ? persistedOps : i.feature === "stateMachines" ? stateMachines : true;
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter(shown) }));
 
   return (
     <div className="flex flex-col h-screen">

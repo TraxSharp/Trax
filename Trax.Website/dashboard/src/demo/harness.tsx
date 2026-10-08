@@ -114,14 +114,16 @@ export async function everyPage(page: HTMLElement) {
 
 /**
  * Reads the recorder (Trax.Samples scripts/recordings/dashboard.mjs) does not record yet. The demo
- * does not offer what needs them (lib/answerable.ts): no run graph, and so no resume. Once the recordings hold one, it is checked like every other read; drop it from here
+ * does not offer what needs them (lib/answerable.ts): no State machines page, no run graph and so
+ * no resume. Once the recordings hold one, it is checked like every other read; drop it from here
  * when they all do.
  */
-export const NOT_RECORDED_YET = ["RunGraph"];
+export const NOT_RECORDED_YET = ["RunGraph", "MachineInstanceCounts", "MachineInstances", "MachineInstance"];
 
 /** The read each write not recorded yet is offered from: no read, no write. */
 export const WRITES_OFFERED_FROM: Record<string, string> = {
   ResumeExecution: "RunGraph",
+  CancelMachineInstance: "MachineInstance",
 };
 
 /** True when the demo does not offer `op` because its recordings do not hold it yet. */

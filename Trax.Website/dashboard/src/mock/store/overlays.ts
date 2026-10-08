@@ -1183,6 +1183,106 @@ const readPersistedOperationDetail: QueryOverlay = (data, store, variables) => {
   });
 };
 
+// ── State machines ─────────────────────────────────────────────────────────
+// CancelMachineInstance -> MachineInstance (the run its state waits on) / WorkQueue / ExecutionDetail.
+// The answer depends on the instance, which the mutation's variables do not carry, so the reads
+// note what each instance they served waits on, per store. The messages are the API's.
+
+interface SeenInstance {
+  state: string;
+  live: boolean;
+  queuedEntryId: number | null;
+  liveRunId: number | null;
+}
+
+const seenInstances = new WeakMap<MockStore, Map<string, SeenInstance>>();
+const instanceKey = (machine: unknown, id: unknown) => `${machine}|${id}`;
+
+function seen(store: MockStore): Map<string, SeenInstance> {
+  let map = seenInstances.get(store);
+  if (!map) seenInstances.set(store, (map = new Map()));
+  return map;
+}
+
+const MACHINE_CANCEL_KEY = "machineInstancesCancelled";
+
+export const USER_OWNED_CANCEL_REFUSAL =
+  "Operators can cancel only a system-owned instance. A user-owned instance is read-only to operators: " +
+  "its run is cancelled when its user leaves the state through one of the machine's own transitions.";
+
+const cancelMachineInstance: MutationOverlay = (variables, store) => {
+  const { machine, id } = variables;
+  const answer = (outcome: string, success: boolean, message: string) =>
+    wrap("operations.cancelMachineInstance", { success, outcome, message, state: null });
+  if (variables.ownerKind !== "SYSTEM") return answer("USER_OWNED", false, USER_OWNED_CANCEL_REFUSAL);
+  const instance = seen(store).get(instanceKey(machine, id));
+  if (!instance) return answer("NOT_FOUND", false, `No system-owned instance of '${machine}' has id ${id}.`);
+  if (!instance.live)
+    return answer(
+      "NO_LIVE_RUN",
+      false,
+      `Instance ${id} of '${machine}' is in '${instance.state}', which waits on no train run: there is nothing to cancel.`,
+    );
+  store.update("CancelMachineInstance", (draft) => {
+    const current = (draft[MACHINE_CANCEL_KEY] as string[] | undefined) ?? [];
+    draft[MACHINE_CANCEL_KEY] = [...new Set([...current, instanceKey(machine, id)])];
+  });
+  // A queued run is cancelled before it starts. This mock registers no machine, so the instance
+  // moves when a host that does applies the outcome.
+  if (instance.queuedEntryId != null) {
+    addCancelled(store, [instance.queuedEntryId]);
+    return answer(
+      "RUN_CANCELLED",
+      true,
+      `The queued run of instance ${id} of '${machine}' is cancelled and will not start. The instance moves ` +
+        "through its state's OnCancelled edge when a host that registers the machine applies the outcome.",
+    );
+  }
+  // A dispatched run has its cancel requested and stops at its next junction.
+  if (instance.liveRunId != null)
+    store.update("CancelMachineInstance", (draft) => {
+      const current = (draft[EXEC_CANCEL_KEY] as number[] | undefined) ?? [];
+      draft[EXEC_CANCEL_KEY] = [...new Set([...current, instance.liveRunId!])];
+    });
+  return answer(
+    "CANCEL_REQUESTED",
+    true,
+    `Cancellation requested for the run instance ${id} of '${machine}' waits on in '${instance.state}'. ` +
+      "The run stops at its next junction, and the instance then moves through the state's OnCancelled edge.",
+  );
+};
+
+const readMachineInstance: QueryOverlay = (data, store) => {
+  const instance = asRecord(asRecord(asRecord(data)?.operations)?.machineInstance);
+  if (!instance) return data;
+  const key = instanceKey(instance.machine, instance.id);
+  const runs = (instance.invokedRuns as Rec[] | undefined) ?? [];
+  const live = runs.find((r) => r.isLive);
+  if (instance.ownerKind === "SYSTEM")
+    seen(store).set(key, {
+      state: String(instance.state),
+      live: Boolean(instance.hasLiveInvokedRun),
+      queuedEntryId: (instance.queuedInvokedRunEntryId as number | null) ?? null,
+      liveRunId: (live?.id as number | undefined) ?? null,
+    });
+  if (!readDelta<string[]>(store, MACHINE_CANCEL_KEY, []).includes(key)) return data;
+  // Cancelled: a queued run is no longer queued; a dispatched one has its cancel requested.
+  return patchObjectAtPath(data, "operations.machineInstance", {
+    queuedInvokedRunEntryId: null,
+    invokedRuns: runs.map((r) => (r.isLive ? { ...r, cancellationRequested: true } : r)),
+  });
+};
+
+const readMachineInstances: QueryOverlay = (data, store) => {
+  const page = asRecord(asRecord(asRecord(data)?.operations)?.machineInstances);
+  for (const row of (page?.items as Rec[] | undefined) ?? []) {
+    const key = instanceKey(row.machine, row.id);
+    if (row.ownerKind !== "SYSTEM" || seen(store).has(key)) continue;
+    seen(store).set(key, { state: String(row.state), live: Boolean(row.hasLiveInvokedRun), queuedEntryId: null, liveRunId: null });
+  }
+  return data;
+};
+
 // ── Registration ───────────────────────────────────────────────────────────
 
 export const workQueueOverlay: StatefulOverlay = {
@@ -1215,6 +1315,11 @@ export const executionOverlay: StatefulOverlay = {
     ResumeExecution: resumeExecution,
   },
   queries: { ExecutionDetail: readExecutionDetail, Executions: readExecutions },
+};
+
+export const machineInstanceOverlay: StatefulOverlay = {
+  mutations: { CancelMachineInstance: cancelMachineInstance },
+  queries: { MachineInstance: readMachineInstance, MachineInstances: readMachineInstances },
 };
 
 export const manifestOverlay: StatefulOverlay = {
@@ -1292,6 +1397,7 @@ export const defaultOverlays: StatefulOverlay[] = [
   schedulerOverlay,
   effectOverlay,
   persistedOperationOverlay,
+  machineInstanceOverlay,
 ];
 
 /**

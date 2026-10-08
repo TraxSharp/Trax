@@ -935,3 +935,78 @@ export const RUN_GRAPH = gql`
     }
   }
 `;
+
+// ── State machines ─────────────────────────────────────────────────────────
+// Operators see instances read-only and never their context: none of these selects it.
+
+// How many instances each machine has in each state, by owner kind. Exact, where the list's total
+// stops at 10,000.
+export const MACHINE_INSTANCE_COUNTS = gql`
+  query MachineInstanceCounts {
+    operations {
+      machineInstanceCounts {
+        machine
+        state
+        ownerKind
+        count
+      }
+    }
+  }
+`;
+
+// Instances newest first by when each was last written. Offset-paged: the order is by a time that
+// moves, so the API has no cursor here.
+export const MACHINE_INSTANCES = gql`
+  query MachineInstances($machine: String, $state: String, $ownerKind: SnapshotOwnerKind, $skip: Int!, $take: Int!) {
+    operations {
+      machineInstances(machine: $machine, state: $state, ownerKind: $ownerKind, skip: $skip, take: $take) {
+        items {
+          machine
+          ownerKind
+          id
+          rowId
+          state
+          version
+          createdAt
+          updatedAt
+          hasLiveInvokedRun
+        }
+        totalCount
+        isCountCapped
+      }
+    }
+  }
+`;
+
+// One instance with the runs it invoked (newest first, at most 50). A user's draft is named by its
+// rowId too, because several users can each hold a draft under one id.
+export const MACHINE_INSTANCE = gql`
+  query MachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!, $rowId: Long) {
+    operations {
+      machineInstance(machine: $machine, ownerKind: $ownerKind, id: $id, rowId: $rowId) {
+        machine
+        ownerKind
+        id
+        rowId
+        state
+        version
+        createdAt
+        updatedAt
+        hasLiveInvokedRun
+        queuedInvokedRunEntryId
+        isInvokedRunsCapped
+        invokedRuns {
+          id
+          externalId
+          name
+          trainState
+          startTime
+          endTime
+          failureClass
+          cancellationRequested
+          isLive
+        }
+      }
+    }
+  }
+`;

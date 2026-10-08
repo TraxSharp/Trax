@@ -9,6 +9,8 @@ import { ExecutionsPage } from "./pages/ExecutionsPage";
 import { WorkQueuePage } from "./pages/WorkQueuePage";
 import { DeadLettersPage } from "./pages/DeadLettersPage";
 import { LogsPage } from "./pages/LogsPage";
+import { StateMachinesPage } from "./pages/StateMachinesPage";
+import { StateMachineInstancePage } from "./pages/StateMachineInstancePage";
 import { ManifestsPage } from "./pages/ManifestsPage";
 import { ManifestGroupsPage } from "./pages/ManifestGroupsPage";
 import { ManifestGroupDetailPage } from "./pages/ManifestGroupDetailPage";
@@ -35,6 +37,8 @@ export function AppRoutes() {
         <Route path="/dead-letters" element={<DeadLettersPage />} />
         <Route path="/dead-letters/:id" element={<DeadLetterDetailPage />} />
         <Route path="/logs" element={<LogsPage />} />
+        <Route path="/state-machines" element={<StateMachinesPage />} />
+        <Route path="/state-machines/:machine/:owner/:id" element={<StateMachineInstancePage />} />
         <Route path="/manifests" element={<ManifestsPage />} />
         <Route path="/manifests/:id" element={<ManifestDetailPage />} />
         <Route path="/groups" element={<ManifestGroupsPage />} />

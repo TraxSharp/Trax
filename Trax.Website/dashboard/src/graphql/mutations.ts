@@ -177,6 +177,21 @@ export const RESUME_EXECUTION = gql`
   }
 `;
 
+// The operator's one action on a state-machine instance: cancel the run a system-owned instance's
+// state waits on. A refusal is success: false with a typed outcome and the message.
+export const CANCEL_MACHINE_INSTANCE = gql`
+  mutation CancelMachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!) {
+    operations {
+      cancelMachineInstance(machine: $machine, ownerKind: $ownerKind, id: $id) {
+        success
+        outcome
+        message
+        state
+      }
+    }
+  }
+`;
+
 // Patch a manifest's mutable settings.
 export const UPDATE_MANIFEST = gql`
   mutation UpdateManifest($id: Long!, $input: UpdateManifestInput!) {

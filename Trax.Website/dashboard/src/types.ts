@@ -697,3 +697,65 @@ export interface RunGraph {
   nodes: RunGraphNode[];
   unmatchedSteps: Pick<JunctionStep, "position" | "name" | "nameWithheld" | "state">[];
 }
+
+// ── State machines ─────────────────────────────────────────────────────────
+// An instance as operators see it: never its context, never whose a user's draft is.
+export type SnapshotOwnerKind = "SYSTEM" | "USER";
+
+export interface MachineInstance {
+  machine: string;
+  ownerKind: SnapshotOwnerKind;
+  id: string;
+  rowId: number;
+  state: string;
+  version: number;
+  createdAt: string | null;
+  updatedAt: string;
+  // True while the instance's state waits on a train run it invoked.
+  hasLiveInvokedRun: boolean;
+}
+
+export interface MachineInstanceCount {
+  machine: string;
+  state: string;
+  ownerKind: SnapshotOwnerKind;
+  count: number;
+}
+
+export interface MachineInstanceInvokedRun {
+  id: number;
+  externalId: string;
+  name: string;
+  trainState: TrainState;
+  startTime: string;
+  endTime: string | null;
+  failureClass: FailureClass;
+  cancellationRequested: boolean;
+  // The run the instance's state waits on now.
+  isLive: boolean;
+}
+
+export interface MachineInstanceDetail extends MachineInstance {
+  invokedRuns: MachineInstanceInvokedRun[];
+  // The instance invoked more runs than the newest 50 listed.
+  isInvokedRunsCapped: boolean;
+  // The work queue entry of the run its state waits on, while that run is still queued.
+  queuedInvokedRunEntryId: number | null;
+}
+
+export type MachineInstanceCancelOutcome =
+  | "CANCEL_REQUESTED"
+  | "MOVED"
+  | "NOT_FOUND"
+  | "NO_LIVE_RUN"
+  | "RUN_CANCELLED"
+  | "RUN_ENDED"
+  | "USER_OWNED";
+
+export interface MachineInstanceCancelResponse {
+  success: boolean;
+  outcome: MachineInstanceCancelOutcome;
+  message: string;
+  // The state the instance moved into, for MOVED.
+  state: string | null;
+}

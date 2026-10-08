@@ -1,6 +1,6 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import { operationFixtures } from "./fixtures";
-import { runGraph } from "./scenarios";
+import { machineQueryResolvers, runGraph } from "./scenarios";
 import { hashVariables } from "./variables-hash";
 import type { RunGraph, RunGraphNode } from "../types";
 
@@ -87,8 +87,9 @@ export const workQueueSeed: MockSchemaOverrides = {
   }),
 };
 
-// The captured fixtures predate the run graph, and the devhost they come from has none, so
-// `dev:mock` answers a run's graph from the scenario's checkpointed train. A captured run
+// The captured fixtures predate the run graph and the state machines, and the devhost they come
+// from has neither, so `dev:mock` answers both from the scenarios: the state machines as
+// machineScenario does, and a run's graph from the scenario's checkpointed train. A captured run
 // that completed ran every step; any other run (captured failed or cancelled, or auto-mocked)
 // stopped after its checkpoint and can resume, so the resume controls show.
 function capturedState(metadataId: number): string | undefined {
@@ -116,6 +117,7 @@ function devRunGraph(metadataId: number): RunGraph {
 export const devMockSeed: MockSchemaOverrides = {
   resolvers: () => ({
     OperationsQueries: {
+      ...machineQueryResolvers,
       runGraph: (_root: unknown, args: Record<string, unknown>) => devRunGraph(args.metadataId as number),
     },
   }),

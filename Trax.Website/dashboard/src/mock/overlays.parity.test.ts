@@ -2,18 +2,23 @@ import { describe, expect, test } from "vitest";
 import { createMockClient } from "./client";
 import { createMockStore } from "./store/mock-store";
 import {
+  MACHINE_IDS,
   effectsScenario,
   groupScenario,
+  machineScenario,
   manifestScenario,
   persistedOperationsScenario,
   schedulerConfigScenario,
 } from "./scenarios";
+import { USER_OWNED_CANCEL_REFUSAL } from "./store/overlays";
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import {
   EFFECTS,
   EXECUTIONS,
   LOG_LEVELS,
   EXECUTION_DETAIL,
+  MACHINE_INSTANCE,
+  MACHINE_INSTANCES,
   MANIFESTS,
   MANIFEST_DETAIL,
   MANIFEST_GROUPS,
@@ -25,6 +30,7 @@ import {
 import {
   CANCEL_EXECUTIONS,
   CANCEL_GROUPS,
+  CANCEL_MACHINE_INSTANCE,
   CANCEL_WORK_QUEUE_ENTRY,
   RESUME_EXECUTION,
   CONFIGURE_EFFECT,
@@ -125,6 +131,69 @@ describe("work queue / runs", () => {
       const d = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
       expect(get(d.data, "operations.executionDetail.cancellationRequested")).toBe(true);
     }
+  });
+});
+
+describe("state machines", () => {
+  const instance = (c: ReturnType<typeof client>, id: string, ownerKind = "SYSTEM", rowId: number | null = null) =>
+    c.query(MACHINE_INSTANCE, { machine: ownerKind === "SYSTEM" ? "source-partition" : "topic-map", ownerKind, id, rowId }, NET).toPromise();
+  const cancel = (c: ReturnType<typeof client>, id: string, ownerKind = "SYSTEM", machine = "source-partition") =>
+    c.mutation(CANCEL_MACHINE_INSTANCE, { machine, ownerKind, id }).toPromise();
+
+  test("cancelling a dispatched run requests its cancel, and the instance and the run show it", async () => {
+    const c = client(machineScenario);
+    await instance(c, MACHINE_IDS.dispatched);
+    const ack = get((await cancel(c, MACHINE_IDS.dispatched)).data, "operations.cancelMachineInstance");
+    expect(ack).toEqual({
+      success: true,
+      outcome: "CANCEL_REQUESTED",
+      state: null,
+      message:
+        `Cancellation requested for the run instance ${MACHINE_IDS.dispatched} of 'source-partition' waits on in 'Ingesting'. ` +
+        "The run stops at its next junction, and the instance then moves through the state's OnCancelled edge.",
+    });
+    const runs = get((await instance(c, MACHINE_IDS.dispatched)).data, "operations.machineInstance.invokedRuns") as {
+      id: number;
+      cancellationRequested: boolean;
+    }[];
+    expect(runs.map((r) => [r.id, r.cancellationRequested])).toEqual([
+      [7101, true],
+      [7090, false],
+    ]);
+    const run = await c.query(EXECUTION_DETAIL, { id: 7101 }, NET).toPromise();
+    expect(get(run.data, "operations.executionDetail.cancellationRequested")).toBe(true);
+  });
+
+  test("cancelling a queued run cancels its work queue entry before it starts", async () => {
+    const c = client(machineScenario);
+    await instance(c, MACHINE_IDS.queued);
+    const ack = get((await cancel(c, MACHINE_IDS.queued)).data, "operations.cancelMachineInstance");
+    expect(ack).toMatchObject({ success: true, outcome: "RUN_CANCELLED" });
+    expect(get((await instance(c, MACHINE_IDS.queued)).data, "operations.machineInstance.queuedInvokedRunEntryId")).toBeNull();
+    const entry = await c.query(WORK_QUEUE_DETAIL, { id: 7201 }, NET).toPromise();
+    expect(get(entry.data, "operations.workQueue.detail.status")).toBe("CANCELLED");
+  });
+
+  test("refuses a user's draft, an instance waiting on no run and one it does not know, changing nothing", async () => {
+    const c = client(machineScenario);
+    await instance(c, MACHINE_IDS.idle);
+    const user = get((await cancel(c, MACHINE_IDS.draftBuilding, "USER", "topic-map")).data, "operations.cancelMachineInstance");
+    expect(user).toEqual({ success: false, outcome: "USER_OWNED", state: null, message: USER_OWNED_CANCEL_REFUSAL });
+    const idle = get((await cancel(c, MACHINE_IDS.idle)).data, "operations.cancelMachineInstance");
+    expect(idle).toMatchObject({
+      success: false,
+      outcome: "NO_LIVE_RUN",
+      message: `Instance ${MACHINE_IDS.idle} of 'source-partition' is in 'Ingested', which waits on no train run: there is nothing to cancel.`,
+    });
+    const missing = get((await cancel(c, "3f2c1a00-0000-4000-8000-0000000000ff")).data, "operations.cancelMachineInstance");
+    expect(missing).toMatchObject({ success: false, outcome: "NOT_FOUND" });
+  });
+
+  test("no read returns an instance's context", async () => {
+    const c = client(machineScenario);
+    const list = await c.query(MACHINE_INSTANCES, { skip: 0, take: 20 }, NET).toPromise();
+    const detail = await instance(c, MACHINE_IDS.dispatched);
+    expect(JSON.stringify([list.data, detail.data])).not.toMatch(/context/i);
   });
 });
 
