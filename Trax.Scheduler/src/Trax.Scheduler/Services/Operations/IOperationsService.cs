@@ -212,6 +212,49 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(RequeueExecutionAsync));
 
     /// <summary>
+    /// Queues a run that resumes a failed or cancelled run from a checkpoint, instead of running
+    /// every step again: at the step <paramref name="from"/> names, or after the run's latest
+    /// checkpoint when it is null. The operator's resume, the dashboard's "Resume from here" and
+    /// GraphQL's <c>resumeExecution</c>; see
+    /// Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It is a requeue in every check but where the run starts. It enqueues through the mediator
+    /// as <see cref="RequeueExecutionAsync(long, CancellationToken)"/> does, so the train's
+    /// <c>[TraxAuthorize]</c> applies, with the run's saved input, and the new run replays the
+    /// decisions of the run it resumes as a requeue would. Whether the run can resume at
+    /// <paramref name="from"/> is decided from its checkpoints and the train's declared chain
+    /// before anything is queued, and the run checks again when it starts.
+    /// </para>
+    /// <para>
+    /// One queued resume per run: an operator's resume racing a manifest's retry of the same run
+    /// queues exactly one of them, and this one is refused when it loses.
+    /// </para>
+    /// </remarks>
+    /// <param name="metadataId">The id of the run (metadata row) to resume.</param>
+    /// <param name="from">The node id of the step to resume at, or null for after the latest checkpoint.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <c>OperationResult(true, Id: newEntryId, Count: 1, ...)</c> on success. A failed result, with
+    /// a message, when no run has the id, the run is not Failed or Cancelled, a state machine's
+    /// invoking state queued it, its saved input cannot be re-queued, a resume of it is already
+    /// queued, its train is no longer registered or its chain cannot be read here, the resume
+    /// check refuses (its reason, as given), or the enqueue is refused as
+    /// <see cref="QueueTrainAsync"/> describes.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">
+    /// The caller may not queue the train. It propagates, as from <see cref="QueueTrainAsync"/>.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    Task<OperationResult> ResumeExecutionAsync(
+        long metadataId,
+        string? from,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(ResumeExecutionAsync));
+
+    /// <summary>
     /// Transitions a queued work queue entry to <c>Cancelled</c>. Only entries currently
     /// in the <c>Queued</c> state are eligible. Entries that are already dispatched or
     /// already cancelled return a failure result without modifying the row.
