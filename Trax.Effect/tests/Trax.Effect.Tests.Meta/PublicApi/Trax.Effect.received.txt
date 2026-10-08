@@ -1242,6 +1242,7 @@ namespace Trax.Effect.Services.Checkpoints
         public System.Collections.Generic.IReadOnlyCollection<string> Checkpoints { get; init; }
         public Trax.Effect.Services.Checkpoints.ResumeVerdict Latest { get; init; }
         public System.Collections.Generic.IReadOnlyCollection<string> Restored { get; init; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> RestoredTracks { get; init; }
         public System.Collections.Generic.IReadOnlyCollection<string> Written { get; init; }
     }
     public sealed class ResumeVerdict : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeVerdict>

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Monad;
+using Trax.Core.Utils;
 
 namespace Trax.Effect.Services.Checkpoints;
 
@@ -114,7 +115,17 @@ public sealed record ResumeChecks(
     IReadOnlyCollection<string> Checkpoints,
     IReadOnlyCollection<string> Written,
     IReadOnlyCollection<string> Restored
-);
+)
+{
+    /// <summary>
+    /// For a resumed run, the track each routing step before the point it resumed at took, by
+    /// node id, as the checkpoint it restored stored it. The run recorded no step for those
+    /// routing steps, so this is how the tracks it passed over show as skipped. A route the
+    /// checkpoint withheld (its key is marked sensitive) is not here.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> RestoredTracks { get; init; } =
+        new Dictionary<string, string>();
+}
 
 /// <inheritdoc />
 internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProvider services)
@@ -185,7 +196,10 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
             ResumePlanner.Chosen(chain, lineage).Keys.ToList(),
             lineage.Count > 0 ? lineage[0].Rows.Select(r => r.NodeId).Distinct().ToList() : [],
             ResumePlanner.Restored(chain, input, output, container, lineage)
-        );
+        )
+        {
+            RestoredTracks = ResumePlanner.RestoredTracks(chain, input, output, container, lineage),
+        };
     }
 }
 
@@ -366,6 +380,60 @@ internal static class ResumePlanner
         }
 
         return restored;
+    }
+
+    /// <summary>
+    /// The track each routing step before a resumed run's point took, read from the routes the
+    /// checkpoint it restored stored: a routing step's id names the key it routes on
+    /// (<c>Switch&lt;Source&gt;#0</c>), and each stored route names its key's type.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> RestoredTracks(
+        ChainRecorder chain,
+        Type input,
+        Type output,
+        IServiceProviderIsService? container,
+        IReadOnlyList<ResumedRun> lineage
+    )
+    {
+        var tracks = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (lineage.Count < 2 || lineage[0].ResumeFrom is null)
+            return tracks;
+
+        var chosen = Chosen(chain, lineage.Skip(1).ToList());
+        var outcome = ChainVerification.CheckResume(
+            chain,
+            input,
+            output,
+            container is null ? null : container.IsService,
+            chosen.Keys.ToList(),
+            lineage[0].ResumeAt
+        );
+
+        if (!outcome.CanResume || outcome.MainCheckpoint is not { } main)
+            return tracks;
+
+        var restored = Restored(chain, input, output, container, lineage)
+            .ToHashSet(StringComparer.Ordinal);
+        var stored = Tracks(chosen[main].Tracks, outcome.TrackTypes[main]);
+
+        foreach (var taken in stored)
+        {
+            var key = taken.GetType().GetGenericArguments()[0].ReadableName();
+            var name = (string)taken.GetType().GetProperty("Track")!.GetValue(taken)!;
+
+            foreach (var id in restored)
+            {
+                var step = id[(id.LastIndexOf('/') + 1)..];
+                if (
+                    step.StartsWith($"Switch<{key}>#", StringComparison.Ordinal)
+                    || step.StartsWith($"Gate<{key}>#", StringComparison.Ordinal)
+                    || step.StartsWith($"Scale<{key}>#", StringComparison.Ordinal)
+                )
+                    tracks[id] = name;
+            }
+        }
+
+        return tracks;
     }
 
     private static Dictionary<string, int> Order(ChainRecorder chain) =>

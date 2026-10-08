@@ -122,6 +122,19 @@ public class ResearchResumeTests : RecoveryTestFixture
         foreach (var id in new[] { "PlanResearch#0", "Scale<Depth>#0", Checkpoint })
             nodes[id].GetProperty("state").GetString().Should().Be("RESTORED", $"{surface}: {id}");
         nodes[Summarize].GetProperty("state").GetString().Should().Be("COMPLETED");
+
+        // Restored only on the tracks the failed run took: the ones it passed over are skipped,
+        // as they are on the failed run's own graph.
+        nodes["Switch<Source>#0/Papers/SearchPapers#0"]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("RESTORED", surface);
+        nodes["Switch<Source>#0/Web/SearchWeb#0"]
+            .GetProperty("state")
+            .GetString()
+            .Should()
+            .Be("SKIPPED", $"{surface}: the failed run never took the Web track");
     }
 
     private async Task<long> ResumeOverGraphQLAsync(long failed, string from)

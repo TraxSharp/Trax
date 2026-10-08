@@ -314,7 +314,12 @@ public static class RunGraphs
                 ? RunNodeState.NotRecorded
             : RunNodeState.NotReached;
 
-        var taken = node.Tracks.Count == 0 ? null : TrackTaken(node, steps, byNode);
+        // A resumed run recorded no step for a routing step before its point; the checkpoint it
+        // restored says which track that step took.
+        var taken =
+            node.Tracks.Count == 0
+                ? null
+                : TrackTaken(node, steps, byNode) ?? walk.Resume.TakenBefore(node.Id);
 
         // A route whose answer is withheld withholds every step after it, on its tracks and past
         // them, because which steps ran would give the answer away. From here on a node with no
@@ -512,6 +517,12 @@ public static class RunGraphs
         public bool Offers => offers;
 
         public bool Restored(string id) => _restored.Contains(id);
+
+        /// <summary>The track a routing step the resumed run restored took, or null.</summary>
+        public string? TakenBefore(string id) =>
+            checks?.RestoredTracks.GetValueOrDefault(id) is { } track && Restored(id)
+                ? track
+                : null;
 
         public bool Wrote(string id) => _written.Contains(id);
 
