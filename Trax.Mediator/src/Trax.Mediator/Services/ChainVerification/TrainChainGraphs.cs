@@ -13,11 +13,15 @@ internal sealed class TrainChainGraphs(
     ILogger<TrainChainGraphs>? logger = null
 ) : ITrainChainGraphs
 {
-    private readonly ConcurrentDictionary<string, Lazy<ChainGraph?>> _graphs = new(
+    private readonly ConcurrentDictionary<string, Lazy<Declared?>> _chains = new(
         StringComparer.Ordinal
     );
 
-    public ChainGraph? Find(string train)
+    public ChainGraph? Find(string train) => Lookup(train)?.Graph;
+
+    public DeclaredTrainChain? FindDeclared(string train) => Lookup(train)?.Chain;
+
+    private Declared? Lookup(string train)
     {
         if (string.IsNullOrWhiteSpace(train))
             return null;
@@ -31,10 +35,10 @@ internal sealed class TrainChainGraphs(
         if (registration is null)
             return null;
 
-        return _graphs.GetOrAdd(train, _ => new Lazy<ChainGraph?>(() => Read(registration))).Value;
+        return _chains.GetOrAdd(train, _ => new Lazy<Declared?>(() => Read(registration))).Value;
     }
 
-    private ChainGraph? Read(TrainRegistration registration)
+    private Declared? Read(TrainRegistration registration)
     {
         try
         {
@@ -47,11 +51,19 @@ internal sealed class TrainChainGraphs(
                     .GetMethod(nameof(Core.Train.Train<,>.DeclaredChain), Type.EmptyTypes)!
                     .Invoke(train, null)!;
 
-            return ChainGraph.From(
-                chain,
-                train.GetType(),
-                registration.InputType,
-                registration.OutputType
+            return new Declared(
+                ChainGraph.From(
+                    chain,
+                    train.GetType(),
+                    registration.InputType,
+                    registration.OutputType
+                ),
+                new DeclaredTrainChain(
+                    train.GetType(),
+                    chain,
+                    registration.InputType,
+                    registration.OutputType
+                )
             );
         }
         catch (Exception e)
@@ -66,4 +78,7 @@ internal sealed class TrainChainGraphs(
             return null;
         }
     }
+
+    /// <summary>A train's graph and the declaration it was drawn from, read together once.</summary>
+    private sealed record Declared(ChainGraph Graph, DeclaredTrainChain Chain);
 }

@@ -56,6 +56,30 @@ public class TrainChainGraphsTests
         GraphedTrain.Declared.Should().Be(1, "a chain cannot change while the host runs");
     }
 
+    [Test]
+    public async Task FindDeclared_GivesTheChainItsGraphIsDrawnFrom_ReadOnce()
+    {
+        GraphedTrain.Declared = 0;
+        await using var provider = Provider(services =>
+            services.AddScoped<IGraphedTrain, GraphedTrain>()
+        );
+        var graphs = Graphs(provider, Registration<IGraphedTrain, GraphedTrain>());
+
+        var declared = graphs.FindDeclared(typeof(IGraphedTrain).FullName!);
+        var graph = graphs.Find(typeof(IGraphedTrain).FullName!);
+
+        declared.Should().NotBeNull();
+        declared!.Train.Should().Be(typeof(GraphedTrain));
+        declared.Input.Should().Be(typeof(GraphInput));
+        declared.Output.Should().Be(typeof(bool));
+        ChainGraph
+            .From(declared.Chain, declared.Train, declared.Input, declared.Output)
+            .Hash.Should()
+            .Be(graph!.Hash, "a resume is checked against the chain the graph is drawn from");
+        GraphedTrain.Declared.Should().Be(1, "the graph and the chain are read together");
+        graphs.FindDeclared("System.IO.File").Should().BeNull();
+    }
+
     [TestCase("")]
     [TestCase("   ")]
     [TestCase("System.IO.File")]

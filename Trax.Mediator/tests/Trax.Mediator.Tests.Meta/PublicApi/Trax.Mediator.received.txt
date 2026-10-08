@@ -110,9 +110,20 @@ namespace Trax.Mediator.Extensions
 }
 namespace Trax.Mediator.Services.ChainVerification
 {
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public sealed class DeclaredTrainChain : System.IEquatable<Trax.Mediator.Services.ChainVerification.DeclaredTrainChain>
+    {
+        public DeclaredTrainChain(System.Type Train, Trax.Core.Monad.ChainRecorder Chain, System.Type Input, System.Type Output) { }
+        public Trax.Core.Monad.ChainRecorder Chain { get; init; }
+        public System.Type Input { get; init; }
+        public System.Type Output { get; init; }
+        public System.Type Train { get; init; }
+    }
     public interface ITrainChainGraphs
     {
         Trax.Core.Monad.ChainGraph? Find(string train);
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+        Trax.Mediator.Services.ChainVerification.DeclaredTrainChain? FindDeclared(string train);
     }
 }
 namespace Trax.Mediator.Services.ConcurrencyLimiter

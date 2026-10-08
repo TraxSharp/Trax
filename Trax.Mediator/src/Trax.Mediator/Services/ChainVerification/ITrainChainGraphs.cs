@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Trax.Core.Monad;
 
 namespace Trax.Mediator.Services.ChainVerification;
@@ -24,4 +25,22 @@ public interface ITrainChainGraphs
     /// for the same reason.
     /// </remarks>
     ChainGraph? Find(string train);
+
+    /// <summary>
+    /// The declared chain of the registered train named <paramref name="train"/>, with its class and
+    /// its input and output types, looked up as <see cref="Find"/> looks it up, or null when
+    /// <see cref="Find"/> would give no graph. It is what deciding whether a failed run can resume
+    /// needs (<c>IRunResumes.Check</c>, Trax.Docs/adr/0047).
+    /// </summary>
+    /// <remarks>An implementation that predates it answers null, and no run is resumed through it.</remarks>
+    [Experimental("TRAXEXP003")]
+    DeclaredTrainChain? FindDeclared(string train) => null;
 }
+
+/// <summary>A registered train's declared chain, as its class declares it.</summary>
+/// <param name="Train">The train's class.</param>
+/// <param name="Chain">Its declared chain.</param>
+/// <param name="Input">Its input type.</param>
+/// <param name="Output">Its output type.</param>
+[Experimental("TRAXEXP003")]
+public sealed record DeclaredTrainChain(Type Train, ChainRecorder Chain, Type Input, Type Output);

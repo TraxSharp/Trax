@@ -144,6 +144,11 @@ canonical name, reading each chain once and keeping it. The operations API retur
 node by the `nodeId` junction events record; the dashboard's run page shows the same
 [run graph](/docs/dashboard).
 
+`ITrainChainGraphs.FindDeclared(name)` (experimental, `TRAXEXP003`) looks a train up the same way and
+returns the `ChainRecorder` the graph was drawn from, with the train's class and its input and output
+types, as a `DeclaredTrainChain`. It is what `IRunResumes.Check` needs to decide whether a failed run
+can resume from a checkpoint; the scheduler's retries and the operator's resume ask through it.
+
 ## Example
 
 A test that fails when a train's shape changes, by comparing its graph to a committed copy:
