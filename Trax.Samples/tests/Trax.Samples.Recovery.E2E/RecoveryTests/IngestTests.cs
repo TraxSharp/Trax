@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Factories;
+using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Recovery.Faults;
 using Trax.Samples.Recovery.Index;
 using Trax.Samples.Recovery.Trains.Discover;
@@ -26,6 +27,11 @@ public class IngestTests
         IndexFixture.Crossref,
         "2025-02"
     );
+
+    // Discovery starts a machine per partition, and each queues an ingest of its partition. A test
+    // here that runs the ingest itself, or arms its crash, waits for those to finish first.
+    [SetUp]
+    public Task LetThePartitionMachinesFinish() => PartitionMachines.WaitUntilSettledAsync();
 
     [Test]
     public async Task Seeding_Twice_AddsNoRecords()

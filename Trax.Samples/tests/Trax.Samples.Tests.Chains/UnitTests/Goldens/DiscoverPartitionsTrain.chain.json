@@ -13,6 +13,15 @@
       "tracks": []
     },
     {
+      "id": "StartPartitionMachines#0",
+      "kind": "Chain",
+      "junction": "StartPartitionMachines",
+      "in": "DiscoveredPartitions",
+      "out": "DiscoveredPartitions",
+      "opaque": false,
+      "tracks": []
+    },
+    {
       "id": "Resolve#0",
       "kind": "Resolve",
       "junction": null,

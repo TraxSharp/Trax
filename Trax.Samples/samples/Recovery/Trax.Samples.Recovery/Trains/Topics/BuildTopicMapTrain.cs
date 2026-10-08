@@ -1,7 +1,6 @@
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Services.ServiceTrain;
-using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Trains.Topics.Junctions;
 
 namespace Trax.Samples.Recovery.Trains.Topics;
@@ -23,8 +22,14 @@ namespace Trax.Samples.Recovery.Trains.Topics;
 /// one a user's own state machine may invoke. Every step is an <c>EffectJunction</c>, so a run can be
 /// cancelled from another host, and its output holds no sensitive member.
 /// </para>
+/// <para>
+/// The <c>topic-map</c> machine's <c>Building</c> state invokes it, and a user-owned machine may not
+/// invoke a train stricter than its own mutations, which need an authenticated caller and no role. So
+/// it asks for exactly that. Every caller this host authenticates holds <c>Operator</c> or
+/// <c>Viewer</c>, so the set of callers who may run it is the same as before.
+/// </para>
 /// </remarks>
-[TraxAuthorize(Roles = RecoveryRoles.Operator + "," + RecoveryRoles.Viewer)]
+[TraxAuthorize]
 public class BuildTopicMapTrain : ServiceTrain<TopicMapInput, TopicMap>, IBuildTopicMapTrain
 {
     protected override Task<Either<Exception, TopicMap>> Junctions() =>

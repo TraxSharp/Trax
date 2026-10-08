@@ -62,8 +62,12 @@ public sealed record CombinedSignals(
     IReadOnlyList<TopicLink> Links
 );
 
-/// <summary>The train's output.</summary>
+/// <summary>
+/// The train's output. <see cref="RunId"/> is the key the join wrote the pairs under, so a state machine
+/// that ran the build keeps it as a pointer to them.
+/// </summary>
 public sealed record TopicMap(
+    string RunId,
     int Papers,
     int TopicPairs,
     string CoCitationTrack,

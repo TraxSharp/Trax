@@ -29,14 +29,18 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DomainContext;
 using Trax.Effect.Decisions.SystemOne.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Samples.Recovery;
+using Trax.Samples.Recovery.Api;
 using Trax.Samples.Recovery.Auth;
 using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.Faults;
 using Trax.Samples.Recovery.Index;
+using Trax.Samples.Recovery.Machines;
 using Trax.Samples.Recovery.Model;
 using Trax.Samples.Recovery.Records;
 using Trax.Scheduler.Extensions;
@@ -81,7 +85,10 @@ builder.Services.AddTrax(trax =>
                 .AddDecisionRecording()
                 // Publishes each junction, question and track live, and stores it in
                 // trax.junction_run. Only EffectJunctions are steps.
-                .AddJunctionEvents();
+                .AddJunctionEvents()
+                // Records the running junction and reads a run's cancel flag between junctions, so
+                // a machine leaving a state stops the run it invoked on whichever host runs it.
+                .AddJunctionProgress();
 
             return useNimble
                 ? configured.AddNimbleDecider(o =>
@@ -94,6 +101,10 @@ builder.Services.AddTrax(trax =>
                 )
                 : configured;
         })
+        // Two state machines: one system-owned instance per index partition, which ingests it, and
+        // the topic map wizard each user drives, whose Building state builds the map. Before
+        // AddMediator, which routes their four stateMachine mutations.
+        .AddStateMachines(typeof(TopicMapMachine).Assembly)
         .AddMediator(typeof(DemoDecider).Assembly)
         .AddScheduler(scheduler =>
             scheduler
@@ -135,6 +146,9 @@ if (builder.Environment.IsDevelopment())
     );
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
+
+// A topic map draft belongs to the caller who saved it: each demo key has drafts of its own.
+builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 
 // ── GraphQL ─────────────────────────────────────────────────────────────────
 builder.Services.AddTraxGraphQL(graphql =>

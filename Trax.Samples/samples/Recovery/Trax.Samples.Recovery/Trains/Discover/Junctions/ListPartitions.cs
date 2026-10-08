@@ -32,9 +32,6 @@ public class ListPartitions(ITopicMapDbContext db, DemoPace pace)
             })
             .ToListAsync(CancellationToken);
 
-        // The seam for system-owned instances: once a machine can be started from code, each
-        // partition here starts (or finds, since its id derives from the key) one instance keyed
-        // by (Source, Month), and that instance's ingesting state runs IIngestPartitionTrain.
         return new DiscoveredPartitions(
             partitions
                 .OrderBy(p => p.Source, StringComparer.Ordinal)

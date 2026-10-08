@@ -4,8 +4,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
-    <!-- TRAXEXP001: opts in to the experimental Parallel step, which the topic map's signals run in. -->
-    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
+    <!-- TRAXEXP001: opts in to the experimental Parallel step, which the topic map's signals run in.
+         TRAXEXP002: opts in to the experimental Invokes and IMachineInstances, which the partition and
+         topic map machines use to run the ingest and the build. -->
+    <NoWarn>$(NoWarn);TRAXEXP001;TRAXEXP002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +17,8 @@
   <ItemGroup>
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
     <ProjectReference Include="../../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>

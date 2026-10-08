@@ -581,6 +581,13 @@
           "Trax.Effect": "[1.99.99, )"
         }
       },
+      "trax.effect.junctionprovider.progress": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )"
+        }
+      },
       "trax.effect.provider.json": {
         "type": "Project",
         "dependencies": {
@@ -622,6 +629,8 @@
         "dependencies": {
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Effect.StateMachine": "[1.99.99, )",
+          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )",
           "Trax.Mediator": "[1.99.99, )",
           "Trax.Scheduler": "[1.99.99, )"
         }

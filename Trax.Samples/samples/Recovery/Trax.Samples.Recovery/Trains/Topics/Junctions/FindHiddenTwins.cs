@@ -20,6 +20,7 @@ public class FindHiddenTwins(FaultInjector faults, DemoPace pace)
         faults.Disarm(combined.RunId);
 
         return new TopicMap(
+            combined.RunId,
             combined.Papers,
             combined.Written,
             combined.CoCitationTrack,
