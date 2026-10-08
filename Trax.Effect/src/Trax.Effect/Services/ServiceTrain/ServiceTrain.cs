@@ -398,6 +398,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
         // from inside a try whose catch also finishes the train ran both of them twice.
         Either<Exception, TOut> result;
+        CheckpointRun? checkpoints = null;
 
         try
         {
@@ -423,10 +424,9 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
             // A run that resumes an earlier one skips to its checkpoint; one that cannot runs from
             // the top. Its checkpoints are stored against this run. See Trax.Docs/adr/0047.
-            CheckpointRun.Current =
-                Declared() is { } declared && Metadata.Id > 0
-                    ? new CheckpointRun(Metadata.Id, declared.Hash)
-                    : null;
+            checkpoints =
+                Metadata.Id > 0 ? new CheckpointRun(Metadata.Id, () => Declared()?.Hash) : null;
+            CheckpointRun.Current = checkpoints;
             Resume = await BeginResume();
 
             // The same for the run's junction events, when the host publishes them
@@ -563,7 +563,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         await this.FinishServiceTrain(result);
         var unrecordedOutcome = await SaveOutcome();
 
-        await ForgetCheckpoints();
+        if (checkpoints is { Wrote: true })
+            await ForgetCheckpoints();
 
         // The hooks report what happened, not what the store could hold: the output the store
         // refused is what they publish, in place of the placeholder that was stored.
@@ -637,50 +638,53 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     #region Checkpoints
 
-    /// <summary>A train class's declared chain and its hash, read once per class.</summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
-        Type,
-        (ChainRecorder Chain, string Hash, bool Checkpoints)?
-    > DeclaredChains = new();
-
     /// <summary>
-    /// This class's declared chain and hash, read once and cached, or null when it cannot be read
-    /// (a run of it then neither takes nor resumes from a checkpoint).
+    /// This class's declared chain and hash, as the host's startup check read it, or read once for
+    /// the process when nothing did; null when it cannot be read (a run of it then neither takes nor
+    /// resumes from a checkpoint). Read on a fresh instance, never on this one: this one may be
+    /// running its chain, and a junction of it reading its state while it is declared would throw.
     /// </summary>
-    private (ChainRecorder Chain, string Hash, bool Checkpoints)? Declared() =>
-        DeclaredChains.GetOrAdd(
+    private DeclaredChains.Declared? Declared() =>
+        DeclaredChains.For(
             GetType(),
-            type =>
-            {
-                try
-                {
-                    var chain = DeclaredChain();
-                    return (
-                        chain,
-                        ChainGraph.From(chain, type, typeof(TIn), typeof(TOut)).Hash,
-                        HasCheckpoint(chain)
-                    );
-                }
-                catch (Exception e)
-                {
-                    Logger?.LogWarning(
-                        e,
-                        "The chain of train ({TrainName}) could not be read, so its runs take no "
-                            + "checkpoints and do not resume.",
-                        TrainName
-                    );
-                    return null;
-                }
-            }
+            typeof(TIn),
+            typeof(TOut),
+            DeclareOnAFreshInstance,
+            e =>
+                Logger?.LogWarning(
+                    e,
+                    "The chain of train ({TrainName}) could not be read, so its runs take no "
+                        + "checkpoints and do not resume.",
+                    TrainName
+                )
         );
 
-    private static bool HasCheckpoint(ChainRecorder chain) =>
-        chain
-            .Steps.Select((step, i) => (step, i))
-            .Any(s =>
-                s.step.Kind == ChainStepKind.Checkpoint
-                || chain.TracksAt(s.i).Any(t => HasCheckpoint(t.Steps))
-            );
+    /// <summary>
+    /// The chain this class declares, read on an instance built for the purpose in a scope of its
+    /// own, so the running instance's <c>Junctions()</c> is called once per run.
+    /// </summary>
+    private ChainRecorder DeclareOnAFreshInstance()
+    {
+        ServiceProvider.AssertLoaded();
+
+        using var scope = (
+            ServiceProvider.GetService(
+                typeof(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory)
+            ) as Microsoft.Extensions.DependencyInjection.IServiceScopeFactory
+        )?.CreateScope();
+        var services = scope?.ServiceProvider ?? ServiceProvider;
+
+        var fresh =
+            (ServiceTrain<TIn, TOut>)
+                Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance(
+                    services,
+                    GetType()
+                );
+        services.InjectProperties(fresh);
+        fresh.ServiceProvider ??= services;
+
+        return fresh.DeclaredChain();
+    }
 
     /// <summary>
     /// The resume this run starts with, when it names a run to resume: the checkpoints of that
@@ -747,8 +751,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         ServiceProvider.AssertLoaded();
 
         if (
-            Declared() is not { Checkpoints: true }
-            || Metadata.Id <= 0
+            Metadata.Id <= 0
             || ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
         )
             return;

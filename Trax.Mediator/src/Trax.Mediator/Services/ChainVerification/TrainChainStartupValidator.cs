@@ -234,6 +234,14 @@ internal sealed class TrainChainStartupValidator(
 
         warnings.AddRange(BuiltJunctionsWithInjectProperties(chain));
 
+        // A run takes its chain from here rather than calling Junctions() again (Trax.Docs/adr/0047).
+        Trax.Effect.Services.Checkpoints.DeclaredChains.Remember(
+            train.GetType(),
+            chain,
+            registration.InputType,
+            registration.OutputType
+        );
+
         // Asks whether the container can supply a type without building one. Resolving each
         // candidate would construct services at boot, and a factory that only works inside a
         // request (one reading HttpContext, say) would crash startup instead of answering.

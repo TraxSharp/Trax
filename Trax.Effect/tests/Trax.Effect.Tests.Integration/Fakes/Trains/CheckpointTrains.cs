@@ -335,6 +335,39 @@ public sealed class ResearchTrain : ServiceTrain<string, string>, IResearchTrain
             .Resolve();
 }
 
+/// <summary>
+/// The research chain, noting each call of its <c>Junctions()</c>: which instance, and whether it was
+/// being read or run. Used by one test alone, so nothing else has read its chain first.
+/// </summary>
+public interface ICountingResearchTrain : IServiceTrain<string, string>;
+
+public sealed class CountingResearchTrain : ServiceTrain<string, string>, ICountingResearchTrain
+{
+    public static System.Collections.Concurrent.ConcurrentQueue<(
+        int Instance,
+        bool Declaring
+    )> Calls { get; } = new();
+
+    protected override Task<Either<Exception, string>> Junctions()
+    {
+        Calls.Enqueue(
+            (System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this), IsDeclaringChain)
+        );
+
+        return Chain<PlanResearch>()
+            .Switch<Brief, ResearchSource>(s =>
+                s.When(ResearchSource.Web, w => w.Chain<SearchWeb>())
+                    .When(ResearchSource.Papers, p => p.Chain<SearchPapers>())
+            )
+            .Chain<FetchFullTexts>()
+            .Checkpoint<CheckedFindings>()
+            .Chain<ScoreFindings>()
+            .Checkpoint<Scored>()
+            .Chain<Summarize>()
+            .Resolve();
+    }
+}
+
 /// <summary>The research chain with a step that leaves its data context dirty before the checkpoint.</summary>
 public interface IDirtyResearchTrain : IServiceTrain<string, string>;
 

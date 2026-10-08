@@ -56,7 +56,8 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
                     .AddScopedTraxRoute<ISecretTrain, SecretTrain>()
                     .AddScopedTraxRoute<IVaultThenCheckpointTrain, VaultThenCheckpointTrain>()
                     .AddScopedTraxRoute<ICheckpointInVaultTrain, CheckpointInVaultTrain>()
-                    .AddScopedTraxRoute<ITwoBranchTrain, TwoBranchTrain>();
+                    .AddScopedTraxRoute<ITwoBranchTrain, TwoBranchTrain>()
+                    .AddScopedTraxRoute<ICountingResearchTrain, CountingResearchTrain>();
             }
         );
 
@@ -265,6 +266,27 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         (await _host.Checkpoints(run.Id))
             .Should()
             .BeEmpty($"nothing may resume a completed run ({Adr})");
+    }
+
+    [Test]
+    public async Task The_running_train_declares_its_chain_once_even_when_it_stores_a_checkpoint()
+    {
+        // Found by the full test pass: a run read its chain hash by calling DeclaredChain on itself,
+        // which calls Junctions() a second time on the running instance. The hash is read on a fresh
+        // instance instead, and only once the run reaches a checkpoint.
+        CountingResearchTrain.Calls.Clear();
+
+        var run = await Run<ICountingResearchTrain>();
+
+        run.TrainState.Should().Be(TrainState.Completed, run.FailureReason);
+        CountingResearchTrain
+            .Calls.GroupBy(c => c.Instance)
+            .Should()
+            .OnlyContain(
+                instance => instance.Count() == 1,
+                $"each instance's Junctions() runs once: the run's to run, another to read ({Adr})"
+            );
+        CountingResearchTrain.Calls.Should().ContainSingle(c => !c.Declaring);
     }
 
     [Test]
