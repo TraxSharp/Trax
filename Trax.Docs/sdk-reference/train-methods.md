@@ -38,3 +38,4 @@ that used to sit above the chain belongs in a junction at the head of it.
 | [Gate](/docs/sdk-reference/train-methods/gate) | Routes on the probability that a yes/no answer is yes |
 | [Scale](/docs/sdk-reference/train-methods/scale) | Routes on where the state falls on an ordered scale |
 | [DeclaredChain](/docs/sdk-reference/train-methods/declared-chain) | Reads the declared chain without running it, and verifies it with `ChainVerification.Verify` |
+| [ChainGraph](/docs/sdk-reference/train-methods/chain-graph) | The declared chain as a graph with stable node ids, canonical JSON and a hash, and the id of the step a run is executing |
