@@ -179,6 +179,22 @@ public class ChainGraphTests : TestSetup
     }
 
     [Test]
+    public async Task CurrentNodeId_IsTheQuestionsId_WhenAnAnswerIsRefused()
+    {
+        var capture = new Capture();
+
+        var result = await new DecidingTrain(capture, new ScriptedDecider()).RunEither("abc");
+
+        result.IsLeft.Should().BeTrue("a question left unanswered fails the run");
+        capture
+            .Refusals.Should()
+            .Equal(
+                ["Decide<ChoiceDecision<Lane>>#0"],
+                "a refusal belongs to the question it refuses"
+            );
+    }
+
+    [Test]
     public async Task CurrentNodeId_IsNullOutsideAStep()
     {
         await new LinearTrain().RunEither("abc");
@@ -215,6 +231,14 @@ public class ChainGraphTests : TestSetup
         public Task Routed(TrackRouted routing, CancellationToken cancellationToken)
         {
             Note();
+            return Task.CompletedTask;
+        }
+
+        public List<string> Refusals { get; } = [];
+
+        public Task Refused(DecisionRefused refusal, CancellationToken cancellationToken)
+        {
+            Refusals.Add(ChainGraph.CurrentNodeId ?? "(none)");
             return Task.CompletedTask;
         }
     }
@@ -304,11 +328,12 @@ public class ChainGraphTests : TestSetup
             Chain<Length>().Extract<int, long>().ShortCircuit<MaybePositive>().Resolve();
     }
 
-    private sealed class DecidingTrain(Capture capture) : Train<string, bool>
+    private sealed class DecidingTrain(Capture capture, IDecider? decider = null)
+        : Train<string, bool>
     {
         protected override Task<Either<Exception, bool>> Junctions() =>
             AddServices<IDecider, IDecisionObserver>(
-                    new ScriptedDecider().Choose(Lane.Left),
+                    decider ?? new ScriptedDecider().Choose(Lane.Left),
                     capture
                 )
                 .Decide<string>(q => q.Choice<Lane>())
