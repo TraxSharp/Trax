@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.StateMachine;
@@ -55,6 +56,16 @@ public class InvokesModelTests(ClusterStore store)
 
     // Every wait on a concurrent step: long past any step here, short enough that a hang fails the test.
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
+
+    // The TraxInvariants that hold between any two steps, not only once every host has stopped: the dispatcher
+    // writes a run with its dispatched entry, and an instance's token with the state it is in and the run it queued.
+    private static readonly HashSet<string> AlwaysHold =
+    [
+        TraxInvariants.DispatchedWithoutRun,
+        TraxInvariants.InvokeTokenWithoutRun,
+        TraxInvariants.InvokingStateWithoutToken,
+        TraxInvariants.InvokeTokenOutsideInvokingState,
+    ];
 
     private InvokeCluster _cluster = null!;
     private ClusterHost _api = null!;
@@ -1206,6 +1217,28 @@ public class InvokesModelTests(ClusterStore store)
 
             // No run moved an instance twice.
             _moved.Where(m => m.Value > 1).Should().BeEmpty("an outcome is applied at most once");
+
+            await CheckInvariants(machines.Values);
+        }
+
+        // The database's own invariants, read from the rows rather than from the model, so a token the model and
+        // the system agree on wrongly still fails. Between steps a run may be in progress and an effect claimed,
+        // so only the invariants that hold at every moment are checked here. TraxInvariants reads only Postgres.
+        private async Task CheckInvariants(IEnumerable<IMachineInternals> machines)
+        {
+            if (test._cluster.Store != ClusterStore.Postgres)
+                return;
+
+            var invoking = machines
+                .SelectMany(m => m.InvokedTrains)
+                .Select(i => new InvokingState(i.Machine, i.State));
+            var violations = (
+                await TraxInvariants.FindViolationsAsync(test._cluster.ConnectionString, invoking)
+            )
+                .Where(v => AlwaysHold.Contains(v.Invariant))
+                .ToList();
+
+            violations.Should().BeEmpty(TraxInvariants.Describe(violations));
         }
 
         private void Count(InvokeDelivery? delivery)

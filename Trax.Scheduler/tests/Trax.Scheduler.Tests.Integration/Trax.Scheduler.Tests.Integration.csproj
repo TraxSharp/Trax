@@ -37,6 +37,8 @@
     <ProjectReference Include="../Trax.Scheduler.Tests.ArrayLogger/Trax.Scheduler.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <!-- TraxInvariants, which the invoke model test checks the database with after every step. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
     <!-- The invoked-train outcome tests run on SQLite as well as Postgres. -->
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
