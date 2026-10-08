@@ -242,6 +242,17 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
                 $"the vault's track is withheld, as from junction events ({Adr})"
             );
         row.Tracks.Should().NotContain("Left");
+
+        CheckpointProbe.Reset();
+        var inside = await Run<ICheckpointInVaultTrain>();
+
+        inside.TrainState.Should().Be(TrainState.Failed);
+        inside.FailureClass.Should().Be(FailureClass.Permanent);
+        inside.FailureReason.Should().Contain("[TraxSensitive]").And.NotContain("Left");
+        inside.FailureJunction.Should().NotContain("Left", "the failure names no withheld track");
+        (await _host.Checkpoints(inside.Id))
+            .Should()
+            .BeEmpty("its node id names the withheld track, and a resume could not find it");
     }
 
     [Test]

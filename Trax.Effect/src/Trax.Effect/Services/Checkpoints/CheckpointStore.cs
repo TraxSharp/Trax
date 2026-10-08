@@ -40,6 +40,23 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
                     + "holding a sensitive value is never stored."
             );
 
+        // Refused at startup too; checked here because a row's node id names every track it is
+        // inside, and the track of a sensitive routing step is withheld from every record.
+        // The refusal names the routing step and the checkpoint, never the node id: that holds the
+        // track's name.
+        if (SensitiveTrack(checkpoint.NodeId) is { } routing)
+            throw Refused(
+                checkpoint with
+                {
+                    NodeId = checkpoint.NodeId[(checkpoint.NodeId.LastIndexOf('/') + 1)..],
+                },
+                $"The checkpoint '{checkpoint.NodeId[(checkpoint.NodeId.LastIndexOf('/') + 1)..]}' "
+                    + $"is inside a track of '{routing}', whose answer is marked "
+                    + "[TraxSensitive] and withheld from every record. A resume could not find its "
+                    + "way back into the track, so the checkpoint is never stored. Move it after "
+                    + "the routing step."
+            );
+
         if (checkpoint.Services is { } scope && _rows.HasUncommittedWork(scope))
             throw Refused(
                 checkpoint,
@@ -107,6 +124,30 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
 
         return array.ToJsonString();
     }
+
+    /// <summary>
+    /// The routing step (<c>Switch&lt;Vault&gt;#0</c>) of a sensitive question whose track
+    /// <paramref name="nodeId"/> lies inside, or null. A node inside a track has the routing
+    /// step's id and the track's name before its own, so each such pair is read from the id.
+    /// </summary>
+    internal static string? SensitiveTrack(string nodeId)
+    {
+        var segments = nodeId.Split('/');
+
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            var routing = RoutingSegment.Match(segments[i]);
+            if (routing.Success && SensitiveQuestions.IsSensitive(routing.Groups["key"].Value))
+                return segments[i];
+        }
+
+        return null;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex RoutingSegment = new(
+        @"^(Switch|Gate|Scale)<(?<key>.+)>#\d+$",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant
+    );
 
     private static TrainException Refused(CheckpointTaken checkpoint, string reason)
     {
