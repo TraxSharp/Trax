@@ -73,34 +73,71 @@ public static class ResearchProbe
     /// <summary>The prefix of the manifest group the train writes before its checkpoint, one per topic.</summary>
     public const string NotePrefix = "research-note-";
 
+    /// <summary>Holds the first junction to run, whichever it is, when given as <see cref="HoldIn"/>.</summary>
+    public const string AnyJunction = "*";
+
+    private static readonly TimeSpan HoldBound = TimeSpan.FromSeconds(30);
+
+    private static TaskCompletionSource _released = NewGate();
+
     /// <summary>Each junction that ran, in order, as <c>(topic, junction)</c>.</summary>
     public static ConcurrentQueue<(string Topic, string Junction)> Ran { get; } = new();
 
     /// <summary>The junction that throws when it runs, or null.</summary>
     public static string? FailIn { get; set; }
 
+    /// <summary>
+    /// The junction that, once it starts, waits for <see cref="Release"/>; <see cref="AnyJunction"/>
+    /// holds the first one to run. It holds once.
+    /// </summary>
+    public static string? HoldIn { get; set; }
+
+    /// <summary>Released once when a junction is held.</summary>
+    public static SemaphoreSlim Held { get; private set; } = new(0);
+
     public static IReadOnlyList<string> RanFor(string topic) =>
         Ran.Where(r => r.Topic == topic).Select(r => r.Junction).ToList();
 
-    public static void Note(string topic, string junction)
+    public static async Task Note(string topic, string junction)
     {
         Ran.Enqueue((topic, junction));
+
+        if (HoldIn is { } hold && (hold == AnyJunction || hold == junction))
+        {
+            HoldIn = null;
+            Held.Release();
+            await _released.Task.WaitAsync(HoldBound);
+        }
 
         if (FailIn == junction)
             throw new TimeoutException($"{junction} timed out");
     }
 
+    /// <summary>Lets the held junction go on.</summary>
+    public static void Release() => _released.TrySetResult();
+
     public static void Reset()
     {
         Ran.Clear();
         FailIn = null;
+        HoldIn = null;
+        _released.TrySetResult();
+        _released = NewGate();
+        Held = new SemaphoreSlim(0);
     }
+
+    private static TaskCompletionSource NewGate() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 /// <summary>Answers the research train's questions with the choices set for them.</summary>
 public sealed class ResearchDecider : IDecider
 {
+    private static readonly TimeSpan HoldBound = TimeSpan.FromSeconds(30);
+
     private int _asked;
+    private bool _holdNext;
+    private TaskCompletionSource _released = NewGate();
 
     public ResearchDepth Depth { get; set; } = ResearchDepth.Deep;
 
@@ -108,34 +145,56 @@ public sealed class ResearchDecider : IDecider
 
     public int Asked => _asked;
 
+    /// <summary>Released once when a held question is asked: the run is between two junctions.</summary>
+    public SemaphoreSlim Asking { get; private set; } = new(0);
+
+    /// <summary>Makes the next question wait, once asked, until <see cref="Release"/>.</summary>
+    public void HoldNextAsk() => _holdNext = true;
+
+    /// <summary>Lets the held question be answered.</summary>
+    public void Release() => _released.TrySetResult();
+
     public void Reset()
     {
         Depth = ResearchDepth.Deep;
         Style = SummaryStyle.Long;
         Interlocked.Exchange(ref _asked, 0);
+        _holdNext = false;
+        _released.TrySetResult();
+        _released = NewGate();
+        Asking = new SemaphoreSlim(0);
     }
 
-    public Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct)
+    public async Task<DecisionResult> Decide(DecisionRequest request, CancellationToken ct)
     {
         Interlocked.Increment(ref _asked);
-        return Task.FromResult(
-            new DecisionResult(
-                new Dictionary<string, Answer>
-                {
-                    [QuestionKey.For<ResearchDepth>()] = new ChoiceAnswer(Depth.ToString()),
-                    [QuestionKey.For<SummaryStyle>()] = new ChoiceAnswer(Style.ToString()),
-                }
-            )
+
+        if (_holdNext)
+        {
+            _holdNext = false;
+            Asking.Release();
+            await _released.Task.WaitAsync(HoldBound, ct);
+        }
+
+        return new DecisionResult(
+            new Dictionary<string, Answer>
+            {
+                [QuestionKey.For<ResearchDepth>()] = new ChoiceAnswer(Depth.ToString()),
+                [QuestionKey.For<SummaryStyle>()] = new ChoiceAnswer(Style.ToString()),
+            }
         );
     }
+
+    private static TaskCompletionSource NewGate() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 public sealed class PlanResearch : EffectJunction<ResearchInput, ResearchBrief>
 {
-    public override Task<ResearchBrief> Run(ResearchInput input)
+    public override async Task<ResearchBrief> Run(ResearchInput input)
     {
-        ResearchProbe.Note(input.Topic, nameof(PlanResearch));
-        return Task.FromResult(new ResearchBrief(input.Topic));
+        await ResearchProbe.Note(input.Topic, nameof(PlanResearch));
+        return new ResearchBrief(input.Topic);
     }
 }
 
@@ -145,7 +204,7 @@ public sealed class WriteResearchNote(IDataContext context)
 {
     public override async Task<ResearchBrief> Run(ResearchBrief input)
     {
-        ResearchProbe.Note(input.Topic, nameof(WriteResearchNote));
+        await ResearchProbe.Note(input.Topic, nameof(WriteResearchNote));
         await context.Track(
             new ManifestGroup
             {
@@ -161,45 +220,45 @@ public sealed class WriteResearchNote(IDataContext context)
 
 public sealed class SearchQuick : EffectJunction<ResearchBrief, ResearchFindings>
 {
-    public override Task<ResearchFindings> Run(ResearchBrief input)
+    public override async Task<ResearchFindings> Run(ResearchBrief input)
     {
-        ResearchProbe.Note(input.Topic, nameof(SearchQuick));
-        return Task.FromResult(new ResearchFindings(input.Topic, "quick"));
+        await ResearchProbe.Note(input.Topic, nameof(SearchQuick));
+        return new ResearchFindings(input.Topic, "quick");
     }
 }
 
 public sealed class SearchDeep : EffectJunction<ResearchBrief, ResearchFindings>
 {
-    public override Task<ResearchFindings> Run(ResearchBrief input)
+    public override async Task<ResearchFindings> Run(ResearchBrief input)
     {
-        ResearchProbe.Note(input.Topic, nameof(SearchDeep));
-        return Task.FromResult(new ResearchFindings(input.Topic, "deep"));
+        await ResearchProbe.Note(input.Topic, nameof(SearchDeep));
+        return new ResearchFindings(input.Topic, "deep");
     }
 }
 
 public sealed class FetchFullTexts : EffectJunction<ResearchFindings, CheckedFindings>
 {
-    public override Task<CheckedFindings> Run(ResearchFindings input)
+    public override async Task<CheckedFindings> Run(ResearchFindings input)
     {
-        ResearchProbe.Note(input.Topic, nameof(FetchFullTexts));
-        return Task.FromResult(new CheckedFindings(input.Topic, input.Depth, 12));
+        await ResearchProbe.Note(input.Topic, nameof(FetchFullTexts));
+        return new CheckedFindings(input.Topic, input.Depth, 12);
     }
 }
 
 public sealed class SummarizeShort : EffectJunction<CheckedFindings, string>
 {
-    public override Task<string> Run(CheckedFindings input)
+    public override async Task<string> Run(CheckedFindings input)
     {
-        ResearchProbe.Note(input.Topic, nameof(SummarizeShort));
-        return Task.FromResult($"short {input.Depth} summary of {input.Topic}");
+        await ResearchProbe.Note(input.Topic, nameof(SummarizeShort));
+        return $"short {input.Depth} summary of {input.Topic}";
     }
 }
 
 public sealed class SummarizeLong : EffectJunction<CheckedFindings, string>
 {
-    public override Task<string> Run(CheckedFindings input)
+    public override async Task<string> Run(CheckedFindings input)
     {
-        ResearchProbe.Note(input.Topic, nameof(SummarizeLong));
-        return Task.FromResult($"long {input.Depth} summary of {input.Topic}, {input.Pages} pages");
+        await ResearchProbe.Note(input.Topic, nameof(SummarizeLong));
+        return $"long {input.Depth} summary of {input.Topic}, {input.Pages} pages";
     }
 }

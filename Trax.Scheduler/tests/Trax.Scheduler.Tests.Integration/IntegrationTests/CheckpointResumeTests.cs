@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
+using Trax.Core.Functional;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Utils;
@@ -13,6 +14,7 @@ using Trax.Scheduler.Services.RequestHandler;
 using Trax.Scheduler.Services.TraxScheduler;
 using Trax.Scheduler.Tests.Integration.Fakes.Trains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.Scheduler.Trains.JobDispatcher;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 
@@ -423,6 +425,178 @@ public class CheckpointResumeTests(ClusterStore store)
             .RanFor("remote")
             .Should()
             .Equal([nameof(SummarizeLong)], $"the worker restored the stored state ({Adr})");
+    }
+
+    [Test]
+    public async Task A_resumed_run_cancelled_through_its_cancel_flag_on_another_host_is_recorded_cancelled()
+    {
+        // The dashboard's cancel and the API's are this call; on another host, it reaches the run
+        // only through the database.
+        var other = _cluster.Cluster.Host(
+            machines: false,
+            scheduler: true,
+            configure: s => s.AddSingleton<IDecider>(_decider)
+        );
+        var manifest = await _cluster.Manifest("cancel");
+        var failed = await Crash(manifest, nameof(SummarizeLong));
+        var runId = await DispatchRetry(manifest, failed);
+
+        // Held while it asks the style question, between the checkpoint and SummarizeLong.
+        _decider.HoldNextAsk();
+        var job = Task.Run(() => _cluster.Host.RunJob(runId));
+        (await _decider.Asking.WaitAsync(Bound))
+            .Should()
+            .BeTrue($"the resumed run asks the question after the checkpoint ({Adr})");
+
+        using (var scope = other.Services.CreateScope())
+            (
+                await scope
+                    .ServiceProvider.GetRequiredService<IOperationsService>()
+                    .CancelExecutionsAsync([runId], CancellationToken.None)
+            )
+                .Count.Should()
+                .Be(1);
+        _decider.Release();
+        await job.WaitAsync(Bound);
+
+        var run = await _cluster.Host.Run(runId);
+        run.TrainState.Should()
+            .Be(
+                TrainState.Cancelled,
+                $"a resumed run reads its cancel flag before its next junction, as any run does ({Adr})"
+            );
+        run.CancellationRequested.Should().BeTrue();
+        run.ResumeFrom.Should().Be(failed.Id);
+        ResearchProbe
+            .RanFor("cancel")
+            .Should()
+            .BeEmpty(
+                "the cancel stopped it before SummarizeLong, and it skipped every step before"
+            );
+    }
+
+    [Test]
+    public async Task A_resumed_run_past_its_job_timeout_is_recorded_cancelled()
+    {
+        var manifest = await _cluster.Manifest("timeout", timeoutSeconds: 60);
+        var failed = await Crash(manifest, nameof(SummarizeLong));
+        var runId = await DispatchRetry(manifest, failed);
+
+        _decider.HoldNextAsk();
+        var job = Task.Run(() => _cluster.Host.RunJob(runId));
+        (await _decider.Asking.WaitAsync(Bound))
+            .Should()
+            .BeTrue($"the resumed run asks the question after the checkpoint ({Adr})");
+
+        // The resumed run has been going for longer than its manifest allows.
+        await _cluster.Host.Age(runId, TimeSpan.FromMinutes(5));
+        await _cluster.Host.RunManifestManager();
+        (await _cluster.Host.Run(runId))
+            .CancellationRequested.Should()
+            .BeTrue("the manifest manager flags a run past its timeout");
+        _decider.Release();
+        await job.WaitAsync(Bound);
+
+        var run = await _cluster.Host.Run(runId);
+        run.TrainState.Should()
+            .Be(
+                TrainState.Cancelled,
+                $"the timeout reaches a resumed run as it reaches any run ({Adr})"
+            );
+        run.ResumeFrom.Should().Be(failed.Id);
+        ResearchProbe.RanFor("timeout").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task A_resumed_run_reports_progress_only_for_the_steps_it_runs()
+    {
+        var manifest = await _cluster.Manifest("progress");
+        var failed = await Crash(manifest, nameof(SummarizeLong));
+        var runId = await DispatchRetry(manifest, failed);
+
+        // Held in the first junction it runs, whichever that is: had it run a step before the
+        // checkpoint, that step would be the one held and reported.
+        ResearchProbe.HoldIn = ResearchProbe.AnyJunction;
+        var job = Task.Run(() => _cluster.Host.RunJob(runId));
+        (await ResearchProbe.Held.WaitAsync(Bound)).Should().BeTrue("the resumed run starts");
+
+        var running = await _cluster.Host.Run(runId);
+        running
+            .CurrentlyRunningJunction.Should()
+            .Be(
+                nameof(SummarizeLong),
+                $"the first junction a resumed run reports is the first after its checkpoint ({Adr})"
+            );
+        running.JunctionStartedAt.Should().NotBeNull();
+        ResearchProbe.RanFor("progress").Should().Equal([nameof(SummarizeLong)]);
+
+        ResearchProbe.Release();
+        await job.WaitAsync(Bound);
+
+        var run = await _cluster.Host.Run(runId);
+        run.TrainState.Should().Be(TrainState.Completed, run.FailureReason);
+        run.CurrentlyRunningJunction.Should().BeNull("every junction it ran has ended");
+        ResearchProbe.RanFor("progress").Should().Equal([nameof(SummarizeLong)]);
+    }
+
+    [Test]
+    public async Task A_resumed_retry_waits_out_its_backoff()
+    {
+        await using var delayed = await ResearchCluster.Create(
+            store,
+            _decider,
+            s => s.DefaultRetryDelay(TimeSpan.FromMinutes(10)).MaxRetryDelay(TimeSpan.FromHours(1))
+        );
+        var manifest = await delayed.Manifest("backoff");
+        ResearchProbe.FailIn = nameof(SummarizeLong);
+        var failed = await delayed.Cycle(manifest);
+        failed.TrainState.Should().Be(TrainState.Failed);
+        ResearchProbe.Reset();
+
+        await delayed.Host.RunManifestManager();
+        var retry = await delayed.QueuedEntry(manifest.Id);
+        retry.ResumeFrom.Should().Be(failed.Id, $"the retry resumes ({Adr})");
+        retry
+            .ScheduledAt.Should()
+            .BeAfter(
+                DateTime.UtcNow.AddMinutes(9),
+                $"a retry that resumes waits out the same backoff as one that reruns ({Adr})"
+            );
+
+        using (var scope = delayed.Host.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+        (await delayed.Entry(retry.Id))
+            .Status.Should()
+            .Be(WorkQueueStatus.Queued, "the dispatcher leaves it until its backoff is over");
+        ResearchProbe.RanFor("backoff").Should().BeEmpty();
+
+        // The backoff over.
+        await delayed.With(d =>
+            d.WorkQueues.Where(q => q.Id == retry.Id)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(q => q.ScheduledAt, DateTime.UtcNow.AddMinutes(-1))
+                )
+        );
+        var resumed = await delayed.DispatchAndRun(await delayed.Entry(retry.Id));
+
+        resumed.TrainState.Should().Be(TrainState.Completed, resumed.FailureReason);
+        resumed.ResumeFrom.Should().Be(failed.Id);
+        ResearchProbe.RanFor("backoff").Should().Equal([nameof(SummarizeLong)]);
+    }
+
+    /// <summary>
+    /// Queues <paramref name="manifest"/>'s retry, checks it resumes <paramref name="failed"/>, and
+    /// dispatches it without running it.
+    /// </summary>
+    private async Task<long> DispatchRetry(
+        Effect.Models.Manifest.Manifest manifest,
+        Metadata failed
+    )
+    {
+        await _cluster.Host.RunManifestManager();
+        var entry = await _cluster.QueuedEntry(manifest.Id);
+        entry.ResumeFrom.Should().Be(failed.Id, $"the retry resumes the failed run ({Adr})");
+        return await _cluster.Dispatch(entry);
     }
 
     /// <summary>Runs <paramref name="manifest"/> once with a crash in <paramref name="junction"/>.</summary>

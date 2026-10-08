@@ -73,7 +73,8 @@ public sealed class ResearchCluster : IAsyncDisposable
     public async Task<Manifest> Manifest(
         string topic,
         int maxRetries = 5,
-        bool replayDecisionsOnRetry = false
+        bool replayDecisionsOnRetry = false,
+        int? timeoutSeconds = null
     )
     {
         using var scope = Host.Services.CreateScope();
@@ -95,6 +96,7 @@ public sealed class ResearchCluster : IAsyncDisposable
             }
         );
         manifest.ManifestGroupId = group.Id;
+        manifest.TimeoutSeconds = timeoutSeconds;
         await data.Track(manifest);
         await data.SaveChanges(CancellationToken.None);
         return manifest;
