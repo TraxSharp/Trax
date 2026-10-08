@@ -26,6 +26,9 @@ public interface ISnapshotPrincipal
 }
 ```
 
+An empty or whitespace key is treated as unauthenticated, the same as `null`, and the draft service refuses one
+with an `ArgumentException`.
+
 In an HTTP host this is backed by the request principal (a claim); in tests it is a fake. Bind it in DI when
 you wire the subsystem.
 

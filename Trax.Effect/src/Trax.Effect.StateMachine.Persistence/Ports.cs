@@ -194,7 +194,10 @@ public interface ISnapshotStore
 /// </summary>
 public interface ISnapshotPrincipal
 {
-    /// <summary>The current user's key, or <c>null</c> if the request is unauthenticated.</summary>
+    /// <summary>
+    /// The current user's key, or <c>null</c> if the request is unauthenticated. An empty or whitespace key is
+    /// treated as unauthenticated too.
+    /// </summary>
     string? CurrentUserKey { get; }
 }
 

@@ -15,7 +15,7 @@ public interface ISnapshotEffectRunner
     /// whose effect already ran on content other than the draft's current content is rejected as
     /// <c>draft-changed</c>: its receipt is not recorded and the effect does not run again.
     /// </summary>
-    /// <param name="userKey">The authenticated owner of the draft.</param>
+    /// <param name="userKey">The authenticated owner of the draft; a null, empty or whitespace key is refused.</param>
     /// <param name="id">The draft id.</param>
     /// <param name="requestId">The client's idempotency key for this send; a retry with the same id replays.</param>
     /// <param name="cancellationToken">
@@ -24,6 +24,7 @@ public interface ISnapshotEffectRunner
     /// records it are written whatever the token says, so a cancelled request never leaves an effect that ran
     /// looking as if it had not.
     /// </param>
+    /// <exception cref="ArgumentException"><paramref name="userKey"/> is null, empty or whitespace.</exception>
     Task<AdvanceOutcome> Run(
         string userKey,
         Guid id,
@@ -104,6 +105,7 @@ internal sealed class SnapshotEffectRunner<TState, TTrigger> : ISnapshotEffectRu
         CancellationToken cancellationToken = default
     )
     {
+        SnapshotOwner.Require(userKey);
         switch (await _drafts.Load(userKey, id, cancellationToken))
         {
             case LoadResult.NotFound:

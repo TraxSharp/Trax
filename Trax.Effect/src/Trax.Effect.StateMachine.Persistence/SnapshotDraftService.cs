@@ -121,9 +121,13 @@ public interface ISnapshotDraftService
     /// Reads the caller's draft and rehydrates it, validating the stored JSON on the way out. A draft idle
     /// past the configured TTL is deleted, with its effect claims, and reported as <see cref="LoadResult.NotFound"/>.
     /// </summary>
-    /// <param name="userKey">The owner of the draft; drafts are always scoped to one user.</param>
+    /// <param name="userKey">
+    /// The owner of the draft; drafts are always scoped to one user. A null, empty or whitespace key names no
+    /// owner and is refused, on every method of this service.
+    /// </param>
     /// <param name="id">The draft's id.</param>
     /// <param name="cancellationToken">Cancels the store read.</param>
+    /// <exception cref="ArgumentException"><paramref name="userKey"/> is null, empty or whitespace.</exception>
     Task<LoadResult> Load(string userKey, Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -383,6 +387,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         CancellationToken cancellationToken = default
     )
     {
+        SnapshotOwner.Require(userKey);
         var stored = await store.Get(userKey, _machineId, id, cancellationToken);
         if (stored is null)
             return new LoadResult.NotFound();
@@ -421,6 +426,8 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         CancellationToken cancellationToken = default
     )
     {
+        SnapshotOwner.Require(userKey);
+
         // Bound the payload before any parsing or DB work (DoS guard).
         if (Encoding.UTF8.GetByteCount(snapshotJson) > SnapshotLimits.MaxSnapshotBytes)
             return new AutosaveResult.Rejected(
@@ -596,6 +603,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
         CancellationToken cancellationToken
     )
     {
+        SnapshotOwner.Require(userKey);
         var stored = await store.Get(userKey, _machineId, id, cancellationToken);
         if (stored is null)
             return new AdvanceOutcome.NotFound();

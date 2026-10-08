@@ -23,7 +23,7 @@ treat a code it does not recognise as a refusal, so that a code added later does
 | `unknown-state` | rehydrate | the snapshot names a state the definition does not have. Only the exact declared name is a state: `"1"`, `" Unlocked"` and `"Locked, Unlocked"` are unknown, and an unknown trigger token is `no-transition` |
 | `version-mismatch` | rehydrate | the snapshot version is newer than the definition, or a [migration](/docs/sdk-reference/statemachine-api/migrations) is missing |
 | `unknown-machine` | rehydrate, save, advance, load, send | no registered machine has that name |
-| `unauthenticated` | save, advance, load, send | the request carries no user: `ISnapshotPrincipal.CurrentUserKey` is null. Checked before anything else, so nothing was read or written |
+| `unauthenticated` | save, advance, load, send | the request carries no user: `ISnapshotPrincipal.CurrentUserKey` is null, empty or whitespace. Checked before anything else, so nothing was read or written |
 | `not-found` | advance, load, send | no draft with that id exists for this user and machine, or it expired and was deleted; start a new one |
 | `schema-mismatch` | save, advance, load, send | the client's machine [schema hash](/docs/sdk-reference/statemachine-api/runtime-integrity) differs from the server's; the client is out of date and should reload |
 | `client-divergence` | advance | the client's computed result differs from the server's authoritative result ([divergence detection](/docs/sdk-reference/statemachine-api/runtime-integrity)); nothing was written, reload |
