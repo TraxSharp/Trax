@@ -25,7 +25,7 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, (Exception)Exception);
 
-        ChainGraph.Enter(Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction))));
+        ChainGraph.Enter(Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction))), BranchPath);
 
         var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 
@@ -83,7 +83,7 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance)
         where TJunction : class =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.ShortCircuit)
+            ? RecordInstance(junctionInstance, RecordStep<TJunction>(ChainStepKind.ShortCircuit))
             : new(ShortCircuitAsync(junctionInstance));
 
     private async Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>(

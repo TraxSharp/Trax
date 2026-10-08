@@ -44,6 +44,12 @@ public enum ChainStepKind
 
     /// <summary>Routes on a score in Memory to the track for the level it reaches.</summary>
     Scale,
+
+    /// <summary>
+    /// Runs a fixed set of named branches side by side, each on its own copy of Memory, and
+    /// merges what they produce. <see cref="ChainRecorder.TracksAt(int)"/> holds the branches.
+    /// </summary>
+    Parallel,
 }
 
 /// <summary>
@@ -89,7 +95,18 @@ public sealed class ChainRecorder
     /// A recorder for one track of a routing step, sharing the question keys of the chain it is
     /// part of.
     /// </summary>
-    internal ChainRecorder(ChainRecorder chain) => _questionKeys = chain._questionKeys;
+    internal ChainRecorder(ChainRecorder chain)
+    {
+        _questionKeys = chain._questionKeys;
+        InBranch = chain.InBranch;
+    }
+
+    /// <summary>
+    /// True while recording a branch of a <c>Parallel</c> step, or a track inside one, where a
+    /// step that changes the run as a whole (a short circuit, a call on the train itself) cannot
+    /// be told apart from its siblings' and is refused.
+    /// </summary>
+    internal bool InBranch { get; init; }
 
     /// <summary>
     /// The type each question key was first asked about, across the whole chain and its tracks.
@@ -178,6 +195,18 @@ public sealed class ChainRecorder
     }
 
     internal bool IsBuilt(int stepIndex) => _builtSteps.Contains(stepIndex);
+
+    private readonly List<object> _instances = [];
+
+    /// <summary>Notes a junction instance a step of this chain was handed.</summary>
+    internal void NoteInstance(object instance) => _instances.Add(instance);
+
+    /// <summary>
+    /// Every junction instance this chain's steps, and its tracks' and branches' steps, were
+    /// handed.
+    /// </summary>
+    internal IEnumerable<object> Instances() =>
+        _instances.Concat(_tracks.Values.SelectMany(t => t).SelectMany(t => t.Steps.Instances()));
 
     /// <summary>
     /// Refuses the chain as a whole, for something no single step did.

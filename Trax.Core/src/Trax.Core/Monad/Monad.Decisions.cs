@@ -582,7 +582,7 @@ public partial class Monad<TInput, TReturn>
                         QuestionType = spec.On,
                     };
 
-                    ChainGraph.Enter(nodeIds[spec.Key]);
+                    ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
 
                     // The step fails on the refusal either way, so an observer that cannot record
                     // it is only logged: its failure would hide why the step failed.
@@ -659,7 +659,7 @@ public partial class Monad<TInput, TReturn>
                 StateType = (object?)state is { } held ? held.GetType() : typeof(TState),
             };
 
-            ChainGraph.Enter(nodeIds[spec.Key]);
+            ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
 
             if (
                 await Tell(observer, (o, ct) => o.Decided(made, ct), at).ConfigureAwait(false) is
@@ -1106,7 +1106,7 @@ public partial class Monad<TInput, TReturn>
         var at = $"{step} (train '{train}')";
 
         var nodeId = Nodes.Next(ChainNodeScope.RoutingKey(kind, typeof(TKey)));
-        ChainGraph.Enter(nodeId);
+        ChainGraph.Enter(nodeId, BranchPath);
 
         if (taken is null)
             return Refuse(step, $"{at}: {noTrack}");

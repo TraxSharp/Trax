@@ -103,7 +103,7 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </remarks>
     private async Task<Either<Exception, TReturn>> RunInternal(TInput input)
     {
-        _monad = NewMonad().Activate(input);
+        var monad = _monad = NewMonad().Activate(input);
 
         try
         {
@@ -112,6 +112,21 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         catch (Exception ex)
         {
             return ex;
+        }
+        finally
+        {
+            // A branch's scope outlives its branch: what it put in Memory may hold on to it.
+            foreach (var scope in monad.BranchScopes)
+            {
+                try
+                {
+                    await scope.DisposeAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // A branch's scope failing to dispose cannot change the run's result.
+                }
+            }
         }
     }
 
@@ -251,6 +266,15 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     private Monad<TInput, TReturn> Root(string call, bool startsAJunction)
     {
+        // Inside a Parallel branch, a call on the train runs on the run's own Memory beside the
+        // branch rather than in it.
+        if (_monad?.Recorder is { InBranch: true } branch)
+            branch.Refuse(
+                $"a Parallel branch calls {call} on the train itself, which runs on the run's "
+                    + "Memory beside the branch instead of in it. Chain it on the branch's "
+                    + "parameter, as in b => b.Chain<A>()."
+            );
+
         ActiveRecorder?.NoteRootCall(call, startsAJunction);
         return _monad!;
     }

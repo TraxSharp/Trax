@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Core.Decisions;
 using Trax.Core.Extensions;
 using Trax.Core.Functional;
 
@@ -178,6 +179,12 @@ public static class ChainVerification
         for (var i = 0; i < steps.Count; i++)
         {
             var step = steps[i];
+
+            if (step.Kind == ChainStepKind.Parallel)
+            {
+                ReplayParallel(i, step);
+                continue;
+            }
 
             // A step naming a type that is not a junction is kept, without types, only so later
             // steps keep their written positions. Its refusal says what is wrong with it.
@@ -374,6 +381,99 @@ public static class ChainVerification
                 memory.Add(decision);
         }
 
+        void ReplayParallel(int i, ChainStep step)
+        {
+            // Every branch starts from Memory as it is here, and the step after the join sees the
+            // union of what they added. A type two branches both add has no single value to merge,
+            // so it is refused; an interface two tuples' elements both bring is left out of the
+            // merge at run time, so it is left out here too.
+            var fork = new System.Collections.Generic.HashSet<Type>(memory);
+            var producedBy = new Dictionary<Type, string>();
+            var collided = new System.Collections.Generic.HashSet<Type>();
+            var reads = new List<(string Branch, Type Type)>();
+
+            foreach (var declared in chain.TracksAt(i))
+            {
+                var branchMemory = new System.Collections.Generic.HashSet<Type>(fork);
+                var context = new TrackContext(
+                    track?.SwitchIndex ?? i,
+                    track?.Kind ?? step.Kind,
+                    $"{track?.Prefix}branch '{declared.Name}', "
+                );
+
+                Replay(
+                    declared.Steps,
+                    branchMemory,
+                    faults,
+                    output,
+                    availableElsewhere,
+                    checkConstructors,
+                    context
+                );
+
+                foreach (var written in Outputs(declared.Steps).Where(fork.Contains).Where(Merged))
+                    faults.Add(
+                        Fault(
+                            i,
+                            step.Kind,
+                            null,
+                            $"branch '{declared.Name}' produces '{Name(written)}', which was in "
+                                + "Memory before the Parallel. A branch adds to Memory; one that "
+                                + "replaced a value would race its siblings reading it. Produce a "
+                                + "new type."
+                        )
+                    );
+
+                foreach (var input in Inputs(declared.Steps))
+                    reads.Add((declared.Name, input));
+
+                foreach (var added in branchMemory.Where(t => !fork.Contains(t) && Merged(t)))
+                {
+                    if (!producedBy.TryAdd(added, declared.Name))
+                    {
+                        if (added.IsInterface)
+                            collided.Add(added);
+                        else
+                            faults.Add(
+                                Fault(
+                                    i,
+                                    step.Kind,
+                                    null,
+                                    $"branches '{producedBy[added]}' and '{declared.Name}' both "
+                                        + $"produce '{Name(added)}', so the join has two values "
+                                        + "for one type. Have one branch produce it, or give each "
+                                        + "its own type."
+                                )
+                            );
+                    }
+                }
+            }
+
+            // A branch cannot see what a sibling produces: they run at the same time. When the
+            // container also supplies the type the branch would silently get the container's.
+            foreach (var (branch, input) in reads)
+                if (
+                    !fork.Contains(input)
+                    && producedBy.TryGetValue(input, out var sibling)
+                    && sibling != branch
+                )
+                    faults.Add(
+                        Fault(
+                            i,
+                            step.Kind,
+                            null,
+                            $"branch '{branch}' needs '{Name(input)}', which only branch "
+                                + $"'{sibling}' produces. Branches run at the same time and see "
+                                + "only what was in Memory before the Parallel. Produce it "
+                                + "before the Parallel, or read it after the join."
+                        )
+                    );
+
+            foreach (var added in producedBy.Keys)
+                if (!collided.Contains(added))
+                    memory.Add(added);
+        }
+
         void ReplayRouting(int i, ChainStep step)
         {
             if (step.In is { } decision && !memory.Contains(decision))
@@ -423,6 +523,46 @@ public static class ChainVerification
                 memory.UnionWith(afterEveryTrack);
         }
     }
+
+    /// <summary>
+    /// Whether a type a branch adds is merged into the run's Memory: <c>Unit</c> is always there,
+    /// and what a branch decided and which track it took stay the branch's, so two branches can
+    /// each route on the same question.
+    /// </summary>
+    internal static bool Merged(Type type) =>
+        type != typeof(Unit)
+        && !(
+            type.IsGenericType
+            && type.GetGenericTypeDefinition() is var open
+            && (
+                open == typeof(TrackTaken<>)
+                || open == typeof(ChoiceDecision<>)
+                || open == typeof(YesNoDecision<>)
+                || open == typeof(ScoreDecision<>)
+            )
+        );
+
+    /// <summary>Every type a chain's steps, and their tracks' and branches' steps, produce.</summary>
+    private static IEnumerable<Type> Outputs(ChainRecorder chain) =>
+        chain
+            .Steps.Select((step, i) => (step, i))
+            .SelectMany(s =>
+                (
+                    s.step.Kind == ChainStepKind.ShortCircuit || s.step.Out is null
+                        ? []
+                        : new[] { s.step.Out }
+                ).Concat(chain.TracksAt(s.i).SelectMany(t => Outputs(t.Steps)))
+            );
+
+    /// <summary>Every type a chain's steps, and their tracks' and branches' steps, consume.</summary>
+    private static IEnumerable<Type> Inputs(ChainRecorder chain) =>
+        chain
+            .Steps.Select((step, i) => (step, i))
+            .SelectMany(s =>
+                (s.step.In is null ? [] : new[] { s.step.In }).Concat(
+                    chain.TracksAt(s.i).SelectMany(t => Inputs(t.Steps))
+                )
+            );
 
     /// <summary>
     /// The arguments of <paramref name="junction"/>'s one public constructor that neither Memory

@@ -35,7 +35,7 @@ public sealed record ChainGraph(
     IReadOnlyList<string> Refusals
 )
 {
-    private static readonly AsyncLocal<string?> Running = new();
+    private static readonly AsyncLocal<(string NodeId, string? BranchPath)?> Running = new();
 
     /// <summary>
     /// The id of the declared node whose junction, question or routing step is executing on this
@@ -46,9 +46,20 @@ public sealed record ChainGraph(
     /// junction effects of an <c>EffectJunction</c> or a decision observer, can say which node it
     /// belongs to. A train run inside a junction sets its own for its own steps.
     /// </remarks>
-    public static string? CurrentNodeId => Running.Value;
+    public static string? CurrentNodeId => Running.Value?.NodeId;
 
-    internal static void Enter(string nodeId) => Running.Value = nodeId;
+    /// <summary>
+    /// The path of the <c>Parallel</c> branch the step executing on this async flow belongs to,
+    /// as in <c>Parallel#0/cocitation</c>, or null for a step outside any branch.
+    /// </summary>
+    /// <remarks>
+    /// Two branches can each ask the same question, so a recorded answer is told apart by the
+    /// branch as well as by how many times the question was asked.
+    /// </remarks>
+    public static string? CurrentBranchPath => Running.Value?.BranchPath;
+
+    internal static void Enter(string nodeId, string? branchPath) =>
+        Running.Value = (nodeId, branchPath);
 
     /// <summary>
     /// A hash of the graph's canonical JSON (<see cref="ToJson"/>), as 64 lowercase hex digits.
