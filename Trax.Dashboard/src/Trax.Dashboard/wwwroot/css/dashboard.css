@@ -517,6 +517,46 @@
     color: var(--rz-info, #1565C0);
 }
 
+/* A Parallel step's branches all run, so they sit side by side as lanes, each with a solid rule
+   once the step has started. A lane too narrow to read wraps onto the next row. */
+.cs-rg-lanes {
+    list-style: none;
+    margin: 0.15rem 0 0.25rem 0.3rem;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.cs-rg-lane {
+    flex: 1 1 14rem;
+    min-width: 0;
+    padding: 0.25rem 0.5rem;
+    border-top: 2px solid var(--rz-info, #1565C0);
+}
+
+.cs-rg-lane--idle {
+    border-top-style: dashed;
+    border-top-color: var(--rz-base-300, rgba(255, 255, 255, 0.15));
+}
+
+.cs-rg-lane-name {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+}
+
+@media (max-width: 640px) {
+    .cs-rg-lanes {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
 .cs-rg-unmatched-list {
     list-style: none;
     margin: 0;

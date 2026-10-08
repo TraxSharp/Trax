@@ -220,6 +220,173 @@ public class RunGraphViewTests
             .Equal(api.UnmatchedSteps.Select(s => s.Position.ToString()));
     }
 
+    private const string Fork = "Parallel#0";
+    private const string Left = "Parallel#0/left/ScoreLeft#0";
+    private const string RightSwitch = "Parallel#0/right/Switch<Lane>#0";
+    private const string RightFast = "Parallel#0/right/Switch<Lane>#0/Fast/Ship#0";
+    private const string RightSlow = "Parallel#0/right/Switch<Lane>#0/Slow/Ship#0";
+    private const string NestedFork = "Parallel#0/right/Parallel#0";
+    private const string NestedX = "Parallel#0/right/Parallel#0/x/CountX#0";
+    private const string NestedY = "Parallel#0/right/Parallel#0/y/CountY#0";
+
+    private static readonly ChainGraph ParallelGraph = new(
+        "Acme.Ranking.RankingTrain",
+        "Paper",
+        "Ranking",
+        [
+            Node("Fetch#0", ChainStepKind.Chain),
+            Node(
+                Fork,
+                ChainStepKind.Parallel,
+                tracks:
+                [
+                    new ChainGraphTrack("left", null, false, [Node(Left, ChainStepKind.Chain)]),
+                    new ChainGraphTrack(
+                        "right",
+                        null,
+                        false,
+                        [
+                            Node(
+                                RightSwitch,
+                                ChainStepKind.Switch,
+                                tracks:
+                                [
+                                    new ChainGraphTrack(
+                                        "Fast",
+                                        null,
+                                        false,
+                                        [Node(RightFast, ChainStepKind.Chain)]
+                                    ),
+                                    new ChainGraphTrack(
+                                        "Slow",
+                                        null,
+                                        false,
+                                        [Node(RightSlow, ChainStepKind.Chain)]
+                                    ),
+                                ]
+                            ),
+                            Node(
+                                NestedFork,
+                                ChainStepKind.Parallel,
+                                tracks:
+                                [
+                                    new ChainGraphTrack(
+                                        "x",
+                                        null,
+                                        false,
+                                        [Node(NestedX, ChainStepKind.Chain)]
+                                    ),
+                                    new ChainGraphTrack(
+                                        "y",
+                                        null,
+                                        false,
+                                        [Node(NestedY, ChainStepKind.Chain)]
+                                    ),
+                                ]
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            Node("Join#0", ChainStepKind.Chain),
+        ],
+        []
+    );
+
+    [Test]
+    public void A_Parallel_steps_branches_sit_side_by_side_as_named_lanes()
+    {
+        var view = _ctx.RenderComponent<RunGraphView>(p =>
+            p.Add(
+                x => x.Graph,
+                RunGraphs.Match(
+                    1,
+                    Train,
+                    ParallelGraph,
+                    [
+                        Step(0, "Fetch#0"),
+                        Step(1, Left),
+                        Step(2, RightSwitch, JunctionRunKind.Route, answer: "Fast"),
+                        Step(3, RightFast),
+                        Step(4, NestedY),
+                        Step(5, NestedX, JunctionRunState.Failed),
+                    ]
+                )
+            )
+        );
+
+        var fork = view.Find($"li[data-node-id='{Fork}']");
+        fork.GetAttribute("data-kind").Should().Be(nameof(ChainStepKind.Parallel));
+        fork.GetAttribute("data-state").Should().Be(nameof(RunNodeState.Failed));
+
+        var lanes = fork.QuerySelector(":scope > ul.cs-rg-lanes")!;
+        lanes.GetAttribute("aria-label").Should().Contain("side by side");
+        var branches = lanes.QuerySelectorAll(":scope > li.cs-rg-lane").ToList();
+        branches.Select(b => b.GetAttribute("data-branch")).Should().Equal("left", "right");
+        branches.Should().OnlyContain(b => b.GetAttribute("data-taken") == "true");
+        branches[0].QuerySelector(".cs-rg-lane-name")!.TextContent.Should().Contain("left");
+        fork.QuerySelectorAll(":scope > ul.cs-rg-tracks")
+            .Should()
+            .BeEmpty("a Parallel step's branches are not alternatives");
+
+        // A routing step inside a branch keeps its tracks; a Parallel inside one has lanes of its own.
+        branches[1]
+            .QuerySelector($"li[data-node-id='{RightSwitch}'] > ul.cs-rg-tracks")
+            .Should()
+            .NotBeNull();
+        StateOf(view, RightFast).Should().Be(nameof(RunNodeState.Completed));
+        StateOf(view, RightSlow).Should().Be(nameof(RunNodeState.Skipped));
+        view.FindAll($"li[data-node-id='{NestedFork}'] > ul.cs-rg-lanes > li.cs-rg-lane")
+            .Select(b => b.GetAttribute("data-branch"))
+            .Should()
+            .Equal("x", "y");
+        StateOf(view, NestedFork).Should().Be(nameof(RunNodeState.Failed));
+        StateOf(view, NestedY).Should().Be(nameof(RunNodeState.Completed));
+        StateOf(view, "Join#0").Should().Be(nameof(RunNodeState.NotReached));
+    }
+
+    [Test]
+    public void A_Parallel_step_not_yet_started_draws_its_lanes_idle()
+    {
+        var view = _ctx.RenderComponent<RunGraphView>(p =>
+            p.Add(x => x.Graph, RunGraphs.Match(1, Train, ParallelGraph, [Step(0, "Fetch#0")]))
+        );
+
+        var lanes = view.FindAll($"li[data-node-id='{Fork}'] > ul.cs-rg-lanes > li.cs-rg-lane");
+        lanes.Should().HaveCount(2);
+        lanes.Should().OnlyContain(l => l.GetAttribute("data-taken") == "false");
+        lanes.Should().OnlyContain(l => l.ClassList.Contains("cs-rg-lane--idle"));
+        StateOf(view, Fork).Should().Be(nameof(RunNodeState.NotReached));
+    }
+
+    [Test]
+    public async Task The_run_page_shows_each_branch_node_in_the_state_the_API_reports()
+    {
+        _graphs.With(Train, ParallelGraph);
+        var runId = await SeedRunAsync(
+            Train,
+            Row(0, JunctionRunKind.Junction, "Fetch", "Fetch#0", JunctionRunState.Completed),
+            Row(1, JunctionRunKind.Junction, "ScoreLeft", Left, JunctionRunState.Completed),
+            Row(2, JunctionRunKind.Route, "Lane", RightSwitch, JunctionRunState.Completed, "Slow"),
+            Row(3, JunctionRunKind.Junction, "CountX", NestedX, JunctionRunState.Cancelled),
+            Row(4, JunctionRunKind.Junction, "Ship", RightSlow, JunctionRunState.Failed)
+        );
+
+        var page = _ctx.RenderComponent<MetadataDetailPage>(p => p.Add(x => x.MetadataId, runId));
+        var api = await new OperationsQueries().GetRunGraph(runId, _data, _graphs, default);
+
+        var expected = Flatten(api!.Nodes).ToList();
+        expected.Should().Contain((Fork, nameof(RunNodeState.Failed)));
+        page.WaitForAssertion(
+            () =>
+                page.FindAll("li.cs-rg-node")
+                    .Select(n => (n.GetAttribute("data-node-id"), n.GetAttribute("data-state")))
+                    .Should()
+                    .Equal(expected),
+            WaitTimeout
+        );
+    }
+
     private static IEnumerable<(string?, string?)> Flatten(IEnumerable<RunGraphNode> nodes) =>
         nodes.SelectMany(n =>
             new[] { ((string?)n.Id, (string?)n.State.ToString()) }.Concat(
@@ -235,7 +402,18 @@ public class RunGraphViewTests
     private static string? StateOf(IRenderedFragment view, string nodeId) =>
         view.Find($"li[data-node-id='{nodeId}']").GetAttribute("data-state");
 
-    private async Task<long> SeedRunAsync(string train)
+    private Task<long> SeedRunAsync(string train) =>
+        SeedRunAsync(
+            train,
+            Row(0, JunctionRunKind.Junction, "Fetch", "Fetch#0", JunctionRunState.Completed),
+            Row(1, JunctionRunKind.Choice, "Lane", Decide, JunctionRunState.Completed, "Fast"),
+            Row(2, JunctionRunKind.Route, "Lane", Switch, JunctionRunState.Completed, "Fast"),
+            Row(3, JunctionRunKind.Junction, "Ship", FastShip, JunctionRunState.Completed),
+            Row(4, JunctionRunKind.Junction, "Legacy", null, JunctionRunState.Completed),
+            Row(5, JunctionRunKind.Junction, "Finish", "Finish#0", JunctionRunState.Failed)
+        );
+
+    private async Task<long> SeedRunAsync(string train, params JunctionRun[] rows)
     {
         await using var db = await _data.CreateDbContextAsync(default);
         var run = Metadata.Create(
@@ -250,15 +428,6 @@ public class RunGraphViewTests
         await db.Track(run);
         await db.SaveChanges(default);
 
-        var rows = new[]
-        {
-            Row(0, JunctionRunKind.Junction, "Fetch", "Fetch#0", JunctionRunState.Completed),
-            Row(1, JunctionRunKind.Choice, "Lane", Decide, JunctionRunState.Completed, "Fast"),
-            Row(2, JunctionRunKind.Route, "Lane", Switch, JunctionRunState.Completed, "Fast"),
-            Row(3, JunctionRunKind.Junction, "Ship", FastShip, JunctionRunState.Completed),
-            Row(4, JunctionRunKind.Junction, "Legacy", null, JunctionRunState.Completed),
-            Row(5, JunctionRunKind.Junction, "Finish", "Finish#0", JunctionRunState.Failed),
-        };
         foreach (var row in rows)
         {
             row.MetadataId = run.Id;

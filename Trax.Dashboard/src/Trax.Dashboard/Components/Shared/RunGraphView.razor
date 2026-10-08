@@ -69,7 +69,7 @@
     protected override void OnAfterRender(bool firstRender) => _rendered = Graph;
 
     private RenderFragment RenderNode(RunGraphNode node) =>
-        @<li class="cs-rg-node @(node.State is RunNodeState.Skipped or RunNodeState.NotReached ? "cs-rg-node--dim" : "")" data-node-id="@node.Id" data-state="@node.State">
+        @<li class="cs-rg-node @(node.State is RunNodeState.Skipped or RunNodeState.NotReached ? "cs-rg-node--dim" : "")" data-node-id="@node.Id" data-kind="@node.Kind" data-state="@node.State">
             <div class="cs-rg-row" title="@node.Id">
                 <span class="cs-rg-dot @NodeClass(node.State)" aria-hidden="true"></span>
                 <span class="cs-rg-kind">@KindLabel(node.Kind)</span>
@@ -91,7 +91,33 @@
                     </span>
                 }
             </div>
-            @if (node.Tracks.Count > 0)
+            @if (node.Kind == ChainStepKind.Parallel)
+            {
+                @* Every branch runs, so the branches sit side by side as lanes rather than as
+                   alternatives stacked under the step. *@
+                <ul class="cs-rg-lanes" aria-label="@($"Branches of {NameOf(node)}, run side by side")">
+                    @foreach (var branch in node.Tracks)
+                    {
+                        <li class="cs-rg-lane @(branch.Taken ? "" : "cs-rg-lane--idle")" data-branch="@branch.Name" data-taken="@(branch.Taken ? "true" : "false")">
+                            <div class="cs-rg-lane-name">
+                                <RadzenIcon Icon="call_split" Style="font-size: 14px;" aria-hidden="true" />
+                                <span class="cs-rg-kind">branch</span>
+                                <span>@branch.Name</span>
+                            </div>
+                            @if (branch.Nodes.Count > 0)
+                            {
+                                <ol class="cs-rg" aria-label="@($"Steps of branch {branch.Name}")">
+                                    @foreach (var inner in branch.Nodes)
+                                    {
+                                        @RenderNode(inner)
+                                    }
+                                </ol>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            else if (node.Tracks.Count > 0)
             {
                 <ul class="cs-rg-tracks" aria-label="@($"Tracks of {NameOf(node)}")">
                     @foreach (var track in node.Tracks)
