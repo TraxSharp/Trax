@@ -149,6 +149,8 @@ public class TrainExecutionService(
                 DeferPromotion = deferPromotion,
                 SubjectKey = subjectKey,
                 ReplayDecisionsOf = options.ReplayDecisionsOf,
+                ResumeFrom = options.ResumeFrom,
+                ResumeAt = options.ResumeAt,
             }
         );
         entry.ExternalId = externalId;

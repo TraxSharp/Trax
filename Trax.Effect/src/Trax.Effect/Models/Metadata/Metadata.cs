@@ -539,6 +539,8 @@ public class Metadata : IModel, IDisposable
             ParentId = metadata.ParentId,
             ManifestId = metadata.ManifestId,
             ReplayDecisionsOf = metadata.ReplayDecisionsOf,
+            ResumeFrom = metadata.ResumeFrom,
+            ResumeAt = metadata.ResumeAt,
             InvokingMachine = metadata.InvokedBy?.Machine,
             InvokingInstanceId = metadata.InvokedBy?.InstanceId,
             InvokingOwnerKind = metadata.InvokedBy?.OwnerKind,

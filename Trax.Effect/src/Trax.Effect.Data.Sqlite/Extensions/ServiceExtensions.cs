@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.Services.DataContext;
@@ -78,6 +79,12 @@ public static class ServiceExtensions
         configurationBuilder.AddEffect<IDataContextProviderFactory, SqliteContextProviderFactory>(
             toggleable: false
         );
+
+        // The rows a run's checkpoints are stored in and resumed from (Trax.Docs/adr/0047).
+        configurationBuilder.ServiceCollection.TryAddSingleton<
+            Trax.Effect.Services.Checkpoints.ICheckpointRows,
+            Trax.Effect.Data.Checkpoints.CheckpointRows
+        >();
 
         // Register the SQL dialect
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, SqliteSqlDialect>();

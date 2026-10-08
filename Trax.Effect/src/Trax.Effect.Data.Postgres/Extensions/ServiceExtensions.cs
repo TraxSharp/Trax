@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
@@ -165,6 +166,12 @@ public static class ServiceExtensions
         configurationBuilder.AddEffect<IDataContextProviderFactory, PostgresContextProviderFactory>(
             toggleable: false
         );
+
+        // The rows a run's checkpoints are stored in and resumed from (Trax.Docs/adr/0047).
+        configurationBuilder.ServiceCollection.TryAddSingleton<
+            Trax.Effect.Services.Checkpoints.ICheckpointRows,
+            Trax.Effect.Data.Checkpoints.CheckpointRows
+        >();
 
         // Register the SQL dialect for provider-specific raw SQL
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();

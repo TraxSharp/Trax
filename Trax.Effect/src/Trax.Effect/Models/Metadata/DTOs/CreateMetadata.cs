@@ -44,6 +44,14 @@ public class CreateMetadata
     /// <summary>The run whose recorded decisions the new run replays, if any.</summary>
     public long? ReplayDecisionsOf { get; set; }
 
+    /// <summary>The failed run the new run resumes from a checkpoint, if any.</summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public long? ResumeFrom { get; set; }
+
+    /// <summary>The step the new run resumes at, or null for after its source's latest checkpoint.</summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public string? ResumeAt { get; set; }
+
     /// <summary>The state-machine instance whose invoking state queued the run, or null.</summary>
     [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP002")]
     public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }

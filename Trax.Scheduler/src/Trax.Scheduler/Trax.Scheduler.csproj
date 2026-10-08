@@ -9,6 +9,9 @@
     <!-- TRAXEXP002: the dispatcher carries the state-machine instance that invoked a run to its
          metadata, and the operations service refuses to requeue such a run. -->
     <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
+    <!-- TRAXEXP003: the dispatcher carries the run a queued run resumes to its metadata, and retries
+         and the operator's resume queue resumed runs. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

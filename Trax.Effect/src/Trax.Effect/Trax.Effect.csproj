@@ -11,6 +11,9 @@
     <!-- TRAXEXP002: the work queue entry and the run record which state-machine instance invoked them, and
          the models write those experimental columns themselves. -->
     <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
+    <!-- TRAXEXP003: a run stores the checkpoints it reaches and resumes from them, so the effect layer is
+         where the experimental feature's runtime lives. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

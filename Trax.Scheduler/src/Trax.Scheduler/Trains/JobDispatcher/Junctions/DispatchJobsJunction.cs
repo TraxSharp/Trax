@@ -260,6 +260,8 @@ internal class DispatchJobsJunction(
                 Input = null,
                 ManifestId = claimed.ManifestId,
                 ReplayDecisionsOf = claimed.ReplayDecisionsOf,
+                ResumeFrom = claimed.ResumeFrom,
+                ResumeAt = claimed.ResumeAt,
                 InvokedBy = InvokedBy(claimed),
             }
         );
@@ -496,6 +498,8 @@ internal class DispatchJobsJunction(
                 Input = null,
                 ManifestId = claimed.ManifestId,
                 ReplayDecisionsOf = claimed.ReplayDecisionsOf,
+                ResumeFrom = claimed.ResumeFrom,
+                ResumeAt = claimed.ResumeAt,
                 InvokedBy = InvokedBy(claimed),
             }
         );

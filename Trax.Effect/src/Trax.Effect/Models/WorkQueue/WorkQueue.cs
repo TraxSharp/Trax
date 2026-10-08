@@ -304,6 +304,8 @@ public class WorkQueue : IModel
             ScheduledAt = dto.ScheduledAt,
             DeadLetterId = dto.DeadLetterId,
             ReplayDecisionsOf = dto.ReplayDecisionsOf,
+            ResumeFrom = dto.ResumeFrom,
+            ResumeAt = dto.ResumeAt,
             IsExplicitTrigger = dto.ExplicitTrigger || dto.DeadLetterId is not null,
             Status = WorkQueueStatus.Queued,
             CreatedAt = DateTime.UtcNow,

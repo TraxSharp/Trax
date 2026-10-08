@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
 using Trax.Effect.Data.Services.DataContext;
@@ -66,6 +67,12 @@ public static class ServiceExtensions
             factory,
             toggleable: false
         );
+
+        // The rows a run's checkpoints are stored in and resumed from (Trax.Docs/adr/0047).
+        configurationBuilder.ServiceCollection.TryAddSingleton<
+            Trax.Effect.Services.Checkpoints.ICheckpointRows,
+            Trax.Effect.Data.Checkpoints.CheckpointRows
+        >();
 
         // Register IDataContext as scoped so services that resolve it directly from DI
         // (e.g. SchedulerStartupService, ManifestManagerPollingService) work the same

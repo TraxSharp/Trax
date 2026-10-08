@@ -6,6 +6,8 @@
     <AssemblyName>Trax.Mediator</AssemblyName>
     <!-- TRAXEXP002: the mediator implements the experimental launcher of a state's invoked train. -->
     <NoWarn>$(NoWarn);TRAXEXP002</NoWarn>
+    <!-- TRAXEXP003: queueing a run carries the run it resumes from a checkpoint. -->
+    <NoWarn>$(NoWarn);TRAXEXP003</NoWarn>
     <PackageDescription>Decoupled dispatch for Trax .NET trains: ITrainBus runs the train registered for an input's type, so callers never reference a concrete train. Adds assembly scanning, the train registry, [TraxAuthorize] train authorization and concurrency limits. Install it when callers should hand over an input rather than inject a specific train.</PackageDescription>
   </PropertyGroup>
 

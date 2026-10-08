@@ -44,6 +44,14 @@ public class CreateWorkQueue
     /// <summary>The run whose recorded decisions the queued run replays, if any.</summary>
     public long? ReplayDecisionsOf { get; set; }
 
+    /// <summary>The failed run the queued run resumes from a checkpoint, if any.</summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public long? ResumeFrom { get; set; }
+
+    /// <summary>The step the queued run resumes at, or null for after its source's latest checkpoint.</summary>
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP003")]
+    public string? ResumeAt { get; set; }
+
     /// <summary>
     /// Marks the entry as a run someone asked for by name (a trigger, a group trigger or a
     /// run-now), so it is dispatched even while its manifest is disabled. Defaults to false: a

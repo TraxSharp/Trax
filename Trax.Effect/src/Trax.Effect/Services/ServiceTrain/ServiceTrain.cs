@@ -12,6 +12,7 @@ using Trax.Effect.Exceptions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Services.Decisions;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectRunner;
@@ -420,6 +421,14 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // before it asks anything.
             DecisionRun.Current = await BeginDecisions();
 
+            // A run that resumes an earlier one skips to its checkpoint; one that cannot runs from
+            // the top. Its checkpoints are stored against this run. See Trax.Docs/adr/0047.
+            CheckpointRun.Current =
+                Declared() is { } declared && Metadata.Id > 0
+                    ? new CheckpointRun(Metadata.Id, declared.Hash)
+                    : null;
+            Resume = await BeginResume();
+
             // The same for the run's junction events, when the host publishes them
             // (AddJunctionEvents): its junctions and decisions report against this run only.
             JunctionEventRun.Current = ServiceProvider.GetService(typeof(JunctionEventPublisher))
@@ -445,6 +454,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // every path, rather than with whatever terminal write or hook comes next.
             DecisionRun.Current = null;
             JunctionEventRun.Current = null;
+            CheckpointRun.Current = null;
+            Resume = null;
         }
 
         if (result.IsLeft)
@@ -552,6 +563,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         await this.FinishServiceTrain(result);
         var unrecordedOutcome = await SaveOutcome();
 
+        await ForgetCheckpoints();
+
         // The hooks report what happened, not what the store could hold: the output the store
         // refused is what they publish, in place of the placeholder that was stored.
         unrecordedOutcome?.Restore(Metadata);
@@ -621,6 +634,142 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         return output;
     }
+
+    #region Checkpoints
+
+    /// <summary>A train class's declared chain and its hash, read once per class.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
+        Type,
+        (ChainRecorder Chain, string Hash, bool Checkpoints)?
+    > DeclaredChains = new();
+
+    /// <summary>
+    /// This class's declared chain and hash, read once and cached, or null when it cannot be read
+    /// (a run of it then neither takes nor resumes from a checkpoint).
+    /// </summary>
+    private (ChainRecorder Chain, string Hash, bool Checkpoints)? Declared() =>
+        DeclaredChains.GetOrAdd(
+            GetType(),
+            type =>
+            {
+                try
+                {
+                    var chain = DeclaredChain();
+                    return (
+                        chain,
+                        ChainGraph.From(chain, type, typeof(TIn), typeof(TOut)).Hash,
+                        HasCheckpoint(chain)
+                    );
+                }
+                catch (Exception e)
+                {
+                    Logger?.LogWarning(
+                        e,
+                        "The chain of train ({TrainName}) could not be read, so its runs take no "
+                            + "checkpoints and do not resume.",
+                        TrainName
+                    );
+                    return null;
+                }
+            }
+        );
+
+    private static bool HasCheckpoint(ChainRecorder chain) =>
+        chain
+            .Steps.Select((step, i) => (step, i))
+            .Any(s =>
+                s.step.Kind == ChainStepKind.Checkpoint
+                || chain.TracksAt(s.i).Any(t => HasCheckpoint(t.Steps))
+            );
+
+    /// <summary>
+    /// The resume this run starts with, when it names a run to resume: the checkpoints of that
+    /// run and those it resumed, checked against this chain. A resume that can no longer be
+    /// trusted (the chain or the state type changed, a step would read a value nothing restores)
+    /// is logged and the run runs from the top, as a retry always did.
+    /// </summary>
+    private async Task<ResumePlan?> BeginResume()
+    {
+        Metadata.AssertLoaded();
+        ServiceProvider.AssertLoaded();
+
+        if (Metadata.ResumeFrom is not { } from)
+            return null;
+
+        if (
+            ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
+            || Declared() is not { } declared
+        )
+        {
+            Logger?.LogWarning(
+                "Run ({ExternalId}) of ({TrainName}) resumes run ({From}), but this host stores "
+                    + "no checkpoints, so it runs from the top.",
+                ExternalId,
+                TrainName,
+                from
+            );
+            return null;
+        }
+
+        var lineage = await rows.Lineage(from, CancellationToken);
+        var (verdict, plan) = ResumePlanner.Plan(
+            declared.Chain,
+            declared.Hash,
+            typeof(TIn),
+            typeof(TOut),
+            ServiceProvider.GetService(
+                typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
+            ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
+            lineage,
+            Metadata.ResumeAt
+        );
+
+        if (plan is null)
+            Logger?.LogWarning(
+                "Run ({ExternalId}) of ({TrainName}) cannot resume run ({From}) and runs from the "
+                    + "top: {Reason}",
+                ExternalId,
+                TrainName,
+                from,
+                verdict.Reason
+            );
+
+        return plan;
+    }
+
+    /// <summary>
+    /// Deletes a completed run's checkpoints: nothing may resume it. A failure is logged, and
+    /// metadata cleanup deletes them with the run later.
+    /// </summary>
+    private async Task ForgetCheckpoints()
+    {
+        Metadata.AssertLoaded();
+        ServiceProvider.AssertLoaded();
+
+        if (
+            Declared() is not { Checkpoints: true }
+            || Metadata.Id <= 0
+            || ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
+        )
+            return;
+
+        try
+        {
+            await rows.DeleteFor(Metadata.Id, CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            Logger?.LogWarning(
+                e,
+                "The checkpoints of completed run ({ExternalId}) of ({TrainName}) could not be "
+                    + "deleted; metadata cleanup deletes them with the run.",
+                ExternalId,
+                TrainName
+            );
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Prepares the recording of this run's decisions, when the host records them.
