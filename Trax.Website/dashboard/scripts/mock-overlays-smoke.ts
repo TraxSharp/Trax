@@ -2,23 +2,29 @@
 // the store delta, and a follow-up query (list + detail) reflects it. Run:
 //   npx tsx scripts/mock-overlays-smoke.ts
 import { createMockClient } from "../src/mock/client";
+import { devMockSeed } from "../src/mock/seeds";
 import { createMockStore } from "../src/mock/store/mock-store";
 import {
   DEAD_LETTERS,
   DEAD_LETTER_DETAIL,
+  EXECUTIONS,
   MANIFESTS,
   MANIFEST_DETAIL,
   MANIFEST_GROUPS,
+  RUN_GRAPH,
   SCHEDULER_CONFIG,
+  WORK_QUEUE_DETAIL,
 } from "../src/graphql/queries";
 import {
   ACKNOWLEDGE_DEAD_LETTER,
+  RESUME_EXECUTION,
   UPDATE_MANIFEST,
   UPDATE_MANIFEST_GROUP,
   UPDATE_SCHEDULER,
 } from "../src/graphql/mutations";
 
-const client = createMockClient({ store: createMockStore({ exposeOnWindow: false }) });
+// As `dev:mock` builds it: the fixtures, with the seed for what they do not hold.
+const client = createMockClient({ store: createMockStore({ exposeOnWindow: false }), overrides: devMockSeed });
 const NET = { requestPolicy: "network-only" as const };
 const get = (o: unknown, path: string) =>
   path.split(".").reduce<unknown>((a, k) => (a as Record<string, unknown>)?.[k], o);
@@ -73,6 +79,24 @@ function check(label: string, cond: boolean) {
   const after = await client.query(SCHEDULER_CONFIG, {}, NET).toPromise();
   const cfg = get(after.data, "operations.config.scheduler") as { maxActiveJobs: number; defaultMaxRetries: number };
   check("schedulerConfig -> patched", cfg.maxActiveJobs === 42 && cfg.defaultMaxRetries === 9);
+}
+
+// ── Resume: a run that stopped after its checkpoint offers a resume (a captured completed run does
+// not); resuming queues an entry, and a second is refused while it is queued ──
+{
+  const list = await client.query(EXECUTIONS, { take: 25 }, NET).toPromise();
+  const completed = (get(list.data, "operations.executions.items") as { id: number }[])[0];
+  const done = await client.query(RUN_GRAPH, { metadataId: completed.id }, NET).toPromise();
+  check("runGraph of a captured completed run -> not resumable", get(done.data, "operations.runGraph.canResume") === false);
+  const failed = { id: 424_242 };
+  const graph = await client.query(RUN_GRAPH, { metadataId: failed.id }, NET).toPromise();
+  check("runGraph of a stopped run -> resumable", get(graph.data, "operations.runGraph.canResume") === true);
+  const ack = await client.mutation(RESUME_EXECUTION, { id: failed.id, from: null }).toPromise();
+  const entryId = get(ack.data, "operations.resumeExecution.id") as number;
+  const entry = await client.query(WORK_QUEUE_DETAIL, { id: entryId }, NET).toPromise();
+  check("resumeExecution -> queued entry", get(entry.data, "operations.workQueue.detail.status") === "QUEUED");
+  const again = await client.mutation(RESUME_EXECUTION, { id: failed.id, from: null }).toPromise();
+  check("resumeExecution again -> refused", get(again.data, "operations.resumeExecution.success") === false);
 }
 
 console.log(results.join("\n"));

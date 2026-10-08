@@ -405,6 +405,30 @@ const requeueExecution: MutationOverlay = (variables, store) => {
   });
 };
 
+// A resume queues a fresh entry, as a re-queue does, and the API answers it with no message. A run
+// is resumed once at a time: while its resume is still queued, another is refused in the API's
+// words.
+const RESUMES_KEY = "executionResumes";
+
+const resumeExecution: MutationOverlay = (variables, store) => {
+  const runId = variables.id as number;
+  const queued = readDelta<Record<string, number>>(store, RESUMES_KEY, {})[String(runId)];
+  const cancelled = new Set(readDelta<number[]>(store, CANCELLED_KEY, []));
+  if (queued != null && !cancelled.has(queued))
+    return wrap("operations.resumeExecution", {
+      success: false,
+      message: `A resume of execution ${runId} is already queued (WorkQueue ${queued}); a run is resumed once at a time. Nothing was queued.`,
+      id: null,
+    });
+  const id = queuedSeq++;
+  const at = variables.from ? ` at ${variables.from}` : "";
+  addQueued(store, "ResumeExecution", queuedEntry(id, `Resume of run ${runId}${at}`, 0, null));
+  store.update("ResumeExecution", (draft) => {
+    draft[RESUMES_KEY] = { ...(draft[RESUMES_KEY] as Record<string, number> | undefined), [String(runId)]: id };
+  });
+  return wrap("operations.resumeExecution", { success: true, message: null, id });
+};
+
 const readExecutionDetail: QueryOverlay = (data, store, variables) => {
   const id = variables.id as number;
   const run = readDelta<Record<string, Rec>>(store, RUN_KEY, {})[String(id)];
@@ -1188,6 +1212,7 @@ export const executionOverlay: StatefulOverlay = {
     CancelExecution: cancelExecution,
     CancelExecutions: cancelExecutions,
     RequeueExecution: requeueExecution,
+    ResumeExecution: resumeExecution,
   },
   queries: { ExecutionDetail: readExecutionDetail, Executions: readExecutions },
 };

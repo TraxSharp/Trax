@@ -634,3 +634,66 @@ export interface PersistedOperationPayload {
   operation: PersistedOperation | null;
   errors: PersistedOperationError[];
 }
+
+// ── Run graph ──────────────────────────────────────────────────────────────
+export type ChainStepKind =
+  | "CHAIN"
+  | "CHECKPOINT"
+  | "DECIDE"
+  | "EXTRACT"
+  | "GATE"
+  | "I_CHAIN"
+  | "PARALLEL"
+  | "RESOLVE"
+  | "SCALE"
+  | "SEED"
+  | "SHORT_CIRCUIT"
+  | "SWITCH";
+
+export type RunNodeState =
+  | "NOT_REACHED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED"
+  | "SKIPPED"
+  | "NOT_RECORDED"
+  | "WITHHELD"
+  | "RESTORED";
+
+// The steps a node recorded, as far as the run graph draws them.
+export type RunGraphStep = Pick<JunctionStep, "state" | "failureClass" | "failureException">;
+
+// One declared step of a run's train, with where the run left it (operations.runGraph). A node
+// says whether a checkpoint is stored at it and whether resumeExecution can resume there; never
+// what a checkpoint holds.
+export interface RunGraphNode {
+  id: string;
+  kind: ChainStepKind;
+  opaque: boolean;
+  replayed: boolean;
+  checkpointed: boolean;
+  canResume: boolean;
+  state: RunNodeState;
+  steps: RunGraphStep[];
+  // Absent below the depth RUN_GRAPH reads.
+  tracks?: RunGraphTrack[];
+}
+
+export interface RunGraphTrack {
+  name: string;
+  description: string | null;
+  isFallback: boolean;
+  taken: boolean;
+  nodes: RunGraphNode[];
+}
+
+export interface RunGraph {
+  metadataId: number;
+  hasGraph: boolean;
+  moreSteps: boolean;
+  // True when resumeExecution can resume the run after its latest checkpoint.
+  canResume: boolean;
+  nodes: RunGraphNode[];
+  unmatchedSteps: Pick<JunctionStep, "position" | "name" | "nameWithheld" | "state">[];
+}

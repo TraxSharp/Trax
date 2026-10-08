@@ -415,3 +415,137 @@ export const RunLogOldestFirst: Story = {
     await waitFor(() => expect(within(table).getAllByRole("row").length).toBe(2));
   },
 };
+
+// ── Run graph, checkpoints and resume ────────────────────────────────────
+
+const graphOf = async (c: ReturnType<typeof within>) => c.findByRole("region", { name: "Run graph" });
+const nodeOf = (graph: HTMLElement, id: string) => graph.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+
+// A failed run after a checkpoint: the checkpoint is marked (never what it holds), the failed step
+// shows its failure, the routing step's tracks sit under it, and the steps it can resume at offer
+// "Resume from here".
+export const RunGraphCheckpoints: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    await waitFor(() => expect(nodeOf(graph, "Findings#1")).toBeInTheDocument());
+    const g = within(graph);
+    expect(within(nodeOf(graph, "Findings#1")).getByText("checkpoint")).toBeInTheDocument();
+    expect(nodeOf(graph, "Findings#1")).toHaveAttribute("data-kind", "CHECKPOINT");
+    expect(within(nodeOf(graph, "Summarize#2")).getByText("failed")).toBeInTheDocument();
+    expect(within(nodeOf(graph, "Summarize#2")).getByText("Transient · TimeoutException")).toBeInTheDocument();
+    expect(g.getByRole("list", { name: "Tracks of Route#3" })).toBeInTheDocument();
+    expect(g.getAllByRole("button", { name: "Resume from here" })).toHaveLength(2);
+    expect(within(nodeOf(graph, "Fetch#0")).queryByRole("button")).not.toBeInTheDocument();
+    expect(c.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+  },
+};
+
+// Resume queues a run that skips past the latest checkpoint, beside Re-queue.
+export const ResumeAfterCheckpoint: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await userEvent.click(await c.findByRole("button", { name: "Resume" }));
+      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// "Resume from here" resumes at that node.
+export const ResumeFromNode: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      const graph = await graphOf(c);
+      await waitFor(() => expect(nodeOf(graph, "Publish#4")).toBeInTheDocument());
+      await userEvent.click(within(nodeOf(graph, "Publish#4")).getByRole("button", { name: "Resume from here" }));
+      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// A host that refuses the resume: its reason is shown and the page stays.
+export const ResumeRefused: Story = {
+  parameters: {
+    route: "/executions/902",
+    overlays: [
+      {
+        mutations: {
+          ResumeExecution: () => ({
+            operations: {
+              resumeExecution: {
+                success: false,
+                message: "Summarize needs Findings; no checkpoint before it holds one. Nothing was queued.",
+                id: null,
+              },
+            },
+          }),
+        },
+      },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await userEvent.click(await c.findByRole("button", { name: "Resume" }));
+      expect(await c.findByText(/no checkpoint before it holds one/)).toBeInTheDocument();
+      expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// The run that resumed: the steps before its resume point are restored, a Parallel step's branches
+// sit side by side, and a completed run offers no resume.
+export const ResumedRunRestored: Story = {
+  parameters: { route: "/executions/952" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    await waitFor(() => expect(nodeOf(graph, "Fetch#0")).toBeInTheDocument());
+    expect(nodeOf(graph, "Fetch#0")).toHaveAttribute("data-state", "RESTORED");
+    expect(within(nodeOf(graph, "Findings#1")).getByText("restored")).toBeInTheDocument();
+    expect(within(graph).getByRole("list", { name: "Branches of Signals#4, run side by side" })).toBeInTheDocument();
+    expect(graph.querySelector('[data-track="Short"]')).toHaveAttribute("data-taken", "true");
+    expect(within(graph).getByText("LegacyStep")).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(within(graph).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
+  },
+};
+
+// A run with no saved input cannot be resumed, as it cannot be re-queued: the checkpoint still
+// shows, but nothing offers a resume.
+export const NoInputNoResume: Story = {
+  parameters: { route: "/executions/954" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    await waitFor(() => expect(nodeOf(graph, "Findings#1")).toBeInTheDocument());
+    expect(within(nodeOf(graph, "Findings#1")).getByText("checkpoint")).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(within(graph).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
+  },
+};
+
+// A train this host has no declared graph for says so.
+export const NoDeclaredGraph: Story = {
+  parameters: { route: "/executions/900" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    expect(await within(graph).findByText(/no declared graph for this train/)).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+  },
+};

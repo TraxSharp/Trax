@@ -868,3 +868,70 @@ export const PERSISTED_OPERATION_DETAIL = gql`
     }
   }
 `;
+
+// ── Run graph ──────────────────────────────────────────────────────────────
+// One node of the run graph: never a checkpoint's state, only that one is stored (checkpointed)
+// and whether resumeExecution can resume there (canResume).
+const RUN_GRAPH_NODE = `
+  id
+  kind
+  opaque
+  replayed
+  checkpointed
+  canResume
+  state
+  steps {
+    state
+    failureClass
+    failureException
+  }
+`;
+
+const RUN_GRAPH_TRACK = `
+  name
+  description
+  isFallback
+  taken
+`;
+
+// One run drawn on its train's declared chain (operations.runGraph), the read the Blazor run page's
+// run graph makes. GraphQL has no recursion, so tracks are read four levels deep.
+export const RUN_GRAPH = gql`
+  query RunGraph($metadataId: Long!) {
+    operations {
+      runGraph(metadataId: $metadataId) {
+        metadataId
+        hasGraph
+        moreSteps
+        canResume
+        unmatchedSteps {
+          position
+          name
+          nameWithheld
+          state
+        }
+        nodes {
+          ${RUN_GRAPH_NODE}
+          tracks {
+            ${RUN_GRAPH_TRACK}
+            nodes {
+              ${RUN_GRAPH_NODE}
+              tracks {
+                ${RUN_GRAPH_TRACK}
+                nodes {
+                  ${RUN_GRAPH_NODE}
+                  tracks {
+                    ${RUN_GRAPH_TRACK}
+                    nodes {
+                      ${RUN_GRAPH_NODE}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;

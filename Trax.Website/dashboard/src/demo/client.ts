@@ -1,6 +1,7 @@
 import { Client, cacheExchange, makeErrorResult, makeResult, type Exchange, type Operation } from "@urql/core";
 import { filter, map, pipe } from "wonka";
 import { activityExchange } from "../lib/activity-exchange";
+import { limitAnswers } from "../lib/answerable";
 import type { MockStore } from "../mock/store/mock-store";
 import { statefulExchange } from "../mock/store/stateful-exchange";
 import { defaultOverlays, type MutationOverlay, type StatefulOverlay } from "../mock/store/overlays";
@@ -112,7 +113,7 @@ export interface DemoClientOptions {
 
 /** A urql client that answers from the recordings, with the mock's overlays for writes. */
 export function createDemoClient({ recordings, store, onServe, overlays = [] }: DemoClientOptions): Client {
-  return new Client({
+  const client = new Client({
     url: "/demo", // never fetched: recordingExchange ends every operation
     requestPolicy: "cache-and-network",
     exchanges: [
@@ -122,4 +123,7 @@ export function createDemoClient({ recordings, store, onServe, overlays = [] }: 
       recordingExchange(recordings, onServe),
     ],
   });
+  // A page does not offer what no recording answers (see lib/answerable.ts).
+  limitAnswers(client, Object.keys(recordings.queries));
+  return client;
 }

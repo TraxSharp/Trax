@@ -25,6 +25,8 @@ import {
 import {
   CANCEL_EXECUTIONS,
   CANCEL_GROUPS,
+  CANCEL_WORK_QUEUE_ENTRY,
+  RESUME_EXECUTION,
   CONFIGURE_EFFECT,
   SET_LOG_LEVELS,
   TRIGGER_GROUPS,
@@ -94,6 +96,25 @@ describe("work queue / runs", () => {
     expect(get(ack.data, "operations.requeueExecution.message")).toMatch(/asks afresh/);
     const detail = await c.query(WORK_QUEUE_DETAIL, { id }, NET).toPromise();
     expect(get(detail.data, "operations.workQueue.detail.status")).toBe("QUEUED");
+  });
+
+  test("resumeExecution queues an entry the detail page resolves, and refuses a second while it is queued", async () => {
+    const c = client();
+    const ack = await c.mutation(RESUME_EXECUTION, { id: 902, from: "Summarize#2" }).toPromise();
+    expect(get(ack.data, "operations.resumeExecution")).toMatchObject({ success: true, message: null });
+    const id = get(ack.data, "operations.resumeExecution.id") as number;
+    const detail = await c.query(WORK_QUEUE_DETAIL, { id }, NET).toPromise();
+    expect(get(detail.data, "operations.workQueue.detail.status")).toBe("QUEUED");
+    const again = await c.mutation(RESUME_EXECUTION, { id: 902, from: null }).toPromise();
+    expect(get(again.data, "operations.resumeExecution")).toEqual({
+      success: false,
+      message: `A resume of execution 902 is already queued (WorkQueue ${id}); a run is resumed once at a time. Nothing was queued.`,
+      id: null,
+    });
+    // Once that entry is cancelled, the run can be resumed again.
+    await c.mutation(CANCEL_WORK_QUEUE_ENTRY, { id }).toPromise();
+    const third = await c.mutation(RESUME_EXECUTION, { id: 902, from: null }).toPromise();
+    expect(get(third.data, "operations.resumeExecution.success")).toBe(true);
   });
 
   test("cancelExecutions flags every selected execution", async () => {

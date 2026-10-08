@@ -29,10 +29,11 @@ async function boot() {
       new URLSearchParams(window.location.search).has("mock"));
 
   if (useMock) {
-    const { createMockClient, createMockStore, startTrainEventSimulator } = await import("./mock");
+    const { createMockClient, createMockStore, devMockSeed, startTrainEventSimulator } = await import("./mock");
     const store = createMockStore();
-    // Fixtures (captured real data) are on by default, so every page renders realistically.
-    const client: Client = createMockClient({ store });
+    // Fixtures (captured real data) are on by default, so every page renders realistically; the
+    // seed answers what the fixtures do not hold (run graphs).
+    const client: Client = createMockClient({ store, overrides: devMockSeed });
     startTrainEventSimulator(store, { intervalMs: 2500 });
     root.render(
       <StrictMode>

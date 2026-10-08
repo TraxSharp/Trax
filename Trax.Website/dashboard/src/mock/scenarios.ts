@@ -1,4 +1,5 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
+import type { ChainStepKind, RunGraph, RunGraphNode, RunNodeState } from "../types";
 
 // Reusable auto-mock overrides for interaction stories: deterministic, filterable data plus
 // empty / error states, so play functions can exercise every control without a backend.
@@ -376,8 +377,90 @@ export const executionScenario: MockSchemaOverrides = {
 
 // ── Execution detail ─────────────────────────────────────────────────────
 // Keyed by id: 903 is active (cancellable), 900 terminal (re-queueable), 800 has children, 902
-// failed (a replaying retry of 899, a child of 800, with a junction timeline), 950 recorded more
-// steps than the timeline shows.
+// failed (a replaying retry of 899, a child of 800, with a junction timeline, and checkpoints it
+// can resume from), 950 recorded more steps than the timeline shows, 952 resumed 902 after its
+// checkpoint, 954 failed without a saved input.
+
+// One node of a run graph; tracks and steps default to none.
+function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields: Partial<RunGraphNode> = {}): RunGraphNode {
+  return {
+    id,
+    kind,
+    opaque: false,
+    replayed: false,
+    checkpointed: false,
+    canResume: false,
+    state,
+    steps: [],
+    tracks: [],
+    ...fields,
+  };
+}
+
+const NO_GRAPH = { hasGraph: false, moreSteps: false, canResume: false, nodes: [], unmatchedSteps: [] };
+
+/**
+ * The run graph of a scenario run. 902 failed after its Findings checkpoint: the checkpoint is
+ * stored, and it can resume at Summarize (the step after it, where it failed) or at Publish. 952 is
+ * the run that resumed it there: the steps before are RESTORED. 954 (no saved input) has the same
+ * checkpoint as 902, so its page draws "Resume from here" nowhere. Every other run's train has no
+ * declared graph on this host.
+ */
+export function runGraph(metadataId: number): RunGraph {
+  if (metadataId === 902 || metadataId === 954) {
+    return {
+      metadataId,
+      hasGraph: true,
+      moreSteps: false,
+      canResume: true,
+      nodes: [
+        graphNode("Fetch#0", "CHAIN", "COMPLETED", { steps: [{ state: "COMPLETED", failureClass: null, failureException: null }] }),
+        graphNode("Findings#1", "CHECKPOINT", "COMPLETED", { checkpointed: true }),
+        graphNode("Summarize#2", "CHAIN", "FAILED", {
+          canResume: true,
+          steps: [{ state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" }],
+        }),
+        graphNode("Route#3", "DECIDE", "NOT_REACHED", {
+          tracks: [
+            { name: "Short", description: "A summary under a page", isFallback: false, taken: false, nodes: [graphNode("Route#3/Short/Trim#0", "CHAIN", "NOT_REACHED")] },
+            { name: "Long", description: null, isFallback: true, taken: false, nodes: [graphNode("Route#3/Long/Split#0", "CHAIN", "NOT_REACHED")] },
+          ],
+        }),
+        graphNode("Publish#4", "CHAIN", "NOT_REACHED", { canResume: true }),
+      ],
+      unmatchedSteps: [],
+    };
+  }
+  if (metadataId === 952) {
+    return {
+      metadataId,
+      hasGraph: true,
+      moreSteps: false,
+      canResume: false,
+      nodes: [
+        graphNode("Fetch#0", "CHAIN", "RESTORED"),
+        graphNode("Findings#1", "CHECKPOINT", "RESTORED", { checkpointed: true }),
+        graphNode("Summarize#2", "CHAIN", "COMPLETED", { steps: [{ state: "COMPLETED", failureClass: null, failureException: null }] }),
+        graphNode("Route#3", "DECIDE", "COMPLETED", {
+          tracks: [
+            { name: "Short", description: "A summary under a page", isFallback: false, taken: true, nodes: [graphNode("Route#3/Short/Trim#0", "CHAIN", "COMPLETED")] },
+            { name: "Long", description: null, isFallback: true, taken: false, nodes: [graphNode("Route#3/Long/Split#0", "CHAIN", "SKIPPED")] },
+          ],
+        }),
+        graphNode("Signals#4", "PARALLEL", "COMPLETED", {
+          tracks: [
+            { name: "Citations", description: null, isFallback: false, taken: true, nodes: [graphNode("Signals#4/Citations/Count#0", "CHAIN", "COMPLETED")] },
+            { name: "Recency", description: null, isFallback: false, taken: true, nodes: [graphNode("Signals#4/Recency/Age#0", "CHAIN", "COMPLETED")] },
+          ],
+        }),
+        graphNode("Publish#5", "CHAIN", "COMPLETED"),
+      ],
+      unmatchedSteps: [{ position: 9, name: "LegacyStep", nameWithheld: false, state: "COMPLETED" }],
+    };
+  }
+  return { metadataId, ...NO_GRAPH };
+}
+
 function execDetail(id: number, name: string, state: string, childCount: number) {
   const done = state !== "IN_PROGRESS" && state !== "PENDING";
   const failed = state === "FAILED";
@@ -572,8 +655,11 @@ export const executionDetailScenario: MockSchemaOverrides = {
         if (id === 902) return execDetail(902, "Trax.Exec.BetaJob", "FAILED", 0);
         if (id === 950) return execDetail(950, "Trax.Exec.LongJob", "COMPLETED", 0);
         if (id === 951) return execDetail(951, "Trax.Exec.RetryJob", "COMPLETED", 0);
+        if (id === 952) return execDetail(952, "Trax.Exec.BetaJob", "COMPLETED", 0);
+        if (id === 954) return { ...execDetail(954, "Trax.Exec.BetaJob", "FAILED", 0), input: null };
         return execDetail(900, "Trax.Exec.DeltaJob", "COMPLETED", 0);
       },
+      runGraph: (_root: unknown, args: Args) => runGraph(args.metadataId as number),
       junctionRuns: (_root: unknown, args: Args) => junctionRuns(args),
       decisions: (_root: unknown, args: Args) => decisionPage(args),
       executionChildren: (_root: unknown, args: Args) =>

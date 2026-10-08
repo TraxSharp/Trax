@@ -10,6 +10,7 @@ import {
   everyPage,
   everySelect,
   newLedger,
+  notOfferedYet,
   pageOf,
   recordedIds,
   recordings,
@@ -145,9 +146,26 @@ describe("every link leads to a recorded page", () => {
   }, 600_000);
 });
 
+describe("what the recordings do not hold yet", () => {
+  // Nothing in the demo leads to a read no recording answers: the page parts that need one are not
+  // offered (lib/answerable.ts) until the recorder records it.
+  test("a run page draws no run graph", async () => {
+    if (!notOfferedYet("RunGraph")) return;
+    const ledger = newLedger();
+    for (const id of recordedIds("ExecutionDetail", "id").slice(0, 10)) {
+      const page = renderDemo(`/executions/${id}`, ledger);
+      await settle();
+      expect(within(page.container).queryByRole("region", { name: "Run graph" }) == null).toBe(notOfferedYet("RunGraph"));
+      page.unmount();
+    }
+    expect(served(ledger, "missing")).toEqual([]);
+  });
+});
+
 describe("writes", () => {
   test("every write the overlays handle has the host's own answer recorded", () => {
-    const ops = defaultOverlays.flatMap((o) => Object.keys(o.mutations ?? {}));
+    // A write whose page part the demo does not offer yet (harness.tsx) is never sent.
+    const ops = defaultOverlays.flatMap((o) => Object.keys(o.mutations ?? {})).filter((op) => !notOfferedYet(op));
     const unrecorded = ops.filter((op) => !(recordings().mutations[op]?.length > 0));
     expect(unrecorded).toEqual([]);
   });

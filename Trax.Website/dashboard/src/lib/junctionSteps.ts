@@ -141,7 +141,9 @@ export function formatConfidence(confidence: number): string {
 }
 
 /** A failed or cancelled step's one-line explanation: "Cancelled" or the class, then the exception. */
-export function stepFailure(step: JunctionStep): string | null {
+export function stepFailure(
+  step: Pick<JunctionStep, "state" | "failureClass" | "failureException">,
+): string | null {
   if (step.state !== "FAILED" && step.state !== "CANCELLED") return null;
   const head = step.state === "CANCELLED" ? "Cancelled" : step.failureClass && enumLabel(step.failureClass);
   return [head, step.failureException].filter((s) => s).join(" · ");
