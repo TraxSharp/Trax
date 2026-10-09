@@ -436,6 +436,8 @@ namespace Trax.Core.Monad
         public string Train { get; init; }
         public static string? CurrentBranchPath { get; }
         public static string? CurrentNodeId { get; }
+        public bool Equals(Trax.Core.Monad.ChainGraph? other) { }
+        public override int GetHashCode() { }
         public string ToJson() { }
         public static Trax.Core.Monad.ChainGraph From(Trax.Core.Monad.ChainRecorder chain, System.Type train, System.Type input, System.Type output) { }
     }
@@ -449,6 +451,8 @@ namespace Trax.Core.Monad
         public bool Opaque { get; init; }
         public string? Out { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphTrack> Tracks { get; init; }
+        public bool Equals(Trax.Core.Monad.ChainGraphNode? other) { }
+        public override int GetHashCode() { }
     }
     public sealed class ChainGraphTrack : System.IEquatable<Trax.Core.Monad.ChainGraphTrack>
     {
@@ -457,6 +461,8 @@ namespace Trax.Core.Monad
         public bool IsFallback { get; init; }
         public string Name { get; init; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes { get; init; }
+        public bool Equals(Trax.Core.Monad.ChainGraphTrack? other) { }
+        public override int GetHashCode() { }
     }
     public sealed class ChainRecorder
     {

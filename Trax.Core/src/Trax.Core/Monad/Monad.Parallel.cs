@@ -401,7 +401,9 @@ public partial class Monad<TInput, TReturn>
 
         var recorded = new List<ChainTrack>();
 
-        foreach (var branch in declared.Declared)
+        // A branch whose name is refused is left out: its steps' ids would repeat or misread
+        // another branch's, and the refusal already fails the chain.
+        foreach (var branch in declared.Declared.Where(b => !b.Refused))
         {
             var steps = RecordBranch(branch);
 

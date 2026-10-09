@@ -62,6 +62,21 @@ public sealed record ChainGraph(
         Running.Value = (nodeId, branchPath);
 
     /// <summary>
+    /// True when <paramref name="other"/> draws the same train: the same names, and equal nodes
+    /// and refusals in the same order.
+    /// </summary>
+    public bool Equals(ChainGraph? other) =>
+        other is not null
+        && Train == other.Train
+        && Input == other.Input
+        && Output == other.Output
+        && Nodes.SequenceEqual(other.Nodes)
+        && Refusals.SequenceEqual(other.Refusals);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(Train, Input, Output, Nodes.Count);
+
+    /// <summary>
     /// A hash of the graph's canonical JSON (<see cref="ToJson"/>), as 64 lowercase hex digits.
     /// Two reads of an unchanged train give the same hash; a change to any step, type or track
     /// gives another.
@@ -84,12 +99,30 @@ public sealed record ChainGraph(
         ArgumentNullException.ThrowIfNull(output);
 
         return new ChainGraph(
-            train.FullName ?? train.ReadableName(),
+            NameOf(train),
             input.ReadableName(),
             output.ReadableName(),
             NodesOf(chain, new ChainNodeScope("")),
             chain.Refusals.ToList()
         );
+    }
+
+    /// <summary>
+    /// The train's full name, with a generic train's type arguments written by their full names
+    /// rather than assembly-qualified, so the name, and the hash, do not change with an
+    /// assembly's version.
+    /// </summary>
+    private static string NameOf(Type type)
+    {
+        if (type.IsArray)
+            return NameOf(type.GetElementType()!) + "[]";
+
+        if (!type.IsGenericType || type.IsGenericTypeDefinition)
+            return type.FullName ?? type.Name;
+
+        var definition = type.GetGenericTypeDefinition();
+        return $"{definition.FullName ?? definition.Name}"
+            + $"[{string.Join(", ", type.GetGenericArguments().Select(NameOf))}]";
     }
 
     private static List<ChainGraphNode> NodesOf(ChainRecorder chain, ChainNodeScope scope)
@@ -221,7 +254,22 @@ public sealed record ChainGraphNode(
     string? Out,
     bool Opaque,
     IReadOnlyList<ChainGraphTrack> Tracks
-);
+)
+{
+    /// <summary>True when <paramref name="other"/> is the same step with equal tracks.</summary>
+    public bool Equals(ChainGraphNode? other) =>
+        other is not null
+        && Id == other.Id
+        && Kind == other.Kind
+        && Junction == other.Junction
+        && In == other.In
+        && Out == other.Out
+        && Opaque == other.Opaque
+        && Tracks.SequenceEqual(other.Tracks);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(Id, Kind, Junction, In, Out, Opaque);
+}
 
 /// <summary>
 /// One track of a routing step in a <see cref="ChainGraph"/>.
@@ -235,7 +283,19 @@ public sealed record ChainGraphTrack(
     string? Description,
     bool IsFallback,
     IReadOnlyList<ChainGraphNode> Nodes
-);
+)
+{
+    /// <summary>True when <paramref name="other"/> is the same track with equal nodes.</summary>
+    public bool Equals(ChainGraphTrack? other) =>
+        other is not null
+        && Name == other.Name
+        && Description == other.Description
+        && IsFallback == other.IsFallback
+        && Nodes.SequenceEqual(other.Nodes);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(Name, Description, IsFallback);
+}
 
 /// <summary>
 /// Numbers the nodes of one chain or track, the same way when a chain is read and when it runs, so
@@ -297,6 +357,20 @@ internal sealed class ChainNodeScope(string prefix)
             ChainStepKind.Resolve => "Resolve",
             ChainStepKind.Checkpoint => CheckpointKey(step.In),
             _ => step.Kind.ToString(),
+        };
+
+    /// <summary>
+    /// The type a junction or checkpoint step's key names, or null for any other step. Questions
+    /// and routes are told apart by their question keys, which the chain already refuses to
+    /// share between two types.
+    /// </summary>
+    public static Type? KeyType(ChainStep step) =>
+        step.Kind switch
+        {
+            ChainStepKind.Chain or ChainStepKind.IChain or ChainStepKind.ShortCircuit =>
+                step.Junction,
+            ChainStepKind.Checkpoint => step.In,
+            _ => null,
         };
 
     /// <summary>The name a junction step is numbered under: the junction type.</summary>

@@ -55,13 +55,16 @@ public sealed record ChainGraphTrack(
 | `ChainGraph` member | Description |
 |---|---|
 | `From(chain, train, input, output)` | Builds the graph of a recording from `DeclaredChain()`. `train`, `input` and `output` are the train type and its `TInput` and `TReturn` |
-| `Train` | The train's full type name |
+| `Train` | The train's full type name. A generic train's type arguments are written by their full names, without an assembly version, so the name and the hash stay the same across builds |
 | `Input`, `Output` | The train's input and return types, by their readable names (`List<Order>`, not the CLR's backtick form) |
 | `Nodes` | The chain's steps, in the order it declares them |
 | `Refusals` | What the declaration did that no step can express, as `ChainRecorder.Refusals` lists it |
 | `ToJson()` | The graph as canonical JSON. See [Canonical JSON and Hash](#canonical-json-and-hash) |
 | `Hash` | SHA-256 of `ToJson()`, as 64 lowercase hex digits |
 | `CurrentNodeId` | The id of the node a run is executing on this async flow, or null. See [CurrentNodeId](#currentnodeid) |
+
+Two graphs are equal when their names, nodes, tracks and refusals are, in the same order: two reads
+of an unchanged train give equal graphs.
 
 | `ChainGraphNode` member | Description |
 |---|---|
@@ -101,6 +104,13 @@ the head of a chain and every other node keeps its id, where a positional id wou
 step after it, and with it everything keyed on those ids: a recorded run, a drawing's layout, a
 review comment on one step. Only a second step with the same key takes a new ordinal, and only
 the occurrences after it move.
+
+A key uses a type's short name, so two different junctions (or checkpoint states) a chain names
+by the same short name, `Billing.Fetch` and `Search.Fetch` say, would be told apart only by their
+position, and swapping one for the other would change neither the ids nor the hash. The
+declaration refuses that and names both types; rename one. A `Parallel` branch whose name is
+refused (empty, repeated, or containing `/` or `#`) is left out of the graph, so its steps do not
+repeat another branch's ids.
 
 ## Opaque nodes
 

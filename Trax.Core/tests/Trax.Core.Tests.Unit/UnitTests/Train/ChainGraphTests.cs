@@ -56,6 +56,48 @@ public class ChainGraphTests : TestSetup
     }
 
     [Test]
+    public void TwoReadsOfOneTrain_GiveEqualGraphs()
+    {
+        var first = GraphOf(new DecidingTrain(new Capture()));
+        var second = GraphOf(new DecidingTrain(new Capture()));
+
+        second.Should().Be(first, "a graph is a value: equal when every node and track is");
+        second.GetHashCode().Should().Be(first.GetHashCode());
+        GraphOf(new LinearTrain()).Should().NotBe(GraphOf(new LongerTrain()));
+    }
+
+    [Test]
+    public void TwoJunctionsSharingAName_AreRefused()
+    {
+        // Ids name a junction by its short name, so two different junctions both called Fetch
+        // would be told apart only by where they sit, and swapping one for the other would leave
+        // the graph and its hash unchanged.
+        var graph = GraphOf(new SameNameTrain());
+
+        graph
+            .Refusals.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain(typeof(First.Fetch).FullName)
+            .And.Contain(typeof(Second.Fetch).FullName);
+    }
+
+    [Test]
+    public void AGenericTrainsName_CarriesNoAssemblyVersion()
+    {
+        var train = new GenericTrain<int>();
+        var graph = ChainGraph.From(
+            train.DeclaredChain(),
+            train.GetType(),
+            typeof(string),
+            typeof(bool)
+        );
+
+        graph.Train.Should().NotContain("Version=").And.NotContain("PublicKeyToken");
+        graph.Train.Should().Contain("GenericTrain").And.Contain("System.Int32");
+    }
+
+    [Test]
     public void Hash_ChangesWhenAStepIsAdded_ButTheOtherIdsDoNot()
     {
         var linear = GraphOf(new LinearTrain());
@@ -289,6 +331,34 @@ public class ChainGraphTests : TestSetup
     private sealed class InterfaceLength : Junction<string, int>, ILength
     {
         public override Task<int> Run(string input) => Task.FromResult(input.Length);
+    }
+
+    public static class First
+    {
+        public sealed class Fetch : Junction<string, int>
+        {
+            public override Task<int> Run(string input) => Task.FromResult(input.Length);
+        }
+    }
+
+    public static class Second
+    {
+        public sealed class Fetch : Junction<int, bool>
+        {
+            public override Task<bool> Run(int input) => Task.FromResult(input > 0);
+        }
+    }
+
+    private sealed class SameNameTrain : Train<string, bool>
+    {
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<First.Fetch>().Chain<Second.Fetch>().Resolve();
+    }
+
+    private sealed class GenericTrain<T> : Train<string, bool>
+    {
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<Length>().Chain<Positive>().Resolve();
     }
 
     private sealed class LinearTrain : Train<string, bool>

@@ -584,6 +584,26 @@ public class ParallelTests : TestSetup
         new NamedTrain(name).DeclaredChain().Refusals.Should().Contain(r => r.Contains(expected));
     }
 
+    [Test]
+    public void TheGraphOfARefusedBranchName_StillHasUniqueIds()
+    {
+        var train = new TwiceTheSameTrain();
+        var graph = ChainGraph.From(
+            train.DeclaredChain(),
+            train.GetType(),
+            typeof(string),
+            typeof(string)
+        );
+
+        graph.Refusals.Should().Contain(r => r.Contains("twice"));
+        static IEnumerable<string> All(IEnumerable<ChainGraphNode> nodes) =>
+            nodes.SelectMany(n => All(n.Tracks.SelectMany(t => t.Nodes)).Prepend(n.Id));
+
+        All(graph.Nodes)
+            .Should()
+            .OnlyHaveUniqueItems("a node id names one node, even in a refused graph");
+    }
+
     #endregion
 
     #region Helpers
@@ -1283,6 +1303,17 @@ public class ParallelTests : TestSetup
                         ? p.Branch(name, b => b.Chain<ScoreEmbedding>())
                             .Branch(name, b => b.Chain<ScoreCoCitation>())
                         : p.Branch(name, b => b.Chain<ScoreEmbedding>())
+                )
+                .Resolve();
+    }
+
+    private sealed class TwiceTheSameTrain : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("twice", b => b.Chain<ScoreEmbedding>())
+                        .Branch("twice", b => b.Chain<ScoreEmbedding>())
                 )
                 .Resolve();
     }

@@ -225,6 +225,48 @@ public sealed class ChainRecorder
         _instances.Concat(_tracks.Values.SelectMany(t => t).SelectMany(t => t.Steps.Instances()));
 
     /// <summary>
+    /// Refuses two different junctions, or checkpoint states, that the chain's steps name by the
+    /// same short name.
+    /// </summary>
+    /// <remarks>
+    /// A node's id names its junction or checkpoint by its short name, so two
+    /// different types called <c>Fetch</c> would be told apart only by their position, and
+    /// replacing one by the other would leave the graph, its hash, and a resume against it
+    /// unchanged. A run numbers its steps as it reaches them, without the whole chain to hand, so
+    /// it cannot qualify one name only where another collides; the chain is refused instead.
+    /// </remarks>
+    internal void RefuseAmbiguousNames()
+    {
+        var named = new Dictionary<string, Type>();
+        var refused = new System.Collections.Generic.HashSet<string>();
+
+        Visit(this);
+
+        void Visit(ChainRecorder chain)
+        {
+            for (var i = 0; i < chain.Steps.Count; i++)
+            {
+                var step = chain.Steps[i];
+
+                if (ChainNodeScope.KeyType(step) is { } type)
+                {
+                    var key = ChainNodeScope.KeyOf(step);
+
+                    if (!named.TryAdd(key, type) && named[key] != type && refused.Add(key))
+                        Refuse(
+                            $"'{named[key].FullName}' and '{type.FullName}' are both named "
+                                + $"'{key}', so the ids of their steps cannot tell them apart. "
+                                + "Rename one."
+                        );
+                }
+
+                foreach (var track in chain.TracksAt(i))
+                    Visit(track.Steps);
+            }
+        }
+    }
+
+    /// <summary>
     /// Refuses the chain as a whole, for something no single step did.
     /// </summary>
     internal void Refuse(string reason) => Add(new RecordedRefusal(null, null, null, reason));

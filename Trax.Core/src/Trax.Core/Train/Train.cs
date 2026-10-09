@@ -250,6 +250,8 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
                             + "produces the result and end with Resolve()."
                     );
             }
+
+            recorder.RefuseAmbiguousNames();
         }
         finally
         {

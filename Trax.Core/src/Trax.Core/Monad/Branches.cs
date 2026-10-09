@@ -54,6 +54,8 @@ public sealed class Branches<TInput, TReturn>
     {
         ArgumentNullException.ThrowIfNull(body);
 
+        var problems = Problems.Count;
+
         if (string.IsNullOrWhiteSpace(name))
             Problems.Add("declares a branch with no name. Name every branch.");
         else if (name.Contains('/') || name.Contains('#'))
@@ -64,7 +66,12 @@ public sealed class Branches<TInput, TReturn>
         else if (Declared.Any(b => b.Name == name))
             Problems.Add($"declares the branch '{name}' twice. Name each branch once.");
 
-        Declared.Add(new DeclaredBranch<TInput, TReturn>(name ?? "", body));
+        Declared.Add(
+            new DeclaredBranch<TInput, TReturn>(name ?? "", body)
+            {
+                Refused = Problems.Count > problems,
+            }
+        );
         return this;
     }
 
@@ -102,7 +109,14 @@ internal static class ExperimentalIds
 internal sealed record DeclaredBranch<TInput, TReturn>(
     string Name,
     Func<MonadTask<TInput, TReturn>, MonadTask<TInput, TReturn>> Body
-);
+)
+{
+    /// <summary>
+    /// True when the branch's name is refused (empty, repeated, or holding a separator), so its
+    /// steps could not have ids of their own and it is left out of the recorded chain.
+    /// </summary>
+    public bool Refused { get; init; }
+}
 
 /// <summary>
 /// The branch running on this async flow: the token its junctions honour and the path that
