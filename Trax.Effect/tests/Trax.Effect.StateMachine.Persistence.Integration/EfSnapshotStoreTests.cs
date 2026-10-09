@@ -142,4 +142,19 @@ public class EfSnapshotStoreTests
             .BeFalse("the row changed after this writer read it");
         (await TestDb.NewStore().Get("u", id))!.Json.Should().Contain("dollar");
     }
+
+    [Test]
+    public async Task A_users_draft_named_without_a_key_is_refused_before_any_query()
+    {
+        // DraftOwner.User always carries a key; an owner built without one must not fall through to a query
+        // that would match every user's draft, or none.
+        IMachineInstanceStore store = TestDb.NewStore();
+        var keyless = new DraftOwner(Trax.Effect.Enums.SnapshotOwnerKind.User, null);
+
+        var get = () => store.Get(keyless, "turnstile", Guid.NewGuid(), CancellationToken.None);
+
+        await get.Should()
+            .ThrowAsync<ArgumentException>()
+            .WithMessage("A user's draft needs the user's key.*");
+    }
 }

@@ -267,6 +267,20 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     }
 
     [Test]
+    public async Task A_users_drafts_runs_are_not_read_without_its_row_id()
+    {
+        var act = () =>
+            _operations.GetMachineInstanceRunsAsync(
+                new MachineInstanceKey(_machine, SnapshotOwnerKind.User, Guid.NewGuid()),
+                CancellationToken.None
+            );
+
+        await act.Should()
+            .ThrowAsync<ArgumentException>()
+            .WithMessage("*row id*", "an operator reads one user's draft, never every user's");
+    }
+
+    [Test]
     public async Task Counts_each_state_per_machine_and_owner_kind()
     {
         var at = DateTimeOffset.UtcNow;

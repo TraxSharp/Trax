@@ -14,6 +14,9 @@ public enum LaunchFault
 
     /// <summary>After the run's entry is written, before the transaction commits.</summary>
     AfterEnqueue,
+
+    /// <summary>Before the run's entry is written, as an authorization the caller fails.</summary>
+    Forbidden,
 }
 
 /// <summary>
@@ -48,6 +51,9 @@ internal sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTr
         CancellationToken cancellationToken = default
     )
     {
+        if (Fault == LaunchFault.Forbidden)
+            throw new UnauthorizedAccessException("The caller may not run this train.");
+
         if (Fault == LaunchFault.BeforeEnqueue)
             throw new InvalidOperationException(
                 "The host died between the advance and the enqueue."

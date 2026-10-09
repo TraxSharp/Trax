@@ -203,6 +203,26 @@ public class ServiceTrainResumeTests(CheckpointStoreKind store)
         CheckpointProbe.Ran.Should().BeEmpty("a resume was asked for, not a fresh run");
     }
 
+    [TestCase("null", "the stored state is null")]
+    [TestCase("[1, 2]", "could not be converted")]
+    public async Task A_resume_whose_checkpoint_state_cannot_be_read_back_fails_with_the_refusal(
+        string stored,
+        string why
+    )
+    {
+        // The hashes still match, so the verdict allows the resume; only reading the state back finds
+        // that the row holds nothing a step can start from.
+        var failed = await Crash(nameof(Summarize));
+        await _host.Tamper(failed.Id, row => row.State = stored);
+
+        var resumed = await Run(resumeFrom: failed.Id);
+
+        resumed.TrainState.Should().Be(TrainState.Failed);
+        resumed.FailureException.Should().Be(nameof(ResumeRefusedException), Adr);
+        resumed.FailureReason.Should().Contain("could not be read back as").And.Contain(why);
+        CheckpointProbe.Ran.Should().BeEmpty("no step runs on a state it could not restore");
+    }
+
     [Test]
     public async Task An_operators_resume_of_a_run_with_no_checkpoint_fails_with_the_refusal()
     {

@@ -271,6 +271,43 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         (await Entries(systemRun)).Should().Be(1);
     }
 
+    [Test]
+    public async Task A_launch_whose_input_is_not_the_trains_input_type_is_refused_and_queues_nothing()
+    {
+        // A machine's input mapping is typed by its declaration, so this cannot come from one; if a launch carries
+        // some other object, the launcher refuses it rather than store an input the train cannot read.
+        var externalId = Guid.NewGuid().ToString("N");
+
+        var launch = async () =>
+        {
+            using var scope = _host.Scope();
+            await scope
+                .ServiceProvider.GetRequiredService<IInvokedTrainLauncher>()
+                .Launch(
+                    new InvokedTrainLaunch(
+                        typeof(IGoodTrain),
+                        "not a GoodInput",
+                        externalId,
+                        new InvokedBy(
+                            SystemChainMachine.MachineId,
+                            Guid.NewGuid(),
+                            SnapshotOwnerKind.System
+                        ),
+                        "Embedding"
+                    ),
+                    scope.ServiceProvider.GetRequiredService<IDataContext>()
+                );
+        };
+
+        var refused = await launch.Should().ThrowAsync<InvalidOperationException>();
+        refused
+            .Which.Message.Should()
+            .Contain("The input built for")
+            .And.Contain(nameof(GoodInput))
+            .And.Contain("String");
+        (await Entries(externalId)).Should().Be(0);
+    }
+
     private async Task LaunchFromOutcome(string externalId, string machine, SnapshotOwnerKind owner)
     {
         using var scope = _host.Scope();
