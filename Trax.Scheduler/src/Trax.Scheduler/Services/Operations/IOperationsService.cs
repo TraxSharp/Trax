@@ -256,7 +256,10 @@ public interface IOperationsService
     /// <summary>
     /// Transitions a queued work queue entry to <c>Cancelled</c>. Only entries currently
     /// in the <c>Queued</c> state are eligible. Entries that are already dispatched or
-    /// already cancelled return a failure result without modifying the row.
+    /// already cancelled return a failure result without modifying the row, and so does an entry
+    /// a step of a user's state-machine draft queued, with
+    /// <c>OperationsService.UserOwnedRunCancelRefusal</c>: a user's draft is read-only to
+    /// operators (central ADR 0046).
     /// </summary>
     Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct);
 
@@ -267,12 +270,17 @@ public interface IOperationsService
     /// running when the job runner picks it up), and each is also cancelled at once through the
     /// <c>ICancellationRegistry</c> when it runs on this host. Terminal and unknown ids are
     /// skipped. <c>ITraxScheduler.CancelAsync</c> and <c>CancelGroupAsync</c> apply the same
-    /// rule to a manifest's or a group's runs.
+    /// rule to a manifest's or a group's runs. A run a step of a user's state-machine draft
+    /// started is skipped too, because a user's draft is read-only to operators and only its
+    /// user cancels it, by leaving the state (central ADR 0046): the message counts those and
+    /// gives <c>OperationsService.UserOwnedRunCancelRefusal</c>.
     /// </summary>
     /// <returns>
     /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number of runs flagged,
     /// zero included. <c>OperationResult(false, ...)</c> for an empty list or more than
-    /// <c>OperationsService.MaxBatchSize</c> ids, with nothing flagged.
+    /// <c>OperationsService.MaxBatchSize</c> ids, with nothing flagged, and for a single id that
+    /// names a run a user's draft started, whatever its state, with
+    /// <c>OperationsService.UserOwnedRunCancelRefusal</c>.
     /// </returns>
     Task<OperationResult> CancelExecutionsAsync(
         IReadOnlyCollection<long> ids,
@@ -281,12 +289,15 @@ public interface IOperationsService
 
     /// <summary>
     /// Cancels the given work queue entries that are still <c>Queued</c>, in one statement, so an
-    /// entry dispatched meanwhile is left alone. Other ids are skipped. Signals
+    /// entry dispatched meanwhile is left alone. Other ids are skipped, and so is an entry a step
+    /// of a user's state-machine draft queued, which the message counts and explains with
+    /// <c>OperationsService.UserOwnedRunCancelRefusal</c> (central ADR 0046). Signals
     /// <c>ChangeDomain.WorkQueue</c> when any entry changed.
     /// </summary>
     /// <returns>
     /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number cancelled, zero
-    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids.
+    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids, and for a
+    /// single id that names an entry a user's draft queued, whatever its status.
     /// </returns>
     Task<OperationResult> CancelWorkQueueEntriesAsync(
         IReadOnlyCollection<long> ids,

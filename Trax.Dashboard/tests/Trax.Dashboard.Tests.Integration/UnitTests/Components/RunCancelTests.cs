@@ -9,6 +9,8 @@ using Trax.Dashboard.Tests.Integration.Fakes.Services;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 using static Trax.Dashboard.Tests.Integration.Utils.GridInteraction;
 
@@ -125,10 +127,61 @@ public class RunCancelTests
         (await IsFlaggedAsync(done)).Should().BeFalse("a finished run is not");
     }
 
+    [Test]
+    public async Task Cancelling_a_run_a_users_draft_started_is_refused_on_its_page()
+    {
+        var runId = await SeedRunAsync("Acme.IWizardStep", TrainState.InProgress, userOwned: true);
+
+        var page = _ctx.RenderComponent<MetadataDetailPage>(p => p.Add(x => x.MetadataId, runId));
+        var cancel = page.WaitForElement("button:contains('Cancel')", WaitTimeout);
+        await cancel.ClickAsync(new());
+
+        page.WaitForAssertion(
+            () =>
+                page
+                    .Markup.Should()
+                    .Contain(
+                        OperationsService.UserOwnedRunCancelRefusal,
+                        "the API's cancelExecution refuses it with the same reason"
+                    ),
+            WaitTimeout
+        );
+        (await IsFlaggedAsync(runId)).Should().BeFalse("a user's draft is read-only to operators");
+    }
+
+    [Test]
+    public async Task Cancel_selected_skips_the_runs_users_drafts_started_and_says_so()
+    {
+        var users = await SeedRunAsync("Acme.IWizardStep", TrainState.Pending, userOwned: true);
+        var plain = await SeedRunAsync("Acme.IPlain", TrainState.Pending);
+
+        var page = _ctx.RenderComponent<MetadataPage>();
+        foreach (var name in new[] { "IWizardStep", "IPlain" })
+        {
+            WaitForRow(page, name);
+            await ToggleRow(page, name);
+        }
+
+        await ClickButton(page, "Cancel Selected");
+
+        page.WaitForAssertion(
+            () =>
+                Messages()
+                    .Should()
+                    .Contain(
+                        "Cancellation requested for 1 of 2 execution(s). 1 skipped: "
+                            + OperationsService.UserOwnedRunCancelRefusal
+                    ),
+            WaitTimeout
+        );
+        (await IsFlaggedAsync(users)).Should().BeFalse();
+        (await IsFlaggedAsync(plain)).Should().BeTrue();
+    }
+
     private IEnumerable<string> Messages() =>
         _ctx.Services.GetRequiredService<NotificationService>().Messages.Select(m => m.Detail);
 
-    private async Task<long> SeedRunAsync(string name, TrainState state)
+    private async Task<long> SeedRunAsync(string name, TrainState state, bool userOwned = false)
     {
         await using var db = await _data.CreateDbContextAsync(default);
         var run = Metadata.Create(
@@ -137,6 +190,9 @@ public class RunCancelTests
                 Name = name,
                 ExternalId = Guid.NewGuid().ToString("N"),
                 Input = null,
+                InvokedBy = userOwned
+                    ? new InvokedBy("wizard", Guid.NewGuid(), SnapshotOwnerKind.User)
+                    : null,
             }
         );
         run.TrainState = state;

@@ -759,16 +759,40 @@ public class InvokesModelTests(ClusterStore store)
 
             using var scope = host.Services.CreateScope();
             var operations = scope.ServiceProvider.GetRequiredService<IOperationsService>();
+
+            // A user's draft is read-only to operators: a cancel of the run its step started, or of
+            // that run's queued entry, is refused and changes nothing.
+            var userOwned = !run.Owner.System;
             if (run.MetadataId is { } metadataId)
             {
-                await operations.CancelExecutionsAsync([metadataId], CancellationToken.None);
+                var cancelled = await operations.CancelExecutionsAsync(
+                    [metadataId],
+                    CancellationToken.None
+                );
+                if (userOwned)
+                {
+                    cancelled
+                        .Success.Should()
+                        .BeFalse($"a user's run is not an operator's. See {Adr}");
+                    cancelled.Message.Should().Be(OperationsService.UserOwnedRunCancelRefusal);
+                    return;
+                }
                 if (run.Phase == Phase.Dispatched)
                     run.CancelRequested = true;
                 return;
             }
 
             var entry = (await Api.Entry(run.Token))!;
-            await operations.CancelWorkQueueEntriesAsync([entry.Id], CancellationToken.None);
+            var withdrawn = await operations.CancelWorkQueueEntriesAsync(
+                [entry.Id],
+                CancellationToken.None
+            );
+            if (userOwned)
+            {
+                withdrawn.Success.Should().BeFalse($"a user's run is not an operator's. See {Adr}");
+                withdrawn.Message.Should().Be(OperationsService.UserOwnedRunCancelRefusal);
+                return;
+            }
             if (run.Phase == Phase.Queued)
                 run.Phase = Phase.Withdrawn;
         }

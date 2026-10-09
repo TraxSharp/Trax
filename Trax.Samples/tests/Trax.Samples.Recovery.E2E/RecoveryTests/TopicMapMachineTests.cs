@@ -167,6 +167,94 @@ public class TopicMapMachineTests : RecoveryTestFixture
     }
 
     [Test]
+    public async Task AnOperator_CannotCancelTheBuild_ThroughTheRunOrItsEntry_OneByOneOrInBulk()
+    {
+        await _draft.CreateAsync();
+        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var entry = (await Runs()).Single();
+
+        var refused = new List<(bool Success, string? Message)>
+        {
+            await OperationAsync(
+                $"mutation {{ operations {{ workQueue {{ cancelWorkQueueEntry(id: {entry.Id}) {{ success message }} }} }} }}",
+                "workQueue",
+                "cancelWorkQueueEntry"
+            ),
+        };
+
+        // Once dispatched, the run itself: alone, and in a batch with an id that names nothing.
+        long? run = null;
+        (
+            await Shared.Testing.Polling.WaitUntilAsync(
+                async () => (run = (await EntryAsync(entry.Id)).MetadataId) is not null,
+                TopicMapDraft.Patience,
+                TimeSpan.FromMilliseconds(100)
+            )
+        )
+            .Should()
+            .BeTrue("the build's entry is dispatched");
+        refused.Add(
+            await OperationAsync(
+                $"mutation {{ operations {{ cancelExecution(id: {run}) {{ success message }} }} }}",
+                "cancelExecution"
+            )
+        );
+        var bulk = await OperationAsync(
+            $"mutation {{ operations {{ cancelExecutions(ids: [{run}, 999999999]) {{ success count message }} }} }}",
+            "cancelExecutions"
+        );
+
+        refused
+            .Should()
+            .AllSatisfy(r =>
+            {
+                r.Success.Should().BeFalse("a user's draft is read-only to operators");
+                r.Message.Should()
+                    .Be(
+                        Trax.Scheduler
+                            .Services
+                            .Operations
+                            .OperationsService
+                            .UserOwnedRunCancelRefusal
+                    );
+            });
+        bulk.Success.Should().BeTrue();
+        bulk.Message.Should()
+            .EndWith(
+                "1 skipped: "
+                    + Trax.Scheduler.Services.Operations.OperationsService.UserOwnedRunCancelRefusal
+            );
+
+        // The build goes on, and its outcome moves the draft.
+        (
+            await _draft.WaitForStateAsync(nameof(TopicMapState.Built))
+        ).Context["topicPairs"]!.GetValue<int>().Should().Be(32);
+    }
+
+    private async Task<(bool Success, string? Message)> OperationAsync(
+        string mutation,
+        params string[] path
+    )
+    {
+        var response = await GraphQL.SendAsync(mutation, OperatorKey);
+        response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
+        var payload = response.GetData(["operations", .. path]);
+        return (
+            payload.GetProperty("success").GetBoolean(),
+            payload.GetProperty("message").GetString()
+        );
+    }
+
+    private static async Task<Trax.Effect.Models.WorkQueue.WorkQueue> EntryAsync(long id)
+    {
+        await using var scope = SharedRecoverySetup.Factory.Services.CreateAsyncScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .WorkQueues.AsNoTracking()
+            .SingleAsync(w => w.Id == id);
+    }
+
+    [Test]
     public async Task ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt()
     {
         var sweeper = SharedRecoverySetup.Factory.Services.GetRequiredService<TopicMapSweeper>();

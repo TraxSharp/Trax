@@ -253,7 +253,9 @@ public partial class OperationsMutations
     /// progress. The request is durable: the process running the train sees it and ends the run
     /// as Cancelled, and a run on this host is cancelled at once. <c>count</c> is 1 when the
     /// execution was flagged; an execution that is already finished or does not exist returns
-    /// <c>success: false</c> with <c>count</c> 0.
+    /// <c>success: false</c> with <c>count</c> 0. So does a run a step of a user's state-machine
+    /// draft started, with the reason: a user's draft is read-only to operators, and only its user
+    /// cancels the run, by leaving the state (central ADR 0046).
     /// </summary>
     public async Task<OperationResponse> CancelExecution(
         long id,
@@ -277,8 +279,9 @@ public partial class OperationsMutations
     /// <summary>
     /// Requests cancellation of the listed executions, as <c>cancelExecution</c> does for one:
     /// every one still pending or in progress is flagged, and finished or unknown ids are skipped.
-    /// <c>count</c> is the number flagged, zero included. An empty list, or more than 1000 ids,
-    /// returns <c>success: false</c> and flags nothing.
+    /// A run a step of a user's state-machine draft started is skipped too, and the message says
+    /// how many and why. <c>count</c> is the number flagged, zero included. An empty list, or more
+    /// than 1000 ids, returns <c>success: false</c> and flags nothing.
     /// </summary>
     public async Task<OperationResponse> CancelExecutions(
         long[] ids,

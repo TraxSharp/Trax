@@ -116,7 +116,7 @@ How the run ended decides the outcome:
 | --- | --- |
 | completed | `OnDone`, with the output the run recorded for its machine |
 | failed by its train, or by the scheduler (a run reaped as stale, failed at dispatch or on startup recovery) | `OnFailed` |
-| cancelled: a timeout, an operator's cancel of the run, or an operator's cancel of its entry before it was dispatched | `OnCancelled` |
+| cancelled: a timeout, or, for a system-owned instance, an operator's cancel of the instance, of its run, or of its entry before it was dispatched | `OnCancelled` |
 | cancelled because its state was left | nothing: the token was cleared when the state was left |
 | still queued, requeued after a failed dispatch, or running | nothing yet |
 
@@ -263,7 +263,18 @@ cancel of the run itself does: a run still queued is marked Cancelled and never 
 dispatched run has its cancel requested and stops at its next junction. The instance then moves
 through its state's `OnCancelled` edge, applied once by the same conditional update every
 delivery makes. A user's draft is refused, as are an instance whose state waits on no run and one
-whose run has already ended. No surface creates or advances a system instance.
+whose run has already ended.
+
+A user's draft is read-only to operators, so its run is too: `cancelExecution` and
+`cancelWorkQueueEntry`, and the dashboard's Cancel on the run's and the entry's pages, refuse a
+run or a queued entry a step of a user's draft started, with one message on both surfaces, and
+their bulk forms skip such rows and say how many they skipped. Only its user cancels it, by leaving
+the state through one of the machine's own transitions. A system-owned instance's run can be
+cancelled either way, and the instance then moves through `OnCancelled`.
+
+No Trax-provided operation creates or advances a system instance. A host can advance one from its
+own code through [`IMachineInstances.Advance`](/docs/sdk-reference/statemachine-api/machine-instances),
+and expose that under its own authorization, as the Recovery sample's `partitionAction` does.
 
 ## Junctions must be idempotent
 

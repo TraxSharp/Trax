@@ -555,6 +555,20 @@ public partial class OperationsService : IOperationsService
         + "entering the step again.";
 
     /// <summary>
+    /// The reason an operator's cancel of a run, or of a queued work queue entry, that a step of a
+    /// user's state-machine draft started is refused, on the dashboard and the API alike: a user's
+    /// draft is read-only to operators, so only its user cancels the run, by leaving the state
+    /// (central ADR 0046). A bulk cancel skips such rows and appends this to its message.
+    /// </summary>
+    public const string UserOwnedRunCancelRefusal =
+        "A run a step of a user's state-machine draft started is read-only to operators: it is "
+        + "cancelled only when its user leaves the state through one of the machine's own "
+        + "transitions.";
+
+    private static string ReportSkippedUserOwned(string message, int skipped) =>
+        skipped == 0 ? message : $"{message} {skipped} skipped: {UserOwnedRunCancelRefusal}";
+
+    /// <summary>
     /// What a queueing operation answers on a host with no database provider, where nothing
     /// dispatches the work queue (scheduler ADR 0019).
     /// </summary>
@@ -1546,18 +1560,43 @@ public partial class OperationsService : IOperationsService
         var distinct = ids.Distinct().ToList();
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        // A run a user's draft started is the user's to cancel, by leaving the state: skipped and
+        // reported whatever its state, so the answer does not depend on whether it has ended yet.
+        var skipped = await db
+            .Metadatas.AsNoTracking()
+            .CountAsync(
+                m => distinct.Contains(m.Id) && m.InvokingOwnerKind == SnapshotOwnerKind.User,
+                ct
+            );
         var flagged = await ExecutionCancellation.RequestAsync(
             db,
-            db.Metadatas.Where(m => distinct.Contains(m.Id)),
+            db.Metadatas.Where(m =>
+                distinct.Contains(m.Id)
+                && (m.InvokingOwnerKind == null || m.InvokingOwnerKind != SnapshotOwnerKind.User)
+            ),
             _services?.GetService<ICancellationRegistry>(),
             _changeSignal,
             ct
         );
 
+        // One run, refused, is a refusal; a batch reports what it skipped, as it reports the
+        // finished runs it found.
+        if (distinct.Count == 1 && skipped == 1)
+            return new OperationResult(
+                false,
+                Id: distinct[0],
+                Count: 0,
+                Message: UserOwnedRunCancelRefusal
+            );
+
         return new OperationResult(
             true,
             Count: flagged,
-            Message: $"Cancellation requested for {flagged} of {distinct.Count} execution(s)."
+            Message: ReportSkippedUserOwned(
+                $"Cancellation requested for {flagged} of {distinct.Count} execution(s).",
+                skipped
+            )
         );
     }
 
@@ -1573,10 +1612,23 @@ public partial class OperationsService : IOperationsService
         var distinct = ids.Distinct().ToList();
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        // An entry a user's draft queued is the user's to cancel, by leaving the state: skipped
+        // and reported whatever its status, so the answer does not depend on whether it has been
+        // dispatched yet.
+        var skipped = await db
+            .WorkQueues.AsNoTracking()
+            .CountAsync(
+                q => distinct.Contains(q.Id) && q.InvokingOwnerKind == SnapshotOwnerKind.User,
+                ct
+            );
+
         // One statement with the status test in it, so an entry the dispatcher claims meanwhile
         // keeps its Dispatched status instead of being overwritten.
         var queued = db.WorkQueues.Where(q =>
-            distinct.Contains(q.Id) && q.Status == WorkQueueStatus.Queued
+            distinct.Contains(q.Id)
+            && q.Status == WorkQueueStatus.Queued
+            && (q.InvokingOwnerKind == null || q.InvokingOwnerKind != SnapshotOwnerKind.User)
         );
         var cancelled = db.SupportsSetUpdates()
             ? await queued.ExecuteUpdateAsync(
@@ -1588,10 +1640,22 @@ public partial class OperationsService : IOperationsService
         if (cancelled > 0)
             _changeSignal?.Notify(ChangeDomain.WorkQueue);
 
+        // One entry, refused, is a refusal; a batch reports what it skipped.
+        if (distinct.Count == 1 && skipped == 1)
+            return new OperationResult(
+                false,
+                Id: distinct[0],
+                Count: 0,
+                Message: UserOwnedRunCancelRefusal
+            );
+
         return new OperationResult(
             true,
             Count: cancelled,
-            Message: $"{cancelled} of {distinct.Count} work queue entry(s) cancelled."
+            Message: ReportSkippedUserOwned(
+                $"{cancelled} of {distinct.Count} work queue entry(s) cancelled.",
+                skipped
+            )
         );
     }
 
@@ -2254,6 +2318,10 @@ public partial class OperationsService : IOperationsService
 
         if (entry is null)
             return new OperationResult(false, Message: $"Work queue entry {id} not found.");
+
+        // Whatever its status, so the answer does not depend on whether it was dispatched yet.
+        if (entry.InvokingOwnerKind == SnapshotOwnerKind.User)
+            return new OperationResult(false, Id: id, Message: UserOwnedRunCancelRefusal);
 
         if (entry.Status != WorkQueueStatus.Queued)
             return new OperationResult(

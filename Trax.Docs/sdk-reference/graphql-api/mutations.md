@@ -506,6 +506,13 @@ mutation {
 
 **Returns**: `OperationResponse`. `count` is `1` when the execution was flagged. An execution that is missing or already terminal returns `success: false` with `count` `0`.
 
+A run a step of a user's state-machine draft started is refused, whatever its state, with
+`success: false` and the message the dashboard shows too: a user's draft is read-only to operators,
+so only its user cancels the run, by leaving the state through one of the machine's own
+transitions (see [Invoking a train](/docs/statemachine/invoking-trains#operators)). A run a
+system-owned instance started is cancelled as any other, and the instance moves through
+`OnCancelled`.
+
 ---
 
 ### cancelExecutions
@@ -524,7 +531,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `ids` | `[Long!]!` | Yes | 1 to 1000 execution metadata ids |
 
-**Returns**: `OperationResponse`. `count` is the number flagged, zero included. An empty list, or more than 1000 ids, returns `success: false` and flags nothing.
+**Returns**: `OperationResponse`. `count` is the number flagged, zero included. An empty list, or more than 1000 ids, returns `success: false` and flags nothing. A run a step of a user's draft started is skipped, as [`cancelExecution`](#cancelexecution) refuses it, and the message ends with how many were skipped and why.
 
 ---
 
@@ -715,8 +722,12 @@ so the instance moves once, whether this call, the run's lifecycle hook or the r
 there first.
 
 Operators may cancel only `SYSTEM` instances. A user's draft is read-only to them: its run is
-cancelled when the user leaves the state through one of the machine's own transitions. Nothing on
-any surface creates or advances a system instance.
+cancelled when the user leaves the state through one of the machine's own transitions, and
+[`cancelExecution`](#cancelexecution) and [`cancelWorkQueueEntry`](#cancelworkqueueentry) refuse
+that run and its queued entry too. No Trax-provided operation creates or advances a system
+instance; a host can advance one from its own code through
+[`IMachineInstances.Advance`](/docs/sdk-reference/statemachine-api/machine-instances) and expose
+that under its own authorization.
 
 ```graphql
 mutation {
@@ -1125,7 +1136,7 @@ A host that exposes the operations mutations must register an `IJobSubmitter`, o
 
 #### cancelWorkQueueEntry
 
-Cancels a queued entry. Only entries with `status: QUEUED` can be cancelled. Already-dispatched or already-cancelled entries return `OperationResponse(success: false, ...)` without modifying the row.
+Cancels a queued entry. Only entries with `status: QUEUED` can be cancelled. Already-dispatched or already-cancelled entries return `OperationResponse(success: false, ...)` without modifying the row. So does an entry a step of a user's state-machine draft queued, whatever its status, with the message [`cancelExecution`](#cancelexecution) refuses its run with: a user's draft is read-only to operators.
 
 ```graphql
 mutation {
@@ -1164,7 +1175,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `ids` | `[Long!]!` | Yes | 1 to 1000 work queue entry ids to cancel |
 
-**Returns**: `OperationResponse`. `count` is the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns `success: false` (`"No ids were given."` for an empty one) and cancels nothing.
+**Returns**: `OperationResponse`. `count` is the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns `success: false` (`"No ids were given."` for an empty one) and cancels nothing. An entry a user's draft queued is skipped, and the message ends with how many were skipped and why.
 
 ---
 

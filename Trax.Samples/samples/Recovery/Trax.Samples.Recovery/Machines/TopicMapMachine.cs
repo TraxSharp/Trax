@@ -24,7 +24,10 @@ public enum TopicMapState
     /// <summary>The build failed, or its run was reaped after its host died.</summary>
     BuildFailed,
 
-    /// <summary>The build's run was cancelled by an operator or timed out.</summary>
+    /// <summary>
+    /// The build's run was cancelled while the draft stayed in Building: it timed out. An operator cannot
+    /// cancel it, because a user's draft is read-only to operators.
+    /// </summary>
     BuildCancelled,
 }
 

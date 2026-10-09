@@ -128,7 +128,7 @@ junction, so no cancel check happens while it runs; and a train started from ins
 its parent.
 
 **A machine leaves an invoking state only through a declared transition**: a user's own event (such as "cancel
-build"), `OnCancelled`, or an operator's cancel. Never through autosave (below).
+build"), `OnCancelled`, or, for a system-owned instance, an operator's cancel. Never through autosave (below).
 
 **Draft expiry never strands a run.** System rows are exempt from the draft time-to-live, and deleting any draft that
 holds a live token cancels its run first.
@@ -173,8 +173,11 @@ the number of steps, not the number of rows.
 **Operators see instances read-only, without the context.** Under the operations gate they see system and user
 instances: state, timestamps, owner kind and the runs each invoked. Not the context: it is an untyped `JsonObject`, so
 nothing can mask its sensitive parts. They can cancel a system-owned instance, which cancels its live run (or marks a
-still-queued row cancelled, racing dispatch cleanly) and moves it through `OnCancelled`. No surface creates or advances
-a system instance.
+still-queued row cancelled, racing dispatch cleanly) and moves it through `OnCancelled`. A user's draft is read-only to
+them, and so is the run its step started: the operator's cancel of a run or of a queued entry refuses one a user's
+draft started, so only the user cancels it, by leaving the state. No Trax-provided operation creates or advances a
+system instance; a host may advance one from its own code through `IMachineInstances.Advance`, under its own
+authorization.
 
 **There is one engine, and the twin sees outcomes as events.** Outcomes are a new IR trigger kind, scoped per invoke
 edge, whose input schema comes from the train's output type. Because `OnDone`'s reduction is declarative, the twin
@@ -309,6 +312,13 @@ follow the first.
   leaving again piled up executing runs bounded only by `MaxActiveJobs`. It now counts the user's runs that are queued,
   or dispatched and not ended, through the work queue's and the run's link to the instance, under a lock on the user;
   `InvokedRunLimit(n)` is compared with that one count.
+- **2026-10-08**: The operator's cancel of a run (`cancelExecution`, `cancelExecutions`) and of a queued entry
+  (`cancelWorkQueueEntry`, `cancelWorkQueueEntries`), and the dashboard's equivalents through the same
+  `IOperationsService` calls, refuse a row a step of a user's draft started: the draft is read-only to operators and
+  cancelling its run would move it through `OnCancelled` from outside. One message on both surfaces
+  (`OperationsService.UserOwnedRunCancelRefusal`); the bulk forms skip such rows and count them in their message.
+  `InvokesModelTests` checks the refusal; `InvokedRunOperationsTests` in `Trax.Api/tests` checks both surfaces.
+
 - **2026-10-08**: `[Experimental("TRAXEXP002")]` lifted: the `Invokes` row of the interaction matrix is complete.
 
 - **2026-10-08**: `InvokesModelTests` lives in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`, on Postgres

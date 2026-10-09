@@ -45,7 +45,9 @@ public class WorkQueueMutations
 
     /// <summary>
     /// Cancels a queued work queue entry. Only entries with status <c>Queued</c> can be
-    /// cancelled.
+    /// cancelled, and not one a step of a user's state-machine draft queued: a user's draft is
+    /// read-only to operators, and only its user cancels the run, by leaving the state (central
+    /// ADR 0046).
     /// </summary>
     public async Task<OperationResponse> CancelWorkQueueEntry(
         long id,
@@ -59,8 +61,9 @@ public class WorkQueueMutations
 
     /// <summary>
     /// Cancels many queued entries in one statement. Only entries still in <c>Queued</c> are
-    /// affected; already-dispatched or cancelled ids are skipped. <c>count</c> is the number
-    /// actually cancelled, zero included. An empty list, or more than 1000 ids, returns
+    /// affected; already-dispatched or cancelled ids are skipped, and so are entries a step of a
+    /// user's state-machine draft queued, which the message counts and explains. <c>count</c> is
+    /// the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns
     /// <c>success: false</c> and cancels nothing.
     /// </summary>
     public async Task<OperationResponse> CancelWorkQueueEntries(

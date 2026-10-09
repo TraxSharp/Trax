@@ -282,6 +282,171 @@ public class InvokedRunOperationsTests
             .AllBeEquivalentTo(WorkQueueStatus.Cancelled);
     }
 
+    [Test]
+    public async Task Cancelling_a_run_a_users_draft_started_is_refused_with_one_reason_on_both_surfaces()
+    {
+        var machine = "wizard-" + Guid.NewGuid().ToString("N");
+        var users = await SeedInvokedRunAsync(
+            machine,
+            Guid.NewGuid(),
+            SnapshotOwnerKind.User,
+            state: TrainState.InProgress
+        );
+        var operations = Operations();
+
+        var graphQl = await new OperationsMutations().CancelExecution(users, operations, default);
+        var dashboard = await operations.CancelExecutionsAsync([users], default);
+
+        graphQl.Success.Should().BeFalse($"a user's draft is read-only to operators. See {Adr}");
+        graphQl.Message.Should().Be(OperationsService.UserOwnedRunCancelRefusal);
+        dashboard.Success.Should().BeFalse();
+        dashboard
+            .Message.Should()
+            .Be(OperationsService.UserOwnedRunCancelRefusal, "one reason on both surfaces");
+        (await IsFlaggedAsync(users)).Should().BeFalse("nothing was flagged");
+    }
+
+    [Test]
+    public async Task A_bulk_cancel_skips_the_runs_users_drafts_started_and_says_so_on_both_surfaces()
+    {
+        var machine = "wizard-" + Guid.NewGuid().ToString("N");
+        var operations = Operations();
+
+        foreach (var surface in new[] { "graphql", "dashboard" })
+        {
+            var users = await SeedInvokedRunAsync(
+                machine,
+                Guid.NewGuid(),
+                SnapshotOwnerKind.User,
+                state: TrainState.Pending
+            );
+            var systems = await SeedInvokedRunAsync(
+                machine,
+                Guid.NewGuid(),
+                SnapshotOwnerKind.System,
+                state: TrainState.InProgress
+            );
+            var plain = await SeedRunAsync(TrainState.Pending);
+            long[] ids = [users, systems, plain];
+
+            var (success, count, message) =
+                surface == "graphql"
+                    ? Unpack(
+                        await new OperationsMutations().CancelExecutions(ids, operations, default)
+                    )
+                    : Unpack(await operations.CancelExecutionsAsync(ids, default));
+
+            success.Should().BeTrue(surface);
+            count.Should().Be(2, $"{surface}: the system's run and the plain run are flagged");
+            message
+                .Should()
+                .Be(
+                    "Cancellation requested for 2 of 3 execution(s). 1 skipped: "
+                        + OperationsService.UserOwnedRunCancelRefusal,
+                    surface
+                );
+            (await IsFlaggedAsync(users)).Should().BeFalse(surface);
+            (await IsFlaggedAsync(systems)).Should().BeTrue(surface);
+            (await IsFlaggedAsync(plain)).Should().BeTrue(surface);
+        }
+    }
+
+    [Test]
+    public async Task Cancelling_a_queued_entry_a_users_draft_queued_is_refused_on_both_surfaces_and_skipped_in_bulk()
+    {
+        var machine = "wizard-" + Guid.NewGuid().ToString("N");
+        var users = await SeedQueuedEntryAsync(machine, SnapshotOwnerKind.User);
+        var systems = await SeedQueuedEntryAsync(machine, SnapshotOwnerKind.System);
+        var plain = await SeedQueuedEntryAsync(machine, owner: null);
+        var operations = Operations();
+
+        var graphQl = await new WorkQueueMutations().CancelWorkQueueEntry(
+            users,
+            operations,
+            default
+        );
+        var dashboard = await operations.CancelWorkQueueEntryAsync(users, default);
+
+        graphQl.Success.Should().BeFalse($"a user's draft is read-only to operators. See {Adr}");
+        graphQl.Message.Should().Be(OperationsService.UserOwnedRunCancelRefusal);
+        dashboard.Success.Should().BeFalse();
+        dashboard.Message.Should().Be(OperationsService.UserOwnedRunCancelRefusal);
+
+        var bulk = await new WorkQueueMutations().CancelWorkQueueEntries(
+            [users, systems],
+            operations,
+            default
+        );
+        bulk.Success.Should().BeTrue();
+        bulk.Count.Should().Be(1);
+        bulk.Message.Should()
+            .Be(
+                "1 of 2 work queue entry(s) cancelled. 1 skipped: "
+                    + OperationsService.UserOwnedRunCancelRefusal
+            );
+
+        var dashboardBulk = await operations.CancelWorkQueueEntriesAsync([users, plain], default);
+        dashboardBulk.Count.Should().Be(1);
+        dashboardBulk
+            .Message.Should()
+            .Be(bulk.Message, "the dashboard's bulk cancel says the same");
+
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var statuses = await db
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.Id == users || w.Id == systems || w.Id == plain)
+            .ToDictionaryAsync(w => w.Id, w => w.Status);
+        statuses[users].Should().Be(WorkQueueStatus.Queued, "the user's entry is left alone");
+        statuses[systems].Should().Be(WorkQueueStatus.Cancelled);
+        statuses[plain].Should().Be(WorkQueueStatus.Cancelled);
+    }
+
+    private static (bool, int?, string?) Unpack(OperationResponse r) =>
+        (r.Success, r.Count, r.Message);
+
+    private static (bool, int?, string?) Unpack(OperationResult r) =>
+        (r.Success, r.Count, r.Message);
+
+    private async Task<long> SeedRunAsync(TrainState state)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var run = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Ingest.IFetchTrain",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        run.TrainState = state;
+        await db.Track(run);
+        await db.SaveChanges(default);
+        return run.Id;
+    }
+
+    private async Task<long> SeedQueuedEntryAsync(string machine, SnapshotOwnerKind? owner)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Ingest.IStageTrain",
+                InvokedBy = owner is { } kind ? new InvokedBy(machine, Guid.NewGuid(), kind) : null,
+            }
+        );
+        await db.Track(entry);
+        await db.SaveChanges(default);
+        return entry.Id;
+    }
+
+    private async Task<bool> IsFlaggedAsync(long id)
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        return (
+            await db.Metadatas.AsNoTracking().SingleAsync(m => m.Id == id)
+        ).CancellationRequested;
+    }
+
     private async Task<SnapshotDraft> SeedDraftAsync(
         string machine,
         SnapshotOwnerKind owner,
@@ -346,7 +511,8 @@ public class InvokedRunOperationsTests
         string machine,
         Guid instance,
         SnapshotOwnerKind owner,
-        string? externalId = null
+        string? externalId = null,
+        TrainState state = TrainState.Failed
     )
     {
         await using var db = await _factory.CreateDbContextAsync(default);
@@ -359,8 +525,9 @@ public class InvokedRunOperationsTests
                 InvokedBy = new InvokedBy(machine, instance, owner),
             }
         );
-        run.TrainState = TrainState.Failed;
-        run.EndTime = DateTime.UtcNow;
+        run.TrainState = state;
+        if (state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+            run.EndTime = DateTime.UtcNow;
         await db.Track(run);
         await db.SaveChanges(default);
         return run.Id;
