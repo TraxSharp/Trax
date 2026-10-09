@@ -370,19 +370,19 @@ public class Metadata : IModel, IDisposable
     [Column("invoking_machine")]
     [JsonPropertyName("invoking_machine")]
     [JsonInclude]
-    public string? InvokingMachine { get; set; }
+    public string? InvokingMachine { get; private set; }
 
     /// <summary>The instance whose invoking state queued this run; null unless <see cref="InvokingMachine"/> is set.</summary>
     [Column("invoking_instance_id")]
     [JsonPropertyName("invoking_instance_id")]
     [JsonInclude]
-    public Guid? InvokingInstanceId { get; set; }
+    public Guid? InvokingInstanceId { get; private set; }
 
     /// <summary>Whether a user or the system owns the instance that queued this run; null unless <see cref="InvokingMachine"/> is set.</summary>
     [Column("invoking_owner_kind")]
     [JsonPropertyName("invoking_owner_kind")]
     [JsonInclude]
-    public SnapshotOwnerKind? InvokingOwnerKind { get; set; }
+    public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
 
     /// <summary>
     /// The output of a completed invoked run, serialized as its machine's <c>OnDone</c> edges read it

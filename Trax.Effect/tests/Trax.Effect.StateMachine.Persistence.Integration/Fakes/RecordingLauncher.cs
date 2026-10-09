@@ -8,7 +8,7 @@ namespace Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 /// Stands in for the mediator's launcher, which this folder cannot reference: it writes the run's work queue entry
 /// into the caller's data context under the external id it is handed, as the mediator does, and records each launch.
 /// </summary>
-public sealed class RecordingLauncher : IInvokedTrainLauncher
+internal sealed class RecordingLauncher : IInvokedTrainLauncher
 {
     public List<InvokedTrainLaunch> Launches { get; } = [];
 

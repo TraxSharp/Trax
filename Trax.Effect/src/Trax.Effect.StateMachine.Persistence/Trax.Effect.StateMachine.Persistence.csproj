@@ -23,6 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The invoked-run ports: the mediator implements the launcher, and the operations service applies an
+         operator's cancel through the outcome delivery. A host neither implements nor calls them. -->
+    <InternalsVisibleTo Include="Trax.Mediator" />
+    <InternalsVisibleTo Include="Trax.Scheduler" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests.Stress" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests" />

@@ -233,7 +233,7 @@ public static class MachineInstanceId
 /// implementation, which cancels as the operations surface does: a still-queued work queue entry is marked
 /// cancelled, and a dispatched run has its cancel flag set, which it reads at its next junction on any host.
 /// </summary>
-public interface IInvokedRunCancellation
+internal interface IInvokedRunCancellation
 {
     /// <summary>
     /// Cancels the run whose invoke token is <paramref name="invokeToken"/>, or does nothing when it has already

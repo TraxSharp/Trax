@@ -16,7 +16,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <see cref="IDataContext"/>, and the engine package depends on no data provider. Infrastructure: a host does not
 /// implement or call it.
 /// </remarks>
-public interface IInvokedTrainLauncher
+internal interface IInvokedTrainLauncher
 {
     /// <summary>
     /// What stops <paramref name="declaration"/>'s train from being invoked, one sentence per problem, each naming
@@ -52,7 +52,7 @@ public interface IInvokedTrainLauncher
 /// <param name="InputType">The train's input type, as the state declared it.</param>
 /// <param name="OutputType">The train's output type, as the state declared it.</param>
 /// <param name="SystemOwned">Whether the machine's instances belong to the system rather than to users.</param>
-public sealed record InvokedTrainDeclaration(
+internal sealed record InvokedTrainDeclaration(
     string Machine,
     string State,
     Type TrainType,
@@ -66,7 +66,7 @@ public sealed record InvokedTrainDeclaration(
 /// <param name="Input">The run's input, built from the context the state was entered with.</param>
 /// <param name="ExternalId">The id the run's work queue entry takes, which the instance stores as its invoke token.</param>
 /// <param name="InvokedBy">The instance invoking it, written on the entry and carried to the run.</param>
-public sealed record InvokedTrainLaunch(
+internal sealed record InvokedTrainLaunch(
     Type TrainType,
     object Input,
     string ExternalId,

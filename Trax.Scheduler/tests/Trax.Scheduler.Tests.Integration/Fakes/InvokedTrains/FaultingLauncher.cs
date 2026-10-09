@@ -8,7 +8,7 @@ namespace Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 /// Wraps the mediator's launcher and, while <see cref="Armed"/>, fails a launch an outcome makes after the run's
 /// entry is written and before the transaction commits: a host dying between the two halves of an outcome.
 /// </summary>
-public sealed class FaultingLauncher(IInvokedTrainLauncher inner) : IInvokedTrainLauncher
+internal sealed class FaultingLauncher(IInvokedTrainLauncher inner) : IInvokedTrainLauncher
 {
     public static bool Armed { get; set; }
 

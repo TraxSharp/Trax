@@ -14,7 +14,7 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// instance moves through its <c>OnCancelled</c> edge in the operator's request when this host can read the
 /// machine. See <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c>.
 /// </remarks>
-public interface IInvokedRunOutcomes
+internal interface IInvokedRunOutcomes
 {
     /// <summary>
     /// Applies the outcome of the run whose invoke token is <paramref name="invokeToken"/>, when the run has ended

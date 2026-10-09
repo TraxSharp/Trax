@@ -20,7 +20,7 @@ public enum LaunchFault
 /// Wraps the mediator's launcher: runs an observation after the real enqueue (from another connection, while the
 /// transaction is still open) and can fail the write on either side of it.
 /// </summary>
-public sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTrainLauncher
+internal sealed class ObservedLauncher(IInvokedTrainLauncher inner) : IInvokedTrainLauncher
 {
     public static LaunchFault Fault { get; set; }
 

@@ -84,52 +84,31 @@ never through `ISnapshotStore`. `invoke_token` is unique where set.
 ### Draft expiry and live runs
 
 The draft TTL applies to user drafts only: a system instance never expires. Deleting a draft that holds a live
-`invoke_token` cancels its run first, through `IInvokedRunCancellation`, and a cancel
-that throws keeps the draft. `AddStateMachines` registers the implementation, which cancels the way the operations
-surface does: a work queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set,
+`invoke_token` cancels its run first, and a cancel that throws keeps the draft. The cancel, which `AddStateMachines`
+registers, works the way the operations surface's does: a work queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set,
 which it reads at its next junction on whichever host runs it. The delete that follows is conditional on the token
 that was cancelled, so a draft that entered an invoking state again in between keeps its new run.
 
-### IInvokedRunOutcomes
+### Invoked-run ports
 
-Applies the outcome of an ended invoked run to the instance waiting on it, now, through
-the delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
-outcome is applied once however many callers deliver it. `AddStateMachines` registers it; the operations service calls
-it after an operator's
-[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued run,
-so the instance moves in that request on a host that registers the machine.
+Three ports connect a state that [invokes a train](/docs/statemachine/invoking-trains) to the rest of Trax. They are
+internal: a host neither implements nor calls them, and `AddStateMachines` and `AddMediator` register them.
 
-```csharp
-public interface IInvokedRunOutcomes
-{
-    // The state this call moved the instance into, or null when it moved nothing: the run has not ended,
-    // no instance holds the token, or this host does not register or cannot read the machine.
-    Task<string?> Deliver(string invokeToken, CancellationToken cancellationToken = default);
-}
-```
-
-### IInvokedTrainLauncher
-
-The port through which a state that
-[invokes a train](/docs/statemachine/invoking-trains) queues its run. Trax.Mediator implements it and
-`AddMediator` registers it; a host does not implement or call it.
-
-```csharp
-public interface IInvokedTrainLauncher
-{
-    IReadOnlyList<string> Refusals(InvokedTrainDeclaration declaration, IServiceProvider services);
-    Task Launch(InvokedTrainLaunch launch, IDataContext context, CancellationToken cancellationToken = default);
-}
-```
-
-`Launch` authorizes the run and writes its work queue entry into the caller's data context, inside the transaction
-that moves the snapshot, so the two commit together; it commits nothing itself. A user-owned instance's run is
-authorized against the current caller. A system-owned instance's run is authorized in Trax's trusted execution
-scope, including one whose `InvokedTrainLaunch.FromOutcome` is set (the previous run's outcome entered a state that
-invokes a train, so no user is present). A user-owned instance never launches from an outcome: the startup check
-refuses such a machine, and `Launch` refuses such a launch with `UnauthorizedAccessException`. `Refusals` tells the startup check
-what about a train stops a machine from invoking it. It lives in the persistence package rather than the engine
-because it writes through `IDataContext`, and the engine depends on no data provider.
+- **The launcher** queues the run. Trax.Mediator implements it. It authorizes the run and writes its work queue entry
+  into the outbox's data context, inside the transaction that moves the snapshot, so the two commit together; it
+  commits nothing itself. A user-owned instance's run is authorized against the current caller. A system-owned instance's run is
+  authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
+  present). A user-owned instance never launches from an outcome: the startup check refuses such a machine, and the
+  launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
+  about a train stops a machine from invoking it. It lives in the persistence package rather than the engine because
+  it writes through `IDataContext`, and the engine depends on no data provider.
+- **The run cancellation** cancels a run by its invoke token, as described under
+  [Draft expiry and live runs](#draft-expiry-and-live-runs).
+- **The outcome delivery** applies the outcome of an ended run to the instance waiting on it, now, through the
+  delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
+  outcome is applied once however many callers deliver it. The operations service calls it after an operator's
+  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued
+  run, so the instance moves in that request on a host that registers the machine.
 
 ### StoredSnapshot
 

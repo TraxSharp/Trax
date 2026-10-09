@@ -33,7 +33,7 @@ public sealed class InstanceHost : IDisposable
         _sqliteFile = sqliteFile;
     }
 
-    public static InstanceHost Create(
+    internal static InstanceHost Create(
         StoreProvider provider,
         TimeSpan? draftTtl = null,
         IInvokedRunCancellation? runCancellation = null,

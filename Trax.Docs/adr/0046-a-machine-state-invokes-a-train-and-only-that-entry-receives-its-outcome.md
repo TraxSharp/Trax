@@ -282,6 +282,10 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The invoked-run ports (the launcher and what it is handed, the run cancellation and the outcome
+  delivery) are internal, visible to Trax.Mediator and Trax.Scheduler, which implement and call them; no host does.
+  The run's link to its instance (`Metadata.InvokingMachine`, `InvokingInstanceId`, `InvokingOwnerKind`) is set only
+  when the run is created.
 - **2026-10-08**: `Build` refuses an outcome sent to the machine's start state, naming why. The start state joined
   the reserved states, so autosave refused to create any draft (`state-reserved`) and the machine was unusable, and
   any ordinary edge back to the start was refused as an edge into an outcome target, a message that hid the cause.

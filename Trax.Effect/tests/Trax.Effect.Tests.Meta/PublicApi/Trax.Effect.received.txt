@@ -827,15 +827,15 @@ namespace Trax.Effect.Models.Metadata
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("invoking_instance_id")]
-        public System.Guid? InvokingInstanceId { get; set; }
+        public System.Guid? InvokingInstanceId { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("invoking_machine")]
-        public string? InvokingMachine { get; set; }
+        public string? InvokingMachine { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("invoking_owner_kind")]
-        public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; set; }
+        public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; }
         public bool IsChild { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("junction_started_at")]
         public System.DateTime? JunctionStartedAt { get; set; }
