@@ -242,6 +242,7 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Post
 - `InvokesReservedStateTests.Autosave_into_an_invoking_state_is_refused`
 - `InvokesReservedStateTests.Autosave_out_of_an_invoking_state_is_refused`
 - `InvokesReservedStateTests.Autosave_into_an_outcome_target_is_refused`
+- `InvokesDeclarationTests.An_outcome_sent_to_the_initial_state_is_refused_at_build_naming_why`
 - `InvokesReservedStateTests.Advance_with_an_outcome_trigger_is_refused`
 - `InvokesReservedStateTests.A_rewritten_context_does_not_change_correlation`
 - `SnapshotOwnerKeyTests.An_empty_or_whitespace_key_is_unauthenticated_for_every_mutation_and_writes_nothing`
@@ -281,6 +282,10 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: `Build` refuses an outcome sent to the machine's start state, naming why. The start state joined
+  the reserved states, so autosave refused to create any draft (`state-reserved`) and the machine was unusable, and
+  any ordinary edge back to the start was refused as an edge into an outcome target, a message that hid the cause.
+  A start state that itself invokes a train is reserved already and is not affected.
 - **2026-10-08**: The live-run cap is per user across every machine, and counts runs, not tokens. It counted the
   user's rows holding an invoke token in one machine, so N machines gave N caps, and leaving a state cleared its
   token at once while a dispatched run only flagged for cancel kept executing: entering, waiting for dispatch and

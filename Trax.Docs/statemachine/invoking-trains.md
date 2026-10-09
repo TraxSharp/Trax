@@ -72,7 +72,9 @@ or into an outcome target. `Build` refuses an ordinary transition into an outcom
 means "the train produced this"; a self-loop on the target does not enter it and is allowed, and so is an edge
 into a target that itself invokes a train, which only queues a new run (that is how a chained stage is retried, and
 how a user-owned machine chains its stages at all; see [Who a run belongs to](#who-a-run-belongs-to)). An outcome
-may not go to the target of the machine's `RunsOnce` effect.
+may not go to the target of the machine's `RunsOnce` effect, nor to the state the machine starts at: that state would
+be reserved, so no save could create a draft of the machine at all. Send the outcome to a state of its own, with an
+edge from there back to the start if the flow returns to it.
 
 An invoked train does not count against the machine's one `RunsOnce` effect.
 

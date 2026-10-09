@@ -196,6 +196,39 @@ public class InvokesDeclarationTests
     }
 
     [Test]
+    public void An_outcome_sent_to_the_initial_state_is_refused_at_build_naming_why()
+    {
+        // The initial state as an outcome target would join the reserved states, so no save could create a draft
+        // of the machine at all, and the abandon edge back to it would be refused as an edge into an outcome target.
+        foreach (
+            var outcomes in new Action<IInvokeBuilder<IngestState, IngestTrigger>>[]
+            {
+                i =>
+                    i.OnDone(IngestState.Fetched)
+                        .OnFailed(IngestState.Idle)
+                        .OnCancelled(IngestState.Cancelled),
+                i =>
+                    i.OnDone(IngestState.Fetched)
+                        .OnFailed(IngestState.FetchFailed)
+                        .OnCancelled(IngestState.Idle),
+            }
+        )
+        {
+            var m = Builder(outcomes);
+            m.In(IngestState.Fetching).On(IngestTrigger.Abandon).To(IngestState.Idle);
+
+            var build = () => m.Build();
+
+            build
+                .Should()
+                .Throw<InvalidOperationException>()
+                .WithMessage(
+                    "*starts at Idle, but Idle is also where the outcome of IFetchTrain, invoked in Fetching, goes*"
+                );
+        }
+    }
+
+    [Test]
     public void A_user_edge_into_an_outcome_target_that_itself_invokes_a_train_is_allowed()
     {
         // A chained stage: Fetching's outcome enters Fetched, which invokes the next run. Retrying that stage

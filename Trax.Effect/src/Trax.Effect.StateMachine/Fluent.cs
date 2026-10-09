@@ -432,7 +432,8 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
     /// more than one effect with <c>RunsOnce</c>, or enters an effect's target state by any other transition. Or
     /// a state invokes more than one train, invokes one by a class rather than its interface, or lacks
     /// <c>OnDone</c>, <c>OnFailed</c> or <c>OnCancelled</c> (or declares either of the last two twice); an
-    /// outcome goes to an effect's target; or an ordinary transition enters a state an outcome goes to.
+    /// outcome goes to an effect's target or to the start state (unless that state invokes a train itself); or an
+    /// ordinary transition enters a state an outcome goes to.
     /// </exception>
     public BuiltMachine<TState, TTrigger> Build()
     {
@@ -668,6 +669,22 @@ public sealed partial class MachineBuilder<TState, TTrigger> : IMachineBuilder<T
         IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
     )
     {
+        // Checked first, because its cause is not the edge: an outcome target joins the reserved states, which no
+        // save may create a draft in, so a machine that starts at one could never have a draft at all.
+        foreach (var invoke in invokes.Values)
+        foreach (var target in invoke.Targets)
+            if (
+                EqualityComparer<TState>.Default.Equals(target, _initial!.Value)
+                && !invokes.ContainsKey(target)
+            )
+                throw new InvalidOperationException(
+                    $"The machine '{_id}' starts at {target}, but {target} is also where the outcome of "
+                        + $"{invoke.TrainType.Name}, invoked in {invoke.State}, goes. An outcome target is reserved: "
+                        + "no save may create a draft in it, so no draft of this machine could ever be created. Send "
+                        + "the outcome to a state of its own, with an edge from there back to the start if the "
+                        + "flow returns to it."
+                );
+
         foreach (var invoke in invokes.Values)
         foreach (var target in invoke.Targets)
         foreach (var t in _transitions)
