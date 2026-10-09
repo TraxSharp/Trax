@@ -133,6 +133,14 @@ and cuts **one** version for **every** package, at the highest bump those commit
 the versioning and the publish job wait on the protected `release` environment. After the
 packages are on nuget.org it moves the `website` branch to the new tag, which publishes the site.
 
+The release notes list one line per commit, so a squash-merged pull request is one line. To say
+more, give the pull request description a `## Release notes` section: what a user of the packages
+will notice, with `###` sub-headings if it needs them. The release copies it, under the pull
+request's title, above the commit list (`.github/release/pr-release-notes.mjs`). Write one for
+every `feat:` pull request of any size; a small fix needs none. It is published as written, so it
+names no work-item ids and describes a security fix, never the attack. Only an author with write
+access has their section copied.
+
 **Never write `BREAKING CHANGE:` in a commit body or footer** unless explicitly told to: it cuts a
 major, which is permanent on nuget.org. Describe breaking changes in the PR description instead.
 
