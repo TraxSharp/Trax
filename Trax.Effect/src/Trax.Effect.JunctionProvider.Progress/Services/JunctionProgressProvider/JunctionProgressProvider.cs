@@ -91,8 +91,10 @@ internal class JunctionProgressProvider(IDataContextProviderFactory dataContextF
         // happened, not part of it. Neither the caller's token nor a failing write may replace the
         // junction's result: a caller that cancelled while the work finished would otherwise see
         // the run recorded Cancelled (effect/0005 records it Completed), and a database blip would
-        // turn finished work into a Failed run a manifest retries. FinishServiceTrain clears these
-        // columns again with the outcome, so a skipped write leaves nothing stale behind.
+        // turn finished work into a Failed run a manifest retries. The run's terminal write always
+        // includes these columns, cleared (DataContext.Update marks them modified for a run that
+        // has ended), so a skipped write here, or an after half that never runs because the
+        // junction was cancelled, leaves nothing stale behind.
         try
         {
             await Write(serviceTrain.Metadata, CancellationToken.None);
