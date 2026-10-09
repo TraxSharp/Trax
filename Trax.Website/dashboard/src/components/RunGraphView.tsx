@@ -1,5 +1,7 @@
 import { GitFork, Play, Route } from "lucide-react";
+import { useMemo } from "react";
 import { stepFailure } from "../lib/junctionSteps";
+import { runGraphTree } from "../lib/runGraphTree";
 import type { ChainStepKind, JunctionRunState, RunGraph, RunGraphNode, RunNodeState } from "../types";
 
 const NODE_DOT: Partial<Record<RunNodeState, string>> = {
@@ -72,6 +74,8 @@ export interface RunGraphViewProps {
  * a checkpoint holds. Mirrors the Blazor RunGraphView.
  */
 export function RunGraphView({ graph, onResume, resumingNode, resumeDisabled }: RunGraphViewProps) {
+  // The API serves every node at any depth in one flat list; drawn as the tree it declares.
+  const nodes = useMemo(() => runGraphTree(graph.allNodes), [graph.allNodes]);
   return (
     <section aria-label="Run graph" className="bg-surface rounded-lg border border-line p-5 mb-6">
       <h2 className="text-sm font-semibold text-fg mb-3">Run graph</h2>
@@ -88,7 +92,7 @@ export function RunGraphView({ graph, onResume, resumingNode, resumeDisabled }: 
             </p>
           )}
           <ol aria-label="Declared steps of the train" className="space-y-1">
-            {graph.nodes.map((node) => (
+            {nodes.map((node) => (
               <Node
                 key={node.id}
                 node={node}
@@ -136,7 +140,7 @@ function Node({
   resumeDisabled,
 }: { node: RunGraphNode } & Omit<RunGraphViewProps, "graph">) {
   const failed = node.steps.find((s) => s.state === "FAILED" || s.state === "CANCELLED");
-  const tracks = node.tracks ?? [];
+  const tracks = node.tracks;
   const resuming = resumingNode === node.id;
   return (
     <li

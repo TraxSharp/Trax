@@ -1,5 +1,6 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import type { ChainStepKind, RunGraph, RunGraphNode, RunNodeState } from "../types";
+import { flattenRunGraph } from "../lib/runGraphTree";
 
 // Reusable auto-mock overrides for interaction stories: deterministic, filterable data plus
 // empty / error states, so play functions can exercise every control without a backend.
@@ -379,7 +380,7 @@ export const executionScenario: MockSchemaOverrides = {
 // Keyed by id: 903 is active (cancellable), 900 terminal (re-queueable), 800 has children, 902
 // failed (a replaying retry of 899, a child of 800, with a junction timeline, and checkpoints it
 // can resume from), 950 recorded more steps than the timeline shows, 952 resumed 902 after its
-// checkpoint, 954 failed without a saved input.
+// checkpoint, 954 failed without a saved input, 956 failed deep in its nested routing.
 
 // One node of a run graph; tracks and steps default to none.
 function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields: Partial<RunGraphNode> = {}): RunGraphNode {
@@ -399,14 +400,80 @@ function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields:
 
 const NO_GRAPH = { hasGraph: false, moreSteps: false, canResume: false, nodes: [], unmatchedSteps: [] };
 
+// A run graph as a scenario declares it: the tree, from which runGraph serves the flat list too.
+type DeclaredRunGraph = Omit<RunGraph, "allNodes"> & { nodes: RunGraphNode[] };
+
+/** A run graph as the API serves it: the nested nodes and the flat allNodes the dashboard reads. */
+export type ServedRunGraph = RunGraph & { nodes: RunGraphNode[] };
+
+/** Serves a declared run graph as the API does, with every node at any depth in allNodes. */
+export function servedRunGraph(graph: DeclaredRunGraph): ServedRunGraph {
+  return { ...graph, allNodes: flattenRunGraph(graph.nodes) };
+}
+
+// One track holding one node, taken or not.
+function oneNodeTrack(name: string, taken: boolean, node: RunGraphNode) {
+  return { name, description: null, isFallback: false, taken, nodes: [node] };
+}
+
+/**
+ * 956's train nests its routing deeper than a query can follow nested tracks: a Decide, a Switch
+ * in it and another in that, a Parallel, a Gate in a branch and a Decide in the Gate, whose step six
+ * tracks deep failed after the checkpoint at the top, so it can resume there. The other branch was
+ * interrupted: the host stopped mid-junction.
+ */
+function deepRunGraph(metadataId: number): DeclaredRunGraph {
+  const leaf = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0", "CHAIN", "FAILED", {
+    canResume: true,
+    steps: [{ state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" }],
+  });
+  const pick = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0", "DECIDE", "FAILED", {
+    tracks: [oneNodeTrack("Deep", true, leaf)],
+  });
+  const check = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0", "GATE", "FAILED", {
+    tracks: [oneNodeTrack("Open", true, pick)],
+  });
+  const right = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Right/Tally#0", "CHAIN", "INTERRUPTED");
+  const lanes = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0", "PARALLEL", "FAILED", {
+    tracks: [oneNodeTrack("Left", true, check), oneNodeTrack("Right", true, right)],
+  });
+  const score = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0", "SWITCH", "FAILED", {
+    tracks: [oneNodeTrack("Lanes", true, lanes)],
+  });
+  const mode = graphNode("Plan#1/Fast/Mode#0", "SWITCH", "FAILED", {
+    tracks: [oneNodeTrack("Lanes", true, score)],
+  });
+  return {
+    metadataId,
+    hasGraph: true,
+    moreSteps: false,
+    canResume: true,
+    nodes: [
+      graphNode("Saved#0", "CHECKPOINT", "COMPLETED", { checkpointed: true }),
+      graphNode("Plan#1", "DECIDE", "FAILED", {
+        tracks: [
+          oneNodeTrack("Fast", true, mode),
+          oneNodeTrack("Slow", false, graphNode("Plan#1/Slow/Wait#0", "CHAIN", "SKIPPED")),
+        ],
+      }),
+    ],
+    unmatchedSteps: [],
+  };
+}
+
 /**
  * The run graph of a scenario run. 902 failed after its Findings checkpoint: the checkpoint is
  * stored, and it can resume at Summarize (the step after it, where it failed) or at Publish. 952 is
  * the run that resumed it there: the steps before are RESTORED. 954 (no saved input) has the same
- * checkpoint as 902, so its page draws "Resume from here" nowhere. Every other run's train has no
- * declared graph on this host.
+ * checkpoint as 902, so its page draws "Resume from here" nowhere. 956 nests six levels deep (see
+ * deepRunGraph). Every other run's train has no declared graph on this host.
  */
-export function runGraph(metadataId: number): RunGraph {
+export function runGraph(metadataId: number): ServedRunGraph {
+  return servedRunGraph(declaredRunGraph(metadataId));
+}
+
+function declaredRunGraph(metadataId: number): DeclaredRunGraph {
+  if (metadataId === 956) return deepRunGraph(metadataId);
   if (metadataId === 902 || metadataId === 954) {
     return {
       metadataId,
@@ -660,6 +727,7 @@ export const executionDetailScenario: MockSchemaOverrides = {
         if (id === 951) return execDetail(951, "Trax.Exec.RetryJob", "COMPLETED", 0);
         if (id === 952) return execDetail(952, "Trax.Exec.BetaJob", "COMPLETED", 0);
         if (id === 954) return { ...execDetail(954, "Trax.Exec.BetaJob", "FAILED", 0), input: null };
+        if (id === 956) return execDetail(956, "Trax.Exec.NestedJob", "FAILED", 0);
         return execDetail(900, "Trax.Exec.DeltaJob", "COMPLETED", 0);
       },
       runGraph: (_root: unknown, args: Args) => runGraph(args.metadataId as number),

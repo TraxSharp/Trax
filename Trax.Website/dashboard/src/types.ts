@@ -681,16 +681,29 @@ export interface RunGraphNode {
   canResume: boolean;
   state: RunNodeState;
   steps: RunGraphStep[];
-  // Absent below the depth RUN_GRAPH reads.
-  tracks?: RunGraphTrack[];
+  tracks: RunGraphTrack[];
 }
 
-export interface RunGraphTrack {
+// A track or branch of a node, as the flat list names it: without its nodes, which the list
+// carries itself.
+export interface RunGraphTrackHead {
   name: string;
   description: string | null;
   isFallback: boolean;
   taken: boolean;
+}
+
+export interface RunGraphTrack extends RunGraphTrackHead {
   nodes: RunGraphNode[];
+}
+
+// One node of runGraph.allNodes, with where it sits: the routing or Parallel step whose track it
+// is on (null at the top level), that track's name, and how many tracks deep it is.
+export interface RunGraphFlatNode extends Omit<RunGraphNode, "tracks"> {
+  parentId: string | null;
+  track: string | null;
+  depth: number;
+  tracks: RunGraphTrackHead[];
 }
 
 export interface RunGraph {
@@ -699,7 +712,8 @@ export interface RunGraph {
   moreSteps: boolean;
   // True when resumeExecution can resume the run after its latest checkpoint.
   canResume: boolean;
-  nodes: RunGraphNode[];
+  // Every node at any depth, in one list; lib/runGraphTree rebuilds the tree.
+  allNodes: RunGraphFlatNode[];
   unmatchedSteps: Pick<JunctionStep, "position" | "name" | "nameWithheld" | "state">[];
 }
 

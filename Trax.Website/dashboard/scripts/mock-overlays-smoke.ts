@@ -91,6 +91,11 @@ function check(label: string, cond: boolean) {
   const completed = (get(list.data, "operations.executions.items") as { id: number }[])[0];
   const done = await client.query(RUN_GRAPH, { metadataId: completed.id }, NET).toPromise();
   check("runGraph of a captured completed run -> not resumable", get(done.data, "operations.runGraph.canResume") === false);
+  const flat = get(done.data, "operations.runGraph.allNodes") as { id: string; parentId: string | null; depth: number }[];
+  check(
+    "runGraph -> every node in allNodes, with where it sits",
+    flat.some((n) => n.parentId === "Signals#4" && n.depth === 1) && flat.some((n) => n.parentId == null && n.depth === 0),
+  );
   const failed = { id: 424_242 };
   const graph = await client.query(RUN_GRAPH, { metadataId: failed.id }, NET).toPromise();
   check("runGraph of a stopped run -> resumable", get(graph.data, "operations.runGraph.canResume") === true);

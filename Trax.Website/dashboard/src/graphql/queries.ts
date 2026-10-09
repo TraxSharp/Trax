@@ -897,7 +897,9 @@ const RUN_GRAPH_TRACK = `
 `;
 
 // One run drawn on its train's declared chain (operations.runGraph), the read the Blazor run page's
-// run graph makes. GraphQL has no recursion, so tracks are read four levels deep.
+// run graph makes. A query cannot follow nested tracks past the server's field-cycle limit, so it
+// reads every node at any depth from the flat allNodes list, each with where it sits (parentId,
+// track, depth) and only its tracks' own fields; lib/runGraphTree rebuilds the tree.
 export const RUN_GRAPH = gql`
   query RunGraph($metadataId: Long!) {
     operations {
@@ -912,25 +914,13 @@ export const RUN_GRAPH = gql`
           nameWithheld
           state
         }
-        nodes {
+        allNodes {
           ${RUN_GRAPH_NODE}
+          parentId
+          track
+          depth
           tracks {
             ${RUN_GRAPH_TRACK}
-            nodes {
-              ${RUN_GRAPH_NODE}
-              tracks {
-                ${RUN_GRAPH_TRACK}
-                nodes {
-                  ${RUN_GRAPH_NODE}
-                  tracks {
-                    ${RUN_GRAPH_TRACK}
-                    nodes {
-                      ${RUN_GRAPH_NODE}
-                    }
-                  }
-                }
-              }
-            }
           }
         }
       }

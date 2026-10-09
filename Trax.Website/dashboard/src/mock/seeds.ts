@@ -1,8 +1,8 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import { operationFixtures } from "./fixtures";
-import { machineQueryResolvers, runGraph } from "./scenarios";
+import { machineQueryResolvers, runGraph, servedRunGraph, type ServedRunGraph } from "./scenarios";
 import { hashVariables } from "./variables-hash";
-import type { RunGraph, RunGraphNode } from "../types";
+import type { RunGraphNode } from "../types";
 
 // A small, stable seed for the WorkQueue list. Auto-mock ids change every call, which breaks
 // read-after-write (a cancelled row would lose its identity on refetch). Fixed ids survive
@@ -102,13 +102,13 @@ function capturedState(metadataId: number): string | undefined {
 const ranEveryStep = (node: RunGraphNode): RunGraphNode => ({
   ...node,
   state: node.state === "RESTORED" ? "COMPLETED" : node.state,
-  tracks: node.tracks?.map((t) => ({ ...t, nodes: t.nodes.map(ranEveryStep) })),
+  tracks: node.tracks.map((t) => ({ ...t, nodes: t.nodes.map(ranEveryStep) })),
 });
 
-function devRunGraph(metadataId: number): RunGraph {
+function devRunGraph(metadataId: number): ServedRunGraph {
   if (capturedState(metadataId) === "COMPLETED") {
     const resumed = runGraph(952);
-    return { ...resumed, metadataId, nodes: resumed.nodes.map(ranEveryStep) };
+    return servedRunGraph({ ...resumed, metadataId, nodes: resumed.nodes.map(ranEveryStep) });
   }
   return { ...runGraph(902), metadataId };
 }

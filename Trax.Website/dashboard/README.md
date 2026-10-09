@@ -14,7 +14,8 @@ User settings), Executions (keyset list with failure-class, external id, parent 
 parent and running-junction columns, live feed; detail with parent/child tree, the run's junction
 timeline read from `junctionRuns` and kept live by `onJunctionEvent`, its recorded decisions with
 withheld answers and tracks, a replay that was abandoned, its log oldest first, cancel/re-queue
-including ask-afresh, and its run graph from `runGraph`: the train's declared steps with where the
+including ask-afresh, and its run graph from `runGraph`: the train's declared steps at any depth (read
+from the flat `allNodes` list and rebuilt as a tree), with where the
 run left each, the checkpoints it stored and the steps a resumed run restored, never what a
 checkpoint holds, with Resume after the latest checkpoint and "Resume from here" on a node, both
 through `resumeExecution`), State machines (instances by machine, state and owner with exact

@@ -550,6 +550,55 @@ export const NoDeclaredGraph: Story = {
   },
 };
 
+// A run whose routing nests deeper than a query can follow nested tracks: every node is drawn, at
+// any depth, under the track it sits on, and the failed step six tracks deep offers "Resume from
+// here". A Parallel step's branches are lanes side by side, and a step the host stopped mid-junction
+// shows as interrupted.
+export const DeepRunGraph: Story = {
+  parameters: { route: "/executions/956" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    const lanes = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0";
+    const leaf = `${lanes}/Left/Check#0/Open/Pick#0/Deep/Leaf#0`;
+    await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
+    // The leaf sits under the Deep track of Pick, under the Open track of Check, in the Left lane.
+    const pick = nodeOf(graph, `${lanes}/Left/Check#0/Open/Pick#0`);
+    expect(pick.querySelector('[data-track="Deep"]')!.contains(nodeOf(graph, leaf))).toBe(true);
+    expect(nodeOf(graph, leaf)).toHaveAttribute("data-can-resume", "true");
+    expect(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" })).toBeInTheDocument();
+    // The Parallel step's branches, as lanes.
+    const parallel = nodeOf(graph, lanes);
+    const branches = [...parallel.querySelectorAll(":scope > ul > [data-branch]")].map((b) => b.getAttribute("data-branch"));
+    expect(branches).toEqual(["Left", "Right"]);
+    expect(within(parallel).getByRole("list", { name: "Branches of Lanes#0, run side by side" })).toBeInTheDocument();
+    const right = nodeOf(graph, `${lanes}/Right/Tally#0`);
+    expect(right).toHaveAttribute("data-state", "INTERRUPTED");
+    expect(within(right).getByText("interrupted")).toBeInTheDocument();
+    // The track the run did not take, dimmed.
+    expect(graph.querySelector('[data-track="Slow"]')).toHaveAttribute("data-taken", "false");
+  },
+};
+
+// Resuming at the deep step names it.
+export const ResumeFromDeepNode: Story = {
+  parameters: { route: "/executions/956" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    const leaf = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0";
+    try {
+      const graph = await graphOf(c);
+      await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
+      await userEvent.click(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" }));
+      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+      expect(getGlobalMockStore()!.getState().executionResumes).toHaveProperty("956");
+    } finally {
+      restore();
+    }
+  },
+};
+
 const runGraphError: MockSchemaOverrides = {
   resolvers: () => {
     const base = executionDetailScenario.resolvers as () => Record<string, Record<string, unknown>>;
