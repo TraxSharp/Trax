@@ -75,7 +75,7 @@ statement has to survive that:
 | a type change, a new constraint, a rename, a new enum type | inside a `DO $$ ... $$` block that checks the catalog first |
 | a row | `INSERT ... ON CONFLICT`, or an `UPDATE`/`DELETE` whose `WHERE` excludes rows already done |
 
-An index on `metadata`, `log` or `work_queue` is built `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, so
+An index on `metadata`, `log`, `work_queue` or `snapshot_draft` is built `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, so
 enqueue, dispatch and run writes carry on while it builds; a plain build blocks them for as long as
 it takes. That works because the script is not in a transaction. A concurrent build that fails leaves
 an `INVALID` index behind, which `IF NOT EXISTS` would skip forever, so before it runs the pending

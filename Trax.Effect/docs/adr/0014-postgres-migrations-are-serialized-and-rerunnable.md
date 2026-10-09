@@ -11,7 +11,7 @@ session advisory lock for the whole run, so hosts starting together against one 
 after another. Because a script that stops partway keeps what it did and is not journaled, it runs again
 from its first statement at the next start, so every script from 046 on is written to be run again: each
 statement is guarded (`IF NOT EXISTS`, `IF EXISTS`, or a `DO` block that checks first). An index on
-`metadata`, `log` or `work_queue` is built `CREATE INDEX CONCURRENTLY`, and the migrator drops an index
+`metadata`, `log`, `work_queue` or `snapshot_draft` is built `CREATE INDEX CONCURRENTLY`, and the migrator drops an index
 a script builds that an interrupted build left `INVALID` before it runs the scripts, so the script builds
 it again. An invalid index no script builds is not the migrator's, and it is left alone. The scripts run
 with a five-second `lock_timeout`, and when one gives up on its lock (`55P03`) the migrator runs the
@@ -66,7 +66,7 @@ The migrator also pins its sessions' time zone to UTC (`effect/0015`).
 ## Exemplars
 
 - `PostgresMigrationRerunTests` reads every script from 046 on and refuses a statement with no guard, and
-  a plain index build on `metadata`, `log` or `work_queue`.
+  a plain index build on `metadata`, `log`, `work_queue` or `snapshot_draft`.
 - `PostgresMigrationTests.cs` runs four migrations of an empty database at once, runs every script from
   046 on again over a migrated database, rebuilds an index left invalid by a failed concurrent build,
   leaves alone an invalid index no script builds, and, behind a held table lock, gives up after its
@@ -79,6 +79,8 @@ run changes anything.
 
 ## Changelog
 
+- **2026-10-08**: `snapshot_draft` joins the tables whose indexes are built concurrently: its drafts are
+  written all the time and it may hold millions of rows.
 - **2026-09-30**: The script session has a five-second `lock_timeout` with bounded retries, and the
   migrator drops only the invalid indexes a script builds.
 - **2026-09-29**: Recorded.
