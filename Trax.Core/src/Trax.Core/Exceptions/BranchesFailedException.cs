@@ -4,13 +4,27 @@ using Trax.Core.Monad;
 namespace Trax.Core.Exceptions;
 
 /// <summary>
-/// One branch of a <c>Parallel</c> step that failed.
+/// One branch of a <c>Parallel</c> step that failed. Only the step that failed makes one.
 /// </summary>
-/// <param name="Branch">The branch's path: the step's id and the branch's name, as in <c>Parallel#0/cocitation</c>.</param>
-/// <param name="Exception">What the branch failed with.</param>
-/// <param name="FailureClass">The class the failure carries from where it happened, or null when it carries none.</param>
 [Experimental(ExperimentalIds.Parallel)]
-public sealed record FailedBranch(string Branch, Exception Exception, FailureClass? FailureClass);
+public sealed record FailedBranch
+{
+    internal FailedBranch(string branch, Exception exception, FailureClass? failureClass)
+    {
+        Branch = branch;
+        Exception = exception;
+        FailureClass = failureClass;
+    }
+
+    /// <summary>The branch's path: the step's id and the branch's name, as in <c>Parallel#0/cocitation</c>.</summary>
+    public string Branch { get; }
+
+    /// <summary>What the branch failed with.</summary>
+    public Exception Exception { get; }
+
+    /// <summary>The class the failure carries from where it happened, or null when it carries none.</summary>
+    public FailureClass? FailureClass { get; }
+}
 
 /// <summary>
 /// A <c>Parallel</c> step failed: one or more of its branches did. The run fails with this one
@@ -28,11 +42,11 @@ public sealed record FailedBranch(string Branch, Exception Exception, FailureCla
 [Experimental(ExperimentalIds.Parallel)]
 public sealed class BranchesFailedException : TrainException
 {
-    /// <summary>Creates the failure of a <c>Parallel</c> step.</summary>
+    /// <summary>Creates the failure of a <c>Parallel</c> step. Only the step that failed makes one.</summary>
     /// <param name="step">The step's id.</param>
     /// <param name="failures">The branches that failed, first to fail first. At least one.</param>
     /// <param name="cancelledBySibling">The paths of the branches stopped because a sibling failed.</param>
-    public BranchesFailedException(
+    internal BranchesFailedException(
         string step,
         IReadOnlyList<FailedBranch> failures,
         IReadOnlyList<string> cancelledBySibling

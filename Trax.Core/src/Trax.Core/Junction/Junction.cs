@@ -50,9 +50,10 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     /// <summary>
     /// The token a junction of <paramref name="train"/> honours: the train's, or inside a
     /// <c>Parallel</c> branch, the branch's, which is cancelled when the run is and when a sibling
-    /// fails.
+    /// fails. Internal: Trax's own junction bases read it, and a consumer's junction reads
+    /// <see cref="CancellationToken"/>, which is set from it.
     /// </summary>
-    protected static CancellationToken TokenFor<TTrainIn, TTrainOut>(
+    internal static CancellationToken TokenFor<TTrainIn, TTrainOut>(
         Train<TTrainIn, TTrainOut> train
     ) => Monad.RunningBranch.TokenFor(train) ?? train.CancellationToken;
 

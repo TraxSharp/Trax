@@ -275,7 +275,6 @@ namespace Trax.Core.Exceptions
     [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
     public sealed class BranchesFailedException : Trax.Core.Exceptions.TrainException
     {
-        public BranchesFailedException(string step, System.Collections.Generic.IReadOnlyList<Trax.Core.Exceptions.FailedBranch> failures, System.Collections.Generic.IReadOnlyList<string> cancelledBySibling) { }
         public System.Collections.Generic.IReadOnlyList<string> CancelledBySibling { get; }
         public System.Collections.Generic.IReadOnlyList<Trax.Core.Exceptions.FailedBranch> Failures { get; }
         public string Step { get; }
@@ -296,10 +295,9 @@ namespace Trax.Core.Exceptions
     [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
     public sealed class FailedBranch : System.IEquatable<Trax.Core.Exceptions.FailedBranch>
     {
-        public FailedBranch(string Branch, System.Exception Exception, Trax.Core.Exceptions.FailureClass? FailureClass) { }
-        public string Branch { get; init; }
-        public System.Exception Exception { get; init; }
-        public Trax.Core.Exceptions.FailureClass? FailureClass { get; init; }
+        public string Branch { get; }
+        public System.Exception Exception { get; }
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; }
     }
     public enum FailureClass
     {
@@ -398,7 +396,6 @@ namespace Trax.Core.Junction
         public Trax.Core.Functional.Either<System.Exception, TOut> Result { get; }
         public virtual System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
         public abstract System.Threading.Tasks.Task<TOut> Run(TIn input);
-        protected static System.Threading.CancellationToken TokenFor<TTrainIn, TTrainOut>(Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
     }
 }
 namespace Trax.Core.Monad
