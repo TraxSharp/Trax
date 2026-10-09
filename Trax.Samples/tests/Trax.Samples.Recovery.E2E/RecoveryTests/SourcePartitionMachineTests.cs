@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.E2E.Utilities;
 using Trax.Samples.Recovery.Faults;
@@ -119,10 +120,19 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
             );
 
             // The failed run's outcome was applied once, under its own token; that token is gone, so it
-            // can never move the instance again, however late a delivery of it comes. Give the outcome
-            // sweep time to run and see that it does not.
-            // negative-wait: longer than the 5 second outcome sweep, for a move that must not come.
-            await Task.Delay(TimeSpan.FromSeconds(6));
+            // can never move the instance again, however late a delivery of it comes. Make that late
+            // delivery now, through the reconciler's own delivery, rather than wait for a sweep that
+            // may or may not have run on a slow machine.
+            var outcomes =
+                SharedRecoverySetup.Factory.Services.GetRequiredService<IInvokedRunOutcomes>();
+            (await outcomes.Deliver(failedRun.ExternalId))
+                .Should()
+                .BeNull("the failed run's token was cleared when its outcome was applied");
+            (await outcomes.Deliver(retryRun.ExternalId))
+                .Should()
+                .BeNull(
+                    "the retry's outcome was applied already, so a second delivery moves nothing"
+                );
             (await PartitionMachines.OfAsync(source, month))!
                 .State.Should()
                 .Be(nameof(PartitionState.Ingested));
@@ -191,15 +201,32 @@ public class SourcePartitionMachineTests : RecoveryTestFixture
     [Test]
     public async Task OnlyAnOperator_MayActOnAPartition()
     {
+        await DiscoverAsync(IndexFixture.Crossref);
+        await PartitionMachines.WaitUntilSettledAsync();
+        var before = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-02"))!;
+        before.State.Should().Be(nameof(PartitionState.NeedsReview));
+        var runsBefore = (await RunsOfAsync(before.Id)).Count;
+
         var response = await GraphQL.SendAsync(
             """
-            mutation { dispatch { partitionAction(input: { source: "OpenAlex", month: "2025-01", action: RETRY }) {
+            mutation { dispatch { partitionAction(input: { source: "Crossref", month: "2025-02", action: APPROVE }) {
               output { state problem } } } }
             """,
             Auth.DemoKeys.Viewer
         );
 
         response.HasErrors.Should().BeTrue("the viewer key holds no Operator role");
+        response
+            .Root.GetProperty("errors")[0]
+            .GetProperty("extensions")
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("TRAX_AUTHORIZATION", response.FirstErrorMessage);
+        var after = (await PartitionMachines.OfAsync(IndexFixture.Crossref, "2025-02"))!;
+        after.State.Should().Be(before.State, "a refused action moves nothing");
+        after.Version.Should().Be(before.Version);
+        (await RunsOfAsync(before.Id)).Should().HaveCount(runsBefore, "and queues nothing");
     }
 
     private static FaultInjector Faults =>

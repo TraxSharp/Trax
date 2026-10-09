@@ -6,6 +6,7 @@ using Trax.Samples.Recovery.Corpus;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Recovery.Faults;
 using Trax.Samples.Recovery.Trains.Topics;
+using Trax.Samples.Shared.Testing;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 
@@ -132,7 +133,23 @@ public class TopicMapTests : RecoveryTestFixture
         // Parallel node: attempt 1 failed on the gate's Yes track inside cocitation, attempt 2 ran it.
         foreach (var (attempt, state) in new[] { (first, "FAILED"), (second, "COMPLETED") })
         {
-            var parallel = (await RunGraph(attempt))
+            // The step rows trail the run's end by moments: wait for the graph to show the gate's
+            // step as it ended rather than read it once.
+            JsonElement graph = default;
+            (
+                await Polling.WaitUntilAsync(
+                    async () => GateStepState(graph = await RunGraph(attempt)) == state,
+                    TimeSpan.FromSeconds(10),
+                    TimeSpan.FromMilliseconds(100)
+                )
+            )
+                .Should()
+                .BeTrue(
+                    $"execution {attempt}'s graph should show the gate's Yes step {state}, but "
+                        + $"shows it {GateStepState(graph) ?? "missing"}"
+                );
+
+            var parallel = graph
                 .GetProperty("nodes")
                 .EnumerateArray()
                 .Single(n => n.GetProperty("kind").GetString() == "PARALLEL");
@@ -196,6 +213,32 @@ public class TopicMapTests : RecoveryTestFixture
         );
         response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
         return response.GetData("operations", "executionDetail");
+    }
+
+    // The state of the step on the co-citation gate's Yes track, or null when the graph has none.
+    private static string? GateStepState(JsonElement graph)
+    {
+        if (graph.ValueKind != JsonValueKind.Object)
+            return null;
+        var gate = graph
+            .GetProperty("nodes")
+            .EnumerateArray()
+            .Where(n => n.GetProperty("kind").GetString() == "PARALLEL")
+            .SelectMany(p => p.GetProperty("tracks").EnumerateArray())
+            .Where(t => t.GetProperty("name").GetString() == "cocitation")
+            .SelectMany(t => t.GetProperty("nodes").EnumerateArray())
+            .FirstOrDefault(n => n.GetProperty("kind").GetString() == "GATE");
+        if (gate.ValueKind != JsonValueKind.Object)
+            return null;
+        var yes = gate.GetProperty("tracks")
+            .EnumerateArray()
+            .FirstOrDefault(t => t.GetProperty("name").GetString() == "Yes");
+        return
+            yes.ValueKind == JsonValueKind.Object
+            && yes.TryGetProperty("nodes", out var nodes)
+            && nodes.GetArrayLength() > 0
+            ? nodes[0].GetProperty("state").GetString()
+            : null;
     }
 
     private async Task<JsonElement> RunGraph(long metadataId)
