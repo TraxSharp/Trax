@@ -348,6 +348,27 @@ public class ParallelTests : TestSetup
     }
 
     [Test]
+    public void Verification_RefusesBranchesReplacingAValueFromBeforeTheFork_ThroughATuple()
+    {
+        // Each branch's tuple carries a string, which was in Memory before the Parallel. At run
+        // time the two strings collide and neither is merged, so the join would read the old one.
+        Faults(new TupleOverwritingTrain())
+            .Where(f => f.Reason.Contains("produces 'System.String', which was in Memory before"))
+            .Should()
+            .HaveCount(2, $"a tuple's elements enter Memory like any output ({Adr})");
+    }
+
+    [Test]
+    public void Verification_RefusesOneBranchReplacingAValueFromBeforeTheFork_ThroughATuple()
+    {
+        Faults(new OneTupleOverwritingTrain())
+            .Should()
+            .Contain(f =>
+                f.Reason.Contains("produces 'System.String', which was in Memory before")
+            );
+    }
+
+    [Test]
     public void Verification_RefusesABranchReadingWhatOnlyASiblingProduces_EvenWhenTheContainerHasIt()
     {
         var faults = ChainVerification.Verify(
@@ -908,6 +929,39 @@ public class ParallelTests : TestSetup
         protected override Task<Either<Exception, int>> Junctions() =>
             Chain<Echo>()
                 .Parallel(p => p.Branch("a", b => b.Chain<Shorten>()))
+                .Chain<Length>()
+                .Resolve();
+    }
+
+    private sealed class ShortenWithEmbedding : Junction<string, (string, Embedding)>
+    {
+        public override Task<(string, Embedding)> Run(string input) =>
+            Task.FromResult((input[..1], new Embedding(1)));
+    }
+
+    private sealed class ShortenWithCoCitation : Junction<string, (string, CoCitation)>
+    {
+        public override Task<(string, CoCitation)> Run(string input) =>
+            Task.FromResult((input[..1], new CoCitation(1)));
+    }
+
+    private sealed class TupleOverwritingTrain : Train<string, int>
+    {
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("a", b => b.Chain<ShortenWithEmbedding>())
+                        .Branch("b", b => b.Chain<ShortenWithCoCitation>())
+                )
+                .Chain<Length>()
+                .Resolve();
+    }
+
+    private sealed class OneTupleOverwritingTrain : Train<string, int>
+    {
+        protected override Task<Either<Exception, int>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p => p.Branch("a", b => b.Chain<ShortenWithEmbedding>()))
                 .Chain<Length>()
                 .Resolve();
     }

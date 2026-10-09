@@ -564,7 +564,14 @@ public static partial class ChainVerification
                     branchWalk is null ? null : scope!.Track(parallelId!, declared.Name)
                 );
 
-                foreach (var written in Outputs(declared.Steps).Where(fork.Contains).Where(Merged))
+                // A tuple enters Memory as its elements, so an element is what it replaces.
+                foreach (
+                    var written in Outputs(declared.Steps)
+                        .SelectMany(o => o.IsTuple() ? o.GetGenericArguments() : [o])
+                        .Distinct()
+                        .Where(fork.Contains)
+                        .Where(Merged)
+                )
                     faults.Add(
                         Fault(
                             i,
