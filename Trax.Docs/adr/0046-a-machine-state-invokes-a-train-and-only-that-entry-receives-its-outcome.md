@@ -253,7 +253,7 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Post
 - `InvokesAuthorizationTests.Leaving_and_entering_again_cannot_pile_up_runs_that_are_still_executing`
 - `InvokesAuthorizationTests.Concurrent_entries_by_one_user_cannot_pass_the_limit_together`
 - `InvokesAuthorizationTests.System_owners_are_not_capped`
-- `InvokesAuthorizationTests.A_user_owned_machines_train_runs_as_the_entering_user`
+- `InvokesAuthorizationTests.A_user_owned_machines_train_is_authorized_against_the_entering_user_at_entry`
 - `InvokesAuthorizationTests.A_system_owned_machines_train_runs_under_the_trusted_scope`
 - `InvokesRuntimeRefusalTests.A_user_owned_instance_cannot_queue_a_broadcast_train`
 - `InvokesRuntimeRefusalTests.No_instance_can_queue_a_train_whose_output_is_sensitive`

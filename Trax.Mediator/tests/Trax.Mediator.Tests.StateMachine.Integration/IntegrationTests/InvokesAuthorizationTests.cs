@@ -201,7 +201,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     }
 
     [Test]
-    public async Task A_user_owned_machines_train_runs_as_the_entering_user()
+    public async Task A_user_owned_machines_train_is_authorized_against_the_entering_user_at_entry()
     {
         var user = NewUser();
 
