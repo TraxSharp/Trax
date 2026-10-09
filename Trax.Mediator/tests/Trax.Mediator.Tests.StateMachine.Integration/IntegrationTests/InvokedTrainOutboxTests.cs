@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Data.Testing;
@@ -32,9 +33,6 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
     private const string User = "u1";
 
     private static readonly TimeSpan NoticeTimeout = TimeSpan.FromSeconds(10);
-
-    // How long a dispatcher is watched for a notice that must not come.
-    private static readonly TimeSpan QuietWindow = TimeSpan.FromMilliseconds(500);
 
     private InvokeHost _host = null!;
 
@@ -365,14 +363,26 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         var listener = _host.Services.GetRequiredService<IQueuedWorkListener>();
         await using var subscription = await listener.SubscribeAsync(CancellationToken.None);
 
+        // On Postgres, the test's own session on the channel: once a query on it returns, every
+        // notification committed before that query began has reached it, so its count is exact.
+        await using var oracle =
+            provider == StoreProvider.Postgres
+                ? new NpgsqlConnection(PostgresSetup.ConnectionString)
+                : null;
+        var oracleNotices = 0;
+        if (oracle is not null)
+        {
+            await oracle.OpenAsync();
+            oracle.Notification += (_, _) => Interlocked.Increment(ref oracleNotices);
+            await using var listen = new NpgsqlCommand("LISTEN trax_queued_work", oracle);
+            await listen.ExecuteNonQueryAsync();
+        }
+
         ObservedLauncher.Fault = LaunchFault.AfterEnqueue;
         var refused = () => _host.EnterRunning(User, Guid.NewGuid(), GoodMachine.MachineId);
         await refused.Should().ThrowAsync<InvalidOperationException>();
-        var quiet = () => subscription.WaitAsync(new CancellationTokenSource(QuietWindow).Token);
-        await quiet
-            .Should()
-            .ThrowAsync<OperationCanceledException>("a rolled-back entry wakes nothing");
 
+        // Committed after the rollback, so its notice is the only one that can exist.
         ObservedLauncher.Fault = LaunchFault.None;
         await _host.EnterRunning(User, Guid.NewGuid(), GoodMachine.MachineId);
 
@@ -380,5 +390,29 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         await woken
             .Should()
             .NotThrowAsync("the committed entry tells a waiting dispatcher there is work");
+
+        if (oracle is not null)
+        {
+            await using var roundTrip = new NpgsqlCommand("SELECT 1", oracle);
+            await roundTrip.ExecuteScalarAsync();
+            oracleNotices
+                .Should()
+                .Be(1, "only the committed entry notifies; the rolled-back one never does");
+        }
+        else
+        {
+            // SQLite's notice is raised in process, as the transaction commits, so every notice the
+            // two entries could send has been raised by now: a second one would already be waiting.
+            using var none = new CancellationTokenSource();
+            var second = subscription.WaitAsync(none.Token);
+            second
+                .IsCompleted.Should()
+                .BeFalse("only the committed entry notifies; the rolled-back one never does");
+            await none.CancelAsync();
+            await FluentActions
+                .Awaiting(() => second)
+                .Should()
+                .ThrowAsync<OperationCanceledException>();
+        }
     }
 }
