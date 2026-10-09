@@ -93,7 +93,7 @@ branches together and one after another holds only while junctions follow that c
 
 ## Changelog
 
-- **2026-10-07**: Recorded.
 - **2026-10-08**: A cancellation a branch raises on its own fails the branch; only the run's token or its cancel flag
   (`CancellationRequestedException`) cancels the run. One junction instance found at run time in two branches fails the
   step. A branch that fails after its siblings were cancelled counts as cancelled by its sibling whatever it threw.
+- **2026-10-07**: Recorded.
