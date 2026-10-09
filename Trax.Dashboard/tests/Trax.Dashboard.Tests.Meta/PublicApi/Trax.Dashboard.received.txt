@@ -195,6 +195,26 @@ namespace Trax.Dashboard.Components.Pages.Data
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
         protected override System.Threading.Tasks.Task OnInitializedAsync() { }
     }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/state-machines/{Machine}/{Owner}/{InstanceId:guid}")]
+    public class StateMachineInstancePage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public StateMachineInstancePage() { }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public System.Guid InstanceId { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Machine { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string Owner { get; set; }
+        [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name="row")]
+        public long? RowId { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
+    [Microsoft.AspNetCore.Components.Route("/trax/data/state-machines")]
+    public class StateMachinesPage : Trax.Dashboard.Components.Shared.PollingComponentBase
+    {
+        public StateMachinesPage() { }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+    }
     [Microsoft.AspNetCore.Components.Route("/trax/data/work-queue/{WorkQueueId:long}")]
     public class WorkQueueDetailPage : Trax.Dashboard.Components.Shared.PollingComponentBase
     {
@@ -356,6 +376,22 @@ namespace Trax.Dashboard.Components.Shared
         public virtual System.Threading.Tasks.ValueTask DisposeAsync() { }
         protected override System.Threading.Tasks.Task OnInitializedAsync() { }
         protected override System.Threading.Tasks.Task OnParametersSetAsync() { }
+    }
+    public class RunGraphView : Microsoft.AspNetCore.Components.ComponentBase
+    {
+        public RunGraphView() { }
+        [Microsoft.AspNetCore.Components.EditorRequired]
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Trax.Api.DTOs.RunGraph Graph { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public Microsoft.AspNetCore.Components.EventCallback<string> OnResume { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public bool ResumeDisabled { get; set; }
+        [Microsoft.AspNetCore.Components.Parameter]
+        public string? ResumingNode { get; set; }
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        protected override void OnAfterRender(bool firstRender) { }
+        protected override bool ShouldRender() { }
     }
     public class StateTimeline : Microsoft.AspNetCore.Components.ComponentBase
     {

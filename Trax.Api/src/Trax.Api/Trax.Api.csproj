@@ -25,5 +25,10 @@
     <InternalsVisibleTo Include="Trax.Api.Tests" />
     <!-- The GraphQL subscriptions number lifecycle events through TrainLifecycleEvent.PublishSequence. -->
     <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+    <!-- The run graph (RunGraphs) is read the same way by GraphQL's runGraph and the dashboard's run page; it is
+         not a consumer API. -->
+    <InternalsVisibleTo Include="Trax.Dashboard" />
+    <InternalsVisibleTo Include="Trax.Dashboard.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.Stress" />
   </ItemGroup>
 </Project>

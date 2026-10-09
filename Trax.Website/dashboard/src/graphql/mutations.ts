@@ -162,6 +162,36 @@ export const REQUEUE_EXECUTION = gql`
   }
 `;
 
+// Resume a failed or cancelled run from a checkpoint instead of running every step again: at the
+// node `from` names (a run graph node id), or after its latest checkpoint when from is null. id is
+// the new work queue entry; a refusal is success: false with the reason.
+export const RESUME_EXECUTION = gql`
+  mutation ResumeExecution($id: Long!, $from: String) {
+    operations {
+      resumeExecution(id: $id, from: $from) {
+        success
+        message
+        id
+      }
+    }
+  }
+`;
+
+// The operator's one action on a state-machine instance: cancel the run a system-owned instance's
+// state waits on. A refusal is success: false with a typed outcome and the message.
+export const CANCEL_MACHINE_INSTANCE = gql`
+  mutation CancelMachineInstance($machine: String!, $ownerKind: SnapshotOwnerKind!, $id: UUID!) {
+    operations {
+      cancelMachineInstance(machine: $machine, ownerKind: $ownerKind, id: $id) {
+        success
+        outcome
+        message
+        state
+      }
+    }
+  }
+`;
+
 // Patch a manifest's mutable settings.
 export const UPDATE_MANIFEST = gql`
   mutation UpdateManifest($id: Long!, $input: UpdateManifestInput!) {

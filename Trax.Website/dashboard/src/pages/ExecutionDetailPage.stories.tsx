@@ -3,6 +3,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { ExecutionDetailPage } from "./ExecutionDetailPage";
 import { executionDetailScenario } from "../mock/scenarios";
 import { getGlobalMockStore } from "../mock/global-store";
+import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 import type { MockSchemaOverrides } from "../mock/build-mock-schema";
 
 const meta = {
@@ -39,6 +40,25 @@ export const CancelActive: Story = {
       await waitFor(() => expect(c.getByRole("heading", { name: "AlphaJob" })).toBeInTheDocument());
       await userEvent.click(c.getByRole("button", { name: "Cancel" }));
       await waitFor(() => expect(c.getByText("Cancellation requested")).toBeInTheDocument());
+    } finally {
+      restore();
+    }
+  },
+};
+
+// A run a step of a user's state-machine draft started is read-only to operators: its cancel is
+// refused with the API's reason, and nothing is requested.
+export const CancelUserDraftRunRefused: Story = {
+  parameters: { overlays: [userDraftRunsOverlay([903])] },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByRole("heading", { name: "AlphaJob" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("button", { name: "Cancel" }));
+      expect(await c.findByText(USER_OWNED_RUN_CANCEL_REFUSAL)).toBeInTheDocument();
+      expect(c.queryByText("Cancellation requested")).not.toBeInTheDocument();
+      expect(c.queryByText("Execution is no longer cancellable.")).not.toBeInTheDocument();
     } finally {
       restore();
     }
@@ -413,5 +433,267 @@ export const RunLogOldestFirst: Story = {
     expect(c.queryByLabelText("Run")).not.toBeInTheDocument();
     await userEvent.type(c.getByLabelText("Message contains"), "timed out");
     await waitFor(() => expect(within(table).getAllByRole("row").length).toBe(2));
+  },
+};
+
+// ── Run graph, checkpoints and resume ────────────────────────────────────
+
+const graphOf = async (c: ReturnType<typeof within>) => c.findByRole("region", { name: "Run graph" });
+const nodeOf = (graph: HTMLElement, id: string) => graph.querySelector(`[data-node-id="${id}"]`) as HTMLElement;
+
+// A failed run after a checkpoint: the checkpoint is marked (never what it holds), the failed step
+// shows its failure, the routing step's tracks sit under it, and the steps it can resume at offer
+// "Resume from here".
+export const RunGraphCheckpoints: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    await waitFor(() => expect(nodeOf(graph, "Findings#1")).toBeInTheDocument());
+    const g = within(graph);
+    expect(within(nodeOf(graph, "Findings#1")).getByText("checkpoint")).toBeInTheDocument();
+    expect(nodeOf(graph, "Findings#1")).toHaveAttribute("data-kind", "CHECKPOINT");
+    expect(within(nodeOf(graph, "Summarize#2")).getByText("failed")).toBeInTheDocument();
+    expect(within(nodeOf(graph, "Summarize#2")).getByText("Transient · TimeoutException")).toBeInTheDocument();
+    expect(g.getByRole("list", { name: "Tracks of Route#3" })).toBeInTheDocument();
+    expect(g.getAllByRole("button", { name: "Resume from here" })).toHaveLength(2);
+    expect(within(nodeOf(graph, "Fetch#0")).queryByRole("button")).not.toBeInTheDocument();
+    expect(c.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+  },
+};
+
+// Resume queues a run that skips past the latest checkpoint, beside Re-queue.
+export const ResumeAfterCheckpoint: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await userEvent.click(await c.findByRole("button", { name: "Resume" }));
+      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// "Resume from here" resumes at that node.
+export const ResumeFromNode: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      const graph = await graphOf(c);
+      await waitFor(() => expect(nodeOf(graph, "Publish#4")).toBeInTheDocument());
+      await userEvent.click(within(nodeOf(graph, "Publish#4")).getByRole("button", { name: "Resume from here" }));
+      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// A host that refuses the resume: its reason is shown and the page stays.
+export const ResumeRefused: Story = {
+  parameters: {
+    route: "/executions/902",
+    overlays: [
+      {
+        mutations: {
+          ResumeExecution: () => ({
+            operations: {
+              resumeExecution: {
+                success: false,
+                message: "Summarize needs Findings; no checkpoint before it holds one. Nothing was queued.",
+                id: null,
+              },
+            },
+          }),
+        },
+      },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await userEvent.click(await c.findByRole("button", { name: "Resume" }));
+      expect(await c.findByText(/no checkpoint before it holds one/)).toBeInTheDocument();
+      expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// The run that resumed: the steps before its resume point are restored, a Parallel step's branches
+// sit side by side, and a completed run offers no resume.
+export const ResumedRunRestored: Story = {
+  parameters: { route: "/executions/952" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    await waitFor(() => expect(nodeOf(graph, "Fetch#0")).toBeInTheDocument());
+    expect(nodeOf(graph, "Fetch#0")).toHaveAttribute("data-state", "RESTORED");
+    expect(within(nodeOf(graph, "Findings#1")).getByText("restored")).toBeInTheDocument();
+    expect(within(graph).getByRole("list", { name: "Branches of Signals#4, run side by side" })).toBeInTheDocument();
+    expect(graph.querySelector('[data-track="Short"]')).toHaveAttribute("data-taken", "true");
+    expect(within(graph).getByText("LegacyStep")).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(within(graph).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
+  },
+};
+
+// A resumed run names the run it resumed, linked, and the node it resumed at.
+export const ResumedRunNamesItsSource: Story = {
+  parameters: { route: "/executions/952" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
+    expect(within(resumes).getByRole("link", { name: "902" })).toHaveAttribute("href", "/executions/902");
+    expect(resumes).toHaveTextContent("902 at Summarize#2");
+  },
+};
+
+// A run that resumed after the latest checkpoint names no node.
+export const ResumedAfterLatestCheckpoint: Story = {
+  parameters: {
+    route: "/executions/952",
+    mock: {
+      resolvers: () => {
+        const r = (executionDetailScenario.resolvers as () => Record<string, Record<string, (...a: unknown[]) => unknown>>)();
+        return {
+          ...r,
+          OperationsQueries: {
+            ...r.OperationsQueries,
+            executionDetail: (...args: unknown[]) => ({
+              ...(r.OperationsQueries.executionDetail(...args) as object),
+              resumeAt: null,
+            }),
+          },
+        };
+      },
+    } satisfies MockSchemaOverrides,
+  },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
+    expect(resumes).toHaveTextContent("902 after its latest checkpoint");
+  },
+};
+
+// A run that was not resumed shows no Resumes field.
+export const NotResumedHasNoResumesField: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    expect(c.queryByText("Resumes", { selector: "dt" })).not.toBeInTheDocument();
+  },
+};
+
+// A run with no saved input cannot be resumed, as it cannot be re-queued: the checkpoint still
+// shows, but nothing offers a resume.
+export const NoInputNoResume: Story = {
+  parameters: { route: "/executions/954" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    await waitFor(() => expect(nodeOf(graph, "Findings#1")).toBeInTheDocument());
+    expect(within(nodeOf(graph, "Findings#1")).getByText("checkpoint")).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(within(graph).queryByRole("button", { name: "Resume from here" })).not.toBeInTheDocument();
+  },
+};
+
+// A train this host has no declared graph for says so.
+export const NoDeclaredGraph: Story = {
+  parameters: { route: "/executions/900" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    expect(await within(graph).findByText(/no declared graph for this train/)).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+  },
+};
+
+// A run whose routing nests deeper than a query can follow nested tracks: every node is drawn, at
+// any depth, under the track it sits on, and the failed step six tracks deep offers "Resume from
+// here". A Parallel step's branches are lanes side by side, and a step the host stopped mid-junction
+// shows as interrupted.
+export const DeepRunGraph: Story = {
+  parameters: { route: "/executions/956" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    const lanes = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0";
+    const leaf = `${lanes}/Left/Check#0/Open/Pick#0/Deep/Leaf#0`;
+    await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
+    // The leaf sits under the Deep track of Pick, under the Open track of Check, in the Left lane.
+    const pick = nodeOf(graph, `${lanes}/Left/Check#0/Open/Pick#0`);
+    expect(pick.querySelector('[data-track="Deep"]')!.contains(nodeOf(graph, leaf))).toBe(true);
+    expect(nodeOf(graph, leaf)).toHaveAttribute("data-can-resume", "true");
+    expect(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" })).toBeInTheDocument();
+    // The Parallel step's branches, as lanes.
+    const parallel = nodeOf(graph, lanes);
+    const branches = [...parallel.querySelectorAll(":scope > ul > [data-branch]")].map((b) => b.getAttribute("data-branch"));
+    expect(branches).toEqual(["Left", "Right"]);
+    expect(within(parallel).getByRole("list", { name: "Branches of Lanes#0, run side by side" })).toBeInTheDocument();
+    const right = nodeOf(graph, `${lanes}/Right/Tally#0`);
+    expect(right).toHaveAttribute("data-state", "INTERRUPTED");
+    expect(within(right).getByText("interrupted")).toBeInTheDocument();
+    // The track the run did not take, dimmed.
+    expect(graph.querySelector('[data-track="Slow"]')).toHaveAttribute("data-taken", "false");
+  },
+};
+
+// Resuming at the deep step names it.
+export const ResumeFromDeepNode: Story = {
+  parameters: { route: "/executions/956" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    const leaf = "Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0";
+    try {
+      const graph = await graphOf(c);
+      await waitFor(() => expect(nodeOf(graph, leaf)).toBeInTheDocument());
+      await userEvent.click(within(nodeOf(graph, leaf)).getByRole("button", { name: "Resume from here" }));
+      expect(await c.findByText("Execution queued to resume.")).toBeInTheDocument();
+      expect(getGlobalMockStore()!.getState().executionResumes).toHaveProperty("956");
+    } finally {
+      restore();
+    }
+  },
+};
+
+const runGraphError: MockSchemaOverrides = {
+  resolvers: () => {
+    const base = executionDetailScenario.resolvers as () => Record<string, Record<string, unknown>>;
+    const r = base();
+    return {
+      ...r,
+      OperationsQueries: {
+        ...r.OperationsQueries,
+        runGraph: () => {
+          throw new Error("Simulated run graph read failure");
+        },
+      },
+    };
+  },
+};
+
+// A run graph that could not be read says so in its section, rather than looking like a run that
+// cannot be resumed; the rest of the page still shows.
+export const RunGraphReadFailed: Story = {
+  parameters: { route: "/executions/902", mock: runGraphError },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    expect(await within(graph).findByText(/Simulated run graph read failure/)).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument();
   },
 };

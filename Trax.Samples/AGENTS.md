@@ -22,9 +22,9 @@ if your work contradicts one, say so rather than silently overriding it.
 | `docker-compose.yml` | [0005](./docs/adr/0005-sample-infrastructure-listens-on-loopback-only.md), every published port binds `127.0.0.1` because the credentials sit beside it |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-one name `samples`, three of them superseded: executable guards, the
+index lists them by folder. Twenty-three name `samples`, three of them superseded: executable guards, the
 dependency direction, the three test conventions, the canonical train name, the documentation
-lints, test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax
+lints, test frameworks staying out of shipped libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax
 owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced
 package, a chain being a declaration (`0016`), a demo credential carrying the
 `do-not-use-in-production` marker and existing only in Development (`0035`), and one repository releasing at one version (`0042`).
@@ -81,6 +81,12 @@ repository, and the pack stamps the release version into the template.
 
 `tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs` is the consumer adoption
 path for the shipped guard packages, and has no test bodies by design.
+
+`tests/Trax.Samples.Tests.Chains/` holds a golden of every sample train's declared graph
+(`ChainGraph`), one `UnitTests/Goldens/<TrainName>.chain.json` per train. A change to a train's
+chain fails it and writes `<TrainName>.chain.json.received` beside the golden; review it and
+rename it over the golden. A new sample project with a train needs a reference there, and the
+test says so.
 
 The census is on `tests/Trax.Samples.Tests.Meta/`, the folder the `adr-guard` job passes as
 `--census-root`: every class there whose name ends in `Tests` is either credited to an ADR or

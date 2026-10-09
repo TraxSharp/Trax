@@ -145,6 +145,12 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
     /// </summary>
     public DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DbSet for the states trains stored at a declared <c>Checkpoint&lt;TState&gt;()</c>,
+    /// from which a later run resumes.
+    /// </summary>
+    public DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; set; }
+
     #endregion
 
     /// <summary>
@@ -179,6 +185,7 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         Models.JunctionRun.PersistentJunctionRun.OnModelCreating(modelBuilder);
         Models.SnapshotDraft.PersistentSnapshotDraft.OnModelCreating(modelBuilder);
         Models.EffectClaim.PersistentEffectClaim.OnModelCreating(modelBuilder);
+        Models.Checkpoint.PersistentCheckpoint.OnModelCreating(modelBuilder);
     }
 
     /// <summary>
@@ -378,6 +385,29 @@ public class DataContext<TDbContext>(DbContextOptions<TDbContext> options)
         // automatically via snapshot comparison.
         if (entry.State == EntityState.Detached)
             entry.State = model.Id > 0 ? EntityState.Modified : EntityState.Added;
+        else if (entry.State == EntityState.Unchanged || entry.State == EntityState.Modified)
+            WriteProgressWithTheOutcome(model);
+    }
+
+    /// <summary>
+    /// Makes a run's terminal write carry its junction progress columns whatever this context
+    /// thinks they hold. Junction progress writes them through a context of its own, so this one
+    /// still has the value it loaded, usually null, as their original: clearing them here would
+    /// look like no change and be left out of the update, leaving a run that ended mid-junction
+    /// (cancelled, or a branch stopped by a failing sibling) showing a junction as running.
+    /// </summary>
+    private void WriteProgressWithTheOutcome(IModel model)
+    {
+        if (
+            model is not Metadata metadata
+            || metadata.TrainState
+                is not (TrainState.Completed or TrainState.Failed or TrainState.Cancelled)
+        )
+            return;
+
+        var entry = Entry(metadata);
+        entry.Property(m => m.CurrentlyRunningJunction).IsModified = true;
+        entry.Property(m => m.JunctionStartedAt).IsModified = true;
     }
 
     /// <inheritdoc />

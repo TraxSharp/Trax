@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.ChatService.Trains.GetChatRoomPeople.GetChatRoomPeopleTrain",
+  "input": "GetChatRoomPeopleInput",
+  "output": "GetChatRoomPeopleOutput",
+  "nodes": [
+    {
+      "id": "FetchRoomPeopleJunction#0",
+      "kind": "Chain",
+      "junction": "FetchRoomPeopleJunction",
+      "in": "GetChatRoomPeopleInput",
+      "out": "GetChatRoomPeopleOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GetChatRoomPeopleOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -4,9 +4,9 @@ using Trax.Samples.Recovery.Faults;
 namespace Trax.Samples.Recovery.Trains.Research.Junctions;
 
 /// <summary>
-/// Writes the report from whatever the tracks found. This is the step the page can crash: it fails
-/// after both model calls, so the retry has two answers to replay. Otherwise the run is over, so
-/// anything still armed for it is removed.
+/// Writes the report from whatever the tracks found. This is the step the page can crash: it comes
+/// after the checkpoint, so the retry resumes here and runs only this step, from the stored findings.
+/// Otherwise the run is over, so anything still armed for it is removed.
 /// </summary>
 public class Summarize(FaultInjector faults, DemoPace pace)
     : EffectJunction<CheckedFindings, ResearchReport>

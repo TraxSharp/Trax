@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -68,6 +69,9 @@ public class DuplicateDeliveryTests : TestSetup
         }
     }
 
+    [LeavesStuckRuns(
+        "Seeds the run already in progress, as another runner's claim would leave it, for the duplicate to skip."
+    )]
     [Test]
     [TestCase(TrainState.InProgress)]
     [TestCase(TrainState.Completed)]

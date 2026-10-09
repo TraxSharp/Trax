@@ -740,7 +740,10 @@ retry that replays; it is null when the run replays nothing, a run queued to ask
 **Replays Decisions Of**. `replayAbandoned` (`Boolean!`) is `true` when the run was queued to replay
 `replayDecisionsOf` and asked its deciders afresh instead, because that replay could not be honoured;
 `false` for a run that replayed or was never queued to. The decisions themselves are on
-[`decisions`](#decisions).
+[`decisions`](#decisions). `resumeFrom` (`Long`) is the failed or cancelled execution this run
+resumed from a [checkpoint](/docs/sdk-reference/train-methods/checkpoint), shown on the dashboard as
+**Resumes**, and `resumeAt` (`String`) the step it resumed at, null when it resumed after the latest
+checkpoint; both are null for a run that ran from the top.
 
 `input` and `output` can hold credentials. They are on this single-row read and on no list; see
 [Train inputs and the operations gate](#train-inputs-and-the-operations-gate).
@@ -837,6 +840,194 @@ refused the other. The rows trail the live subscription by moments: a client fol
 execution subscribes first, then reads this, and keeps for each position whichever is further
 along.
 
+`nodeId` is the id of the declared node the step ran for, as [`declaredChain`](#declaredchain)
+names it: a junction carries its own node's id, a question the id of the `Decide` step that asked
+it, a route the id of its routing step. It is null for a step recorded before node ids were, and
+wherever the step's name is withheld, because the id names the track the step sits on.
+
+`branchPath` is the path of the `Parallel` branch the step ran in, as in `Parallel#0/cocitation`,
+or null outside any branch. Branches run side by side, so their steps interleave by position; group
+them by `branchPath` to read one branch on its own. It is withheld wherever the step's name is, for
+the same reason as `nodeId`: a branch inside a track names the track.
+
+---
+
+### declaredChain
+
+The declared chain of a registered train as a graph: every step in the order the chain declares it,
+each routing step's tracks and each `Parallel` step's branches with their own steps, and a hash that
+changes whenever the chain does.
+Nothing runs to read it; see [ChainGraph](/docs/sdk-reference/train-methods/chain-graph).
+
+```graphql
+query {
+  operations {
+    declaredChain(train: "Acme.Orders.IShipOrderTrain") {
+      train
+      input
+      output
+      hash
+      refusals
+      nodes {
+        id
+        kind
+        junction
+        in
+        out
+        opaque
+        tracks { name description isFallback nodes { id kind junction opaque } }
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `train` | `String!` | none | The train's canonical name, the interface's full name, as `execution.name` carries it |
+
+**Returns**: `ChainGraph`, or null when no registered train has that name, or its chain cannot be
+read outside a request (it needs a dependency only a request supplies). Only registered trains are
+looked up, by name, so no name a caller sends makes the host load a type. `kind` is a
+`ChainStepKind` (`CHAIN`, `I_CHAIN`, `SHORT_CIRCUIT`, `EXTRACT`, `RESOLVE`, `SEED`, `DECIDE`,
+`SWITCH`, `GATE`, `SCALE`, `PARALLEL`), and `opaque` is true for a step whose junction is decided only at run
+time. A node's `id` names the step and the routing step and track it sits in, as in
+`Switch<Lane>#0/Fast/Ship#0`, and is what a recorded step's `nodeId` refers to. In C#, each entry of `allNodes` is a
+`DeclaredNode` (`Trax.Api.DTOs`) and each track a `DeclaredTrack`.
+
+A `PARALLEL` step's `tracks` are its branches, one per `Branch` in declared order, with
+`isFallback` false and no `description`. Unlike a routing step's tracks, every branch runs. A step
+inside a branch has the branch in its id, as in `Parallel#0/cocitation/ScoreCoCitation#0`, and a
+`Parallel` or routing step inside a branch nests the same way.
+
+`allNodes` lists every step of the graph at any depth in one list, each with its `parentId`,
+`track` and `depth`, and its tracks' `name`, `description` and `isFallback` without their steps, as
+[`runGraph`'s `allNodes`](#rungraph) does: read it when the chain may nest deeper than a query can
+follow nested `tracks { nodes }` fields.
+
+The graph names the train's types, so it answers to the operations gate and nothing outside it.
+
+---
+
+### runGraph
+
+One execution drawn on its train's declared chain: each node with the steps the run recorded for it
+and where it stands, the track each routing step took, each `Parallel` step's branches, and the
+steps that match no node. It reads
+the run's first 500 steps through `JunctionRunQueries.ForRun`, as [`junctionRuns`](#junctionruns)
+does, and places them by `nodeId` through `RunGraphs.Match`, which the dashboard's run graph calls
+too.
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 100) {
+      train
+      hasGraph
+      hash
+      moreSteps
+      canResume
+      nodes {
+        id
+        kind
+        state
+        replayed
+        trackTaken
+        canResume
+        checkpointed
+        steps { position state failureClass }
+        tracks { name taken nodes { id state } }
+      }
+      unmatchedSteps { position name nodeId state }
+    }
+  }
+}
+```
+
+**Reading a graph at any depth.** `nodes` and each track's `nodes` nest, so a query that follows
+them repeats `tracks { nodes { ... } }` once per level, and the server refuses a query that repeats
+the same fields past a few levels (HotChocolate's field-cycle limit). A chain can nest `Parallel`
+and routing steps deeper than that. `allNodes` lists every node of the graph at any depth in one
+list instead: depth first, each node before the nodes on its tracks, and each track's nodes in
+declared order. Each node carries `parentId` (the routing or `Parallel` step whose track it sits on,
+null at the top level), `track` (that track's or branch's name) and `depth` (0 at the top level),
+so a client rebuilds the tree by grouping the list on `parentId` and `track`, in list order. Select
+only a node's tracks' own fields there (`name`, `taken`), not their `nodes`:
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 100) {
+      hasGraph
+      allNodes {
+        id kind state parentId track depth
+        tracks { name taken }
+      }
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metadataId` | `Long!` | none | The execution's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
+
+**Returns**: `RunGraph`, or null for an id with no execution. In C# its nodes are `RunGraphNode`s, their
+tracks `RunGraphTrack`s, and a node's `state` a `RunNodeState` (all in `Trax.Api.DTOs`). A node's `state` is one of:
+
+| State | Meaning |
+|-------|---------|
+| `COMPLETED`, `FAILED`, `CANCELLED`, `IN_PROGRESS` | From the steps recorded for it, the worst of them |
+| `INTERRUPTED` | A step recorded for it started and never recorded its end, and the run has ended: the host stopped mid-junction, or the step's end event was dropped |
+| `SKIPPED` | It sits on a track the run did not take |
+| `NOT_REACHED` | Nothing was recorded for it |
+| `NOT_RECORDED` | An `Extract`, `Seed` or `Resolve`, which records nothing when it runs, or a `CHECKPOINT` the run did not store |
+| `WITHHELD` | It comes after a route whose answer is withheld, so the steps recorded there name no node |
+| `RESTORED` | The run resumed from a checkpoint, and the node comes before the point it resumed at: the run skipped it, recorded nothing for it, and took what the steps before the checkpoint produced from the checkpoint |
+
+A `CHECKPOINT` node records no step of its own: it is `COMPLETED` once the run stored it, unless a
+withheld route came before it.
+
+A junction whose end event was dropped keeps the `IN_PROGRESS` row its start wrote (see
+[`junctionRuns`](#junctionruns)). The graph reads each step with the run's own state, so once the
+execution has completed, failed or been cancelled, such a node is `INTERRUPTED` rather than
+`IN_PROGRESS`: nothing is still running in a run that has ended. While the run runs, it stays
+`IN_PROGRESS`.
+
+`trackTaken` is the route's recorded answer, or the one track holding recorded steps when the
+answer is missing.
+
+A `PARALLEL` node runs every branch, so its `tracks` are its branches, none is `SKIPPED` for
+another having run, and each branch's nodes stand as the run recorded them. Every branch is `taken`
+once the step has started, and `trackTaken` is always null. The step records nothing of its own, so
+its `state` is read from its branches: `FAILED` when any branch failed, `CANCELLED` when one was
+stopped (a sibling's failure cancels the others, as does cancelling the run), `IN_PROGRESS` while
+any branch has a step running or still to reach, `COMPLETED` once every branch has finished, and
+`NOT_REACHED` when no branch has started. A branch has finished only when every node on it has, at
+any depth along the tracks its routing steps took: a branch that ends in a routing step holds the
+`Parallel` step open until the track the route took has run. Once the run has ended, a step that
+would still be `IN_PROGRESS` is `INTERRUPTED`. A route whose answer is withheld inside one branch
+withholds that branch's later nodes and every node after the join, but not the other branches,
+which ran on their own. The graph is the chain as the host declares it now, so a step recorded before
+node ids were, after a withheld route, or for a node the chain no longer declares, is listed in
+`unmatchedSteps` rather than dropped. `hasGraph` is false when the host has no graph for the train;
+`nodes` is then empty and every step is unmatched. `moreSteps` says the run recorded more than 500
+steps, so a later node can show as not reached when it ran.
+
+**Where a run can resume.** For a failed or cancelled execution, and for one that itself
+resumed, the read also asks the [resume check](/docs/sdk-reference/train-methods/checkpoint#what-can-resume-where)
+once, over the run's checkpoints and those of the runs it resumed, rather than once per node.
+`canResume` on a node is true when
+[`resumeExecution(id, from)`](/docs/sdk-reference/graphql-api/mutations#resumeexecution) can resume
+the run there, and `canResume` on the graph when it can resume after the latest checkpoint, with
+`from` omitted. Both are false for a run that did not fail or was not cancelled, and for one a state
+machine's step started. The mutation can still refuse a run the graph offers, for its saved input or
+a resume already queued, with the reason. `checkpointed` is true on a node holding a checkpoint the
+run can resume from. The graph says only that a checkpoint exists and where: what it holds, and the
+tracks stored with it, are on no operator surface.
+
+It answers to the operations gate, as `junctionRuns` does.
+
 ---
 
 ### decisions
@@ -915,6 +1106,157 @@ about a millisecond and a page of 500 deep into a 2,000-decision run in under 10
 The stored rows keep every value either way, because a requeue replays from them; only this read
 leaves them out, by the rule [`junctionRuns`](#junctionruns) follows. It answers to the operations
 gate like every field here.
+
+---
+
+### machineInstances
+
+The instances of every [persisted state machine](/docs/statemachine) on the host, system-owned and
+users' drafts alike, newest first by when each was last written. It reads through
+`IOperationsService.GetMachineInstancesAsync` and `CountMachineInstancesAsync`, the reads the
+dashboard's [State Machines page](/docs/dashboard#state-machines) makes.
+
+```graphql
+query {
+  operations {
+    machineInstances(machine: "fulfilment", state: "AwaitingPayment", ownerKind: SYSTEM, take: 25) {
+      items {
+        rowId
+        machine
+        ownerKind
+        id
+        state
+        version
+        createdAt
+        updatedAt
+        hasLiveInvokedRun
+      }
+      totalCount
+      isCountCapped
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `machine` | `String` | `null` | Only instances of this machine, by its id, matched exactly |
+| `state` | `String` | `null` | Only instances in this state, matched exactly |
+| `ownerKind` | `SnapshotOwnerKind` | `null` | `SYSTEM` for instances created from code, `USER` for users' drafts; null for both |
+| `skip` | `Int!` | `0` | Offset; above 10,000 is refused with `TRAX_SKIP_TOO_DEEP`, and the service the dashboard reads through refuses it too |
+| `take` | `Int!` | `25` | Page size, from 1 to 500 |
+
+**Returns**: `PagedResultOfMachineInstance!`. There is no keyset cursor (`nextCursor` is always
+null), because the list is ordered by a time that moves as instances advance: page with `skip`. The
+total counts at most 10,000 instances; past that it reads 10,000 with `isCountCapped` true, and
+[`machineInstanceCounts`](#machineinstancecounts) has the exact numbers. At two million instances
+each page, filtered or not, reads in a few milliseconds.
+
+#### MachineInstance fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rowId` | `Long!` | The row's key. Pass it to [`machineInstance`](#machineinstance) to read a user's draft |
+| `machine` | `String!` | The machine's id |
+| `ownerKind` | `SnapshotOwnerKind!` | `SYSTEM` or `USER` |
+| `id` | `UUID!` | The instance or draft id |
+| `state` | `String!` | The state it is in |
+| `version` | `Int!` | The machine definition version it was last written under |
+| `createdAt` | `DateTime` | When it was created; null for one written before Trax recorded it |
+| `updatedAt` | `DateTime!` | When it was last written |
+| `hasLiveInvokedRun` | `Boolean!` | `true` while its state has [invoked a train](/docs/statemachine/invoking-trains) and waits for the run's outcome |
+
+No field carries an instance's context, and none names the user who owns a draft. The context is an
+untyped JSON object, so nothing could mask the sensitive parts of it; an operator sees where an
+instance is, when it got there and which kind of owner holds it, never what it holds
+([ADR 0046](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md)).
+A user reaches their own drafts only through the `stateMachine` mutations, never through this list.
+
+---
+
+### machineInstance
+
+One instance, or null when none matches. The owner kind is always named, because a user can hold a
+draft under the same id as a system instance. A system instance is unique by machine and id. A
+user's draft also needs its `rowId`, because several users can each hold a draft under one id and an
+operator is not shown whose a draft is.
+
+```graphql
+query {
+  operations {
+    system: machineInstance(machine: "fulfilment", ownerKind: SYSTEM, id: "6f9619ff-8b86-d011-b42d-00c04fc964ff") {
+      state
+      hasLiveInvokedRun
+    }
+    draft: machineInstance(machine: "checkout", ownerKind: USER, id: "6f9619ff-8b86-d011-b42d-00c04fc964ff", rowId: 42) {
+      state
+      updatedAt
+    }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `machine` | `String!` | none | The machine's id. Blank is refused with `TRAX_INVALID_ARGUMENT` |
+| `ownerKind` | `SnapshotOwnerKind!` | none | Who owns the instance |
+| `id` | `UUID!` | none | The instance or draft id |
+| `rowId` | `Long` | `null` | The row's key from the list. Required for `USER` (refused with `TRAX_ROW_ID_REQUIRED` without it); for `SYSTEM`, when given, it must match too |
+
+**Returns**: `MachineInstanceDetail`, with the fields of [`MachineInstance`](#machineinstance-fields)
+and the train runs the instance [invoked](/docs/statemachine/invoking-trains), which only this
+lookup reads:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `invokedRuns` | `[MachineInstanceInvokedRun!]!` | The runs, newest first, at most 50: `id`, `externalId`, `name` (the train), `trainState`, `startTime`, `endTime`, `failureClass`, `cancellationRequested`, and `isLive` for the run the instance's state waits on. Never a run's input or output; [`executionDetail(id)`](#executiondetail) reads the rest, masked |
+| `isInvokedRunsCapped` | `Boolean!` | True when the instance invoked more than 50 runs |
+| `queuedInvokedRunEntryId` | `Long` | The work queue entry of the run the state waits on while it is still queued, and so not yet a run |
+
+A system instance lists every run it invoked. A user's draft lists only its live run: a run
+records the machine, instance id and owner kind that queued it, not the user, and several users
+can each hold a draft under one id, so listing every run under the id could show another user's.
+
+```graphql
+query {
+  operations {
+    machineInstance(machine: "fulfilment", ownerKind: SYSTEM, id: "6f9619ff-8b86-d011-b42d-00c04fc964ff") {
+      state
+      invokedRuns { id name trainState startTime endTime failureClass isLive }
+      queuedInvokedRunEntryId
+    }
+  }
+}
+```
+
+The one operator action on an instance is
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance).
+
+---
+
+### machineInstanceCounts
+
+How many instances each machine has in each state, for each owner kind, ordered by machine, state
+and owner kind. Exact. It reads through `IOperationsService.GetMachineInstanceStateCountsAsync`,
+the counts the dashboard's State Machines page shows.
+
+```graphql
+query {
+  operations {
+    machineInstanceCounts(machine: "fulfilment") { machine state ownerKind count }
+  }
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `machine` | `String` | `null` | Only this machine's counts; null for every machine |
+
+**Returns**: `[MachineInstanceCount!]!`, each with `machine: String!`, `state: String!`,
+`ownerKind: SnapshotOwnerKind!` and `count: Long!`. On Postgres the counts are read from the
+listing's index alone: about 120 ms over two million instances. Each host keeps the counts it read
+for 5 seconds, per `machine` filter, and callers asking meanwhile share that read, so every
+dashboard and API client polling them costs one read, not one each; a count can be that old.
 
 ---
 

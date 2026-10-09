@@ -108,6 +108,22 @@ namespace Trax.Mediator.Extensions
         public static Microsoft.Extensions.DependencyInjection.IServiceCollection RegisterServiceTrains(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, Microsoft.Extensions.DependencyInjection.ServiceLifetime serviceLifetime = 2, params System.Reflection.Assembly[] assemblies) { }
     }
 }
+namespace Trax.Mediator.Services.ChainVerification
+{
+    public sealed class DeclaredTrainChain : System.IEquatable<Trax.Mediator.Services.ChainVerification.DeclaredTrainChain>
+    {
+        public DeclaredTrainChain(System.Type Train, Trax.Core.Monad.ChainRecorder Chain, System.Type Input, System.Type Output) { }
+        public Trax.Core.Monad.ChainRecorder Chain { get; init; }
+        public System.Type Input { get; init; }
+        public System.Type Output { get; init; }
+        public System.Type Train { get; init; }
+    }
+    public interface ITrainChainGraphs
+    {
+        Trax.Core.Monad.ChainGraph? Find(string train);
+        Trax.Mediator.Services.ChainVerification.DeclaredTrainChain? FindDeclared(string train);
+    }
+}
 namespace Trax.Mediator.Services.ConcurrencyLimiter
 {
     public class ConcurrencyLimiter : Trax.Mediator.Services.ConcurrencyLimiter.IConcurrencyLimiter
@@ -218,7 +234,9 @@ namespace Trax.Mediator.Services.TrainExecution
     {
         public QueueTrainOptions() { }
         public int Priority { get; init; }
-        public long? ReplayDecisionsOf { get; init; }
+        public long? ReplayDecisionsOf { get; }
+        public string? ResumeAt { get; }
+        public long? ResumeFrom { get; }
         public System.DateTime? ScheduledAt { get; init; }
     }
     public class QueueTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.QueueTrainResult>

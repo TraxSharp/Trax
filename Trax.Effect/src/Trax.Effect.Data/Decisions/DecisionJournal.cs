@@ -10,8 +10,10 @@ using Trax.Effect.Enums;
 using Trax.Effect.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.RecordedDecision;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Services.Decisions;
 using Trax.Effect.Services.JunctionEvents;
+using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.Utils;
 
 namespace Trax.Effect.Data.Decisions;
@@ -77,8 +79,10 @@ public sealed class DecisionJournal(
     // every run that makes one.
     private readonly ILogger _logger = logger ?? NullLogger<DecisionJournal>.Instance;
 
-    private static readonly IReadOnlyDictionary<(string, int), RecordedAnswer> NothingToReplay =
-        new Dictionary<(string, int), RecordedAnswer>();
+    private static readonly IReadOnlyDictionary<
+        (string, string, int),
+        RecordedAnswer
+    > NothingToReplay = new Dictionary<(string, string, int), RecordedAnswer>();
 
     /// <summary>
     /// The row names each train has begun recorded runs under on this host, keyed by the name
@@ -144,7 +148,7 @@ public sealed class DecisionJournal(
             cancellationToken
         );
 
-        run.Latest[record.QuestionKey] = record.Id;
+        run.Decided(record.QuestionKey, record.Id);
     }
 
     private void LogDecided(DecisionMade decision, bool sensitive, bool onWithheldTrack)
@@ -226,6 +230,7 @@ public sealed class DecisionJournal(
         var record = new RecordedDecision
         {
             MetadataId = metadataId,
+            BranchPath = BranchPaths.Current,
             QuestionKey = refusal.Question.Key,
             Occurrence = refusal.Occurrence,
             Fingerprint = refusal.Fingerprint,
@@ -342,6 +347,7 @@ public sealed class DecisionJournal(
         new()
         {
             MetadataId = metadataId,
+            BranchPath = BranchPaths.Current,
             QuestionKey = decision.Question.Key,
             Occurrence = decision.Occurrence,
             Fingerprint = decision.Fingerprint,
@@ -387,14 +393,31 @@ public sealed class DecisionJournal(
         long recordId;
 
         // A decision written while the run's flow was lost is in the table but not in Latest.
-        if (run.Latest.TryGetValue(key, out var latest))
+        if (run.TryLatest(key, out var latest))
             recordId = latest;
         else if (await LatestRecorded(routing, metadataId, key, cancellationToken) is { } written)
             recordId = written;
         else
             return;
 
-        await Write(
+        // Branches that route on one decision made before they forked add to the same row.
+        await run.Routing.WaitAsync(cancellationToken);
+        try
+        {
+            await AddRoute(routing, recordId, cancellationToken);
+        }
+        finally
+        {
+            run.Routing.Release();
+        }
+    }
+
+    private Task AddRoute(
+        TrackRouted routing,
+        long recordId,
+        CancellationToken cancellationToken
+    ) =>
+        Write(
             routing.Train,
             routing.RunId,
             async context =>
@@ -418,7 +441,6 @@ public sealed class DecisionJournal(
             },
             cancellationToken
         );
-    }
 
     private void LogRouted(TrackRouted routing, bool sensitive, bool onWithheldTrack) =>
         _logger.LogInformation(
@@ -437,7 +459,9 @@ public sealed class DecisionJournal(
     /// <inheritdoc />
     /// <remarks>
     /// Answered from what <c>ServiceTrain.Run</c> loaded before the run's first junction, so it
-    /// never goes to the database on the train's path.
+    /// never goes to the database on the train's path. Inside a <c>Parallel</c> branch the answer
+    /// is the one recorded by the same branch, because branches count their askings on from the
+    /// fork and two of them asking one question ask it under the same occurrence.
     /// </remarks>
     public async Task<RecordedAnswer?> Replay(
         string train,
@@ -447,7 +471,7 @@ public sealed class DecisionJournal(
         CancellationToken cancellationToken
     ) =>
         (await Bound(train, runId, replay: true, cancellationToken))?.Replay.GetValueOrDefault(
-            (key, occurrence)
+            (BranchPaths.Current, key, occurrence)
         );
 
     /// <summary>
@@ -480,7 +504,14 @@ public sealed class DecisionJournal(
                     metadata.Name,
                     metadata.ExternalId,
                     source,
-                    metadata.ManifestId is not null
+                    metadata.ManifestId is not null,
+                    stored =>
+                        RunInputs.Same(
+                            stored,
+                            metadata.Input,
+                            (object?)metadata.GetInputObject(),
+                            RunInputs.InputTypeOf(train)
+                        )
                 ),
                 cancellationToken
             );
@@ -501,6 +532,7 @@ public sealed class DecisionJournal(
     /// <summary>One recorded answer a replay may use.</summary>
     private sealed record Recorded(
         long MetadataId,
+        string BranchPath,
         string Key,
         int Occurrence,
         string Fingerprint,
@@ -528,12 +560,17 @@ public sealed class DecisionJournal(
     /// True for a run of a manifest, whose replay is a retry the scheduler queued: one that cannot be
     /// honoured asks afresh, with a warning, instead of failing the retry.
     /// </param>
+    /// <param name="SameInput">
+    /// Whether the run it names ran on this run's input, given that run's stored input; null when
+    /// the run already checked it as it began.
+    /// </param>
     private sealed record Replaying(
         long Id,
         string Name,
         string ExternalId,
         long Source,
-        bool Retry
+        bool Retry,
+        Func<string?, bool>? SameInput = null
     );
 
     /// <summary>
@@ -553,7 +590,7 @@ public sealed class DecisionJournal(
     /// (<see cref="Metadata.ReplayAbandoned"/>), so a run that dies mid-way is marked too.
     /// </returns>
     private async Task<(
-        IReadOnlyDictionary<(string, int), RecordedAnswer> Answers,
+        IReadOnlyDictionary<(string, string, int), RecordedAnswer> Answers,
         bool Abandoned
     )> LoadReplay(Replaying metadata, CancellationToken cancellationToken)
     {
@@ -594,6 +631,7 @@ public sealed class DecisionJournal(
                         m.ReplayDecisionsOf,
                         m.DecisionsRecorded,
                         m.ReplayAbandoned,
+                        Input = id == source ? m.Input : null,
                     })
                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -611,6 +649,14 @@ public sealed class DecisionJournal(
                 if (link.Name != metadata.Name)
                 {
                     broken = $"run {id} is a run of train '{link.Name}', not of this train";
+                    break;
+                }
+
+                // Its answers were given for its own input; the same answers for another input
+                // would route a different request down tracks chosen for that one.
+                if (id == source && metadata.SameInput?.Invoke(link.Input) == false)
+                {
+                    broken = $"run {id} ran on a different input";
                     break;
                 }
 
@@ -648,6 +694,7 @@ public sealed class DecisionJournal(
                         .Select(d => new
                         {
                             d.MetadataId,
+                            d.BranchPath,
                             d.QuestionKey,
                             d.Occurrence,
                             d.Fingerprint,
@@ -657,7 +704,7 @@ public sealed class DecisionJournal(
                             d.DecidedAt,
                         })
                         .ToListAsync(cancellationToken)
-                ).Select(d => new Recorded(d.MetadataId, d.QuestionKey, d.Occurrence, d.Fingerprint, d.Answer, d.StateHash, d.Replayed, d.DecidedAt)).ToList();
+                ).Select(d => new Recorded(d.MetadataId, d.BranchPath, d.QuestionKey, d.Occurrence, d.Fingerprint, d.Answer, d.StateHash, d.Replayed, d.DecidedAt)).ToList();
         }
         catch (Exception e)
             when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -690,12 +737,12 @@ public sealed class DecisionJournal(
             return (NothingToReplay, true);
         }
 
-        var answers = new Dictionary<(string, int), RecordedAnswer>();
+        var answers = new Dictionary<(string, string, int), RecordedAnswer>();
         var nearestFirst = chain.Select((id, depth) => (id, depth)).ToDictionary();
 
         var byAsking = recorded
             .OrderBy(d => nearestFirst[d.MetadataId])
-            .GroupBy(d => (d.Key, d.Occurrence))
+            .GroupBy(d => (d.BranchPath, d.Key, d.Occurrence))
             .ToList();
         // A bound longer than the time since DateTime.MinValue means no bound at all.
         var now = DateTime.UtcNow;
@@ -709,7 +756,8 @@ public sealed class DecisionJournal(
         foreach (var asking in byAsking)
         {
             var nearest = asking.First();
-            var (runId, key, occurrence, fingerprint, answer, stateHash, _, _) = nearest;
+            var (runId, branchPath, key, occurrence, fingerprint, answer, stateHash, _, _) =
+                nearest;
 
             // Its age is that of the answer a decider gave, not of a later run replaying it, so a
             // chain of requeues cannot keep an answer alive. One whose answering run is gone is
@@ -731,7 +779,7 @@ public sealed class DecisionJournal(
 
             try
             {
-                answers[(key, occurrence)] = new RecordedAnswer(
+                answers[(branchPath, key, occurrence)] = new RecordedAnswer(
                     // A row with neither an answer nor a refusal is damaged, and read as such.
                     DecisionJson.ReadAnswer(answer ?? "null"),
                     fingerprint
@@ -951,17 +999,37 @@ public sealed class DecisionJournal(
         CancellationToken cancellationToken
     )
     {
+        // Read here, on the routing step's flow. As DecisionRun.TryLatest does, a branch routes on
+        // its own asking or, before it asked, on that of the nearest chain enclosing it, such as a
+        // decision made before the fork; never a sibling's.
+        var enclosing = BranchPaths.Enclosing(BranchPaths.Current);
+
         try
         {
             using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-            return await context
+            var candidates = await context
                 .RecordedDecisions.AsNoTracking()
-                .Where(d => d.MetadataId == metadataId && d.QuestionKey == key && d.Refused == null)
-                .OrderByDescending(d => d.Occurrence)
+                .Where(d =>
+                    d.MetadataId == metadataId
+                    && enclosing.Contains(d.BranchPath)
+                    && d.QuestionKey == key
+                    && d.Refused == null
+                )
+                .Select(d => new
+                {
+                    d.Id,
+                    d.BranchPath,
+                    d.Occurrence,
+                })
+                .ToListAsync(cancellationToken);
+
+            return candidates
+                .OrderByDescending(d => d.BranchPath.Length)
+                .ThenByDescending(d => d.Occurrence)
                 .ThenByDescending(d => d.Id)
                 .Select(d => (long?)d.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault();
         }
         catch (Exception e)
             when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

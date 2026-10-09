@@ -272,6 +272,18 @@ namespace Trax.Core.Decisions
 }
 namespace Trax.Core.Exceptions
 {
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+    public sealed class BranchesFailedException : Trax.Core.Exceptions.TrainException
+    {
+        public System.Collections.Generic.IReadOnlyList<string> CancelledBySibling { get; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Exceptions.FailedBranch> Failures { get; }
+        public string Step { get; }
+        public static Trax.Core.Exceptions.FailureClass Combine(System.Collections.Generic.IEnumerable<Trax.Core.Exceptions.FailureClass?> classes) { }
+    }
+    public sealed class CancellationRequestedException : System.OperationCanceledException
+    {
+        public CancellationRequestedException(string message) { }
+    }
     public sealed class ChainDeclarationException : System.Exception
     {
         public ChainDeclarationException(string trainName, string member) { }
@@ -279,6 +291,13 @@ namespace Trax.Core.Exceptions
     public sealed class ChainRecordedException : System.Exception
     {
         public ChainRecordedException() { }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+    public sealed class FailedBranch : System.IEquatable<Trax.Core.Exceptions.FailedBranch>
+    {
+        public string Branch { get; }
+        public System.Exception Exception { get; }
+        public Trax.Core.Exceptions.FailureClass? FailureClass { get; }
     }
     public enum FailureClass
     {
@@ -381,6 +400,19 @@ namespace Trax.Core.Junction
 }
 namespace Trax.Core.Monad
 {
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+    public enum BranchFailurePolicy
+    {
+        CancelSiblings = 0,
+        WaitForAll = 1,
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+    public sealed class Branches<TInput, TReturn>
+    {
+        public Branches() { }
+        public Trax.Core.Monad.Branches<TInput, TReturn> Branch(string name, System.Func<Trax.Core.Train.MonadTask<TInput, TReturn>, Trax.Core.Train.MonadTask<TInput, TReturn>> body) { }
+        public Trax.Core.Monad.Branches<TInput, TReturn> OnFailure(Trax.Core.Monad.BranchFailurePolicy policy) { }
+    }
     public readonly struct ChainFault : System.IEquatable<Trax.Core.Monad.ChainFault>
     {
         public ChainFault(int StepIndex, Trax.Core.Monad.ChainStepKind Kind, System.Type? Junction, string Reason) { }
@@ -389,6 +421,45 @@ namespace Trax.Core.Monad
         public Trax.Core.Monad.ChainStepKind Kind { get; init; }
         public string Reason { get; init; }
         public int StepIndex { get; init; }
+    }
+    public sealed class ChainGraph : System.IEquatable<Trax.Core.Monad.ChainGraph>
+    {
+        public ChainGraph(string Train, string Input, string Output, System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<string> Refusals) { }
+        public string Hash { get; }
+        public string Input { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes { get; init; }
+        public string Output { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Refusals { get; init; }
+        public string Train { get; init; }
+        public static string? CurrentBranchPath { get; }
+        public static string? CurrentNodeId { get; }
+        public bool Equals(Trax.Core.Monad.ChainGraph? other) { }
+        public override int GetHashCode() { }
+        public string ToJson() { }
+        public static Trax.Core.Monad.ChainGraph From(Trax.Core.Monad.ChainRecorder chain, System.Type train, System.Type input, System.Type output) { }
+    }
+    public sealed class ChainGraphNode : System.IEquatable<Trax.Core.Monad.ChainGraphNode>
+    {
+        public ChainGraphNode(string Id, Trax.Core.Monad.ChainStepKind Kind, string? Junction, string? In, string? Out, bool Opaque, System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphTrack> Tracks) { }
+        public string Id { get; init; }
+        public string? In { get; init; }
+        public string? Junction { get; init; }
+        public Trax.Core.Monad.ChainStepKind Kind { get; init; }
+        public bool Opaque { get; init; }
+        public string? Out { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphTrack> Tracks { get; init; }
+        public bool Equals(Trax.Core.Monad.ChainGraphNode? other) { }
+        public override int GetHashCode() { }
+    }
+    public sealed class ChainGraphTrack : System.IEquatable<Trax.Core.Monad.ChainGraphTrack>
+    {
+        public ChainGraphTrack(string Name, string? Description, bool IsFallback, System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes) { }
+        public string? Description { get; init; }
+        public bool IsFallback { get; init; }
+        public string Name { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainGraphNode> Nodes { get; init; }
+        public bool Equals(Trax.Core.Monad.ChainGraphTrack? other) { }
+        public override int GetHashCode() { }
     }
     public sealed class ChainRecorder
     {
@@ -416,6 +487,8 @@ namespace Trax.Core.Monad
         Switch = 7,
         Gate = 8,
         Scale = 9,
+        Parallel = 10,
+        Checkpoint = 11,
     }
     public sealed class ChainTrack : System.IEquatable<Trax.Core.Monad.ChainTrack>
     {
@@ -429,6 +502,11 @@ namespace Trax.Core.Monad
     {
         public static System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainFault> Verify(Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, Microsoft.Extensions.DependencyInjection.IServiceProviderIsService container) { }
         public static System.Collections.Generic.IReadOnlyList<Trax.Core.Monad.ChainFault> Verify(Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, System.Func<System.Type, bool>? availableElsewhere = null) { }
+    }
+    [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+    public interface IBranchScopeInitializer
+    {
+        System.Threading.Tasks.Task Initialize(System.IServiceProvider run, System.IServiceProvider branch, System.Threading.CancellationToken cancellationToken);
     }
     public class Monad<TInput, TReturn>
     {
@@ -451,6 +529,7 @@ namespace Trax.Core.Monad
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        public Trax.Core.Train.MonadTask<TInput, TReturn> Checkpoint<TState>() { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Decide<TState>(System.Func<Trax.Core.Decisions.Questions<TState>, Trax.Core.Decisions.Questions<TState>> questions) { }
         public Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>() { }
         public Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>(TIn input) { }
@@ -458,6 +537,8 @@ namespace Trax.Core.Monad
         public Trax.Core.Train.MonadTask<TInput, TReturn> Gate<TState, TQuestion>(System.Func<Trax.Core.Decisions.GateTracks<TInput, TReturn>, Trax.Core.Decisions.GateTracks<TInput, TReturn>> gate, string? asking = null) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> IChain<TJunction>()
             where TJunction :  class { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+        public Trax.Core.Train.MonadTask<TInput, TReturn> Parallel(System.Func<Trax.Core.Monad.Branches<TInput, TReturn>, Trax.Core.Monad.Branches<TInput, TReturn>> branches) { }
         public Trax.Core.Functional.Either<System.Exception, TReturn> Resolve() { }
         public Trax.Core.Functional.Either<System.Exception, TReturn> Resolve(Trax.Core.Functional.Either<System.Exception, TReturn> returnType) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale)
@@ -505,6 +586,7 @@ namespace Trax.Core.Train
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        public Trax.Core.Train.MonadTask<TInput, TReturn> Checkpoint<TState>() { }
         public System.Runtime.CompilerServices.ConfiguredTaskAwaitable<Trax.Core.Monad.Monad<TInput, TReturn>> ConfigureAwait(bool continueOnCapturedContext) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Decide<TState>(System.Func<Trax.Core.Decisions.Questions<TState>, Trax.Core.Decisions.Questions<TState>> questions) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Extract<TIn, TOut>() { }
@@ -514,6 +596,8 @@ namespace Trax.Core.Train
         public System.Runtime.CompilerServices.TaskAwaiter<Trax.Core.Monad.Monad<TInput, TReturn>> GetAwaiter() { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> IChain<TJunction>()
             where TJunction :  class { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+        public Trax.Core.Train.MonadTask<TInput, TReturn> Parallel(System.Func<Trax.Core.Monad.Branches<TInput, TReturn>, Trax.Core.Monad.Branches<TInput, TReturn>> branches) { }
         public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Resolve() { }
         public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Resolve(Trax.Core.Functional.Either<System.Exception, TReturn> returnType) { }
         public Trax.Core.Train.MonadTask<TInput, TReturn> Scale<TLevel>(System.Func<Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>, Trax.Core.Decisions.ScaleTracks<TInput, TReturn, TLevel>> scale)
@@ -556,6 +640,7 @@ namespace Trax.Core.Train
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut>, new () { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
             where TJunction : Trax.Core.Junction.IJunction<TIn, TOut> { }
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Checkpoint<TState>() { }
         protected Trax.Core.Train.MonadTask<TInput, TReturn> Decide<TState>(System.Func<Trax.Core.Decisions.Questions<TState>, Trax.Core.Decisions.Questions<TState>> questions) { }
         public Trax.Core.Monad.ChainRecorder DeclaredChain() { }
         protected Trax.Core.Monad.Monad<TInput, TReturn> Extract<TIn, TOut>() { }
@@ -566,6 +651,8 @@ namespace Trax.Core.Train
             where TJunction :  class { }
         protected virtual System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> Junctions() { }
         protected virtual Trax.Core.Monad.Monad<TInput, TReturn> NewMonad() { }
+        [System.Diagnostics.CodeAnalysis.Experimental("TRAXEXP001")]
+        protected Trax.Core.Train.MonadTask<TInput, TReturn> Parallel(System.Func<Trax.Core.Monad.Branches<TInput, TReturn>, Trax.Core.Monad.Branches<TInput, TReturn>> branches) { }
         protected Trax.Core.Functional.Either<System.Exception, TReturn> Resolve() { }
         public virtual System.Threading.Tasks.Task<TReturn> Run(TInput input, System.Threading.CancellationToken cancellationToken = default) { }
         public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TReturn>> RunEither(TInput input) { }

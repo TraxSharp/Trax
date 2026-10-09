@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.ChangeCaseData.ChangeCaseDataTrain",
+  "input": "ChangeCaseDataInput",
+  "output": "ChangeCaseDataOutput",
+  "nodes": [
+    {
+      "id": "EditCaseFile#0",
+      "kind": "Chain",
+      "junction": "EditCaseFile",
+      "in": "ChangeCaseDataInput",
+      "out": "ChangeCaseDataOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ChangeCaseDataOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

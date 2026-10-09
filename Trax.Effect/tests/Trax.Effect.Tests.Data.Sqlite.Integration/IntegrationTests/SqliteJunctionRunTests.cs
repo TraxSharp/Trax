@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
 using Trax.Core.Functional;
+using Trax.Core.Monad;
 using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -95,6 +96,41 @@ public class SqliteJunctionRunTests
         await Delete(metadataId);
 
         (await Rows(metadataId)).Should().BeEmpty($"the foreign key cascades. See {Adr}.");
+    }
+
+    [Test]
+    public async Task Each_row_stores_the_id_the_trains_graph_draws_for_its_step()
+    {
+        ChainGraph graph;
+        using (var scope = _provider.CreateScope())
+        {
+            var fresh = (LiteStepsTrain)scope.ServiceProvider.GetRequiredService<ILiteStepsTrain>();
+            graph = ChainGraph.From(
+                fresh.DeclaredChain(),
+                fresh.GetType(),
+                typeof(LiteItem),
+                typeof(string)
+            );
+        }
+
+        var metadataId = await Run();
+
+        var rows = await Rows(metadataId);
+        rows.Select(r => r.NodeId)
+            .Should()
+            .Equal(
+                graph.Nodes[0].Id,
+                graph.Nodes.Single(n => n.Kind == ChainStepKind.Decide).Id,
+                graph.Nodes.Single(n => n.Kind == ChainStepKind.Switch).Id,
+                graph
+                    .Nodes.Single(n => n.Kind == ChainStepKind.Switch)
+                    .Tracks.Single(t => t.Name == nameof(LiteBin.Small))
+                    .Nodes[0]
+                    .Id
+            );
+        rows[3].NodeId.Should().Be("Switch<LiteBin>#0/Small/LiteBreak#0");
+
+        await Delete(metadataId);
     }
 
     private async Task<long> Run()

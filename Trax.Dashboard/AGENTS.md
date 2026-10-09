@@ -25,7 +25,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | a third-party pin in the root `Directory.Packages.props` | [0006](./docs/adr/0006-radzen-and-test-di-float-within-their-major.md): `Radzen.Blazor` and the test DI container float within their major on purpose; the lockfiles hold the version |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Thirty name `dashboard`, three of them superseded: the repository-wide conventions, `0016`
+index lists them by folder. Thirty-two name `dashboard`, three of them superseded: the repository-wide conventions, `0016`
 to `0020` and `0041` (the enqueue ones routed above), and the canonical train name being the interface
 FullName, which this folder compares against when it looks a train up. The index is at
 [`../Trax.Docs/adr/README.md`](../Trax.Docs/adr/README.md).

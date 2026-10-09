@@ -1,5 +1,8 @@
 using System.ComponentModel;
+using System.Text;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -77,7 +80,7 @@ public interface IMachine
 /// }
 /// </code>
 /// </summary>
-public abstract class Machine<TState, TTrigger> : IMachine
+public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
@@ -159,8 +162,24 @@ public abstract class Machine<TState, TTrigger> : IMachine
         ISnapshotStore store,
         IEffectClaimStore? claims,
         TimeSpan? draftTtl = null
+    ) => BuildService(store, claims, draftTtl, runCancellation: null, invokes: null);
+
+    ISnapshotDraftService IMachineInternals.CreateService(
+        ISnapshotStore store,
+        IEffectClaimStore? claims,
+        TimeSpan? draftTtl,
+        IInvokedRunCancellation? runCancellation,
+        InvokeRuntime? invokes
+    ) => BuildService(store, claims, draftTtl, runCancellation, invokes);
+
+    private SnapshotDraftService<TState, TTrigger> BuildService(
+        ISnapshotStore store,
+        IEffectClaimStore? claims,
+        TimeSpan? draftTtl,
+        IInvokedRunCancellation? runCancellation,
+        InvokeRuntime? invokes
     ) =>
-        new SnapshotDraftService<TState, TTrigger>(
+        new(
             Built.Engine,
             store,
             Built.CommittedStates,
@@ -168,10 +187,112 @@ public abstract class Machine<TState, TTrigger> : IMachine
             EffectKeysOnReset,
             draftTtl,
             Built.Effects
-        );
+        )
+        {
+            RunCancellation = runCancellation,
+            ReservedStates = Built.ReservedStates,
+            InvokingStates = Built.Invokes.Keys.ToHashSet(),
+            Invokes = invokes,
+            InvokedRunLimit = Built.InvokedRunLimit,
+        };
+
+    bool IMachineInternals.SystemOwned => Built.SystemOwned;
+
+    IReadOnlyList<InvokedTrainDeclaration> IMachineInternals.InvokedTrains =>
+        Built
+            .Invokes.Values.Select(i => new InvokedTrainDeclaration(
+                Built.Definition.Id,
+                i.State.ToString(),
+                i.TrainType,
+                i.InputType,
+                i.OutputType,
+                Built.SystemOwned
+            ))
+            .ToList();
+
+    IReadOnlyList<ChainedOutcome> IMachineInternals.ChainedOutcomes =>
+        Built
+            .Invokes.Values.SelectMany(i =>
+                i.Done.Select(e => (Outcome: "OnDone", e.To))
+                    .Append((Outcome: "OnFailed", i.Failed.To))
+                    .Append((Outcome: "OnCancelled", i.Cancelled.To))
+                    .Where(e => Built.Invokes.ContainsKey(e.To))
+                    .Select(e => new ChainedOutcome(i.State.ToString(), e.Outcome, e.To.ToString()))
+            )
+            .Distinct()
+            .ToList();
+
+    EnteringInvoke? IMachineInternals.Entering(string state) =>
+        Built.Invokes.Values.FirstOrDefault(i => i.State.ToString() == state) is { } invoke
+            ? new EnteringInvoke(invoke.TrainType, invoke.CreateInput, Built.InvokedRunLimit)
+            : null;
+
+    RehydrationResult IMachineInternals.Rehydrate(string json) => Built.Engine.Rehydrate(json);
+
+    string IMachineInternals.Serialize(Snapshot snapshot) => Built.Engine.Serialize(snapshot);
+
+    AdvanceResult IMachineInternals.ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome)
+    {
+        // The startup check refuses a sensitive output and the launch refuses to queue its train; this refuses the
+        // output again, fail-closed, so it never reaches the context, which is stored as plain JSON. The delivery
+        // applies the state's OnFailed instead.
+        if (
+            outcome is InvokeOutcome.Done
+            && Built.Invokes.Values.FirstOrDefault(i => i.State.ToString() == snapshot.State)
+                is { } invoke
+            && TraxRedaction.ReachesSensitiveMember(invoke.OutputType)
+        )
+            return new AdvanceResult.Rejected(RejectionReasons.InternalError)
+            {
+                Exception = new InvalidOperationException(
+                    InvokeRefusals.SensitiveOutput(
+                        InvokeRefusals.At(Built.Definition.Id, snapshot.State, invoke.TrainType),
+                        invoke.OutputType
+                    )
+                ),
+            };
+
+        return Built.Engine.ApplyOutcome(snapshot, outcome);
+    }
+
+    AdvanceResult IMachineInternals.Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
+        Built.Engine.Advance(snapshot, trigger, input);
+
+    bool IMachineInternals.IsOutcomeTrigger(string trigger) =>
+        Built.Engine.IsOutcomeTrigger(trigger);
+
+    bool IMachineInternals.IsEffectBound(string state, string trigger) =>
+        Built.Effects.Any(e => e.From.ToString() == state && e.Trigger.ToString() == trigger);
 
     private IEnumerable<string> EffectKeysOnReset(string userKey, Guid id) =>
-        Built.Effects.Select(e => $"{e.KeyPrefix}:{userKey}:{id}");
+        Built.Effects.Select(e => EffectClaimKey.ForUser(e.KeyPrefix, userKey, id));
+
+    Snapshot IMachineInternals.InitialSnapshot(JsonObject? context)
+    {
+        var engine = Built.Engine;
+        var definition = engine.Definition;
+        var initial = definition.CreateInitialSnapshot();
+        if (context is not null)
+            initial = initial with { Context = (JsonObject)context.DeepClone() };
+
+        // Validated exactly as a stored snapshot is read back, so nothing is stored that a later read refuses.
+        var json = engine.Serialize(initial);
+        if (Encoding.UTF8.GetByteCount(json) > SnapshotLimits.MaxSnapshotBytes)
+            throw new ArgumentException(
+                $"The initial snapshot of '{definition.Id}' exceeds the {SnapshotLimits.MaxSnapshotBytes}-byte limit.",
+                nameof(context)
+            );
+        return engine.Rehydrate(json) switch
+        {
+            RehydrationResult.Ok ok => ok.Snapshot,
+            RehydrationResult.Error error => throw new ArgumentException(
+                $"The initial snapshot of '{definition.Id}' is not valid ({error.Code}): {error.Message}",
+                nameof(context),
+                error.Exception
+            ),
+            _ => throw new ArgumentException("Unknown rehydration result.", nameof(context)),
+        };
+    }
 
     /// <summary>
     /// Builds the exactly-once runner for the machine's first bound effect, resolving the effect type from
@@ -215,7 +336,7 @@ public abstract class Machine<TState, TTrigger> : IMachine
             binding.From,
             binding.Trigger,
             binding.To,
-            (userKey, id) => $"{binding.KeyPrefix}:{userKey}:{id}",
+            (userKey, id) => EffectClaimKey.ForUser(binding.KeyPrefix, userKey, id),
             receiptKey: "receipt"
         );
     }

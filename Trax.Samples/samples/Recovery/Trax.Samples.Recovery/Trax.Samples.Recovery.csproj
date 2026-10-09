@@ -4,6 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+    <!-- TRAXEXP001: opts in to the experimental Parallel step, which the topic map's signals run in. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
     <ProjectReference Include="../../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>

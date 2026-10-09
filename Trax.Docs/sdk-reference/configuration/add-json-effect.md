@@ -9,7 +9,7 @@ nav_order: 4
 
 # AddJson
 
-Adds JSON change detection for the models a train tracks (its `Metadata`, and anything else passed to `Track`). Each model is serialized when it is first tracked; each time the train saves its effects (when the run starts and when it finishes, and with [`AddJunctionProgress`](/docs/sdk-reference/configuration/add-junction-progress) also before and after each junction) every tracked model is serialized again, and one whose JSON changed is written to `ILogger` at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level). Nothing is stored in the database.
+Adds JSON change detection for the models a train tracks (its `Metadata`, and anything else passed to `Track`). Each model is serialized when it is first tracked; each time the train saves its effects (when the run starts and when it finishes) every tracked model is serialized again, and one whose JSON changed is written to `ILogger` at the [effect log level](/docs/sdk-reference/configuration/set-effect-log-level). Nothing is stored in the database.
 
 ## Signature
 

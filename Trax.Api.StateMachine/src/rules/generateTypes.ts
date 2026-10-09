@@ -16,8 +16,13 @@ export function generateContextTypes(ir: IrDocument): string {
     "",
     `export type ${machine}State = ${union(ir.states)};`,
     `export type ${machine}Trigger = ${union(ir.triggers)};`,
-    "",
   ];
+  // The outcome triggers of states that invoke a train (`Fetching.done`), a kind of their own. Emitted only
+  // when the machine has some, so a machine that invokes nothing generates exactly what it did before.
+  const outcomes = Object.keys(ir.outcomes ?? {}).sort();
+  if (outcomes.length > 0)
+    lines.push(`export type ${machine}Outcome = ${union(outcomes)};`);
+  lines.push("");
 
   // A context type per state, and the state -> context map.
   for (const state of ir.states)
@@ -39,6 +44,12 @@ export function generateContextTypes(ir: IrDocument): string {
     if (schema && schema.fields.length > 0)
       lines.push(...emitType(`${machine}${trigger}Input`, schema), "");
   }
+  // A success outcome's input is the invoked train's output.
+  for (const outcome of outcomes) {
+    const schema = ir.inputs[outcome];
+    if (schema && schema.fields.length > 0)
+      lines.push(...emitType(outcomeTypeName(machine, outcome), schema), "");
+  }
   lines.push(`export type ${machine}Inputs = {`);
   for (const trigger of ir.triggers) {
     const schema = ir.inputs[trigger];
@@ -47,6 +58,14 @@ export function generateContextTypes(ir: IrDocument): string {
         ? `${machine}${trigger}Input`
         : "undefined";
     lines.push(`  ${trigger}: ${type};`);
+  }
+  for (const outcome of outcomes) {
+    const schema = ir.inputs[outcome];
+    const type =
+      schema && schema.fields.length > 0
+        ? outcomeTypeName(machine, outcome)
+        : "undefined";
+    lines.push(`  ${JSON.stringify(outcome)}: ${type};`);
   }
   lines.push("};", "");
 
@@ -186,6 +205,13 @@ function baseType(type: JsonFieldType): string {
       return "Record<string, unknown>";
   }
 }
+
+// `Fetching.done` of machine `ingest` -> `IngestFetchingDoneOutput`: the type of the train output it carries.
+const outcomeTypeName = (machine: string, outcome: string): string =>
+  `${machine}${outcome
+    .split(".")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join("")}Output`;
 
 const union = (values: readonly string[]): string =>
   values.map((v) => `"${v}"`).join(" | ");

@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.ChatService.Trains.InviteToChatRoom.InviteToChatRoomTrain",
+  "input": "InviteToChatRoomInput",
+  "output": "InviteToChatRoomOutput",
+  "nodes": [
+    {
+      "id": "ValidateInviteJunction#0",
+      "kind": "Chain",
+      "junction": "ValidateInviteJunction",
+      "in": "InviteToChatRoomInput",
+      "out": "InviteToChatRoomInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "AddInviteeJunction#0",
+      "kind": "Chain",
+      "junction": "AddInviteeJunction",
+      "in": "InviteToChatRoomInput",
+      "out": "InviteToChatRoomOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "InviteToChatRoomOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

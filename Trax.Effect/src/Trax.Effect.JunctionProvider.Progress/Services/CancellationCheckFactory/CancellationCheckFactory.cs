@@ -12,7 +12,7 @@ namespace Trax.Effect.JunctionProvider.Progress.Services.CancellationCheckFactor
 /// </summary>
 /// <param name="serviceProvider">The provider the cancellation check is resolved from.</param>
 internal class CancellationCheckFactory(IServiceProvider serviceProvider)
-    : IJunctionEffectProviderFactory
+    : ICancellationFlagCheckFactory
 {
     /// <inheritdoc/>
     public IJunctionEffectProvider Create() =>

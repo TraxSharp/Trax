@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.PartitionAction.PartitionActionTrain",
+  "input": "PartitionActionInput",
+  "output": "PartitionActionOutput",
+  "nodes": [
+    {
+      "id": "AdvancePartition#0",
+      "kind": "Chain",
+      "junction": "AdvancePartition",
+      "in": "PartitionActionInput",
+      "out": "PartitionActionOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "PartitionActionOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

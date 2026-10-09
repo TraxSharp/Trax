@@ -142,6 +142,13 @@ namespace Trax.Effect.StateMachine.Persistence
         string ExportIr();
         System.Collections.Generic.IReadOnlyList<string> SelfCheck();
     }
+    public interface IMachineInstances
+    {
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance<TMachine>(Trax.Effect.StateMachine.Persistence.MachineKey key, string trigger, System.Text.Json.Nodes.JsonNode? input = null, System.Threading.CancellationToken cancellationToken = default)
+            where TMachine : Trax.Effect.StateMachine.Persistence.IMachine;
+        System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.MachineInstance> Start<TMachine>(Trax.Effect.StateMachine.Persistence.MachineKey key, System.Text.Json.Nodes.JsonObject? context = null, System.Threading.CancellationToken cancellationToken = default)
+            where TMachine : Trax.Effect.StateMachine.Persistence.IMachine;
+    }
     public interface ISnapshotDraftService
     {
         System.Threading.Tasks.Task<Trax.Effect.StateMachine.Persistence.AdvanceOutcome> Advance(string userKey, System.Guid id, string trigger, System.Text.Json.Nodes.JsonNode? input = null, string? requestId = null, System.Threading.CancellationToken cancellationToken = default);
@@ -203,6 +210,30 @@ namespace Trax.Effect.StateMachine.Persistence
             public NotFound() { }
         }
     }
+    public sealed class MachineInstance : System.IEquatable<Trax.Effect.StateMachine.Persistence.MachineInstance>
+    {
+        public MachineInstance(System.Guid Id, string Machine, string State, bool Created) { }
+        public bool Created { get; init; }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public string State { get; init; }
+    }
+    public static class MachineInstanceId
+    {
+        public static readonly System.Guid Root;
+        public static System.Guid For(string machine, Trax.Effect.StateMachine.Persistence.MachineKey key) { }
+        public static System.Guid Namespace(string machine) { }
+    }
+    public sealed class MachineKey : System.IEquatable<Trax.Effect.StateMachine.Persistence.MachineKey>
+    {
+        public System.Collections.Generic.IReadOnlyList<string> Parts { get; }
+        public bool Equals(Trax.Effect.StateMachine.Persistence.MachineKey? other) { }
+        public override bool Equals(object? obj) { }
+        public override int GetHashCode() { }
+        public override string ToString() { }
+        public static Trax.Effect.StateMachine.Persistence.MachineKey Of(params string[] parts) { }
+        public static Trax.Effect.StateMachine.Persistence.MachineKey op_Implicit(string part) { }
+    }
     public abstract class Machine<TState, TTrigger> : Trax.Effect.StateMachine.Persistence.IMachine
         where TState :  struct, System.Enum
         where TTrigger :  struct, System.Enum
@@ -245,6 +276,8 @@ namespace Trax.Effect.StateMachine.Persistence
     {
         public StateMachineOptions() { }
         public System.TimeSpan? DraftTtl { get; set; }
+        public System.TimeSpan InvokeOutcomeSweepInterval { get; set; }
+        public System.TimeSpan InvokeOutcomeSweepIntervalWhileListening { get; set; }
     }
     public static class StateMachinesBuilderExtensions
     {
@@ -254,6 +287,7 @@ namespace Trax.Effect.StateMachine.Persistence
     public sealed class StoredSnapshot : System.IEquatable<Trax.Effect.StateMachine.Persistence.StoredSnapshot>
     {
         public StoredSnapshot(string Json, System.Guid Token, string? LastRequestId, System.DateTimeOffset UpdatedAt) { }
+        public string? InvokeToken { get; init; }
         public string Json { get; init; }
         public Trax.Effect.StateMachine.Persistence.AppliedRequest? LastRequest { get; }
         public string? LastRequestFromState { get; init; }

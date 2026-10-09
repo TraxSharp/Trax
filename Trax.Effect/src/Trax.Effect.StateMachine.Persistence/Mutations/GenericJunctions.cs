@@ -77,7 +77,7 @@ internal class SaveSnapshotJunction(
     /// </summary>
     public override async Task<SaveSnapshotOutput> Run(SaveSnapshotInput input)
     {
-        if (principal.CurrentUserKey is not { } userKey)
+        if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
                 "unauthenticated",
                 "No authenticated user is associated with this request."
@@ -139,7 +139,7 @@ internal class AdvanceSnapshotJunction(
     /// </summary>
     public override async Task<AdvanceSnapshotOutput> Run(AdvanceSnapshotInput input)
     {
-        if (principal.CurrentUserKey is not { } userKey)
+        if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
                 "unauthenticated",
                 "No authenticated user is associated with this request."
@@ -245,7 +245,7 @@ internal class LoadSnapshotJunction(
     /// </summary>
     public override async Task<LoadSnapshotOutput> Run(LoadSnapshotInput input)
     {
-        if (principal.CurrentUserKey is not { } userKey)
+        if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
                 "unauthenticated",
                 "No authenticated user is associated with this request."
@@ -305,7 +305,7 @@ internal class SendSnapshotJunction(
     /// </summary>
     public override async Task<SendSnapshotOutput> Run(SendSnapshotInput input)
     {
-        if (principal.CurrentUserKey is not { } userKey)
+        if (SnapshotOwner.Key(principal) is not { } userKey)
             return Problem(
                 "unauthenticated",
                 "No authenticated user is associated with this request."

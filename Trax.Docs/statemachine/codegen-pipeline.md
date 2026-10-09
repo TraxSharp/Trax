@@ -56,10 +56,10 @@ runnable typed machine, is generated from that file's IR. The only thing hand-wr
 that drives the machine.
 
 The payoff is proportional to how much of the machine fits the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules):
-an edge left on a delegate guard or reducer is exported with no guard or reducer, so the generated twin treats
-it as unconditional and keeps the context, and disagrees with the server on that edge without any warning.
-Logic the vocabulary cannot express goes in a custom rule or reduction, which the IR names and each runtime
-binds a handler for. A machine that stays declarative generates its whole twin.
+export refuses a machine that still has an edge on a delegate guard or reducer, or a state on a `Holds`
+validator, because the IR cannot carry it and the generated twin would disagree with the server on that edge.
+Logic the vocabulary cannot express goes in a custom rule or reduction (`Rule.Custom`, `Reduction.Custom`),
+which the IR names and each runtime binds a handler for. A machine that stays declarative generates its whole twin.
 
 ## Running it
 

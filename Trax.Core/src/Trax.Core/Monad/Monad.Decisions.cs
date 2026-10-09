@@ -276,6 +276,10 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return this;
 
+        // A resumed run counts the questions before its resume point without asking them.
+        if (SkipQuestions(questions.Specs))
+            return this;
+
         // A cancelled run neither decides nor tells anyone it did, as a junction does not run.
         CancellationToken.ThrowIfCancellationRequested();
 
@@ -301,6 +305,10 @@ public partial class Monad<TInput, TReturn>
             return this;
 
         var specs = questions.Specs;
+        var nodeIds = specs.ToDictionary(
+            s => s.Key,
+            s => Nodes.Next(ChainNodeScope.DecideKey(s.DecisionType))
+        );
         var answers = new Dictionary<string, Answer>();
         var occurrences = new Dictionary<string, int>();
         var replayed = new System.Collections.Generic.HashSet<string>();
@@ -341,6 +349,10 @@ public partial class Monad<TInput, TReturn>
 
                 if (replay is null)
                     continue;
+
+                // Entered before the lookup, so a replay can tell which branch is asking: two
+                // branches asking one question both count their askings on from the fork.
+                ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
 
                 var earlier = await replay
                     .Replay(train, Train.ExternalId, spec.Key, asking, CancellationToken)
@@ -578,6 +590,8 @@ public partial class Monad<TInput, TReturn>
                         QuestionType = spec.On,
                     };
 
+                    ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
+
                     // The step fails on the refusal either way, so an observer that cannot record
                     // it is only logged: its failure would hide why the step failed.
                     if (
@@ -652,6 +666,8 @@ public partial class Monad<TInput, TReturn>
                 QuestionType = spec.On,
                 StateType = (object?)state is { } held ? held.GetType() : typeof(TState),
             };
+
+            ChainGraph.Enter(nodeIds[spec.Key], BranchPath);
 
             if (
                 await Tell(observer, (o, ct) => o.Decided(made, ct), at).ConfigureAwait(false) is
@@ -1001,6 +1017,13 @@ public partial class Monad<TInput, TReturn>
         if (SwitchProblems(tracks).Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
             return Refuse(step, $"{step} {string.Join(" ", problems)}");
 
+        if (
+            await SkipRouting<TTrack>(ChainStepKind.Switch, step, tracks.Set)
+                .ConfigureAwait(false) is
+            { } skipped
+        )
+            return skipped;
+
         var decision = Decision<ChoiceDecision<TTrack>>(step);
 
         if (decision is null)
@@ -1009,6 +1032,7 @@ public partial class Monad<TInput, TReturn>
         var (taken, reason) = tracks.Route(decision);
 
         return await Take<TTrack>(
+                ChainStepKind.Switch,
                 step,
                 taken,
                 reason,
@@ -1031,6 +1055,13 @@ public partial class Monad<TInput, TReturn>
         if (gate.Problems.Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
             return Refuse(step, $"{step} {string.Join(" ", problems)}");
 
+        if (
+            await SkipRouting<TQuestion>(ChainStepKind.Gate, step, gate.Set)
+                .ConfigureAwait(false) is
+            { } skipped
+        )
+            return skipped;
+
         var decision = Decision<YesNoDecision<TQuestion>>(step);
 
         if (decision is null)
@@ -1039,6 +1070,7 @@ public partial class Monad<TInput, TReturn>
         var p = decision.Probability;
 
         return await Take<TQuestion>(
+                ChainStepKind.Gate,
                 step,
                 gate.Route(p),
                 null,
@@ -1064,6 +1096,12 @@ public partial class Monad<TInput, TReturn>
         if (scale.Problems.Concat(unasked ?? []).ToList() is { Count: > 0 } problems)
             return Refuse(step, $"{step} {string.Join(" ", problems)}");
 
+        if (
+            await SkipRouting<TLevel>(ChainStepKind.Scale, step, scale.Set).ConfigureAwait(false) is
+            { } skipped
+        )
+            return skipped;
+
         var decision = Decision<ScoreDecision<TLevel>>(step);
 
         if (decision is null)
@@ -1072,6 +1110,7 @@ public partial class Monad<TInput, TReturn>
         var (taken, reason) = scale.Route(decision);
 
         return await Take<TLevel>(
+                ChainStepKind.Scale,
                 step,
                 taken,
                 reason,
@@ -1084,6 +1123,7 @@ public partial class Monad<TInput, TReturn>
     /// Records which track is taken and runs it, or fails the run when there is none to take.
     /// </summary>
     private async Task<Monad<TInput, TReturn>> Take<TKey>(
+        ChainStepKind kind,
         string step,
         DeclaredTrack<TInput, TReturn>? taken,
         string? fallbackReason,
@@ -1092,6 +1132,9 @@ public partial class Monad<TInput, TReturn>
     {
         var train = Train.GetType().ReadableName();
         var at = $"{step} (train '{train}')";
+
+        var nodeId = Nodes.Next(ChainNodeScope.RoutingKey(kind, typeof(TKey)));
+        ChainGraph.Enter(nodeId, BranchPath);
 
         if (taken is null)
             return Refuse(step, $"{at}: {noTrack}");
@@ -1123,9 +1166,20 @@ public partial class Monad<TInput, TReturn>
         // An observer may have taken a while; a run cancelled meanwhile does not enter the track.
         CancellationToken.ThrowIfCancellationRequested();
 
-        return await taken
-            .Body(new MonadTask<TInput, TReturn>(Task.FromResult(this)))
-            .ConfigureAwait(false);
+        // The track's steps are numbered within the track, as the graph draws them.
+        var outer = Nodes;
+        Nodes = outer.Track(nodeId, taken.Name);
+
+        try
+        {
+            return await taken
+                .Body(new MonadTask<TInput, TReturn>(Task.FromResult(this)))
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            Nodes = outer;
+        }
     }
 
     private TDecision? Decision<TDecision>(string step)

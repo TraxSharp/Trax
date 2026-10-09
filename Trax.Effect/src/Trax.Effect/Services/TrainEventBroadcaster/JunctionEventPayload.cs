@@ -104,4 +104,22 @@ public sealed record JunctionEventPayload(
 {
     /// <summary>The <see cref="Name"/> of a junction whose name is withheld.</summary>
     public const string WithheldName = "(withheld)";
+
+    /// <summary>
+    /// The id of the declared node the step ran for, as <c>ChainGraph.From</c> draws it for the
+    /// train's <c>DeclaredChain()</c>, such as <c>Switch&lt;Source&gt;#0/Papers/FetchPapers#0</c>,
+    /// so a subscriber can place the step on the train's graph. Null when
+    /// <see cref="NameWithheld"/> is set, because the id names the track and the junction.
+    /// </summary>
+    [JsonPropertyName("nodeId")]
+    public string? NodeId { get; init; }
+
+    /// <summary>
+    /// The <c>Parallel</c> branch the step ran in, as Trax.Core names it, such as
+    /// <c>Parallel#0/cocitation</c>, so a subscriber can draw the steps of branches that ran side
+    /// by side in a lane each. Null for a step outside any branch, and when
+    /// <see cref="NameWithheld"/> is set, because a branch path can name a track.
+    /// </summary>
+    [JsonPropertyName("branchPath")]
+    public string? BranchPath { get; init; }
 }

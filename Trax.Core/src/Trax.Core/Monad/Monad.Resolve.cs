@@ -50,6 +50,8 @@ public partial class Monad<TInput, TReturn>
             return new ChainRecordedException();
         }
 
+        FailUnreachedResumePoint();
+
         if (Exception is not null)
             return Exception;
 

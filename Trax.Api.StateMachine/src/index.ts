@@ -82,7 +82,7 @@ export type { FormView, FormViewOptions, ResumedStep, StepAdvance } from './form
 // the CI drift check call these same two functions, so they cannot disagree.
 
 export { machineFromIr } from './rules/irMachine';
-export type { IrDocument, IrTransition } from './rules/irMachine';
+export type { IrDocument, IrTransition, IrOutcome, IrOutcomeEdge } from './rules/irMachine';
 export { evaluateRule, applyReduction, validateSchema } from './rules/interpreter';
 export type {
   Rule,

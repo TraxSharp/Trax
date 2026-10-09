@@ -161,9 +161,9 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
         ((DbContext)this).Set<Effect.Models.JunctionRun.JunctionRun>();
 
     /// <summary>
-    /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft, written by
-    /// Trax.Effect.StateMachine.Persistence. Filter by <c>UserKey</c> when querying directly, because the draft
-    /// id alone is not unique across users.
+    /// The <c>trax.snapshot_draft</c> table: one row per user's state-machine draft or system-owned instance,
+    /// written by Trax.Effect.StateMachine.Persistence. Filter by <c>OwnerKind</c> and <c>UserKey</c> when querying
+    /// directly, because the draft id alone is unique neither across users nor between a user and the system.
     /// </summary>
     /// <remarks>
     /// <see cref="DataContext{TDbContext}"/> declares this set. The default here keeps an implementation written
@@ -182,6 +182,17 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable
     /// </remarks>
     DbSet<Effect.Models.EffectClaim.EffectClaim> EffectClaims =>
         ((DbContext)this).Set<Effect.Models.EffectClaim.EffectClaim>();
+
+    /// <summary>
+    /// The <c>trax.checkpoint</c> table: the state a train declared with <c>Checkpoint&lt;TState&gt;()</c>,
+    /// one row per run and node, from which a later run of the same input resumes. Deleted with its run.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="DataContext{TDbContext}"/> declares this set. The default keeps an implementation
+    /// written before the member existed compiling and loading, as <see cref="RunnerNonces"/> does.
+    /// </remarks>
+    DbSet<Effect.Models.Checkpoint.Checkpoint> Checkpoints =>
+        ((DbContext)this).Set<Effect.Models.Checkpoint.Checkpoint>();
 
     #endregion
 

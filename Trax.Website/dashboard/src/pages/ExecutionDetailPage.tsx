@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "urql";
-import { EXECUTION_DETAIL } from "../graphql/queries";
-import { CANCEL_EXECUTION, REQUEUE_EXECUTION } from "../graphql/mutations";
+import { EXECUTION_DETAIL, RUN_GRAPH } from "../graphql/queries";
+import { CANCEL_EXECUTION, REQUEUE_EXECUTION, RESUME_EXECUTION } from "../graphql/mutations";
 import { StateBadge } from "../components/StateBadge";
 import { StateTimeline } from "../components/StateTimeline";
 import { ExecutionChildren } from "../components/ExecutionChildren";
 import { JunctionTimeline } from "../components/JunctionTimeline";
+import { RunGraphView } from "../components/RunGraphView";
 import { DecisionsPanel } from "../components/DecisionsPanel";
 import { LogsGrid } from "../components/LogsGrid";
 import {
@@ -21,8 +22,9 @@ import {
 } from "../components/detail";
 import { formatMs, formatTime, prettyJson, shortName } from "../lib/format";
 import { toast } from "../lib/toast";
+import { useAnswers } from "../lib/answerable";
 import { useRefetchOnChange } from "../lib/useRefetchOnChange";
-import type { ExecutionDetail } from "../types";
+import type { ExecutionDetail, RunGraph } from "../types";
 
 const ACTIVE_STATES = new Set(["PENDING", "IN_PROGRESS"]);
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
@@ -31,28 +33,65 @@ interface ExecData {
   operations: { executionDetail: ExecutionDetail | null };
 }
 
+interface RunGraphData {
+  operations: { runGraph: RunGraph | null };
+}
+
 export function ExecutionDetailPage() {
   const id = Number(useParams().id);
   const [result, reexecute] = useQuery<ExecData>({
     query: EXECUTION_DETAIL,
     variables: { id },
   });
-  useRefetchOnChange("EXECUTION", () => reexecute({ requestPolicy: "network-only" }));
+  // The run drawn on its train's declared graph, with the checkpoints it can resume from. Not asked
+  // of a client that cannot answer it (the demo, until its recordings hold run graphs).
+  const answersGraph = useAnswers("RunGraph");
+  const [graphResult, reexecuteGraph] = useQuery<RunGraphData>({
+    query: RUN_GRAPH,
+    variables: { metadataId: id },
+    pause: !answersGraph,
+  });
+  // An EXECUTION change names no run, so it refetches the run on any run's change. The graph is the
+  // heavier read and changes only while this run is going, so it is read again only then, and once
+  // more when the run's state moves (as it ends), so a finished run shows the graph it ended with.
+  // reexecute ignores pause, so a client that cannot answer the graph is never sent one.
+  const trainState = result.data?.operations?.executionDetail?.trainState;
+  const active = trainState != null && ACTIVE_STATES.has(trainState);
+  useRefetchOnChange("EXECUTION", () => {
+    reexecute({ requestPolicy: "network-only" });
+    if (answersGraph && active) reexecuteGraph({ requestPolicy: "network-only" });
+  });
+  const seenState = useRef(trainState);
+  useEffect(() => {
+    const before = seenState.current;
+    seenState.current = trainState;
+    if (answersGraph && before != null && trainState != null && before !== trainState)
+      reexecuteGraph({ requestPolicy: "network-only" });
+  }, [trainState, answersGraph, reexecuteGraph]);
   const [, cancelExecution] = useMutation(CANCEL_EXECUTION);
   const [, requeueExecution] = useMutation(REQUEUE_EXECUTION);
+  const [, resumeExecution] = useMutation(RESUME_EXECUTION);
   const [busy, setBusy] = useState(false);
+  // While a resume is in flight: the node a "Resume from here" names, or "" for the Resume button.
+  const [resuming, setResuming] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const e = result.data?.operations.executionDetail;
+  const graph = graphResult.data?.operations?.runGraph ?? null;
+  // A resume, like a re-queue, runs on the saved input, so a run without one offers no resume, as
+  // on the Blazor page.
+  const hasInput = Boolean(e?.input?.trim());
 
   async function onCancel() {
     if (!confirm(`Request cancellation of execution #${id}?`)) return;
     setBusy(true);
     const r = await cancelExecution({ id });
     setBusy(false);
+    const res = r.data?.operations?.cancelExecution;
     if (r.error) toast(r.error.message, "error");
-    else if (r.data?.operations.cancelExecution.count === 0)
-      toast("Execution is no longer cancellable.", "info");
+    // A refusal says why: a run a user's state-machine draft started is read-only to operators.
+    else if (res && !res.success) toast(res.message ?? "Could not request cancellation.", "error");
+    else if (res?.count === 0) toast("Execution is no longer cancellable.", "info");
     else toast("Cancellation requested.", "success");
     reexecute({ requestPolicy: "network-only" });
   }
@@ -74,6 +113,29 @@ export function ExecutionDetailPage() {
       toast(res.message ? `Execution re-queued. ${res.message}` : "Execution re-queued.", "success");
       if (res.id != null) navigate(`/work-queue/${res.id}`);
     } else toast(res?.message ?? "Could not re-queue.", "error");
+  }
+
+  // Resume queues a run that skips to the step after this run's latest checkpoint (from null), or to
+  // the node a "Resume from here" names, and opens its work queue entry. Through resumeExecution,
+  // the call the Blazor page's Resume buttons make, so the API refuses the same runs with the same
+  // reasons. One re-queue or resume at a time.
+  async function onResume(from: string | null) {
+    if (busy) return;
+    const what = from
+      ? `Resume execution #${id} from ${from}? A run is queued that skips to this step, on what the checkpoint before it restores.`
+      : `Resume execution #${id}? A run is queued that skips to the step after its latest checkpoint.`;
+    if (!confirm(what)) return;
+    setBusy(true);
+    setResuming(from ?? "");
+    const r = await resumeExecution({ id, from });
+    setBusy(false);
+    setResuming(null);
+    const res = r.data?.operations?.resumeExecution;
+    if (r.error) toast(r.error.message, "error");
+    else if (res?.success) {
+      toast(res.message ? `Execution queued to resume. ${res.message}` : "Execution queued to resume.", "success");
+      if (res.id != null) navigate(`/work-queue/${res.id}`);
+    } else toast(res?.message ?? "Could not resume.", "error");
   }
 
   if (result.error)
@@ -115,6 +177,16 @@ export function ExecutionDetailPage() {
               className="text-sm px-3 py-1 rounded-md border border-danger-line text-danger-fg hover:bg-danger-soft disabled:opacity-50"
             >
               Cancel
+            </button>
+          )}
+          {hasInput && graph?.canResume && (
+            <button
+              onClick={() => onResume(null)}
+              disabled={busy}
+              title="Queue a run that skips to the step after this run's latest checkpoint, instead of running every step again."
+              className="text-sm px-3 py-1 rounded-md border border-accent-line text-accent-fg hover:bg-accent-soft disabled:opacity-50"
+            >
+              {resuming === "" ? "Resuming…" : "Resume"}
             </button>
           )}
           {TERMINAL_STATES.has(e.trainState) && (
@@ -197,6 +269,21 @@ export function ExecutionDetailPage() {
                   ],
                 ] as [string, React.ReactNode][])
               : []),
+            ...(e.resumeFrom != null
+              ? ([
+                  [
+                    "Resumes",
+                    <>
+                      <DetailLink to={`/executions/${e.resumeFrom}`}>
+                        {e.resumeFrom}
+                      </DetailLink>
+                      {e.resumeAt != null
+                        ? ` at ${e.resumeAt}`
+                        : " after its latest checkpoint"}
+                    </>,
+                  ],
+                ] as [string, React.ReactNode][])
+              : []),
           ]}
         />
       </DetailPanel>
@@ -236,6 +323,24 @@ export function ExecutionDetailPage() {
             ]}
           />
         </div>
+      )}
+
+      {graphResult.error && !graph ? (
+        // A read that failed, told apart from a run that cannot be resumed: nothing offers a resume
+        // until the graph can be read.
+        <section aria-label="Run graph" className="bg-surface rounded-lg border border-line p-5 mb-6">
+          <h2 className="text-sm font-semibold text-fg mb-3">Run graph</h2>
+          <p className="text-sm text-danger-fg">
+            Could not read the run graph: {graphResult.error.message}
+          </p>
+        </section>
+      ) : graph && (
+        <RunGraphView
+          graph={graph}
+          onResume={hasInput ? (from) => void onResume(from) : undefined}
+          resumingNode={resuming}
+          resumeDisabled={busy}
+        />
       )}
 
       <JunctionTimeline

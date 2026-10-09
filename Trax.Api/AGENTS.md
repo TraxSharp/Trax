@@ -34,11 +34,11 @@ if your work contradicts one, say so rather than silently overriding it.
 | `subjectKey` or `confirmedAt` on work queue reads | central `docs/0019` and `docs/0018` |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Thirty-five name `api`, three of them superseded. Among them: executable guards, the
+index lists them by folder. Thirty-seven name `api`, three of them superseded. Among them: executable guards, the
 dependency direction, the three test conventions, the canonical train name being the
 interface FullName, the documentation lints, feature-package tables shipping in the core
 provider migration set, the public API baseline, test frameworks staying out of shipped
-libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
+libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
 (`0016`), the enqueue, staging, subject and failure-classification decisions (`0017` to
 `0020`), the shared dashboard/API operations (`0022`), a requeue replaying decisions (`0041`), and one

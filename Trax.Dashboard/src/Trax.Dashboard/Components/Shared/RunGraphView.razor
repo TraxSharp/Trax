@@ -1,0 +1,251 @@
+@* One run drawn on its train's declared chain, as RunGraphs.Match places its recorded steps *@
+@using Trax.Api.DTOs
+@using Trax.Core.Monad
+
+<RadzenCard class="rz-mb-4 cs-rg-card">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2" Style="margin: 0;">Run Graph</RadzenText>
+
+    @if (!Graph.HasGraph)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="cs-rg-none" Style="color: var(--rz-text-disabled-color); margin: 0;">
+            This host has no declared graph for this train: it is not registered here, or its chain
+            cannot be read outside a request. The steps the run recorded are in the timeline below.
+        </RadzenText>
+    }
+    else
+    {
+        @if (Graph.MoreSteps)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="cs-rg-truncated rz-mb-2" Style="color: var(--rz-warning); margin: 0;">
+                Only the run's first steps are placed; a later node can show as not reached when it ran.
+            </RadzenText>
+        }
+        <ol class="cs-rg" aria-label="Declared steps of the train">
+            @foreach (var node in Graph.Nodes)
+            {
+                @RenderNode(node)
+            }
+        </ol>
+    }
+
+    @if (Graph.HasGraph && Graph.UnmatchedSteps.Count > 0)
+    {
+        <section class="cs-rg-unmatched" aria-label="Steps that match no node">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mt-3 rz-mb-1" Style="margin-bottom: 0.25rem;">
+                Steps not on the graph
+            </RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" Style="color: var(--rz-text-secondary-color); margin: 0 0 0.25rem 0;">
+                Recorded without a node id (before node ids were recorded, or after a route whose
+                answer is withheld), or for a step the chain no longer declares.
+            </RadzenText>
+            <ul class="cs-rg-unmatched-list">
+                @foreach (var step in Graph.UnmatchedSteps)
+                {
+                    <li class="cs-rg-unmatched-step" data-position="@step.Position">
+                        <span class="cs-rg-dot @StepClass(step.State)" aria-hidden="true"></span>
+                        <span class="cs-jt-step-number">#@step.Position</span>
+                        <span class="@(step.NameWithheld ? "cs-jt-answer--withheld" : "")">@(step.NameWithheld ? "withheld" : step.Name)</span>
+                        <span class="cs-rg-state-label">@step.State</span>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</RadzenCard>
+
+@code {
+    /// <summary>
+    /// The run on its graph, from <c>RunGraphs.Match</c>: the read <c>operations.runGraph</c>
+    /// makes. Without a graph (<see cref="RunGraph.HasGraph"/> false), a short message is shown.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public RunGraph Graph { get; set; } = default!;
+
+    /// <summary>
+    /// Called with a node's id when the operator asks to resume the run there. Without it, no
+    /// node offers "Resume from here". The page resumes through
+    /// <c>IOperationsService.ResumeExecutionAsync</c>, the call the API's <c>resumeExecution</c> makes.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnResume { get; set; }
+
+    /// <summary>The node whose resume is in flight, whose button shows busy, or null.</summary>
+    [Parameter]
+    public string? ResumingNode { get; set; }
+
+    /// <summary>True while any of the page's re-queues or resumes is in flight.</summary>
+    [Parameter]
+    public bool ResumeDisabled { get; set; }
+
+    // A poll that hands the same graph back renders nothing again.
+    private RunGraph? _rendered;
+    private string? _renderedResuming;
+    private bool _renderedDisabled;
+
+    protected override bool ShouldRender() =>
+        !ReferenceEquals(Graph, _rendered)
+        || ResumingNode != _renderedResuming
+        || ResumeDisabled != _renderedDisabled;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _rendered = Graph;
+        _renderedResuming = ResumingNode;
+        _renderedDisabled = ResumeDisabled;
+    }
+
+    private RenderFragment RenderNode(RunGraphNode node) =>
+        @<li class="cs-rg-node @(node.State is RunNodeState.Skipped or RunNodeState.NotReached ? "cs-rg-node--dim" : "")" data-node-id="@node.Id" data-kind="@node.Kind" data-state="@node.State" data-can-resume="@(node.CanResume ? "true" : "false")">
+            <div class="cs-rg-row" title="@node.Id">
+                <span class="cs-rg-dot @NodeClass(node.State)" aria-hidden="true"></span>
+                <span class="cs-rg-kind">@KindLabel(node.Kind)</span>
+                <span class="cs-rg-name">@NameOf(node)</span>
+                <span class="cs-rg-state-label">@StateLabel(node.State)</span>
+                @if (node.Opaque)
+                {
+                    <RadzenBadge class="cs-rg-opaque" BadgeStyle="BadgeStyle.Light" Variant="Variant.Outlined" Text="opaque"
+                                 title="Which junction runs here is decided only at run time" />
+                }
+                @if (node.Replayed)
+                {
+                    <RadzenBadge class="cs-rg-replayed" BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Outlined" Text="replayed" />
+                }
+                @if (node.Checkpointed)
+                {
+                    @* That a checkpoint is stored here, never what it holds. *@
+                    <RadzenBadge class="cs-rg-checkpoint" BadgeStyle="BadgeStyle.Info" Variant="Variant.Outlined" Text="checkpoint"
+                                 title="A checkpoint the run can resume from is stored here" />
+                }
+                @if (node.CanResume && OnResume.HasDelegate)
+                {
+                    <RadzenButton class="cs-rg-resume"
+                                  Text="Resume from here"
+                                  Icon="play_arrow"
+                                  ButtonStyle="ButtonStyle.Secondary"
+                                  Variant="Variant.Text"
+                                  Size="ButtonSize.ExtraSmall"
+                                  title="Queue a run that skips to this step, on what the checkpoint before it restores."
+                                  Click="@(() => OnResume.InvokeAsync(node.Id))"
+                                  IsBusy="@(ResumingNode == node.Id)"
+                                  Disabled="@ResumeDisabled" />
+                }
+                @if (node.Steps.FirstOrDefault(s => s.State is JunctionRunState.Failed or JunctionRunState.Cancelled) is { } failed)
+                {
+                    <span class="cs-jt-failure cs-rg-failure">
+                        @string.Join(" · ", new[] { failed.State == JunctionRunState.Cancelled ? "Cancelled" : failed.FailureClass?.ToString(), failed.FailureException }.Where(s => !string.IsNullOrEmpty(s)))
+                    </span>
+                }
+            </div>
+            @if (node.Kind == ChainStepKind.Parallel)
+            {
+                @* Every branch runs, so the branches sit side by side as lanes rather than as
+                   alternatives stacked under the step. *@
+                <ul class="cs-rg-lanes" aria-label="@($"Branches of {NameOf(node)}, run side by side")">
+                    @foreach (var branch in node.Tracks)
+                    {
+                        <li class="cs-rg-lane @(branch.Taken ? "" : "cs-rg-lane--idle")" data-branch="@branch.Name" data-taken="@(branch.Taken ? "true" : "false")">
+                            <div class="cs-rg-lane-name">
+                                <RadzenIcon Icon="call_split" Style="font-size: 14px;" aria-hidden="true" />
+                                <span class="cs-rg-kind">branch</span>
+                                <span>@branch.Name</span>
+                            </div>
+                            @if (branch.Nodes.Count > 0)
+                            {
+                                <ol class="cs-rg" aria-label="@($"Steps of branch {branch.Name}")">
+                                    @foreach (var inner in branch.Nodes)
+                                    {
+                                        @RenderNode(inner)
+                                    }
+                                </ol>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            else if (node.Tracks.Count > 0)
+            {
+                <ul class="cs-rg-tracks" aria-label="@($"Tracks of {NameOf(node)}")">
+                    @foreach (var track in node.Tracks)
+                    {
+                        <li class="cs-rg-track @(track.Taken ? "cs-rg-track--taken" : "")" data-track="@track.Name" data-taken="@(track.Taken ? "true" : "false")">
+                            <div class="cs-rg-track-name" title="@track.Description">
+                                <RadzenIcon Icon="alt_route" Style="font-size: 14px;" aria-hidden="true" />
+                                <span>@track.Name</span>
+                                @if (track.IsFallback)
+                                {
+                                    <span class="cs-rg-fallback">fallback</span>
+                                }
+                                @if (track.Taken)
+                                {
+                                    <span class="cs-rg-taken">taken</span>
+                                }
+                            </div>
+                            @if (track.Nodes.Count > 0)
+                            {
+                                <ol class="cs-rg">
+                                    @foreach (var inner in track.Nodes)
+                                    {
+                                        @RenderNode(inner)
+                                    }
+                                </ol>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </li>;
+
+    // The last segment of the id names the step within its track, as "Ship#0".
+    private static string NameOf(RunGraphNode node)
+    {
+        var slash = node.Id.LastIndexOf('/');
+        return slash < 0 ? node.Id : node.Id[(slash + 1)..];
+    }
+
+    private static string KindLabel(ChainStepKind kind) =>
+        kind switch
+        {
+            ChainStepKind.Chain => "Junction",
+            ChainStepKind.IChain => "Junction (interface)",
+            ChainStepKind.ShortCircuit => "Short circuit",
+            _ => kind.ToString(),
+        };
+
+    private static string StateLabel(RunNodeState state) =>
+        state switch
+        {
+            RunNodeState.NotReached => "not reached",
+            RunNodeState.InProgress => "running",
+            RunNodeState.Completed => "completed",
+            RunNodeState.Failed => "failed",
+            RunNodeState.Cancelled => "cancelled",
+            RunNodeState.Skipped => "skipped",
+            RunNodeState.NotRecorded => "not recorded",
+            RunNodeState.Withheld => "withheld",
+            RunNodeState.Restored => "restored",
+            RunNodeState.Interrupted => "interrupted",
+            _ => state.ToString(),
+        };
+
+    private static string NodeClass(RunNodeState state) =>
+        state switch
+        {
+            RunNodeState.InProgress => "cs-jt--in-progress",
+            RunNodeState.Completed => "cs-jt--completed",
+            RunNodeState.Failed => "cs-jt--failed",
+            RunNodeState.Cancelled => "cs-jt--cancelled",
+            RunNodeState.Restored => "cs-rg--restored",
+            RunNodeState.Interrupted => "cs-rg--interrupted",
+            _ => "cs-rg--idle",
+        };
+
+    private static string StepClass(JunctionRunState state) =>
+        state switch
+        {
+            JunctionRunState.InProgress => "cs-jt--in-progress",
+            JunctionRunState.Completed => "cs-jt--completed",
+            JunctionRunState.Failed => "cs-jt--failed",
+            JunctionRunState.Cancelled => "cs-jt--cancelled",
+            _ => "cs-rg--idle",
+        };
+}

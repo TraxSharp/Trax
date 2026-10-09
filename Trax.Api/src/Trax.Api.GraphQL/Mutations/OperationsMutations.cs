@@ -253,7 +253,9 @@ public partial class OperationsMutations
     /// progress. The request is durable: the process running the train sees it and ends the run
     /// as Cancelled, and a run on this host is cancelled at once. <c>count</c> is 1 when the
     /// execution was flagged; an execution that is already finished or does not exist returns
-    /// <c>success: false</c> with <c>count</c> 0.
+    /// <c>success: false</c> with <c>count</c> 0. So does a run a step of a user's state-machine
+    /// draft started, with the reason: a user's draft is read-only to operators, and only its user
+    /// cancels the run, by leaving the state (central ADR 0046).
     /// </summary>
     public async Task<OperationResponse> CancelExecution(
         long id,
@@ -277,8 +279,9 @@ public partial class OperationsMutations
     /// <summary>
     /// Requests cancellation of the listed executions, as <c>cancelExecution</c> does for one:
     /// every one still pending or in progress is flagged, and finished or unknown ids are skipped.
-    /// <c>count</c> is the number flagged, zero included. An empty list, or more than 1000 ids,
-    /// returns <c>success: false</c> and flags nothing.
+    /// A run a step of a user's state-machine draft started is skipped too, and the message says
+    /// how many and why. <c>count</c> is the number flagged, zero included. An empty list, or more
+    /// than 1000 ids, returns <c>success: false</c> and flags nothing.
     /// </summary>
     public async Task<OperationResponse> CancelExecutions(
         long[] ids,
@@ -337,6 +340,30 @@ public partial class OperationsMutations
                 ? await operationsService.RequeueExecutionAsync(id, askAfresh: true, ct)
                 : await operationsService.RequeueExecutionAsync(id, ct)
         );
+
+    /// <summary>
+    /// Resumes a failed or cancelled execution from a checkpoint instead of running every step
+    /// again: queues a run of the same train, with the input the execution recorded, that skips
+    /// to the step <c>from</c> names (a node id, as <c>runGraph</c> gives it), or to the step after
+    /// the execution's latest checkpoint when <c>from</c> is omitted. Through
+    /// <see cref="IOperationsService.ResumeExecutionAsync"/>, the same call the dashboard's Resume
+    /// and Resume from here buttons make. It is a requeue in every check but where the run starts,
+    /// so it enqueues through the mediator and the train's <c>[TraxAuthorize]</c> applies, and the
+    /// new run replays the execution's decisions. Fails without queueing, with the reason, when
+    /// the execution does not exist, is not failed or cancelled, was started by a state machine's
+    /// step, has a saved input a requeue would refuse, already has a queued resume, or when no
+    /// checkpoint it wrote lets it resume at that step.
+    /// </summary>
+    /// <param name="id">The execution (metadata) id.</param>
+    /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the request.</param>
+    /// <param name="from">The node id of the step to resume at, or null for after the latest checkpoint.</param>
+    public async Task<OperationResponse> ResumeExecution(
+        long id,
+        [Service] IOperationsService operationsService,
+        CancellationToken ct,
+        string? from = null
+    ) => ToResponse(await operationsService.ResumeExecutionAsync(id, from, ct));
 
     /// <summary>
     /// Patches mutable settings on a single manifest (enabled, retries, priority, timeout,

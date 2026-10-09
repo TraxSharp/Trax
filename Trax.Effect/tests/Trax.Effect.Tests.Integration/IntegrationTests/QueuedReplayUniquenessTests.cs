@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -36,6 +37,9 @@ public class QueuedReplayUniquenessTests : TestSetup
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "marks an entry dispatched by hand to exercise the partial index, with no run behind it"
+    )]
     public async Task A_dispatched_replay_does_not_count_against_a_queued_one()
     {
         var source = Random.Shared.NextInt64(1_000_000_000, long.MaxValue);

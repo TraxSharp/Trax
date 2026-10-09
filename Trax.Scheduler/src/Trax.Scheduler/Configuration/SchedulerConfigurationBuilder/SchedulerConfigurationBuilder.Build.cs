@@ -17,6 +17,8 @@ using Trax.Scheduler.Services.LogLevels;
 using Trax.Scheduler.Services.ManifestManagerPollingService;
 using Trax.Scheduler.Services.MetadataCleanupPollingService;
 using Trax.Scheduler.Services.Operations;
+using Trax.Scheduler.Services.QueuedWorkListenerService;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Services.SchedulerLiveness;
 using Trax.Scheduler.Services.SchedulerStartupService;
 using Trax.Scheduler.Services.TraxScheduler;
@@ -70,8 +72,15 @@ public partial class SchedulerConfigurationBuilder
             ServiceDescriptor.Singleton<ICancellationRegistry, CancellationRegistry>()
         );
 
-        // Register ITraxScheduler
-        _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler, TraxScheduler>();
+        // Register ITraxScheduler. Built by the container, then handed what its dead-letter
+        // requeue resumes runs with, so its public constructors stay as they are.
+        _parentBuilder.ServiceCollection.TryAddScoped<TraxScheduler>();
+        _parentBuilder.ServiceCollection.AddScoped<ITraxScheduler>(sp =>
+        {
+            var scheduler = sp.GetRequiredService<TraxScheduler>();
+            scheduler.RetryResume ??= sp.GetRequiredService<RetryResume>();
+            return scheduler;
+        });
 
         // The effects list, toggle and settings editor the dashboard and the GraphQL API share
         // (docs/0022). It acts on this process only.
@@ -84,6 +93,15 @@ public partial class SchedulerConfigurationBuilder
         _parentBuilder.ServiceCollection.TryAddScoped(sp => new RetryDecisionReplay(
             sp.GetRequiredService<IDataContextProviderFactory>(),
             sp.GetRequiredService<ILogger<RetryDecisionReplay>>()
+        ));
+
+        // Chooses the run a manifest's retry or a dead-letter requeue resumes from a checkpoint
+        // (Trax.Docs/adr/0047).
+        _parentBuilder.ServiceCollection.TryAddScoped(sp => new RetryResume(
+            sp.GetRequiredService<IDataContextProviderFactory>(),
+            sp.GetService<Trax.Effect.Services.Checkpoints.IRunResumes>(),
+            sp.GetService<Trax.Mediator.Services.ChainVerification.ITrainChainGraphs>(),
+            sp.GetRequiredService<ILogger<RetryResume>>()
         ));
 
         // Register IOperationsService — shared between dashboard UI and GraphQL operations
@@ -105,6 +123,10 @@ public partial class SchedulerConfigurationBuilder
         // in-memory SchedulerConfiguration singleton, then keeps checking it so a save made on
         // any host reaches this one within seconds.
         _parentBuilder.ServiceCollection.AddHostedService<SchedulerConfigBootstrapHostedService>();
+
+        // Holds the lifecycle events of the runs a ManifestManager cycle fails until its
+        // transaction commits.
+        _parentBuilder.ServiceCollection.TryAddScoped<DeferredOutcomeEvents>();
 
         // Register IDormantDependentContext with forwarding so both concrete type
         // (for RunScheduledTrainJunction.Initialize) and interface (for user steps)
@@ -204,6 +226,14 @@ public partial class SchedulerConfigurationBuilder
         if (_parentBuilder.HasDatabaseProvider)
         {
             _parentBuilder.ServiceCollection.AddHostedService<JobDispatcherPollingService>();
+
+            // Ends the dispatcher's wait when the provider reports queued work: on Postgres from
+            // any host, on SQLite from this one. The poll stays the fallback.
+            _parentBuilder.ServiceCollection.AddSingleton<DispatcherWake>();
+            _parentBuilder.ServiceCollection.AddSingleton<QueuedWorkListenerService>();
+            _parentBuilder.ServiceCollection.AddHostedService(sp =>
+                sp.GetRequiredService<QueuedWorkListenerService>()
+            );
 
             if (_configuration.MetadataCleanup is not null)
             {

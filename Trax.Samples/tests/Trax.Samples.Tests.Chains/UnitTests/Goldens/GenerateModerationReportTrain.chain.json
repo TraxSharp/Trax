@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.ContentShield.Trains.Reports.GenerateModerationReport.GenerateModerationReportTrain",
+  "input": "GenerateModerationReportInput",
+  "output": "GenerateModerationReportOutput",
+  "nodes": [
+    {
+      "id": "AggregateMetricsJunction#0",
+      "kind": "Chain",
+      "junction": "AggregateMetricsJunction",
+      "in": "GenerateModerationReportInput",
+      "out": "GenerateModerationReportInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "FormatReportJunction#0",
+      "kind": "Chain",
+      "junction": "FormatReportJunction",
+      "in": "GenerateModerationReportInput",
+      "out": "GenerateModerationReportOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GenerateModerationReportOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

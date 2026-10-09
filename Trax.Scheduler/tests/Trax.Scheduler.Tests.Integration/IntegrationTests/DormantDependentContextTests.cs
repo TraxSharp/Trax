@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -324,6 +325,9 @@ public class DormantDependentContextTests : TestSetup
         entries[0].Input.Should().NotContain("ShouldBeSkipped");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, so activation finds an active execution."
+    )]
     [Test]
     public async Task ActivateAsync_WhenActiveExecution_SkipsWithoutError()
     {

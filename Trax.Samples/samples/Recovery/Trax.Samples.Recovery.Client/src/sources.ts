@@ -2,11 +2,13 @@
 // shows what actually runs.
 import researchTrain from "../../Trax.Samples.Recovery/Trains/Research/ResearchTopicTrain.cs?raw";
 import refundTrain from "../../Trax.Samples.Recovery/Trains/Refund/ApproveRefundTrain.cs?raw";
+import topicMapTrain from "../../Trax.Samples.Recovery/Trains/Topics/BuildTopicMapTrain.cs?raw";
 import type { Scenario, Step } from "./types";
 
 export const SOURCES: Record<Scenario, { file: string; code: string }> = {
   RESEARCH: { file: "Trains/Research/ResearchTopicTrain.cs", code: researchTrain },
   REFUND: { file: "Trains/Refund/ApproveRefundTrain.cs", code: refundTrain },
+  TOPIC_MAP: { file: "Trains/Topics/BuildTopicMapTrain.cs", code: topicMapTrain },
 };
 
 const GATE_TRACKS: Record<string, string> = { Yes: ".Yes(", No: ".No(", Unsure: ".Unsure(" };

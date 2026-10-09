@@ -8,6 +8,7 @@ using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Logging.Extensions;
@@ -215,6 +216,9 @@ public class MaxActiveJobsTests
 
     #region Pending + InProgress Combined Limit Tests
 
+    [LeavesStuckRuns(
+        "Seeds in-progress runs that no host is running, to fill the active-job limit."
+    )]
     [Test]
     public async Task Run_CountsBothPendingAndInProgressTowardLimit()
     {
@@ -259,6 +263,9 @@ public class MaxActiveJobsTests
         }
     }
 
+    [LeavesStuckRuns(
+        "Seeds in-progress runs that no host is running, to fill the active-job limit."
+    )]
     [Test]
     public async Task Run_OnlyInProgressJobs_CountsTowardLimit()
     {
@@ -578,6 +585,9 @@ public class MaxActiveJobsTests
         dispatchedCount.Should().Be(1, "only one slot was available");
     }
 
+    [LeavesStuckRuns(
+        "Seeds in-progress runs that no host is running, to fill the active-job limit."
+    )]
     [Test]
     public async Task Run_WithMixedStatesAtBoundary_CorrectlyCalculatesLimit()
     {
@@ -840,6 +850,9 @@ public class MaxActiveJobsTests
 
     #region ExcludeFromMaxActiveJobs Tests
 
+    [LeavesStuckRuns(
+        "Seeds in-progress runs that no host is running, to fill the active-job limit."
+    )]
     [Test]
     public async Task Run_ExcludedTrain_NotCountedTowardMaxActiveJobs()
     {
@@ -964,6 +977,9 @@ public class MaxActiveJobsTests
             d.Dispose();
     }
 
+    [LeavesStuckRuns(
+        "Seeds in-progress runs that no host is running, to fill the active-job limit."
+    )]
     [Test]
     public async Task Run_NonExcludedTrain_CountedTowardMaxActiveJobs()
     {

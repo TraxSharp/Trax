@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -43,6 +44,9 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         _config.DefaultJobTimeout = _previousDefault;
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, aged so the reaper leaves it alone."
+    )]
     [Test]
     public async Task A_run_61_minutes_into_a_three_hour_timeout_stays_in_progress()
     {
@@ -66,6 +70,9 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         (await Load(run)).TrainState.Should().Be(TrainState.Failed);
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, aged so the reaper leaves it alone."
+    )]
     [Test]
     public async Task A_run_past_its_manifest_timeout_but_inside_the_grace_stays_in_progress()
     {
@@ -88,6 +95,9 @@ public class ManifestTimeoutStaleReapTests : TestSetup
         (await Load(run)).TrainState.Should().Be(TrainState.Failed);
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, aged so the reaper leaves it alone."
+    )]
     [TestCase(165, TrainState.InProgress)]
     [TestCase(185, TrainState.Failed)]
     public async Task With_a_stale_timeout_shorter_than_the_default_job_timeout_a_run_is_reaped_at_its_manifest_timeout(

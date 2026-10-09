@@ -2,23 +2,32 @@
 // the store delta, and a follow-up query (list + detail) reflects it. Run:
 //   npx tsx scripts/mock-overlays-smoke.ts
 import { createMockClient } from "../src/mock/client";
+import { devMockSeed } from "../src/mock/seeds";
 import { createMockStore } from "../src/mock/store/mock-store";
 import {
   DEAD_LETTERS,
   DEAD_LETTER_DETAIL,
+  EXECUTIONS,
+  MACHINE_INSTANCE,
+  MACHINE_INSTANCES,
   MANIFESTS,
   MANIFEST_DETAIL,
   MANIFEST_GROUPS,
+  RUN_GRAPH,
   SCHEDULER_CONFIG,
+  WORK_QUEUE_DETAIL,
 } from "../src/graphql/queries";
 import {
   ACKNOWLEDGE_DEAD_LETTER,
+  CANCEL_MACHINE_INSTANCE,
+  RESUME_EXECUTION,
   UPDATE_MANIFEST,
   UPDATE_MANIFEST_GROUP,
   UPDATE_SCHEDULER,
 } from "../src/graphql/mutations";
 
-const client = createMockClient({ store: createMockStore({ exposeOnWindow: false }) });
+// As `dev:mock` builds it: the fixtures, with the seed for what they do not hold.
+const client = createMockClient({ store: createMockStore({ exposeOnWindow: false }), overrides: devMockSeed });
 const NET = { requestPolicy: "network-only" as const };
 const get = (o: unknown, path: string) =>
   path.split(".").reduce<unknown>((a, k) => (a as Record<string, unknown>)?.[k], o);
@@ -73,6 +82,44 @@ function check(label: string, cond: boolean) {
   const after = await client.query(SCHEDULER_CONFIG, {}, NET).toPromise();
   const cfg = get(after.data, "operations.config.scheduler") as { maxActiveJobs: number; defaultMaxRetries: number };
   check("schedulerConfig -> patched", cfg.maxActiveJobs === 42 && cfg.defaultMaxRetries === 9);
+}
+
+// ── Resume: a run that stopped after its checkpoint offers a resume (a captured completed run does
+// not); resuming queues an entry, and a second is refused while it is queued ──
+{
+  const list = await client.query(EXECUTIONS, { take: 25 }, NET).toPromise();
+  const completed = (get(list.data, "operations.executions.items") as { id: number }[])[0];
+  const done = await client.query(RUN_GRAPH, { metadataId: completed.id }, NET).toPromise();
+  check("runGraph of a captured completed run -> not resumable", get(done.data, "operations.runGraph.canResume") === false);
+  const flat = get(done.data, "operations.runGraph.allNodes") as { id: string; parentId: string | null; depth: number }[];
+  check(
+    "runGraph -> every node in allNodes, with where it sits",
+    flat.some((n) => n.parentId === "Signals#4" && n.depth === 1) && flat.some((n) => n.parentId == null && n.depth === 0),
+  );
+  const failed = { id: 424_242 };
+  const graph = await client.query(RUN_GRAPH, { metadataId: failed.id }, NET).toPromise();
+  check("runGraph of a stopped run -> resumable", get(graph.data, "operations.runGraph.canResume") === true);
+  const ack = await client.mutation(RESUME_EXECUTION, { id: failed.id, from: null }).toPromise();
+  const entryId = get(ack.data, "operations.resumeExecution.id") as number;
+  const entry = await client.query(WORK_QUEUE_DETAIL, { id: entryId }, NET).toPromise();
+  check("resumeExecution -> queued entry", get(entry.data, "operations.workQueue.detail.status") === "QUEUED");
+  const again = await client.mutation(RESUME_EXECUTION, { id: failed.id, from: null }).toPromise();
+  check("resumeExecution again -> refused", get(again.data, "operations.resumeExecution.success") === false);
+}
+
+// ── State machines: cancel a system instance's live run -> its run shows the cancel request ──
+{
+  const list = await client.query(MACHINE_INSTANCES, { skip: 0, take: 20, ownerKind: "SYSTEM" }, NET).toPromise();
+  const live = (get(list.data, "operations.machineInstances.items") as { machine: string; id: string; hasLiveInvokedRun: boolean }[]).find(
+    (i) => i.hasLiveInvokedRun,
+  )!;
+  const vars = { machine: live.machine, ownerKind: "SYSTEM", id: live.id, rowId: null };
+  await client.query(MACHINE_INSTANCE, vars, NET).toPromise();
+  const ack = await client.mutation(CANCEL_MACHINE_INSTANCE, { machine: live.machine, ownerKind: "SYSTEM", id: live.id }).toPromise();
+  check("cancelMachineInstance -> accepted", get(ack.data, "operations.cancelMachineInstance.success") === true);
+  const after = await client.query(MACHINE_INSTANCE, vars, NET).toPromise();
+  const runs = get(after.data, "operations.machineInstance.invokedRuns") as { isLive: boolean; cancellationRequested: boolean }[];
+  check("machineInstance -> live run cancel requested", runs.some((r) => r.isLive && r.cancellationRequested));
 }
 
 console.log(results.join("\n"));

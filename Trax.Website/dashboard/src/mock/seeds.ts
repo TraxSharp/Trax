@@ -1,4 +1,8 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
+import { operationFixtures } from "./fixtures";
+import { machineQueryResolvers, runGraph, servedRunGraph, type ServedRunGraph } from "./scenarios";
+import { hashVariables } from "./variables-hash";
+import type { RunGraphNode } from "../types";
 
 // A small, stable seed for the WorkQueue list. Auto-mock ids change every call, which breaks
 // read-after-write (a cancelled row would lose its identity on refetch). Fixed ids survive
@@ -79,6 +83,42 @@ export const workQueueSeed: MockSchemaOverrides = {
         take: 25,
         nextCursor: null,
       }),
+    },
+  }),
+};
+
+// The captured fixtures predate the run graph and the state machines, and the devhost they come
+// from has neither, so `dev:mock` answers both from the scenarios: the state machines as
+// machineScenario does, and a run's graph from the scenario's checkpointed train. A captured run
+// that completed ran every step; any other run (captured failed or cancelled, or auto-mocked)
+// stopped after its checkpoint and can resume, so the resume controls show.
+function capturedState(metadataId: number): string | undefined {
+  const data = operationFixtures.ExecutionDetail?.[hashVariables({ id: metadataId })] as
+    | { operations?: { executionDetail?: { trainState?: string } | null } }
+    | undefined;
+  return data?.operations?.executionDetail?.trainState;
+}
+
+const ranEveryStep = (node: RunGraphNode): RunGraphNode => ({
+  ...node,
+  state: node.state === "RESTORED" ? "COMPLETED" : node.state,
+  tracks: node.tracks.map((t) => ({ ...t, nodes: t.nodes.map(ranEveryStep) })),
+});
+
+function devRunGraph(metadataId: number): ServedRunGraph {
+  if (capturedState(metadataId) === "COMPLETED") {
+    const resumed = runGraph(952);
+    return servedRunGraph({ ...resumed, metadataId, nodes: resumed.nodes.map(ranEveryStep) });
+  }
+  return { ...runGraph(902), metadataId };
+}
+
+/** The `dev:mock` overrides for what the captured fixtures do not hold. */
+export const devMockSeed: MockSchemaOverrides = {
+  resolvers: () => ({
+    OperationsQueries: {
+      ...machineQueryResolvers,
+      runGraph: (_root: unknown, args: Record<string, unknown>) => devRunGraph(args.metadataId as number),
     },
   }),
 };

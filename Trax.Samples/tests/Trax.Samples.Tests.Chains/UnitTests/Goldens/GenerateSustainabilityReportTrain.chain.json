@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.EnergyHub.Trains.Sustainability.GenerateSustainabilityReport.GenerateSustainabilityReportTrain",
+  "input": "GenerateSustainabilityReportInput",
+  "output": "GenerateSustainabilityReportOutput",
+  "nodes": [
+    {
+      "id": "AggregateMetricsJunction#0",
+      "kind": "Chain",
+      "junction": "AggregateMetricsJunction",
+      "in": "GenerateSustainabilityReportInput",
+      "out": "GenerateSustainabilityReportInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "PublishReportJunction#0",
+      "kind": "Chain",
+      "junction": "PublishReportJunction",
+      "in": "GenerateSustainabilityReportInput",
+      "out": "GenerateSustainabilityReportOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GenerateSustainabilityReportOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

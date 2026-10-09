@@ -44,6 +44,18 @@ public enum ChainStepKind
 
     /// <summary>Routes on a score in Memory to the track for the level it reaches.</summary>
     Scale,
+
+    /// <summary>
+    /// Runs a fixed set of named branches side by side, each on its own copy of Memory, and
+    /// merges what they produce. <see cref="ChainRecorder.TracksAt(int)"/> holds the branches.
+    /// </summary>
+    Parallel,
+
+    /// <summary>
+    /// Stores the state type in Memory the chain names, so a later run can resume after it. The
+    /// step's input is the state; it contributes nothing to Memory.
+    /// </summary>
+    Checkpoint,
 }
 
 /// <summary>
@@ -89,7 +101,28 @@ public sealed class ChainRecorder
     /// A recorder for one track of a routing step, sharing the question keys of the chain it is
     /// part of.
     /// </summary>
-    internal ChainRecorder(ChainRecorder chain) => _questionKeys = chain._questionKeys;
+    internal ChainRecorder(ChainRecorder chain)
+    {
+        _questionKeys = chain._questionKeys;
+        InBranch = chain.InBranch;
+        _shortCircuitBefore = chain.AfterShortCircuit;
+    }
+
+    private readonly bool _shortCircuitBefore;
+
+    /// <summary>
+    /// True when a <c>ShortCircuit</c> comes before the step about to be recorded, in this chain
+    /// or in the chain a track or branch of it belongs to.
+    /// </summary>
+    internal bool AfterShortCircuit =>
+        _shortCircuitBefore || _steps.Any(s => s.Kind == ChainStepKind.ShortCircuit);
+
+    /// <summary>
+    /// True while recording a branch of a <c>Parallel</c> step, or a track inside one, where a
+    /// step that changes the run as a whole (a short circuit, a call on the train itself) cannot
+    /// be told apart from its siblings' and is refused.
+    /// </summary>
+    internal bool InBranch { get; init; }
 
     /// <summary>
     /// The type each question key was first asked about, across the whole chain and its tracks.
@@ -178,6 +211,60 @@ public sealed class ChainRecorder
     }
 
     internal bool IsBuilt(int stepIndex) => _builtSteps.Contains(stepIndex);
+
+    private readonly List<object> _instances = [];
+
+    /// <summary>Notes a junction instance a step of this chain was handed.</summary>
+    internal void NoteInstance(object instance) => _instances.Add(instance);
+
+    /// <summary>
+    /// Every junction instance this chain's steps, and its tracks' and branches' steps, were
+    /// handed.
+    /// </summary>
+    internal IEnumerable<object> Instances() =>
+        _instances.Concat(_tracks.Values.SelectMany(t => t).SelectMany(t => t.Steps.Instances()));
+
+    /// <summary>
+    /// Refuses two different junctions, or checkpoint states, that the chain's steps name by the
+    /// same short name.
+    /// </summary>
+    /// <remarks>
+    /// A node's id names its junction or checkpoint by its short name, so two
+    /// different types called <c>Fetch</c> would be told apart only by their position, and
+    /// replacing one by the other would leave the graph, its hash, and a resume against it
+    /// unchanged. A run numbers its steps as it reaches them, without the whole chain to hand, so
+    /// it cannot qualify one name only where another collides; the chain is refused instead.
+    /// </remarks>
+    internal void RefuseAmbiguousNames()
+    {
+        var named = new Dictionary<string, Type>();
+        var refused = new System.Collections.Generic.HashSet<string>();
+
+        Visit(this);
+
+        void Visit(ChainRecorder chain)
+        {
+            for (var i = 0; i < chain.Steps.Count; i++)
+            {
+                var step = chain.Steps[i];
+
+                if (ChainNodeScope.KeyType(step) is { } type)
+                {
+                    var key = ChainNodeScope.KeyOf(step);
+
+                    if (!named.TryAdd(key, type) && named[key] != type && refused.Add(key))
+                        Refuse(
+                            $"'{named[key].FullName}' and '{type.FullName}' are both named "
+                                + $"'{key}', so the ids of their steps cannot tell them apart. "
+                                + "Rename one."
+                        );
+                }
+
+                foreach (var track in chain.TracksAt(i))
+                    Visit(track.Steps);
+            }
+        }
+    }
 
     /// <summary>
     /// Refuses the chain as a whole, for something no single step did.

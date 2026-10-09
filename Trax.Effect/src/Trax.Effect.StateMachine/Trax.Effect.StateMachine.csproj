@@ -3,13 +3,22 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Description>Portable, resumable snapshot state-machine engine. Pure, dependency-free: represents a multi-step flow's state as language-neutral JSON so a C# backend and a TypeScript client agree on it, with illegal (state, context) pairs unrepresentable and every operation total.</Description>
+    <Description>Portable, resumable snapshot state-machine engine. Pure: no database or I/O. Represents a multi-step flow's state as language-neutral JSON so a C# backend and a TypeScript client agree on it, with illegal (state, context) pairs unrepresentable and every operation total.</Description>
     <AssemblyName>Trax.Effect.StateMachine</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- A state that invokes a train names it by its IServiceTrain interface, which carries the train's input and output types. -->
+    <ProjectReference Include="../Trax.Effect/Trax.Effect.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests" />
-    <!-- Reads the exception behind an internal-error rejection, to log it without returning its text. -->
+    <!-- Reads the exception behind an internal-error rejection, to log it without returning its text; and, for a
+         state that invokes a train, reads the invoke declarations and the reserved states, and applies outcomes. -->
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+    <!-- Applies an outcome to a machine whose train only the mediator's tests can declare. -->
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.StateMachine.Integration" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Scheduling.Trains.ImportSupplierFeed.ImportSupplierFeedTrain",
+  "input": "ImportSupplierFeedInput",
+  "output": "ImportSupplierFeedOutput",
+  "nodes": [
+    {
+      "id": "DownloadFeedJunction#0",
+      "kind": "Chain",
+      "junction": "DownloadFeedJunction",
+      "in": "ImportSupplierFeedInput",
+      "out": "ImportSupplierFeedOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ImportSupplierFeedOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

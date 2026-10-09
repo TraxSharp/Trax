@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -130,6 +131,9 @@ public class RecoverStuckJobsTests : TestSetup
         updated.TrainState.Should().Be(TrainState.Failed);
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, which recovery, being disabled, leaves."
+    )]
     [Test]
     public async Task StartAsync_WithRecoveryDisabled_LeavesInProgressJobsUnchanged()
     {

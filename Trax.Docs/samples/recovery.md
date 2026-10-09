@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Recovery
-description: "The Recovery sample: a train asks a model, a later step crashes, and the manifest's retry replays the decisions while a page shows every junction live."
+description: "The Recovery sample: a crashed run resumes without asking its model twice, a topic map runs signals in parallel, and state machines run trains."
 parent: Samples & Deployment
 nav_order: 3
 ---
@@ -11,17 +11,26 @@ nav_order: 3
 A train asks a model which track to take, a later step crashes, and the retry takes the same tracks
 without paying for the model again. The Recovery sample makes that visible. Its page shows the
 train's real C# with the running step highlighted, a console that narrates every junction event as
-it arrives, and a timeline with one lane per attempt. Attempt 2's lane reads **replayed: model not
-asked** for each question, and its question bars take milliseconds instead of the model's second or
-so. Progress pills follow the run through **Runs**, **Breaks** and **Recovers**.
+it arrives, and a timeline with one lane per attempt. A refund's attempt 2 lane reads **replayed:
+model not asked** for its question, and its question bar takes milliseconds instead of the model's
+second or so. The research brief stores its checked findings in a checkpoint, so its attempt 2
+resumes there and its lane holds only the report step. Progress pills follow the run through
+**Runs**, **Breaks** and **Recovers**. A third scenario,
+the topic map, runs three similarity signals side by side in parallel branches, and each lane draws
+its attempt on the train's declared graph with the branches next to each other. Two state machines
+run trains as well: one system-owned instance per partition of a scholarly index ingests it, and each
+user builds their own topic map through a wizard whose `Building` state runs the map's train.
 
-It proves three features working together, against Postgres, in one process:
+It proves six features working together, against Postgres, in one process:
 
 | Feature | What the sample shows | Page |
 |---|---|---|
 | Train decisions | A `Gate` (refund approval), a `Switch` and a `Scale` (research brief), answered by an `IDecider` | [Decisions](/docs/core/decisions) |
 | Retries replay decisions | The manifest's automatic retry replays every recorded answer whose state hashes the same, asks afresh when the data changed, and asks afresh on purpose with `askAfresh` | [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions) |
+| Checkpoints and resume | The research brief checkpoints its checked findings; the manifest's retry resumes after it, and an operator resumes the failed run at `Summarize` with `resumeExecution` or the dashboard's **Resume** | [Resuming from a checkpoint](#resuming-from-a-checkpoint) |
 | Junction events | `onJunctionEvent` and `operations.junctionRuns` drive the page | [Junction Events](/docs/effect/junction-events) |
+| Parallel branches | The topic map's three signals run side by side; a failed branch fails the run by name, and only the step after the join writes | [The topic map](#the-topic-map) |
+| State machines that invoke trains | System-owned instances started from a train, an unsure output routed by a guarded `OnDone`, a failed ingest retried by entering its state again, a user's wizard whose result no client can forge, and a draft rebuilt after its host is killed mid-run | [The state machines](#the-state-machines) |
 
 The code is in `Trax.Samples/samples/Recovery`; its tests are in
 `Trax.Samples/tests/Trax.Samples.Recovery.E2E`.
@@ -52,9 +61,11 @@ on 5432, start the host with
 
 1. **Research, crash once, Run.** Attempt 1 runs `PlanResearch`, asks `Source` (where to look) and
    `Depth` (how far to dig), runs a step on each chosen track, and crashes in `Summarize` while
-   writing the report. The sidebar counts down to the retry. A few seconds later the manifest's
-   retry starts as a new execution: `PlanResearch` runs again, but both questions arrive with
-   `replayed: true` in a few milliseconds, the retry takes the same tracks, and the run completes.
+   writing the report. Before it did, the run stored its `CheckedFindings` in a checkpoint. The
+   sidebar counts down to the retry. A few seconds later the manifest's retry starts as a new
+   execution and resumes after the checkpoint: its lane holds only `Summarize`, its run graph marks
+   every step before the checkpoint **restored**, neither question is asked again, and the run
+   completes.
 2. **Refund, A-1001, Run.** Attempt 1 runs `LoadRefundCase`, asks `ApproveRefund` (yes at 0.93) and
    crashes in `IssuePayment`. The retry replays the answer and takes the same `Yes` track.
 3. **Change the data during the backoff.** Pressed while the retry counts down, it records an
@@ -62,18 +73,37 @@ on 5432, start the host with
    it reads no longer hashes the same, so the replay is refused, the model is asked again (0.58,
    between the bars), and the refund takes the `Unsure` track to a person instead of being paid.
    The lane reads **asked afresh: state changed**.
-4. **Ask afresh during the backoff.** It calls `triggerManifest(externalId, askAfresh: true)`, so
-   the retry starts at once and asks afresh; the lane reads **asked afresh: on purpose**.
+4. **Ask afresh during the backoff.** On a refund it calls
+   `triggerManifest(externalId, askAfresh: true)`, so the retry starts at once and asks afresh; the
+   lane reads **asked afresh: on purpose**. A research run does not offer it: its retry resumes after
+   both of its questions, so there is nothing left to ask.
 5. **Another track.** Orders A-1002 and A-1003 crash too: the model is unsure about A-1002 and
    declines A-1003, so their runs take the review and decline tracks, the step on that track crashes
    the same way, and the retry reuses the answer and takes the same track.
 6. **Ask afresh after a run.** Once a run has completed, **Ask afresh** calls
    `requeueExecution(id, askAfresh: true)` on its last execution, a run of its own outside the
-   manifest, shown as a `[requeue]` lane.
+   manifest, shown as a `[requeue]` lane. A requeue runs the chain from the top, so a research run
+   asks both questions again.
+7. **Resume from Summarize.** Once a research run is over, **Resume from Summarize** calls
+   `resumeExecution(id, from: "Summarize#0")` on its failed attempt, the operation behind the
+   dashboard's **Resume from here**. The `[resume]` lane runs only `Summarize`, from the findings the
+   checkpoint stored, and writes the same report the retry did.
+
+8. **Topic map, crash once, Run.** Attempt 1 runs `LoadCorpus`, then three branches at once:
+   `embedding`, `cocitation` and `authors`. The `cocitation` branch counts shared references, asks
+   `SameTopic` (do papers that cite the same works share a topic in this slice?), and crashes in the
+   step on the track the answer picks. The run fails with a `BranchesFailedException` naming
+   `Parallel#0/cocitation`, and `CombineSignals`, the join, never runs, so nothing is written. The
+   retry replays the answer and completes. The lane's run graph shows the three branches side by
+   side; the gate inside `cocitation` shows its three tracks, with the one taken marked.
+   The three slices on the picker take the gate's three tracks with the demo model: 2016 to 2025
+   trusts shared references (`Yes`, 0.87), 2021 to 2025 is unsure (0.52) and dampens them, 2022 to
+   2025 ignores them (`No`, 0.28).
 
 Case files and armed crashes live in memory. A run started before the host restarts has lost its
-case file, so every retry fails and the manifest dead-letters. A requeue would fail the same way, so
-the page offers no re-run once a run is dead.
+case file, so every retry that reads it again fails and the manifest dead-letters (a research run
+that reached its checkpoint does not read it again). A requeue would fail the same way, so the page
+offers no re-run once a run is dead.
 
 The same over GraphQL, with the header `X-Api-Key: recovery-operator-key-do-not-use-in-production`:
 
@@ -94,7 +124,20 @@ query {
 
 query {
   operations {
-    junctionRuns(metadataId: 42) { position kind name state answer replayed trackPosition attempt }
+    junctionRuns(metadataId: 42) { position kind name state answer replayed trackPosition attempt nodeId }
+  }
+}
+```
+
+The topic map starts the same way, with `scenario: TOPIC_MAP` and, optionally, `fields`, `fromYear`
+and `toYear`. Its run graph, the train's declared chain with the run's steps laid on it:
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 42) {
+      nodes { id kind state tracks { name taken nodes { id kind state trackTaken } } }
+    }
   }
 }
 ```
@@ -191,10 +234,15 @@ builder.Services.AddTraxGraphQL(graphql =>
     graphql.ExposeOperationQueries().ExposeOperationMutations().GateOperations(roles: "Operator"));
 ```
 
-The two scenario trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
-so the viewer key follows their steps through the broadcast view. Once a token scheme is
-registered, a subscription socket without a credential is refused at `connection_init`, so a
-"public" watcher still needs a key. The alternative to an operator key is
+The research and refund trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
+so the viewer key follows their steps through the broadcast view. The topic map's train carries a bare
+`[TraxAuthorize]`, which admits any authenticated caller and names no role, and no `[TraxBroadcast]`:
+the `topic-map` machine invokes it, and a user's own machine may not invoke a train stricter than its
+own mutations, nor one that broadcasts every run to every subscriber. Every caller this host
+authenticates holds `Operator` or `Viewer`, and the page follows its steps through the operations view.
+
+Once a token scheme is registered, a subscription socket without a credential is refused at
+`connection_init`, so a "public" watcher still needs a key. The alternative to an operator key is
 `AllowJunctionAnswersForBroadcastSubscribers()`, called inside `IsDevelopment()` only.
 
 Outside Development no key exists, the operations namespace answers no one and the dashboard is
@@ -220,14 +268,17 @@ public class ResearchTopicTrain : ServiceTrain<ResearchInput, ResearchReport>, I
                 scale
                     .AtLeast(Depth.Skim, t => t.Chain<SkimSources>())
                     .AtLeast(Depth.CrossCheck, t => t.Chain<FetchFullTexts>()))
+            .Checkpoint<CheckedFindings>()
             .Chain<Summarize>()
             .Resolve();
 }
 ```
 
 Every `Switch` track produces `Findings` and every `Scale` track `CheckedFindings`, because after a
-routing step the chain can rely only on what every track produces. The refund approval asks one
-yes/no question:
+routing step the chain can rely only on what every track produces. `CheckedFindings` is also all
+`Summarize` reads, which is why the checkpoint stores it; see
+[Resuming from a checkpoint](#resuming-from-a-checkpoint). The refund approval asks one yes/no
+question:
 
 ```csharp
 Chain<LoadRefundCase>()
@@ -260,6 +311,7 @@ public async Task<DecisionResult> Decide(DecisionRequest request, CancellationTo
             (ResearchBrief brief, ChoiceQuestion) => ChooseSource(brief),   // ChoiceAnswer
             (Findings findings, ScoreQuestion) => ScoreDepth(findings),     // ScoreAnswer
             (RefundCase refund, YesNoQuestion) => ApproveRefund(refund),    // YesNoAnswer
+            (CoCitationEvidence e, YesNoQuestion) => SameTopic(e),          // YesNoAnswer
             _ => throw new InvalidOperationException($"Cannot answer {question.Key}."),
         };
     return new DecisionResult(answers);
@@ -338,6 +390,52 @@ after the manifest is scheduled.
 Killing the worker process would not show a recovery: a killed run is failed by stuck-job recovery
 much later, or at the next start, not resumed.
 
+### Resuming from a checkpoint
+
+Before the checkpoint, a research run has planned, asked the model twice, searched and checked what
+it found. A crash in `Summarize` used to repeat all of it, because a retry runs the chain from the
+top. `.Checkpoint<CheckedFindings>()` stores the `CheckedFindings` in Memory when the run reaches it,
+with the track each routing step took, in `trax.checkpoint`. Nothing else is stored. The state must
+come back from JSON as the same value, so `CheckedFindings` and the `Findings` inside it are sealed
+records of data; the host refuses to start otherwise and names the member.
+
+**A manifest's retry now resumes by itself.** When the failed run has a checkpoint, the retry is
+queued to resume after it: it runs `Junctions()` again, skips every step before the checkpoint in
+place, puts the stored `CheckedFindings` back in Memory and runs only `Summarize`. Neither question
+is asked: both come before the checkpoint. That is also why the page offers no **Ask afresh** during
+a research run's backoff. A dead letter's requeue resumes the same way; `requeueExecution` still
+reruns from the top.
+
+**What the operator sees.** On the failed run, `operations.runGraph` sets `canResume`, marks the
+checkpoint's node `checkpointed` and every node after it that a resume can start at `canResume`;
+nothing before the checkpoint can. The dashboard's Metadata Detail page offers **Resume** beside
+**Re-queue**, puts a **checkpoint** badge on the stored step of its run graph and a **Resume from
+here** on each step the graph allows; both call `IOperationsService.ResumeExecutionAsync`, the call
+behind `resumeExecution`. On the resumed run, every node before its resume point is `RESTORED`: it
+was skipped, not run. Neither surface ever shows what a checkpoint holds.
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 42) { canResume nodes { id kind state canResume checkpointed } }
+  }
+}
+
+mutation {
+  operations {
+    resumeExecution(id: 42, from: "Summarize#0") { success message id }
+  }
+}
+```
+
+`resumeExecution` resumes a failed or cancelled run, at the step `from` names or, without it, after
+its latest checkpoint. It answers with the work queue entry's id, like a requeue, and the run is not
+one of the manifest's executions. One resume of a run may be queued at a time: while the manifest's
+retry is queued it already resumes the failed run, and a second resume is refused. The page offers
+**Resume from Summarize** once the run is over for that reason. See
+[Checkpoint](/docs/sdk-reference/train-methods/checkpoint) for what may be stored and where a run
+can resume.
+
 ### Changing the data during the backoff
 
 `changeCaseData` edits the order the next attempt will read, not the manifest's input. The retry is
@@ -346,6 +444,183 @@ answer: its recorded `state_hash` no longer matches the state the question is as
 refusal is stored as `replay_refused` in the new row's answer. The run is not marked
 `replay_abandoned`, which is kept for a replay that could not be honoured at all (the named run gone,
 a host that does not record).
+
+### The topic map
+
+The topic map reads a corpus of 28 made-up papers in three fields, shaped like works from a scholarly
+index (title, abstract, year, authors, the works each one cites, concepts). It makes no network
+calls. The papers and the pairs the map writes live in a `topic_map` schema beside Trax's tables,
+through a `DomainDataContext`; at startup the host creates the schema with
+`EnsureSchemaCreatedAsync` and adds every paper not already there, so a restart adds nothing.
+`EnsureSchemaCreatedAsync` is for demos and tests; a real application uses migrations.
+
+```csharp
+Chain<LoadCorpus>()
+    .Parallel(signals =>
+        signals
+            .Branch("embedding", b => b.Chain<EmbeddingSimilarity>())
+            .Branch("cocitation", b =>
+                b.Chain<CountSharedReferences>()
+                    .Gate<CoCitationEvidence, SameTopic>(gate =>
+                        gate.Yes(t => t.Chain<TrustCoCitation>(), atLeast: 0.8)
+                            .No(t => t.Chain<IgnoreCoCitation>(), below: 0.3)
+                            .Unsure(t => t.Chain<DampenCoCitation>())))
+            .Branch("authors", b => b.Chain<AuthorOverlap>()))
+    .Chain<CombineSignals>()
+    .Chain<FindHiddenTwins>()
+    .Resolve();
+```
+
+`Parallel` is experimental: the project opts in with `<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`. Each
+branch starts from a copy of Memory taken after `LoadCorpus`, runs in its own DI scope, and adds one
+signal: `EmbeddingSignal` (a bag-of-words cosine over title and abstract, standing in for an
+embedding model), `CoCitationSignal` (how many works two papers both cite, weighted by the track the
+model chose) and `AuthorSignal`. `CombineSignals` reads all three as a tuple once every branch has
+finished. The decision inside `cocitation` is the branch's own, recorded and replayed like any other.
+
+Branches compute; the join commits. Because each branch has its own scope, and so its own
+transaction, no branch writes. `CombineSignals` weighs the signals, keeps the pairs that score 0.3
+or more and writes them in one transaction, replacing any pairs the same run wrote before.
+`FindHiddenTwins` then lists the pairs that read alike (a similarity of 0.35 or more) but cite
+nothing in common: the stormwater paper filed under hydrology and the green-roof paper filed under
+urban ecology, and the two nitrate papers. A citation graph alone would never put them side by side.
+
+The crash fires in the step on whichever track the gate picks, after the model has answered. The
+branch fails, the default `CancelSiblings` policy stops any sibling still running, and the run
+fails with one `BranchesFailedException`. Its `failureJunction` is
+`Parallel#0/cocitation:<junction>`, so the execution names the branch. Every step a branch records
+carries a node id under it, `Parallel#0/<branch>/...`, which is how `operations.runGraph` places it.
+
+### The state machines
+
+Two state machines run trains through the [`Invokes`](/docs/statemachine/invoking-trains): a
+state names a train, entering the state queues one run in the transaction that moves the machine, and only
+that entry of the state receives the run's outcome. The project opts in to the experimental `Parallel` with
+`<NoWarn>$(NoWarn);TRAXEXP001</NoWarn>`, and the host adds `AddStateMachines(...)` before
+`AddMediator(...)`, `AddJunctionProgress()` so a run can be cancelled from any host, and an
+`ISnapshotPrincipal` that maps each demo key to a user.
+
+#### One instance per index partition
+
+The host also seeds 18 made-up records from two scholarly indexes, OpenAlex and Crossref, three months
+each: six partitions. `DiscoverPartitionsTrain` (the operator mutation `discoverPartitions`) lists them and
+starts one `source-partition` instance per partition with `IMachineInstances.Start`, keyed by
+`(source, month)`. The machine is `SystemOwned()`: no user owns an instance, and no `stateMachine`
+mutation reaches one.
+
+```
+Discovered --Ingest--> Ingesting --done, unsure--> NeedsReview --Approve--> Approved
+                         │  ▲      --done-------> Ingested
+                         │  └─Retry── Failed      (the run failed, or was reaped)
+                         │  └─Retry── Cancelled   (an operator cancelled the run)
+```
+
+```csharp
+m.In(PartitionState.Ingesting)
+    .Context<PartitionContext>()
+    .Invokes<IIngestPartitionTrain, IngestPartitionInput, IngestPartitionResult>(ctx =>
+        new IngestPartitionInput(ctx["source"]!.GetValue<string>(), ctx["month"]!.GetValue<string>()))
+    .OnDone(PartitionState.NeedsReview,
+        when: Input((IngestPartitionResult o) => o.Unsure).IsTrue(),
+        reduce: KeepWhatWasWritten)
+    .OnDone(PartitionState.Ingested, reduce: KeepWhatWasWritten)
+    .OnFailed(PartitionState.Failed)
+    .OnCancelled(PartitionState.Cancelled);
+```
+
+**An unsure ingest goes to review through a guarded `OnDone`.** A run ends in one result, so "unsure" is
+not an outcome of its own: the ingest says so in its output, and the `OnDone` edges are tried in order.
+Crossref's February partition holds a paper whose title is close to one in the corpus, the model is unsure
+whether they are the same work, and the instance lands in `NeedsReview`; the other five land in
+`Ingested`. Either way the reduction keeps pointers, not rows: a fingerprint of what was written and the
+counts of works created, merged and held for review. The works themselves are in
+`topic_map.ingested_works`.
+
+**Discovery is idempotent.** An instance's id is derived from its key, so running discovery again finds the
+six instances it started, creates none and queues nothing. Starting an instance and sending it into
+`Ingesting` are two writes; an instance a crash left in `Discovered` between them is sent on by the next
+discovery, and one already past `Discovered` is left alone.
+
+**A failed ingest is retried by entering `Ingesting` again, not by the scheduler.** An invoked run has no
+manifest, so nothing retries it. Its failure moves the instance to `Failed`, and `Retry` moves it back into
+`Ingesting`, which queues a new run under a new token. The old run's token is gone, so a late delivery of
+its outcome lands nowhere. Because the machine is system-owned, the sample fires `Retry` (and `Approve`,
+out of `NeedsReview`) through its own operator-only mutation, `partitionAction`, which calls
+`IMachineInstances.Advance` as the system. That call makes the same checks a user's advance makes: `Retry`
+only from `Failed` or `Cancelled`, and never an outcome trigger.
+
+```graphql
+mutation { dispatch { discoverPartitions(input: {}) {
+  output { instancesStarted instancesSentToIngest partitions { source month records } } } } }
+
+mutation { dispatch { partitionAction(input: { source: "OpenAlex", month: "2025-03", action: RETRY }) {
+  output { state problem } } } }
+
+query { operations { machineInstances(machine: "source-partition", ownerKind: SYSTEM) {
+  totalCount items { id state hasLiveInvokedRun } } } }
+```
+
+Operators see the instances on the dashboard's State machines page and through
+`operations.machineInstances`: state, timestamps and whether a run is live, never the context.
+
+#### Build my topic map
+
+The `topic-map` machine is a wizard each user drives from the page: choose the fields, choose the years,
+build. It is user-owned, so each demo key has drafts of its own, stored in `trax.snapshot_draft`.
+
+```
+ChoosingFields --ChooseFields--> ChoosingRange --Build--> Building --done-------> Built
+      ▲            ◀──Back──          ▲  ◀──CancelBuild──    │     --failed-----> BuildFailed
+      │                               └───────Edit─────────── Built, BuildFailed, BuildCancelled
+      │                                                      └──── --cancelled--> BuildCancelled
+                          Building ◀──Rebuild── Built, BuildFailed, BuildCancelled
+```
+
+`Building` invokes `IBuildTopicMapTrain`. The run's input is built on the server from the draft's choices,
+with a run id of its own, which the pairs the join writes are keyed by; `OnDone` keeps that id as `mapId`,
+with the number of papers and pairs and the co-citation track. A user's machine may not invoke a train
+stricter than its own mutations, which need an authenticated caller and no role, so `BuildTopicMapTrain`
+asks for exactly that; every caller this host authenticates is an operator or a viewer.
+
+**Old maps are swept.** A rebuild writes a new map and moves `mapId` to it, which leaves the old one
+behind, and a demo run's map is pointed at by nothing once its run ends. `TopicMapSweeper` deletes the
+pairs of every map no stored `topic-map` draft points at, every five minutes
+(`Recovery:TopicMapSweepInterval`). It decides from the drafts the server holds and never from what a
+client sent, so a client can keep a map alive with a forged `mapId` but can never get one deleted; the
+build does not delete the map it replaces for the same reason, since the draft's context is the
+client's to write in the states it may autosave. A build writes its pairs a moment before its outcome
+points the draft at them, so a map is deleted only once two sweeps an interval apart both found it
+unreferenced. A draft left with **Start over** stays stored, and so does its map.
+
+The page drives the wizard with a TypeScript twin generated from the machine by the `trax machine` CLI:
+
+```bash
+dotnet run --project Trax.Cli/src/Trax.Cli -- machine generate \
+  --assembly Trax.Samples/samples/Recovery/Trax.Samples.Recovery/bin/Debug/net10.0/Trax.Samples.Recovery.dll \
+  --machine Trax.Samples.Recovery.Machines.TopicMapMachine \
+  --ir-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
+  --twin-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
+  --engine-src Trax.Api.StateMachine/src --import-style specifier
+```
+
+The twin tells the page which step it may take; the page sends the step with `advanceSnapshot` and the
+twin's own result, and the server refuses a result that differs from its own. The draft id is kept in the
+browser, so closing the tab and coming back loads the same draft at the same step. While the draft is in
+`Building` the page loads it a second after its last load answered, because only the run's outcome moves
+it on. Every load and step is numbered when it is sent, and an answer older than one already applied is
+dropped, so a slow load never puts back a draft a step the user just took has replaced.
+
+**A client cannot forge the result.** Every state an outcome reaches is reserved: an autosave cannot put a
+draft in `Built` (`state-reserved`), cannot move one out of `Building` (`draft-invoking`), and
+`advanceSnapshot` refuses `Building.done` (`outcome-bound`). `CancelBuild` leaves `Building`, which cancels
+the run: a run still queued is marked cancelled, and one already running stops at its next junction.
+
+**What "recovers" means after a restart.** A run a machine invoked has no manifest, so the scheduler does
+not retry it. When the host running a build dies, the run stays `InProgress` until a host starts and fails
+it on startup recovery (or the stale-run reaper fails it, after `StaleInProgressTimeout`). The outcome
+reconciler, which every host that registers machines runs, then moves the draft from `Building` to
+`BuildFailed`. The draft and the seeded data are in Postgres, so both are still there, and `Rebuild` from
+`BuildFailed` queues a new run on the host that is up.
 
 ### The page
 
@@ -376,24 +651,61 @@ running step: `Chain<Name>` for a junction, the routing step for a question, and
 `Resolve()`, and sizes its font so the longest line fits unwrapped, so the code stays still while the
 highlight moves, and it shows the train the picker selects. The timeline gives each attempt a lane on
 one time axis: a junction's bar spans its run, a question's bar the time the answer took to arrive.
+A step that ran in a branch is labelled with the branch.
+
+Under each lane the page draws the attempt's run graph from `operations.runGraph(metadataId:)`,
+polled while the attempt runs and read once more when it ends. Each declared step is a node in the
+order the chain declares it, coloured by its state (completed, failed, running, not reached,
+skipped, interrupted), with the state also given as text for screen readers. A routing step shows
+its tracks next to each other with the one taken marked, and a `Parallel` step shows its branches
+as columns side by side, since they ran at the same time. The page reads the graph as `allNodes`,
+one flat list at any depth, and rebuilds the tree from each node's `parentId` and `track`, so it
+draws a chain nested deeper than a query could follow nested tracks. Each read is numbered and an
+answer older than one already drawn is dropped, and a poll waits for the one before it, so a slow
+answer never draws an older graph over the final one.
+
+A run that resumed records only the steps after its resume point, so its lane holds those alone and
+its graph draws the rest as restored, with a badge counting them. **Resume from Summarize** sends
+`resumeExecution` with the node id `Summarize#0` for the latest failed research attempt, then reads
+the work queue entry it answers with until the entry names its run, and follows that run in a
+`[resume]` lane, as **Ask afresh** follows a requeue.
 
 ## The tests
 
 `Trax.Samples.Recovery.E2E` boots the real host with `WebApplicationFactory` against the
 `recovery_e2e_tests` database (port 5432, or `TRAX_TEST_PG_PORT`), with a counting decider in place
-of the demo one, and asserts over GraphQL:
+of the demo one, and asserts over GraphQL. `RestartTests` starts the host as two processes of its own, one after
+the other, on the `recovery_restart_e2e_tests` database, so it can kill the first the way a crash does:
 
 | Test | Proves |
 |---|---|
-| `ResearchRun_CrashedOnce_CompletesOnAttempt2_WithoutAskingTheModelAgain` | Attempt 2 completes; the decider was asked each question once across both attempts; attempt 2's decision events have `replayed: true`, live and stored |
+| `ResearchRun_CrashedOnce_CompletesOnAttempt2_WithoutAskingTheModelAgain` | Attempt 2 resumes after the checkpoint and completes; its junction events, live and stored, hold only `Summarize`; the decider was asked each question once across both attempts |
+| `A_crash_in_Summarize_resumes_from_CheckedFindings_without_fetching_again` | The failed run's graph offers `Summarize#0`; `resumeExecution` and the dashboard's resume each run only `Summarize`, write the retry's report and draw the steps before as `RESTORED`; `TraxInvariants` finds nothing new |
 | `RefundRun_PaymentTimedOutOnce_RetryTakesTheSameTrackWithoutAskingAgain` | The gate replays its answer; the state hash is keyed (`k1:`) |
 | `RefundRun_OnAnotherTrack_CrashesOnce_AndTheRetryReplaysTheDecision` | Orders A-1002 (review) and A-1003 (decline) crash once on their track, and the retry replays the answer |
 | `RunWithNoCrashArmed_CompletesInOneAttempt` | One attempt, and the once manifest disables itself |
-| `TriggerWithAskAfresh_DuringTheBackoff_RetryAsksTheModelAgain` | `triggerManifest(askAfresh: true)` makes the retry ask again |
+| `TriggerWithAskAfresh_DuringTheBackoff_RetryAsksTheModelAgain` | `triggerManifest(askAfresh: true)` makes a refund's retry ask again |
 | `RequeueExecution_ReplaysByDefault_AndAsksAgainWithAskAfresh` | `requeueExecution` replays; with `askAfresh: true` it asks again |
 | `DataChangedDuringTheBackoff_RetryAsksAfresh_AndTakesTheTrackTheNewDataCallsFor` | The retry stays linked, refuses the answer for a changed state, asks afresh and takes `Unsure` |
 | `ViewerSubscriber_SeesTheShape_ButNotTheAnswersOrTheTrack` | The broadcast view gets no answers, and every step on a track is `(withheld)` |
 | `TheSchedulersOwnRuns_AreSweptAfterTheirRetention` | The scheduler's own runs are deleted once past their retention |
+| `Seeding_Twice_AddsNoWorks` | Seeding the corpus again adds nothing |
+| `Run_OverTheWholeCorpus_MapsTopicsAndFindsTheHiddenTwins` | The map of the seeded corpus: 32 pairs written, the strongest pair, and exactly the two hidden twins |
+| `Run_OverASlice_TakesTheCoCitationTrackTheModelChooses` | The three slices take the gate's `Yes`, `Unsure` and `No` tracks |
+| `CrashedCoCitationBranch_FailsTheRunNamingIt_AndTheJoinWritesNothing` | The run throws a `BranchesFailedException` naming `Parallel#0/cocitation`, and no pair is written |
+| `ScheduledRun_CrashedOnce_FailsNamingTheBranch_ThenEveryBranchRecordsItsSteps` | Attempt 1 fails naming the branch with nothing written; the retry replays the branch's answer, writes the pairs, records steps under all three branches, and `runGraph` draws them |
+| `Discovery_StartsOneInstancePerPartition_AndARerunStartsNoneAndQueuesNothing` | Six partitions, six instances, six ingest runs; a second discovery starts none and queues nothing |
+| `EachPartition_IsIngested_AndTheUnsureOne_GoesToReview` | Five instances reach `Ingested` and Crossref/2025-02 reaches `NeedsReview`, each holding counts and a fingerprint; `Approve` moves it on, and `Retry` from `Ingested` is a `no-transition` |
+| `ACrashedIngest_Fails_AndARetry_RunsItAgainUnderANewToken` | A crashed ingest reaches `Failed` and is not retried by the scheduler; `Retry` queues a new run under a new token and the instance reaches `Ingested`, and a late delivery of either run's outcome moves nothing |
+| `OnlyAnOperator_MayActOnAPartition` | The viewer key's `partitionAction` is refused with `TRAX_AUTHORIZATION`, and the instance neither moves nor queues a run |
+| `AnOperator_CannotCancelTheBuild_ThroughTheRunOrItsEntry_OneByOneOrInBulk` | `cancelWorkQueueEntry`, `cancelExecution` and `cancelExecutions` refuse or skip the run a user's draft started, with one message, and the build still reaches `Built` |
+| `Operators_SeeThePartitions_ReadOnly_AndNoUserReachesThem` | `operations.machineInstances` lists the system instances and has no context field; a user's `loadSnapshot` of one answers `unknown-machine` |
+| `TheWizard_BuildsTheMap_AndTheDraftKeepsAPointerToIt` | Fields, years, build: the run's outcome moves the draft to `Built` with the map's id and summary, the pairs are under that id, and a reload returns the same snapshot |
+| `AnAutosaveIntoBuilt_IsRefused`, `WhileBuilding_AHandFiredOutcome_AndAnAutosave_AreRefused` | `state-reserved`, `outcome-bound` and `draft-invoking`; the real outcome still lands |
+| `CancellingTheBuild_GoesBackToTheRange_AndCancelsItsRun`, `AFailedBuild_IsRebuiltByEnteringBuildingAgain_WithANewRun` | Leaving `Building` cancels its run; a rebuild is a new run |
+| `ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt`, `TheSweep_NeverDeletesAMapAStoredDraftPointsAt_NorOneItSawOnlyOnce` | After a rebuild, two sweeps delete the replaced map's pairs and keep the new one's; a map is deleted only on the second sweep that finds it unreferenced |
+
+| `AHostKilledMidBuild_FailsTheRunOnTheNextStart_AndTheDraftIsRebuiltFromBuildFailed` | A host process killed mid-build leaves the run `InProgress`; the next host fails it on startup, the draft reaches `BuildFailed`, the seeded data is there, and a rebuild reaches `Built` |
 
 ```bash
 TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.Recovery.E2E
@@ -401,4 +713,4 @@ TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.Recovery.E2E
 
 ## SDK Reference
 
-> [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider) | [Switch](/docs/sdk-reference/train-methods/switch) | [Scale](/docs/sdk-reference/train-methods/scale) | [Gate](/docs/sdk-reference/train-methods/gate) | [ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Queries](/docs/sdk-reference/graphql-api/queries)
+> [AddDecisionRecording](/docs/sdk-reference/configuration/add-decision-recording) | [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events) | [AddNimbleDecider](/docs/sdk-reference/configuration/add-nimble-decider) | [Switch](/docs/sdk-reference/train-methods/switch) | [Scale](/docs/sdk-reference/train-methods/scale) | [Gate](/docs/sdk-reference/train-methods/gate) | [Checkpoint](/docs/sdk-reference/train-methods/checkpoint) | [ScheduleOnceAsync](/docs/sdk-reference/scheduler-api/manifest-management) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Subscriptions](/docs/sdk-reference/graphql-api/subscriptions) | [Mutations](/docs/sdk-reference/graphql-api/mutations) | [Queries](/docs/sdk-reference/graphql-api/queries) | [Invoking a train](/docs/statemachine/invoking-trains) | [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances)

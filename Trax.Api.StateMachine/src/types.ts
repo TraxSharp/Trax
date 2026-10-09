@@ -51,6 +51,13 @@ export interface MachineDefinition<S extends string, T extends string> {
    * enforced server-side by the persistence layer — mirrored here so a client can ask before it writes.
    */
   committedStates?: readonly S[];
+  /**
+   * The outcome triggers of states that invoke a train (`Fetching.done`, `Fetching.failed`,
+   * `Fetching.cancelled`). Their edges are in `transitions`, tried in declaration order; when none accepts
+   * a train's output the result is `no-transition`, as on the server, and they are never offered by
+   * `availableTriggers`. The twin applies an outcome it is told about; it never starts a train.
+   */
+  outcomeTriggers?: readonly string[];
   /** Per-state validators: return null when the context is legal for that state, else a message. */
   contextValidators?: Partial<Record<S, ContextValidator>>;
   /** Forward migrations keyed by the version they migrate FROM. */

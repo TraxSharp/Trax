@@ -11,6 +11,7 @@ using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.DeadLetter;
@@ -324,6 +325,9 @@ public class ManifestRetryReplaysDecisionsTests
         await AssertRetryAsksAfreshAsync(dependent, "fired");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running: the replay already under way."
+    )]
     [TestCase(false)]
     [TestCase(true)]
     public async Task A_dead_letter_requeue_asks_afresh_while_something_already_replays_the_failed_run(

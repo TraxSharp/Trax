@@ -2,10 +2,13 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Validation;
 using Trax.Api.Services.HealthCheck;
+using Trax.Api.Services.Runs;
 using Trax.Core.Exceptions;
+using Trax.Core.Monad;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.JunctionEvents;
 using Trax.Effect.Data.Services.IDataContextFactory;
@@ -13,7 +16,9 @@ using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Data.Utils;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Utils;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.Effects;
@@ -26,7 +31,7 @@ namespace Trax.Api.GraphQL.Queries;
 /// Predefined operational queries: health, trains, manifests, manifest groups, execution
 /// history, and the nested <c>deadLetters</c> namespace.
 /// </summary>
-public class OperationsQueries
+public partial class OperationsQueries
 {
     /// <summary>
     /// Nested namespace exposing dead letter queries (<c>deadLetters</c>, <c>deadLetter</c>).
@@ -989,6 +994,8 @@ public class OperationsQueries
             )
             {
                 ReplayAbandoned = m.ReplayAbandoned,
+                ResumeFrom = m.ResumeFrom,
+                ResumeAt = m.ResumeAt,
             })
             .FirstOrDefaultAsync(ct);
 
@@ -1089,6 +1096,66 @@ public class OperationsQueries
 
         var page = await rows.Take(take).ToListAsync(ct);
         return page.Select(JunctionStep.From).ToList();
+    }
+
+    /// <summary>
+    /// The declared chain of the registered train named <paramref name="train"/>, its canonical
+    /// name (the interface's full name, as <c>execution.name</c> carries it), as a graph: every
+    /// step in order, each routing step's tracks, and a hash that changes with the chain. Null when
+    /// no registered train has that name, or its chain cannot be read outside a request.
+    /// </summary>
+    /// <remarks>
+    /// Only registered trains are looked up, by name, so no name a caller sends makes the host load
+    /// a type. Read through <see cref="ITrainChainGraphs"/>, which the dashboard's run page reads
+    /// too. The graph names the train's types, so it is under the operations gate.
+    /// </remarks>
+    /// <param name="train">The train's canonical name.</param>
+    /// <param name="chainGraphs">Resolved from DI; not a GraphQL argument.</param>
+    public ChainGraph? GetDeclaredChain(string train, [Service] ITrainChainGraphs chainGraphs) =>
+        chainGraphs.Find(train);
+
+    /// <summary>
+    /// One execution drawn on its train's declared chain: each node with the steps the run
+    /// recorded for it and where it stands (completed, failed, skipped on a track not taken, not
+    /// reached), the track each routing step took, and the steps that match no node. Null for an
+    /// id with no execution.
+    /// </summary>
+    /// <remarks>
+    /// Read through <c>RunGraphs.ReadAsync</c>, the read the dashboard's run graph makes.
+    /// Steps are matched by node id; a step recorded without one, or for a node the current chain
+    /// no longer declares, is in <c>unmatchedSteps</c>. At most the first 500 steps are read
+    /// (<c>moreSteps</c> says when there were more). For a failed or cancelled execution, and a
+    /// resumed one, the checkpoints it can resume from are read too, once per graph: each node
+    /// says whether <c>resumeExecution</c> can resume there (<c>canResume</c>) and whether a
+    /// checkpoint is stored at it (<c>checkpointed</c>), and a resumed execution's nodes before its
+    /// resume point are <c>RESTORED</c>. What a checkpoint holds is never returned.
+    /// </remarks>
+    /// <param name="metadataId">The execution's id.</param>
+    /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="chainGraphs">Resolved from DI; not a GraphQL argument.</param>
+    /// <param name="ct">Cancels the read.</param>
+    /// <param name="services">
+    /// Resolved from DI; not a GraphQL argument. The resume check is read from it; without one no
+    /// resume is offered.
+    /// </param>
+    public async Task<RunGraph?> GetRunGraph(
+        long metadataId,
+        [Service] IDataContextProviderFactory dataContextFactory,
+        [Service] ITrainChainGraphs chainGraphs,
+        CancellationToken ct,
+        [Service] IServiceProvider? services = null
+    )
+    {
+        RunIdArgument.Require(metadataId);
+
+        using var db = await dataContextFactory.CreateDbContextAsync(ct);
+        return await RunGraphs.ReadAsync(
+            db,
+            chainGraphs,
+            services?.GetService<IRunResumes>(),
+            metadataId,
+            ct
+        );
     }
 
     // Names and enum spellings follow the options the queue and run paths deserialize input

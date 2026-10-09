@@ -21,13 +21,14 @@ if your work contradicts one, say so rather than silently overriding it.
 | `Train.Junctions()`, `DeclaredChain()`, the chain recorder or `ChainVerification` | central `docs/0016`, a chain is a declaration, and the replay has to mirror how the runtime stores and finds values |
 | `Train.NewMonad()` or `ChainRecordedException`, or narrowing anything that shipped public | [0002](./docs/adr/0002-a-shipped-seam-stays-public-and-hidden.md), both stay public and hidden because the published Trax.Effect overrides `NewMonad()` |
 | `FailureClass`, or how a junction carries a failure's class in `TrainExceptionData` | central `docs/0020`, a failure is classified where it happens and the answer is carried |
+| `Parallel`, `Branches`, `BranchesFailedException`, or how `ChainVerification` replays branches | central `docs/0045`, a Parallel step runs a fixed set of branches on copies of Memory, and the join commits |
 | `Decide`, `Switch`, `Gate` or `Scale`, `IDecider`, or how `ChainVerification` replays tracks | central `docs/0040`, a chain declares every track and a decider chooses one per run; the tracks are part of the declaration `docs/0016` describes |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-three name `core`, three of them superseded: executable guards, the
+index lists them by folder. Twenty-five name `core`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the documentation lints, the public API baseline, test frameworks staying out of shipped
-libraries, exemplars declared by attribute, Trax owning its vocabulary, tests owning their
+libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax owning its vocabulary, tests owning their
 timeouts, every `PackageVersion` naming a referenced package, a chain being a declaration
 (`0016`), failures being classified where they happen (`0020`), a warning failing the CI build
 (`0032`), packages validating against their last release (`0033`), a chain declaring every track a decider
@@ -56,10 +57,13 @@ not to record. The format is
 
 ## Guards
 
-`tests/Trax.Core.Tests.Meta/` holds eleven convention guards, and **all eleven are shared** with
-the other folders. Trax.Core owns no guard of its own, which is expected: the conventions it
-would enforce are repository-wide, and the engines behind several of them ship from here in
-`Trax.Core.Testing` for consumers to subclass.
+`tests/Trax.Core.Tests.Meta/` holds twelve convention guards. Eleven are shared with the other
+folders: the conventions they enforce are repository-wide, and the engines behind several of them
+ship from here in `Trax.Core.Testing` for consumers to subclass. The twelfth,
+`InteractionMatrixTests`, is this folder's own: a new `ChainStepKind` member needs a row in
+[`docs/interaction-matrix.md`](./docs/interaction-matrix.md) naming the test that covers it with
+each existing feature (requeue, cancel, junction events and the rest), and so does each
+state-machine feature the test lists in `MachineFeatures`, in the file's machine-features table.
 
 The census is on: every guard class under that folder is either credited to an ADR or
 carries `Not ADR-enforcing:` with a reason, and the `adr-guard` job checks it. A new guard is

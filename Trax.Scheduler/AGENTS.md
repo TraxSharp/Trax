@@ -27,6 +27,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | the dispatch claim, `LoadQueuedJobsJunction`, or the subject lock | central `docs/0019`, one subject's queued work runs one at a time |
 | `OperationsService.RequeueExecutionAsync`, the replay link a requeue sets, or carrying `replay_decisions_of` from the work queue to the run | central `docs/0041`, a requeued run replays the decisions of the run it repeats, and only that method sets the link for a caller's run; a manifest trigger does not |
 | a manifest's retry in `CreateWorkQueueEntriesJunction`, a dead-letter requeue, `RetryDecisionReplay`, or `ReplayDecisionsOnRetry` | [0017](./docs/adr/0017-a-manifests-retry-replays-the-decisions-of-the-run-it-retries.md), a retry replays the failed run's decisions at most once in a row, only from a run of the manifest's train that asked itself, recorded, and was queued with the same input; otherwise, or when an operator asks afresh, it asks afresh |
+| `RetryResume`, `OperationsService.ResumeExecutionAsync`, `resume_from` on a retry or dead-letter requeue, or keeping a resumed run in `DeleteExpiredMetadataJunction` and `ManifestPruner` | central `docs/0047`, a retry and a dead-letter requeue resume after the failed run's latest checkpoint whenever the chain allows it, `requeueExecution` reruns from the top, one queued resume per run, and cleanup keeps a run while something resumes it |
 | `ResolveStaleStagedEntriesJunction`, `StaleStagedEntryTimeout` or `PromoteStaleStagedEntries` | central `docs/0018`, a stranded staged entry is cancelled by default |
 | a train's `Junctions()`, including the ManifestManager, JobDispatcher and JobRunner chains | central `docs/0016`, a chain is a declaration read at host startup, so it may not read the input |
 | the JobRunner chain, or anything done after a scheduled train returns | [0005](./docs/adr/0005-a-scheduled-runs-bookkeeping-lives-in-the-junction-that-ran-it.md), the manifest update stays in the junction that ran the train, on an uncancellable token |
@@ -37,7 +38,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | `RemoteRunResponse.PublicMessage`, `RemoteRunException`, or what a remote failure shows a client | central `docs/0028`, the runner offers only a plain `TrainException`'s message, and every remote failure is rebuilt as a `RemoteRunException` carrying it |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Thirty-three name `scheduler`, three of them superseded. Besides the repository-wide conventions and
+index lists them by folder. Thirty-five name `scheduler`, three of them superseded. Besides the repository-wide conventions and
 `0016` to `0020`, `0022` and `0041` (routed above), `0007` (the canonical train name is the
 interface FullName) is the one this folder touches most, since it is the string stored in
 `work_queue.train_name` and the one a remote run puts on the wire. The wire is lenient about

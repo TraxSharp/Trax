@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -75,6 +76,9 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
         loaded.FailureJunction.Should().Be("ReapStaleInProgressMetadataJunction");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, too recent for the reaper to fail."
+    )]
     [Test]
     public async Task Run_RecentInProgressMetadata_NotAffected()
     {
@@ -260,6 +264,9 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
             });
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, too recent for the reaper to fail."
+    )]
     [Test]
     public async Task Run_MixOfStaleAndRecent_OnlyStaleFailed()
     {
@@ -342,6 +349,9 @@ public class ReapStaleInProgressMetadataJunctionTests : TestSetup
             .Be(TrainState.Failed, "60 seconds > 30 second timeout, should be reaped");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, too recent for the reaper to fail."
+    )]
     [Test]
     public async Task Run_TimeoutEdge_WithinBoundaryNotReaped()
     {

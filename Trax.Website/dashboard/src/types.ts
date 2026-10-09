@@ -142,6 +142,10 @@ export interface ExecutionDetail extends ExecutionSummary {
   // True when the run was queued to replay replayDecisionsOf and asked its deciders afresh
   // instead, because that replay could not be honoured.
   replayAbandoned?: boolean;
+  // The run this one resumed from a checkpoint, and the step it resumed at (null for after the
+  // latest checkpoint); both null for a run that ran from the top.
+  resumeFrom?: number | null;
+  resumeAt?: string | null;
   failureException: string | null;
   stackTrace: string | null;
   input: string | null;
@@ -633,4 +637,144 @@ export interface PersistedOperationPayload {
   success: boolean;
   operation: PersistedOperation | null;
   errors: PersistedOperationError[];
+}
+
+// ── Run graph ──────────────────────────────────────────────────────────────
+export type ChainStepKind =
+  | "CHAIN"
+  | "CHECKPOINT"
+  | "DECIDE"
+  | "EXTRACT"
+  | "GATE"
+  | "I_CHAIN"
+  | "PARALLEL"
+  | "RESOLVE"
+  | "SCALE"
+  | "SEED"
+  | "SHORT_CIRCUIT"
+  | "SWITCH";
+
+export type RunNodeState =
+  | "NOT_REACHED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED"
+  | "SKIPPED"
+  | "NOT_RECORDED"
+  | "WITHHELD"
+  | "RESTORED"
+  | "INTERRUPTED";
+
+// The steps a node recorded, as far as the run graph draws them.
+export type RunGraphStep = Pick<JunctionStep, "state" | "failureClass" | "failureException">;
+
+// One declared step of a run's train, with where the run left it (operations.runGraph). A node
+// says whether a checkpoint is stored at it and whether resumeExecution can resume there; never
+// what a checkpoint holds.
+export interface RunGraphNode {
+  id: string;
+  kind: ChainStepKind;
+  opaque: boolean;
+  replayed: boolean;
+  checkpointed: boolean;
+  canResume: boolean;
+  state: RunNodeState;
+  steps: RunGraphStep[];
+  tracks: RunGraphTrack[];
+}
+
+// A track or branch of a node, as the flat list names it: without its nodes, which the list
+// carries itself.
+export interface RunGraphTrackHead {
+  name: string;
+  description: string | null;
+  isFallback: boolean;
+  taken: boolean;
+}
+
+export interface RunGraphTrack extends RunGraphTrackHead {
+  nodes: RunGraphNode[];
+}
+
+// One node of runGraph.allNodes, with where it sits: the routing or Parallel step whose track it
+// is on (null at the top level), that track's name, and how many tracks deep it is.
+export interface RunGraphFlatNode extends Omit<RunGraphNode, "tracks"> {
+  parentId: string | null;
+  track: string | null;
+  depth: number;
+  tracks: RunGraphTrackHead[];
+}
+
+export interface RunGraph {
+  metadataId: number;
+  hasGraph: boolean;
+  moreSteps: boolean;
+  // True when resumeExecution can resume the run after its latest checkpoint.
+  canResume: boolean;
+  // Every node at any depth, in one list; lib/runGraphTree rebuilds the tree.
+  allNodes: RunGraphFlatNode[];
+  unmatchedSteps: Pick<JunctionStep, "position" | "name" | "nameWithheld" | "state">[];
+}
+
+// ── State machines ─────────────────────────────────────────────────────────
+// An instance as operators see it: never its context, never whose a user's draft is.
+export type SnapshotOwnerKind = "SYSTEM" | "USER";
+
+export interface MachineInstance {
+  machine: string;
+  ownerKind: SnapshotOwnerKind;
+  id: string;
+  rowId: number;
+  state: string;
+  version: number;
+  createdAt: string | null;
+  updatedAt: string;
+  // True while the instance's state waits on a train run it invoked.
+  hasLiveInvokedRun: boolean;
+}
+
+export interface MachineInstanceCount {
+  machine: string;
+  state: string;
+  ownerKind: SnapshotOwnerKind;
+  count: number;
+}
+
+export interface MachineInstanceInvokedRun {
+  id: number;
+  externalId: string;
+  name: string;
+  trainState: TrainState;
+  startTime: string;
+  endTime: string | null;
+  failureClass: FailureClass;
+  cancellationRequested: boolean;
+  // The run the instance's state waits on now.
+  isLive: boolean;
+}
+
+export interface MachineInstanceDetail extends MachineInstance {
+  invokedRuns: MachineInstanceInvokedRun[];
+  // The instance invoked more runs than the newest 50 listed.
+  isInvokedRunsCapped: boolean;
+  // The work queue entry of the run its state waits on, while that run is still queued.
+  queuedInvokedRunEntryId: number | null;
+}
+
+export type MachineInstanceCancelOutcome =
+  | "CANCEL_REQUESTED"
+  | "MOVED"
+  | "NOT_FOUND"
+  | "NO_LIVE_RUN"
+  | "RUN_CANCELLED"
+  | "RUN_ENDED"
+  | "USER_OWNED";
+
+export interface MachineInstanceCancelResponse {
+  success: boolean;
+  outcome: MachineInstanceCancelOutcome;
+  message: string;
+  // The state the instance moved into, for MOVED.
+  state: string | null;
 }

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -238,6 +239,9 @@ public class OperationsServiceTests : TestSetup
         result.Message.Should().Contain("Cancelled");
     }
 
+    [LeavesStuckRuns(
+        "Marks a queue entry dispatched by hand, with no run behind it, for the cancel to refuse."
+    )]
     [Test]
     public async Task CancelWorkQueueEntryAsync_AlreadyDispatched_ReturnsFailure()
     {

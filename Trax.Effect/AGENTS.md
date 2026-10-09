@@ -29,23 +29,25 @@ if your work contradicts one, say so rather than silently overriding it.
 | `DataLayerGuards.OwnerScopeCompleteness`, or a consumer's per-user row filters | [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md), a filter counts only if it reads the principal, and a per-user entity is a bare `[TraxAuthorize]` |
 | `TrainInput` in `QueueSubjectKey` or `OnQueue`, or `ServiceTrain.EnterQueueHooks` | central `docs/0021`, the enqueue hands the hooks their input for a scope and never sets `Metadata` |
 | `AddDecisionRecording`, the `trax.decision` table, `replay_decisions_of`, or the System One / Nimble decider | central `docs/0040` (a decider chooses a declared track) and `docs/0041` (a requeued run replays the decisions of the run it repeats); the table follows `docs/0009` and `docs/0036` |
+| the `trax.checkpoint` table, `IDataContext.Checkpoints`, or `resume_from` / `resume_at` | central `docs/0047` (a checkpoint stores a state the train declares, and a resume skips to it); the table follows `docs/0009` and `docs/0036` |
 | `Metadata.FailureClass`, the `failure_class` column, or `IFailureClassifier` | central `docs/0020`, and [0006](./docs/adr/0006-a-closed-vocabulary-is-a-postgres-enum.md) for how the enum is stored |
 | `[TraxSensitive]`, `TraxRedaction`, or anything that serializes a train's input or output for storage | [0010](./docs/adr/0010-a-sensitive-field-is-marked-and-masked-where-it-is-written.md), a marked member is masked where its copy is written, opt-in, never by name |
 | `ServiceTrain.Run`, `SaveOutcome`, or anything on a train's terminal write | [0005](./docs/adr/0005-a-trains-outcome-is-recorded-on-an-uncancellable-token.md), the outcome is written on a token the caller cannot cancel |
 | running a train instance more than once, `AddSingletonTraxRoute`, or how lifecycle hooks are built | [0011](./docs/adr/0011-a-service-train-instance-is-one-run.md), a train instance is one run at a time and never a singleton, and hooks come from the run's scope |
 | overriding `ServiceTrain.Run` or `NewMonad`, or their modifiers | [0009](./docs/adr/0009-a-service-train-does-its-work-in-junctions.md), `Run` and `NewMonad` are sealed so `Junctions()` is the only way a service train does work |
 | `trax.decision.state_hash`, or how long a recorded answer is replayed (`ReplayAnswersFor`) | [0020](./docs/adr/0020-a-recorded-answer-replays-only-while-it-is-fresh.md), an answer replays only into the same state and only while it is younger than the bound, counted from when a decider gave it |
+| `AddJunctionProgress`, or any junction effect that writes while a run is going | [0021](./docs/adr/0021-a-runs-tracked-writes-commit-once-when-it-finishes.md), a run's tracked writes commit once, when it finishes; a junction effect writes only its own columns, through its own context |
 | `AddJunctionEvents`, `IJunctionEventHandler`, the junction event types, `trax.junction_run`, or `[TraxSensitive]` on a question type | [0019](./docs/adr/0019-junction-events-are-opt-in-and-carry-no-run-data.md), junction events are opt-in, reach junction event handlers only, carry names, times, states and failure classes but never run data, and their rows go with their run |
 | `MapTraxTrainEventHub`, or the SignalR sink's default client payload | [0016](./docs/adr/0016-the-train-event-hub-carries-the-hosts-authorization.md), the hub is mapped with an authorization posture or the host does not start, and the default payload leaves the failure reason out |
 | a state-machine draft's `requestId` replay, or `ISnapshotStore.UpdateWithRequest` | [0013](./docs/adr/0013-a-request-id-replays-only-the-request-it-recorded.md), an id replays only for the trigger it recorded, and a request whose outcome was undone fires again |
 | what a state-machine draft's autosave or advance may write, what the effect runner commits or replays and when a reset releases its claim, `effect_claim.content_fingerprint`, `RunsOnce`, or `Committed()` | [0017](./docs/adr/0017-only-the-effect-runner-reaches-a-committed-state.md), only the effect runner puts a draft into a committed state or an effect's target |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Twenty-nine name `effect`, three of them superseded: executable guards, the
+index lists them by folder. Thirty-one name `effect`, three of them superseded: executable guards, the
 dependency direction, the three test conventions (AwesomeAssertions, no `[Ignore]`, no fixed
 delays), the canonical train name being the interface FullName, the documentation lints,
 feature-package tables shipping in the core provider migration set, the public API baseline,
-test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax owning
+test frameworks staying out of shipped libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax owning
 its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced package,
 a chain being a declaration (`0016`), a deferred enqueue being staged (`0018`), one subject's
 queued work running one at a time (`0019`), failures being classified where they happen
@@ -103,7 +105,11 @@ owns a distinct schema, a migration-based context has no pending model changes, 
 entity holding per-user data is filtered through the principal and exposed only as a bare
 `[TraxAuthorize]` (the owner-scope census, [0008](./docs/adr/0008-per-user-data-is-filtered-by-its-owner.md)).
 `DomainDataLayerGuardFixture.cs` next to it is the turnkey fixture a consumer subclasses to
-run all five without writing a test body. `tests/Trax.Effect.Data.Testing.Tests/` is their
+run all five without writing a test body. `TraxInvariants.cs` beside them checks a database once
+every host has stopped (no run in progress, no effect claim left without a receipt, no dispatched
+queue entry without its run); `CheckTraxInvariantsAttribute` runs it after every test in
+`Trax.Effect.Tests.Integration` and `Trax.Effect.StateMachine.Persistence.Integration`, and a test
+that leaves such a row on purpose says why with `[LeavesStuckRuns]`. `tests/Trax.Effect.Data.Testing.Tests/` is their
 own suite, and `DomainDataLayerGuardFixtureSelfTest` there subclasses the fixture the way a
 consumer would. Changing either file changes what every consumer enforces, so treat
 them as published API, not as test helpers.

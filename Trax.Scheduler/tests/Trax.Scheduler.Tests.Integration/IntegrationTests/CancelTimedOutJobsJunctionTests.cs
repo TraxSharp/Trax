@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -35,6 +36,9 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
             disposable.Dispose();
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running; the timeout junction only flags its cancel."
+    )]
     [Test]
     public async Task Run_TimedOutJob_SetsCancellationRequested()
     {
@@ -57,6 +61,9 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         loaded.CancellationRequested.Should().BeTrue();
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running; the timeout junction only flags its cancel."
+    )]
     [Test]
     public async Task Run_NotTimedOutJob_DoesNotSetCancellationRequested()
     {
@@ -79,6 +86,9 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         loaded.CancellationRequested.Should().BeFalse();
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running; the timeout junction only flags its cancel."
+    )]
     [Test]
     public async Task Run_PerManifestTimeout_OverridesDefaultTimeout()
     {
@@ -111,6 +121,9 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         ok.CancellationRequested.Should().BeFalse("elapsed 90s < timeout 600s");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running; the timeout junction only flags its cancel."
+    )]
     [Test]
     public async Task Run_AlreadyCancellationRequested_NotReprocessed()
     {
@@ -148,6 +161,9 @@ public class CancelTimedOutJobsJunctionTests : TestSetup
         await act.Should().NotThrowAsync();
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running; the timeout junction only flags its cancel."
+    )]
     [Test]
     public async Task Run_TimedOutJob_DoesNotCountAsFailed()
     {

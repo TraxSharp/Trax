@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.StateMachine.ListMachines",
+  "input": "ListMachinesInput",
+  "output": "ListMachinesOutput",
+  "nodes": [
+    {
+      "id": "ListMachinesJunction#0",
+      "kind": "Chain",
+      "junction": "ListMachinesJunction",
+      "in": "ListMachinesInput",
+      "out": "ListMachinesOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ListMachinesOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

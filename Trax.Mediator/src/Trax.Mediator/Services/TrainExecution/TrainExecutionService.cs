@@ -16,6 +16,8 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.StateMachine.Persistence;
+using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.ConcurrencyLimiter;
@@ -148,6 +150,8 @@ public class TrainExecutionService(
                 DeferPromotion = deferPromotion,
                 SubjectKey = subjectKey,
                 ReplayDecisionsOf = options.ReplayDecisionsOf,
+                ResumeFrom = options.ResumeFrom,
+                ResumeAt = options.ResumeAt,
             }
         );
         entry.ExternalId = externalId;
@@ -235,6 +239,117 @@ public class TrainExecutionService(
 
             throw;
         }
+
+        return new QueueTrainResult(entry.Id, entry.ExternalId);
+    }
+
+    /// <summary>
+    /// The enqueue of a run a state machine's invoking state queues: through the mediator like any
+    /// caller's enqueue (central ADR 0017), so the train is found by its canonical name, authorized,
+    /// its input capped and its subject key stamped, but written into the caller's
+    /// <paramref name="context"/> and flushed inside the transaction the caller holds, which commits
+    /// it with the snapshot or not at all. A user-owned instance's run is authorized against the
+    /// current caller, the user entering the state; a system-owned instance's, including one entered
+    /// by the outcome of the run before it (<see cref="InvokedTrainLaunch.FromOutcome"/>), inside the
+    /// trusted execution scope, as a scheduled manifest run is. A user-owned instance never launches
+    /// from an outcome: no user is present to authorize it, so it is refused.
+    /// </summary>
+    /// <remarks>
+    /// An invoked train may not stage its entry (central ADR 0018) or run an <c>OnQueue</c> hook:
+    /// both commit on their own, outside the caller's transaction. The state-machine startup check
+    /// refuses such a train; this refuses it again rather than queue it any other way.
+    /// </remarks>
+    /// <exception cref="UnauthorizedAccessException">
+    /// The caller may not run the train, or a user-owned instance's run was launched from an outcome.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The train defers promotion or has an <c>OnQueue</c> hook.</exception>
+    internal async Task<QueueTrainResult> QueueInvokedAsync(
+        InvokedTrainLaunch launch,
+        IDataContext context,
+        CancellationToken ct
+    )
+    {
+        ArgumentNullException.ThrowIfNull(launch);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var registration = FindTrain(launch.TrainType.FullName ?? launch.TrainType.Name);
+
+        if (ResolveOnQueueOverride(registration.ImplementationType) is not null)
+            throw new InvalidOperationException(
+                $"{registration.ServiceTypeName} has an OnQueue hook, which commits on its own, so a "
+                    + "state machine cannot queue it in the transaction that enters its state."
+            );
+
+        // The startup check refuses both; this refuses them again, fail-closed, so a host that skipped the check
+        // (its hosted services never started) still queues neither.
+        var at = InvokeRefusals.At(launch.InvokedBy.Machine, launch.State, launch.TrainType);
+        if (
+            launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System
+            && registration.IsBroadcastEnabled
+        )
+            throw new InvalidOperationException(InvokeRefusals.Broadcast(at));
+        if (TraxRedaction.ReachesSensitiveMember(registration.OutputType))
+            throw new InvalidOperationException(
+                InvokeRefusals.SensitiveOutput(at, registration.OutputType)
+            );
+
+        // A run entered by the outcome of the run before it has no user present to authorize it. Only a
+        // system-owned instance may launch one (the state-machine startup check refuses a user-owned machine
+        // that declares such an edge), so a user-owned one is refused here too, fail-closed, rather than
+        // authorized in the trusted scope.
+        if (launch.FromOutcome && launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System)
+            throw new UnauthorizedAccessException(
+                $"{registration.ServiceTypeName} was launched by an outcome of a user-owned instance of "
+                    + $"'{launch.InvokedBy.Machine}', which no user is present to authorize. Only a "
+                    + "system-owned machine chains runs through outcomes."
+            );
+
+        // A system-owned instance's run is authorized as a scheduled manifest run is.
+        if (launch.InvokedBy.OwnerKind == SnapshotOwnerKind.System)
+        {
+            using (
+                serviceProvider
+                    .GetRequiredService<ITrustedExecutionScope>()
+                    .BeginTrusted("state machine")
+            )
+                await AuthorizeAsync(registration, ct);
+        }
+        else
+            await AuthorizeAsync(registration, ct);
+
+        if (!registration.InputType.IsInstanceOfType(launch.Input))
+            throw new InvalidOperationException(
+                $"The input built for {registration.ServiceTypeName} is a "
+                    + $"{launch.Input.GetType().Name}, not its input type "
+                    + $"{registration.InputType.Name}."
+            );
+
+        registration.ServiceType.FullName.AssertLoaded();
+
+        var serializedInput = TrainInputReader.WriteForStorage(
+            launch.Input,
+            registration,
+            mediatorConfiguration.MaxInputJsonBytes
+        );
+
+        await using var train = new EnqueueTrain(serviceProvider, registration);
+        var subjectKey = ResolveSubjectKey(registration, train, launch.Input, launch.ExternalId);
+
+        var entry = CreateEntry(
+            registration,
+            new CreateWorkQueue
+            {
+                TrainName = registration.ServiceType.FullName,
+                Input = serializedInput,
+                InputTypeName = registration.InputType.FullName,
+                SubjectKey = subjectKey,
+                InvokedBy = launch.InvokedBy,
+            }
+        );
+        entry.ExternalId = launch.ExternalId;
+
+        await context.Track(entry);
+        await context.SaveChanges(ct);
 
         return new QueueTrainResult(entry.Id, entry.ExternalId);
     }

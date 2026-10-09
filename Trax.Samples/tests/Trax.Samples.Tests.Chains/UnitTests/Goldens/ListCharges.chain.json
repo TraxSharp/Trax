@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.StateMachine.ListCharges",
+  "input": "ListChargesInput",
+  "output": "ListChargesOutput",
+  "nodes": [
+    {
+      "id": "ListChargesJunction#0",
+      "kind": "Chain",
+      "junction": "ListChargesJunction",
+      "in": "ListChargesInput",
+      "out": "ListChargesOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ListChargesOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -213,6 +213,11 @@ namespace Trax.Effect.Enums
         DormantDependent = 5,
         Once = 6,
     }
+    public enum SnapshotOwnerKind
+    {
+        User = 0,
+        System = 1,
+    }
     public enum TrainState
     {
         Pending = 0,
@@ -230,6 +235,11 @@ namespace Trax.Effect.Enums
 }
 namespace Trax.Effect.Exceptions
 {
+    public class ResumeRefusedException : Trax.Core.Exceptions.TrainException
+    {
+        public ResumeRefusedException(string code, string message) { }
+        public string Code { get; }
+    }
     public class StoreRefusedContentException : System.Exception
     {
         public StoreRefusedContentException(System.Exception innerException) { }
@@ -346,6 +356,33 @@ namespace Trax.Effect.Models.BackgroundJob.DTOs
         public string? InputType { get; set; }
         public required long MetadataId { get; set; }
         public int Priority { get; set; }
+    }
+}
+namespace Trax.Effect.Models.Checkpoint
+{
+    public class Checkpoint
+    {
+        public Checkpoint() { }
+        [System.ComponentModel.DataAnnotations.Schema.Column("branch_path")]
+        public string? BranchPath { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("chain_hash")]
+        public string ChainHash { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTime CreatedAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public long Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("metadata_id")]
+        public long MetadataId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("node_id")]
+        public string NodeId { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state")]
+        public string State { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state_fingerprint")]
+        public string StateFingerprint { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("state_type")]
+        public string StateType { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("tracks")]
+        public string Tracks { get; set; }
     }
 }
 namespace Trax.Effect.Models.DeadLetter.DTOs
@@ -493,6 +530,8 @@ namespace Trax.Effect.Models.JunctionRun
         public bool AnswerWithheld { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("attempt")]
         public int? Attempt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("branch_path")]
+        public string? BranchPath { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("confidence")]
         public double? Confidence { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("ended_at")]
@@ -511,6 +550,8 @@ namespace Trax.Effect.Models.JunctionRun
         public string Name { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("name_withheld")]
         public bool NameWithheld { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("node_id")]
+        public string? NodeId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("position")]
         public int Position { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("question_key")]
@@ -735,10 +776,13 @@ namespace Trax.Effect.Models.Metadata.DTOs
         public CreateMetadata() { }
         public required string ExternalId { get; set; }
         public required object? Input { get; set; }
+        public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
         public long? ManifestId { get; set; }
         public required string Name { get; set; }
         public long? ParentId { get; set; }
         public long? ReplayDecisionsOf { get; set; }
+        public string? ResumeAt { get; set; }
+        public long? ResumeFrom { get; set; }
     }
 }
 namespace Trax.Effect.Models.Metadata
@@ -785,6 +829,18 @@ namespace Trax.Effect.Models.Metadata
         [System.ComponentModel.DataAnnotations.Schema.Column("input")]
         [System.Text.Json.Serialization.JsonIgnore]
         public string? Input { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("invoking_instance_id")]
+        public System.Guid? InvokingInstanceId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("invoking_machine")]
+        public string? InvokingMachine { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("invoking_owner_kind")]
+        public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; }
         public bool IsChild { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("junction_started_at")]
         public System.DateTime? JunctionStartedAt { get; set; }
@@ -811,6 +867,14 @@ namespace Trax.Effect.Models.Metadata
         [System.Text.Json.Serialization.JsonInclude]
         [System.Text.Json.Serialization.JsonPropertyName("replay_decisions_of")]
         public long? ReplayDecisionsOf { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_at")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("resume_at")]
+        public string? ResumeAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_from")]
+        [System.Text.Json.Serialization.JsonInclude]
+        [System.Text.Json.Serialization.JsonPropertyName("resume_from")]
+        public long? ResumeFrom { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_time")]
         public System.DateTime? ScheduledTime { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("stack_trace")]
@@ -890,6 +954,8 @@ namespace Trax.Effect.Models.RecordedDecision
         public RecordedDecision() { }
         [System.ComponentModel.DataAnnotations.Schema.Column("answer")]
         public string? Answer { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("branch_path")]
+        public string BranchPath { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("decided_at")]
         public System.DateTime DecidedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("decider")]
@@ -998,8 +1064,14 @@ namespace Trax.Effect.Models.SnapshotDraft
         public System.Guid ConcurrencyToken { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("context", TypeName="jsonb")]
         public string Context { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("created_at")]
+        public System.DateTimeOffset? CreatedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("id")]
         public System.Guid Id { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoke_stranded_state")]
+        public string? InvokeStrandedState { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoke_token")]
+        public string? InvokeToken { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_from_state")]
         public string? LastRequestFromState { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("last_request_id")]
@@ -1008,12 +1080,16 @@ namespace Trax.Effect.Models.SnapshotDraft
         public string? LastRequestTrigger { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("machine")]
         public string Machine { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("owner_kind")]
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("row_id")]
+        public long RowId { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("state")]
         public string State { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("updated_at")]
         public System.DateTimeOffset UpdatedAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("user_key")]
-        public string UserKey { get; set; }
+        public string? UserKey { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("version")]
         public int Version { get; set; }
     }
@@ -1028,12 +1104,22 @@ namespace Trax.Effect.Models.WorkQueue.DTOs
         public bool ExplicitTrigger { get; set; }
         public string? Input { get; set; }
         public string? InputTypeName { get; set; }
+        public Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy { get; set; }
         public long? ManifestId { get; set; }
         public int Priority { get; set; }
         public long? ReplayDecisionsOf { get; set; }
+        public string? ResumeAt { get; set; }
+        public long? ResumeFrom { get; set; }
         public System.DateTime? ScheduledAt { get; set; }
         public string? SubjectKey { get; set; }
         public required string TrainName { get; set; }
+    }
+    public sealed class InvokedBy : System.IEquatable<Trax.Effect.Models.WorkQueue.DTOs.InvokedBy>
+    {
+        public InvokedBy(string Machine, System.Guid InstanceId, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind) { }
+        public System.Guid InstanceId { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
     }
 }
 namespace Trax.Effect.Models.WorkQueue
@@ -1064,6 +1150,15 @@ namespace Trax.Effect.Models.WorkQueue
         public string? Input { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("input_type_name")]
         public string? InputTypeName { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_instance_id")]
+        [System.Text.Json.Serialization.JsonInclude]
+        public System.Guid? InvokingInstanceId { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_machine")]
+        [System.Text.Json.Serialization.JsonInclude]
+        public string? InvokingMachine { get; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("invoking_owner_kind")]
+        [System.Text.Json.Serialization.JsonInclude]
+        public Trax.Effect.Enums.SnapshotOwnerKind? InvokingOwnerKind { get; }
         [System.ComponentModel.DataAnnotations.Schema.Column("is_explicit_trigger")]
         public bool IsExplicitTrigger { get; set; }
         public Trax.Effect.Models.Manifest.Manifest? Manifest { get; set; }
@@ -1076,6 +1171,10 @@ namespace Trax.Effect.Models.WorkQueue
         public int Priority { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("replay_decisions_of")]
         public long? ReplayDecisionsOf { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_at")]
+        public string? ResumeAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.Column("resume_from")]
+        public long? ResumeFrom { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("scheduled_at")]
         public System.DateTime? ScheduledAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.Column("status")]
@@ -1137,7 +1236,7 @@ namespace Trax.Effect.Services.EffectJunction
     {
         protected EffectJunction() { }
         public Trax.Effect.Models.JunctionMetadata.JunctionMetadata? Metadata { get; }
-        public override System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
+        public override sealed System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Core.Train.Train<TTrainIn, TTrainOut> train) { }
         public System.Threading.Tasks.Task<Trax.Core.Functional.Either<System.Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(Trax.Core.Functional.Either<System.Exception, TIn> previousOutput, Trax.Effect.Services.ServiceTrain.ServiceTrain<TTrainIn, TTrainOut> serviceTrain) { }
         public abstract override System.Threading.Tasks.Task<TOut> Run(TIn input) { }
     }
@@ -1377,6 +1476,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public bool AnswerWithheld { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("attempt")]
         public int? Attempt { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("branchPath")]
+        public string? BranchPath { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("confidence")]
         public double? Confidence { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("decider")]
@@ -1397,6 +1498,8 @@ namespace Trax.Effect.Services.TrainEventBroadcaster
         public string Name { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("nameWithheld")]
         public bool NameWithheld { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("nodeId")]
+        public string? NodeId { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("position")]
         public int Position { get; init; }
         [System.Text.Json.Serialization.JsonPropertyName("questionKey")]

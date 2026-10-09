@@ -92,6 +92,11 @@ public class MachineGeneratorNodeTests
     public void Generate_reproduces_the_committed_checkout_artifacts_byte_for_byte() =>
         AssertByteParityWithCommitted(new DeclarativeCheckoutMachine(), "checkout");
 
+    // A state that invokes a train exports outcome triggers, which the twin and corpus generators carry through.
+    [Test]
+    public void Generate_reproduces_the_committed_ingest_artifacts_with_outcome_triggers_byte_for_byte() =>
+        AssertByteParityWithCommitted(new DeclarativeIngestMachine(), "ingest");
+
     // The end goal: the CLI's IR/twin/corpus for a machine are byte-identical to what the engine repo commits,
     // so `trax machine generate` (and `check`) is a faithful stand-in for the retired regenerate-via-tests path.
     private void AssertByteParityWithCommitted(IMachine machine, string id)

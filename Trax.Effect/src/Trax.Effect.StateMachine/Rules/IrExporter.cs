@@ -20,7 +20,9 @@ public static class IrExporter
     /// <returns>The IR as canonical JSON.</returns>
     /// <exception cref="InvalidOperationException">
     /// The machine was authored with raw delegates (<see cref="BuiltMachine{TState,TTrigger}.Declarative"/>
-    /// is null), so there is no declarative model to export.
+    /// is null), so there is no declarative model to export; or it mixes the styles and still has a delegate
+    /// guard (<c>When(Func...)</c>), delegate reducer (<c>Reduce(Func...)</c>) or delegate validator
+    /// (<c>Holds</c>), which the IR cannot carry.
     /// </exception>
     public static string Export<TState, TTrigger>(BuiltMachine<TState, TTrigger> machine)
         where TState : struct, Enum
@@ -32,6 +34,7 @@ public static class IrExporter
                 "IR export requires a declaratively-authored machine (use .Context/.When/.Reduce, not raw delegates)."
             );
         var def = machine.Definition;
+        RefuseDelegates(machine, declarative);
 
         var context = new JsonObject();
         foreach (var (state, schema) in declarative.ContextSchemas)
@@ -40,6 +43,11 @@ public static class IrExporter
         var inputs = new JsonObject();
         foreach (var (trigger, schema) in declarative.TriggerInputs)
             inputs[trigger.ToString()!] = WriteSchema(schema);
+
+        // An invoking state's success outcome takes the train's output as its input, so its schema is the
+        // output type's. Failure and cancel carry no input.
+        foreach (var invoke in def.Invokes.Values)
+            inputs[invoke.TriggerName(InvokeOutcomeKind.Done)] = WriteSchema(OutputSchema(invoke));
 
         var transitions = BuildTransitions(machine, declarative);
 
@@ -72,6 +80,11 @@ public static class IrExporter
             ir["invariants"] = invariants;
         }
 
+        // The outcome triggers of states that invoke a train, a trigger kind of their own. Omitted when the machine
+        // invokes nothing, so its IR is unchanged.
+        if (def.Invokes.Count > 0)
+            ir["outcomes"] = WriteOutcomes(def.Invokes);
+
         // The differential fuzzing inputs (test-only), if authored via .Differential(...). Carries the
         // samples/seeds/contexts the cross-language harness enumerates, so it reads this one IR instead of a
         // hand-written machine.json. Omitted when empty, so a machine without .Differential has identical IR.
@@ -79,6 +92,64 @@ public static class IrExporter
             ir["differential"] = WriteDifferential(differential);
 
         return CanonicalJson.Serialize(ir);
+    }
+
+    // A delegate is opaque, so the IR would carry its edge with no guard or reducer (which a generated twin reads
+    // as "always taken, keep the context") and its state with no validator, while the server runs the delegate.
+    // The twin would accept what the server refuses. Refuse the export instead, naming every offender.
+    private static void RefuseDelegates<TState, TTrigger>(
+        BuiltMachine<TState, TTrigger> machine,
+        DeclarativeModel<TState, TTrigger> declarative
+    )
+        where TState : struct, Enum
+        where TTrigger : struct, Enum
+    {
+        var def = machine.Definition;
+        var problems = new List<string>();
+
+        // The builder records the engine transition and its declarative twin in lockstep, and a declarative
+        // When/Reduce sets both, so an engine delegate with no matching rule or reduction is a raw delegate.
+        for (var i = 0; i < def.Transitions.Count; i++)
+        {
+            var td = def.Transitions[i];
+            var dt = i < declarative.Transitions.Count ? declarative.Transitions[i] : null;
+            var edge = $"{td.From} -{td.Trigger}-> {td.To}";
+            if (td.Guard is not null && dt?.Guard is null)
+                problems.Add(
+                    $"the edge {edge} has a delegate guard (When(Func...)). Use When(Rule), or for logic the rule "
+                        + "vocabulary cannot express, `.When(new Rule.Custom(\"name\"))` with "
+                        + "`.CustomGuard(\"name\", (context, input) => ...)`."
+                );
+            if (td.Reduce is not null && dt?.Reduce is null)
+                problems.Add(
+                    $"the edge {edge} has a delegate reducer (Reduce(Func...)). Use Reduce(Reduction), or for logic "
+                        + "the vocabulary cannot express, `.Reduce(new Reduction.Custom(\"name\"))` with "
+                        + "`.CustomReducer(\"name\", (context, input) => ...)`."
+                );
+        }
+
+        var delegateStates = def
+            .ContextValidators.Keys.Where(state =>
+                declarative.DelegateValidatedStates.Contains(state)
+                || (
+                    !declarative.ContextSchemas.ContainsKey(state)
+                    && !declarative.StateInvariants.ContainsKey(state)
+                )
+            )
+            .OrderBy(state => state.ToString(), StringComparer.Ordinal);
+        foreach (var state in delegateStates)
+            problems.Add(
+                $"the state {state} has a delegate validator (Holds). Use Context<T>() and Requires(Rule), or for "
+                    + "a check the vocabulary cannot express, `.Requires(new Rule.Custom(\"name\"))` with "
+                    + "`.CustomGuard(\"name\", (context, input) => ...)`."
+            );
+
+        if (problems.Count > 0)
+            throw new InvalidOperationException(
+                $"IR export refuses the machine '{def.Id}': the IR cannot carry a C# delegate, so a generated twin "
+                    + "would accept what the server refuses. "
+                    + string.Join(" ", problems.Select(p => char.ToUpperInvariant(p[0]) + p[1..]))
+            );
     }
 
     private static JsonObject WriteDifferential<TState, TTrigger>(
@@ -89,16 +160,13 @@ public static class IrExporter
     {
         var obj = new JsonObject();
 
-        if (diff.Samples.Count > 0)
+        if (diff.Samples.Count > 0 || diff.OutcomeSamples.Count > 0)
         {
             var samples = new JsonObject();
             foreach (var (trigger, inputs) in diff.Samples)
-            {
-                var arr = new JsonArray();
-                foreach (var input in inputs)
-                    arr.Add(input.DeepClone());
-                samples[trigger.ToString()!] = arr;
-            }
+                samples[trigger.ToString()!] = Copy(inputs);
+            foreach (var (state, outputs) in diff.OutcomeSamples)
+                samples[OutcomeTriggers.Name(state, InvokeOutcomeKind.Done)] = Copy(outputs);
             obj["samples"] = samples;
         }
 
@@ -119,6 +187,64 @@ public static class IrExporter
         }
 
         return obj;
+    }
+
+    private static JsonArray Copy(IEnumerable<JsonNode> nodes)
+    {
+        var arr = new JsonArray();
+        foreach (var node in nodes)
+            arr.Add(node.DeepClone());
+        return arr;
+    }
+
+    private static ContextSchema OutputSchema<TState>(InvokeDefinition<TState> invoke)
+        where TState : struct, Enum
+    {
+        try
+        {
+            return SchemaReflection.For(invoke.OutputType);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(
+                $"IR export cannot describe the output of {invoke.TrainType.Name}, invoked in {invoke.State}: "
+                    + ex.Message,
+                ex
+            );
+        }
+    }
+
+    // One entry per outcome trigger (Fetching.done, Fetching.failed, Fetching.cancelled): the invoking state, the
+    // outcome, the train's canonical name, and the edges in declaration order, which is the order they are tried
+    // in, so a guarded edge before an unguarded fallback stays before it. The input mapping is server-only and
+    // is not exported: the twin never starts a train.
+    private static JsonObject WriteOutcomes<TState>(
+        IReadOnlyDictionary<TState, InvokeDefinition<TState>> invokes
+    )
+        where TState : struct, Enum
+    {
+        var outcomes = new JsonObject();
+        foreach (var invoke in invokes.Values)
+        foreach (var kind in Enum.GetValues<InvokeOutcomeKind>())
+        {
+            var edges = new JsonArray();
+            foreach (var edge in invoke.EdgesFor(kind))
+            {
+                var e = new JsonObject { ["to"] = edge.To.ToString() };
+                if (edge.Guard is not null)
+                    e["guard"] = WriteRule(edge.Guard);
+                if (edge.Reduce is not null)
+                    e["reduce"] = WriteReduction(edge.Reduce);
+                edges.Add(e);
+            }
+            outcomes[invoke.TriggerName(kind)] = new JsonObject
+            {
+                ["state"] = invoke.State.ToString(),
+                ["outcome"] = OutcomeTriggers.Suffix(kind),
+                ["edges"] = edges,
+            };
+        }
+        return outcomes;
     }
 
     private static JsonArray BuildTransitions<TState, TTrigger>(

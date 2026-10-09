@@ -1,0 +1,129 @@
+{
+  "train": "Trax.Samples.Recovery.Trains.Ingest.IngestPartitionTrain",
+  "input": "IngestPartitionInput",
+  "output": "IngestPartitionResult",
+  "nodes": [
+    {
+      "id": "FetchPartition#0",
+      "kind": "Chain",
+      "junction": "FetchPartition",
+      "in": "IngestPartitionInput",
+      "out": "FetchedPartition",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "NormaliseWorks#0",
+      "kind": "Chain",
+      "junction": "NormaliseWorks",
+      "in": "FetchedPartition",
+      "out": "NormalisedPartition",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "FindExistingMatches#0",
+      "kind": "Chain",
+      "junction": "FindExistingMatches",
+      "in": "NormalisedPartition",
+      "out": "MatchEvidence",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Decide<YesNoDecision<SameWorkAsExisting>>#0",
+      "kind": "Decide",
+      "junction": "IDecider",
+      "in": "MatchEvidence",
+      "out": "YesNoDecision<SameWorkAsExisting>",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Gate<SameWorkAsExisting>#0",
+      "kind": "Gate",
+      "junction": null,
+      "in": "YesNoDecision<SameWorkAsExisting>",
+      "out": "TrackTaken<SameWorkAsExisting>",
+      "opaque": false,
+      "tracks": [
+        {
+          "name": "Yes",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Gate<SameWorkAsExisting>#0/Yes/MergeIntoExisting#0",
+              "kind": "Chain",
+              "junction": "MergeIntoExisting",
+              "in": "MatchEvidence",
+              "out": "ResolvedPartition",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "No",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Gate<SameWorkAsExisting>#0/No/CreateAsNew#0",
+              "kind": "Chain",
+              "junction": "CreateAsNew",
+              "in": "MatchEvidence",
+              "out": "ResolvedPartition",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "Unsure",
+          "description": null,
+          "isFallback": true,
+          "nodes": [
+            {
+              "id": "Gate<SameWorkAsExisting>#0/Unsure/HoldForReview#0",
+              "kind": "Chain",
+              "junction": "HoldForReview",
+              "in": "MatchEvidence",
+              "out": "ResolvedPartition",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "UpsertWorks#0",
+      "kind": "Chain",
+      "junction": "UpsertWorks",
+      "in": "ResolvedPartition",
+      "out": "UpsertedPartition",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "FingerprintPartition#0",
+      "kind": "Chain",
+      "junction": "FingerprintPartition",
+      "in": "UpsertedPartition",
+      "out": "IngestPartitionResult",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "IngestPartitionResult",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

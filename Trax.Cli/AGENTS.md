@@ -21,9 +21,9 @@ if your work contradicts one, say so rather than silently overriding it.
 | anything under `Machines/` | [0001](./docs/adr/0001-the-machine-toolchain-is-half-in-process.md), the C# half loads a compiled assembly and the TypeScript half spawns node |
 
 Decisions binding more than one folder live in the central corpus at `Trax.Docs/adr/`, whose
-index lists them by folder. Nineteen name `cli`, three of them superseded: executable guards, the
+index lists them by folder. Twenty name `cli`, three of them superseded: executable guards, the
 dependency direction, the three test conventions, the documentation lints, the public API
-baseline, test frameworks staying out of shipped libraries, exemplars declared by attribute, Trax
+baseline, test frameworks staying out of shipped libraries, property tests using CsCheck in test projects only (`0044`), exemplars declared by attribute, Trax
 owning its vocabulary, tests owning their timeouts, every `PackageVersion` naming a referenced
 package, a chain being a declaration (`0016`), and one repository releasing at one version
 (`0042`). The index is at

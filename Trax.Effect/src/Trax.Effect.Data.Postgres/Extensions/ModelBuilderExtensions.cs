@@ -52,6 +52,7 @@ public static class ModelBuilderExtensions
         modelBuilder.HasPostgresEnum<MisfirePolicy>(schema: "trax");
         modelBuilder.HasPostgresEnum<JunctionRunKind>(schema: "trax");
         modelBuilder.HasPostgresEnum<JunctionRunState>(schema: "trax");
+        modelBuilder.HasPostgresEnum<SnapshotOwnerKind>(schema: "trax");
 
         return modelBuilder;
     }
@@ -97,6 +98,7 @@ public static class ModelBuilderExtensions
         npgsqlDataSourceBuilder.MapEnum<MisfirePolicy>("trax.misfire_policy");
         npgsqlDataSourceBuilder.MapEnum<JunctionRunKind>("trax.junction_run_kind");
         npgsqlDataSourceBuilder.MapEnum<JunctionRunState>("trax.junction_run_state");
+        npgsqlDataSourceBuilder.MapEnum<SnapshotOwnerKind>("trax.snapshot_owner_kind");
 
         configure?.Invoke(npgsqlDataSourceBuilder);
 

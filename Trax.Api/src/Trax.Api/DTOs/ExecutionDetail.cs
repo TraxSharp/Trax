@@ -74,4 +74,17 @@ public record ExecutionDetail(
     /// replayed, or was never queued to.
     /// </summary>
     public bool ReplayAbandoned { get; init; }
+
+    /// <summary>
+    /// The failed or cancelled execution this one resumed from a checkpoint, as the dashboard's
+    /// "Resumes" shows it; <c>null</c> for a run that ran from the top. See
+    /// Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
+    /// </summary>
+    public long? ResumeFrom { get; init; }
+
+    /// <summary>
+    /// The step this execution resumed at, or <c>null</c> when it resumed after the latest
+    /// checkpoint of <see cref="ResumeFrom"/> (or did not resume).
+    /// </summary>
+    public string? ResumeAt { get; init; }
 }

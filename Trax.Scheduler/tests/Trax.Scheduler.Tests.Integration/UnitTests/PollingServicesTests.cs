@@ -118,6 +118,7 @@ public class PollingServicesTests
             sp,
             FastConfig(),
             new SchedulerLivenessMonitor(TimeProvider.System),
+            new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 
@@ -138,6 +139,7 @@ public class PollingServicesTests
             sp,
             config,
             new SchedulerLivenessMonitor(TimeProvider.System),
+            new DispatcherWake(),
             NullLogger<JobDispatcherPollingService>.Instance
         );
 

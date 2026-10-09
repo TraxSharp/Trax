@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Queries;
+using Trax.Api.Services.Runs;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Data.Postgres.Extensions;
@@ -13,6 +14,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
+using Trax.Effect.Models.JunctionRun;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
 using Trax.Effect.Models.ManifestGroup;
@@ -21,6 +23,7 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.RecordedDecision;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Configuration;
@@ -673,6 +676,99 @@ public class OperationsParityReadsTests
             .ContainSingle()
             .Which.Code.Should()
             .Be("TRAX_INVALID_ARGUMENT");
+    }
+
+    #endregion
+
+    #region Run graph
+
+    [Test]
+    public async Task RunGraph_PlacesTheStepsJunctionRunsReads_OnTheTrainsGraph()
+    {
+        var run = await SeedRun();
+        await SeedSteps(
+            run,
+            ("Fetch", JunctionRunKind.Junction, JunctionRunState.Completed, "Fetch#0", null),
+            ("Lane", JunctionRunKind.Route, JunctionRunState.Completed, "Switch<Lane>#0", "Fast"),
+            (
+                "Ship",
+                JunctionRunKind.Junction,
+                JunctionRunState.Failed,
+                "Switch<Lane>#0/Fast/Ship#0",
+                null
+            ),
+            ("Legacy", JunctionRunKind.Junction, JunctionRunState.Completed, null, null)
+        );
+        var graphs = Substitute.For<ITrainChainGraphs>();
+        graphs.Find("Trax.X.Parity").Returns(ParityOperationsOverHttpTests.RoutedGraph);
+
+        var graph = await new OperationsQueries().GetRunGraph(run, _factory, graphs, default);
+        var steps = await new OperationsQueries().GetJunctionRuns(run, _factory, default);
+
+        graph!.Train.Should().Be("Trax.X.Parity");
+        graph.HasGraph.Should().BeTrue();
+        graph.Hash.Should().Be(ParityOperationsOverHttpTests.RoutedGraph.Hash);
+        graph
+            .Should()
+            .BeEquivalentTo(
+                RunGraphs.Match(run, "Trax.X.Parity", graphs.Find("Trax.X.Parity"), steps)
+            );
+        graph.Nodes[0].State.Should().Be(RunNodeState.Completed);
+        graph.Nodes[1].TrackTaken.Should().Be("Fast");
+        graph.Nodes[1].Tracks[0].Nodes[0].State.Should().Be(RunNodeState.Failed);
+        graph.Nodes[2].State.Should().Be(RunNodeState.NotReached);
+        graph.UnmatchedSteps.Select(s => s.Name).Should().Equal("Legacy");
+    }
+
+    [Test]
+    public async Task RunGraph_OfAnIdWithNoRun_IsNull_AndOfAnUnregisteredTrain_HasNoGraph()
+    {
+        var graphs = Substitute.For<ITrainChainGraphs>();
+        (await new OperationsQueries().GetRunGraph(424242, _factory, graphs, default))
+            .Should()
+            .BeNull();
+
+        var run = await SeedRun();
+        await SeedSteps(
+            run,
+            ("Fetch", JunctionRunKind.Junction, JunctionRunState.Completed, "Fetch#0", null)
+        );
+        var graph = await new OperationsQueries().GetRunGraph(run, _factory, graphs, default);
+
+        graph!.HasGraph.Should().BeFalse();
+        graph.Nodes.Should().BeEmpty();
+        graph.UnmatchedSteps.Should().ContainSingle().Which.NodeId.Should().Be("Fetch#0");
+    }
+
+    private async Task SeedSteps(
+        long run,
+        params (
+            string Name,
+            JunctionRunKind Kind,
+            JunctionRunState State,
+            string? NodeId,
+            string? Answer
+        )[] steps
+    )
+    {
+        await using var db = await _factory.CreateDbContextAsync(default);
+        var position = 0;
+        foreach (var step in steps)
+            db.JunctionRuns.Add(
+                new JunctionRun
+                {
+                    MetadataId = run,
+                    Position = position++,
+                    Kind = step.Kind,
+                    Name = step.Name,
+                    State = step.State,
+                    StartedAt = DateTime.UtcNow,
+                    QuestionKey = step.Kind == JunctionRunKind.Junction ? null : step.Name,
+                    Answer = step.Answer,
+                    NodeId = step.NodeId,
+                }
+            );
+        await db.SaveChanges(default);
     }
 
     #endregion

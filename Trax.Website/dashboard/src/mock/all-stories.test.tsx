@@ -16,7 +16,7 @@ afterEach(cleanup);
 
 for (const [path, mod] of Object.entries(modules)) {
   const composed = composeStories(mod as StoryModule);
-  describe(path.replace("../", ""), () => {
+  describe(path.replace(/^\.\.\//, ""), () => {
     for (const [name, Story] of Object.entries(composed) as [string, ComposedStory][]) {
       if (Story.parameters?.real) continue;
       test(`${name} renders`, async () => {

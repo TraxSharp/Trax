@@ -1,0 +1,1311 @@
+{
+  "machine": "ingest",
+  "version": 1,
+  "generated": "GENERATED differential corpus. Do not hand-edit; regenerate with UPDATE_DIFFERENTIAL=1. TypeScript is the oracle; every runtime replays and must reproduce each outcome.",
+  "cases": [
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Approved",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Fetching\",\"context\":{\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Cancelled",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Fetching\",\"context\":{\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "FetchFailed",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetched",
+        "context": {
+          "fingerprint": "sha256:abc",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Idle\",\"context\":{\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Cancelled\",\"context\":{\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-context"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Fetched\",\"context\":{\"fingerprint\":\"sha256:abc\",\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"NeedsReview\",\"context\":{\"fingerprint\":\"sha256:def\",\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "invalid-context"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Fetching",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"FetchFailed\",\"context\":{\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Fetching\",\"context\":{\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "Idle",
+        "context": {
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Abandon"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Approve"
+      },
+      "expect": {
+        "outcome": "transitioned",
+        "wire": "{\"machine\":\"ingest\",\"version\":1,\"state\":\"Approved\",\"context\":{\"fingerprint\":\"sha256:def\",\"source\":\"s3://bucket/partition-1\"}}"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Retry"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Start"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.cancelled"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:abc",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "sha256:def",
+          "unsure": true
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.done",
+        "input": {
+          "fingerprint": "",
+          "unsure": false
+        }
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    },
+    {
+      "given": {
+        "machine": "ingest",
+        "version": 1,
+        "state": "NeedsReview",
+        "context": {
+          "fingerprint": "sha256:def",
+          "source": "s3://bucket/partition-1"
+        }
+      },
+      "when": {
+        "trigger": "Fetching.failed"
+      },
+      "expect": {
+        "outcome": "rejected",
+        "reason": "no-transition"
+      }
+    }
+  ]
+}

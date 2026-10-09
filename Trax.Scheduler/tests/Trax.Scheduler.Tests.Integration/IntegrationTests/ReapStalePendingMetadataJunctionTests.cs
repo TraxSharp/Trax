@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -92,6 +93,9 @@ public class ReapStalePendingMetadataJunctionTests : TestSetup
             .Be(TrainState.Pending, "recent pending metadata should not be reaped");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, which the pending reaper must leave alone."
+    )]
     [Test]
     public async Task Run_InProgressMetadata_NotAffected()
     {

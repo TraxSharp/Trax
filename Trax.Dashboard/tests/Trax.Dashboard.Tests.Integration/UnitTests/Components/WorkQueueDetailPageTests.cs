@@ -10,6 +10,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Services.TraxScheduler;
 
 namespace Trax.Dashboard.Tests.Integration.UnitTests.Components;
@@ -92,6 +93,37 @@ public class WorkQueueDetailPageTests
             TimeSpan.FromSeconds(10)
         );
         page.Markup.Should().NotContain("Waiting On");
+    }
+
+    [Test]
+    public async Task Cancelling_an_entry_a_users_draft_queued_is_refused_with_the_APIs_reason()
+    {
+        var entry = WorkQueue.Create(
+            new CreateWorkQueue
+            {
+                TrainName = "Acme.IWizardStep",
+                InvokedBy = new InvokedBy("wizard", Guid.NewGuid(), SnapshotOwnerKind.User),
+            }
+        );
+        await using (var db = await _data.CreateDbContextAsync(default))
+        {
+            await db.Track(entry);
+            await db.SaveChanges(default);
+        }
+
+        var page = Render(entry.Id);
+        var cancel = page.WaitForElement("button:contains('Cancel')", TimeSpan.FromSeconds(10));
+        await cancel.ClickAsync(new());
+
+        page.WaitForAssertion(
+            () => page.Markup.Should().Contain(OperationsService.UserOwnedRunCancelRefusal),
+            TimeSpan.FromSeconds(10)
+        );
+        await using var after = await _data.CreateDbContextAsync(default);
+        after
+            .WorkQueues.Single(w => w.Id == entry.Id)
+            .Status.Should()
+            .Be(WorkQueueStatus.Queued, "a user's draft is read-only to operators");
     }
 
     private IRenderedComponent<WorkQueueDetailPage> Render(long id) =>

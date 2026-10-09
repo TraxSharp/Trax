@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -198,6 +199,7 @@ public class MetadataCleanupTrainTests : TestSetup
             );
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, which cleanup must keep.")]
     [Test]
     public async Task Run_ParentMetadataWithRunningChild_NullsChildParentIdAndDeletesParent()
     {
@@ -430,6 +432,7 @@ public class MetadataCleanupTrainTests : TestSetup
         remaining.Should().NotBeNull("pending metadata should never be deleted regardless of age");
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, which cleanup must keep.")]
     [Test]
     public async Task Run_DoesNotDeleteInProgressMetadata()
     {
@@ -895,6 +898,7 @@ public class MetadataCleanupTrainTests : TestSetup
         }
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, which cleanup must keep.")]
     [TestCase(false)]
     [TestCase(true)]
     public async Task Delete_KeepsARunLinkedAfterItWasSelected(bool byQueuedEntry)
@@ -955,6 +959,7 @@ public class MetadataCleanupTrainTests : TestSetup
         (await DataContext.Metadatas.AnyAsync(m => m.Id == unlinked.Id)).Should().BeFalse();
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running, which cleanup must keep.")]
     [Test]
     public async Task Delete_LinkedMidBatch_KeepsTheRunWithEverythingItOwns()
     {

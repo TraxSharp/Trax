@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.SignalRBroadcaster.Trains.Ping.PingTrain",
+  "input": "PingInput",
+  "output": "PingOutput",
+  "nodes": [
+    {
+      "id": "PingJunction#0",
+      "kind": "Chain",
+      "junction": "PingJunction",
+      "in": "PingInput",
+      "out": "PingOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "PingOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

@@ -291,12 +291,19 @@ public class SignalRJunctionEventTests
             .Be(2, $"a run's steps are given up before another run's outcome. See {Adr}.");
     }
 
+    private const string ShipNode = "Switch<Lane>#0/Express/Ship#0";
+
     private static TrainLifecycleEventMessage OnTrack(bool nameWithheld = false)
     {
         var message = Step(eventType: "JunctionStarted");
         return message with
         {
-            Junction = message.Junction! with { TrackPosition = 1, NameWithheld = nameWithheld },
+            Junction = message.Junction! with
+            {
+                TrackPosition = 1,
+                NameWithheld = nameWithheld,
+                NodeId = ShipNode,
+            },
         };
     }
 
@@ -322,6 +329,11 @@ public class SignalRJunctionEventTests
         var step = sent.Should().BeOfType<TraxJunctionClientEvent>().Subject;
         step.Name.Should().Be(name, $"a junction on a track gives its answer away. See {Adr}.");
         step.NameWithheld.Should().Be(name == "(withheld)");
+        step.NodeId.Should()
+            .Be(
+                step.NameWithheld ? null : ShipNode,
+                $"a node id names the track and the junction. See {Adr}."
+            );
         step.TrackPosition.Should().Be(1);
     }
 

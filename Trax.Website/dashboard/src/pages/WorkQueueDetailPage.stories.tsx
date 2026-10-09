@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { WorkQueueDetailPage } from "./WorkQueueDetailPage";
 import { errorOverride, workQueueScenario } from "../mock/scenarios";
+import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 
 const meta = {
   title: "Pages/Work queue detail",
@@ -72,6 +73,24 @@ export const CancelEntry: Story = {
       await userEvent.click(c.getByRole("button", { name: "Cancel entry" }));
       await waitFor(() => expect(c.getByText("Status").nextElementSibling).toHaveTextContent("Cancelled"));
       expect(c.queryByRole("button", { name: "Cancel entry" })).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// An entry a step of a user's state-machine draft queued is read-only to operators: its cancel is
+// refused with the API's reason, and it stays queued.
+export const CancelUserDraftEntryRefused: Story = {
+  parameters: { overlays: [userDraftRunsOverlay([], [601])] },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByRole("button", { name: "Cancel entry" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("button", { name: "Cancel entry" }));
+      expect(await c.findByText(USER_OWNED_RUN_CANCEL_REFUSAL)).toBeInTheDocument();
+      expect(c.getByText("Status").nextElementSibling).toHaveTextContent("Queued");
     } finally {
       restore();
     }

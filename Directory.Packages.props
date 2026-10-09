@@ -29,6 +29,8 @@
     <PackageVersion Include="bunit" Version="1.40.0" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Cronos" Version="0.13.0" />
+    <!-- Property-based tests (Trax.Docs/adr/0044). Test projects only, never a shipped package. -->
+    <PackageVersion Include="CsCheck" Version="4.9.1" />
     <PackageVersion Include="dbup-core" Version="6.1.1" />
     <PackageVersion Include="dbup-postgresql" Version="7.0.1" />
     <PackageVersion Include="dbup-sqlite" Version="6.0.4" />

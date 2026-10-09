@@ -29,6 +29,8 @@
     <ProjectReference Include="../Trax.Mediator.Tests.ArrayLogger/Trax.Mediator.Tests.ArrayLogger.csproj" />
     <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <!-- TraxInvariants, checked after every test that uses the shared Postgres. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />

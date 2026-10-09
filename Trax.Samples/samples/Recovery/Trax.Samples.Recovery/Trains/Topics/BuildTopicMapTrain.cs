@@ -1,0 +1,55 @@
+using Trax.Core.Functional;
+using Trax.Effect.Attributes;
+using Trax.Effect.Services.ServiceTrain;
+using Trax.Samples.Recovery.Trains.Topics.Junctions;
+
+namespace Trax.Samples.Recovery.Trains.Topics;
+
+/// <summary>
+/// A topic map of a slice of papers: load the slice, work out three similarity signals side by side
+/// (how alike the abstracts read, which works both cite, who wrote both), weigh them together and
+/// write the pairs, then find the papers that read alike but cite nothing in common. The co-citation
+/// branch asks the model whether shared references mean a shared topic in this slice; the step on the
+/// track it chooses is the one the page can crash.
+/// </summary>
+/// <remarks>
+/// Branches compute; the join commits. Each branch runs in its own scope, so only
+/// <see cref="CombineSignals"/>, after every branch has finished, writes to the database, in one
+/// transaction. A failed branch fails the run before anything is written.
+/// <para>
+/// Unlike the other two scenario trains it is not <c>[TraxBroadcast]</c>: its steps reach the page
+/// through the operations view, and a train whose every run is broadcast to every subscriber is not
+/// one a user's own state machine may invoke. Every step is an <c>EffectJunction</c>, so a run can be
+/// cancelled from another host, and its output holds no sensitive member.
+/// </para>
+/// <para>
+/// The <c>topic-map</c> machine's <c>Building</c> state invokes it, and a user-owned machine may not
+/// invoke a train stricter than its own mutations, which need an authenticated caller and no role. So
+/// it asks for exactly that. Every caller this host authenticates holds <c>Operator</c> or
+/// <c>Viewer</c>, so the set of callers who may run it is the same as before.
+/// </para>
+/// </remarks>
+[TraxAuthorize]
+public class BuildTopicMapTrain : ServiceTrain<TopicMapInput, TopicMap>, IBuildTopicMapTrain
+{
+    protected override Task<Either<Exception, TopicMap>> Junctions() =>
+        Chain<LoadCorpus>()
+            .Parallel(signals =>
+                signals
+                    .Branch("embedding", b => b.Chain<EmbeddingSimilarity>())
+                    .Branch(
+                        "cocitation",
+                        b =>
+                            b.Chain<CountSharedReferences>()
+                                .Gate<CoCitationEvidence, SameTopic>(gate =>
+                                    gate.Yes(t => t.Chain<TrustCoCitation>(), atLeast: 0.8)
+                                        .No(t => t.Chain<IgnoreCoCitation>(), below: 0.3)
+                                        .Unsure(t => t.Chain<DampenCoCitation>())
+                                )
+                    )
+                    .Branch("authors", b => b.Chain<AuthorOverlap>())
+            )
+            .Chain<CombineSignals>()
+            .Chain<FindHiddenTwins>()
+            .Resolve();
+}

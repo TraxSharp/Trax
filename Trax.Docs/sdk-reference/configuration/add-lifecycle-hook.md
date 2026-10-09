@@ -63,6 +63,8 @@ All methods have default implementations that return `Task.CompletedTask`. Overr
 | `OnCancelled` | After a requested cancellation (the run's token was cancelled or its cancel flag was set), after cancellation is persisted |
 | `OnStateChanged` | After each of the four above, on every hook, once that event has run on every hook. A hook that implements both `OnStateChanged` and a specific event sees each transition twice |
 
+A run the scheduler ends with no train running fires the same events, once, after its row is saved: `OnFailed` for a run reaped as stale, failed on startup recovery, or failed at dispatch or submit, and `OnCancelled` for a run cancelled before it started. The exception `OnFailed` receives carries the failure recorded on the row (for example `StalePendingTimeout`); `TrainInput` and `GetInput<T>()` return `default` for these.
+
 ### Accessing Train Input and Output
 
 #### Availability by hook

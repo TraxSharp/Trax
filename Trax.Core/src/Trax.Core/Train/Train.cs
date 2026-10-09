@@ -53,6 +53,18 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     private Monad<TInput, TReturn>? _monad;
 
     /// <summary>
+    /// Starts this train's <c>Parallel</c> branches. Always the thread pool in a shipped host;
+    /// Trax's own tests substitute a runner that controls how branches interleave.
+    /// </summary>
+    internal IBranchRunner BranchRunner { get; set; } = ThreadPoolBranchRunner.Instance;
+
+    /// <summary>
+    /// What the next run restores and where it starts, when it resumes an earlier run of the same
+    /// input; null for a run from the top. Set by the host before <see cref="Run"/>.
+    /// </summary>
+    internal ResumePlan? Resume { get; set; }
+
+    /// <summary>
     /// Executes the train with the provided input.
     /// This method unwraps the Either result from RunEither and throws any exceptions.
     /// </summary>
@@ -103,7 +115,16 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </remarks>
     private async Task<Either<Exception, TReturn>> RunInternal(TInput input)
     {
-        _monad = NewMonad().Activate(input);
+        var monad = _monad = NewMonad().Activate(input);
+
+        if (Resume is { } resume)
+        {
+            if (resume.Restored.GetValueOrDefault("") is { } restored)
+                monad.Restore(restored);
+
+            if (resume.Target is { } target)
+                monad.Resuming = (target, resume.Inclusive);
+        }
 
         try
         {
@@ -112,6 +133,21 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
         catch (Exception ex)
         {
             return ex;
+        }
+        finally
+        {
+            // A branch's scope outlives its branch: what it put in Memory may hold on to it.
+            foreach (var scope in monad.BranchScopes)
+            {
+                try
+                {
+                    await scope.DisposeAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // A branch's scope failing to dispose cannot change the run's result.
+                }
+            }
         }
     }
 
@@ -214,6 +250,8 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
                             + "produces the result and end with Resolve()."
                     );
             }
+
+            recorder.RefuseAmbiguousNames();
         }
         finally
         {
@@ -251,6 +289,15 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     /// </summary>
     private Monad<TInput, TReturn> Root(string call, bool startsAJunction)
     {
+        // Inside a Parallel branch, a call on the train runs on the run's own Memory beside the
+        // branch rather than in it.
+        if (_monad?.Recorder is { InBranch: true } branch)
+            branch.Refuse(
+                $"a Parallel branch calls {call} on the train itself, which runs on the run's "
+                    + "Memory beside the branch instead of in it. Chain it on the branch's "
+                    + "parameter, as in b => b.Chain<A>()."
+            );
+
         ActiveRecorder?.NoteRootCall(call, startsAJunction);
         return _monad!;
     }
@@ -297,6 +344,25 @@ public abstract class Train<TInput, TReturn> : IRoute<TInput, TReturn>
     protected MonadTask<TInput, TReturn> Chain<TJunction, TIn>()
         where TJunction : IJunction<TIn, Unit>, new() =>
         Root("Chain", true).Chain<TJunction, TIn>();
+
+    /// <summary>
+    /// Runs a fixed set of named branches side by side, each on its own copy of Memory, and
+    /// joins them before the next step. See <see cref="Monad{TInput, TReturn}.Parallel"/>.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.Experimental(ExperimentalIds.Parallel)]
+    protected MonadTask<TInput, TReturn> Parallel(
+        Func<Branches<TInput, TReturn>, Branches<TInput, TReturn>> branches
+    ) =>
+#pragma warning disable TRAXEXP001 // The experimental feature's own entry point.
+        Root("Parallel", true).Parallel(branches);
+#pragma warning restore TRAXEXP001
+
+    /// <summary>
+    /// Stores the state in Memory so a later run of the same input can resume here. See
+    /// <see cref="Monad{TInput, TReturn}.Checkpoint{TState}"/>.
+    /// </summary>
+    protected MonadTask<TInput, TReturn> Checkpoint<TState>() =>
+        Root("Checkpoint", true).Checkpoint<TState>();
 
     /// <summary>
     /// Ends a chain that declares no junctions, taking the train's return value from Memory.

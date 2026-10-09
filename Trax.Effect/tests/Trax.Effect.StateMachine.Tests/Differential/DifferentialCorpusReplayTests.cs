@@ -1,6 +1,8 @@
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Trax.Effect.StateMachine.Testing;
 using Trax.Effect.StateMachine.Tests.Fakes;
+using Trax.Effect.StateMachine.Tests.Helpers;
 
 namespace Trax.Effect.StateMachine.Tests.Differential;
 
@@ -84,6 +86,34 @@ public class DifferentialCorpusReplayTests
             .Contain("Coin")
             .And.Contain("oracle transitioned WRONG")
             .And.Contain("C# transitioned");
+    }
+
+    [Test]
+    public void Outcome_triggers_apply_the_same_reduction_in_the_twin()
+    {
+        // The TypeScript twin enumerates the ingest machine from its IR, firing its outcome triggers
+        // (Fetching.done with each sampled output, Fetching.failed, Fetching.cancelled) as events. The C# engine
+        // replays those cases through its outcome path and must land in the same state with the same reduced
+        // context, byte for byte. This is the pure half only: the twin holds no token, so a stale completion is
+        // indistinguishable from a live one here.
+        var file = FixturePaths.DifferentialFile("ingest");
+        file.Should().NotBeNull("the shared machines/ directory is part of the repository");
+        var corpus = File.ReadAllText(file!);
+
+        var outcomeCases = JsonNode.Parse(corpus)!["cases"]!
+            .AsArray()
+            .Where(c => c!["when"]!["trigger"]!.GetValue<string>().StartsWith("Fetching."))
+            .ToList();
+        outcomeCases
+            .Should()
+            .Contain(
+                c => c!["expect"]!["outcome"]!.GetValue<string>() == "transitioned",
+                "the corpus must exercise the outcome reductions, not only their rejections"
+            );
+
+        var diffs = DifferentialCorpus.Replay(IngestMachine.Machine, corpus);
+
+        diffs.Should().BeEmpty(string.Join("\n", diffs));
     }
 
     [Test]

@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.EnergyHub.Trains.BatteryStorage.ManageBatteryStorage.ManageBatteryStorageTrain",
+  "input": "ManageBatteryStorageInput",
+  "output": "ManageBatteryStorageOutput",
+  "nodes": [
+    {
+      "id": "ReadBatteryStateJunction#0",
+      "kind": "Chain",
+      "junction": "ReadBatteryStateJunction",
+      "in": "ManageBatteryStorageInput",
+      "out": "ManageBatteryStorageInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "OptimizeChargeLevelJunction#0",
+      "kind": "Chain",
+      "junction": "OptimizeChargeLevelJunction",
+      "in": "ManageBatteryStorageInput",
+      "out": "ManageBatteryStorageOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ManageBatteryStorageOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

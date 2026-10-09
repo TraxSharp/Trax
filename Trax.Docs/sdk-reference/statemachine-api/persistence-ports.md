@@ -26,6 +26,9 @@ public interface ISnapshotPrincipal
 }
 ```
 
+An empty or whitespace key is treated as unauthenticated, the same as `null`, and the draft service refuses one
+with an `ArgumentException`.
+
 In an HTTP host this is backed by the request principal (a claim); in tests it is a fake. Bind it in DI when
 you wire the subsystem.
 
@@ -53,6 +56,61 @@ draft service then reads before every save and creates through `Insert`, so one 
 | `Update(userKey, id, snapshot, expectedToken, requestId, ct)` | `bool` | writes only if the row still carries `expectedToken`, and records `requestId` as the last applied idempotency key with no trigger or from-state; `false` if the row changed |
 | `UpdateWithRequest(userKey, id, snapshot, expectedToken, request, ct)` | `bool` | the authoritative path: `Update` that records the whole `AppliedRequest` (id, trigger, from-state), or clears it when `request` is `null`. It has a default implementation that calls `Update` with the id alone, so a custom store keeps compiling; override it, or every retry against that store is refused as `request-id-reused` rather than replayed |
 
+### Owners: users and the system
+
+A row of `trax.snapshot_draft` belongs to a user or to the system, recorded in its `owner_kind` column (`user` or
+`system`). A user's row names the user in `user_key`. A system row has no `user_key`: it is an instance created
+from code by
+[`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances), and no GraphQL operation
+creates, reads or advances one. The column is a closed vocabulary, so on Postgres it is the enum
+`trax.snapshot_owner_kind`, and on SQLite the integer of `SnapshotOwnerKind` (0 is a user, 1 the system).
+
+`ISnapshotStore` is a user's port. Every member of `EfSnapshotStore` filters on `owner_kind = user` as well as the
+user's key, so `loadSnapshot`, `saveSnapshot`, `advanceSnapshot` and `sendSnapshot` with a system instance's id
+answer as though nothing were there (`NotFound`, or a save that creates the user's own draft), and a user's delete
+or draft expiry never removes a system row. A user may hold a draft under the same id as a system instance: the
+two are separate rows, and every lookup names the owner kind. A custom store must keep the same rule: never return
+or touch a row a user does not own.
+
+A user's row is unique by `(user_key, machine, id)`, and a system row by `(machine, id)` among system rows, each
+through a partial unique index. Because `user_key` can be null, the table's primary key is a surrogate `row_id`.
+Migration `070_snapshot_draft_owner_kind.sql` (Postgres) and `032_snapshot_draft_owner_kind.sql` (SQLite) add the
+columns, the indexes, a check that a user row has a key and a system row has none, and an index on
+`(machine, state)` for listing instances by state.
+
+System rows and the `invoke_token` column are written only by Trax's own server code, through the data context, and
+never through `ISnapshotStore`. `invoke_token` is unique where set.
+
+### Draft expiry and live runs
+
+The draft TTL applies to user drafts only: a system instance never expires. Deleting a draft that holds a live
+`invoke_token` cancels its run first, and a cancel that throws keeps the draft. The cancel, which `AddStateMachines`
+registers, works the way the operations surface's does: a work queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set,
+which it reads at its next junction on whichever host runs it. The delete that follows is conditional on the token
+that was cancelled, so a draft that entered an invoking state again in between keeps its new run.
+
+### Invoked-run ports
+
+Three ports connect a state that [invokes a train](/docs/statemachine/invoking-trains) to the rest of Trax. They are
+internal: a host neither implements nor calls them, and `AddStateMachines` and `AddMediator` register them.
+
+- **The launcher** queues the run. Trax.Mediator implements it. It authorizes the run and writes its work queue entry
+  into the outbox's data context, inside the transaction that moves the snapshot, so the two commit together; it
+  commits nothing itself. It refuses a train whose output reaches a `[TraxSensitive]` member, and, for a user-owned
+  instance, a `[TraxBroadcast]` train, as the startup check does. A user-owned instance's run is authorized against
+  the current caller. A system-owned instance's run is authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
+  present). A user-owned instance never launches from an outcome: the startup check refuses such a machine, and the
+  launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
+  about a train stops a machine from invoking it. It lives in the persistence package rather than the engine because
+  it writes through `IDataContext`, and the engine depends on no data provider.
+- **The run cancellation** cancels a run by its invoke token, as described under
+  [Draft expiry and live runs](#draft-expiry-and-live-runs).
+- **The outcome delivery** applies the outcome of an ended run to the instance waiting on it, now, through the
+  delivery the lifecycle hook and the reconciler make: one conditional update on the instance's invoke token, so the
+  outcome is applied once however many callers deliver it. The operations service calls it after an operator's
+  [`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance) cancels a still-queued
+  run, so the instance moves in that request on a host that registers the machine.
+
 ### StoredSnapshot
 
 A stored draft as read back:
@@ -66,6 +124,7 @@ A stored draft as read back:
 | `LastRequestFromState` | string? | the state that advance fired from, or `null` when none was recorded |
 | `LastRequest` | `AppliedRequest?` | the three above as one value, or `null` when there is no request id |
 | `UpdatedAt` | `DateTimeOffset` | when the row was last written (the window the draft-TTL expiry checks) |
+| `InvokeToken` | string? | the token of the train run the draft's current state invoked, or `null` when no run is live. Server-only: it is never in `Json`. A custom store that records none leaves it `null` |
 
 The `Token` / `expectedToken` pair is the optimistic-concurrency contract: read a draft, then `Update` against
 its `Token`; if another write landed in between, the token no longer matches and the update returns `false`
@@ -100,7 +159,10 @@ effect-bound transition lands in, because only send knows the effect ran:
 | Path | Refuses | Code |
 | --- | --- | --- |
 | advance | a trigger bound to the machine's effect from the stored state | `effect-bound` |
-| autosave | creating a draft in, or moving one into, a committed state or an effect's target | `state-reserved` |
+| advance | an invoked train's outcome trigger | `outcome-bound` |
+| advance | entering an invoking state past the user's live-run limit, or for a user the train refuses | `invoke-limit-reached`, `invoke-forbidden` |
+| autosave | any change to a draft in an invoking state or holding a live run | `draft-invoking` |
+| autosave | creating a draft in, or moving one into, a committed state, an effect's target, an invoking state or an invoked train's outcome target | `state-reserved` |
 | autosave | any change to a draft already in a committed state or an effect's target, except a reset to the initial state that the machine declares from that state | `draft-committed` |
 | autosave | overwriting a stored draft that fails rehydration with anything but the initial state | `draft-unreadable` |
 | send | recording the receipt on a draft that was written while the effect ran | `conflict` |

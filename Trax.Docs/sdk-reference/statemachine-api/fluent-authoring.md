@@ -32,6 +32,8 @@ public abstract class Machine<TState, TTrigger>
 | `MigrateFrom(int fromVersion, Func<string, JsonObject, MigrationResult> migrate)` | Forward-migrate a stored snapshot from `fromVersion` to this definition's version. The migrator gets the stored state name and context and returns a `MigrationResult`. |
 | `Differential(Action<IDifferentialBuilder> configure)` | Authors the cross-language differential fuzzing inputs (test-only): per-trigger input samples, per-state seed contexts, and dense probe contexts. Exported into the IR's `differential` block so the differential harness enumerates off the one C# source, with no hand-written machine.json. Only valid on a declaratively-authored machine. See [IDifferentialBuilder](#idifferentialbuilder). |
 | `In(TState state)` | Opens a state to declare its context rule and outgoing transitions. Returns an `IStateBuilder`. |
+| `SystemOwned()` | The machine's instances belong to the system: only [`IMachineInstances.Start`](/docs/sdk-reference/statemachine-api/machine-instances) creates one, and no user's draft operation reaches the machine (they answer `unknown-machine`). A train it invokes is authorized in the trusted execution scope, so the host refuses one that declares `[TraxAuthorize]`. Without it a machine is user-owned and `Start` refuses it. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
+| `InvokedRunLimit(int limit)` | The most live invoked runs one user may already hold, counted across every machine, for entering one of this machine's invoking states to be allowed; past it the entry is refused with `invoke-limit-reached`. Defaults to 10; at least 1. System owners are not capped. See [Invoking a train](/docs/statemachine/invoking-trains#who-a-run-belongs-to). |
 | `CustomGuard(string name, Func<JsonObject, JsonNode?, bool> guard)` | Binds the C# handler for `Rule.Custom(name)`, wherever the machine uses it (a `When` or a `Requires`, nested or not). The TypeScript twin's `customGuards` is the other half. |
 | `CustomReducer(string name, Func<JsonObject, JsonNode?, JsonObject> reducer)` | Binds the C# handler for `Reduction.Custom(name)`: it gets the context and the trigger input and returns the destination context. The twin's `customReducers` is the other half. |
 
@@ -56,6 +58,26 @@ override them.
 | `Requires(Rule constraint)` | A per-state policy layered on the schema (composed, ANDed, chainable): what the state demands beyond its shape, e.g. a complete draft or an absent receipt. Exports as the state's `invariants` entry. Build the rule with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
 | `Committed()` | Marks the state as completed. A soft autosave can neither put a draft into it nor move a draft out of it (except a reset to the initial state); only the effect runner puts a draft there. See [what each path may write](/docs/sdk-reference/statemachine-api/persistence-ports#what-each-path-may-write). |
 | `On(TTrigger trigger)` | Starts a transition out of this state. Returns an `ITransitionBuilder`. |
+| `Invokes<TTrain, TInput, TOutput>(Func<JsonObject, TInput> input)` | Runs the train `TTrain` (its interface, an `IServiceTrain<TInput, TOutput>`) whenever the machine enters this state; `input` builds the run's input from the context, on the server only. Returns an [`IInvokeBuilder`](#iinvokebuilder). A state invokes at most one train. See [Invoking a train](/docs/statemachine/invoking-trains). |
+
+## IInvokeBuilder
+
+Says where an invoked train's outcome goes. It is also the state's
+`IStateBuilder`, so the state's transitions follow it. Every target joins the machine's reserved states.
+
+| Method | Description |
+|--------|-------------|
+| `OnDone(TState target, Rule? when = null, Reduction? reduce = null)` | Where a successful run goes. Declare one or more; they are tried in declaration order and the first whose `when` holds for the output is taken (null: every output). `when` reads the output as the outcome's input (`Input((MyOutput o) => o.Field)`); `reduce` builds the target's context from it (null keeps the context). An output no edge accepts is a `no-transition` to the engine; on the server the finished run is applied as `OnFailed` with the reason `invoke-output-unaccepted`. |
+| `OnFailed(TState target, Reduction? reduce = null)` | Where a failed run goes, a reaped run included. Exactly once. The outcome carries no input. |
+| `OnCancelled(TState target, Reduction? reduce = null)` | Where a cancelled run goes. Required, exactly once. The outcome carries no input. |
+
+`Build()` throws `InvalidOperationException`, naming the state, when an invoking state lacks `OnDone`, `OnFailed`
+or `OnCancelled`, declares either of the last two twice, invokes a second train, names the train by a class
+rather than its interface, or names a tuple as the output (its elements are fields, which no guard or reduction can
+read). It also throws when an outcome goes to the target of the `RunsOnce` effect, or to the state the machine
+`StartsAt` (which would be reserved, so no draft could ever be created), or when an ordinary transition enters a
+state an outcome goes to (a self-loop is allowed). An invoked train does not count
+against the one `RunsOnce` effect.
 
 ## ITransitionBuilder
 
@@ -86,6 +108,7 @@ raw `JsonObject` overloads give exact control.
 | `EmptySample(TTrigger trigger)` | An empty (`{}`) input for a trigger, distinct from the always-added no-input case. |
 | `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. |
 | `Probe<TContext>(TContext context)` / `Probe(JsonObject context)` | A dense probe context crossed with every state, exercising guards and validators on unreachable-but-sendable snapshots. |
+| `OutcomeSample<TOutput>(TState invokingState, TOutput output)` | A representative output of the train the state invokes, fired as its `<State>.done` outcome trigger. Every outcome trigger is also fired with no input. `Build` refuses a sample for a state that invokes nothing. |
 
 ## Delegate vs declarative
 
@@ -95,17 +118,17 @@ authored with them cannot be exported to the IR that drives cross-language codeg
 reducers as data. They compile to the identical engine delegates, so behaviour is unchanged, and they also
 record the `DeclarativeModel` that `IrExporter` turns into the machine's `.ir.json`.
 
-The two styles coexist on one builder, so you can migrate a machine edge by edge, but the export cannot see a
-delegate. Once a machine makes any declarative call, the export includes every edge, and an edge whose guard
-or reducer is a delegate is exported with no `guard` or no `reduce`: an unconditional edge that keeps the
-context. Nothing refuses or warns. A generated twin then accepts that trigger for any input and leaves the
-context as it was, while the server runs the delegate, so the client predicts transitions the server refuses
-and contexts the server does not produce. The C# replay of the differential corpus notices only if a sample or
-probe happens to exercise the delegate. A `Holds` validator is not exported either.
+The two styles coexist on one builder, so you can build and run a machine while migrating it edge by edge,
+but the export cannot see a delegate, so it refuses one. Once a machine makes any declarative call,
+`ExportIr()` throws `InvalidOperationException` if any edge still has a delegate guard (`When(Func...)`) or
+delegate reducer (`Reduce(Func...)`), or any state a `Holds` validator; the message names each edge (source
+state, trigger, target) and state. Exporting it would give the edge no `guard` or `reduce`, which a generated
+twin reads as an unconditional edge that keeps the context, so the client would predict transitions the
+server refuses and contexts the server does not produce.
 
-> **On a machine with a generated twin, keep every guard and reducer declarative.** For logic the vocabulary
-> cannot express, use `Rule.Custom(name)` or `Reduction.Custom(name)` with `CustomGuard` / `CustomReducer`:
-> the IR then names the rule, and each runtime binds its own handler, rather than the edge silently losing it.
+> **To export a machine, make every guard, reducer and validator declarative.** For logic the vocabulary
+> cannot express, use `Rule.Custom(name)` (in `When` or `Requires`) or `Reduction.Custom(name)` with
+> `CustomGuard` / `CustomReducer`: the IR then names the rule, and each runtime binds its own handler.
 
 Author the data form with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and see
 [Declarative authoring](/docs/statemachine/declarative-authoring) for a machine built end to end.
@@ -123,9 +146,9 @@ string ir = new CheckoutMachine().ExportIr();   // canonical single-line JSON
 
 The result is the same canonical JSON the [`trax machine` CLI](/docs/reference/cli#state-machines-trax-machine)
 writes to `<machine>.ir.json`; the CLI calls `ExportIr()` directly. It requires a declaratively-authored
-machine (`Context`/`When(Rule)`/`Reduce(Reduction)`): it throws `InvalidOperationException` only for a machine
-that made no declarative call at all. A machine that mixes the styles exports without complaint, with each
-delegate edge exported as unconditional (see [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). In practice you rarely call `ExportIr()` by hand: `trax machine
+machine (`Context`/`When(Rule)`/`Reduce(Reduction)`): it throws `InvalidOperationException` for a machine that
+made no declarative call at all, and for one that mixes the styles and still has a delegate guard, reducer or
+`Holds` validator (see [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). In practice you rarely call `ExportIr()` by hand: `trax machine
 generate` exports the IR and regenerates every downstream artifact in one command.
 
 ## Result codes

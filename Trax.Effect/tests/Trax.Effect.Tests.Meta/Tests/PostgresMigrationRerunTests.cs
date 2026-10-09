@@ -11,7 +11,7 @@ namespace Trax.Effect.Tests.Meta.Tests;
 /// <c>DROP</c> says <c>IF EXISTS</c>, <c>ADD COLUMN</c> says <c>IF NOT EXISTS</c>, a change that has
 /// no such clause (a type change, a new constraint, a rename) sits in a <c>DO</c> block that checks
 /// first, and an <c>INSERT</c> says what happens on a conflict. An index on <c>metadata</c>,
-/// <c>log</c> or <c>work_queue</c> is built <c>CONCURRENTLY</c>.</para>
+/// <c>log</c>, <c>work_queue</c> or <c>snapshot_draft</c> is built <c>CONCURRENTLY</c>.</para>
 ///
 /// <para>This reads the SQL as text, so it checks that a guard is there, not that the guard is
 /// right: the body of a <c>DO</c> block, and the <c>WHERE</c> of an <c>UPDATE</c> or
@@ -29,7 +29,13 @@ public class PostgresMigrationRerunTests
     /// <summary>The first migration written under the rule. The ones before it shipped as they are.</summary>
     private const int FirstRerunnable = 46;
 
-    private static readonly string[] HotTables = ["metadata", "log", "work_queue"];
+    private static readonly string[] HotTables =
+    [
+        "metadata",
+        "log",
+        "work_queue",
+        "snapshot_draft",
+    ];
 
     public static IEnumerable<TestCaseData> Scripts() =>
         Directory
@@ -77,6 +83,7 @@ public class PostgresMigrationRerunTests
     [TestCase("CREATE INDEX ix ON trax.manifest (name)", "IF NOT EXISTS")]
     [TestCase("CREATE INDEX IF NOT EXISTS ix ON trax.work_queue (x)", "CONCURRENTLY")]
     [TestCase("CREATE UNIQUE INDEX IF NOT EXISTS ix ON trax.log (x)", "CONCURRENTLY")]
+    [TestCase("CREATE UNIQUE INDEX IF NOT EXISTS ix ON trax.snapshot_draft (x)", "CONCURRENTLY")]
     [TestCase("CREATE TABLE trax.t (id int)", "IF NOT EXISTS")]
     [TestCase("DROP INDEX trax.ix", "IF EXISTS")]
     [TestCase("ALTER TABLE trax.t ADD COLUMN c int", "ADD COLUMN")]

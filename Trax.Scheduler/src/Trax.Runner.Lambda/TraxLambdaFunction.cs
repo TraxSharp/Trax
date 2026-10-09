@@ -19,6 +19,7 @@ using Trax.Scheduler.Services.Lambda;
 using Trax.Scheduler.Services.RequestHandler;
 using Trax.Scheduler.Services.RequestSigning;
 using Trax.Scheduler.Services.RunExecutor;
+using Trax.Scheduler.Services.RunOutcomes;
 
 namespace Trax.Runner.Lambda;
 
@@ -459,6 +460,7 @@ public abstract class TraxLambdaFunction
     /// <see cref="CancellationToken.None"/>: the function's own token is already cancelled. Left
     /// Pending, the row would wait for the stale-pending reaper, which records it <c>Failed</c>
     /// and so counts it toward the manifest's retries. A failure to write is logged, not thrown.
+    /// A run this write cancelled is published to the lifecycle hooks as <c>Cancelled</c>.
     /// </summary>
     private static async Task RecordCancelledAsync(
         IServiceProvider services,
@@ -484,8 +486,9 @@ public abstract class TraxLambdaFunction
                 m.Id == metadataId && m.TrainState == TrainState.Pending
             );
 
+            int cancelled;
             if (context is DbContext db && db.Database.IsRelational())
-                await pending.ExecuteUpdateAsync(
+                cancelled = await pending.ExecuteUpdateAsync(
                     s =>
                         s.SetProperty(m => m.TrainState, TrainState.Cancelled)
                             .SetProperty(m => m.EndTime, now),
@@ -493,13 +496,20 @@ public abstract class TraxLambdaFunction
                 );
             else
             {
-                foreach (var run in await pending.ToListAsync(CancellationToken.None))
+                var runs = await pending.ToListAsync(CancellationToken.None);
+                foreach (var run in runs)
                 {
                     run.TrainState = TrainState.Cancelled;
                     run.EndTime = now;
                 }
                 await context.SaveChanges(CancellationToken.None);
+                cancelled = runs.Count;
             }
+
+            // Committed, and only by this write: its train never ran, so nothing else publishes
+            // the outcome.
+            if (cancelled > 0)
+                await OutOfTrainOutcomes.PublishCancelledAsync(services, [metadataId], logger);
         }
         catch (Exception ex)
         {

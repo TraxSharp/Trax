@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Bookworm.Trains.Lending.ReturnBook.ReturnBookTrain",
+  "input": "ReturnBookInput",
+  "output": "ReturnBookOutput",
+  "nodes": [
+    {
+      "id": "ReturnBookJunction#0",
+      "kind": "Chain",
+      "junction": "ReturnBookJunction",
+      "in": "ReturnBookInput",
+      "out": "ReturnBookOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ReturnBookOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

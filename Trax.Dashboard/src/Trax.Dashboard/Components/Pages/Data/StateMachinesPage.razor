@@ -1,0 +1,184 @@
+@page "/trax/data/state-machines"
+@using Trax.Scheduler.Services.Operations
+@inherits PollingComponentBase
+@inject IOperationsService OperationsService
+@inject NavigationManager Navigation
+
+@* The operator's read-only view of state-machine instances. Every read goes through
+   IOperationsService, the calls the API's machineInstances and machineInstanceCounts make. It
+   shows where each instance is and when it got there, never its context or the user who owns it. *@
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-2">State Machines</RadzenText>
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-4" Style="color: var(--rz-text-secondary-color);">
+    The instances of every state machine this host persists, system-owned and users' drafts alike: which state each is in, when it got there, and whether it waits on a train run it invoked. An instance's context is never shown.
+</RadzenText>
+
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Instances By State</RadzenText>
+    @if (_counts.Count == 0 && !IsLoading)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="cs-machine-counts-empty">No state machine instances.</RadzenText>
+    }
+    else
+    {
+        <TraxDataGrid TItem="MachineInstanceStateCount"
+                      Data="@_counts"
+                      IsLoading="@IsLoading"
+                      AllowFiltering="false"
+                      PageSize="10"
+                      RowClick="@(args => args.Data is { } count ? FilterToAsync(count) : Task.CompletedTask)"
+                      Style="cursor: pointer;">
+            <Columns>
+                <RadzenDataGridColumn TItem="MachineInstanceStateCount" Property="Machine" Title="Machine" />
+                <RadzenDataGridColumn TItem="MachineInstanceStateCount" Property="State" Title="State" />
+                <RadzenDataGridColumn TItem="MachineInstanceStateCount" Property="OwnerKind" Title="Owner" Width="120px" />
+                <RadzenDataGridColumn TItem="MachineInstanceStateCount" Property="Count" Title="Instances" Width="140px" />
+            </Columns>
+        </TraxDataGrid>
+    }
+</RadzenCard>
+
+<RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="0.75rem" Wrap="FlexWrap.Wrap" class="rz-mb-2 cs-machine-filters">
+    <RadzenStack Gap="0.25rem">
+        <RadzenLabel Text="Machine" Component="cs-machine-machine" />
+        <RadzenDropDown TValue="string"
+                        Name="cs-machine-machine"
+                        class="cs-machine-machine"
+                        Data="@Machines"
+                        AllowClear="true"
+                        Placeholder="Any machine"
+                        Value="@_machine"
+                        ValueChanged="@(async (string v) => { _machine = v; _state = null; await FilterChangedAsync(); })"
+                        Style="width: 16rem;" />
+    </RadzenStack>
+    <RadzenStack Gap="0.25rem">
+        <RadzenLabel Text="State" Component="cs-machine-state" />
+        <RadzenDropDown TValue="string"
+                        Name="cs-machine-state"
+                        class="cs-machine-state"
+                        Data="@States"
+                        AllowClear="true"
+                        Placeholder="Any state"
+                        Value="@_state"
+                        ValueChanged="@(async (string v) => { _state = v; await FilterChangedAsync(); })"
+                        Style="width: 14rem;" />
+    </RadzenStack>
+    <RadzenStack Gap="0.25rem">
+        <RadzenLabel Text="Owner" Component="cs-machine-owner" />
+        <RadzenDropDown TValue="SnapshotOwnerKind?"
+                        Name="cs-machine-owner"
+                        class="cs-machine-owner"
+                        Data="@OwnerKinds"
+                        AllowClear="true"
+                        Placeholder="Users and system"
+                        Value="@_ownerKind"
+                        ValueChanged="@(async (SnapshotOwnerKind? v) => { _ownerKind = v; await FilterChangedAsync(); })"
+                        Style="width: 12rem;" />
+    </RadzenStack>
+</RadzenStack>
+<RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2" Style="color: var(--rz-text-secondary-color);">
+    Newest first, by when each instance was last written. Click a count above to list its instances.
+</RadzenText>
+
+@if (_capped.Value)
+{
+    <RadzenText TextStyle="TextStyle.Caption" class="rz-mb-2 cs-machine-capped" Style="color: var(--rz-warning);">
+        More than @Trax.Scheduler.Services.Operations.OperationsService.MachineInstanceCountCap.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) instances match, so the pager stops there. The counts above are exact; filter by machine and state to reach the rest.
+    </RadzenText>
+}
+
+<TraxDataGrid @ref="_grid"
+              TItem="MachineInstanceRow"
+              AllowFiltering="false"
+              AllowSorting="false"
+              ServerLoadData="@LoadPageAsync"
+              RowClick="@(args => OpenInstance(args.Data))"
+              Style="cursor: pointer;">
+    <Columns>
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="Machine" Title="Machine" />
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="OwnerKind" Title="Owner" Width="110px" />
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="Id" Title="Id" Width="320px" />
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="State" Title="State" />
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="HasLiveInvokedRun" Title="Waiting On A Run" Width="160px">
+            <Template Context="i">
+                @if (i.HasLiveInvokedRun)
+                {
+                    <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="Yes" />
+                }
+            </Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="UpdatedAt" Title="Updated" Width="190px">
+            <Template Context="i">@i.UpdatedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</Template>
+        </RadzenDataGridColumn>
+        <RadzenDataGridColumn TItem="MachineInstanceRow" Property="CreatedAt" Title="Created" Width="190px">
+            <Template Context="i">@(i.CreatedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</TraxDataGrid>
+
+@code {
+    private static readonly SnapshotOwnerKind?[] OwnerKinds = [SnapshotOwnerKind.System, SnapshotOwnerKind.User];
+
+    private TraxDataGrid<MachineInstanceRow>? _grid;
+    private readonly GridCount _count = new();
+    private readonly MachineInstanceCountCapped _capped = new();
+    private IReadOnlyList<MachineInstanceStateCount> _counts = [];
+    private string? _machine;
+    private string? _state;
+    private SnapshotOwnerKind? _ownerKind;
+
+    private IEnumerable<string> Machines =>
+        _counts.Select(c => c.Machine).Distinct(StringComparer.Ordinal);
+
+    private IEnumerable<string> States =>
+        _counts.Where(c => _machine is null || c.Machine == _machine)
+            .Select(c => c.State)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
+
+    private protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _counts = await OperationsService.GetMachineInstanceStateCountsAsync(null, cancellationToken);
+        if (_grid is not null)
+            await _grid.ReloadAsync();
+    }
+
+    private void OpenInstance(MachineInstanceRow? row)
+    {
+        if (row is not null)
+            Navigation.NavigateTo(MachineInstanceRoutes.Detail(row));
+    }
+
+    private async Task FilterToAsync(MachineInstanceStateCount count)
+    {
+        _machine = count.Machine;
+        _state = count.State;
+        _ownerKind = count.OwnerKind;
+        await FilterChangedAsync();
+    }
+
+    // A changed filter starts again from the first page, as a column filter does.
+    private async Task FilterChangedAsync()
+    {
+        if (_grid is not null)
+            await _grid.FirstPageAsync();
+    }
+
+    private async Task<ServerDataResult<MachineInstanceRow>> LoadPageAsync(LoadDataArgs args, CancellationToken ct)
+    {
+        var wasCapped = _capped.Value;
+        var page = await MachineInstanceGridQuery.LoadPageAsync(
+            OperationsService,
+            new MachineInstanceQuery(_machine, _state, _ownerKind),
+            args,
+            _count,
+            _capped,
+            ct
+        );
+
+        // The caption above the grid is this page's, which the grid's own render skips.
+        if (_capped.Value != wasCapped)
+            await InvokeAsync(StateHasChanged);
+        return page;
+    }
+}

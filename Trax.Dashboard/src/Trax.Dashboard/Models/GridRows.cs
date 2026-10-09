@@ -137,3 +137,35 @@ internal sealed class LogRow
             Exception = log.Exception,
         };
 }
+
+/// <summary>
+/// A state-machine instance as the State machines grid shows it, read through
+/// <c>IOperationsService.GetMachineInstancesAsync</c>. It has no context and no owner key,
+/// because the operations service never reads either for an operator.
+/// </summary>
+internal sealed class MachineInstanceRow
+{
+    public long RowId { get; init; }
+    public string Machine { get; init; } = "";
+    public SnapshotOwnerKind OwnerKind { get; init; }
+    public Guid Id { get; init; }
+    public string State { get; init; } = "";
+    public int Version { get; init; }
+    public DateTimeOffset? CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+    public bool HasLiveInvokedRun { get; init; }
+
+    public static MachineInstanceRow From(MachineInstanceRecord instance) =>
+        new()
+        {
+            RowId = instance.RowId,
+            Machine = instance.Machine,
+            OwnerKind = instance.OwnerKind,
+            Id = instance.Id,
+            State = instance.State,
+            Version = instance.Version,
+            CreatedAt = instance.CreatedAt,
+            UpdatedAt = instance.UpdatedAt,
+            HasLiveInvokedRun = instance.HasLiveInvokedRun,
+        };
+}

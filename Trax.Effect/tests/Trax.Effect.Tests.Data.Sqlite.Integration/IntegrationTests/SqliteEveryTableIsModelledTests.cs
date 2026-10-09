@@ -142,6 +142,27 @@ public class SqliteEveryTableIsModelledTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task Checkpoint_is_mapped_column_for_column()
+    {
+        using var context = NewContext();
+        var migrated = await MigratedColumns(context);
+        var mapped = MappedColumns(context);
+
+        mapped
+            .Should()
+            .ContainKey(
+                "checkpoint",
+                $"a checkpoint is written and resumed through IDataContext.Checkpoints. See {Adr}."
+            );
+        mapped["checkpoint"]
+            .Should()
+            .BeEquivalentTo(
+                migrated["checkpoint"],
+                $"the Checkpoint model maps exactly the columns its migration creates. See {Adr}."
+            );
+    }
+
     [TestCase("snapshot_draft")]
     [TestCase("effect_claim")]
     public async Task State_machine_tables_are_mapped_column_for_column(string table)

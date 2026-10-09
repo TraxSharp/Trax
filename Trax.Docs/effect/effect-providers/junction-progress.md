@@ -51,11 +51,13 @@ Runs **before** each junction to set two columns on the train's `Metadata`:
 | `CurrentlyRunningJunction` | The name of the junction about to execute |
 | `JunctionStartedAt` | `DateTime.UtcNow` at the moment the junction begins |
 
-After each junction completes, it clears both columns back to `null`. The provider calls `EffectRunner.Update()` and `EffectRunner.SaveChanges()` on both paths so the changes are persisted immediately.
+After each junction completes, it clears both columns back to `null`, or, while a sibling `Parallel` branch is still running a junction, shows that junction instead.
 
-The write after a junction does not take the train's cancellation token, and a failure of it is logged rather than thrown. By then the junction's work has returned, so the write is bookkeeping about work that happened. A caller that cancelled while a junction was finishing its work still gets that work recorded `Completed`, as it is without junction progress, and a database error on this write does not turn a finished junction into a failed run. The outcome write clears the same columns, so a skipped write leaves nothing stale.
+It writes the two columns, and only those, through a database context of its own, never through the train's effect runner. One writer per run makes the writes, one at a time. A change made while a write is in flight waits for the next write, and every change made in the meantime shares it, so branches that start junctions together wait for at most two writes rather than queueing for one each. The junction waits for the write before it, so the columns show it before it runs; it does not wait for the write after it.
 
-As a safety net, `FinishServiceTrain` always clears both junction progress columns regardless of outcome. This prevents stale values if a train crashes mid-junction.
+The write after a junction does not take the train's cancellation token, and a failure of it is logged rather than thrown. By then the junction's work has returned, so the write is bookkeeping about work that happened. A caller that cancelled while a junction was finishing its work still gets that work recorded `Completed`, as it is without junction progress, and a database error on this write does not turn a finished junction into a failed run.
+
+Before the run records its outcome it waits for the writer to finish, and the outcome write always clears both columns. A run cancelled mid-junction, or one whose branch was stopped by a failing sibling, never reaches the write after that junction; the outcome write clears what it left.
 
 ## Execution Order
 
@@ -89,9 +91,9 @@ When a train is `InProgress`, the dashboard detail page displays the current jun
 
 ## Performance Considerations
 
-Junction progress adds **3 database round-trips per junction**: the cancellation check reads the run's `CancellationRequested` flag, then one write before the junction (set `CurrentlyRunningJunction`) and one after (clear it). For a train with N junctions, that's N reads and 2N writes on top of the normal metadata saves.
+Junction progress adds **3 database round-trips per junction**: the cancellation check reads the run's `CancellationRequested` flag, then one write before the junction (set `CurrentlyRunningJunction`) and one after (clear it). For a train with N junctions, that's N reads and at most 2N writes on top of the normal metadata saves; a write after one junction and the write before the next often share one.
 
-The cancellation check opens a new `DbContext` for its read, from the Npgsql connection pool. The two writes go through the train's effect runner, on the train's existing context, and each is a full `SaveChanges` across every effect provider: anything else the train has tracked by then is written too, and the JSON effect compares and logs its tracked models at each one.
+The cancellation check opens a new `DbContext` for its read, from the Npgsql connection pool. Each progress write opens one too and updates the two columns in a single statement, without loading the row.
 
 For most trains (3-5 junctions), this is negligible. For high-frequency trains with many junctions (e.g., a 15-junction ETL running every 30 seconds), the extra writes add up. If you don't need real-time junction visibility or cross-server cancellation for a particular train, you can omit `AddJunctionProgress()` from that deployment's configuration.
 

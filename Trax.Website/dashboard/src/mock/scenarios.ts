@@ -1,4 +1,6 @@
 import type { MockSchemaOverrides } from "./build-mock-schema";
+import type { ChainStepKind, RunGraph, RunGraphNode, RunNodeState } from "../types";
+import { flattenRunGraph } from "../lib/runGraphTree";
 
 // Reusable auto-mock overrides for interaction stories: deterministic, filterable data plus
 // empty / error states, so play functions can exercise every control without a backend.
@@ -376,8 +378,156 @@ export const executionScenario: MockSchemaOverrides = {
 
 // ── Execution detail ─────────────────────────────────────────────────────
 // Keyed by id: 903 is active (cancellable), 900 terminal (re-queueable), 800 has children, 902
-// failed (a replaying retry of 899, a child of 800, with a junction timeline), 950 recorded more
-// steps than the timeline shows.
+// failed (a replaying retry of 899, a child of 800, with a junction timeline, and checkpoints it
+// can resume from), 950 recorded more steps than the timeline shows, 952 resumed 902 after its
+// checkpoint, 954 failed without a saved input, 956 failed deep in its nested routing.
+
+// One node of a run graph; tracks and steps default to none.
+function graphNode(id: string, kind: ChainStepKind, state: RunNodeState, fields: Partial<RunGraphNode> = {}): RunGraphNode {
+  return {
+    id,
+    kind,
+    opaque: false,
+    replayed: false,
+    checkpointed: false,
+    canResume: false,
+    state,
+    steps: [],
+    tracks: [],
+    ...fields,
+  };
+}
+
+const NO_GRAPH = { hasGraph: false, moreSteps: false, canResume: false, nodes: [], unmatchedSteps: [] };
+
+// A run graph as a scenario declares it: the tree, from which runGraph serves the flat list too.
+type DeclaredRunGraph = Omit<RunGraph, "allNodes"> & { nodes: RunGraphNode[] };
+
+/** A run graph as the API serves it: the nested nodes and the flat allNodes the dashboard reads. */
+export type ServedRunGraph = RunGraph & { nodes: RunGraphNode[] };
+
+/** Serves a declared run graph as the API does, with every node at any depth in allNodes. */
+export function servedRunGraph(graph: DeclaredRunGraph): ServedRunGraph {
+  return { ...graph, allNodes: flattenRunGraph(graph.nodes) };
+}
+
+// One track holding one node, taken or not.
+function oneNodeTrack(name: string, taken: boolean, node: RunGraphNode) {
+  return { name, description: null, isFallback: false, taken, nodes: [node] };
+}
+
+/**
+ * 956's train nests its routing deeper than a query can follow nested tracks: a Decide, a Switch
+ * in it and another in that, a Parallel, a Gate in a branch and a Decide in the Gate, whose step six
+ * tracks deep failed after the checkpoint at the top, so it can resume there. The other branch was
+ * interrupted: the host stopped mid-junction.
+ */
+function deepRunGraph(metadataId: number): DeclaredRunGraph {
+  const leaf = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0/Deep/Leaf#0", "CHAIN", "FAILED", {
+    canResume: true,
+    steps: [{ state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" }],
+  });
+  const pick = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0/Open/Pick#0", "DECIDE", "FAILED", {
+    tracks: [oneNodeTrack("Deep", true, leaf)],
+  });
+  const check = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Left/Check#0", "GATE", "FAILED", {
+    tracks: [oneNodeTrack("Open", true, pick)],
+  });
+  const right = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0/Right/Tally#0", "CHAIN", "INTERRUPTED");
+  const lanes = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0/Lanes#0", "PARALLEL", "FAILED", {
+    tracks: [oneNodeTrack("Left", true, check), oneNodeTrack("Right", true, right)],
+  });
+  const score = graphNode("Plan#1/Fast/Mode#0/Lanes/Score#0", "SWITCH", "FAILED", {
+    tracks: [oneNodeTrack("Lanes", true, lanes)],
+  });
+  const mode = graphNode("Plan#1/Fast/Mode#0", "SWITCH", "FAILED", {
+    tracks: [oneNodeTrack("Lanes", true, score)],
+  });
+  return {
+    metadataId,
+    hasGraph: true,
+    moreSteps: false,
+    canResume: true,
+    nodes: [
+      graphNode("Saved#0", "CHECKPOINT", "COMPLETED", { checkpointed: true }),
+      graphNode("Plan#1", "DECIDE", "FAILED", {
+        tracks: [
+          oneNodeTrack("Fast", true, mode),
+          oneNodeTrack("Slow", false, graphNode("Plan#1/Slow/Wait#0", "CHAIN", "SKIPPED")),
+        ],
+      }),
+    ],
+    unmatchedSteps: [],
+  };
+}
+
+/**
+ * The run graph of a scenario run. 902 failed after its Findings checkpoint: the checkpoint is
+ * stored, and it can resume at Summarize (the step after it, where it failed) or at Publish. 952 is
+ * the run that resumed it there: the steps before are RESTORED. 954 (no saved input) has the same
+ * checkpoint as 902, so its page draws "Resume from here" nowhere. 956 nests six levels deep (see
+ * deepRunGraph). Every other run's train has no declared graph on this host.
+ */
+export function runGraph(metadataId: number): ServedRunGraph {
+  return servedRunGraph(declaredRunGraph(metadataId));
+}
+
+function declaredRunGraph(metadataId: number): DeclaredRunGraph {
+  if (metadataId === 956) return deepRunGraph(metadataId);
+  if (metadataId === 902 || metadataId === 954) {
+    return {
+      metadataId,
+      hasGraph: true,
+      moreSteps: false,
+      canResume: true,
+      nodes: [
+        graphNode("Fetch#0", "CHAIN", "COMPLETED", { steps: [{ state: "COMPLETED", failureClass: null, failureException: null }] }),
+        graphNode("Findings#1", "CHECKPOINT", "COMPLETED", { checkpointed: true }),
+        graphNode("Summarize#2", "CHAIN", "FAILED", {
+          canResume: true,
+          steps: [{ state: "FAILED", failureClass: "TRANSIENT", failureException: "TimeoutException" }],
+        }),
+        graphNode("Route#3", "DECIDE", "NOT_REACHED", {
+          tracks: [
+            { name: "Short", description: "A summary under a page", isFallback: false, taken: false, nodes: [graphNode("Route#3/Short/Trim#0", "CHAIN", "NOT_REACHED")] },
+            { name: "Long", description: null, isFallback: true, taken: false, nodes: [graphNode("Route#3/Long/Split#0", "CHAIN", "NOT_REACHED")] },
+          ],
+        }),
+        graphNode("Publish#4", "CHAIN", "NOT_REACHED", { canResume: true }),
+      ],
+      unmatchedSteps: [],
+    };
+  }
+  if (metadataId === 952) {
+    return {
+      metadataId,
+      hasGraph: true,
+      moreSteps: false,
+      canResume: false,
+      nodes: [
+        graphNode("Fetch#0", "CHAIN", "RESTORED"),
+        graphNode("Findings#1", "CHECKPOINT", "RESTORED", { checkpointed: true }),
+        graphNode("Summarize#2", "CHAIN", "COMPLETED", { steps: [{ state: "COMPLETED", failureClass: null, failureException: null }] }),
+        graphNode("Route#3", "DECIDE", "COMPLETED", {
+          tracks: [
+            { name: "Short", description: "A summary under a page", isFallback: false, taken: true, nodes: [graphNode("Route#3/Short/Trim#0", "CHAIN", "COMPLETED")] },
+            { name: "Long", description: null, isFallback: true, taken: false, nodes: [graphNode("Route#3/Long/Split#0", "CHAIN", "SKIPPED")] },
+          ],
+        }),
+        graphNode("Signals#4", "PARALLEL", "COMPLETED", {
+          tracks: [
+            { name: "Citations", description: null, isFallback: false, taken: true, nodes: [graphNode("Signals#4/Citations/Count#0", "CHAIN", "COMPLETED")] },
+            { name: "Recency", description: null, isFallback: false, taken: true, nodes: [graphNode("Signals#4/Recency/Age#0", "CHAIN", "COMPLETED")] },
+          ],
+        }),
+        graphNode("Publish#5", "CHAIN", "COMPLETED"),
+      ],
+      unmatchedSteps: [{ position: 9, name: "LegacyStep", nameWithheld: false, state: "COMPLETED" }],
+    };
+  }
+  return { metadataId, ...NO_GRAPH };
+}
+
 function execDetail(id: number, name: string, state: string, childCount: number) {
   const done = state !== "IN_PROGRESS" && state !== "PENDING";
   const failed = state === "FAILED";
@@ -409,6 +559,9 @@ function execDetail(id: number, name: string, state: string, childCount: number)
     hostLabels: id === 902 ? '{"region":"eu-west","pool":"blue"}' : null,
     replayDecisionsOf: id === 902 ? 899 : id === 951 ? 902 : null,
     replayAbandoned: id === 951,
+    // 952 resumed 902 at Summarize, the step after its checkpoint.
+    resumeFrom: id === 952 ? 902 : null,
+    resumeAt: id === 952 ? "Summarize#2" : null,
   };
 }
 
@@ -572,8 +725,12 @@ export const executionDetailScenario: MockSchemaOverrides = {
         if (id === 902) return execDetail(902, "Trax.Exec.BetaJob", "FAILED", 0);
         if (id === 950) return execDetail(950, "Trax.Exec.LongJob", "COMPLETED", 0);
         if (id === 951) return execDetail(951, "Trax.Exec.RetryJob", "COMPLETED", 0);
+        if (id === 952) return execDetail(952, "Trax.Exec.BetaJob", "COMPLETED", 0);
+        if (id === 954) return { ...execDetail(954, "Trax.Exec.BetaJob", "FAILED", 0), input: null };
+        if (id === 956) return execDetail(956, "Trax.Exec.NestedJob", "FAILED", 0);
         return execDetail(900, "Trax.Exec.DeltaJob", "COMPLETED", 0);
       },
+      runGraph: (_root: unknown, args: Args) => runGraph(args.metadataId as number),
       junctionRuns: (_root: unknown, args: Args) => junctionRuns(args),
       decisions: (_root: unknown, args: Args) => decisionPage(args),
       executionChildren: (_root: unknown, args: Args) =>
@@ -805,3 +962,131 @@ export const persistedOperationsUnavailable: MockSchemaOverrides = errorOverride
   "OperationsQueries",
   "persistedOperations",
 );
+
+// ── State machines ───────────────────────────────────────────────────────
+// Two machines, as the Recovery sample has them. source-partition is system-owned: ...0001 waits on
+// a dispatched run (7101), ...0002 on a run still queued (work queue 7201), ...0003 waits on none.
+// topic-map instances are users' drafts: ...0004 waits on its Building run, ...0005 on none. No row
+// carries a context: operators never see one.
+export const MACHINE_IDS = {
+  dispatched: "3f2c1a00-0000-4000-8000-000000000001",
+  queued: "3f2c1a00-0000-4000-8000-000000000002",
+  idle: "3f2c1a00-0000-4000-8000-000000000003",
+  draftBuilding: "3f2c1a00-0000-4000-8000-000000000004",
+  draftIdle: "3f2c1a00-0000-4000-8000-000000000005",
+};
+
+function machineRow(
+  machine: string,
+  ownerKind: string,
+  id: string,
+  rowId: number,
+  state: string,
+  hasLiveInvokedRun: boolean,
+  minute: number,
+) {
+  const updatedAt = `2026-07-07T11:${String(minute).padStart(2, "0")}:00.000Z`;
+  return { machine, ownerKind, id, rowId, state, version: 1, createdAt: "2026-07-07T10:00:00.000Z", updatedAt, hasLiveInvokedRun };
+}
+
+export const MACHINE_ROWS = [
+  machineRow("source-partition", "SYSTEM", MACHINE_IDS.dispatched, 11, "Ingesting", true, 58),
+  machineRow("topic-map", "USER", MACHINE_IDS.draftBuilding, 21, "Building", true, 57),
+  machineRow("source-partition", "SYSTEM", MACHINE_IDS.queued, 12, "Ingesting", true, 56),
+  machineRow("topic-map", "USER", MACHINE_IDS.draftIdle, 22, "ChoosingRange", false, 55),
+  machineRow("source-partition", "SYSTEM", MACHINE_IDS.idle, 13, "Ingested", false, 54),
+];
+
+function invokedRun(id: number, trainState: string, isLive: boolean, minute: number) {
+  const done = trainState !== "IN_PROGRESS" && trainState !== "PENDING";
+  return {
+    id,
+    externalId: `run-${id}`,
+    name: id < 7100 || id === 7101 ? "Trax.Samples.Recovery.IIngestPartitionTrain" : "Trax.Samples.Recovery.IBuildTopicMapTrain",
+    trainState,
+    startTime: `2026-07-07T11:${String(minute).padStart(2, "0")}:00.000Z`,
+    endTime: done ? `2026-07-07T11:${String(minute).padStart(2, "0")}:30.000Z` : null,
+    failureClass: trainState === "FAILED" ? "TRANSIENT" : "UNCLASSIFIED",
+    cancellationRequested: false,
+    isLive,
+  };
+}
+
+const INVOKED_RUNS: Record<string, ReturnType<typeof invokedRun>[]> = {
+  [MACHINE_IDS.dispatched]: [invokedRun(7101, "IN_PROGRESS", true, 58), invokedRun(7090, "FAILED", false, 40)],
+  [MACHINE_IDS.queued]: [],
+  [MACHINE_IDS.idle]: [invokedRun(7050, "COMPLETED", false, 30)],
+  [MACHINE_IDS.draftBuilding]: [invokedRun(7110, "IN_PROGRESS", true, 57)],
+  [MACHINE_IDS.draftIdle]: [],
+};
+
+/** The instance a machineInstance lookup names, as the API looks it up; null when none matches. */
+export function machineInstanceDetail(args: Args) {
+  if (args.ownerKind === "USER" && args.rowId == null)
+    throw new Error("A user's draft is named by its row id as well as its machine and id.");
+  const row = MACHINE_ROWS.find(
+    (r) =>
+      r.machine === args.machine &&
+      r.ownerKind === args.ownerKind &&
+      r.id === args.id &&
+      (args.rowId == null || r.rowId === args.rowId),
+  );
+  if (!row) return null;
+  return {
+    ...row,
+    invokedRuns: INVOKED_RUNS[row.id] ?? [],
+    isInvokedRunsCapped: row.id === MACHINE_IDS.idle,
+    queuedInvokedRunEntryId: row.id === MACHINE_IDS.queued ? 7201 : null,
+  };
+}
+
+function machineCounts(rows: typeof MACHINE_ROWS) {
+  const counts = new Map<string, { machine: string; state: string; ownerKind: string; count: number }>();
+  for (const r of rows) {
+    const key = `${r.machine}|${r.state}|${r.ownerKind}`;
+    const c = counts.get(key) ?? { machine: r.machine, state: r.state, ownerKind: r.ownerKind, count: 0 };
+    c.count++;
+    counts.set(key, c);
+  }
+  return [...counts.values()];
+}
+
+function machineInstancesPage(args: Args, capped = false) {
+  let rows = MACHINE_ROWS;
+  if (args.machine != null) rows = rows.filter((r) => r.machine === args.machine);
+  if (args.state != null) rows = rows.filter((r) => r.state === args.state);
+  if (args.ownerKind != null) rows = rows.filter((r) => r.ownerKind === args.ownerKind);
+  const skip = Number(args.skip ?? 0);
+  const take = Number(args.take ?? 25);
+  return {
+    items: rows.slice(skip, skip + take),
+    totalCount: capped ? 10_000 : rows.length,
+    isCountCapped: capped,
+    isEstimatedCount: false,
+    skip,
+    take,
+    nextCursor: null,
+  };
+}
+
+/** The OperationsQueries resolvers of {@link machineScenario}. */
+export const machineQueryResolvers = {
+  machineInstanceCounts: (_root: unknown, args: Args) =>
+    machineCounts(args.machine != null ? MACHINE_ROWS.filter((r) => r.machine === args.machine) : MACHINE_ROWS),
+  machineInstances: (_root: unknown, args: Args) => machineInstancesPage(args),
+  machineInstance: (_root: unknown, args: Args) => machineInstanceDetail(args),
+};
+
+export const machineScenario: MockSchemaOverrides = {
+  resolvers: () => ({ OperationsQueries: machineQueryResolvers }),
+};
+
+/** More instances match than the API counts: the total stops at 10,000. */
+export const machineScenarioCapped: MockSchemaOverrides = {
+  resolvers: () => ({
+    OperationsQueries: {
+      machineInstanceCounts: () => machineCounts(MACHINE_ROWS),
+      machineInstances: (_root: unknown, args: Args) => machineInstancesPage(args, true),
+    },
+  }),
+};

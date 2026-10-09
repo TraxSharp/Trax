@@ -3,6 +3,7 @@ import { fireEvent } from "@testing-library/react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { ExecutionsPage } from "./ExecutionsPage";
 import { emptyPage, errorOverride, executionScenario } from "../mock/scenarios";
+import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 
 const meta = {
   title: "Pages/Executions",
@@ -181,6 +182,23 @@ export const BulkCancel: Story = {
       await userEvent.click(c.getByText("Cancel selected"));
       expect(await c.findByText(/Cancellation requested for 1/)).toBeInTheDocument();
       await waitFor(() => expect(c.queryByText(/selected/)).not.toBeInTheDocument());
+    } finally {
+      restore();
+    }
+  },
+};
+
+// A selection of only runs users' drafts started is refused with the API's reason.
+export const BulkCancelUserDraftRunRefused: Story = {
+  parameters: { overlays: [userDraftRunsOverlay([901])] },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByLabelText("Select #901")).toBeInTheDocument());
+      await userEvent.click(c.getByLabelText("Select #901"));
+      await userEvent.click(c.getByText("Cancel selected"));
+      expect(await c.findByText(USER_OWNED_RUN_CANCEL_REFUSAL)).toBeInTheDocument();
     } finally {
       restore();
     }

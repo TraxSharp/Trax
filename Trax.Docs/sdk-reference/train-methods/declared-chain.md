@@ -9,7 +9,7 @@ nav_order: 9
 
 # DeclaredChain
 
-Reads a train's declared chain without resolving or running any junction. This is what the host's [startup chain check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) calls for every registered train; you can call it yourself, for example in a test that asserts a train's route.
+Reads a train's declared chain without resolving or running any junction. This is what the host's [startup chain check](/docs/core/trains-and-junctions#the-host-checks-every-chain-before-it-serves-traffic) calls for every registered train; you can call it yourself, for example in a test that asserts a train's route. To draw the chain, diff it or name its steps, turn the recording into a [ChainGraph](/docs/sdk-reference/train-methods/chain-graph).
 
 ## Signatures
 
@@ -34,12 +34,14 @@ public sealed class ChainRecorder
 {
     public IReadOnlyList<ChainStep> Steps { get; }
     public IReadOnlyList<string> Refusals { get; }
+    public IReadOnlyList<ChainTrack> TracksAt(int stepIndex);
 }
 ```
 
 | Member | Description |
 |--------|-------------|
 | `Steps` | The declared steps, in order. A step naming a type that is not a junction is kept with no `In` or `Out`, so a step's index is always its written position |
+| `TracksAt(stepIndex)` | The tracks a `Switch`, `Gate` or `Scale` step declares, each with its own recording (`ChainTrack.Steps`); empty for any other step |
 | `Refusals` | Things the declaration did that no step can express, each phrased for whoever has to fix it: awaiting before returning, returning a result instead of ending in `Resolve()`, ending in `Resolve(value)`, `IChain` or `AddServices` of a class, `AddServices` of null, `Chain` or `ShortCircuit` of a type that is not a junction, `Chain<T>()` or `ShortCircuit<T>()` of a junction Trax cannot build (not exactly one public constructor, abstract, or an interface) |
 
 ## ChainStep and ChainStepKind
@@ -47,7 +49,7 @@ public sealed class ChainRecorder
 ```csharp
 public readonly record struct ChainStep(ChainStepKind Kind, Type? Junction, Type? In, Type? Out);
 
-public enum ChainStepKind { Chain, IChain, ShortCircuit, Extract, Resolve, Seed }
+public enum ChainStepKind { Chain, IChain, ShortCircuit, Extract, Resolve, Seed, Decide, Switch, Gate, Scale }
 ```
 
 | Field | Description |
@@ -65,6 +67,8 @@ public enum ChainStepKind { Chain, IChain, ShortCircuit, Extract, Resolve, Seed 
 | `Extract` | `Extract<TIn, TOut>()`, projecting a value already in Memory |
 | `Resolve` | `Resolve()` |
 | `Seed` | A value handed to the chain directly, by `AddServices(value)` or `Extract<TIn, TOut>(value)`, which puts its type into Memory without a junction producing it |
+| `Decide` | One question of a [Decide](/docs/sdk-reference/train-methods/decide), or the question an asking `Switch`, `Gate` or `Scale` puts first. Its `Junction` is the decider, `In` the state and `Out` the decision |
+| `Switch`, `Gate`, `Scale` | The routing step itself. `In` is the decision it routes on and `Out` the `TrackTaken<T>` it records; its tracks are in `TracksAt` |
 
 ## ChainVerification.Verify
 

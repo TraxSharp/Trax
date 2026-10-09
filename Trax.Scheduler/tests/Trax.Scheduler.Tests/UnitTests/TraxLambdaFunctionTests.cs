@@ -18,6 +18,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.TrainLifecycleHook;
 using Trax.Runner.Lambda;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
@@ -723,6 +724,31 @@ public class TraxLambdaFunctionTests
     }
 
     [Test]
+    public async Task FunctionHandler_NoTimeLeft_PublishesTheRunCancelledOnce()
+    {
+        var fn = new TestFunction(withDatabase: true);
+        var metadataId = await fn.SavePendingRunAsync();
+
+        var envelope = new LambdaEnvelope(
+            LambdaRequestType.Execute,
+            JsonSerializer.Serialize(new RemoteJobRequest(MetadataId: metadataId))
+        );
+
+        // Delivered twice: the second delivery finds the run Cancelled already.
+        await fn.FunctionHandler(envelope, CreateContext(TimeSpan.Zero));
+        await fn.FunctionHandler(envelope, CreateContext(TimeSpan.Zero));
+
+        fn.Hooks.Events.Should()
+            .Equal(
+                [
+                    ("Cancelled", metadataId, TrainState.Cancelled),
+                    ("StateChanged", metadataId, TrainState.Cancelled),
+                ],
+                "no train ran to publish the outcome, so the runner that recorded it publishes it, once"
+            );
+    }
+
+    [Test]
     public async Task FunctionHandler_AmpleTimeLeft_HandsTheHandlerALiveToken()
     {
         var fn = new TestFunction();
@@ -793,6 +819,9 @@ public class TraxLambdaFunctionTests
 
         public FakeRequestHandler Handler { get; } = new();
 
+        /// <summary>The lifecycle events the function's hooks received, with a database.</summary>
+        public LifecycleRecorder Hooks { get; } = new();
+
         public async Task<long> SavePendingRunAsync()
         {
             using var context = (IDataContext)
@@ -836,7 +865,14 @@ public class TraxLambdaFunctionTests
 
             var services = new ServiceCollection();
             if (withDatabase)
-                services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
+            {
+                services.AddSingleton(Hooks);
+                services.AddTrax(trax =>
+                    trax.AddEffects(effects =>
+                        effects.UseInMemory().AddLifecycleHook<RecordingLifecycleHook>()
+                    )
+                );
+            }
             services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
             services.AddLogging();
             services.AddSingleton<ITraxRequestHandler>(Handler);
@@ -852,6 +888,41 @@ public class TraxLambdaFunctionTests
         public void ExposeConfigureRoutes(
             Microsoft.AspNetCore.Routing.IEndpointRouteBuilder routes
         ) => ConfigureRoutes(routes);
+    }
+
+    private sealed class LifecycleRecorder
+    {
+        private readonly List<(string Event, long Id, TrainState State)> _events = [];
+
+        public IReadOnlyList<(string Event, long Id, TrainState State)> Events
+        {
+            get
+            {
+                lock (_events)
+                    return _events.ToList();
+            }
+        }
+
+        public void Add(string name, Metadata metadata)
+        {
+            lock (_events)
+                _events.Add((name, metadata.Id, metadata.TrainState));
+        }
+    }
+
+    private sealed class RecordingLifecycleHook(LifecycleRecorder recorder) : ITrainLifecycleHook
+    {
+        public Task OnCancelled(Metadata metadata, CancellationToken ct)
+        {
+            recorder.Add("Cancelled", metadata);
+            return Task.CompletedTask;
+        }
+
+        public Task OnStateChanged(Metadata metadata, CancellationToken ct)
+        {
+            recorder.Add("StateChanged", metadata);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeRequestHandler : ITraxRequestHandler

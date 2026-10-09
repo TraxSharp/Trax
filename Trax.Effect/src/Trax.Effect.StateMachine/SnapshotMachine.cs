@@ -120,6 +120,111 @@ public sealed class SnapshotMachine<TState, TTrigger>
     }
 
     /// <summary>
+    /// Applies an invoked run's <paramref name="outcome"/> to <paramref name="snapshot"/>: the persistence layer
+    /// calls this once it has matched the outcome to the entry that queued the run. A success tries the state's
+    /// <c>OnDone</c> edges in declaration order and takes the first whose guard holds for the output; a failure or
+    /// a cancel takes its one edge. The chosen edge's reduction produces the target's context, which must satisfy
+    /// the target's validator. Never throws.
+    /// </summary>
+    /// <returns>
+    /// The successor, or a rejection: <c>no-transition</c> when the snapshot is not in a state that invokes a
+    /// train, or no <c>OnDone</c> edge accepts the output; <c>invalid-context</c> when the reduction produced a
+    /// context the target refuses; <c>internal-error</c> when a custom handler threw.
+    /// </returns>
+    internal AdvanceResult ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome) =>
+        ApplyOutcomeCore(
+            snapshot,
+            outcome.Kind,
+            outcome is InvokeOutcome.Done done ? done.Output : null,
+            triggerState: null
+        );
+
+    /// <summary>
+    /// Applies an outcome named by its trigger (<c>Fetching.done</c>) with <paramref name="input"/> as its input,
+    /// as the TypeScript twin does on <c>advance</c>. The differential corpus replays outcome cases through this;
+    /// <see cref="Advance"/> refuses every outcome trigger. Never throws.
+    /// </summary>
+    internal AdvanceResult AdvanceOutcome(Snapshot snapshot, string trigger, JsonNode? input) =>
+        OutcomeTriggers.TryParse(trigger, out var state, out var kind)
+            ? ApplyOutcomeCore(snapshot, kind, input, state)
+            : new AdvanceResult.Rejected(
+                RejectionReasons.NoTransition,
+                $"Unknown trigger '{trigger}'."
+            );
+
+    /// <summary>Whether <paramref name="trigger"/> names one of this machine's outcome triggers.</summary>
+    internal bool IsOutcomeTrigger(string trigger) =>
+        OutcomeTriggers.TryParse(trigger, out var state, out _)
+        && TryParseState(state, out var parsed)
+        && _def.Invokes.ContainsKey(parsed);
+
+    private AdvanceResult ApplyOutcomeCore(
+        Snapshot snapshot,
+        InvokeOutcomeKind kind,
+        JsonNode? input,
+        string? triggerState
+    )
+    {
+        if (!TryParseState(snapshot.State, out var fromState))
+            return new AdvanceResult.Rejected(
+                RejectionReasons.NoTransition,
+                $"Unknown state '{snapshot.State}'."
+            );
+        var trigger = OutcomeTriggers.Name(fromState, kind);
+        if (triggerState is not null && triggerState != snapshot.State)
+            return new AdvanceResult.Rejected(
+                RejectionReasons.NoTransition,
+                $"No transition from '{snapshot.State}' on '{triggerState}.{OutcomeTriggers.Suffix(kind)}'."
+            );
+        if (!_def.Invokes.TryGetValue(fromState, out var invoke))
+            return new AdvanceResult.Rejected(
+                RejectionReasons.NoTransition,
+                $"No transition from '{snapshot.State}' on '{trigger}': the state invokes no train."
+            );
+
+        try
+        {
+            var context = snapshot.Context;
+            var chosen = invoke
+                .EdgesFor(kind)
+                .FirstOrDefault(e => e.CompiledGuard is null || e.CompiledGuard(context, input));
+            // An output no OnDone edge accepts has nowhere to go. It is not a guard the caller can satisfy by
+            // sending something else, so it is a no-transition rather than a guard-failed.
+            if (chosen is null)
+                return new AdvanceResult.Rejected(
+                    RejectionReasons.NoTransition,
+                    $"No OnDone edge from '{snapshot.State}' accepts the train's output."
+                );
+
+            var newContext =
+                chosen.CompiledReduce?.Invoke(context, input) ?? (JsonObject)context.DeepClone();
+            var contextError = _def.ValidateContext(chosen.To, newContext);
+            if (contextError is not null)
+                return new AdvanceResult.Rejected(RejectionReasons.InvalidContext, contextError);
+
+            return new AdvanceResult.Transitioned(
+                new Snapshot
+                {
+                    Machine = _def.Id,
+                    Version = _def.Version,
+                    State = chosen.To.ToString(),
+                    Context = newContext,
+                }
+            );
+        }
+        catch (Exception ex)
+        {
+            return new AdvanceResult.Rejected(
+                RejectionReasons.InternalError,
+                "The transition failed with an unexpected error."
+            )
+            {
+                Exception = ex,
+            };
+        }
+    }
+
+    /// <summary>
     /// Parses and validates stored JSON (e.g. a jsonb column) into a <see cref="Snapshot"/>.
     /// This is the "parse, don't validate" boundary: bad data becomes a typed
     /// <see cref="RehydrationResult.Error"/>, never a throw.
@@ -308,16 +413,37 @@ public sealed class SnapshotMachine<TState, TTrigger>
             .OrderBy(s => s, StringComparer.Ordinal)
             .ToArray();
 
-        var triggers = _def
-            .Transitions.Select(t => t.Trigger.ToString()!)
+        // An invoking state's outcome edges are edges too, under their outcome trigger (Fetching.done), as the
+        // TypeScript twin lists them.
+        var edges = _def
+            .Transitions.Select(t =>
+                (From: t.From.ToString()!, Trigger: t.Trigger.ToString()!, To: t.To.ToString()!)
+            )
+            .Concat(
+                _def.Invokes.Values.SelectMany(invoke =>
+                    Enum.GetValues<InvokeOutcomeKind>()
+                        .SelectMany(kind =>
+                            invoke
+                                .EdgesFor(kind)
+                                .Select(e =>
+                                    (
+                                        From: invoke.State.ToString()!,
+                                        Trigger: invoke.TriggerName(kind),
+                                        To: e.To.ToString()!
+                                    )
+                                )
+                        )
+                )
+            )
+            .ToList();
+
+        var triggers = edges
+            .Select(t => t.Trigger)
             .Distinct()
             .OrderBy(t => t, StringComparer.Ordinal)
             .ToArray();
 
-        var transitions = _def
-            .Transitions.Select(t =>
-                (From: t.From.ToString()!, Trigger: t.Trigger.ToString()!, To: t.To.ToString()!)
-            )
+        var transitions = edges
             .OrderBy(t => t.From, StringComparer.Ordinal)
             .ThenBy(t => t.Trigger, StringComparer.Ordinal)
             .ThenBy(t => t.To, StringComparer.Ordinal)

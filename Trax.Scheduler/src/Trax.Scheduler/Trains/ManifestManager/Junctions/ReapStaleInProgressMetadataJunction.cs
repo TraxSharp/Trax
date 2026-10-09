@@ -5,6 +5,7 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Scheduler.Configuration;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
@@ -31,6 +32,9 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 /// CancelTimedOutJobsJunction and only then, once cancellation has had the same time to land,
 /// failed here.
 ///
+/// Each run it fails is published to the lifecycle hooks as <c>Failed</c>, once, after the write
+/// commits (see <see cref="DeferredOutcomeEvents"/>), since no train is left to publish it.
+///
 /// This junction runs after ReapStalePendingMetadataJunction and before LoadManifestsJunction
 /// so that newly-failed metadata is counted in the same ManifestManager cycle (enabling
 /// dead-lettering if retries are exhausted).
@@ -38,6 +42,7 @@ namespace Trax.Scheduler.Trains.ManifestManager.Junctions;
 internal class ReapStaleInProgressMetadataJunction(
     IDataContext dataContext,
     SchedulerConfiguration config,
+    DeferredOutcomeEvents outcomeEvents,
     ILogger<ReapStaleInProgressMetadataJunction> logger
 ) : EffectJunction<Unit, Unit>
 {
@@ -102,28 +107,27 @@ internal class ReapStaleInProgressMetadataJunction(
             );
         }
 
-        await dataContext
-            .Metadatas.Where(m => staleIds.Contains(m.Id) && m.TrainState == TrainState.InProgress)
-            .ExecuteUpdateAsync(
-                s =>
-                    s.SetProperty(m => m.TrainState, TrainState.Failed)
-                        .SetProperty(m => m.EndTime, now)
-                        .SetProperty(
-                            m => m.FailureReason,
-                            "Job was stuck InProgress beyond the configured stale in-progress timeout"
-                        )
-                        .SetProperty(m => m.FailureException, "StaleInProgressTimeout")
-                        .SetProperty(
-                            m => m.FailureJunction,
-                            nameof(ReapStaleInProgressMetadataJunction)
-                        ),
-                CancellationToken
-            );
+        // One conditional write for every run, which also tells the runs it moved to Failed: a run
+        // that finished, or that another pass reaped, matches nothing and is not published again.
+        var reaped = await ReapedRuns.FailAsync(
+            dataContext,
+            dataContext.Metadatas.Where(m =>
+                staleIds.Contains(m.Id) && m.TrainState == TrainState.InProgress
+            ),
+            staleIds,
+            "Job was stuck InProgress beyond the configured stale in-progress timeout",
+            "StaleInProgressTimeout",
+            nameof(ReapStaleInProgressMetadataJunction),
+            CancellationToken
+        );
 
         logger.LogInformation(
             "ReapStaleInProgressMetadataJunction completed: {Count} stale in-progress job(s) marked as failed",
-            staleIds.Count
+            reaped.Count
         );
+
+        // No train ran to publish these outcomes; published once the write commits.
+        await outcomeEvents.FailedAsync(dataContext, reaped);
 
         return Unit.Default;
     }

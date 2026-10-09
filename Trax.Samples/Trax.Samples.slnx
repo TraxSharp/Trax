@@ -69,6 +69,7 @@
     <Project Path="tests/Trax.Samples.Scheduling.E2E/Trax.Samples.Scheduling.E2E.csproj" />
     <Project Path="tests/Trax.Samples.ContentShield.E2E/Trax.Samples.ContentShield.E2E.csproj" />
     <Project Path="tests/Trax.Samples.SignalRBroadcaster.E2E/Trax.Samples.SignalRBroadcaster.E2E.csproj" />
+    <Project Path="tests/Trax.Samples.Tests.Chains/Trax.Samples.Tests.Chains.csproj" />
     <Project Path="tests/Trax.Samples.Tests.Meta/Trax.Samples.Tests.Meta.csproj" />
   </Folder>
   <Folder Name="/templates/">

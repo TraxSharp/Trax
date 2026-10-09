@@ -6,7 +6,7 @@ import { configure as configureStorybook } from "storybook/test";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { hashVariables } from "../mock/variables-hash";
 import type { Served } from "./lookup";
-import { recordings, settle } from "./harness";
+import { notOfferedYet, recordings, settle } from "./harness";
 import { setStoryRecordings } from "./story-source";
 
 // Every story, with its play function, on the demo's recordings instead of the auto-mock. The plays
@@ -72,8 +72,10 @@ describe("stories on the recordings", () => {
     const composed = composeStories(mod as StoryModule);
     for (const [name, Story] of Object.entries(composed) as [string, ComposedStory][]) {
       if (Story.parameters?.real) continue;
-      test(`${path.replace("../", "")} ${name}`, async () => {
-        current = `${path.replace("../", "")} ${name}`;
+      // The glob's paths start with "../"; the label drops that prefix only.
+      const label = `${path.replace(/^\.\.\//, "")} ${name}`;
+      test(label, async () => {
+        current = label;
         const { container } = render(<Story />);
         await settle();
         try {
@@ -88,7 +90,9 @@ describe("stories on the recordings", () => {
   }
 
   test("every query the stories sent was answered by a recording", () => {
-    const entries = [...ledger.values()];
+    // A story of a page the demo does not offer yet (harness.tsx, NOT_RECORDED_YET) sends reads no
+    // recording answers; the demo never sends them.
+    const entries = [...ledger.values()].filter((e) => !(e.served === "missing" && notOfferedYet(e.op)));
     const scenario = entries.filter((e) => e.served === "created" || (e.served === "missing" && scenarioRow(e.variables)));
     const typed = entries.filter((e) => e.served === "derived");
     const missing = entries.filter((e) => e.served === "missing" && !scenarioRow(e.variables));

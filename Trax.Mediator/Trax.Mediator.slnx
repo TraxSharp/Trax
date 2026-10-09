@@ -8,6 +8,7 @@
     <Project Path="tests/Trax.Mediator.Testing.Tests/Trax.Mediator.Testing.Tests.csproj" />
     <Project Path="tests/Trax.Mediator.Tests.Postgres.Integration/Trax.Mediator.Tests.Postgres.Integration.csproj" />
     <Project Path="tests/Trax.Mediator.Tests.MemoryLeak.Integration/Trax.Mediator.Tests.MemoryLeak.Integration.csproj" />
+    <Project Path="tests/Trax.Mediator.Tests.StateMachine.Integration/Trax.Mediator.Tests.StateMachine.Integration.csproj" />
     <Project Path="tests/Trax.Mediator.Tests.Meta/Trax.Mediator.Tests.Meta.csproj" />
   </Folder>
 </Solution>

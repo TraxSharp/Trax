@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <Description>The effect layer for Trax .NET trains: the ServiceTrain base class that records every run as a Metadata row (state, timing, input, output, failure), DI registration (AddTrax, AddEffects, AddScopedTraxRoute), lifecycle hooks and the UseBroadcaster event pipeline. Install it with one data provider (Trax.Effect.Data.Postgres, .Sqlite or .InMemory) to persist those runs.</Description>
     <AssemblyName>Trax.Effect</AssemblyName>
+    <!-- TRAXEXP001: a run records the failure of a Parallel step (BranchesFailedException) by
+         classifying each failed branch, so the effect layer reads the experimental step's types. -->
+    <NoWarn>$(NoWarn);TRAXEXP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,8 +38,36 @@
     <InternalsVisibleTo Include="Trax.Mediator" />
   </ItemGroup>
 
+  <!-- The cancel-flag check marks its factory as one (ICancellationFlagCheckFactory), so the state-machine startup
+       check can require it for a machine that invokes trains, and reads whether an output reaches a sensitive
+       member (TraxRedaction). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.JunctionProvider.Progress" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
+  </ItemGroup>
+
+  <!-- The engine serializes an invoked run's output with the options a run stores it with (InvokedRunOutput), so the
+       two cannot drift. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine" />
+  </ItemGroup>
+
   <!-- Decision recording binds each run's decisions to its row through ServiceTrain.Run. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.Data" />
+  </ItemGroup>
+
+  <!-- Whether a run can resume (IRunResumes and its verdicts) and how large a checkpoint may be (CheckpointOptions)
+       are Trax's own plumbing between the scheduler's retries, the operations service and both operator surfaces;
+       no consumer calls or configures them (Trax.Docs/adr/0047). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler" />
+    <InternalsVisibleTo Include="Trax.Api" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+    <InternalsVisibleTo Include="Trax.Dashboard" />
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.MemoryLeak.Integration" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Dashboard.Tests.Integration" />
   </ItemGroup>
 </Project>

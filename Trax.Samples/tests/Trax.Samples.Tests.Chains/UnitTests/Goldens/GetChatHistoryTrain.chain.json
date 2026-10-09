@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.ChatService.Trains.GetChatHistory.GetChatHistoryTrain",
+  "input": "GetChatHistoryInput",
+  "output": "GetChatHistoryOutput",
+  "nodes": [
+    {
+      "id": "FetchMessagesJunction#0",
+      "kind": "Chain",
+      "junction": "FetchMessagesJunction",
+      "in": "GetChatHistoryInput",
+      "out": "GetChatHistoryOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GetChatHistoryOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

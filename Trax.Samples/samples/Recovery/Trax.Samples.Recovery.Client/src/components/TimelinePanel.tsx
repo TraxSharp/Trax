@@ -1,4 +1,5 @@
-import { shownAnswer, type Attempt, type Step } from "../types";
+import { branchOf, restoredIn, shownAnswer, type Attempt, type Step } from "../types";
+import { RunGraphView } from "./RunGraphView";
 
 interface Props {
   attempts: Attempt[];
@@ -70,9 +71,11 @@ function Lane({
 }: Omit<Props, "attempts"> & { attempts: Attempt[]; attempt: Attempt; t0: number; t1: number }) {
   const steps = Object.values(attempt.steps).sort((a, b) => a.position - b.position);
   const manifestIndex = attempts.filter((a) => a.origin === "manifest").findIndex((a) => a.id === attempt.id);
+  // A resumed run records only the steps after its resume point; its graph marks the rest restored.
+  const restored = restoredIn(attempt.graph);
   const [status, statusTone] =
     attempt.trainState === "COMPLETED"
-      ? [manifestIndex > 0 ? "Recovered" : "Completed", "completed"]
+      ? [attempt.origin === "resume" ? "Resumed" : manifestIndex > 0 ? "Recovered" : "Completed", "completed"]
       : attempt.trainState === "FAILED"
         ? [
             attempt.origin === "manifest" && manifestIndex < maxRetries ? `Failed, retrying ${manifestIndex + 1}/${maxRetries}` : "Failed",
@@ -103,7 +106,11 @@ function Lane({
   }
   if (t1 > cursor) segments.push({ kind: "gap", ms: t1 - cursor });
 
-  const nameOf = (step: Step) => (step.nameWithheld ? "(withheld)" : step.kind === "JUNCTION" ? step.name : `${step.questionKey}?`);
+  const nameOf = (step: Step) => {
+    const name = step.nameWithheld ? "(withheld)" : step.kind === "JUNCTION" ? step.name : `${step.questionKey}?`;
+    const branch = branchOf(step.nodeId);
+    return branch ? `${branch}: ${name}` : name;
+  };
 
   return (
     <div className="lane">
@@ -119,6 +126,9 @@ function Lane({
             </span>
           ) : null;
         })}
+        {restored > 0 && (
+          <span className="badge replay">resumed after the checkpoint: {restored} step(s) restored, not run</span>
+        )}
         {attempt.failureJunction && <span className="badge failed">crashed in {attempt.failureJunction}</span>}
         <span className={`status ${statusTone}`}>{status}</span>
       </div>
@@ -142,6 +152,7 @@ function Lane({
           );
         })}
       </div>
+      {attempt.graph?.hasGraph && <RunGraphView graph={attempt.graph} />}
     </div>
   );
 }

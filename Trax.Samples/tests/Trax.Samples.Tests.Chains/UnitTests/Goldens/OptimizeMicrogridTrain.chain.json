@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.EnergyHub.Trains.Microgrid.OptimizeMicrogrid.OptimizeMicrogridTrain",
+  "input": "OptimizeMicrogridInput",
+  "output": "Unit",
+  "nodes": [
+    {
+      "id": "GatherEnergyMetricsJunction#0",
+      "kind": "Chain",
+      "junction": "GatherEnergyMetricsJunction",
+      "in": "OptimizeMicrogridInput",
+      "out": "OptimizeMicrogridInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "ApplyDistributionJunction#0",
+      "kind": "Chain",
+      "junction": "ApplyDistributionJunction",
+      "in": "OptimizeMicrogridInput",
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

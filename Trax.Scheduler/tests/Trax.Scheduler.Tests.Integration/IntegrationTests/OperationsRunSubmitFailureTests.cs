@@ -8,6 +8,7 @@ using Trax.Effect.Data.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
@@ -68,6 +69,9 @@ public class OperationsRunSubmitFailureTests
         await TestSetup.CleanupDatabase(scope.ServiceProvider.GetRequiredService<IDataContext>());
     }
 
+    [LeavesStuckRuns(
+        "Marks the run in progress by hand, as a runner's claim would, and no runner follows."
+    )]
     [Test]
     public async Task A_failed_submit_does_not_overwrite_a_run_the_runner_claimed_meanwhile()
     {

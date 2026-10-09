@@ -9,7 +9,8 @@ using Trax.Scheduler.Extensions;
 namespace Trax.Scheduler.Trains.ManifestManager.Utilities;
 
 /// <summary>
-/// The replay links a retry or a requeue reads and clears (docs/adr/0017).
+/// The replay links a retry or a requeue reads and clears (docs/adr/0017), and the resume links
+/// beside them (Trax.Docs/adr/0047).
 /// </summary>
 internal static class RetryReplayLinks
 {
@@ -20,6 +21,12 @@ internal static class RetryReplayLinks
     internal const string QueuedReplayIndex = "ix_work_queue_unique_queued_replay";
 
     /// <summary>
+    /// The unique index that holds at most one queued entry per resumed run. Trax.Effect creates
+    /// it (Postgres 074, Sqlite 036). See Trax.Docs/adr/0047.
+    /// </summary>
+    internal const string QueuedResumeIndex = "ix_work_queue_unique_queued_resume";
+
+    /// <summary>
     /// Whether <paramref name="exception"/>, or one it wraps, is an insert refused because a queued
     /// entry already replays the same run: a unique violation on <see cref="QueuedReplayIndex"/>,
     /// which Postgres names and Sqlite reports by its column. Any other failure, another unique
@@ -27,7 +34,35 @@ internal static class RetryReplayLinks
     /// </summary>
     /// <param name="exception">The failure to read.</param>
     /// <param name="dialect">When known, it must also read the failure as a unique violation.</param>
-    internal static bool IsQueuedReplayConflict(Exception exception, ISqlDialect? dialect = null)
+    internal static bool IsQueuedReplayConflict(Exception exception, ISqlDialect? dialect = null) =>
+        IsConflictOn(
+            exception,
+            dialect,
+            QueuedReplayIndex,
+            "UNIQUE constraint failed: work_queue.replay_decisions_of"
+        );
+
+    /// <summary>
+    /// Whether <paramref name="exception"/>, or one it wraps, is an insert refused because a queued
+    /// entry already resumes the same run: a unique violation on <see cref="QueuedResumeIndex"/>,
+    /// which Postgres names and Sqlite reports by its column. Any other failure is false.
+    /// </summary>
+    /// <param name="exception">The failure to read.</param>
+    /// <param name="dialect">When known, it must also read the failure as a unique violation.</param>
+    internal static bool IsQueuedResumeConflict(Exception exception, ISqlDialect? dialect = null) =>
+        IsConflictOn(
+            exception,
+            dialect,
+            QueuedResumeIndex,
+            "UNIQUE constraint failed: work_queue.resume_from"
+        );
+
+    private static bool IsConflictOn(
+        Exception exception,
+        ISqlDialect? dialect,
+        string index,
+        string sqliteMessage
+    )
     {
         for (Exception? e = exception; e is not null; e = e.InnerException)
         {
@@ -42,11 +77,8 @@ internal static class RetryReplayLinks
                 inner = inner.InnerException
             )
                 if (
-                    inner.Message.Contains(QueuedReplayIndex, StringComparison.Ordinal)
-                    || inner.Message.Contains(
-                        "UNIQUE constraint failed: work_queue.replay_decisions_of",
-                        StringComparison.Ordinal
-                    )
+                    inner.Message.Contains(index, StringComparison.Ordinal)
+                    || inner.Message.Contains(sqliteMessage, StringComparison.Ordinal)
                 )
                     return true;
             return false;
@@ -58,9 +90,11 @@ internal static class RetryReplayLinks
     /// Saves <paramref name="context"/>, and when the save is refused because a queued entry
     /// already replays the run one of <paramref name="entries"/> names, clears that entry's link
     /// and saves again, so it asks afresh rather than failing. On a second refusal every link
-    /// among them is cleared. Any other failure propagates.
+    /// among them is cleared. A refusal because a queued entry already resumes the run one of them
+    /// names clears that entry's resume link the same way, so it reruns from the top
+    /// (Trax.Docs/adr/0047). Any other failure propagates.
     /// </summary>
-    /// <returns>How many links were cleared.</returns>
+    /// <returns>How many replay links were cleared.</returns>
     internal static async Task<int> SaveAskingAfreshOnConflictAsync(
         IDataContext context,
         IReadOnlyCollection<WorkQueue> entries,
@@ -69,7 +103,10 @@ internal static class RetryReplayLinks
     )
     {
         var cleared = 0;
-        for (var attempt = 1; ; attempt++)
+        var replayConflicts = 0;
+        var resumeConflicts = 0;
+
+        while (true)
         {
             try
             {
@@ -77,15 +114,16 @@ internal static class RetryReplayLinks
                 return cleared;
             }
             catch (DbUpdateException ex)
-                when (attempt <= 2
+                when (replayConflicts < 2
                     && IsQueuedReplayConflict(ex)
                     && entries.Any(e => e.ReplayDecisionsOf is not null)
                 )
             {
+                replayConflicts++;
                 var linked = entries.Where(e => e.ReplayDecisionsOf is not null).ToList();
                 var sources = linked.Select(e => e.ReplayDecisionsOf!.Value).ToList();
                 var taken =
-                    attempt == 1
+                    replayConflicts == 1
                         ? (
                             await context
                                 .WorkQueues.AsNoTracking()
@@ -109,6 +147,42 @@ internal static class RetryReplayLinks
                     );
                     entry.ReplayDecisionsOf = null;
                     cleared++;
+                }
+            }
+            catch (DbUpdateException ex)
+                when (resumeConflicts < 2
+                    && IsQueuedResumeConflict(ex)
+                    && entries.Any(e => e.ResumeFrom is not null)
+                )
+            {
+                resumeConflicts++;
+                var linked = entries.Where(e => e.ResumeFrom is not null).ToList();
+                var sources = linked.Select(e => e.ResumeFrom!.Value).ToList();
+                var taken =
+                    resumeConflicts == 1
+                        ? (
+                            await context
+                                .WorkQueues.AsNoTracking()
+                                .Where(q =>
+                                    q.ResumeFrom != null
+                                    && sources.Contains(q.ResumeFrom.Value)
+                                    && q.Status == WorkQueueStatus.Queued
+                                )
+                                .Select(q => q.ResumeFrom!.Value)
+                                .ToListAsync(ct)
+                        ).ToHashSet()
+                        : sources.ToHashSet();
+
+                foreach (var entry in linked.Where(e => taken.Contains(e.ResumeFrom!.Value)))
+                {
+                    logger.LogInformation(
+                        "A queued entry already resumes run {ResumeFrom}, so the entry queued for "
+                            + "manifest {ManifestId} reruns from the top",
+                        entry.ResumeFrom,
+                        entry.ManifestId
+                    );
+                    entry.ResumeFrom = null;
+                    entry.ResumeAt = null;
                 }
             }
         }

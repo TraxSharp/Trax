@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.PersistedOperations.Trains.Greeting.Greet.GreetTrain",
+  "input": "GreetInput",
+  "output": "GreetOutput",
+  "nodes": [
+    {
+      "id": "ComposeGreetingJunction#0",
+      "kind": "Chain",
+      "junction": "ComposeGreetingJunction",
+      "in": "GreetInput",
+      "out": "GreetOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "GreetOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

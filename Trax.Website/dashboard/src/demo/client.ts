@@ -1,6 +1,7 @@
 import { Client, cacheExchange, makeErrorResult, makeResult, type Exchange, type Operation } from "@urql/core";
 import { filter, map, pipe } from "wonka";
 import { activityExchange } from "../lib/activity-exchange";
+import { limitAnswers } from "../lib/answerable";
 import type { MockStore } from "../mock/store/mock-store";
 import { statefulExchange } from "../mock/store/stateful-exchange";
 import { defaultOverlays, type MutationOverlay, type StatefulOverlay } from "../mock/store/overlays";
@@ -60,14 +61,15 @@ export function recordedWordingOverlays(recordings: Recordings, overlays = defau
     if (!overlay.mutations) return overlay;
     const mutations: Record<string, MutationOverlay> = {};
     for (const [op, write] of Object.entries(overlay.mutations)) {
-      mutations[op] = (variables, store) => {
+      mutations[op] = (variables, store, context) => {
         const { exact, all } = recordedMutations(recordings, op, variables);
         const current = exact?.current ? exact : undefined;
         if (current?.data && refused(current.data)) return current.data as Rec;
-        const ack = write(variables, store);
         const like = (m: RecordedMutation) => m.data && !refused(m.data);
         const source = current && like(current) ? current : all.find(like);
-        return source ? (withMessages(ack, source.data, source === current) as Rec) : ack;
+        const worded = (ack: Rec) => (source ? (withMessages(ack, source.data, source === current) as Rec) : ack);
+        const ack = write(variables, store, context);
+        return ack instanceof Promise ? ack.then(worded) : worded(ack);
       };
     }
     return { ...overlay, mutations };
@@ -112,7 +114,7 @@ export interface DemoClientOptions {
 
 /** A urql client that answers from the recordings, with the mock's overlays for writes. */
 export function createDemoClient({ recordings, store, onServe, overlays = [] }: DemoClientOptions): Client {
-  return new Client({
+  const client = new Client({
     url: "/demo", // never fetched: recordingExchange ends every operation
     requestPolicy: "cache-and-network",
     exchanges: [
@@ -122,4 +124,7 @@ export function createDemoClient({ recordings, store, onServe, overlays = [] }: 
       recordingExchange(recordings, onServe),
     ],
   });
+  // A page does not offer what no recording answers (see lib/answerable.ts).
+  limitAnswers(client, Object.keys(recordings.queries));
+  return client;
 }

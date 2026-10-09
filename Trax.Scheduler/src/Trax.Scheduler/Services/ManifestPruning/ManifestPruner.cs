@@ -136,6 +136,32 @@ internal static class ManifestPruner
                 )
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.RetryMetadataId, (long?)null), ct);
 
+            // A run that resumes one of these runs, or an entry queued to, belongs to no manifest
+            // when an operator asked for it, so it is kept and its link cleared: nothing may name
+            // a run that is gone, and a queued one now runs from the top (Trax.Docs/adr/0047).
+            // The manifest's own resumed runs and entries go with it.
+            await context
+                .WorkQueues.Where(w => w.ResumeFrom.HasValue && runIds.Contains(w.ResumeFrom.Value))
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(w => w.ResumeFrom, (long?)null)
+                            .SetProperty(w => w.ResumeAt, (string?)null),
+                    ct
+                );
+
+            await context
+                .Metadatas.Where(m =>
+                    m.ResumeFrom.HasValue
+                    && runIds.Contains(m.ResumeFrom.Value)
+                    && !(m.ManifestId.HasValue && batch.Contains(m.ManifestId.Value))
+                )
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(m => m.ResumeFrom, (long?)null)
+                            .SetProperty(m => m.ResumeAt, (string?)null),
+                    ct
+                );
+
             await context
                 .Metadatas.Where(m =>
                     m.ManifestId.HasValue

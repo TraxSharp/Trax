@@ -48,6 +48,16 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     public abstract Task<TOut> Run(TIn input);
 
     /// <summary>
+    /// The token a junction of <paramref name="train"/> honours: the train's, or inside a
+    /// <c>Parallel</c> branch, the branch's, which is cancelled when the run is and when a sibling
+    /// fails. Internal: Trax's own junction bases read it, and a consumer's junction reads
+    /// <see cref="CancellationToken"/>, which is set from it.
+    /// </summary>
+    internal static CancellationToken TokenFor<TTrainIn, TTrainOut>(
+        Train<TTrainIn, TTrainOut> train
+    ) => Monad.RunningBranch.TokenFor(train) ?? train.CancellationToken;
+
+    /// <summary>
     /// Railway-oriented implementation that handles the Either monad pattern.
     /// This method:
     /// 1. Short-circuits if the previous junction failed (input is Left)
@@ -68,8 +78,9 @@ public abstract class Junction<TIn, TOut> : IJunction<TIn, TOut>
     {
         PreviousResult = previousOutput;
 
-        // Propagate the token from the train to this junction
-        CancellationToken = train.CancellationToken;
+        // Propagate the token from the train to this junction; inside a Parallel branch, the
+        // branch's own, so a sibling's failure can stop it.
+        CancellationToken = TokenFor(train);
 
         // If the previous junction failed, short-circuit and return its exception
         if (previousOutput.IsLeft)

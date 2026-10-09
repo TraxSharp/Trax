@@ -56,6 +56,18 @@ internal static class DispatchFailure
         return exception;
     }
 
+    /// <summary>
+    /// <see cref="Published"/> for <paramref name="run"/>, also written onto the copy of the row
+    /// the lifecycle hooks are given, so what they show a subscriber is the masked reason. The
+    /// stored row keeps the full detail.
+    /// </summary>
+    internal static Exception PublishedAndShown(Trax.Effect.Models.Metadata.Metadata run)
+    {
+        var published = Published(run);
+        run.AddException(published);
+        return published;
+    }
+
     /// <summary>The wait before the first retry of a failed dispatch.</summary>
     internal static readonly TimeSpan FirstBackoff = TimeSpan.FromSeconds(5);
 

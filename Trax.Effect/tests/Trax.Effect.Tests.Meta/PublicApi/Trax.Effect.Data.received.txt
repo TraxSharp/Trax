@@ -72,6 +72,13 @@ namespace Trax.Effect.Data.Junctions.CommitTransaction
         public override System.Threading.Tasks.Task<Trax.Core.Functional.Unit> Run(Trax.Core.Functional.Unit input) { }
     }
 }
+namespace Trax.Effect.Data.Models.Checkpoint
+{
+    public class PersistentCheckpoint : Trax.Effect.Models.Checkpoint.Checkpoint
+    {
+        public PersistentCheckpoint() { }
+    }
+}
 namespace Trax.Effect.Data.Models
 {
     public interface IEntityReference { }
@@ -98,6 +105,7 @@ namespace Trax.Effect.Data.Services.DataContext
         public DataContext(Microsoft.EntityFrameworkCore.DbContextOptions<TDbContext> options) { }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; set; }
         public int Changes { get; set; }
+        public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; set; }
         public Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; set; }
@@ -129,6 +137,7 @@ namespace Trax.Effect.Data.Services.DataContext
     {
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.BackgroundJob.BackgroundJob> BackgroundJobs { get; }
         int Changes { get; set; }
+        Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.Checkpoint.Checkpoint> Checkpoints { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.DeadLetter.DeadLetter> DeadLetters { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.EffectClaim.EffectClaim> EffectClaims { get; }
         Microsoft.EntityFrameworkCore.DbSet<Trax.Effect.Models.JunctionRun.JunctionRun> JunctionRuns { get; }
@@ -247,6 +256,17 @@ namespace Trax.Effect.Data.Services.IDataContextFactory
     public interface IDataContextProviderFactory : Trax.Effect.Services.EffectProviderFactory.IEffectProviderFactory
     {
         System.Threading.Tasks.Task<Trax.Effect.Data.Services.DataContext.IDataContext> CreateDbContextAsync(System.Threading.CancellationToken cancellationToken);
+    }
+}
+namespace Trax.Effect.Data.Services.QueuedWorkListener
+{
+    public interface IQueuedWorkListener
+    {
+        System.Threading.Tasks.Task<Trax.Effect.Data.Services.QueuedWorkListener.IQueuedWorkSubscription> SubscribeAsync(System.Threading.CancellationToken cancellationToken);
+    }
+    public interface IQueuedWorkSubscription : System.IAsyncDisposable
+    {
+        System.Threading.Tasks.Task WaitAsync(System.Threading.CancellationToken cancellationToken);
     }
 }
 namespace Trax.Effect.Data.Services.SqlDialect

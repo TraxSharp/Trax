@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -77,6 +78,9 @@ public class JobDispatcherTrainTests : TestSetup
         await act.Should().NotThrowAsync();
     }
 
+    [LeavesStuckRuns(
+        "Marks a queue entry dispatched by hand, with no run behind it, for the dispatcher to skip."
+    )]
     [Test]
     public async Task Run_OnlyPicksQueuedEntries_IgnoresDispatchedAndCancelled()
     {

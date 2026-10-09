@@ -35,6 +35,7 @@ public class SchedulerLivenessIntegrationTests : TestSetup
             Scope.ServiceProvider,
             config,
             monitor,
+            new DispatcherWake(),
             logger
         );
 

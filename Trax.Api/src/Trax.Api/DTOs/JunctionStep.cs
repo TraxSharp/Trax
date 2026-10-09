@@ -60,6 +60,30 @@ public sealed record JunctionStep(
     int? TrackPosition = null
 )
 {
+    /// <summary>
+    /// The id of the declared node this step ran for, as the train's graph names it
+    /// (<c>operations.declaredChain</c>), such as <c>Switch&lt;Source&gt;#0/Papers/FetchPapers#0</c>.
+    /// A question carries the id of the <c>Decide</c> step that asked it, a route its routing
+    /// step's. Null for a step recorded
+    /// before node ids were, and for a step on a track whose answer is withheld, from this caller
+    /// or from everyone.
+    /// </summary>
+    /// <remarks>
+    /// An id names the track a step sits on, so it is withheld wherever the step's name is.
+    /// </remarks>
+    public string? NodeId { get; init; }
+
+    /// <summary>
+    /// The path of the <c>Parallel</c> branch the step ran in, such as
+    /// <c>Parallel#0/cocitation</c>, or null for a step outside any branch. Withheld wherever the
+    /// step's name is, as <see cref="NodeId"/> is: a branch inside a track names the track.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="NodeId"/> already starts with the branch path, so a step is placed on its node
+    /// without it; it is here so a reader of the timeline can group a run's steps by branch.
+    /// </remarks>
+    public string? BranchPath { get; init; }
+
     /// <summary>What a withheld name reads as.</summary>
     internal const string WithheldName = JunctionEventPayload.WithheldName;
 
@@ -69,6 +93,8 @@ public sealed record JunctionStep(
         {
             Name = WithheldName,
             NameWithheld = true,
+            NodeId = null,
+            BranchPath = null,
         };
 
     /// <summary>
@@ -116,7 +142,12 @@ public sealed record JunctionStep(
             payload.Attempt,
             payload.NameWithheld,
             payload.TrackPosition
-        );
+        )
+        {
+            // A withheld name keeps its node id withheld too: the id names the track.
+            NodeId = payload.NameWithheld ? null : payload.NodeId,
+            BranchPath = payload.NameWithheld ? null : payload.BranchPath,
+        };
 
     /// <summary>The step a recorded <c>trax.junction_run</c> row holds.</summary>
     /// <param name="row">The row.</param>
@@ -140,5 +171,10 @@ public sealed record JunctionStep(
             row.Attempt,
             row.NameWithheld,
             row.TrackPosition
-        );
+        )
+        {
+            // A withheld name keeps its node id withheld too: the id names the track.
+            NodeId = row.NameWithheld ? null : row.NodeId,
+            BranchPath = row.NameWithheld ? null : row.BranchPath,
+        };
 }

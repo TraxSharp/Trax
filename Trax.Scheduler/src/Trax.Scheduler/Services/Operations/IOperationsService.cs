@@ -161,7 +161,9 @@ public interface IOperationsService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// <c>OperationResult(true, Id: newEntryId, Count: 1, ...)</c> on success. A failed result,
-    /// with a message, when no run has the id (<c>"Execution {id} not found."</c>), its train is
+    /// with a message, when no run has the id (<c>"Execution {id} not found."</c>), a state
+    /// machine's invoking state queued the run (<c>OperationsService.InvokedRunRequeueRefusal</c>:
+    /// the machine retries it by entering the state again), its train is
     /// no longer registered (<c>"Train {name} is no longer registered, ..."</c>), its saved input
     /// cannot be re-queued or no longer reads as the train's input type (<c>"The saved input of
     /// run {id} no longer reads as {type}: ..."</c>), or the enqueue is refused as
@@ -210,9 +212,54 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(RequeueExecutionAsync));
 
     /// <summary>
+    /// Queues a run that resumes a failed or cancelled run from a checkpoint, instead of running
+    /// every step again: at the step <paramref name="from"/> names, or after the run's latest
+    /// checkpoint when it is null. The operator's resume, the dashboard's "Resume from here" and
+    /// GraphQL's <c>resumeExecution</c>; see
+    /// Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It is a requeue in every check but where the run starts. It enqueues through the mediator
+    /// as <see cref="RequeueExecutionAsync(long, CancellationToken)"/> does, so the train's
+    /// <c>[TraxAuthorize]</c> applies, with the run's saved input, and the new run replays the
+    /// decisions of the run it resumes as a requeue would. Whether the run can resume at
+    /// <paramref name="from"/> is decided from its checkpoints and the train's declared chain
+    /// before anything is queued, and the run checks again when it starts.
+    /// </para>
+    /// <para>
+    /// One queued resume per run: an operator's resume racing a manifest's retry of the same run
+    /// queues exactly one of them, and this one is refused when it loses.
+    /// </para>
+    /// </remarks>
+    /// <param name="metadataId">The id of the run (metadata row) to resume.</param>
+    /// <param name="from">The node id of the step to resume at, or null for after the latest checkpoint.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <c>OperationResult(true, Id: newEntryId, Count: 1, ...)</c> on success. A failed result, with
+    /// a message, when no run has the id, the run is not Failed or Cancelled, a state machine's
+    /// invoking state queued it, its saved input cannot be re-queued, a resume of it is already
+    /// queued, its train is no longer registered or its chain cannot be read here, the resume
+    /// check refuses (its reason, as given), or the enqueue is refused as
+    /// <see cref="QueueTrainAsync"/> describes.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">
+    /// The caller may not queue the train. It propagates, as from <see cref="QueueTrainAsync"/>.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The implementation predates this method.</exception>
+    Task<OperationResult> ResumeExecutionAsync(
+        long metadataId,
+        string? from,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(ResumeExecutionAsync));
+
+    /// <summary>
     /// Transitions a queued work queue entry to <c>Cancelled</c>. Only entries currently
     /// in the <c>Queued</c> state are eligible. Entries that are already dispatched or
-    /// already cancelled return a failure result without modifying the row.
+    /// already cancelled return a failure result without modifying the row, and so does an entry
+    /// a step of a user's state-machine draft queued, with
+    /// <c>OperationsService.UserOwnedRunCancelRefusal</c>: a user's draft is read-only to
+    /// operators (central ADR 0046).
     /// </summary>
     Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct);
 
@@ -223,12 +270,17 @@ public interface IOperationsService
     /// running when the job runner picks it up), and each is also cancelled at once through the
     /// <c>ICancellationRegistry</c> when it runs on this host. Terminal and unknown ids are
     /// skipped. <c>ITraxScheduler.CancelAsync</c> and <c>CancelGroupAsync</c> apply the same
-    /// rule to a manifest's or a group's runs.
+    /// rule to a manifest's or a group's runs. A run a step of a user's state-machine draft
+    /// started is skipped too, because a user's draft is read-only to operators and only its
+    /// user cancels it, by leaving the state (central ADR 0046): the message counts those and
+    /// gives <c>OperationsService.UserOwnedRunCancelRefusal</c>.
     /// </summary>
     /// <returns>
     /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number of runs flagged,
     /// zero included. <c>OperationResult(false, ...)</c> for an empty list or more than
-    /// <c>OperationsService.MaxBatchSize</c> ids, with nothing flagged.
+    /// <c>OperationsService.MaxBatchSize</c> ids, with nothing flagged, and for a single id that
+    /// names a run a user's draft started, whatever its state, with
+    /// <c>OperationsService.UserOwnedRunCancelRefusal</c>.
     /// </returns>
     Task<OperationResult> CancelExecutionsAsync(
         IReadOnlyCollection<long> ids,
@@ -237,12 +289,15 @@ public interface IOperationsService
 
     /// <summary>
     /// Cancels the given work queue entries that are still <c>Queued</c>, in one statement, so an
-    /// entry dispatched meanwhile is left alone. Other ids are skipped. Signals
+    /// entry dispatched meanwhile is left alone. Other ids are skipped, and so is an entry a step
+    /// of a user's state-machine draft queued, which the message counts and explains with
+    /// <c>OperationsService.UserOwnedRunCancelRefusal</c> (central ADR 0046). Signals
     /// <c>ChangeDomain.WorkQueue</c> when any entry changed.
     /// </summary>
     /// <returns>
     /// <c>OperationResult(true, Count: N, ...)</c> where <c>N</c> is the number cancelled, zero
-    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids.
+    /// included; <c>OperationResult(false, ...)</c> for an empty list or too many ids, and for a
+    /// single id that names an entry a user's draft queued, whatever its status.
     /// </returns>
     Task<OperationResult> CancelWorkQueueEntriesAsync(
         IReadOnlyCollection<long> ids,
@@ -514,6 +569,105 @@ public interface IOperationsService
     /// <param name="ct">Cancellation token.</param>
     Task<WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, CancellationToken ct) =>
         throw NotImplementedBy(nameof(GetWorkQueueEntryDetailAsync));
+
+    /// <summary>
+    /// A page of state-machine instances, system-owned and user-owned alike, filtered by machine,
+    /// state and owner kind (each optional), newest first by when each was last written. Each
+    /// carries its state, timestamps, owner kind and whether it waits on an invoked run; never
+    /// its context or its owner's key (see <see cref="MachineInstanceRecord"/>). The page size is
+    /// clamped to 1 through <c>OperationsService.MaxPageSize</c>, and a skip above
+    /// <c>OperationsService.MachineInstanceCountCap</c> is refused with an
+    /// <see cref="ArgumentOutOfRangeException"/>. The dashboard's State machines page and the
+    /// API's <c>operations.machineInstances</c> both read it here.
+    /// </summary>
+    /// <param name="query">The filter and the page.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<MachineInstancePage> GetMachineInstancesAsync(
+        MachineInstanceQuery query,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstancesAsync));
+
+    /// <summary>
+    /// How many instances match the query's filter, counted up to
+    /// <c>OperationsService.MachineInstanceCountCap</c>; its paging fields are ignored.
+    /// </summary>
+    /// <param name="query">The filter.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<MachineInstanceTotal> CountMachineInstancesAsync(
+        MachineInstanceQuery query,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CountMachineInstancesAsync));
+
+    /// <summary>
+    /// One state-machine instance as an operator reads it, or <c>null</c> when no row matches
+    /// <paramref name="key"/>. The owner kind is part of every lookup, so a system instance and a
+    /// user's draft under the same id are never confused; a user's draft is named by its row id
+    /// as well, because several users can hold one id.
+    /// </summary>
+    /// <param name="key">The machine, owner kind, id and, for a user's draft, row id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="key"/> names a user's draft without a row id, or names no machine.
+    /// </exception>
+    Task<MachineInstanceRecord?> GetMachineInstanceAsync(
+        MachineInstanceKey key,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceAsync));
+
+    /// <summary>
+    /// How many instances each machine has in each state, for each owner kind, ordered by
+    /// machine, state and owner kind. Exact, never capped, and kept for
+    /// <c>OperationsService.MachineInstanceCountCacheDuration</c> per host and machine filter, so
+    /// a count can be that many seconds old.
+    /// </summary>
+    /// <param name="machine">Only this machine's counts; null counts every machine.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(
+        string? machine,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceStateCountsAsync));
+
+    /// <summary>
+    /// The train runs one state-machine instance invoked, newest first and capped at
+    /// <c>OperationsService.MachineInstanceRunCap</c>, with the run its state waits on marked
+    /// live; or <c>null</c> when no row matches <paramref name="key"/>. Each run carries the
+    /// fields the run listings show, never its input or output. A system instance lists every run
+    /// it invoked; a user's draft lists only its live run, because a run does not record which
+    /// user's draft queued it (see <see cref="MachineInstanceRuns"/>). The dashboard's instance
+    /// page and the API's <c>machineInstance { invokedRuns }</c> both read it here.
+    /// </summary>
+    /// <param name="key">The instance, named as for <see cref="GetMachineInstanceAsync"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="key"/> names a user's draft without a row id, or names no machine.
+    /// </exception>
+    Task<MachineInstanceRuns?> GetMachineInstanceRunsAsync(
+        MachineInstanceKey key,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(GetMachineInstanceRunsAsync));
+
+    /// <summary>
+    /// An operator's cancel of a system-owned state-machine instance: cancels the train run its
+    /// state waits on, and the instance then moves through that state's <c>OnCancelled</c> edge.
+    /// A run still only queued is marked Cancelled and never starts, and the outcome is applied
+    /// in this call when this host registers the machine; a run already dispatched has its
+    /// cancel requested, stops at its next junction, and the instance moves when it ends. The
+    /// outcome is applied through the one conditional update every delivery makes, so it is
+    /// applied once whoever delivers it first. The dashboard's Cancel button and the API's
+    /// <c>cancelMachineInstance</c> both call it, and show its message.
+    /// </summary>
+    /// <remarks>
+    /// Refused, changing nothing: a user-owned instance (operators see users' drafts read-only),
+    /// an instance that does not exist, one whose state waits on no run, and one whose run has
+    /// already ended.
+    /// </remarks>
+    /// <param name="key">The instance. Only a system-owned instance can be cancelled.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="ArgumentException"><paramref name="key"/> names no machine.</exception>
+    Task<MachineInstanceCancelResult> CancelMachineInstanceAsync(
+        MachineInstanceKey key,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(CancelMachineInstanceAsync));
 
     private NotSupportedException NotImplementedBy(string member) =>
         new(

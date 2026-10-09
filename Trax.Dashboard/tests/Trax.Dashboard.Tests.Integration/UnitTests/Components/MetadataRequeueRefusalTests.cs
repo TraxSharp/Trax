@@ -18,6 +18,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Mediator.Configuration;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Mediator.Services.TrustedExecution;
@@ -58,6 +59,7 @@ public class MetadataRequeueRefusalTests
         services.AddSingleton<IDashboardSettingsService, DashboardSettingsService>();
         services.AddSingleton<ITrainDiscoveryService>(discovery);
         services.AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>();
+        services.AddSingleton<ITrainChainGraphs>(new FixedChainGraphs());
         // Stands in for the host's database provider, so the requeue is not refused as having
         // nothing to dispatch it (Trax.Scheduler ADR 0019).
         services.AddSingleton<ISqlDialect, StandInSqlDialect>();

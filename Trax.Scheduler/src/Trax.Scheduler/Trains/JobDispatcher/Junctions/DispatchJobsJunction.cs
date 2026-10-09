@@ -11,11 +11,11 @@ using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.EffectJunction;
-using Trax.Effect.Services.LifecycleHookRunner;
 using Trax.Effect.Utils;
 using Trax.Mediator.Services.TrainRegistry;
 using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RunOutcomes;
 using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Utilities;
 
@@ -147,6 +147,20 @@ internal class DispatchJobsJunction(
     }
 
     /// <summary>
+    /// The state-machine instance whose invoking state queued the entry, carried to the run so the
+    /// run stays linked to it after the instance has left the state; null for every other entry.
+    /// </summary>
+    private static Trax.Effect.Models.WorkQueue.DTOs.InvokedBy? InvokedBy(WorkQueue claimed) =>
+        claimed
+            is {
+                InvokingMachine: { } machine,
+                InvokingInstanceId: { } instance,
+                InvokingOwnerKind: { } owner,
+            }
+            ? new(machine, instance, owner)
+            : null;
+
+    /// <summary>
     /// Atomically claims a work queue entry using FOR UPDATE SKIP LOCKED,
     /// creates its Metadata record, and enqueues to the job submitter.
     /// </summary>
@@ -246,6 +260,9 @@ internal class DispatchJobsJunction(
                 Input = null,
                 ManifestId = claimed.ManifestId,
                 ReplayDecisionsOf = claimed.ReplayDecisionsOf,
+                ResumeFrom = claimed.ResumeFrom,
+                ResumeAt = claimed.ResumeAt,
+                InvokedBy = InvokedBy(claimed),
             }
         );
 
@@ -481,6 +498,9 @@ internal class DispatchJobsJunction(
                 Input = null,
                 ManifestId = claimed.ManifestId,
                 ReplayDecisionsOf = claimed.ReplayDecisionsOf,
+                ResumeFrom = claimed.ResumeFrom,
+                ResumeAt = claimed.ResumeAt,
+                InvokedBy = InvokedBy(claimed),
             }
         );
         metadata.TrainState = TrainState.Failed;
@@ -501,7 +521,7 @@ internal class DispatchJobsJunction(
         await dataContext.SaveChanges(CancellationToken);
         await LinkDeadLetterRetryAsync(dataContext, claimed, metadata.Id);
         await dataContext.CommitTransaction();
-        await PublishFailedAsync(metadata.Id, CancellationToken);
+        await PublishFailedAsync(metadata.Id);
 
         logger.LogError(
             exception,
@@ -696,7 +716,7 @@ internal class DispatchJobsJunction(
         // is. A requeued attempt is not: its entry runs again under the same external id. Nor is
         // a row no longer Pending, which a runner owns and reports itself.
         if (failedForGood)
-            await PublishFailedAsync(metadataId, token);
+            await PublishFailedAsync(metadataId);
     }
 
     /// <summary>
@@ -710,7 +730,8 @@ internal class DispatchJobsJunction(
     /// Called once, after the Failed row is committed. The hooks swallow their own failures; a
     /// failure to read the row is logged, since the outcome is already recorded either way.
     /// <para>
-    /// The hooks are given the run with <see cref="DispatchFailure.Published"/> as its failure, not
+    /// The hooks are given the run with <see cref="DispatchFailure.Published"/> as its failure (see
+    /// <see cref="DispatchFailure.PublishedAndShown"/>), not
     /// what the row records. A dispatch failure's detail is the dispatcher's and the runner's (a
     /// remote worker's response body, an input type's assembly-qualified name, a serializer's
     /// message), and a lifecycle event reaches subscribers who are not operators. The row keeps the
@@ -722,41 +743,14 @@ internal class DispatchJobsJunction(
     /// token, is abandoned and logged rather than holding up every entry behind it.
     /// </para>
     /// </remarks>
-    private async Task PublishFailedAsync(long metadataId, CancellationToken ct)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-            var metadata = await dataContext
-                .Metadatas.AsNoTracking()
-                .FirstOrDefaultAsync(m => m.Id == metadataId, ct);
-            if (metadata is null)
-                return;
-
-            // Transient, and disposed with the scope.
-            var hooks = scope.ServiceProvider.GetService<ILifecycleHookRunner>();
-            if (hooks is null)
-                return;
-
-            var published = DispatchFailure.Published(metadata);
-            metadata.AddException(published);
-
-            using var bounded = new CancellationTokenSource(FailurePublishTimeout);
-            await hooks
-                .OnFailed(metadata, published, bounded.Token)
-                .WaitAsync(FailurePublishTimeout, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Could not publish the failure of Metadata {MetadataId}, which failed at dispatch; "
-                    + "the failure is recorded on its row",
-                metadataId
-            );
-        }
-    }
+    private Task PublishFailedAsync(long metadataId) =>
+        OutOfTrainOutcomes.PublishFailedAsync(
+            serviceProvider,
+            [metadataId],
+            logger,
+            DispatchFailure.PublishedAndShown,
+            FailurePublishTimeout
+        );
 
     /// <summary>
     /// The failure fields <see cref="Trax.Effect.Models.Metadata.Metadata.AddException"/> would

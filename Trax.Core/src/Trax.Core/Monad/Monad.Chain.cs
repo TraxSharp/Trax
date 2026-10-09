@@ -28,6 +28,33 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, Exception);
 
+        if (ClaimJunction(junction) is { } shared)
+        {
+            Exception = shared;
+            return (this, shared);
+        }
+
+        var node = Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction)));
+        ChainGraph.Enter(node, BranchPath);
+
+        if (BranchPath is not null)
+        {
+            // Where a test's branch runner holds a branch, or fails it, between junctions.
+            try
+            {
+                await Train.BranchRunner.BeforeJunction(BranchPath, node).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                Exception ??= e;
+                return (this, e);
+            }
+        }
+
         var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 
         if (result.IsLeft)
@@ -57,6 +84,9 @@ public partial class Monad<TInput, TReturn>
         where TJunction : IJunction<TIn, TOut>
     {
         if (Exception is not null)
+            return this;
+
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
             return this;
 
         var input = this.ExtractTypeFromMemory<TIn, TInput, TReturn>(missing =>
@@ -117,6 +147,10 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return Task.FromResult(this);
 
+        // A resumed run skips the step before resolving anything for it.
+        if (SkipStep(ChainNodeScope.JunctionKey(junctionType)))
+            return Task.FromResult(this);
+
         var junctionService = this.ExtractTypeFromMemory<TJunction, TInput, TReturn>(missing =>
             $"IChain<{missing.ReadableName()}> (train '{Train.GetType().ReadableName()}') needs "
             + $"a junction implementing '{missing.ReadableName()}'"
@@ -143,6 +177,10 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return Task.FromResult(this);
 
+        // A resumed run skips the step before building its junction.
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
+            return Task.FromResult(this);
+
         var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
         if (junctionInstance is null)
@@ -157,7 +195,7 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> Chain<TJunction>(TJunction junctionInstance)
         where TJunction : class =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.Chain)
+            ? RecordInstance(junctionInstance, RecordStep<TJunction>(ChainStepKind.Chain))
             : new(ChainAsync(junctionInstance));
 
     private Task<Monad<TInput, TReturn>> ChainAsync<TJunction>(TJunction junctionInstance)
@@ -189,7 +227,10 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn, TOut>(TJunction junction)
         where TJunction : IJunction<TIn, TOut> =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(TOut))
+            ? RecordInstance(
+                junction,
+                RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(TOut))
+            )
             : new(ChainJunction<TJunction, TIn, TOut>(junction));
 
     /// <summary>
@@ -207,7 +248,10 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> Chain<TJunction, TIn>(TJunction junction)
         where TJunction : IJunction<TIn, Unit> =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(Unit))
+            ? RecordInstance(
+                junction,
+                RecordStep<TJunction>(ChainStepKind.Chain, typeof(TIn), typeof(Unit))
+            )
             : new(ChainJunction<TJunction, TIn, Unit>(junction));
 
     /// <summary>
@@ -220,6 +264,21 @@ public partial class Monad<TInput, TReturn>
             : new(ChainJunction<TJunction, TIn, Unit>(new TJunction()));
 
     #endregion
+
+    /// <summary>
+    /// Notes the junction instance a step was handed, so two branches of a <c>Parallel</c>
+    /// handed the same one can be refused: a junction instance holds the state of its run.
+    /// </summary>
+    private MonadTask<TInput, TReturn> RecordInstance(
+        object? instance,
+        MonadTask<TInput, TReturn> recorded
+    )
+    {
+        if (instance is not null)
+            Recorder!.NoteInstance(instance);
+
+        return recorded;
+    }
 
     /// <summary>
     /// Writes one step to the recorder and hands back a completed monad, so a route reads as a
@@ -239,6 +298,17 @@ public partial class Monad<TInput, TReturn>
     private MonadTask<TInput, TReturn> RecordStep<TJunction>(ChainStepKind kind, bool built)
     {
         var junction = typeof(TJunction);
+
+        // A short circuit sets the run's result while the chain runs on, so two branches doing it
+        // would race for the result.
+        if (kind == ChainStepKind.ShortCircuit && Recorder!.InBranch)
+            Recorder.RefuseStep(
+                kind,
+                junction,
+                $"ShortCircuit<{junction.ReadableName()}> is inside a Parallel branch, where it "
+                    + "would race its siblings for the run's result. Short-circuit before the "
+                    + "Parallel or after it."
+            );
         Type tIn,
             tOut;
 

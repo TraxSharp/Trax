@@ -5,6 +5,8 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 /// <summary>
 /// When replaying is not what the operator wants, the retry asks the model again: on purpose with
 /// <c>askAfresh</c>, or by itself when the data the decision was about changed during the backoff.
+/// These run the refund, which declares no checkpoint: the research run's retry resumes after both
+/// of its questions, so it has nothing left to ask afresh (see <c>ResearchResumeTests</c>).
 /// </summary>
 [TestFixture]
 public class AskAfreshTests : RecoveryTestFixture
@@ -12,7 +14,7 @@ public class AskAfreshTests : RecoveryTestFixture
     [Test]
     public async Task TriggerWithAskAfresh_DuringTheBackoff_RetryAsksTheModelAgain()
     {
-        await Run.StartAsync("RESEARCH", crashOnce: true);
+        await Run.StartAsync("REFUND", crashOnce: true, orderId: "A-1001");
 
         var first = await Run.FollowAttemptAsync(1);
         (await Run.WaitForEndAsync(first)).Should().Be("FAILED");
@@ -33,12 +35,16 @@ public class AskAfreshTests : RecoveryTestFixture
         var second = await Run.FollowAttemptAsync(2);
         (await Run.WaitForEndAsync(second)).Should().Be("COMPLETED");
 
-        Decider.Asked(Run.RunId, "Source").Should().Be(2);
-        Decider.Asked(Run.RunId, "Depth").Should().Be(2);
+        Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(2);
 
         var attempt2 = await Run.TimelineAsync(second);
-        Questions(attempt2).Should().HaveCount(2);
-        Questions(attempt2).Should().OnlyContain(q => !q.GetProperty("replayed").GetBoolean());
+        Questions(attempt2)
+            .Should()
+            .ContainSingle()
+            .Which.GetProperty("replayed")
+            .GetBoolean()
+            .Should()
+            .BeFalse();
 
         var journal = await Run.JournalAsync(second);
         journal

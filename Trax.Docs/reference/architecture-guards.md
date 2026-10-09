@@ -17,7 +17,7 @@ Each package lives in the folder of the Trax repository that owns the concern it
 | Package | Owns | Guards |
 |---|---|---|
 | `Trax.Core.Testing` | Infrastructure + hygiene | `RepoRoot` / `SourceFiles` / `SourceText`, `ArchitectureGuardOptions`, `GuardResult`; `HygieneGuards` (no `[Ignore]` in any form, including a qualified or suffixed name, an attribute list split across lines, and `Ignore =` or `IgnoreReason =` on a `TestCase`; no legacy asserts, including `ClassicAssert`, `CollectionAssert` and `StringAssert`; no fixed delays); `RepoConventionGuards` (`Directory.Build.props` version; Trax packages consumed from another repository pinned centrally in `Directory.Packages.props` with no inline `Version` or `VersionOverride`, for a codebase split across repositories); `VocabularyGuards` (a listed third-party attribute, found wherever it sits in an attribute list, with or without its `Attribute` suffix, including in files that see its library only through a global or project-level using) |
-| `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext`, `NoPendingModelChanges`, `OwnerScopeCompleteness`, `OwnerScopeFilterBypasses` |
+| `Trax.Effect.Data.Testing` | Data layer | `DomainContextsDeriveBase`, `CompanionInterfaces`, `OneSchemaPerContext`, `NoPendingModelChanges`, `OwnerScopeCompleteness`, `OwnerScopeFilterBypasses`; `TraxInvariants` (a database left consistent after a test) |
 | `Trax.Api.GraphQL.Testing` | GraphQL | `EdgeManifestIsValid`, `EdgeResolversUseLoader` |
 | `Trax.Mediator.Testing` | Trains | `EveryTrainHasInterface` |
 
@@ -140,6 +140,40 @@ The scan reads text, not compiled code. It does not follow a query built in one 
 The census proves a principal-reading filter exists, not that it compares the right column, and not what a bypass branch inside it allows: a filter reading `principal.IsAdmin || e.OwnerId == principal.Id` under an admin gate shows admins every owner's rows. Entities mapped with `ToSqlQuery` or to a function over per-user tables, and a per-user entity reached through a navigation from a type that is exposed, are outside both checks too.
 
 What catches those is a **cross-user behavioural test**: sign in as one user, create a row, sign in as a second user, and assert that every surface the row can be read through (each GraphQL query and model, each train that returns it) gives the second user nothing. Write one per per-user entity against the running API, not the model; it is the only check that exercises the filter as it actually runs.
+
+## Database invariants after a test
+
+`TraxInvariants` (`Trax.Effect.Data.Testing`) checks a Trax Postgres or SQLite database once every host a test started has stopped. The first three checks fail on states that are normal while a host runs; after it stops, each is work that was started and lost. The rest hold whenever no write is half done, because one statement or transaction keeps each of them:
+
+| Check | Fails on |
+|---|---|
+| `run-in-progress` | a `trax.metadata` row still `in_progress` |
+| `effect-claim-in-flight` | a `trax.effect_claim` row with no receipt: a state-machine effect claimed and neither completed nor released |
+| `dispatched-without-run` | a `trax.work_queue` row `dispatched` whose run does not exist |
+| `checkpoint-of-completed-run` | a `trax.checkpoint` row of a run that completed: a run that completes deletes its checkpoints, since nothing may resume it |
+| `resume-from-missing-run` | a `trax.work_queue` or `trax.metadata` row whose `resume_from` names no run: the metadata cleanup keeps a run while something resumes it |
+| `invoke-token-without-run` | a `trax.snapshot_draft` row whose invoke token names no queue entry or run that carries the instance as its invoker |
+| `invoking-state-without-token` | a `trax.snapshot_draft` row in a state that invokes a train with no invoke token, so no outcome can move it on. A row whose `invoke_stranded_state` is its state is exempt: its run ended, not even the failure could be applied, and the instance was left to leave the state through a declared transition |
+| `invoke-token-outside-invoking-state` | a `trax.snapshot_draft` row holding an invoke token in a state that invokes nothing: leaving the invoking state did not clear it |
+
+Each check's name is a constant on `TraxInvariants` (`RunInProgress`, `EffectClaimInFlight`, `DispatchedWithoutRun`, `CheckpointOfCompletedRun`, `ResumeFromMissingRun`, `InvokeTokenWithoutRun`, `InvokingStateWithoutToken`, `InvokeTokenOutsideInvokingState`).
+
+| Member | What it does |
+|---|---|
+| `FindViolationsAsync(connectionString)` | Every violation in a Postgres database, ordered by check, then by id |
+| `FindViolationsAsync(connectionString, invokingStates)` | The same, and checks that each instance of a machine named in `invokingStates` holds a token exactly when it is in one of those states |
+| `FindViolationsAsync(connection, invokingStates)` | The same checks over an open connection, Postgres or SQLite; the caller keeps owning it. On SQLite a violation names its table without the `trax.` schema. Any other connection throws `NotSupportedException` |
+| `AssertConsistentAsync(connectionString)`, `AssertConsistentAsync(connectionString, invokingStates)` | Throws `InvalidOperationException` listing every violation, not only the first |
+| `Describe(violations)` | That failure message: one line per violation, and how to mark a test that leaves the state on purpose |
+| `IsExempt(fixtureType, methodName)` | True when the test method, its fixture or a base class of the fixture carries `[LeavesStuckRuns]` |
+
+A violation is a `TraxInvariantViolation(Invariant, Table, Id, Detail)`; its `ToString()` is `[invariant] table id: detail`.
+
+The database does not record which states invoke a train, so the two token-and-state checks run only for the machines you pass as `InvokingState(Machine, State)` records, one per invoking state, with the names `trax.snapshot_draft` stores. A machine you do not pass is checked only for tokens that name no run.
+
+Call it from teardown, after the hosts are disposed. A test that leaves one of these states on purpose, such as a crash simulation or a cancelled effect whose claim must hold until its lease passes, carries `[LeavesStuckRuns("why")]` (`LeavesStuckRunsAttribute`, on the method or the fixture), and `TraxInvariants.IsExempt(fixtureType, methodName)` tells the teardown to skip it.
+
+A claim names its effect's intent, not a run, so the claim check cannot ask whether the claim's run finished; it reports every claim left without a receipt.
 
 ## The patterns the guards enforce
 

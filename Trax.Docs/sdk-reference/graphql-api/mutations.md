@@ -216,7 +216,7 @@ The response type still uses the unified format, but `metadataId` and `output` w
 
 ## Operations Mutations
 
-The whole namespace sits behind the operations gate (`GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations`; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). Mutations that enqueue a train and input the caller chose (`requeueExecution`, `workQueue.queueTrain`) also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) are governed by the gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
+The whole namespace sits behind the operations gate (`GateOperations`, `RequireAuthorization` or `AllowAnonymousOperations`; see [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql)). Mutations that enqueue a train and input the caller chose (`requeueExecution`, `resumeExecution`, `workQueue.queueTrain`) also apply that train's `[TraxAuthorize]` requirements. Mutations that enqueue what a manifest fixed (`triggerManifest`, `triggerManifestDelayed`, `triggerGroup`, dead-letter requeues) are governed by the gate alone. See [Authorization: The Operations Surface](/docs/authorization#the-operations-surface).
 
 The five mutations that take a manifest's `externalId` (`triggerManifest`, `triggerManifestDelayed`, `disableManifest`, `enableManifest`, `cancelManifest`) answer an id no manifest has with `success: false` and the message `Manifest '<externalId>' not found.`, and change nothing. It is a refusal, not a GraphQL error.
 
@@ -506,6 +506,13 @@ mutation {
 
 **Returns**: `OperationResponse`. `count` is `1` when the execution was flagged. An execution that is missing or already terminal returns `success: false` with `count` `0`.
 
+A run a step of a user's state-machine draft started is refused, whatever its state, with
+`success: false` and the message the dashboard shows too: a user's draft is read-only to operators,
+so only its user cancels the run, by leaving the state through one of the machine's own
+transitions (see [Invoking a train](/docs/statemachine/invoking-trains#operators)). A run a
+system-owned instance started is cancelled as any other, and the instance moves through
+`OnCancelled`.
+
 ---
 
 ### cancelExecutions
@@ -524,7 +531,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `ids` | `[Long!]!` | Yes | 1 to 1000 execution metadata ids |
 
-**Returns**: `OperationResponse`. `count` is the number flagged, zero included. An empty list, or more than 1000 ids, returns `success: false` and flags nothing.
+**Returns**: `OperationResponse`. `count` is the number flagged, zero included. An empty list, or more than 1000 ids, returns `success: false` and flags nothing. A run a step of a user's draft started is skipped, as [`cancelExecution`](#cancelexecution) refuses it, and the message ends with how many were skipped and why.
 
 ---
 
@@ -644,6 +651,121 @@ query {
   operations { workQueue { workQueue(id: 7) { status metadataId } } }
 }
 ```
+
+---
+
+### resumeExecution
+
+Resumes a failed or cancelled execution from a
+[checkpoint](/docs/sdk-reference/train-methods/checkpoint) instead of running every step again: it
+queues a run of the same train, with the input the execution recorded, that skips every step
+before the resume point and starts from the state the checkpoint stored. With `from`, the run
+resumes at that step, named by its node id as [`runGraph`](/docs/sdk-reference/graphql-api/queries#rungraph)
+gives it; without it, after the execution's latest checkpoint. It is the GraphQL counterpart of the
+dashboard's **Resume** and **Resume from here** buttons. All three call
+[`IOperationsService.ResumeExecutionAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#resumeexecutionasync),
+so they refuse the same runs with the same messages.
+
+A resume is a requeue in every check but where the run starts. It enqueues through the same path
+as [`requeueExecution`](#requeueexecution), so a caller past the operations gate who may not run the
+train gets a GraphQL error with code `TRAX_AUTHORIZATION` (`"Not authorized."`), and the new run
+replays the execution's decisions as a requeue's would. It needs no role a requeue does not.
+
+It is refused with `success: false`, the reason as the message, and nothing queued when:
+
+- no execution has the id, or it is not `FAILED` or `CANCELLED` (`"Execution 100 is Completed; only a failed or cancelled run can be resumed."`);
+- a state machine's step started it, since only that step receives its outcome;
+- its saved input is missing, a placeholder or masked, for the reasons `requeueExecution` gives;
+- a resume of it is already queued (`"A resume of execution 100 is already queued (WorkQueue 7); a run is resumed once at a time. Nothing was queued."`);
+- a resume of it already completed, so its work is done (`"Execution 100 cannot be resumed: a resume of run 100 already completed, so its work is done. Requeue it to run it again from the top. Nothing was queued."`);
+- its train is no longer registered here, or its chain cannot be read;
+- no checkpoint it wrote lets it resume at that step: none comes before it, a step from the point
+  on needs a value nothing restores, or the stored checkpoint no longer matches the running chain
+  or the state's shape. The resume check's own reason is the message, for example
+  `"No checkpoint the run wrote comes before 'FetchSources#0', so it can only run again from the top."`
+
+`runGraph` says beforehand where a run can resume: `canResume` on the graph for a resume after the
+latest checkpoint, and on each node for a resume there.
+
+```graphql
+mutation {
+  operations {
+    resumeExecution(id: 100, from: "SummarizeSources#0") { success message id }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `Long!` | Yes | The execution's metadata id |
+| `from` | `String` | No | The node id of the step to resume at. Omitted, the run resumes after its latest checkpoint |
+
+**Returns**: `OperationResponse`. On success, `id` is the new **work queue entry**'s id, as for
+`requeueExecution`. The entry names the execution it resumes and the step (`resume_from` and
+`resume_at` on the work queue row), and the run copies both when it is dispatched.
+
+The run checks the resume again as it starts. If it can no longer be honoured (a deploy changed
+the chain or the state between the queueing and the dispatch, say), the run fails, classified
+permanent, with `ResumeRefusedException` and the reason as its failure, rather than running from
+the top: a resume was asked for, not a fresh run.
+
+---
+
+### cancelMachineInstance
+
+Cancels a system-owned [state machine instance](/docs/statemachine/invoking-trains#operators)'s
+live train run, and the instance then moves through its state's `OnCancelled` edge. It is the
+GraphQL counterpart of the Cancel button on the dashboard's
+[instance page](/docs/dashboard#state-machines); both call
+[`IOperationsService.CancelMachineInstanceAsync`](/docs/sdk-reference/scheduler-api/i-operations-service#state-machine-instances),
+so they refuse the same instances with the same message.
+
+A run still only queued is marked Cancelled and never starts. A run already dispatched has its
+cancel requested: it stops at its next junction and ends Cancelled. The dispatcher claims an entry
+and writes its run in one transaction, so a cancel racing the dispatcher ends exactly one of those
+two ways. The outcome is then applied through the one conditional update every delivery makes,
+so the instance moves once, whether this call, the run's lifecycle hook or the reconciler gets
+there first.
+
+Operators may cancel only `SYSTEM` instances. A user's draft is read-only to them: its run is
+cancelled when the user leaves the state through one of the machine's own transitions, and
+[`cancelExecution`](#cancelexecution) and [`cancelWorkQueueEntry`](#cancelworkqueueentry) refuse
+that run and its queued entry too. No Trax-provided operation creates or advances a system
+instance; a host can advance one from its own code through
+[`IMachineInstances.Advance`](/docs/sdk-reference/statemachine-api/machine-instances) and expose
+that under its own authorization.
+
+```graphql
+mutation {
+  operations {
+    cancelMachineInstance(machine: "fulfilment", ownerKind: SYSTEM, id: "6f9619ff-8b86-d011-b42d-00c04fc964ff") {
+      success
+      outcome
+      message
+      state
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `machine` | `String!` | Yes | The machine's id. Blank is refused with `TRAX_INVALID_ARGUMENT` |
+| `ownerKind` | `SnapshotOwnerKind!` | Yes | Who owns the instance; only `SYSTEM` can be cancelled |
+| `id` | `UUID!` | Yes | The instance id |
+
+**Returns**: `MachineInstanceCancelResponse`: `success`, `outcome`, `message` (the dashboard shows
+the same text) and `state`, the state the instance entered when this call moved it.
+
+| `outcome` | `success` | Meaning |
+|-----------|-----------|---------|
+| `MOVED` | `true` | The queued run is cancelled, and this host, which registers the machine, moved the instance through `OnCancelled`; `state` is the state it entered |
+| `RUN_CANCELLED` | `true` | The queued run is cancelled; a host that registers the machine moves the instance (on Postgres the cancel wakes its reconciler) |
+| `CANCEL_REQUESTED` | `true` | The run was dispatched; it stops at its next junction, and the instance moves when it ends |
+| `USER_OWNED` | `false` | A user's draft. Nothing changes |
+| `NOT_FOUND` | `false` | No system instance has this machine and id |
+| `NO_LIVE_RUN` | `false` | The instance's state waits on no run, so there is nothing to cancel |
+| `RUN_ENDED` | `false` | The run has already ended; its own outcome is being applied |
 
 ---
 
@@ -1020,7 +1142,7 @@ A host that exposes the operations mutations must register an `IJobSubmitter`, o
 
 #### cancelWorkQueueEntry
 
-Cancels a queued entry. Only entries with `status: QUEUED` can be cancelled. Already-dispatched or already-cancelled entries return `OperationResponse(success: false, ...)` without modifying the row.
+Cancels a queued entry. Only entries with `status: QUEUED` can be cancelled. Already-dispatched or already-cancelled entries return `OperationResponse(success: false, ...)` without modifying the row. So does an entry a step of a user's state-machine draft queued, whatever its status, with the message [`cancelExecution`](#cancelexecution) refuses its run with: a user's draft is read-only to operators.
 
 ```graphql
 mutation {
@@ -1059,7 +1181,7 @@ mutation {
 |-----------|------|----------|-------------|
 | `ids` | `[Long!]!` | Yes | 1 to 1000 work queue entry ids to cancel |
 
-**Returns**: `OperationResponse`. `count` is the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns `success: false` (`"No ids were given."` for an empty one) and cancels nothing.
+**Returns**: `OperationResponse`. `count` is the number actually cancelled, zero included. An empty list, or more than 1000 ids, returns `success: false` (`"No ids were given."` for an empty one) and cancels nothing. An entry a user's draft queued is skipped, and the message ends with how many were skipped and why.
 
 ---
 
@@ -1124,5 +1246,5 @@ Shared response type for operations mutations.
 |-------|------|-------------|
 | `success` | `Boolean!` | Whether the operation succeeded |
 | `count` | `Int` | Number of affected records, for a mutation that acts on a set or patches fields; `null` otherwise |
-| `id` | `Long` | The one row the operation acted on, when there is one: the work queue entry `queueTrain` and `requeueExecution` created, the execution `runTrain` started, the group `updateManifestGroup` patched. `null` otherwise |
+| `id` | `Long` | The one row the operation acted on, when there is one: the work queue entry `queueTrain`, `requeueExecution` and `resumeExecution` created, the execution `runTrain` started, the group `updateManifestGroup` patched. `null` otherwise |
 | `message` | `String` | Human-readable status message |

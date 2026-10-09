@@ -37,6 +37,12 @@ public sealed record DeclarativeModel<TState, TTrigger>(
     /// parameter, so existing construction stays source-compatible.
     /// </summary>
     public DifferentialModel<TState, TTrigger>? Differential { get; init; }
+
+    /// <summary>
+    /// The states whose validator is a <c>Holds</c> delegate rather than one built from
+    /// <c>Context</c>/<c>Requires</c>. The IR cannot carry a delegate, so the exporter refuses a machine with any.
+    /// </summary>
+    internal IReadOnlySet<TState> DelegateValidatedStates { get; init; } = new HashSet<TState>();
 }
 
 /// <summary>
@@ -58,5 +64,13 @@ public sealed record DifferentialModel<TState, TTrigger>(
     /// True when no samples, seeds or probe contexts were authored. The IR exporter omits the
     /// <c>differential</c> section for an empty model, so the IR matches a machine without one.
     /// </summary>
-    public bool IsEmpty => Samples.Count == 0 && Seeds.Count == 0 && Contexts.Count == 0;
+    public bool IsEmpty =>
+        Samples.Count == 0 && Seeds.Count == 0 && Contexts.Count == 0 && OutcomeSamples.Count == 0;
+
+    /// <summary>
+    /// Representative outputs per invoking state, fired as that state's <c>done</c> outcome trigger. Exported under
+    /// <c>samples</c> keyed by the outcome trigger (<c>Fetching.done</c>).
+    /// </summary>
+    internal IReadOnlyDictionary<TState, IReadOnlyList<JsonNode>> OutcomeSamples { get; init; } =
+        new Dictionary<TState, IReadOnlyList<JsonNode>>();
 }

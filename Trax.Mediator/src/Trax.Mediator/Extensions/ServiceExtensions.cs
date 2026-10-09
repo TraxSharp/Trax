@@ -123,6 +123,22 @@ public static class ServiceExtensions
         var configuration = mediatorBuilder.Build();
 
         builder.ServiceCollection.AddSingleton(configuration);
+
+        // A checkpoint's state is held to the cap a requeue's stored input is held to, so a run
+        // that can be repeated can be resumed under the same bound (Trax.Docs/adr/0047).
+        builder.ServiceCollection.Replace(
+            ServiceDescriptor.Singleton(
+                new Trax.Effect.Services.Checkpoints.CheckpointOptions
+                {
+                    MaxStateBytes = (int)
+                        Math.Min(
+                            (long)configuration.MaxInputJsonBytes
+                                * Services.TrainExecution.TrainInputReader.StoredInputGrowthFactor,
+                            int.MaxValue
+                        ),
+                }
+            )
+        );
         builder.ServiceCollection.AddServiceTrainBus(
             configuration.TrainLifetime,
             configuration.Assemblies
@@ -283,6 +299,10 @@ public static class ServiceExtensions
             .AddSingleton<IServiceCollection>(serviceCollection)
             .AddSingleton<ITrainRegistry>(trainRegistry)
             .AddSingleton<ITrainDiscoveryService, TrainDiscoveryService>()
+            .AddSingleton<
+                Services.ChainVerification.ITrainChainGraphs,
+                Services.ChainVerification.TrainChainGraphs
+            >()
             .AddSingleton<IConcurrencyLimiter, ConcurrencyLimiter>()
             .AddSingleton<ITrustedExecutionScope, TrustedExecutionScope>()
             // Default null-returning principal provider. Hosts with an HTTP
@@ -300,6 +320,14 @@ public static class ServiceExtensions
             .AddSingleton<IEnqueueContextAccessor, EnqueueContextAccessor>()
             .AddSingleton<IWorkQueuePromotion, WorkQueuePromotion>()
             .AddScoped<ITrainExecutionService, TrainExecutionService>()
+            // Queues the train a state machine's invoking state runs, through the execution service
+            // above and into the caller's transaction. Registered whether or not the host has
+            // machines; AddStateMachines' startup check refuses a machine that invokes trains
+            // without it.
+            .AddScoped<
+                Trax.Effect.StateMachine.Persistence.IInvokedTrainLauncher,
+                Services.InvokedTrains.InvokedTrainLauncher
+            >()
             .RegisterServiceTrains(trainRegistry.DiscoveredTrains, serviceTrainLifetime);
     }
 }

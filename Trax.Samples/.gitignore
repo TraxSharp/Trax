@@ -157,3 +157,6 @@ tsconfig.tsbuildinfo
 *.csproj.lscache
 
 # Local Trax package version override (CPM)
+
+# A sample train graph that differs from its golden, written for review (Trax.Samples.Tests.Chains)
+*.chain.json.received

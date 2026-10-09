@@ -33,6 +33,12 @@ namespace Trax.Scheduler.Trains.MetadataCleanup.Junctions;
 /// <c>replay_decisions_of</c> (central <c>docs/0041</c>). A run that replays another is deleted only
 /// in the same transaction as the run it replays, or once that run is gone, so no run is ever
 /// kept while a replay of it has been deleted (docs/adr/0017).
+/// <c>resume_from</c> is kept together the same way, since a run's checkpoints go with it: a run
+/// is kept while a queued entry or a run that stays resumes it, and a resumed run is deleted with
+/// the run it resumes, or once that run is gone. An entry no longer queued that names a deleted run
+/// has its resume link cleared, so no row names a run that is gone (Trax.Docs/adr/0047).
+/// A run a state machine invoked is kept while an instance still holds its invoke token, so its
+/// outcome is still delivered from it (central <c>docs/0046</c>).
 /// A batch that fails (for example an unexpected foreign-key reference) is bisected to isolate the
 /// offending row, which is logged and skipped so one bad row can never abort the whole sweep.
 /// </remarks>
@@ -88,7 +94,15 @@ internal class DeleteExpiredMetadataJunction(
                     || m.TrainState == TrainState.Failed
                     || m.TrainState == TrainState.Cancelled
                 )
-                .Where(m => !skippedIds.Contains(m.Id));
+                .Where(m => !skippedIds.Contains(m.Id))
+                // A run a state machine invoked is kept while an instance still holds its token: its outcome
+                // has not been delivered, and the delivery reads how it ended from this row. A token is never
+                // set again once cleared (each entry mints a new run), so a run that passes this test cannot
+                // become held again before it is deleted, and the selection needs no recheck for it.
+                .Where(m =>
+                    m.InvokingMachine == null
+                    || !dataContext.SnapshotDrafts.Any(d => d.InvokeToken == m.ExternalId)
+                );
 
             while (true)
             {
@@ -115,6 +129,24 @@ internal class DeleteExpiredMetadataJunction(
                         m.ReplayDecisionsOf == null
                         || !dataContext.Metadatas.Any(s => s.Id == m.ReplayDecisionsOf)
                         || eligible.Any(e => e.Id == m.ReplayDecisionsOf)
+                    )
+                    // The same for a resume (Trax.Docs/adr/0047): a run a queued entry or a run
+                    // that stays resumes is kept, since its checkpoints go with it, and a resumed
+                    // run goes with the run it resumed.
+                    .Where(m =>
+                        !dataContext.WorkQueues.Any(q =>
+                            q.ResumeFrom == m.Id && q.Status == WorkQueueStatus.Queued
+                        )
+                    )
+                    .Where(m =>
+                        !dataContext.Metadatas.Any(r =>
+                            r.ResumeFrom == m.Id && !eligible.Any(e => e.Id == r.Id)
+                        )
+                    )
+                    .Where(m =>
+                        m.ResumeFrom == null
+                        || !dataContext.Metadatas.Any(s => s.Id == m.ResumeFrom)
+                        || eligible.Any(e => e.Id == m.ResumeFrom)
                     )
                     .OrderBy(m => m.Id)
                     .Select(m => m.Id);
@@ -189,6 +221,10 @@ internal class DeleteExpiredMetadataJunction(
                         (m.ReplayDecisionsOf != null && ids.Contains(m.ReplayDecisionsOf.Value))
                         || dataContext.Metadatas.Any(r =>
                             ids.Contains(r.Id) && r.ReplayDecisionsOf == m.Id
+                        )
+                        || (m.ResumeFrom != null && ids.Contains(m.ResumeFrom.Value))
+                        || dataContext.Metadatas.Any(r =>
+                            ids.Contains(r.Id) && r.ResumeFrom == m.Id
                         )
                     )
                 )
@@ -383,6 +419,15 @@ internal class DeleteExpiredMetadataJunction(
                 || ids.Contains(m.ReplayDecisionsOf.Value)
                 || !dataContext.Metadatas.Any(s => s.Id == m.ReplayDecisionsOf)
             )
+            && !dataContext.WorkQueues.Any(q =>
+                q.ResumeFrom == m.Id && q.Status == WorkQueueStatus.Queued
+            )
+            && !dataContext.Metadatas.Any(r => r.ResumeFrom == m.Id && !ids.Contains(r.Id))
+            && (
+                m.ResumeFrom == null
+                || ids.Contains(m.ResumeFrom.Value)
+                || !dataContext.Metadatas.Any(s => s.Id == m.ResumeFrom)
+            )
         );
 
     /// <summary>
@@ -429,6 +474,23 @@ internal class DeleteExpiredMetadataJunction(
             await dataContext
                 .Metadatas.Where(c => c.ParentId.HasValue && ids.Contains(c.ParentId.Value))
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.ParentId, (long?)null), ct);
+
+            // An entry that is no longer queued and resumes one of these runs, a cancelled one or
+            // one dispatched as a run that is not this batch's, will never read its link again: a
+            // dispatched entry's run carries its own. Its link is cleared, so nothing names a run
+            // that is gone (Trax.Docs/adr/0047). A queued one keeps the run (the keep test).
+            await dataContext
+                .WorkQueues.Where(q =>
+                    q.ResumeFrom.HasValue
+                    && ids.Contains(q.ResumeFrom.Value)
+                    && q.Status != WorkQueueStatus.Queued
+                )
+                .ExecuteUpdateAsync(
+                    s =>
+                        s.SetProperty(q => q.ResumeFrom, (long?)null)
+                            .SetProperty(q => q.ResumeAt, (string?)null),
+                    ct
+                );
 
             if (beforeMetadataDelete is not null)
                 await beforeMetadataDelete(ct);

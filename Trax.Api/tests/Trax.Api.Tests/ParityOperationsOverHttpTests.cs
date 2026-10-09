@@ -10,8 +10,10 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Core.Monad;
 using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 using Trax.Scheduler.Services.Effects;
@@ -55,6 +57,73 @@ public class ParityOperationsOverHttpTests
         "{ operations { effects { fullName fields { name typeName kind nullable enumValues sensitive hasValue value hint } } } }";
     private const string LogLevels =
         "{ operations { config { logLevels { category level configuredLevel overridden } version } } }";
+
+    private const string RoutedTrain = "Acme.IRoutedTrain";
+
+    private const string GraphFields =
+        "train input output refusals hash nodes { id kind junction in out opaque tracks "
+        + "{ name description isFallback nodes { id kind junction opaque tracks { name } } } }";
+
+    private static string DeclaredChain(string train) =>
+        $"{{ operations {{ declaredChain(train: \"{train}\") {{ {GraphFields} }} }} }}";
+
+    private const string RunGraph =
+        "{ operations { runGraph(metadataId: 7) { metadataId hasGraph nodes { id state } } } }";
+
+    /// <summary>The graph the chain graphs service holds for <see cref="RoutedTrain"/>.</summary>
+    internal static readonly ChainGraph RoutedGraph = new(
+        "Acme.RoutedTrain",
+        "Order",
+        "Receipt",
+        [
+            new ChainGraphNode(
+                "Fetch#0",
+                ChainStepKind.Chain,
+                "Fetch",
+                "Order",
+                "Order",
+                false,
+                []
+            ),
+            new ChainGraphNode(
+                "Switch<Lane>#0",
+                ChainStepKind.Switch,
+                null,
+                "Order",
+                "Taken<Lane>",
+                false,
+                [
+                    new ChainGraphTrack(
+                        "Fast",
+                        "Ship today",
+                        false,
+                        [
+                            new ChainGraphNode(
+                                "Switch<Lane>#0/Fast/Ship#0",
+                                ChainStepKind.Chain,
+                                "Ship",
+                                "Order",
+                                "Order",
+                                false,
+                                []
+                            ),
+                        ]
+                    ),
+                    new ChainGraphTrack("Otherwise", null, true, []),
+                ]
+            ),
+            new ChainGraphNode(
+                "IPay#0",
+                ChainStepKind.IChain,
+                "IPay",
+                "Order",
+                "Receipt",
+                true,
+                []
+            ),
+        ],
+        []
+    );
 
     private IHost _host = null!;
     private IOperationsService _operations = null!;
@@ -202,6 +271,10 @@ public class ParityOperationsOverHttpTests
                                 .GateOperations(roles: "Admin")
                         );
 
+                        var graphs = Substitute.For<ITrainChainGraphs>();
+                        graphs.Find(RoutedTrain).Returns(RoutedGraph);
+                        services.AddSingleton(graphs);
+
                         services.AddScoped(_ => _operations);
                         services.AddScoped(_ => _effects);
                         services.AddSingleton(_logLevels);
@@ -241,6 +314,7 @@ public class ParityOperationsOverHttpTests
         yield return new TestCaseData(Decisions).SetName("decisions");
         yield return new TestCaseData(Effects).SetName("effects.fields");
         yield return new TestCaseData(LogLevels).SetName("config.logLevels+version");
+        yield return new TestCaseData(DeclaredChain(RoutedTrain)).SetName("declaredChain");
     }
 
     [TestCaseSource(nameof(Documents))]
@@ -343,6 +417,72 @@ public class ParityOperationsOverHttpTests
             );
     }
 
+    [Test]
+    public async Task DeclaredChain_OfARegisteredTrain_IsItsGraph_WithItsTracksAndHash()
+    {
+        var graph = Operations(
+            await PostAsync(DeclaredChain(RoutedTrain), AdminKey),
+            "declaredChain"
+        );
+
+        graph.GetProperty("train").GetString().Should().Be("Acme.RoutedTrain");
+        graph.GetProperty("hash").GetString().Should().Be(RoutedGraph.Hash).And.HaveLength(64);
+        var nodes = graph.GetProperty("nodes");
+        nodes
+            .EnumerateArray()
+            .Select(n => n.GetProperty("id").GetString())
+            .Should()
+            .Equal("Fetch#0", "Switch<Lane>#0", "IPay#0");
+        nodes[1].GetProperty("kind").GetString().Should().Be("SWITCH");
+        nodes[2].GetProperty("opaque").GetBoolean().Should().BeTrue();
+        var tracks = nodes[1].GetProperty("tracks");
+        tracks
+            .EnumerateArray()
+            .Select(t => t.GetProperty("name").GetString())
+            .Should()
+            .Equal("Fast", "Otherwise");
+        tracks[0]
+            .GetProperty("nodes")[0]
+            .GetProperty("id")
+            .GetString()
+            .Should()
+            .Be("Switch<Lane>#0/Fast/Ship#0");
+        tracks[1].GetProperty("isFallback").GetBoolean().Should().BeTrue();
+    }
+
+    [TestCase("Acme.IUnknownTrain")]
+    [TestCase("System.String")]
+    [TestCase("")]
+    public async Task DeclaredChain_OfANameNoRegisteredTrainHas_IsNull(string train)
+    {
+        var graph = Operations(await PostAsync(DeclaredChain(train), AdminKey), "declaredChain");
+
+        graph.ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Test]
+    public async Task DeclaredChain_ForAnAnonymousCaller_IsRefused()
+    {
+        var doc = await PostAsync(DeclaredChain(RoutedTrain), apiKey: null);
+
+        doc.RootElement.GetRawText().Should().NotContain("Switch<Lane>");
+        var noData =
+            !doc.RootElement.TryGetProperty("data", out var data)
+            || data.ValueKind == JsonValueKind.Null
+            || data.GetProperty("operations").ValueKind == JsonValueKind.Null;
+        noData.Should().BeTrue("an anonymous caller gets nothing from the namespace");
+    }
+
+    [Test]
+    public async Task RunGraph_WithoutTheRole_IsRefused()
+    {
+        var doc = await PostAsync(RunGraph, ReaderKey);
+
+        Auth.AdminOperationsAuthorizationTests.HasErrorCode(doc, "TRAX_AUTHORIZATION")
+            .Should()
+            .BeTrue(doc.RootElement.GetRawText());
+    }
+
     private static JsonElement Operations(JsonDocument doc, string field)
     {
         doc.RootElement.TryGetProperty("errors", out _)
@@ -351,14 +491,15 @@ public class ParityOperationsOverHttpTests
         return doc.RootElement.GetProperty("data").GetProperty("operations").GetProperty(field);
     }
 
-    private async Task<JsonDocument> PostAsync(string query, string apiKey)
+    private async Task<JsonDocument> PostAsync(string query, string? apiKey)
     {
         var client = _host.GetTestServer().CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/trax/graphql")
         {
             Content = JsonContent.Create(new { query }),
         };
-        request.Headers.Add("X-Api-Key", apiKey);
+        if (apiKey is not null)
+            request.Headers.Add("X-Api-Key", apiKey);
         var response = await client.SendAsync(request);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
     }

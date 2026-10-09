@@ -2,18 +2,24 @@ import { describe, expect, test } from "vitest";
 import { createMockClient } from "./client";
 import { createMockStore } from "./store/mock-store";
 import {
+  MACHINE_IDS,
   effectsScenario,
+  executionDetailScenario,
   groupScenario,
+  machineScenario,
   manifestScenario,
   persistedOperationsScenario,
   schedulerConfigScenario,
 } from "./scenarios";
+import { USER_OWNED_CANCEL_REFUSAL, USER_OWNED_RUN_CANCEL_REFUSAL, defaultOverlays, userDraftRunsOverlay } from "./store/overlays";
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import {
   EFFECTS,
   EXECUTIONS,
   LOG_LEVELS,
   EXECUTION_DETAIL,
+  MACHINE_INSTANCE,
+  MACHINE_INSTANCES,
   MANIFESTS,
   MANIFEST_DETAIL,
   MANIFEST_GROUPS,
@@ -23,8 +29,13 @@ import {
   WORK_QUEUE_DETAIL,
 } from "../graphql/queries";
 import {
+  CANCEL_EXECUTION,
   CANCEL_EXECUTIONS,
+  CANCEL_WORK_QUEUE_ENTRIES,
   CANCEL_GROUPS,
+  CANCEL_MACHINE_INSTANCE,
+  CANCEL_WORK_QUEUE_ENTRY,
+  RESUME_EXECUTION,
   CONFIGURE_EFFECT,
   SET_LOG_LEVELS,
   TRIGGER_GROUPS,
@@ -71,6 +82,52 @@ describe("work queue / runs", () => {
     expect((get(list.data, "operations.workQueue.workQueues.items") as Row[])[0].id).toBe(id);
   });
 
+  // Ids count per store, so what a story or test sees does not depend on what ran before it.
+  test("every store hands out the same ids from the start, each once", async () => {
+    const queue = (c: ReturnType<typeof client>) =>
+      c.mutation(QUEUE_TRAIN, { input: { trainName: "T", inputJson: "{}" } }).toPromise().then((r) => get(r.data, "operations.workQueue.queueTrain.id"));
+    const run = (c: ReturnType<typeof client>) =>
+      c.mutation(RUN_TRAIN, { input: { trainName: "T" } }).toPromise().then((r) => get(r.data, "operations.workQueue.runTrain.id"));
+    const first = client();
+    const ids = [await queue(first), await queue(first), await run(first), await run(first)];
+    expect(new Set(ids).size).toBe(4);
+    const second = client();
+    expect([await queue(second), await queue(second), await run(second), await run(second)]).toEqual(ids);
+  });
+
+  test("a host whose users' drafts started runs refuses their cancel and skips them in bulk, in the API's words", async () => {
+    const c = createMockClient({
+      store: createMockStore({ exposeOnWindow: false, persist: false }),
+      fixtures: false,
+      // Runs that start with no cancel requested, so only the overlay can request one.
+      overrides: executionDetailScenario,
+      overlays: [...defaultOverlays, userDraftRunsOverlay([7110], [7202])],
+    });
+    const one = get((await c.mutation(CANCEL_EXECUTION, { id: 7110 }).toPromise()).data, "operations.cancelExecution");
+    expect(one).toEqual({ success: false, count: 0, message: USER_OWNED_RUN_CANCEL_REFUSAL });
+    const many = get((await c.mutation(CANCEL_EXECUTIONS, { ids: [7110, 7] }).toPromise()).data, "operations.cancelExecutions");
+    expect(many).toEqual({
+      success: true,
+      count: 1,
+      message: `Cancellation requested for 1 of 2 execution(s). 1 skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`,
+    });
+    for (const [id, flagged] of [[7110, false], [7, true]] as const) {
+      const d = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
+      expect(get(d.data, "operations.executionDetail.cancellationRequested")).toBe(flagged);
+    }
+    const entry = get((await c.mutation(CANCEL_WORK_QUEUE_ENTRY, { id: 7202 }).toPromise()).data, "operations.workQueue.cancelWorkQueueEntry");
+    expect(entry).toEqual({ success: false, message: USER_OWNED_RUN_CANCEL_REFUSAL });
+    const entries = get(
+      (await c.mutation(CANCEL_WORK_QUEUE_ENTRIES, { ids: [7202, 7203] }).toPromise()).data,
+      "operations.workQueue.cancelWorkQueueEntries",
+    );
+    expect(entries).toEqual({
+      success: true,
+      count: 1,
+      message: `1 of 2 work queue entry(s) cancelled. 1 skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`,
+    });
+  });
+
   test("queueTrain and runTrain refuse input that is not JSON", async () => {
     const c = client();
     const q = await c.mutation(QUEUE_TRAIN, { input: { trainName: "T", inputJson: "{bad" } }).toPromise();
@@ -96,6 +153,25 @@ describe("work queue / runs", () => {
     expect(get(detail.data, "operations.workQueue.detail.status")).toBe("QUEUED");
   });
 
+  test("resumeExecution queues an entry the detail page resolves, and refuses a second while it is queued", async () => {
+    const c = client();
+    const ack = await c.mutation(RESUME_EXECUTION, { id: 902, from: "Summarize#2" }).toPromise();
+    expect(get(ack.data, "operations.resumeExecution")).toMatchObject({ success: true, message: null });
+    const id = get(ack.data, "operations.resumeExecution.id") as number;
+    const detail = await c.query(WORK_QUEUE_DETAIL, { id }, NET).toPromise();
+    expect(get(detail.data, "operations.workQueue.detail.status")).toBe("QUEUED");
+    const again = await c.mutation(RESUME_EXECUTION, { id: 902, from: null }).toPromise();
+    expect(get(again.data, "operations.resumeExecution")).toEqual({
+      success: false,
+      message: `A resume of execution 902 is already queued (WorkQueue ${id}); a run is resumed once at a time. Nothing was queued.`,
+      id: null,
+    });
+    // Once that entry is cancelled, the run can be resumed again.
+    await c.mutation(CANCEL_WORK_QUEUE_ENTRY, { id }).toPromise();
+    const third = await c.mutation(RESUME_EXECUTION, { id: 902, from: null }).toPromise();
+    expect(get(third.data, "operations.resumeExecution.success")).toBe(true);
+  });
+
   test("cancelExecutions flags every selected execution", async () => {
     const c = client();
     const ack = await c.mutation(CANCEL_EXECUTIONS, { ids: [7, 8] }).toPromise();
@@ -104,6 +180,82 @@ describe("work queue / runs", () => {
       const d = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
       expect(get(d.data, "operations.executionDetail.cancellationRequested")).toBe(true);
     }
+  });
+});
+
+describe("state machines", () => {
+  const instance = (c: ReturnType<typeof client>, id: string, ownerKind = "SYSTEM", rowId: number | null = null) =>
+    c.query(MACHINE_INSTANCE, { machine: ownerKind === "SYSTEM" ? "source-partition" : "topic-map", ownerKind, id, rowId }, NET).toPromise();
+  const cancel = (c: ReturnType<typeof client>, id: string, ownerKind = "SYSTEM", machine = "source-partition") =>
+    c.mutation(CANCEL_MACHINE_INSTANCE, { machine, ownerKind, id }).toPromise();
+
+  test("cancelling a dispatched run requests its cancel, and the instance and the run show it", async () => {
+    const c = client(machineScenario);
+    await instance(c, MACHINE_IDS.dispatched);
+    const ack = get((await cancel(c, MACHINE_IDS.dispatched)).data, "operations.cancelMachineInstance");
+    expect(ack).toEqual({
+      success: true,
+      outcome: "CANCEL_REQUESTED",
+      state: null,
+      message:
+        `Cancellation requested for the run instance ${MACHINE_IDS.dispatched} of 'source-partition' waits on in 'Ingesting'. ` +
+        "The run stops at its next junction, and the instance then moves through the state's OnCancelled edge.",
+    });
+    const runs = get((await instance(c, MACHINE_IDS.dispatched)).data, "operations.machineInstance.invokedRuns") as {
+      id: number;
+      cancellationRequested: boolean;
+    }[];
+    expect(runs.map((r) => [r.id, r.cancellationRequested])).toEqual([
+      [7101, true],
+      [7090, false],
+    ]);
+    const run = await c.query(EXECUTION_DETAIL, { id: 7101 }, NET).toPromise();
+    expect(get(run.data, "operations.executionDetail.cancellationRequested")).toBe(true);
+  });
+
+  test("cancelling a queued run cancels its work queue entry before it starts", async () => {
+    const c = client(machineScenario);
+    await instance(c, MACHINE_IDS.queued);
+    const ack = get((await cancel(c, MACHINE_IDS.queued)).data, "operations.cancelMachineInstance");
+    expect(ack).toMatchObject({ success: true, outcome: "RUN_CANCELLED" });
+    expect(get((await instance(c, MACHINE_IDS.queued)).data, "operations.machineInstance.queuedInvokedRunEntryId")).toBeNull();
+    const entry = await c.query(WORK_QUEUE_DETAIL, { id: 7201 }, NET).toPromise();
+    expect(get(entry.data, "operations.workQueue.detail.status")).toBe("CANCELLED");
+  });
+
+  test("refuses a user's draft, an instance waiting on no run and one it does not know, changing nothing", async () => {
+    const c = client(machineScenario);
+    await instance(c, MACHINE_IDS.idle);
+    const user = get((await cancel(c, MACHINE_IDS.draftBuilding, "USER", "topic-map")).data, "operations.cancelMachineInstance");
+    expect(user).toEqual({ success: false, outcome: "USER_OWNED", state: null, message: USER_OWNED_CANCEL_REFUSAL });
+    const idle = get((await cancel(c, MACHINE_IDS.idle)).data, "operations.cancelMachineInstance");
+    expect(idle).toMatchObject({
+      success: false,
+      outcome: "NO_LIVE_RUN",
+      message: `Instance ${MACHINE_IDS.idle} of 'source-partition' is in 'Ingested', which waits on no train run: there is nothing to cancel.`,
+    });
+    const missing = get((await cancel(c, "3f2c1a00-0000-4000-8000-0000000000ff")).data, "operations.cancelMachineInstance");
+    expect(missing).toMatchObject({ success: false, outcome: "NOT_FOUND" });
+  });
+
+  // The answer does not depend on whether a page read the instance first.
+  test("answers a cancel for an instance no read has served", async () => {
+    const dispatched = get((await cancel(client(machineScenario), MACHINE_IDS.dispatched)).data, "operations.cancelMachineInstance");
+    expect(dispatched).toMatchObject({ success: true, outcome: "CANCEL_REQUESTED" });
+    const c = client(machineScenario);
+    const queued = get((await cancel(c, MACHINE_IDS.queued)).data, "operations.cancelMachineInstance");
+    expect(queued).toMatchObject({ success: true, outcome: "RUN_CANCELLED" });
+    const entry = await c.query(WORK_QUEUE_DETAIL, { id: 7201 }, NET).toPromise();
+    expect(get(entry.data, "operations.workQueue.detail.status")).toBe("CANCELLED");
+    const idle = get((await cancel(client(machineScenario), MACHINE_IDS.idle)).data, "operations.cancelMachineInstance");
+    expect(idle).toMatchObject({ success: false, outcome: "NO_LIVE_RUN" });
+  });
+
+  test("no read returns an instance's context", async () => {
+    const c = client(machineScenario);
+    const list = await c.query(MACHINE_INSTANCES, { skip: 0, take: 20 }, NET).toPromise();
+    const detail = await instance(c, MACHINE_IDS.dispatched);
+    expect(JSON.stringify([list.data, detail.data])).not.toMatch(/context/i);
   });
 });
 

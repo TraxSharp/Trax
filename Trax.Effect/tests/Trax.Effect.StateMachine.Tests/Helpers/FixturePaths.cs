@@ -23,6 +23,10 @@ public static class FixturePaths
     public static string? DifferentialFile(string machine) =>
         MachinesRoot is null ? null : Path.Combine(MachinesRoot, machine, "differential.json");
 
+    /// <summary>The committed IR of a machine, which the TypeScript twin and its corpus are generated from (or null if isolated).</summary>
+    public static string? IrFile(string machine) =>
+        MachinesRoot is null ? null : Path.Combine(MachinesRoot, machine, $"{machine}.ir.json");
+
     /// <summary>The shared migration golden for a machine: stored older-version snapshots and the exact
     /// canonical wire each must become after forward migration (or null if isolated).</summary>
     public static string? MigrationFile(string machine) =>

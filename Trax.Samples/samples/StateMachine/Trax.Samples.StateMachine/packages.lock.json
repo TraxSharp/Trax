@@ -113,7 +113,10 @@
         }
       },
       "trax.effect.statemachine": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )"
+        }
       },
       "trax.effect.statemachine.persistence": {
         "type": "Project",
@@ -132,7 +135,8 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Trax.Effect": "[1.99.99, )",
-          "Trax.Effect.Data": "[1.99.99, )"
+          "Trax.Effect.Data": "[1.99.99, )",
+          "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
         }
       },
       "Microsoft.EntityFrameworkCore": {

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ORDERS, TOPICS } from "../cases";
+import { ORDERS, SLICES, TOPICS } from "../cases";
 import { SOURCES } from "../sources";
 import type { Phase, Scenario, Step } from "../types";
 import { useRecoveryRun } from "../useRecoveryRun";
 import { CodePanel } from "./CodePanel";
 import { ConsolePanel } from "./ConsolePanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { TopicMapWizard } from "./TopicMapWizard";
 
 // The host retries a failed run after four seconds and polls every second (see the README's demo-only
 // settings), so the retry starts four to five seconds after the failure.
@@ -21,14 +22,15 @@ export function App() {
   const [scenario, setScenario] = useState<Scenario>("RESEARCH");
   const [topic, setTopic] = useState(TOPICS[0].key);
   const [order, setOrder] = useState(ORDERS[0].key);
+  const [slice, setSlice] = useState(SLICES[0].key);
   const [crash, setCrash] = useState(true);
   const recovery = useRecoveryRun();
-  const { phase, attempts, run, forkTaken } = recovery;
+  const { phase, attempts, run, forkTaken, resumable } = recovery;
 
   const locked = phase === "starting" || phase === "running" || phase === "backoff" || phase === "retrying" || phase === "requeue";
 
   // A clock for the countdown and the timeline's running bars.
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!locked) return;
     const timer = setInterval(() => setNow(Date.now()), 50);
@@ -36,9 +38,22 @@ export function App() {
   }, [locked]);
 
   const runIt = () => {
-    const subject = TOPICS.find((t) => t.key === topic)?.label ?? TOPICS[0].label;
-    void recovery.start(scenario, crash, order, subject);
+    if (scenario === "RESEARCH") {
+      const subject = TOPICS.find((t) => t.key === topic)?.label ?? TOPICS[0].label;
+      void recovery.start(scenario, crash, { topic: subject });
+    } else if (scenario === "REFUND") void recovery.start(scenario, crash, { orderId: order });
+    else {
+      const chosen = SLICES.find((s) => s.key === slice) ?? SLICES[0];
+      void recovery.start(scenario, crash, { fromYear: chosen.fromYear, toYear: chosen.toYear });
+    }
   };
+
+  // What the picker offers for each scenario, and what Crash once does in it.
+  const picker = {
+    RESEARCH: { label: "Topic", value: topic, set: setTopic, options: TOPICS, crashAt: "while it writes the report" },
+    REFUND: { label: "Order", value: order, set: setOrder, options: ORDERS, crashAt: "in the step after the approval" },
+    TOPIC_MAP: { label: "Papers", value: slice, set: setSlice, options: SLICES, crashAt: "in the co-citation branch" },
+  }[scenario];
 
   // Changing what to run clears the last run.
   const choose = (change: () => void) => {
@@ -64,7 +79,12 @@ export function App() {
   const shown = run?.scenario ?? scenario;
   const reached = PHASES.findIndex((p) => p.phases.includes(phase));
   const crashed = attempts.some((a) => a.trainState === "FAILED");
-  const canAskAfresh = (phase === "backoff" && forkTaken === "none") || phase === "done";
+  // The research run's retry resumes after its checkpoint, which comes after both of its questions,
+  // so there is nothing left to ask afresh during its backoff; once it is over, a requeue reruns it.
+  const research = run?.scenario === "RESEARCH";
+  const canAskAfresh = (phase === "backoff" && forkTaken === "none" && !research) || phase === "done";
+  // While a retry is queued it already resumes the failed run, and a run has one queued resume at a time.
+  const canResume = resumable != null && phase === "done";
 
   return (
     <div className="app">
@@ -83,7 +103,7 @@ export function App() {
 
         <Group label="Scenario">
           <div role="tablist" className="segmented">
-            {(["RESEARCH", "REFUND"] as const).map((s) => (
+            {(["RESEARCH", "REFUND", "TOPIC_MAP"] as const).map((s) => (
               <button
                 key={s}
                 role="tab"
@@ -92,18 +112,14 @@ export function App() {
                 onClick={() => choose(() => setScenario(s))}
                 className={scenario === s ? "active" : ""}
               >
-                {s === "RESEARCH" ? "Research" : "Refund"}
+                {s === "RESEARCH" ? "Research" : s === "REFUND" ? "Refund" : "Topic map"}
               </button>
             ))}
           </div>
           <label className="field">
-            {scenario === "RESEARCH" ? "Topic" : "Order"}
-            <select
-              value={scenario === "RESEARCH" ? topic : order}
-              disabled={locked}
-              onChange={(e) => choose(() => (scenario === "RESEARCH" ? setTopic : setOrder)(e.target.value))}
-            >
-              {(scenario === "RESEARCH" ? TOPICS : ORDERS).map((o) => (
+            {picker.label}
+            <select value={picker.value} disabled={locked} onChange={(e) => choose(() => picker.set(e.target.value))}>
+              {picker.options.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}
                 </option>
@@ -112,30 +128,55 @@ export function App() {
           </label>
           <label className="check">
             <input type="checkbox" checked={crash} disabled={locked} onChange={(e) => choose(() => setCrash(e.target.checked))} />
-            Crash once ({scenario === "RESEARCH" ? "while it writes the report" : "in the step after the approval"})
+            Crash once ({picker.crashAt})
           </label>
         </Group>
+
+        {scenario === "TOPIC_MAP" && (
+          <Group label="Build my map: a state machine">
+            <TopicMapWizard />
+          </Group>
+        )}
 
         <Group label="Actions">
           <button className="primary" onClick={runIt} disabled={locked}>
             Run
           </button>
-          <button className="action" onClick={recovery.changeData} disabled={phase !== "backoff" || forkTaken !== "none"}>
+          <button
+            className="action"
+            onClick={recovery.changeData}
+            disabled={phase !== "backoff" || forkTaken !== "none" || run?.scenario === "TOPIC_MAP"}
+          >
             Change the data during the backoff
           </button>
           <div className="action-pair">
             <button className="action" onClick={recovery.askAfresh} disabled={!canAskAfresh}>
               Ask afresh
             </button>
-            <button className="action" onClick={recovery.reset} disabled={!run || locked}>
-              Reset
+            <button
+              className="action"
+              onClick={recovery.resumeFromSummarize}
+              disabled={!canResume}
+              title='resumeExecution(id, from: "Summarize#0") on the failed research attempt'
+            >
+              Resume from Summarize
             </button>
           </div>
+          <button className="action" onClick={recovery.reset} disabled={!run || locked}>
+            Reset
+          </button>
           <p className="hint">
-            {retryIn != null && forkTaken === "none" ? (
+            {retryIn != null && forkTaken === "none" && research ? (
+              <span className="signal">
+                In the backoff: the retry starts in {retryIn.toFixed(1)} s and resumes after the CheckedFindings checkpoint,
+                so it writes the report from the stored findings without searching or asking the model again.
+              </span>
+            ) : retryIn != null && forkTaken === "none" ? (
               <span className="signal">
                 In the backoff: the retry starts in {retryIn.toFixed(1)} s. Change the data or ask afresh before it does.
               </span>
+            ) : phase === "done" && canResume ? (
+              "The run is over. Ask afresh to run it again from the top with every question put to the model, or resume the failed attempt from Summarize, as the dashboard's Resume from here does."
             ) : phase === "done" ? (
               "The run is over. Ask afresh to run it again with every question put to the model."
             ) : phase === "dead" ? (

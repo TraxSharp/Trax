@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { WorkQueuePage } from "./WorkQueuePage";
 import { emptyPage, errorOverride, workQueueScenario } from "../mock/scenarios";
+import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 
 const meta = {
   title: "Pages/WorkQueue",
@@ -40,6 +41,47 @@ export const CancelSingle: Story = {
       await userEvent.click(within(row).getByText("Cancel"));
       await waitFor(() => expect(c.getAllByText("Cancelled", badge)).toHaveLength(2));
       expect(await c.findByText(/Entry #601 cancelled/)).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  },
+};
+
+// An entry a step of a user's state-machine draft queued is read-only to operators: its cancel is
+// refused with the API's reason, and the entry stays queued.
+export const CancelUserDraftEntryRefused: Story = {
+  parameters: { overlays: [userDraftRunsOverlay([], [601])] },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByLabelText("Select #601")).toBeInTheDocument());
+      const row = c.getByLabelText("Select #601").closest("tr") as HTMLElement;
+      await userEvent.click(within(row).getByText("Cancel"));
+      expect(await c.findByText(USER_OWNED_RUN_CANCEL_REFUSAL)).toBeInTheDocument();
+      expect(c.queryByText(/Entry #601 cancelled/)).not.toBeInTheDocument();
+      expect(c.getAllByText("Cancelled", badge)).toHaveLength(1);
+    } finally {
+      restore();
+    }
+  },
+};
+
+// A bulk cancel cancels the rest and says how many it skipped, and why.
+export const CancelSelectedSkipsUserDraftEntries: Story = {
+  parameters: { overlays: [userDraftRunsOverlay([], [601])] },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByLabelText("Select #601")).toBeInTheDocument());
+      await userEvent.click(c.getByLabelText("Select #601"));
+      await userEvent.click(c.getByLabelText("Select #602"));
+      await userEvent.click(c.getByText("Cancel selected"));
+      expect(
+        await c.findByText(`1 of 2 work queue entry(s) cancelled. 1 skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(c.getAllByText("Cancelled", badge)).toHaveLength(2));
     } finally {
       restore();
     }

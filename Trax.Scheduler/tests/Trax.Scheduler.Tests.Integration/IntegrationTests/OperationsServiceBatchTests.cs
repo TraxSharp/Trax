@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Manifest;
 using Trax.Effect.Models.Manifest.DTOs;
@@ -111,6 +112,7 @@ public class OperationsServiceBatchTests : TestSetup
 
     #region CancelExecutionsAsync
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running; the cancel only flags it.")]
     [Test]
     public async Task Cancel_flags_pending_and_in_progress_runs_and_skips_the_rest()
     {
@@ -129,6 +131,7 @@ public class OperationsServiceBatchTests : TestSetup
         (await Flagged()).Should().BeEquivalentTo([pending.Id, running.Id]);
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running; the cancel only flags it.")]
     [Test]
     public async Task Cancel_cancels_a_run_on_this_host_at_once()
     {
@@ -171,6 +174,7 @@ public class OperationsServiceBatchTests : TestSetup
         }
     }
 
+    [LeavesStuckRuns("Seeds an in-progress run that no host is running; the cancel only flags it.")]
     [Test]
     public async Task Cancel_signals_the_execution_domain_when_it_flags_a_run()
     {
@@ -199,6 +203,9 @@ public class OperationsServiceBatchTests : TestSetup
 
     #region CancelWorkQueueEntriesAsync
 
+    [LeavesStuckRuns(
+        "Marks a queue entry dispatched by hand, with no run behind it, for the cancel to skip."
+    )]
     [Test]
     public async Task Work_queue_cancel_touches_only_queued_entries_and_signals()
     {
@@ -222,6 +229,9 @@ public class OperationsServiceBatchTests : TestSetup
         _signal.Domains.Should().Equal(ChangeDomain.WorkQueue);
     }
 
+    [LeavesStuckRuns(
+        "Marks a queue entry dispatched by hand, with no run behind it, for the cancel to skip."
+    )]
     [Test]
     public async Task Work_queue_cancel_that_changes_nothing_does_not_signal()
     {

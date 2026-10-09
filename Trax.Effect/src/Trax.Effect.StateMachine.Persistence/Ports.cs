@@ -23,6 +23,13 @@ public sealed record StoredSnapshot(
     /// <summary>The state the last applied advance fired from, or <c>null</c> when none was recorded.</summary>
     public string? LastRequestFromState { get; init; }
 
+    /// <summary>
+    /// The correlation token of the train run the draft's current state invoked, or <c>null</c> when no run is
+    /// live (or the store does not record one). Server-only: it is never part of <see cref="Json"/>. Deleting a
+    /// draft that holds one cancels the run first.
+    /// </summary>
+    public string? InvokeToken { get; init; }
+
     /// <summary>The last applied request as one value, or <c>null</c> when there is no request id.</summary>
     public AppliedRequest? LastRequest =>
         LastRequestId is { } requestId
@@ -47,6 +54,10 @@ public sealed record AppliedRequest(string RequestId, string? Trigger, string? F
 /// <para>A draft is keyed by its user, its machine and its id: two machines may give one user a draft under
 /// the same id. The writes take the machine from the snapshot, and the draft service reads and deletes through
 /// the overloads that name it.</para>
+///
+/// <para>Every member is a user's: it reads, writes and deletes only drafts a user owns. A system-owned instance
+/// (created by <see cref="IMachineInstances.Start{TMachine}"/>) is never reached through this port, even under the
+/// same id, so an implementation must not return or touch a row a user does not own.</para>
 /// </summary>
 public interface ISnapshotStore
 {
@@ -194,7 +205,10 @@ public interface ISnapshotStore
 /// </summary>
 public interface ISnapshotPrincipal
 {
-    /// <summary>The current user's key, or <c>null</c> if the request is unauthenticated.</summary>
+    /// <summary>
+    /// The current user's key, or <c>null</c> if the request is unauthenticated. An empty or whitespace key is
+    /// treated as unauthenticated too.
+    /// </summary>
     string? CurrentUserKey { get; }
 }
 

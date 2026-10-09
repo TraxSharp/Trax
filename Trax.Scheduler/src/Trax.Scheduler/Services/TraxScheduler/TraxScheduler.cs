@@ -1269,7 +1269,12 @@ public class TraxScheduler(
         var replayDecisionsOf = askAfresh
             ? null
             : await RetryReplay.SourceForRetryAsync(deadLetter.Manifest!, ct);
-        var entry = CreateWorkQueueFromDeadLetter(deadLetter, replayDecisionsOf);
+        // Resumed after the failed run's latest checkpoint when it has one the chain allows,
+        // whether or not it asks afresh: that concerns its deciders (Trax.Docs/adr/0047).
+        var resumeFrom = RetryResume is { } resume
+            ? await resume.SourceForRetryAsync(deadLetter.Manifest!, ct)
+            : null;
+        var entry = CreateWorkQueueFromDeadLetter(deadLetter, replayDecisionsOf, resumeFrom);
         context.WorkQueues.Add(entry);
 
         deadLetter.Requeue($"Re-queued (WorkQueue {entry.Id})");
@@ -1707,6 +1712,11 @@ public class TraxScheduler(
                 ct
             );
 
+        // And resumes it after its latest checkpoint, as a retry does (Trax.Docs/adr/0047).
+        var resumeSources = RetryResume is { } resume
+            ? await resume.SourcesForRetriesAsync(groups.Select(g => g[0].Manifest!).ToList(), ct)
+            : new Dictionary<long, long>();
+
         var batches = groups
             .Select(members =>
                 (
@@ -1714,6 +1724,9 @@ public class TraxScheduler(
                         members[0],
                         replaySources.TryGetValue(members[0].ManifestId, out var source)
                             ? source
+                            : null,
+                        resumeSources.TryGetValue(members[0].ManifestId, out var resumed)
+                            ? resumed
                             : null
                     ),
                     Members: members
@@ -1771,7 +1784,8 @@ public class TraxScheduler(
 
     private static WorkQueue CreateWorkQueueFromDeadLetter(
         Effect.Models.DeadLetter.DeadLetter deadLetter,
-        long? replayDecisionsOf
+        long? replayDecisionsOf,
+        long? resumeFrom
     )
     {
         var manifest = deadLetter.Manifest!;
@@ -1788,6 +1802,8 @@ public class TraxScheduler(
                 // An operator asked for this run by name, so it runs while the manifest is disabled.
                 ExplicitTrigger = true,
                 ReplayDecisionsOf = replayDecisionsOf,
+                // After the failed run's latest checkpoint: no step is named.
+                ResumeFrom = resumeFrom,
             }
         );
     }
@@ -1800,6 +1816,13 @@ public class TraxScheduler(
         _retryReplay ??= new RetryDecisionReplay(dataContextFactory, logger);
 
     private RetryDecisionReplay? _retryReplay;
+
+    /// <summary>
+    /// Chooses the run a dead-letter requeue resumes from a checkpoint (Trax.Docs/adr/0047). Set
+    /// when the container builds the scheduler, since it needs the chain lookup and the checkpoint
+    /// rows; a scheduler built by hand has none, and its requeues rerun from the top.
+    /// </summary>
+    internal RetryResume? RetryResume { get; set; }
 
     // ── Private helpers ──────────────────────────────────────────────────
 

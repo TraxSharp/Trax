@@ -1,0 +1,26 @@
+{
+  "train": "Trax.Samples.Scheduling.Trains.SendLaunchAnnouncement.SendLaunchAnnouncementTrain",
+  "input": "SendLaunchAnnouncementInput",
+  "output": "Unit",
+  "nodes": [
+    {
+      "id": "AnnounceJunction#0",
+      "kind": "Chain",
+      "junction": "AnnounceJunction",
+      "in": "SendLaunchAnnouncementInput",
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "Unit",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

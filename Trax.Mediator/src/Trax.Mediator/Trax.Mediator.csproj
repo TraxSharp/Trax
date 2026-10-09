@@ -9,11 +9,21 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Mediator.Tests.MemoryLeak.Integration" />
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.Postgres.Integration" />
+  </ItemGroup>
+
+  <!-- A run's links to another run (the decisions it replays, the run it resumes) are set only by the operations
+       service, which checks the run it names first, so QueueTrainOptions sets them internally. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <!-- The state machine declares the port that queues a state's invoked train (IInvokedTrainLauncher); the
+         mediator implements it, so the enqueue goes through train authorization like any caller's. -->
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
   </ItemGroup>
 </Project>

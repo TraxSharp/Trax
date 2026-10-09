@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Trax.Core.Exceptions;
 using Trax.Effect.Data.Decisions;
 using Trax.Effect.Data.Services.DataContext;
@@ -18,9 +19,11 @@ using Trax.Effect.Models.SchedulerConfig;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
+using Trax.Mediator.Services.ChainVerification;
 using Trax.Mediator.Services.TrainAuthorization;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -29,13 +32,15 @@ using Trax.Scheduler.Configuration;
 using Trax.Scheduler.Extensions;
 using Trax.Scheduler.Services.CancellationRegistry;
 using Trax.Scheduler.Services.JobSubmitter;
+using Trax.Scheduler.Services.RunOutcomes;
+using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.ManifestManager.Utilities;
 using SchedulerTrigger = Trax.Scheduler.Services.TraxScheduler.TraxScheduler;
 
 namespace Trax.Scheduler.Services.Operations;
 
 /// <inheritdoc />
-public class OperationsService : IOperationsService
+public partial class OperationsService : IOperationsService
 {
     private readonly ITrainDiscoveryService _discoveryService;
     private readonly IDataContextProviderFactory _dataContextFactory;
@@ -176,11 +181,26 @@ public class OperationsService : IOperationsService
             var source = await db
                 .Metadatas.AsNoTracking()
                 .Where(m => m.Id == metadataId)
-                .Select(m => new { m.Name, m.Input })
+                .Select(m => new
+                {
+                    m.Name,
+                    m.Input,
+                    m.InvokingMachine,
+                })
                 .FirstOrDefaultAsync(ct);
 
             if (source is null)
                 return new OperationResult(false, Message: $"Execution {metadataId} not found.");
+
+            // A run a state machine's invoking state queued belongs to that entry of the state: its
+            // outcome is applied only through the instance's invoke token, and a retry is the
+            // machine entering the state again, which queues a new run. A requeued copy would run
+            // with no state to deliver to (ADR 0046).
+            if (source.InvokingMachine is { } machine)
+                return new OperationResult(
+                    false,
+                    Message: InvokedRunRequeueRefusal(metadataId, machine)
+                );
 
             // Re-queueing reads the saved input back as the train's input. Nothing saved, a
             // placeholder saved in its place, or masked [TraxSensitive] members would all read
@@ -273,6 +293,191 @@ public class OperationsService : IOperationsService
         return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
     }
 
+    /// <inheritdoc />
+    public async Task<OperationResult> ResumeExecutionAsync(
+        long metadataId,
+        string? from,
+        CancellationToken ct
+    )
+    {
+        string trainName;
+        string savedInput;
+        bool replays;
+        bool alreadyReplayed = false;
+
+        using (var db = await _dataContextFactory.CreateDbContextAsync(ct))
+        {
+            var source = await db
+                .Metadatas.AsNoTracking()
+                .Where(m => m.Id == metadataId)
+                .Select(m => new
+                {
+                    m.Name,
+                    m.Input,
+                    m.InvokingMachine,
+                    m.TrainState,
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (source is null)
+                return new OperationResult(false, Message: $"Execution {metadataId} not found.");
+
+            // Only a run that ended without finishing has work left to resume. A completed run
+            // keeps no checkpoints, and a running one may still finish.
+            if (source.TrainState is not (TrainState.Failed or TrainState.Cancelled))
+                return new OperationResult(
+                    false,
+                    Message: $"Execution {metadataId} is {source.TrainState}; only a failed or "
+                        + "cancelled run can be resumed."
+                );
+
+            // Requeue's reason, for the same cause (ADR 0046): the machine's step owns the run.
+            if (source.InvokingMachine is { } machine)
+                return new OperationResult(
+                    false,
+                    Message: InvokedRunResumeRefusal(metadataId, machine)
+                );
+
+            var refusal = RequeueInputCheck.RefusalFor(metadataId, source.Input);
+            if (refusal is not null || source.Input is not { } input)
+                return new OperationResult(false, Message: refusal);
+
+            // One queued resume per run (ix_work_queue_unique_queued_resume). Checked here for the
+            // message; the index decides a race.
+            var queued = await db
+                .WorkQueues.AsNoTracking()
+                .Where(q => q.ResumeFrom == metadataId && q.Status == WorkQueueStatus.Queued)
+                .Select(q => (long?)q.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (queued is { } entry)
+                return new OperationResult(false, Message: QueuedResumeRefusal(metadataId, entry));
+
+            // A resume that completed did the run's remaining work; resuming it again would do it
+            // twice. The resumed run checks this too as it starts (Trax.Docs/adr/0047).
+            if (
+                await db.Metadatas.AnyAsync(
+                    m => m.ResumeFrom == metadataId && m.TrainState == TrainState.Completed,
+                    ct
+                )
+            )
+                return new OperationResult(false, Message: CompletedResumeRefusal(metadataId));
+
+            trainName = source.Name;
+            savedInput = input;
+
+            // The decisions of the run it resumes replay as a requeue's would, so a question asked
+            // after the checkpoint takes the track the run took (docs/0041).
+            replays = await db.HasDecisionsToReplay(metadataId, ct);
+            if (replays)
+            {
+                alreadyReplayed = await db.IsReplayedAsync(metadataId, ct);
+                replays = !alreadyReplayed;
+            }
+        }
+
+        var registration = _discoveryService
+            .DiscoverTrains()
+            .FirstOrDefault(r => r.ServiceType.FullName == trainName);
+
+        if (registration is null)
+            return new OperationResult(
+                false,
+                Message: RequeueInputCheck.TrainNoLongerRegistered(metadataId, trainName)
+            );
+
+        if (
+            _services?.GetService<ITrainChainGraphs>()?.FindDeclared(trainName) is not { } declared
+            || _services.GetService<IRunResumes>() is not { } resumes
+        )
+            return new OperationResult(
+                false,
+                Message: $"The chain of {trainName} cannot be read on this host, so whether "
+                    + $"execution {metadataId} can resume cannot be decided. Nothing was queued."
+            );
+
+        // Decided before anything is queued, from the run's checkpoints and the declared chain;
+        // its reason is the operator's answer as it stands.
+        var verdict = await resumes.Check(
+            declared.Train,
+            declared.Chain,
+            declared.Input,
+            declared.Output,
+            metadataId,
+            from,
+            ct
+        );
+
+        if (!verdict.CanResume)
+            return new OperationResult(false, Message: verdict.Reason);
+
+        string resumedInput;
+
+        try
+        {
+            // As a requeue reads it back: the stored-input cap, then compact.
+            resumedInput = Compact(
+                TrainInputReader.ResolveSavedInput(savedInput, registration, StoredInputCap())
+            );
+        }
+        catch (JsonException ex)
+        {
+            return new OperationResult(
+                false,
+                Message: $"Execution {metadataId}'s saved input cannot be read back as the input "
+                    + $"it ran with: {ex.Message}"
+            );
+        }
+        catch (TrainInputValidationException ex)
+        {
+            return new OperationResult(false, Message: ex.Message);
+        }
+
+        if (BeforeResumeEnqueue is { } beforeEnqueue)
+            await beforeEnqueue(ct);
+
+        var result = await EnqueueAsync(
+            registration,
+            resumedInput,
+            priority: 0,
+            scheduledAt: null,
+            replayDecisionsOf: replays ? metadataId : null,
+            ct,
+            requeueOf: metadataId,
+            resumeFrom: metadataId,
+            resumeAt: from
+        );
+
+        return result.Success && alreadyReplayed ? AskedAfresh(result, metadataId) : result;
+    }
+
+    /// <summary>
+    /// The reason <see cref="ResumeExecutionAsync"/> refuses a run a state machine's invoking state
+    /// queued, worded as <see cref="InvokedRunRequeueRefusal"/> is.
+    /// </summary>
+    internal static string InvokedRunResumeRefusal(long metadataId, string machine) =>
+        $"Execution {metadataId} was started by a step of the state machine '{machine}', and only "
+        + "that step receives its outcome, so it cannot be resumed. The machine retries it by "
+        + "entering the step again.";
+
+    /// <summary>The reason a second resume of one run is refused while the first is queued.</summary>
+    internal static string QueuedResumeRefusal(long metadataId, long? entry = null) =>
+        $"A resume of execution {metadataId} is already queued"
+        + (entry is { } id ? $" (WorkQueue {id})" : "")
+        + "; a run is resumed once at a time. Nothing was queued.";
+
+    /// <summary>The reason a run whose resume already completed is refused another.</summary>
+    internal static string CompletedResumeRefusal(long metadataId) =>
+        $"Execution {metadataId} cannot be resumed: "
+        + ResumeSources.AlreadyResumedReason(metadataId)
+        + " Nothing was queued.";
+
+    /// <summary>
+    /// Test seam: awaited between a resume's checks and its insert, so a test can queue a
+    /// competing resume inside that window.
+    /// </summary>
+    internal Func<CancellationToken, Task>? BeforeResumeEnqueue { get; set; }
+
     /// <summary>A requeue's result, saying it asks afresh because its run is already replayed.</summary>
     private static OperationResult AskedAfresh(OperationResult result, long metadataId) =>
         result with
@@ -353,6 +558,33 @@ public class OperationsService : IOperationsService
     }
 
     /// <summary>
+    /// The one reason <see cref="RequeueExecutionAsync(long, bool, CancellationToken)"/> refuses a
+    /// run a state machine's invoking state queued, on GraphQL and the dashboard alike (central
+    /// ADR 0022): such a run is retried by its machine entering the state again, never by a
+    /// requeue.
+    /// </summary>
+    /// <param name="metadataId">The run that was asked to be re-queued.</param>
+    /// <param name="machine">The machine whose invoking state queued it.</param>
+    public static string InvokedRunRequeueRefusal(long metadataId, string machine) =>
+        $"Execution {metadataId} was started by a step of the state machine '{machine}', and only "
+        + "that step receives its outcome, so it cannot be re-queued. The machine retries it by "
+        + "entering the step again.";
+
+    /// <summary>
+    /// The reason an operator's cancel of a run, or of a queued work queue entry, that a step of a
+    /// user's state-machine draft started is refused, on the dashboard and the API alike: a user's
+    /// draft is read-only to operators, so only its user cancels the run, by leaving the state
+    /// (central ADR 0046). A bulk cancel skips such rows and appends this to its message.
+    /// </summary>
+    public const string UserOwnedRunCancelRefusal =
+        "A run a step of a user's state-machine draft started is read-only to operators: it is "
+        + "cancelled only when its user leaves the state through one of the machine's own "
+        + "transitions.";
+
+    private static string ReportSkippedUserOwned(string message, int skipped) =>
+        skipped == 0 ? message : $"{message} {skipped} skipped: {UserOwnedRunCancelRefusal}";
+
+    /// <summary>
     /// What a queueing operation answers on a host with no database provider, where nothing
     /// dispatches the work queue (scheduler ADR 0019).
     /// </summary>
@@ -374,7 +606,9 @@ public class OperationsService : IOperationsService
         DateTime? scheduledAt,
         long? replayDecisionsOf,
         CancellationToken ct,
-        long? requeueOf = null
+        long? requeueOf = null,
+        long? resumeFrom = null,
+        string? resumeAt = null
     )
     {
         // Enqueue through the mediator rather than writing the row here. That is what applies
@@ -399,27 +633,43 @@ public class OperationsService : IOperationsService
                 return new OperationResult(false, Message: noDispatcher);
             }
 
-            // Only a replay needs the options overload; every other enqueue goes through the
-            // overload every implementation has.
-            queued = replayDecisionsOf is null
-                ? await _trainExecution.QueueAsync(
-                    registration.ServiceType.FullName!,
-                    inputJson,
-                    priority,
-                    scheduledAt,
-                    ct
-                )
-                : await _trainExecution.QueueAsync(
-                    registration.ServiceType.FullName!,
-                    inputJson,
-                    new QueueTrainOptions
-                    {
-                        Priority = priority,
-                        ScheduledAt = scheduledAt,
-                        ReplayDecisionsOf = replayDecisionsOf,
-                    },
-                    ct
-                );
+            // Only a replay or a resume needs the options overload; every other enqueue goes
+            // through the overload every implementation has.
+            queued =
+                replayDecisionsOf is null && resumeFrom is null
+                    ? await _trainExecution.QueueAsync(
+                        registration.ServiceType.FullName!,
+                        inputJson,
+                        priority,
+                        scheduledAt,
+                        ct
+                    )
+                    : await _trainExecution.QueueAsync(
+                        registration.ServiceType.FullName!,
+                        inputJson,
+                        new QueueTrainOptions
+                        {
+                            Priority = priority,
+                            ScheduledAt = scheduledAt,
+                            ReplayDecisionsOf = replayDecisionsOf,
+                            ResumeFrom = resumeFrom,
+                            ResumeAt = resumeAt,
+                        },
+                        ct
+                    );
+        }
+        catch (Exception ex)
+            when (resumeFrom is { } resumed
+                && RetryReplayLinks.IsQueuedResumeConflict(ex, _services?.GetService<ISqlDialect>())
+            )
+        {
+            // A resume of the same run (a manifest's retry, another operator) was queued between
+            // the check and this insert, and the index refused a second (Trax.Docs/adr/0047).
+            _logger?.LogInformation(
+                "A queued entry already resumes run {ResumeFrom}; the resume is refused",
+                resumed
+            );
+            return new OperationResult(false, Message: QueuedResumeRefusal(resumed));
         }
         catch (Exception ex)
             when (replayDecisionsOf is { } replayed
@@ -439,7 +689,9 @@ public class OperationsService : IOperationsService
                 scheduledAt,
                 replayDecisionsOf: null,
                 ct,
-                requeueOf
+                requeueOf,
+                resumeFrom,
+                resumeAt
             );
             return afresh.Success ? AskedAfresh(afresh, replayed) : afresh;
         }
@@ -640,6 +892,16 @@ public class OperationsService : IOperationsService
             // dispatcher does when a dispatch fails, and the failure is the server's, not a
             // refusal, so it is thrown (scheduler/0004).
             var failed = await FailUnsubmittedRunAsync(metadata.Id, ex);
+
+            // Failed here, before any runner started it, so no train publishes the outcome. It is
+            // published as a failed dispatch is, without the submitter's detail.
+            if (failed > 0)
+                await OutOfTrainOutcomes.PublishFailedAsync(
+                    services,
+                    [metadata.Id],
+                    (ILogger?)_logger ?? NullLogger.Instance,
+                    DispatchFailure.PublishedAndShown
+                );
 
             if (failed == 0)
             {
@@ -1314,18 +1576,43 @@ public class OperationsService : IOperationsService
         var distinct = ids.Distinct().ToList();
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        // A run a user's draft started is the user's to cancel, by leaving the state: skipped and
+        // reported whatever its state, so the answer does not depend on whether it has ended yet.
+        var skipped = await db
+            .Metadatas.AsNoTracking()
+            .CountAsync(
+                m => distinct.Contains(m.Id) && m.InvokingOwnerKind == SnapshotOwnerKind.User,
+                ct
+            );
         var flagged = await ExecutionCancellation.RequestAsync(
             db,
-            db.Metadatas.Where(m => distinct.Contains(m.Id)),
+            db.Metadatas.Where(m =>
+                distinct.Contains(m.Id)
+                && (m.InvokingOwnerKind == null || m.InvokingOwnerKind != SnapshotOwnerKind.User)
+            ),
             _services?.GetService<ICancellationRegistry>(),
             _changeSignal,
             ct
         );
 
+        // One run, refused, is a refusal; a batch reports what it skipped, as it reports the
+        // finished runs it found.
+        if (distinct.Count == 1 && skipped == 1)
+            return new OperationResult(
+                false,
+                Id: distinct[0],
+                Count: 0,
+                Message: UserOwnedRunCancelRefusal
+            );
+
         return new OperationResult(
             true,
             Count: flagged,
-            Message: $"Cancellation requested for {flagged} of {distinct.Count} execution(s)."
+            Message: ReportSkippedUserOwned(
+                $"Cancellation requested for {flagged} of {distinct.Count} execution(s).",
+                skipped
+            )
         );
     }
 
@@ -1341,10 +1628,23 @@ public class OperationsService : IOperationsService
         var distinct = ids.Distinct().ToList();
 
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
+
+        // An entry a user's draft queued is the user's to cancel, by leaving the state: skipped
+        // and reported whatever its status, so the answer does not depend on whether it has been
+        // dispatched yet.
+        var skipped = await db
+            .WorkQueues.AsNoTracking()
+            .CountAsync(
+                q => distinct.Contains(q.Id) && q.InvokingOwnerKind == SnapshotOwnerKind.User,
+                ct
+            );
+
         // One statement with the status test in it, so an entry the dispatcher claims meanwhile
         // keeps its Dispatched status instead of being overwritten.
         var queued = db.WorkQueues.Where(q =>
-            distinct.Contains(q.Id) && q.Status == WorkQueueStatus.Queued
+            distinct.Contains(q.Id)
+            && q.Status == WorkQueueStatus.Queued
+            && (q.InvokingOwnerKind == null || q.InvokingOwnerKind != SnapshotOwnerKind.User)
         );
         var cancelled = db.SupportsSetUpdates()
             ? await queued.ExecuteUpdateAsync(
@@ -1356,10 +1656,22 @@ public class OperationsService : IOperationsService
         if (cancelled > 0)
             _changeSignal?.Notify(ChangeDomain.WorkQueue);
 
+        // One entry, refused, is a refusal; a batch reports what it skipped.
+        if (distinct.Count == 1 && skipped == 1)
+            return new OperationResult(
+                false,
+                Id: distinct[0],
+                Count: 0,
+                Message: UserOwnedRunCancelRefusal
+            );
+
         return new OperationResult(
             true,
             Count: cancelled,
-            Message: $"{cancelled} of {distinct.Count} work queue entry(s) cancelled."
+            Message: ReportSkippedUserOwned(
+                $"{cancelled} of {distinct.Count} work queue entry(s) cancelled.",
+                skipped
+            )
         );
     }
 
@@ -2022,6 +2334,10 @@ public class OperationsService : IOperationsService
 
         if (entry is null)
             return new OperationResult(false, Message: $"Work queue entry {id} not found.");
+
+        // Whatever its status, so the answer does not depend on whether it was dispatched yet.
+        if (entry.InvokingOwnerKind == SnapshotOwnerKind.User)
+            return new OperationResult(false, Id: id, Message: UserOwnedRunCancelRefusal);
 
         if (entry.Status != WorkQueueStatus.Queued)
             return new OperationResult(

@@ -175,4 +175,121 @@ public class IrExporterTests
             .ToList();
         reduceKinds.Should().Contain(new[] { "set", "clear", "reset", "keep", "custom" });
     }
+
+    // A machine whose every edge and state is declarative except where a test adds a delegate.
+    private static MachineBuilder<TurnstileState, TurnstileTrigger> MixedBuilder()
+    {
+        var m = new MachineBuilder<TurnstileState, TurnstileTrigger>();
+        m.Id("mixed").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
+        m.CustomGuard("open", (_, _) => true);
+        return m;
+    }
+
+    [Test]
+    public void A_machine_mixing_a_delegate_guard_with_a_declarative_one_is_refused_export()
+    {
+        var m = MixedBuilder();
+        m.In(TurnstileState.Locked)
+            .Context()
+            .On(TurnstileTrigger.Coin)
+            .When((_, _) => false)
+            .To(TurnstileState.Unlocked);
+        m.In(TurnstileState.Unlocked)
+            .Context()
+            .On(TurnstileTrigger.Push)
+            .When(new Rule.Custom("open"))
+            .To(TurnstileState.Locked);
+        var built = m.Build();
+
+        var export = () => IrExporter.Export(built);
+
+        export
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*Locked -Coin-> Unlocked has a delegate guard*Rule.Custom*")
+            .Which.Message.Should()
+            .NotContain("Unlocked -Push-> Locked");
+    }
+
+    [Test]
+    public void A_delegate_guard_set_after_a_rule_on_the_same_edge_is_refused_export()
+    {
+        var m = MixedBuilder();
+        m.In(TurnstileState.Locked)
+            .Context()
+            .On(TurnstileTrigger.Coin)
+            .When(new Rule.Custom("open"))
+            .When((_, _) => false)
+            .To(TurnstileState.Unlocked);
+        var built = m.Build();
+
+        var export = () => IrExporter.Export(built);
+
+        export
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*Locked -Coin-> Unlocked has a delegate guard*");
+    }
+
+    [Test]
+    public void A_machine_with_a_delegate_reducer_on_an_otherwise_declarative_machine_is_refused_export()
+    {
+        var m = MixedBuilder();
+        m.In(TurnstileState.Locked)
+            .Context()
+            .On(TurnstileTrigger.Coin)
+            .When(new Rule.Custom("open"))
+            .Reduce((context, _) => context)
+            .To(TurnstileState.Unlocked);
+        var built = m.Build();
+
+        var export = () => IrExporter.Export(built);
+
+        export
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*Locked -Coin-> Unlocked has a delegate reducer*Reduction.Custom*");
+    }
+
+    [Test]
+    public void A_machine_with_a_delegate_Holds_on_an_otherwise_declarative_machine_is_refused_export()
+    {
+        var m = MixedBuilder();
+        m.In(TurnstileState.Locked)
+            .Context()
+            .On(TurnstileTrigger.Coin)
+            .When(new Rule.Custom("open"))
+            .To(TurnstileState.Unlocked);
+        m.In(TurnstileState.Unlocked).Holds(_ => null);
+        var built = m.Build();
+
+        var export = () => IrExporter.Export(built);
+
+        export
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*state Unlocked has a delegate validator (Holds)*Rule.Custom*")
+            .Which.Message.Should()
+            .NotContain("state Locked");
+    }
+
+    [Test]
+    public void A_delegate_Holds_that_replaces_a_declared_context_is_refused_export()
+    {
+        var m = MixedBuilder();
+        m.In(TurnstileState.Locked)
+            .Context()
+            .Holds(_ => null)
+            .On(TurnstileTrigger.Coin)
+            .When(new Rule.Custom("open"))
+            .To(TurnstileState.Unlocked);
+        var built = m.Build();
+
+        var export = () => IrExporter.Export(built);
+
+        export
+            .Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*state Locked has a delegate validator (Holds)*");
+    }
 }

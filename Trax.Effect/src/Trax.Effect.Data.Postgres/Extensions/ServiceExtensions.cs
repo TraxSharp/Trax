@@ -1,20 +1,25 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Trax.Core.Exceptions;
 using Trax.Effect.Configuration.TraxEffectBuilder;
+using Trax.Effect.Data.Postgres.Services.InvokedRunListener;
 using Trax.Effect.Data.Postgres.Services.NulCharacterInterceptor;
 using Trax.Effect.Data.Postgres.Services.PostgresContext;
 using Trax.Effect.Data.Postgres.Services.PostgresContextFactory;
+using Trax.Effect.Data.Postgres.Services.QueuedWorkListener;
 using Trax.Effect.Data.Postgres.Services.SqlDialect;
 using Trax.Effect.Data.Postgres.Utils;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextLoggingProvider;
 using Trax.Effect.Data.Services.FeatureDbConfigurator;
 using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Data.Services.InvokedRunListener;
+using Trax.Effect.Data.Services.QueuedWorkListener;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
@@ -143,6 +148,7 @@ public static class ServiceExtensions
                             o.MapEnum<MisfirePolicy>("misfire_policy", "trax");
                             o.MapEnum<JunctionRunKind>("junction_run_kind", "trax");
                             o.MapEnum<JunctionRunState>("junction_run_state", "trax");
+                            o.MapEnum<SnapshotOwnerKind>("snapshot_owner_kind", "trax");
                         }
                     )
                     .UseLoggerFactory(new NullLoggerFactory())
@@ -161,8 +167,25 @@ public static class ServiceExtensions
             toggleable: false
         );
 
+        // The rows a run's checkpoints are stored in and resumed from (Trax.Docs/adr/0047).
+        configurationBuilder.ServiceCollection.TryAddSingleton<
+            Trax.Effect.Services.Checkpoints.ICheckpointRows,
+            Trax.Effect.Data.Checkpoints.CheckpointRows
+        >();
+
         // Register the SQL dialect for provider-specific raw SQL
         configurationBuilder.ServiceCollection.AddSingleton<ISqlDialect, PostgresSqlDialect>();
+
+        // The notice a dispatcher on any host wakes on when work is queued. Built by the container
+        // so the provider that owns it disposes its data source.
+        configurationBuilder.ServiceCollection.AddSingleton<IQueuedWorkListener>(
+            _ => new PostgresQueuedWorkListener(connectionString, configureDataSource)
+        );
+
+        // The notice a state machine's outcome reconciler on any host wakes on when a run it waits on ends.
+        configurationBuilder.ServiceCollection.AddSingleton<IInvokedRunListener>(
+            _ => new PostgresInvokedRunListener(connectionString, configureDataSource)
+        );
 
         // Configure a feature's own DbContext, if it brings one, against this same Postgres data source, so it needs no
         // host AddDbContext call. A feature table normally ships on IDataContext instead.

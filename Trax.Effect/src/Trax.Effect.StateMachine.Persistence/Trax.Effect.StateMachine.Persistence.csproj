@@ -23,7 +23,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The invoked-run ports: the mediator implements the launcher, and the operations service applies an
+         operator's cancel through the outcome delivery. A host neither implements nor calls them. -->
+    <InternalsVisibleTo Include="Trax.Mediator" />
+    <InternalsVisibleTo Include="Trax.Scheduler" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests.Stress" />
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Tests" />
+    <!-- The mediator implements the launcher; its tests run the startup check per machine and read the
+         owner-aware store, which this folder's tests cannot reach without the mediator. -->
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.StateMachine.Integration" />
+    <!-- The outcome delivery tests drive the reconciler's sweep against a real dispatcher, job runner and reaper,
+         which only the scheduler's tests reach. -->
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+    <!-- Recovery's machine test makes a late delivery through the reconciler's own delivery rather than wait for a
+         sweep that may or may not have run on a slow machine. -->
+    <InternalsVisibleTo Include="Trax.Samples.Recovery.E2E" />
   </ItemGroup>
 </Project>

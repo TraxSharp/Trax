@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using Trax.Effect.StateMachine.Persistence.Mutations;
@@ -87,6 +88,9 @@ public class MutationErrorMessageTests
     }
 
     [Test]
+    [LeavesStuckRuns(
+        "a cancelled effect's outcome is unknown, so its claim stays in flight until the lease passes (IdempotentEffect)"
+    )]
     public async Task A_cancelled_send_is_not_reported_as_a_failed_delivery()
     {
         using var request = new CancellationTokenSource();

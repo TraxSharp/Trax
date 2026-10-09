@@ -8,6 +8,7 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Configuration.TraxEffectBuilder;
 using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Services.ChangeSignal;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Services.EffectProviderFactory;
 using Trax.Effect.Services.EffectRegistry;
 using Trax.Effect.Services.EffectRunner;
@@ -103,6 +104,12 @@ public static class ServiceExtensions
 
         // SaveTrainParameters, configured above, registers its own policy first.
         services.TryAddSingleton<ILifecycleHookOutputPolicy, DefaultLifecycleHookOutputPolicy>();
+
+        // Checkpoints (Trax.Docs/adr/0047): stored through the data provider's rows, which a host
+        // without one does not register, so its runs take none.
+        services.TryAddSingleton<CheckpointOptions>();
+        services.TryAddSingleton<IRunResumes, RunResumes>();
+        services.TryAddSingleton<Trax.Core.Monad.ICheckpointStore, CheckpointStore>();
 
         return services
             .AddSingleton<IEffectRegistry>(registry)

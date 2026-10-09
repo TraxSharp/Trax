@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.DeadLetter;
 using Trax.Effect.Models.DeadLetter.DTOs;
@@ -382,6 +383,9 @@ public class ManifestManagerTrainTests : TestSetup
             .BeEmpty("should not queue a manifest that already has pending execution");
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, so the manager sees an active execution."
+    )]
     [Test]
     public async Task Run_WhenManifestHasInProgressExecution_DoesNotEnqueueJob()
     {
@@ -1440,6 +1444,9 @@ public class ManifestManagerTrainTests : TestSetup
             );
     }
 
+    [LeavesStuckRuns(
+        "Seeds an in-progress run that no host is running, so the manager sees an active execution."
+    )]
     [Test]
     public async Task Run_WhenDependentManifestParentHasOnlyInProgressMetadata_DoesNotEnqueueDependent()
     {

@@ -26,7 +26,8 @@ internal class CreateWorkQueueEntriesJunction(
     SchedulerConfiguration schedulerConfiguration,
     ILogger<CreateWorkQueueEntriesJunction> logger,
     RetryDecisionReplay retryReplay,
-    ITraxChangeSignal? changeSignal = null
+    ITraxChangeSignal? changeSignal = null,
+    RetryResume? retryResume = null
 ) : EffectJunction<List<ManifestDispatchView>, Unit>
 {
     public override async Task<Unit> Run(List<ManifestDispatchView> views)
@@ -64,6 +65,20 @@ internal class CreateWorkQueueEntriesJunction(
                 .ToList(),
             CancellationToken
         );
+
+        // A retry also resumes after its failed run's latest checkpoint, when the train declares one
+        // and its chain allows the resume, whatever the manifest says about replaying decisions:
+        // declaring a checkpoint is the opt-in (Trax.Docs/adr/0047). Looked up the same way, for
+        // the same runs; a failed lookup reruns from the top.
+        var resumeSources = retryResume is null
+            ? new Dictionary<long, long>()
+            : await retryResume.SourcesForRetriesAsync(
+                views
+                    .Where(v => v.LatestFinishedRunFailed && v.FailedCount > 0)
+                    .Select(v => v.Manifest)
+                    .ToList(),
+                CancellationToken
+            );
 
         // The dispatcher compares ScheduledAt with the database's clock, so a retry's due time is
         // the database's now plus its backoff; read once, by the first retry that has a backoff.
@@ -135,12 +150,17 @@ internal class CreateWorkQueueEntriesJunction(
                         )
                             ? source
                             : null,
+                        ResumeFrom = resumeSources.TryGetValue(view.Manifest.Id, out var resumed)
+                            ? resumed
+                            : null,
                     }
                 );
 
                 await dataContext.Track(entry);
                 // Another host, or a requeue, may have queued a replay of the same run since the
-                // lookup: the index refuses a second one and this retry asks afresh instead.
+                // lookup: the index refuses a second one and this retry asks afresh instead. An
+                // operator's resume of the same run queued since is refused the same way, and this
+                // retry reruns from the top.
                 await RetryReplayLinks.SaveAskingAfreshOnConflictAsync(
                     dataContext,
                     [entry],

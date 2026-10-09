@@ -17,9 +17,13 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
             ? o["coin"]!.GetValue<string>()
             : null;
 
-    protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
+    protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m) =>
+        Declare(m, "turnstile");
+
+    /// <summary>The turnstile's states and edges under <paramref name="id"/>, shared with its system-owned twin.</summary>
+    internal static void Declare(IMachineBuilder<TurnstileState, TurnstileTrigger> m, string id)
     {
-        m.Id("turnstile").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
+        m.Id(id).Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
 
         m.In(TurnstileState.Locked)
             .Holds(ctx => ctx.Count == 0 ? null : "Locked carries no context.")
@@ -67,9 +71,13 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
 
     private static JsonObject Fresh() => new() { ["items"] = new JsonArray(), ["receipt"] = null };
 
-    protected override void Configure(IMachineBuilder<OrderState, OrderTrigger> m)
+    protected override void Configure(IMachineBuilder<OrderState, OrderTrigger> m) =>
+        Declare(m, "order");
+
+    /// <summary>The order's states, edges and effect under <paramref name="id"/>, shared with its system-owned twin.</summary>
+    internal static void Declare(IMachineBuilder<OrderState, OrderTrigger> m, string id)
     {
-        m.Id("order").Version(1).StartsAt(OrderState.Draft, Fresh);
+        m.Id(id).Version(1).StartsAt(OrderState.Draft, Fresh);
 
         m.In(OrderState.Draft)
             .Holds(ctx =>
@@ -89,7 +97,7 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
             .On(OrderTrigger.Place)
             .When((ctx, input) => ItemsCount(ctx) > 0 && Receipt(input) is not null)
             .Because("An order needs items and a receipt to be placed.")
-            .RunsOnce<IOrderCharge>("order:place")
+            .RunsOnce<IOrderCharge>($"{id}:place")
             .Reduce(
                 (ctx, input) =>
                 {

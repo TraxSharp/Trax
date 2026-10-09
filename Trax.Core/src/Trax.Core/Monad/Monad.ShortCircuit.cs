@@ -25,6 +25,8 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, (Exception)Exception);
 
+        ChainGraph.Enter(Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction))), BranchPath);
+
         var result = await junction.RailwayJunction(previousJunction, Train).ConfigureAwait(false);
 
         // We skip the Left for Short Circuiting - only process Right results
@@ -64,6 +66,9 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return Task.FromResult(this);
 
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
+            return Task.FromResult(this);
+
         var junctionInstance = this.InitializeJunction<TJunction, TInput, TReturn>();
 
         if (junctionInstance is null)
@@ -81,7 +86,7 @@ public partial class Monad<TInput, TReturn>
     public MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance)
         where TJunction : class =>
         Recorder is not null
-            ? RecordStep<TJunction>(ChainStepKind.ShortCircuit)
+            ? RecordInstance(junctionInstance, RecordStep<TJunction>(ChainStepKind.ShortCircuit))
             : new(ShortCircuitAsync(junctionInstance));
 
     private async Task<Monad<TInput, TReturn>> ShortCircuitAsync<TJunction>(
@@ -90,6 +95,9 @@ public partial class Monad<TInput, TReturn>
         where TJunction : class
     {
         if (Exception is not null)
+            return this;
+
+        if (SkipStep(ChainNodeScope.JunctionKey(typeof(TJunction))))
             return this;
 
         var (tIn, tOut) = ReflectionHelpers.ExtractJunctionTypeArguments<TJunction>();

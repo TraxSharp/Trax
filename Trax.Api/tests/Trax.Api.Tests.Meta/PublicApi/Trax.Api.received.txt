@@ -116,6 +116,22 @@ namespace Trax.Api.DTOs
         public string? StateHash { get; init; }
         public bool TrackWithheld { get; init; }
     }
+    public sealed class DeclaredNode : System.IEquatable<Trax.Api.DTOs.DeclaredNode>
+    {
+        public DeclaredNode(Trax.Core.Monad.ChainGraphNode Node, string? ParentId, string? Track, int Depth) { }
+        public int Depth { get; init; }
+        public Trax.Core.Monad.ChainGraphNode Node { get; init; }
+        public string? ParentId { get; init; }
+        public string? Track { get; init; }
+        public static System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.DeclaredNode> Flatten(Trax.Core.Monad.ChainGraph graph) { }
+    }
+    public sealed class DeclaredTrack : System.IEquatable<Trax.Api.DTOs.DeclaredTrack>
+    {
+        public DeclaredTrack(string Name, string? Description, bool IsFallback) { }
+        public string? Description { get; init; }
+        public bool IsFallback { get; init; }
+        public string Name { get; init; }
+    }
     public class EffectInfo : System.IEquatable<Trax.Api.DTOs.EffectInfo>
     {
         public EffectInfo(string Name, string FullName, bool Enabled, bool Toggleable, bool IsConfigurable = false, string? ConfigurationTypeName = null, string? Configuration = null) { }
@@ -205,6 +221,8 @@ namespace Trax.Api.DTOs
         public long? ParentId { get; init; }
         public bool ReplayAbandoned { get; init; }
         public long? ReplayDecisionsOf { get; init; }
+        public string? ResumeAt { get; init; }
+        public long? ResumeFrom { get; init; }
         public System.DateTime? ScheduledTime { get; init; }
         public string? StackTrace { get; init; }
         public System.DateTime StartTime { get; init; }
@@ -303,6 +321,7 @@ namespace Trax.Api.DTOs
         public string? Answer { get; init; }
         public bool AnswerWithheld { get; init; }
         public int? Attempt { get; init; }
+        public string? BranchPath { get; init; }
         public double? Confidence { get; init; }
         public string? Decider { get; init; }
         public double? DurationMs { get; init; }
@@ -312,6 +331,7 @@ namespace Trax.Api.DTOs
         public Trax.Effect.Enums.JunctionRunKind Kind { get; init; }
         public string Name { get; init; }
         public bool NameWithheld { get; init; }
+        public string? NodeId { get; init; }
         public int Position { get; init; }
         public string? QuestionKey { get; init; }
         public bool Replayed { get; init; }
@@ -345,6 +365,64 @@ namespace Trax.Api.DTOs
         public LogLevelSettingInput(string Category, Microsoft.Extensions.Logging.LogLevel Level) { }
         public string Category { get; init; }
         public Microsoft.Extensions.Logging.LogLevel Level { get; init; }
+    }
+    public class MachineInstance : System.IEquatable<Trax.Api.DTOs.MachineInstance>
+    {
+        public MachineInstance(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }
+        public System.DateTimeOffset? CreatedAt { get; init; }
+        public bool HasLiveInvokedRun { get; init; }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long RowId { get; init; }
+        public string State { get; init; }
+        public System.DateTimeOffset UpdatedAt { get; init; }
+        public int Version { get; init; }
+    }
+    public class MachineInstanceCancelResponse : System.IEquatable<Trax.Api.DTOs.MachineInstanceCancelResponse>
+    {
+        public MachineInstanceCancelResponse(bool Success, Trax.Scheduler.Services.Operations.MachineInstanceCancelOutcome Outcome, string Message, string? State) { }
+        public string Message { get; init; }
+        public Trax.Scheduler.Services.Operations.MachineInstanceCancelOutcome Outcome { get; init; }
+        public string? State { get; init; }
+        public bool Success { get; init; }
+    }
+    public class MachineInstanceCount : System.IEquatable<Trax.Api.DTOs.MachineInstanceCount>
+    {
+        public MachineInstanceCount(string Machine, string State, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, long Count) { }
+        public long Count { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public string State { get; init; }
+    }
+    public class MachineInstanceDetail : System.IEquatable<Trax.Api.DTOs.MachineInstanceDetail>
+    {
+        public MachineInstanceDetail(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }
+        public System.DateTimeOffset? CreatedAt { get; init; }
+        public bool HasLiveInvokedRun { get; init; }
+        public System.Guid Id { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.MachineInstanceInvokedRun> InvokedRuns { get; init; }
+        public bool IsInvokedRunsCapped { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long? QueuedInvokedRunEntryId { get; init; }
+        public long RowId { get; init; }
+        public string State { get; init; }
+        public System.DateTimeOffset UpdatedAt { get; init; }
+        public int Version { get; init; }
+    }
+    public class MachineInstanceInvokedRun : System.IEquatable<Trax.Api.DTOs.MachineInstanceInvokedRun>
+    {
+        public MachineInstanceInvokedRun(long Id, string ExternalId, string Name, Trax.Effect.Enums.TrainState TrainState, System.DateTime StartTime, System.DateTime? EndTime, Trax.Core.Exceptions.FailureClass FailureClass, bool CancellationRequested, bool IsLive) { }
+        public bool CancellationRequested { get; init; }
+        public System.DateTime? EndTime { get; init; }
+        public string ExternalId { get; init; }
+        public Trax.Core.Exceptions.FailureClass FailureClass { get; init; }
+        public long Id { get; init; }
+        public bool IsLive { get; init; }
+        public string Name { get; init; }
+        public System.DateTime StartTime { get; init; }
+        public Trax.Effect.Enums.TrainState TrainState { get; init; }
     }
     public class ManifestDetail : System.IEquatable<Trax.Api.DTOs.ManifestDetail>
     {
@@ -476,6 +554,61 @@ namespace Trax.Api.DTOs
         public int Skip { get; init; }
         public int Take { get; init; }
         public int TotalCount { get; init; }
+    }
+    public sealed class RunGraph : System.IEquatable<Trax.Api.DTOs.RunGraph>
+    {
+        public RunGraph(long MetadataId, string Train, bool HasGraph, string? Hash, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> UnmatchedSteps, bool MoreSteps) { }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> AllNodes { get; }
+        public bool CanResume { get; init; }
+        public bool HasGraph { get; init; }
+        public string? Hash { get; init; }
+        public long MetadataId { get; init; }
+        public bool MoreSteps { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes { get; init; }
+        public string Train { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> UnmatchedSteps { get; init; }
+    }
+    public sealed class RunGraphNode : System.IEquatable<Trax.Api.DTOs.RunGraphNode>
+    {
+        public RunGraphNode(string Id, Trax.Core.Monad.ChainStepKind Kind, string? Junction, string? In, string? Out, bool Opaque, Trax.Api.DTOs.RunNodeState State, bool Replayed, string? TrackTaken, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> Steps, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphTrack> Tracks) { }
+        public bool CanResume { get; init; }
+        public bool Checkpointed { get; init; }
+        public int Depth { get; init; }
+        public string Id { get; init; }
+        public string? In { get; init; }
+        public string? Junction { get; init; }
+        public Trax.Core.Monad.ChainStepKind Kind { get; init; }
+        public bool Opaque { get; init; }
+        public string? Out { get; init; }
+        public string? ParentId { get; init; }
+        public bool Replayed { get; init; }
+        public Trax.Api.DTOs.RunNodeState State { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.JunctionStep> Steps { get; init; }
+        public string? Track { get; init; }
+        public string? TrackTaken { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphTrack> Tracks { get; init; }
+    }
+    public sealed class RunGraphTrack : System.IEquatable<Trax.Api.DTOs.RunGraphTrack>
+    {
+        public RunGraphTrack(string Name, string? Description, bool IsFallback, bool Taken, System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes) { }
+        public string? Description { get; init; }
+        public bool IsFallback { get; init; }
+        public string Name { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.DTOs.RunGraphNode> Nodes { get; init; }
+        public bool Taken { get; init; }
+    }
+    public enum RunNodeState
+    {
+        NotReached = 0,
+        InProgress = 1,
+        Completed = 2,
+        Failed = 3,
+        Cancelled = 4,
+        Skipped = 5,
+        NotRecorded = 6,
+        Withheld = 7,
+        Restored = 8,
+        Interrupted = 9,
     }
     public class RunTrainResponse : System.IEquatable<Trax.Api.DTOs.RunTrainResponse>
     {

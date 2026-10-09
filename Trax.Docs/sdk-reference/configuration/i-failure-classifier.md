@@ -52,6 +52,9 @@ Trax resolves one `IFailureClassifier` from the train's service provider, so the
 | The failure was rebuilt from a serialized record (a remote failure) and carries no class | `Unclassified`; a rebuilt exception is never passed to the local classifier, because its original type is gone |
 | The scheduler recorded the failure (dispatch failure, stale-run reaping) | `Unclassified` |
 | A failure raised outside any junction | The classifier's answer |
+| A `Parallel` step failed (`BranchesFailedException`) | Each failed branch's class, taken as above for that branch's own failure (the class it carries, else the classifier's answer for its exception), combined: `Permanent` if any is, else `Unclassified` if any is or has none, else `Conflict` if any is, else `Transient`. A branch stopped because a sibling failed is not counted. The classifier is not asked about the `BranchesFailedException` itself |
+| A run cancelled while its `Parallel` branches ran (its token, or its cancel flag read by one branch) | `Cancelled` state, as for any requested cancellation |
+| An `OperationCanceledException` nothing asked for, raised inside a `Parallel` branch | That branch's failure, counted in the `BranchesFailedException` like any other |
 
 The recorded class is `Metadata.FailureClass`, readable in `OnFailed`, persisted in the `failure_class` column, and exposed over GraphQL as `failureClass`.
 

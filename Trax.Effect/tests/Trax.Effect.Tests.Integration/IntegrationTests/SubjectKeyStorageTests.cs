@@ -2,6 +2,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
@@ -23,6 +24,9 @@ namespace Trax.Effect.Tests.Integration.IntegrationTests;
 public class SubjectKeyStorageTests : TestSetup
 {
     [Test]
+    [LeavesStuckRuns(
+        "marks an entry dispatched by hand so the key has to fit the busy index, with no run behind it"
+    )]
     public async Task A_key_of_the_most_four_byte_characters_allowed_is_indexed_when_dispatched()
     {
         var key = FourByteKey(WorkQueue.MaxSubjectKeyLength);

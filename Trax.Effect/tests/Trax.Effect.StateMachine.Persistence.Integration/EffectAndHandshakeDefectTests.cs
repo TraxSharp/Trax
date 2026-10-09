@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.StateMachine.Persistence.Integration.Fakes;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 using Trax.Effect.StateMachine.Persistence.Mutations;
@@ -38,6 +39,7 @@ public class EffectAndHandshakeDefectTests
 {
     [TestCase(null)]
     [TestCase("")]
+    [LeavesStuckRuns("ends by claiming the key to prove it is free, and keeps that claim")]
     public async Task An_effect_that_returns_no_receipt_fails_instead_of_being_recorded_in_flight(
         string? receipt
     )

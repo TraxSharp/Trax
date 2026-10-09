@@ -22,6 +22,7 @@ public interface IOperationsService
     Task<OperationResult> RunTrainAsync(RunTrainInput input, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, CancellationToken ct);
     Task<OperationResult> RequeueExecutionAsync(long metadataId, bool askAfresh, CancellationToken ct);
+    Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
     Task<OperationResult> CancelExecutionsAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntriesAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
     Task<OperationResult> SetManifestsEnabledAsync(IReadOnlyCollection<long> ids, bool enabled, CancellationToken ct);
@@ -39,6 +40,10 @@ public interface IOperationsService
     Task<LogCount> CountLogsCappedAsync(LogQuery query, CancellationToken ct);
     Task<RecordedDecisionPage> GetRecordedDecisionsAsync(long metadataId, long? afterId, int take, CancellationToken ct);
     Task<WorkQueueEntryDetail?> GetWorkQueueEntryDetailAsync(long id, CancellationToken ct);
+    Task<MachineInstancePage> GetMachineInstancesAsync(MachineInstanceQuery query, CancellationToken ct);
+    Task<MachineInstanceTotal> CountMachineInstancesAsync(MachineInstanceQuery query, CancellationToken ct);
+    Task<MachineInstanceRecord?> GetMachineInstanceAsync(MachineInstanceKey key, CancellationToken ct);
+    Task<IReadOnlyList<MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(string? machine, CancellationToken ct);
     Task<OperationResult> CancelWorkQueueEntryAsync(long id, CancellationToken ct);
     Task<OperationResult> UpdateManifestAsync(long id, ManifestUpdate update, CancellationToken ct);
     Task<OperationResult> UpdateManifestGroupAsync(long id, UpdateManifestGroupInput input, CancellationToken ct);
@@ -144,6 +149,50 @@ not implement the
 the mediator's `DecisionReplayNotSupportedException` is logged and thrown as a host
 misconfiguration rather than reported as `The enqueue was refused.`
 
+A requeue always runs the chain again from the top, whatever checkpoints the run stored. To carry
+on from a checkpoint instead, resume it.
+
+### ResumeExecutionAsync
+
+```csharp
+Task<OperationResult> ResumeExecutionAsync(long metadataId, string? from, CancellationToken ct);
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `metadataId` | `long` | The failed or cancelled run (metadata row) to resume |
+| `from` | `string?` | The node id of the step to resume at, as the run graph names it, or `null` for after the run's latest checkpoint |
+
+Queues a run that resumes a run from a
+[checkpoint](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0047-a-checkpoint-stores-a-state-the-train-declares-and-a-resume-skips-to-it.md):
+it skips every step before the resume point and starts from the state the checkpoint stored. It is
+a requeue in every check but where the run starts. It refuses, with a failed result and nothing
+queued, when:
+
+- no run has the id (`Execution {id} not found.`);
+- the run is not `Failed` or `Cancelled` (`Execution {id} is {state}; only a failed or cancelled run can be resumed.`);
+- a state machine's invoking state queued it, which only the machine retries, by entering the state again (`Execution {id} was started by a step of the state machine '{machine}', ... so it cannot be resumed. ...`);
+- its saved input cannot be re-queued, for the reasons `RequeueExecutionAsync` gives;
+- a resume of it is already queued (`A resume of execution {id} is already queued ...`);
+- its train is no longer registered, or its chain cannot be read on this host;
+- the resume check refuses: the run stored no checkpoint before `from`, a step after the point needs
+  a value nothing restores, or the stored checkpoint no longer matches the running chain or the
+  state's shape. The check's own reason is the message, unchanged.
+
+Otherwise it enqueues through the mediator exactly as `RequeueExecutionAsync` does, with the run's
+saved input, so the train's `[TraxAuthorize]`, its `OnQueue` hook and its subject key apply, and an
+authorization failure propagates. The entry names the run in `ResumeFrom` and the step in
+`ResumeAt`, and, when the run has decisions to replay, in `ReplayDecisionsOf` as a requeue would, so
+a question asked after the resume point takes the track the run took. On success `Id` is the new
+work queue entry. The new run checks the resume again when it starts, and runs from the top, with a
+warning in its log, if it can no longer be trusted.
+
+A run has at most one queued resume. When a manifest's retry, which resumes after the failed run's
+latest checkpoint on its own (see
+[Retries resume from a checkpoint](/docs/scheduler/dead-letters-and-cleanup#retries-resume-from-a-checkpoint)),
+or another operator queues one between this call's checks and its insert, the database refuses the
+second, and this call returns the same refusal.
+
 ## Failures
 
 Both methods return a failed `OperationResult` with a `Message` for an answer the caller can act on, and throw for a fault on the server's side.
@@ -170,8 +219,8 @@ The actions a list page applies to its selected rows. Each takes up to `Operatio
 
 | Method | What changes | Change signal |
 |--------|--------------|---------------|
-| `CancelExecutionsAsync(ids, ct)` | Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped. A `Pending` run is recorded `Cancelled` and never run when the job runner picks it up, whatever junction providers the host registers. An `InProgress` run observes the flag at its next junction boundary, when the host uses the junction progress provider. | `Execution`, when at least one run was flagged |
-| `CancelWorkQueueEntriesAsync(ids, ct)` | Entries still `Queued` become `Cancelled`, in one statement, so an entry the dispatcher claims meanwhile keeps its status | `WorkQueue` |
+| `CancelExecutionsAsync(ids, ct)` | Each run still `Pending` or `InProgress` gets `CancellationRequested`, and one running on this host is also cancelled at once through `ICancellationRegistry`. Terminal and unknown runs are skipped, and so is a run a step of a user's state-machine draft started, which an operator may not cancel: the message counts those and ends with `OperationsService.UserOwnedRunCancelRefusal`, and a single such id is refused with it. A `Pending` run is recorded `Cancelled` and never run when the job runner picks it up, whatever junction providers the host registers. An `InProgress` run observes the flag at its next junction boundary, when the host uses the junction progress provider. | `Execution`, when at least one run was flagged |
+| `CancelWorkQueueEntriesAsync(ids, ct)` | Entries still `Queued` become `Cancelled`, in one statement, so an entry the dispatcher claims meanwhile keeps its status. An entry a user's draft queued is skipped and counted, as `CancelExecutionsAsync` skips its run, and `CancelWorkQueueEntryAsync` refuses one | `WorkQueue` |
 | `SetManifestsEnabledAsync(ids, enabled, ct)` | Manifests whose `IsEnabled` differs | `Manifest` |
 | `SetManifestsReplayDecisionsOnRetryAsync(ids, replay, ct)` | Manifests whose `ReplayDecisionsOnRetry` differs. Turning it off also clears the replay link of each manifest's queued entry, in the same transaction as the flag, so a retry waiting out its backoff asks afresh; the message then adds `{n} queued retry(s) no longer replay a failed run's decisions.` See [Retries replay decisions](/docs/scheduler/dead-letters-and-cleanup#retries-replay-decisions). | `Manifest`, when any changed; `WorkQueue`, when a link was cleared |
 | `SetManifestGroupsEnabledAsync(ids, enabled, ct)` | Groups whose `IsEnabled` differs, with `UpdatedAt` bumped | `ManifestGroup` |
@@ -253,7 +302,7 @@ On a relational provider each batch is one `UPDATE` with its state test in it, s
 ## Read models
 
 The numbers behind a manifest's detail cards, the manifest groups list, the logs pages, a
-run's recorded decisions and a work queue entry's page.
+run's recorded decisions, a work queue entry's page and the State Machines pages.
 
 | Method | Returns |
 |--------|---------|
@@ -340,6 +389,89 @@ a key two types share is withheld when either is marked.
 
 The replay links are plain columns read with the run and the entry: `Metadata.ReplayDecisionsOf`,
 `Metadata.ReplayAbandoned` and `WorkQueue.ReplayDecisionsOf`.
+
+### State-machine instances
+
+The operator's read-only view of `trax.snapshot_draft`: the dashboard's
+[State Machines pages](/docs/dashboard#state-machines) and the API's
+[`machineInstances`, `machineInstance` and `machineInstanceCounts`](/docs/sdk-reference/graphql-api/queries#machineinstances)
+read through these four methods, and one instance's runs and its cancel through the two after them.
+
+```csharp
+public record MachineInstanceQuery(
+    string? Machine = null, string? State = null, SnapshotOwnerKind? OwnerKind = null,
+    int Skip = 0, int Take = 25);
+
+public record MachineInstanceKey(string Machine, SnapshotOwnerKind OwnerKind, Guid Id, long? RowId = null);
+
+public record MachineInstanceRecord(
+    long RowId, string Machine, SnapshotOwnerKind OwnerKind, Guid Id, string State, int Version,
+    DateTimeOffset? CreatedAt, DateTimeOffset UpdatedAt, bool HasLiveInvokedRun);
+
+public record MachineInstancePage(IReadOnlyList<MachineInstanceRecord> Items, int Skip, int Take);
+public record MachineInstanceTotal(int Count, bool Capped);
+public record MachineInstanceStateCount(string Machine, string State, SnapshotOwnerKind OwnerKind, long Count);
+```
+
+| Method | Returns |
+|--------|---------|
+| `GetMachineInstancesAsync(query, ct)` | A page of instances matching the query's machine, state and owner kind (each optional), newest first by `UpdatedAt`, then by row. `Take` is clamped to 1 through 500, a negative `Skip` reads from the start, and a `Skip` above `MachineInstanceCountCap` (10,000) throws `ArgumentOutOfRangeException`, as the API's `machineInstances` refuses it. |
+| `CountMachineInstancesAsync(query, ct)` | How many match, counted up to `OperationsService.MachineInstanceCountCap` (10,000): more give `Count = 10000, Capped = true`. |
+| `GetMachineInstanceAsync(key, ct)` | One instance, or `null`. The owner kind is part of every lookup, so a user's draft never answers for a system instance under the same id. A user's draft also needs `RowId`, because several users can hold a draft under one id: without it the method throws `ArgumentException`. |
+| `GetMachineInstanceStateCountsAsync(machine, ct)` | Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. Kept for `MachineInstanceCountCacheDuration` (5 seconds) per host and per `machine`, with callers asking meanwhile sharing one read, so a count can be that old. |
+
+A record never carries the snapshot's context or the owning user's key. The context is an untyped
+JSON object, so nothing could mask its sensitive parts; an operator sees where an instance is and
+when it got there, never what it holds. `HasLiveInvokedRun` says whether the instance holds an invoke
+token, not what the token is. `CreatedAt` is null for a row written before migration 071 (Sqlite
+033) added it. On Postgres a page under one machine and state reads
+`ix_snapshot_draft_machine_state_updated` in order, and any other page reads
+`ix_snapshot_draft_updated`; at two million instances every page measured took under 10 ms and the
+counts about 120 ms.
+
+Two more methods serve one instance's page and its one operator action, the dashboard's and the
+API's alike (`machineInstance { invokedRuns }` and
+[`cancelMachineInstance`](/docs/sdk-reference/graphql-api/mutations#cancelmachineinstance)):
+
+```csharp
+public record MachineInstanceRun(
+    long Id, string ExternalId, string TrainName, TrainState TrainState, DateTime StartTime,
+    DateTime? EndTime, FailureClass FailureClass, bool CancellationRequested, bool IsLive);
+
+public record MachineInstanceRuns(IReadOnlyList<MachineInstanceRun> Items, bool Capped, long? QueuedEntryId);
+
+public enum MachineInstanceCancelOutcome
+{
+    Moved, RunCancelled, CancelRequested, // the run was cancelled or its cancel requested
+    UserOwned, NotFound, NoLiveRun, RunEnded, // refused, nothing changed
+}
+
+public record MachineInstanceCancelResult(
+    MachineInstanceCancelOutcome Outcome, string Message, string? State = null)
+{
+    public bool Success { get; }
+}
+```
+
+| Method | Returns |
+|--------|---------|
+| `GetMachineInstanceRunsAsync(key, ct)` | The runs the instance invoked, newest first, at most `OperationsService.MachineInstanceRunCap` (50), with the one its state waits on marked `IsLive`; `QueuedEntryId` is that run's work queue entry while it is still queued. `null` when no row matches. A system instance lists every run linked to it (read through `ix_metadata_invoking_instance`); a user's draft lists only the run its own invoke token names, because a run does not record which user's draft queued it. Never a run's input or output. |
+| `CancelMachineInstanceAsync(key, ct)` | Cancels a system-owned instance's live run: a still-queued entry is marked Cancelled by one conditional statement, and a dispatched run is flagged as `CancelExecutionsAsync` flags one. The dispatcher claims an entry and writes its run in one transaction, so the run either never starts or is cancelled. When this host registers the machine (`AddStateMachines`), a queued run's Cancelled outcome is applied in the call (`Moved`); otherwise a host that does applies it (`RunCancelled`). Every delivery is the one conditional update on the token, so the outcome is applied once. A dispatched run's outcome is applied when it ends (`CancelRequested`). Refused, with a typed outcome and changing nothing: `UserOwned`, `NotFound`, `NoLiveRun`, `RunEnded`. |
+
+The messages are public members of `OperationsService`, and both surfaces show them unchanged:
+
+| Outcome | Message |
+|---|---|
+| `Moved` | `MovedMessage(key, state)`: the queued run was cancelled and the instance moved to `state` in this call |
+| `RunCancelled` | `RunCancelledMessage(key)`: the queued run was cancelled; a host that registers the machine moves it |
+| `CancelRequested` | `CancelRequestedMessage(key, state)`: the dispatched run's cancel flag is set |
+| `UserOwned` | `UserOwnedCancelRefusal` |
+| `NotFound` | `InstanceNotFoundMessage(key)` |
+| `NoLiveRun` | `NoLiveRunMessage(key, state)` |
+| `RunEnded` | `RunEndedMessage(key, state)`: the run ended before the cancel reached it, and its outcome is on its way |
+
+A requeue of a run a machine invoked is refused with `InvokedRunRequeueRefusal(metadataId, machine)`,
+and an operator's cancel of a run a user's draft started with `UserOwnedRunCancelRefusal`.
 
 ### Masking a stored input
 

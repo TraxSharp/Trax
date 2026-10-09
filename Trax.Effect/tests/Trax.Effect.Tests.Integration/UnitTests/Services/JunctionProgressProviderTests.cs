@@ -1,7 +1,13 @@
 using System.Reflection;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
+using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Services.JunctionProgressProvider;
 using Trax.Effect.Models;
 using Trax.Effect.Models.JunctionMetadata;
@@ -9,6 +15,7 @@ using Trax.Effect.Models.JunctionMetadata.DTOs;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.EffectJunction;
+using Trax.Effect.Services.EffectProvider;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.ServiceTrain;
 
@@ -16,26 +23,38 @@ namespace Trax.Effect.Tests.Integration.UnitTests.Services;
 
 /// <summary>
 /// Unit tests for <see cref="JunctionProgressProvider"/>, the junction effect provider
-/// that writes currently-running junction name and timestamp to train metadata.
+/// that writes currently-running junction name and timestamp to train metadata. It writes those two
+/// columns through a context of its own and never saves through the run's effect runner, which
+/// would commit everything else the run has tracked so far.
 /// </summary>
 [TestFixture]
 public class JunctionProgressProviderTests
 {
     private JunctionProgressProvider _provider;
     private FakeEffectRunner _fakeEffectRunner;
+    private ServiceProvider _services;
+    private RecordingFactory _factory;
 
     [SetUp]
     public void SetUp()
     {
-        _provider = new JunctionProgressProvider();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory()));
+        _services = services.BuildServiceProvider();
+        _factory = new RecordingFactory(
+            _services.GetRequiredService<IDataContextProviderFactory>()
+        );
+        _provider = new JunctionProgressProvider(_factory);
         _fakeEffectRunner = new FakeEffectRunner();
     }
 
     [TearDown]
-    public void TearDown()
+    public async Task TearDown()
     {
         _provider.Dispose();
         _fakeEffectRunner.Dispose();
+        await _services.DisposeAsync();
     }
 
     #region BeforeJunctionExecution Tests
@@ -70,29 +89,28 @@ public class JunctionProgressProviderTests
     }
 
     [Test]
-    public async Task BeforeJunctionExecution_CallsEffectRunnerUpdate()
+    public async Task BeforeJunctionExecution_WritesTheProgressColumnsToTheRow()
     {
-        // Arrange
         var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
 
-        // Act
         await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
 
-        // Assert
-        _fakeEffectRunner.UpdateCallCount.Should().Be(1);
+        var row = await StoredRow(train);
+        row.CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
+        row.JunctionStartedAt.Should().NotBeNull();
     }
 
     [Test]
-    public async Task BeforeJunctionExecution_CallsEffectRunnerSaveChanges()
+    public async Task BeforeJunctionExecution_DoesNotSaveThroughTheEffectRunner()
     {
-        // Arrange
         var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
 
-        // Act
         await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
 
-        // Assert
-        _fakeEffectRunner.SaveChangesCallCount.Should().Be(1);
+        _fakeEffectRunner
+            .SaveChangesCallCount.Should()
+            .Be(0, "saving through the runner would commit everything else the run tracked");
+        _fakeEffectRunner.UpdateCallCount.Should().Be(0);
     }
 
     [Test]
@@ -125,18 +143,77 @@ public class JunctionProgressProviderTests
     }
 
     [Test]
-    public async Task BeforeJunctionExecution_PassesCancellationTokenToSaveChanges()
+    public async Task BeforeJunctionExecution_ACancelledCallerStopsWaiting_AndTheRunSettlesTheWrite()
     {
-        // Arrange
+        // The write carries every caller's change, so no one caller's token may cancel it. The
+        // caller stops waiting; the run settles the write before its terminal write.
         var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var gate = _factory.Hold();
         using var cts = new CancellationTokenSource();
 
-        // Act
-        await _provider.BeforeJunctionExecution(junction, train, cts.Token);
+        var before = _provider.BeforeJunctionExecution(junction, train, cts.Token);
+        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30));
+        await cts.CancelAsync();
 
-        // Assert
-        _fakeEffectRunner.SaveChangesCallCount.Should().Be(1);
-        _fakeEffectRunner.LastSaveChangesCancellationToken.Should().Be(cts.Token);
+        await FluentActions
+            .Awaiting(() => before)
+            .Should()
+            .ThrowAsync<OperationCanceledException>();
+
+        var settled = _provider.Settle();
+        settled.IsCompleted.Should().BeFalse("the write the caller left is still in flight");
+
+        gate.SetResult();
+        await settled;
+        _factory.LastToken.Should().Be(CancellationToken.None);
+        (await StoredRow(train)).CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
+    }
+
+    [Test]
+    public async Task BeforeJunctionExecution_ConcurrentBranchesShareAWrite_RatherThanQueueForOne()
+    {
+        // Eight branches start a junction while a write is in flight. They wait for that write and
+        // the one after it, which carries all of their changes, not for eight writes in turn.
+        var train = CreateTestTrain();
+        var gate = _factory.Hold();
+
+        var first = _provider.BeforeJunctionExecution(
+            CreateTestJunction("Branch0"),
+            train,
+            CancellationToken.None
+        );
+        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30));
+
+        var others = Enumerable
+            .Range(1, 7)
+            .Select(i =>
+                _provider.BeforeJunctionExecution(
+                    CreateTestJunction($"Branch{i}"),
+                    train,
+                    CancellationToken.None
+                )
+            )
+            .ToList();
+
+        gate.SetResult();
+        await Task.WhenAll([first, .. others]);
+
+        _factory
+            .Writes.Should()
+            .Be(2, "the seven changes made while the first write was in flight share one write");
+        (await StoredRow(train)).CurrentlyRunningJunction.Should().Be("Branch7");
+    }
+
+    [Test]
+    public async Task BeforeJunctionExecution_ARowNotSavedYet_WritesNothing()
+    {
+        var train = CreateTestTrain(metadata: CreateMetadata(), save: false);
+        var junction = CreateTestJunction("SomeJunction");
+
+        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
+
+        _factory.Writes.Should().Be(0);
+        train.Metadata!.CurrentlyRunningJunction.Should().Be("SomeJunction");
     }
 
     #endregion
@@ -174,17 +251,19 @@ public class JunctionProgressProviderTests
     }
 
     [Test]
-    public async Task AfterJunctionExecution_CallsEffectRunnerUpdateAndSaveChanges()
+    public async Task AfterJunctionExecution_ClearsTheProgressColumnsOnTheRow()
     {
-        // Arrange
         var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
 
-        // Act
         await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await _provider.Settle();
 
-        // Assert
-        _fakeEffectRunner.UpdateCallCount.Should().Be(1);
-        _fakeEffectRunner.SaveChangesCallCount.Should().Be(1);
+        var row = await StoredRow(train);
+        row.CurrentlyRunningJunction.Should().BeNull();
+        row.JunctionStartedAt.Should().BeNull();
+        _fakeEffectRunner.SaveChangesCallCount.Should().Be(0);
+        _fakeEffectRunner.UpdateCallCount.Should().Be(0);
     }
 
     [Test]
@@ -197,15 +276,17 @@ public class JunctionProgressProviderTests
         await cts.CancelAsync();
 
         await _provider.AfterJunctionExecution(junction, train, cts.Token);
+        await _provider.Settle();
 
-        _fakeEffectRunner.LastSaveChangesCancellationToken.Should().Be(CancellationToken.None);
+        _factory.LastToken.Should().Be(CancellationToken.None);
     }
 
     [Test]
     public async Task AfterJunctionExecution_AFailingWrite_DoesNotReplaceTheJunctionsResult()
     {
-        var train = CreateTestTrain(effectRunner: new ThrowingEffectRunner());
+        var train = CreateTestTrain();
         var junction = CreateTestJunction("ProcessDataJunction");
+        _factory.Throws = true;
 
         var act = () => _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
 
@@ -213,6 +294,10 @@ public class JunctionProgressProviderTests
             .NotThrowAsync(
                 "a failed progress write after finished work is logged, not the outcome"
             );
+        await FluentActions
+            .Awaiting(() => _provider.Settle())
+            .Should()
+            .NotThrowAsync("the run's terminal write follows whatever the writer did");
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
     }
 
@@ -250,6 +335,7 @@ public class JunctionProgressProviderTests
 
         // Act — After
         await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await _provider.Settle();
 
         // Assert — progress is cleared
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
@@ -269,6 +355,7 @@ public class JunctionProgressProviderTests
         train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction1");
 
         await _provider.AfterJunctionExecution(junction1, train, CancellationToken.None);
+        await _provider.Settle();
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
 
         // Step 2 lifecycle
@@ -276,11 +363,13 @@ public class JunctionProgressProviderTests
         train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction2");
 
         await _provider.AfterJunctionExecution(junction2, train, CancellationToken.None);
+        await _provider.Settle();
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
 
-        // Verify 4 updates (before+after for each junction) and 4 saves
-        _fakeEffectRunner.UpdateCallCount.Should().Be(4);
-        _fakeEffectRunner.SaveChangesCallCount.Should().Be(4);
+        // Four writes of the two columns (before and after each junction, each settled before the
+        // next), none through the runner.
+        _factory.Writes.Should().Be(4);
+        _fakeEffectRunner.SaveChangesCallCount.Should().Be(0);
     }
 
     #endregion
@@ -316,18 +405,71 @@ public class JunctionProgressProviderTests
         return (train, junction);
     }
 
-    private TestTrain CreateTestTrain(Metadata? metadata = null, IEffectRunner? effectRunner = null)
+    private TestTrain CreateTestTrain(Metadata? metadata = null, bool save = true)
     {
         var train = new TestTrain();
 
         // EffectRunner has a public setter
-        train.EffectRunner = effectRunner ?? _fakeEffectRunner;
+        train.EffectRunner = _fakeEffectRunner;
 
-        // Metadata has an internal setter — use reflection
+        // Metadata has an internal setter — use reflection. Saved first, as a run's row is before
+        // its first junction, so the provider has a row to write to.
         var metadataToSet = metadata ?? CreateMetadata();
+        if (save)
+        {
+            using var context = (IDataContext)_factory.Create();
+            context.Metadatas.Add(metadataToSet);
+            context.SaveChanges(CancellationToken.None).GetAwaiter().GetResult();
+        }
         SetInternalProperty(train, "Metadata", metadataToSet);
 
         return train;
+    }
+
+    private async Task<Metadata> StoredRow(TestTrain train)
+    {
+        using var context = (IDataContext)_factory.Create();
+        return await context.Metadatas.AsNoTracking().SingleAsync(m => m.Id == train.Metadata!.Id);
+    }
+
+    /// <summary>
+    /// The real in-memory factory, counting the contexts the provider opens to write and the
+    /// token it opens them with, failing on request, and holding a write until released.
+    /// </summary>
+    private sealed class RecordingFactory(IDataContextProviderFactory inner)
+        : IDataContextProviderFactory
+    {
+        private int _writes;
+        private TaskCompletionSource? _gate;
+        private readonly TaskCompletionSource _entered = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        public int Writes => _writes;
+        public CancellationToken LastToken { get; private set; }
+        public bool Throws { get; set; }
+
+        /// <summary>Completes once a write has started.</summary>
+        public Task Entered => _entered.Task;
+
+        /// <summary>Holds every write until the returned source is completed.</summary>
+        public TaskCompletionSource Hold() =>
+            _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IEffectProvider Create() => inner.Create();
+
+        public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
+        {
+            if (Throws)
+                throw new InvalidOperationException("database unavailable");
+
+            Interlocked.Increment(ref _writes);
+            LastToken = cancellationToken;
+            _entered.TrySetResult();
+            if (_gate is { } gate)
+                await gate.Task;
+            return await inner.CreateDbContextAsync(cancellationToken);
+        }
     }
 
     private TestTrain CreateTestTrain(bool withNullMetadata)
@@ -415,18 +557,6 @@ public class JunctionProgressProviderTests
     /// <summary>
     /// Fake IEffectRunner that tracks method calls for assertions.
     /// </summary>
-    private class ThrowingEffectRunner : IEffectRunner
-    {
-        public Task SaveChanges(CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("database unavailable");
-
-        public Task Track(IModel model) => Task.CompletedTask;
-
-        public Task Update(IModel model) => Task.CompletedTask;
-
-        public void Dispose() { }
-    }
-
     private class FakeEffectRunner : IEffectRunner
     {
         public int UpdateCallCount { get; private set; }

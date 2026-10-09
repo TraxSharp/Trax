@@ -44,7 +44,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     /// <param name="previousOutput">The previous junction's result, or the train input.</param>
     /// <param name="train">The running train; must be a <see cref="ServiceTrain{TIn,TOut}"/>.</param>
     /// <exception cref="TrainException"><paramref name="train"/> is not a <see cref="ServiceTrain{TIn,TOut}"/>.</exception>
-    public override Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
+    public sealed override Task<Either<Exception, TOut>> RailwayJunction<TTrainIn, TTrainOut>(
         Either<Exception, TIn> previousOutput,
         Train<TTrainIn, TTrainOut> train
     )
@@ -146,11 +146,10 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     {
         try
         {
-            await runner.BeforeJunctionExecution(
-                this,
-                serviceTrain,
-                serviceTrain.CancellationToken
-            );
+            // The token this junction honours, read here because the base sets CancellationToken
+            // only once the effects before it have run. Inside a Parallel branch it is the
+            // branch's, so a cancelled sibling stops this branch's effects as well as its work.
+            await runner.BeforeJunctionExecution(this, serviceTrain, TokenFor(serviceTrain));
         }
         catch (Exception e) when (previousOutput.IsLeft)
         {
@@ -177,7 +176,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
     {
         try
         {
-            await runner.AfterJunctionExecution(this, serviceTrain, serviceTrain.CancellationToken);
+            await runner.AfterJunctionExecution(this, serviceTrain, TokenFor(serviceTrain));
         }
         catch (Exception e) when (result.IsLeft)
         {
@@ -189,6 +188,20 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
             );
         }
     }
+
+    /// <summary>
+    /// Whether the junction stopped because it was asked to: the run was cancelled, or, inside a
+    /// <c>Parallel</c> branch, the branch was, because a sibling failed. A cancellation nothing
+    /// asked for (an <c>HttpClient</c> timeout) is a failure.
+    /// </summary>
+    private static bool IsCancellation<TTrainIn, TTrainOut>(
+        ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
+        Exception failure
+    ) =>
+        serviceTrain.IsRequestedCancellation(failure)
+        || (
+            failure is OperationCanceledException && TokenFor(serviceTrain).IsCancellationRequested
+        );
 
     /// <summary>
     /// Publishes the junction's end. Publishing cannot change the junction's result: whatever goes
@@ -210,7 +223,7 @@ public abstract class EffectJunction<TIn, TOut> : Junction<TIn, TOut>, IEffectJu
                 Metadata.StartTimeUtc ?? DateTime.UtcNow,
                 Metadata.EndTimeUtc ?? DateTime.UtcNow,
                 failure,
-                failure is not null && serviceTrain.IsRequestedCancellation(failure),
+                failure is not null && IsCancellation(serviceTrain, failure),
                 serviceTrain.ServiceProvider,
                 serviceTrain.Logger
             );

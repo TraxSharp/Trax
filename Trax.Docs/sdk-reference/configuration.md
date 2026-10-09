@@ -196,6 +196,7 @@ These properties can be set directly on the `TraxEffectBuilder`:
 |--------|-------------|
 | [IFailureClassifier](/docs/sdk-reference/configuration/i-failure-classifier) | Classifies a failed run's exception into a `FailureClass`; registered in the container, not through the builder |
 | [ISqlDialect](/docs/sdk-reference/configuration/i-sql-dialect) | The provider-specific SQL, including a table's estimated row count; registered by `UsePostgres` and `UseSqlite` |
+| [IQueuedWorkListener](/docs/sdk-reference/configuration/i-queued-work-listener) | The provider's notice that work was queued, which wakes the job dispatcher; registered by `UsePostgres` and `UseSqlite` |
 | [IDataContext](/docs/sdk-reference/configuration/i-data-context) | Trax's own data context: the `trax` tables, transactions, and the scoped registration a data provider adds |
 | [DomainDataContext](/docs/sdk-reference/configuration/domain-data-context) | The base class and registration helpers for your own schema-per-context EF data contexts |
 | [IJunctionEffectProvider](/docs/sdk-reference/configuration/i-junction-effect-provider) | What a junction effect implements: code run before and after every `EffectJunction` |

@@ -233,9 +233,44 @@ public class WorkQueue : IModel
     public long? ReplayDecisionsOf { get; set; }
 
     /// <summary>
+    /// The run the run this entry starts resumes, carried to its metadata when it is dispatched; null for
+    /// an entry that runs its chain from the top. Set by a manifest's retry, a dead letter's requeue or an
+    /// operator's resume. One queued entry at a time may resume a given run.
+    /// </summary>
+    [Column("resume_from")]
+    public long? ResumeFrom { get; set; }
+
+    /// <summary>
+    /// The node id the run resumes at, or null for after the latest checkpoint of the run named by
+    /// <see cref="ResumeFrom"/>. Carried to the run's metadata when it is dispatched.
+    /// </summary>
+    [Column("resume_at")]
+    public string? ResumeAt { get; set; }
+
+    /// <summary>
     /// The dead letter record that triggered this requeue, if applicable.
     /// </summary>
     public DeadLetter.DeadLetter? DeadLetter { get; set; }
+
+    /// <summary>
+    /// The machine whose invoking state queued this entry, or null for every other entry. Set only by
+    /// <see cref="Create"/>, from <see cref="CreateWorkQueue.InvokedBy"/>, and carried to the run's metadata at
+    /// dispatch. An invoked run is never retried by the scheduler and an operator cannot requeue it: the machine
+    /// retries by entering its state again.
+    /// </summary>
+    [Column("invoking_machine")]
+    [JsonInclude]
+    public string? InvokingMachine { get; private set; }
+
+    /// <summary>The id of the instance whose invoking state queued this entry; null unless <see cref="InvokingMachine"/> is set.</summary>
+    [Column("invoking_instance_id")]
+    [JsonInclude]
+    public Guid? InvokingInstanceId { get; private set; }
+
+    /// <summary>Whether a user or the system owns the instance that queued this entry; null unless <see cref="InvokingMachine"/> is set.</summary>
+    [Column("invoking_owner_kind")]
+    [JsonInclude]
+    public SnapshotOwnerKind? InvokingOwnerKind { get; private set; }
 
     #endregion
 
@@ -264,11 +299,16 @@ public class WorkQueue : IModel
             ScheduledAt = dto.ScheduledAt,
             DeadLetterId = dto.DeadLetterId,
             ReplayDecisionsOf = dto.ReplayDecisionsOf,
+            ResumeFrom = dto.ResumeFrom,
+            ResumeAt = dto.ResumeAt,
             IsExplicitTrigger = dto.ExplicitTrigger || dto.DeadLetterId is not null,
             Status = WorkQueueStatus.Queued,
             CreatedAt = DateTime.UtcNow,
             ConfirmedAt = dto.DeferPromotion ? null : DateTime.UtcNow,
             SubjectKey = dto.SubjectKey,
+            InvokingMachine = dto.InvokedBy?.Machine,
+            InvokingInstanceId = dto.InvokedBy?.InstanceId,
+            InvokingOwnerKind = dto.InvokedBy?.OwnerKind,
         };
     }
 

@@ -35,6 +35,7 @@ public interface IDataContext : IEffectProvider, IAsyncDisposable  // IEffectPro
     DbSet<JunctionRun> JunctionRuns { get; }
     DbSet<SnapshotDraft> SnapshotDrafts { get; }
     DbSet<EffectClaim> EffectClaims { get; }
+    DbSet<Checkpoint> Checkpoints { get; }
 
     int Changes { get; set; }
 
@@ -77,8 +78,15 @@ From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveCh
 | `JunctionRuns` | `trax.junction_run` | Each step of a run, written by [AddJunctionEvents](/docs/sdk-reference/configuration/add-junction-events). Read one run's steps in order with `ForRun(metadataId)`. |
 | `SnapshotDrafts` | `trax.snapshot_draft` | State-machine drafts, one per user and draft id |
 | `EffectClaims` | `trax.effect_claim` | Exactly-once state-machine effect intents |
+| `Checkpoints` | `trax.checkpoint` | The state a train declared with `Checkpoint<TState>()`, one row per run and node, from which a later run resumes. |
 
-`RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts` and `EffectClaims` have default implementations on the interface, so an implementation written before they existed still loads.
+A `Checkpoint` row holds the run (`MetadataId`), the declared node (`NodeId`, and `BranchPath` inside a
+`Parallel` branch), the stored state as JSON (`State`) with its type (`StateType`), the tracks the routing steps
+before it took (`Tracks`), and the two values a resume compares with the running code: `ChainHash`, the declared
+chain's hash, and `StateFingerprint`, a fingerprint of the state type's serialized shape. A resume refuses when
+either differs. `CreatedAt` is when it was written. See [Checkpoint](/docs/sdk-reference/train-methods/checkpoint).
+
+`RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts`, `EffectClaims` and `Checkpoints` have default implementations on the interface, so an implementation written before they existed still loads.
 
 ## Members
 

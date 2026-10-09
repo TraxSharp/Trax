@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Trax.Effect.Data.Testing;
 using Trax.Effect.StateMachine.Persistence.Integration.Fixtures;
 
 namespace Trax.Effect.StateMachine.Persistence.Integration;
@@ -14,6 +15,7 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    [LeavesStuckRuns("tests the claim store itself, so the claim it takes is never completed")]
     public async Task Claiming_once_wins_and_a_second_active_claim_loses()
     {
         var key = Key();
@@ -38,6 +40,7 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    [LeavesStuckRuns("tests the claim store itself, so the claim it takes is never completed")]
     public async Task Release_frees_the_key_and_is_a_no_op_on_a_missing_key()
     {
         var key = Key();
@@ -54,6 +57,7 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    [LeavesStuckRuns("tests the claim store itself, so the claim it takes is never completed")]
     public async Task An_in_flight_claim_whose_lease_expired_is_reclaimed_with_a_new_fence_token()
     {
         var key = Key();
@@ -79,6 +83,7 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    [LeavesStuckRuns("tests the claim store itself, so the claim it takes is never completed")]
     public async Task A_claim_in_flight_is_not_reported_as_completed()
     {
         var key = Key();
@@ -108,6 +113,7 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    [LeavesStuckRuns("tests the claim store itself, so the claim it takes is never completed")]
     public async Task Sixteen_concurrent_claims_yield_exactly_one_winner()
     {
         var key = Key();
@@ -124,6 +130,7 @@ public class EffectClaimStoreTests
     }
 
     [Test]
+    [LeavesStuckRuns("tests the claim store itself, so the claim it takes is never completed")]
     public async Task The_sweeper_releases_stale_in_flight_claims_but_leaves_completed_ones()
     {
         var stale = Key();

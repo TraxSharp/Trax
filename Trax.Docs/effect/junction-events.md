@@ -76,6 +76,8 @@ a `JunctionEventPayload`:
 | `AnswerWithheld` | True when the question is about a `[TraxSensitive]` type, and for every question or route on a withheld track |
 | `NameWithheld` | True for every step (a junction, a question or a route) after a route whose answer is withheld; its `Name` is `(withheld)` (`JunctionEventPayload.WithheldName`) |
 | `TrackPosition` | For any step, the position of the latest route the run took before it, or null before any route. `Decided`, `DecisionRefused` and `Routed` carry it as junctions do. |
+| `NodeId` | The id of the declared node the step ran for (see [below](#placing-a-step-on-the-trains-graph)); null when `NameWithheld` is set |
+| `BranchPath` | The `Parallel` branch the step ran in, such as `Parallel#0/cocitation` (see [below](#steps-in-parallel-branches)); null outside any branch and when `NameWithheld` is set |
 | `Attempt` | Which attempt of its manifest the run is, or null for a run with no manifest |
 
 A step never carries a junction's input or output, the train's input or output, a failure's
@@ -104,7 +106,8 @@ all withheld.
 
 Withholding the answer withholds the path too. The steps a track runs would say which track it
 took, so every step after a withheld route, whatever its kind, is published, handed to local
-handlers and stored with its name as `(withheld)` and `NameWithheld` set. A later question or route
+handlers and stored with its name as `(withheld)`, `NameWithheld` set and no `NodeId`, since a
+node id names the track and the step. A later question or route
 also has its `QuestionKey`, `Answer`, `Confidence` and `Decider` left out, with `AnswerWithheld`
 set. `trax.decision` keeps the full answer either way, because a requeue replays it from there; the
 journal's log writes it as withheld, and also withholds the question key, answer, track and decider
@@ -133,6 +136,34 @@ steps with a `TrackPosition` either, since they name the track: the SignalR sink
 broadcast view withhold them by default, as below. This errs toward hiding: a step that runs on
 every track after the rejoin is hidden too.
 
+### Placing a step on the train's graph
+
+Each step carries `NodeId`, the id of the node `ChainGraph.From(train.DeclaredChain(), …)` draws for
+the junction, question or route it ran for. An id names the step rather than its position: the
+junction, decision or routing key, numbered within its chain or track, under the route and track it
+sits on, as in `Switch<Source>#0/Papers/FetchPapers#0`. A junction's start and end carry the same
+id, and a refused answer carries its question's. Read the train's graph once and lay a run's steps
+over it by id. A step on a withheld track carries none.
+
+### Steps in Parallel branches
+
+The junctions, questions and routes of a `Parallel` step's branches run side by side, so their
+steps interleave in the run's timeline. Each carries `BranchPath`, the branch it ran in, as Trax.Core
+names it: the `Parallel` step's id and the branch's name, as in `Parallel#0/cocitation`, with the
+path of an enclosing branch in front for a branch declared inside one. Draw a lane per branch by it.
+Positions stay unique across the run.
+
+A branch's tracks are its own. A route taken in one branch sets the `TrackPosition` of that branch's
+later steps only; a sibling's steps keep the track they had at the fork, and after the join the run
+is on the track it was on before the fork, because the branches' tracks end there.
+
+A withheld answer withholds by the same lines. A withheld route in a branch withholds that branch's
+later steps, and one taken before the fork withholds every branch. It does not withhold a sibling
+running beside it, whose steps run alongside that track rather than on it and so give nothing of it
+away. After the join everything is withheld, later branches included, because the steps after the
+join follow every branch, the withheld one too. `BranchPath` is withheld with the name, since a
+branch inside a track names the track.
+
 ## Where steps go
 
 Each step goes to the host's `IJunctionEventHandler`s and, when [`UseBroadcaster`](/docs/sdk-reference/configuration/use-broadcaster)
@@ -158,7 +189,12 @@ services.AddScoped<IJunctionEventHandler, StepLogger>();
 On the host that runs the train, a handler is called on the run's path, from the run's scope, right
 after the step is published, so the next junction waits for it: return quickly and queue anything
 slow. On other hosts it is called by the receiver, from a fresh scope per message. Whatever a
-handler throws is logged and never reaches the run or the other handlers.
+handler throws is logged and never reaches the run or the other handlers. In a train with
+[`Parallel`](/docs/sdk-reference/train-methods/parallel) branches, steps of different branches are
+published at the same time. A step inside a branch is handed to handlers resolved from that branch's
+own scope, as the branch's junctions are, so a scoped handler (one holding a database context, say)
+is never called from two branches at once. A singleton handler is shared by every branch and every
+run: keep it thread-safe, or keep no state in it.
 
 Publishing never fails a run and never changes a junction's result. A failure to store, broadcast
 or hand out a step is logged and swallowed. A custom `ITrainEventBroadcaster` is handed junction
@@ -188,8 +224,8 @@ was not stored, not one still running.
 [metadata cleanup](/docs/scheduler/admin-trains/metadata-cleanup), manifest pruning and any other
 delete of metadata remove a run's steps with it.
 
-The table ships in the core migration set: Postgres `055`, `057` and `060`, Sqlite `020`, `022` and
-`025`.
+The table ships in the core migration set: Postgres `055`, `057`, `060`, `067` and `068`, Sqlite
+`020`, `022`, `025`, `030` and `031`.
 
 ### Attempt
 

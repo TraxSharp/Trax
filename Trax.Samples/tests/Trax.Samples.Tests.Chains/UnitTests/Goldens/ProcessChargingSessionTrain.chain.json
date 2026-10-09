@@ -1,0 +1,35 @@
+{
+  "train": "Trax.Samples.EnergyHub.Trains.ChargingSessions.ProcessChargingSession.ProcessChargingSessionTrain",
+  "input": "ProcessChargingSessionInput",
+  "output": "ProcessChargingSessionOutput",
+  "nodes": [
+    {
+      "id": "CollectSessionDataJunction#0",
+      "kind": "Chain",
+      "junction": "CollectSessionDataJunction",
+      "in": "ProcessChargingSessionInput",
+      "out": "ProcessChargingSessionInput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "CalculateBillingJunction#0",
+      "kind": "Chain",
+      "junction": "CalculateBillingJunction",
+      "in": "ProcessChargingSessionInput",
+      "out": "ProcessChargingSessionOutput",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Resolve#0",
+      "kind": "Resolve",
+      "junction": null,
+      "in": null,
+      "out": "ProcessChargingSessionOutput",
+      "opaque": false,
+      "tracks": []
+    }
+  ],
+  "refusals": []
+}

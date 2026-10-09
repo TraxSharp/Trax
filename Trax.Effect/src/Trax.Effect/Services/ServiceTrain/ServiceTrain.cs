@@ -12,6 +12,7 @@ using Trax.Effect.Exceptions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Services.Decisions;
 using Trax.Effect.Services.EffectRunner;
 using Trax.Effect.Services.JunctionEffectRunner;
@@ -397,6 +398,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         // takes exactly one path: the terminal write and the failure hooks run once. Rethrowing
         // from inside a try whose catch also finishes the train ran both of them twice.
         Either<Exception, TOut> result;
+        CheckpointRun? checkpoints = null;
 
         try
         {
@@ -420,6 +422,13 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // before it asks anything.
             DecisionRun.Current = await BeginDecisions();
 
+            // A run that resumes an earlier one skips to its checkpoint; one that cannot runs from
+            // the top. Its checkpoints are stored against this run. See Trax.Docs/adr/0047.
+            checkpoints =
+                Metadata.Id > 0 ? new CheckpointRun(Metadata.Id, () => Declared()?.Hash) : null;
+            CheckpointRun.Current = checkpoints;
+            Resume = await BeginResume(input);
+
             // The same for the run's junction events, when the host publishes them
             // (AddJunctionEvents): its junctions and decisions report against this run only.
             JunctionEventRun.Current = ServiceProvider.GetService(typeof(JunctionEventPublisher))
@@ -428,7 +437,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                     Metadata,
                     GetType(),
                     ServiceProvider,
-                    CancellationToken
+                    CancellationToken,
+                    this
                 )
                 : null;
 
@@ -445,6 +455,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             // every path, rather than with whatever terminal write or hook comes next.
             DecisionRun.Current = null;
             JunctionEventRun.Current = null;
+            CheckpointRun.Current = null;
+            Resume = null;
         }
 
         if (result.IsLeft)
@@ -534,11 +546,26 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         Logger?.LogTrace("({TrainName}) completed successfully.", TrainName);
         Metadata.SetOutputObject(output);
 
+        // A run a machine state invoked carries the output its OnDone edges read, in this same
+        // terminal write: once the row says Completed, the output is there for whichever host
+        // applies the outcome, after any crash. Never metadata.Output, which is redacted and
+        // bounded by host policy. See Trax.Docs/adr/0046.
+        if (Metadata.RecordInvokeOutput(output, typeof(TOut)) is { } unserializable)
+            Logger?.LogError(
+                unserializable,
+                "The output of train ({TrainName}) could not be recorded for the state machine that "
+                    + "invoked it; the machine treats the run as failed.",
+                TrainName
+            );
+
         // A failure to record a completed run propagates as it is. It is not turned into a
         // Failed outcome: the work happened, and recording that it failed would be false.
         await EffectRunner.Update(Metadata);
         await this.FinishServiceTrain(result);
         var unrecordedOutcome = await SaveOutcome();
+
+        if (checkpoints is { Wrote: true })
+            await ForgetCheckpoints();
 
         // The hooks report what happened, not what the store could hold: the output the store
         // refused is what they publish, in place of the placeholder that was stored.
@@ -609,6 +636,185 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
         return output;
     }
+
+    #region Checkpoints
+
+    /// <summary>
+    /// This class's declared chain and hash, as the host's startup check read it, or read once for
+    /// the process when nothing did; null when it cannot be read (a run of it then neither takes nor
+    /// resumes from a checkpoint). Read on a fresh instance, never on this one: this one may be
+    /// running its chain, and a junction of it reading its state while it is declared would throw.
+    /// </summary>
+    private DeclaredChains.Declared? Declared() =>
+        DeclaredChains.For(
+            GetType(),
+            typeof(TIn),
+            typeof(TOut),
+            DeclareOnAFreshInstance,
+            e =>
+                Logger?.LogWarning(
+                    e,
+                    "The chain of train ({TrainName}) could not be read, so this run takes no "
+                        + "checkpoint and does not resume; the next run reads it again.",
+                    TrainName
+                )
+        );
+
+    /// <summary>
+    /// The chain this class declares, read on an instance built for the purpose in a scope of its
+    /// own, so the running instance's <c>Junctions()</c> is called once per run.
+    /// </summary>
+    private ChainRecorder DeclareOnAFreshInstance()
+    {
+        ServiceProvider.AssertLoaded();
+
+        using var scope = (
+            ServiceProvider.GetService(
+                typeof(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory)
+            ) as Microsoft.Extensions.DependencyInjection.IServiceScopeFactory
+        )?.CreateScope();
+        var services = scope?.ServiceProvider ?? ServiceProvider;
+
+        var fresh =
+            (ServiceTrain<TIn, TOut>)
+                Microsoft.Extensions.DependencyInjection.ActivatorUtilities.CreateInstance(
+                    services,
+                    GetType()
+                );
+        services.InjectProperties(fresh);
+        fresh.ServiceProvider ??= services;
+
+        return fresh.DeclaredChain();
+    }
+
+    /// <summary>
+    /// The resume this run starts with, when it names a run to resume: the checkpoints of that
+    /// run and those it resumed, checked against this chain, once the run it names is shown to be
+    /// one this run may carry on: a run of the same train, on the same input, that failed or was
+    /// cancelled, and that no resume has already completed.
+    /// </summary>
+    /// <remarks>
+    /// A resume that cannot be honoured is refused. An operator's resume (one queued by
+    /// <c>resumeExecution</c>, which belongs to no manifest) fails the run with the refusal, as a
+    /// <see cref="ResumeRefusedException"/>, because the operator asked to carry on, not to start
+    /// again. A manifest's retry or a dead letter's requeue logs the refusal and runs from the
+    /// top, as a retry always did. See Trax.Docs/adr/0047.
+    /// </remarks>
+    private async Task<ResumePlan?> BeginResume(TIn input)
+    {
+        Metadata.AssertLoaded();
+        ServiceProvider.AssertLoaded();
+
+        if (Metadata.ResumeFrom is not { } from)
+            return null;
+
+        var operatorAsked = Metadata.ManifestId is null;
+
+        ResumePlan? Refuse(string code, string reason)
+        {
+            if (operatorAsked)
+            {
+                var refusal = new ResumeRefusedException(
+                    code,
+                    $"Run {ExternalId} of train '{TrainName}' was queued to resume run {from}, but "
+                        + $"it cannot: {reason} It is failed rather than run from the top, because a "
+                        + "resume was asked for, not a fresh run."
+                );
+                refusal.Data["TrainExceptionData"] = new TrainExceptionData
+                {
+                    TrainName = Metadata.Name,
+                    TrainExternalId = ExternalId,
+                    Type = nameof(ResumeRefusedException),
+                    Junction = "Resume",
+                    Message = refusal.Message,
+                    FailureClass = FailureClass.Permanent,
+                };
+                throw refusal;
+            }
+
+            Logger?.LogWarning(
+                "Run ({ExternalId}) of ({TrainName}) cannot resume run ({From}) and runs from the "
+                    + "top: {Reason}",
+                ExternalId,
+                TrainName,
+                from,
+                reason
+            );
+            return null;
+        }
+
+        if (
+            ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
+            || Declared() is not { } declared
+        )
+            return Refuse(
+                ResumeRefusals.NoCheckpoint,
+                "this host stores no checkpoints, or cannot read the train's chain."
+            );
+
+        if (
+            ResumeSources.Refusal(
+                from,
+                await rows.Source(from, CancellationToken),
+                Metadata.Name,
+                Metadata.Input,
+                input,
+                typeof(TIn)
+            ) is
+            { } refused
+        )
+            return Refuse(refused.Code, refused.Reason);
+
+        var lineage = await rows.Lineage(from, CancellationToken);
+        var (verdict, plan) = await ResumePlanner.Plan(
+            declared.Chain,
+            declared.Hash,
+            typeof(TIn),
+            typeof(TOut),
+            ServiceProvider.GetService(
+                typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
+            ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
+            lineage,
+            Metadata.ResumeAt,
+            rows.States,
+            CancellationToken
+        );
+
+        return plan ?? Refuse(verdict.Code!, verdict.Reason!);
+    }
+
+    /// <summary>
+    /// Deletes a completed run's checkpoints: nothing may resume it. A failure is logged, and
+    /// metadata cleanup deletes them with the run later.
+    /// </summary>
+    private async Task ForgetCheckpoints()
+    {
+        Metadata.AssertLoaded();
+        ServiceProvider.AssertLoaded();
+
+        if (
+            Metadata.Id <= 0
+            || ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
+        )
+            return;
+
+        try
+        {
+            await rows.DeleteFor(Metadata.Id, CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            Logger?.LogWarning(
+                e,
+                "The checkpoints of completed run ({ExternalId}) of ({TrainName}) could not be "
+                    + "deleted; metadata cleanup deletes them with the run.",
+                ExternalId,
+                TrainName
+            );
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Prepares the recording of this run's decisions, when the host records them.

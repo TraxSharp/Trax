@@ -133,6 +133,14 @@ internal static class ServiceTrainExtensions
         serviceTrain.EffectRunner.AssertLoaded();
         serviceTrain.Metadata.AssertLoaded();
 
+        // A junction effect that writes in the background (junction progress) finishes first, so
+        // none of its writes lands after, and over, the outcome written below.
+        if (
+            serviceTrain.JunctionEffectRunner
+            is Services.JunctionEffectRunner.JunctionEffectRunner junctionEffects
+        )
+            await junctionEffects.Settle();
+
         var failureReason = result.IsRight ? null : result.Swap().ValueUnsafe();
 
         var resultState =
@@ -223,6 +231,60 @@ internal static class ServiceTrainExtensions
         if (IsRebuiltFailure(failureReason))
             return null;
 
+        // A Parallel step's failure is classified branch by branch, as each branch's failure
+        // would be had it been the run's, and the classes combined: the step can be retried as a
+        // whole only when every branch's failure can.
+        if (failureReason is BranchesFailedException branches)
+        {
+            var combined = ClassifyBranches(serviceTrain, branches);
+
+            // Trax.Core combined the classes the branches carried, counting one that carried none
+            // as unclassified; the classifier has answered for those now.
+            if (failureReason.Data["TrainExceptionData"] is TrainExceptionData branchesData)
+                branchesData.FailureClass = combined;
+
+            return combined;
+        }
+
+        var answer = Ask(serviceTrain, failureReason);
+
+        if (answer is not { } failureClass)
+            return null;
+
+        Attach(serviceTrain, failureReason, failureClass);
+
+        return failureClass;
+    }
+
+    /// <summary>
+    /// The class of a <c>Parallel</c> step's failure: each failed branch's own class, from where it
+    /// happened or else from the classifier, combined with <see cref="BranchesFailedException.Combine"/>.
+    /// </summary>
+    private static FailureClass ClassifyBranches<TIn, TOut>(
+        ServiceTrain<TIn, TOut> serviceTrain,
+        BranchesFailedException branches
+    ) =>
+        BranchesFailedException.Combine(
+            branches.Failures.Select(branch =>
+                branch.FailureClass
+                ?? branch.Exception switch
+                {
+                    BranchesFailedException nested => ClassifyBranches(serviceTrain, nested),
+                    var failure when IsRebuiltFailure(failure) => null,
+                    var failure => Ask(serviceTrain, failure),
+                }
+            )
+        );
+
+    /// <summary>
+    /// What the registered <see cref="IFailureClassifier"/> says one failure is, normalised, or
+    /// null when nothing classifies it.
+    /// </summary>
+    private static FailureClass? Ask<TIn, TOut>(
+        ServiceTrain<TIn, TOut> serviceTrain,
+        Exception failureReason
+    )
+    {
         FailureClass? answer;
 
         try
@@ -259,9 +321,19 @@ internal static class ServiceTrainExtensions
         )
             answer = FailureClass.Transient;
 
-        if (answer is not { } failureClass)
-            return null;
+        return answer;
+    }
 
+    /// <summary>
+    /// Writes the class onto the failure's structured data, so it travels with the failure if the
+    /// run is reported somewhere else.
+    /// </summary>
+    private static void Attach<TIn, TOut>(
+        ServiceTrain<TIn, TOut> serviceTrain,
+        Exception failureReason,
+        FailureClass failureClass
+    )
+    {
         try
         {
             if (failureReason.Data["TrainExceptionData"] is TrainExceptionData data)
@@ -295,8 +367,6 @@ internal static class ServiceTrainExtensions
                 serviceTrain.TrainName
             );
         }
-
-        return failureClass;
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
@@ -39,6 +41,7 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     private readonly IdempotentEffect _idempotent;
     private readonly IServiceProvider _services;
     private readonly TimeSpan? _draftTtl;
+    private readonly IInvokedRunCancellation? _runCancellation;
     private readonly Dictionary<string, ISnapshotDraftService> _serviceCache = new(
         StringComparer.Ordinal
     );
@@ -50,6 +53,7 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     /// <param name="idempotent">The exactly-once primitive handed to effect runners.</param>
     /// <param name="services">The container effect implementations are resolved from.</param>
     /// <param name="options">Supplies the draft TTL; null means drafts never expire.</param>
+    /// <param name="runCancellation">Cancels a draft's live invoked run before the draft is deleted.</param>
     /// <exception cref="ArgumentException">Two machines share a name.</exception>
     public SnapshotMachineRegistry(
         IEnumerable<IMachine> machines,
@@ -57,9 +61,11 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         IEffectClaimStore claims,
         IdempotentEffect idempotent,
         IServiceProvider services,
-        StateMachineOptions? options = null
+        StateMachineOptions? options = null,
+        IInvokedRunCancellation? runCancellation = null
     )
     {
+        _runCancellation = runCancellation;
         _machines = machines.ToDictionary(m => m.Name, StringComparer.Ordinal);
         _store = store;
         _claims = claims;
@@ -76,7 +82,35 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         if (!_machines.TryGetValue(machine, out var found))
             return null;
 
-        var service = found.CreateService(_store, _claims, _draftTtl);
+        // A system-owned machine's instances are created and driven from code only: no user's draft operation
+        // reaches it, so it is answered as no machine at all.
+        if (found is IMachineInternals { SystemOwned: true })
+            return null;
+
+        ISnapshotDraftService service;
+        if (found is IMachineInternals internals)
+        {
+            // A machine that invokes trains reads and expires its drafts through the owner-aware store over the
+            // request's data context, and writes them through the outbox, on a context of its own, together with
+            // the run's entry, so the snapshot and the run commit in one transaction whatever ISnapshotStore the
+            // host registered.
+            var invokes =
+                internals.InvokedTrains.Count > 0
+                    ? new InvokeRuntime(
+                        _services.GetRequiredService<IMachineInstanceStore>(),
+                        _services.GetRequiredService<InvokeOutbox>()
+                    )
+                    : null;
+            service = internals.CreateService(
+                invokes?.Store as ISnapshotStore ?? _store,
+                _claims,
+                _draftTtl,
+                _runCancellation,
+                invokes
+            );
+        }
+        else
+            service = found.CreateService(_store, _claims, _draftTtl);
         _serviceCache[machine] = service;
         return service;
     }
@@ -84,7 +118,11 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
     /// <inheritdoc/>
     public ISnapshotEffectRunner? EffectRunner(string machine)
     {
-        if (!_machines.TryGetValue(machine, out var found) || !found.HasEffect)
+        if (
+            !_machines.TryGetValue(machine, out var found)
+            || !found.HasEffect
+            || found is IMachineInternals { SystemOwned: true }
+        )
             return null;
 
         return found.CreateEffectRunner(Service(machine)!, _idempotent, _services);
