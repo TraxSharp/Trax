@@ -216,7 +216,7 @@ The same as `RunAsync`: `TrainNotFoundException`, `AmbiguousTrainNameException`,
 
 ## TrainInputReader
 
-The reading rules above, as a public static class in `Trax.Mediator.Services.TrainExecution`. `QueueAsync`, `RunAsync` and `PrepareAsync` all read input through it; a host or package that takes train input JSON on a path of its own should call it rather than copy the rules, so it accepts and refuses the same JSON.
+The reading rules above, as a public static class in `Trax.Mediator.Services.TrainExecution`. `QueueAsync`, `RunAsync` and `PrepareAsync` all read input through it; a host or package that takes train input JSON on a path of its own should call it rather than copy the rules, so it accepts and refuses the same JSON. One that builds an input object and hands it to `ITrainExecutionService` as JSON, as the GraphQL train mutations do, writes it with `Write`.
 
 ```csharp
 public static class TrainInputReader
@@ -234,6 +234,8 @@ public static class TrainInputReader
         TrainRegistration registration,
         int maxInputJsonBytes
     );
+
+    public static string Write(object? input, Type inputType);
 }
 ```
 
@@ -247,11 +249,22 @@ public static class TrainInputReader
 
 **Returns**: an instance of `registration.InputType`, never null.
 
-**Throws**: `TrainInputValidationException` if the JSON is larger than `maxInputJsonBytes` (checked before parsing); `JsonException` if it cannot be read as the input type, names a property twice, uses `$id`/`$values` reference metadata where the type expects a list, is the literal `null`, or is blank for an input type that needs values.
+**Throws**: `TrainInputValidationException` if the JSON is larger than `maxInputJsonBytes` (checked before parsing); `JsonException` if it cannot be read as the input type, names a property twice, uses `$id`/`$values` reference metadata where the type expects a list, is the literal `null`, or is blank for an input type that needs values. When JSON whose root carries an `$id` is refused, the message also says that reference metadata is not accepted and names `Write` and `ResolveSavedInput`.
 
 It does not authorize. Call it after the caller has been authorized for the train, as `PrepareAsync` does, so a caller who may not use the train learns nothing about its input from a parse error.
 
 `StoredInputGrowthFactor` is how many times `MaxInputJsonBytes` a queued input's stored form may be (see step 4 of `QueueAsync`).
+
+### Write
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `input` | `object?` | Yes | N/A | The input, an instance of `inputType` |
+| `inputType` | `Type` | Yes | N/A | The train's input type |
+
+**Returns**: the input as JSON that `Read` reads back as the same input.
+
+It writes with the options `Read` reads with: the host's [`SaveTrainParameters`](/docs/sdk-reference/configuration/save-train-parameters) options, so their naming policy and converters apply, but without reference handling. Those options preserve references (`TraxJsonSerializationOptions.Default` does, unless the host gives others), and a list written with them is an object of `$values` that `Read` refuses. Up to Trax.Api.GraphQL 1.61.0 the GraphQL train mutations wrote their input with the host's options directly, so from Trax.Mediator 1.23.2, which stopped honouring reference metadata in a caller's input, any run, queue or prepare whose input held a list or an array failed before the train ran.
 
 ### ResolveSavedInput
 

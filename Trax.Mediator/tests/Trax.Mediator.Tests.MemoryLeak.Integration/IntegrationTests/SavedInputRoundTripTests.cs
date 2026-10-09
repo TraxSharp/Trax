@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
+using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
@@ -197,6 +198,64 @@ public class SavedInputRoundTripTests
 
         var entry = TrainInputReader.Read(stored.Input, registration, MaxBytes);
         entry.Should().BeEquivalentTo(Shapes());
+    }
+
+    [Test]
+    public void Write_OnAHostThatPreservesReferences_WritesAPlainTreeThatReadsBackExactly()
+    {
+        var registration = RegistrationOf<IShapesTrain>();
+
+        // The host's options write a list as $values, which Read refuses, or this proves nothing.
+        var withHostOptions = JsonSerializer.Serialize(
+            Shapes(),
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+        withHostOptions.Should().Contain("\"$values\"");
+
+        var json = TrainInputReader.Write(Shapes(), typeof(ShapesInput));
+
+        json.Should().NotContain("$id").And.NotContain("$values").And.NotContain("$ref");
+        TrainInputReader.Read(json, registration, MaxBytes).Should().BeEquivalentTo(Shapes());
+    }
+
+    [Test]
+    public void Write_OfAPositionalRecord_ReadsBackExactly()
+    {
+        var shared = new Place { City = "Nice", Zip = 6000 };
+        var original = new RecordInput("r-3", [7, 8], ["x"], shared, shared);
+
+        var json = TrainInputReader.Write(original, typeof(RecordInput));
+
+        TrainInputReader
+            .Read(json, RegistrationOf<IRecordTrain>(), MaxBytes)
+            .Should()
+            .BeEquivalentTo(original);
+    }
+
+    [Test]
+    public void CallerJson_WrittenWithReferenceMetadata_IsRefusedWithAMessageThatNamesIt()
+    {
+        var json = JsonSerializer.Serialize(
+            Shapes(),
+            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
+        );
+
+        var act = () => TrainInputReader.Read(json, RegistrationOf<IShapesTrain>(), MaxBytes);
+
+        var refused = act.Should().Throw<JsonException>().Which;
+        refused.Message.Should().Contain("reference metadata").And.Contain("ResolveSavedInput");
+        refused.Path.Should().Be("$.counts");
+        refused.InnerException.Should().BeOfType<JsonException>();
+    }
+
+    [Test]
+    public void CallerJson_WithoutReferenceMetadata_IsRefusedWithTheSerializersOwnMessage()
+    {
+        const string json = """{"counts":"not a list"}""";
+
+        var act = () => TrainInputReader.Read(json, RegistrationOf<IShapesTrain>(), MaxBytes);
+
+        act.Should().Throw<JsonException>().Which.Message.Should().NotContain("reference metadata");
     }
 
     [TestCase("""{"counts":[1,2],"tags":["a"],"home":{"city":"Lyon","zip":1}}""")]

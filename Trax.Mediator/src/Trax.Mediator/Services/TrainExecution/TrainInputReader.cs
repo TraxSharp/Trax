@@ -14,7 +14,8 @@ namespace Trax.Mediator.Services.TrainExecution;
 /// <remarks>
 /// <see cref="TrainExecutionService"/> reads every <c>RunAsync</c>, <c>QueueAsync</c> and
 /// <c>PrepareAsync</c> input through <see cref="Read"/>. A host or package that takes input JSON
-/// on another path should call it too, rather than keep a copy of these rules.
+/// on another path should call it too, rather than keep a copy of these rules, and one that
+/// builds an input object and hands it on as JSON writes it with <see cref="Write"/>.
 /// </remarks>
 public static class TrainInputReader
 {
@@ -78,6 +79,28 @@ public static class TrainInputReader
             );
 
         return Deserialize(json, registration, missing);
+    }
+
+    /// <summary>
+    /// Writes <paramref name="input"/> as JSON that <see cref="Read"/> reads back as the same
+    /// input.
+    /// </summary>
+    /// <param name="input">The input, an instance of <paramref name="inputType"/>.</param>
+    /// <param name="inputType">The train's input type.</param>
+    /// <returns>The input as a plain JSON tree.</returns>
+    /// <remarks>
+    /// It writes with the options <see cref="Read"/> reads with, so it follows the host's
+    /// naming policy and converters but never writes reference metadata, which the host's
+    /// options (<c>TraxJsonSerializationOptions.Default</c> unless the host gives others) do.
+    /// A surface that builds an input object and hands it to <c>ITrainExecutionService</c> as
+    /// JSON writes it here: written with the host's options instead, every list in it is
+    /// refused.
+    /// </remarks>
+    public static string Write(object? input, Type inputType)
+    {
+        ArgumentNullException.ThrowIfNull(inputType);
+
+        return JsonSerializer.Serialize(input, inputType, InputOptions().Given);
     }
 
     /// <summary>
@@ -295,11 +318,30 @@ public static class TrainInputReader
         }
         else
         {
-            input = JsonSerializer.Deserialize(
-                inputJson,
-                registration.InputType,
-                InputOptions().Given
-            );
+            try
+            {
+                input = JsonSerializer.Deserialize(
+                    inputJson,
+                    registration.InputType,
+                    InputOptions().Given
+                );
+            }
+            catch (JsonException refused) when (SavedInputReferences.Present(inputJson))
+            {
+                // A list written with reference metadata fails as "could not be converted",
+                // which names neither the metadata nor the way out. Checked only once the
+                // input has been refused, so an input that reads costs nothing extra.
+                throw new JsonException(
+                    $"{refused.Message} The input carries JSON reference metadata ($id, "
+                        + "$values, $ref), which a train input does not accept. Write it "
+                        + "without, as TrainInputReader.Write does; a run's saved input is "
+                        + "turned into a plain one by TrainInputReader.ResolveSavedInput.",
+                    refused.Path,
+                    refused.LineNumber,
+                    refused.BytePositionInLine,
+                    refused
+                );
+            }
         }
 
         // A JSON null is well-formed but is not an input, so it is reported the way any other
