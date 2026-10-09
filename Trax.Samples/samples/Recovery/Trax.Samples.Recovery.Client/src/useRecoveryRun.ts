@@ -162,9 +162,15 @@ export function useRecoveryRun() {
     [client, mergeSteps],
   );
 
+  // Each attempt's graph reads are numbered, so a read that answers after a later one started (a
+  // slow poll landing after the final read) is dropped rather than drawn over a newer graph.
+  const graphReads = useRef(new Map<number, number>());
   const readGraph = useCallback(
-    async (attemptId: number) => {
+    async (attemptId: number): Promise<RunGraph | null | undefined> => {
+      const read = (graphReads.current.get(attemptId) ?? 0) + 1;
+      graphReads.current.set(attemptId, read);
       const { data } = await client.query({ query: RUN_GRAPH, variables: { metadataId: attemptId } });
+      if (graphReads.current.get(attemptId) !== read) return undefined;
       const flat = data.operations.runGraph as { hasGraph: boolean; allNodes: FlatGraphNode[] } | null;
       const graph: RunGraph | null = flat && { hasGraph: flat.hasGraph, nodes: treeOf(flat.allNodes) };
       setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, graph } : a)));
@@ -246,7 +252,20 @@ export function useRecoveryRun() {
   useEffect(() => {
     if (!run) return;
     let cancelled = false;
+    // One tick at a time, and one graph read per attempt at a time: a slow host makes the polls
+    // wait rather than pile up.
+    let ticking = false;
+    const graphing = new Set<number>();
+    const pollGraph = (id: number) => {
+      if (graphing.has(id)) return;
+      graphing.add(id);
+      readGraph(id)
+        .catch(() => undefined)
+        .finally(() => graphing.delete(id));
+    };
     const tick = async () => {
+      if (ticking) return;
+      ticking = true;
       try {
         const { data } = await client.query({ query: EXECUTIONS, variables: { manifestId: run.manifestId } });
         if (cancelled) return;
@@ -256,14 +275,17 @@ export function useRecoveryRun() {
           updateRow(row);
         }
         for (const id of [...subscriptions.current.keys()]) {
-          if (!graphed.current.has(id)) void readGraph(id);
+          if (!graphed.current.has(id)) pollGraph(id);
           if (!rows.some((r) => r.id === id)) {
             const one = await client.query({ query: EXECUTION, variables: { id } });
+            if (cancelled) return;
             if (one.data.operations.execution) updateRow(one.data.operations.execution as ExecutionRow);
           }
         }
       } catch {
         // The host may be restarting; the next tick tries again.
+      } finally {
+        ticking = false;
       }
     };
     void tick();

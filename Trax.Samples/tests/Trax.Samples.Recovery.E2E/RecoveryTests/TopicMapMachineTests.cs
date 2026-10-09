@@ -167,6 +167,76 @@ public class TopicMapMachineTests : RecoveryTestFixture
     }
 
     [Test]
+    public async Task ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt()
+    {
+        var sweeper = SharedRecoverySetup.Factory.Services.GetRequiredService<TopicMapSweeper>();
+        await _draft.CreateAsync();
+        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var first = (await _draft.WaitForStateAsync(nameof(TopicMapState.Built))).Context[
+            "mapId"
+        ]!.GetValue<string>();
+
+        (await _draft.AdvanceAsync(nameof(TopicMapTrigger.Rebuild)))
+            .State.Should()
+            .Be(nameof(TopicMapState.Building));
+        var rebuilt = await Shared.Testing.Polling.WaitUntilAsync(
+            async () =>
+                (await _draft.LoadAsync()).Context["mapId"]?.GetValue<string>() is { } id
+                && id != first,
+            TopicMapDraft.Patience,
+            TimeSpan.FromMilliseconds(200)
+        );
+        rebuilt.Should().BeTrue("the rebuild's outcome moves the draft's pointer to its new map");
+        var second = (await _draft.LoadAsync()).Context["mapId"]!.GetValue<string>();
+
+        // A map one sweep finds unreferenced is kept until the next, a build's pairs being written
+        // a moment before its outcome points the draft at them.
+        await sweeper.SweepAsync(CancellationToken.None);
+        await sweeper.SweepAsync(CancellationToken.None);
+
+        await using var db = await TopicMapDb();
+        (await db.TopicPairs.CountAsync(p => p.RunId == first))
+            .Should()
+            .Be(0, "no draft points at the map the rebuild replaced");
+        (await db.TopicPairs.CountAsync(p => p.RunId == second))
+            .Should()
+            .Be(32, "the draft points at the map the rebuild wrote");
+    }
+
+    [Test]
+    public async Task TheSweep_NeverDeletesAMapAStoredDraftPointsAt_NorOneItSawOnlyOnce()
+    {
+        var sweeper = SharedRecoverySetup.Factory.Services.GetRequiredService<TopicMapSweeper>();
+        await _draft.CreateAsync();
+        await _draft.BuildAsync(CorpusFixture.Fields, 2016, 2025);
+        var kept = (await _draft.WaitForStateAsync(nameof(TopicMapState.Built))).Context[
+            "mapId"
+        ]!.GetValue<string>();
+
+        // Pairs no draft points at, written after the last sweep: the next sweep only notes them.
+        const string Orphan = "map-orphan-sweep-test";
+        await using (var db = await TopicMapDb())
+        {
+            db.TopicPairs.Add(
+                new TopicPair
+                {
+                    RunId = Orphan,
+                    WorkA = "a",
+                    WorkB = "b",
+                }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        (await sweeper.SweepAsync(CancellationToken.None)).Should().NotContain(Orphan);
+        (await sweeper.SweepAsync(CancellationToken.None)).Should().Contain(Orphan);
+
+        await using var after = await TopicMapDb();
+        (await after.TopicPairs.CountAsync(p => p.RunId == Orphan)).Should().Be(0);
+        (await after.TopicPairs.CountAsync(p => p.RunId == kept)).Should().Be(32);
+    }
+
+    [Test]
     public async Task AnotherUser_CannotLoadTheDraft()
     {
         await _draft.CreateAsync();

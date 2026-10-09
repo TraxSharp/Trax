@@ -580,6 +580,16 @@ with the number of papers and pairs and the co-citation track. A user's machine 
 stricter than its own mutations, which need an authenticated caller and no role, so `BuildTopicMapTrain`
 asks for exactly that; every caller this host authenticates is an operator or a viewer.
 
+**Old maps are swept.** A rebuild writes a new map and moves `mapId` to it, which leaves the old one
+behind, and a demo run's map is pointed at by nothing once its run ends. `TopicMapSweeper` deletes the
+pairs of every map no stored `topic-map` draft points at, every five minutes
+(`Recovery:TopicMapSweepInterval`). It decides from the drafts the server holds and never from what a
+client sent, so a client can keep a map alive with a forged `mapId` but can never get one deleted; the
+build does not delete the map it replaces for the same reason, since the draft's context is the
+client's to write in the states it may autosave. A build writes its pairs a moment before its outcome
+points the draft at them, so a map is deleted only once two sweeps an interval apart both found it
+unreferenced. A draft left with **Start over** stays stored, and so does its map.
+
 The page drives the wizard with a TypeScript twin generated from the machine by the `trax machine` CLI:
 
 ```bash
@@ -594,7 +604,10 @@ dotnet run --project Trax.Cli/src/Trax.Cli -- machine generate \
 The twin tells the page which step it may take; the page sends the step with `advanceSnapshot` and the
 twin's own result, and the server refuses a result that differs from its own. The draft id is kept in the
 browser, so closing the tab and coming back loads the same draft at the same step. While the draft is in
-`Building` the page loads it once a second, because only the run's outcome moves it on.
+`Building` the page loads it a second after its last load answered, because only the run's outcome moves
+it on. Every load and step is numbered when it is sent, and an answer older than one already applied is
+dropped, so a slow load never puts back a draft a step the user just took has replaced.
+
 
 **A client cannot forge the result.** Every state an outcome reaches is reserved: an autosave cannot put a
 draft in `Built` (`state-reserved`), cannot move one out of `Building` (`draft-invoking`), and
@@ -688,6 +701,8 @@ the other, on the `recovery_restart_e2e_tests` database, so it can kill the firs
 | `TheWizard_BuildsTheMap_AndTheDraftKeepsAPointerToIt` | Fields, years, build: the run's outcome moves the draft to `Built` with the map's id and summary, the pairs are under that id, and a reload returns the same snapshot |
 | `AnAutosaveIntoBuilt_IsRefused`, `WhileBuilding_AHandFiredOutcome_AndAnAutosave_AreRefused` | `state-reserved`, `outcome-bound` and `draft-invoking`; the real outcome still lands |
 | `CancellingTheBuild_GoesBackToTheRange_AndCancelsItsRun`, `AFailedBuild_IsRebuiltByEnteringBuildingAgain_WithANewRun` | Leaving `Building` cancels its run; a rebuild is a new run |
+| `ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt`, `TheSweep_NeverDeletesAMapAStoredDraftPointsAt_NorOneItSawOnlyOnce` | After a rebuild, two sweeps delete the replaced map's pairs and keep the new one's; a map is deleted only on the second sweep that finds it unreferenced |
+
 | `AHostKilledMidBuild_FailsTheRunOnTheNextStart_AndTheDraftIsRebuiltFromBuildFailed` | A host process killed mid-build leaves the run `InProgress`; the next host fails it on startup, the draft reaches `BuildFailed`, the seeded data is there, and a rebuild reaches `Built` |
 
 ```bash

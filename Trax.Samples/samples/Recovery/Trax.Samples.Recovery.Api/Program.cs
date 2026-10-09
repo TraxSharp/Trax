@@ -62,6 +62,14 @@ builder.Services.AddDomainDataContext<ITopicMapDbContext, TopicMapDbContext>(opt
     options.UseNpgsql(connectionString)
 );
 
+// Every build writes a new map; the sweep deletes the maps no topic-map draft points at any more.
+builder.Services.AddSingleton<TopicMapSweeper>();
+builder.Services.AddHostedService(services => new TopicMapSweepService(
+    services.GetRequiredService<TopicMapSweeper>(),
+    builder.Configuration.GetValue("Recovery:TopicMapSweepInterval", TimeSpan.FromMinutes(5)),
+    services.GetRequiredService<ILogger<TopicMapSweepService>>()
+));
+
 // ── The model ───────────────────────────────────────────────────────────────
 // "Demo" (the default) answers deterministically after 0.5 to 1.5 seconds. "Nimble" asks a Nimble
 // server you run (Recovery:Nimble:Endpoint, the full URL of its POST /v1/systemone).
