@@ -247,6 +247,7 @@ namespace Trax.Mediator.Services.TrainExecution
         public const int StoredInputGrowthFactor = 4;
         public static object Read(string? inputJson, Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, int maxInputJsonBytes) { }
         public static string ResolveSavedInput(string savedInputJson, Trax.Mediator.Services.TrainDiscovery.TrainRegistration registration, int maxInputJsonBytes) { }
+        public static string Write(object? input, System.Type inputType) { }
     }
 }
 namespace Trax.Mediator.Services.TrainRegistry

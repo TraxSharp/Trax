@@ -1,11 +1,9 @@
-using System.Text.Json;
 using HotChocolate.Language;
 using HotChocolate.Resolvers;
 using HotChocolate.Types;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Startup;
 using Trax.Effect.Attributes;
-using Trax.Effect.Configuration.TraxEffectConfiguration;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
 
@@ -182,21 +180,22 @@ public partial class TrainTypeModule
     }
 
     /// <summary>
-    /// Extracts the "input" argument and serializes it to JSON using the
-    /// Trax system serializer options. Returns "{}" for input types with no
-    /// GraphQL-representable properties (empty records used for routing uniqueness).
+    /// Extracts the "input" argument and writes it as the JSON the execution service reads it
+    /// back from. Returns "{}" for input types with no GraphQL-representable properties (empty
+    /// records used for routing uniqueness).
     /// </summary>
+    /// <remarks>
+    /// Written by <see cref="TrainInputReader.Write"/>, never with the host's train parameter
+    /// options directly: those preserve references, which writes every list as an object of
+    /// <c>$values</c> that the reader refuses.
+    /// </remarks>
     private static string SerializeInput(IResolverContext ctx, Type inputType)
     {
         if (!HasGraphQLRepresentableProperties(inputType))
             return "{}";
 
         var input = ctx.ArgumentValue<object>("input");
-        return JsonSerializer.Serialize(
-            input,
-            inputType,
-            TraxEffectConfiguration.StaticSystemJsonSerializerOptions
-        );
+        return TrainInputReader.Write(input, inputType);
     }
 
     /// <summary>
