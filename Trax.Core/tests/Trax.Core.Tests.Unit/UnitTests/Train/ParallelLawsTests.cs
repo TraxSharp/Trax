@@ -21,8 +21,13 @@ namespace Trax.Core.Tests.Unit.UnitTests.Train;
 /// were stopped, which is why the laws below compare failures exactly only when no step cancels
 /// siblings.</para>
 ///
-/// <para>A failure prints the seed CsCheck shrank it to. Pin it as its own test with
-/// <c>Sample(..., seed: "...")</c> before fixing the code, so the case stays covered.</para>
+/// <para>Each law is checked first over a <see cref="ScheduledBranchRunner"/> whose choices come
+/// from a generated seed, so a failure there is deterministic: the seed CsCheck shrank it to
+/// replays the input and the interleaving, and the message names the choices taken. Pin it as its
+/// own test with <c>Sample(..., seed: "...")</c> before fixing the code, so the case stays
+/// covered. The same law is then checked over the thread pool, as a smoke signal for interleavings
+/// the scheduled runner cannot make; a failure only that run shows says the seed may not
+/// reproduce it.</para>
 ///
 /// <para>Enforces Trax.Docs/adr/0045-a-parallel-step-runs-fixed-branches-on-copies-of-memory-and-the-join-commits.md.</para>
 /// </summary>
@@ -46,55 +51,95 @@ public class ParallelLawsTests : TestSetup
             .SampleAsync(
                 async Task (IReadOnlyList<Element> chain, int seed) =>
                 {
-                    var pool = await Run(chain, ThreadPoolBranchRunner.Instance);
                     var inOrder = await Run(chain, new SequentialBranchRunner());
-                    var random = new Random(seed);
-                    var scheduled = await Run(
-                        chain,
-                        new ScheduledBranchRunner(ready => random.Next(ready.Count))
+                    var scheduled = await RunScheduled(chain, seed);
+
+                    Violations(chain, inOrder.Outcome, inOrder.Log)
+                        .Should()
+                        .BeEmpty($"every run keeps the laws of Parallel ({Adr})");
+                    Violations(chain, scheduled.Outcome, scheduled.Log)
+                        .Should()
+                        .BeEmpty(
+                            $"every run keeps the laws of Parallel ({Adr}); {scheduled.Replay}"
+                        );
+                    Agrees(chain, scheduled.Outcome, inOrder.Outcome, scheduled.Replay);
+
+                    await OnThePool(
+                        async () =>
+                        {
+                            var pool = await Run(chain, ThreadPoolBranchRunner.Instance);
+                            Violations(chain, pool.Outcome, pool.Log)
+                                .Should()
+                                .BeEmpty($"every run keeps the laws of Parallel ({Adr})");
+                            Agrees(chain, pool.Outcome, inOrder.Outcome, "on the thread pool");
+                        },
+                        scheduled.Replay
                     );
-
-                    foreach (var (outcome, log) in new[] { pool, inOrder, scheduled })
-                        Violations(chain, outcome, log)
-                            .Should()
-                            .BeEmpty($"every run keeps the laws of Parallel ({Adr})");
-
-                    foreach (var (concurrent, _) in new[] { pool, scheduled })
-                    {
-                        concurrent.IsRight.Should().Be(inOrder.Outcome.IsRight);
-                        concurrent.Snapshot.Should().Be(inOrder.Outcome.Snapshot);
-                        if (!CancelsSiblings(chain))
-                            concurrent.Leaves.Should().BeEquivalentTo(inOrder.Outcome.Leaves);
-                    }
                 },
                 iter: 1000,
-                print: t => $"scheduled from {t.Item2}: {Describe(t.Item1)}"
+                print: t => $"seed {t.Item2}: {Describe(t.Item1)}"
             );
 
     [Test]
     public Task RunEither_NeverThrows_AndGivesOneResult_WhereverTheRunIsCancelled() =>
         AShape()
             .SelectMany(chain => Gen.Int[0, Steps(chain)].Select(at => (chain, at)))
+            .Select(Gen.Int, (t, seed) => (t.chain, t.at, seed))
             .SampleAsync(
                 async Task (t) =>
                 {
-                    var (chain, at) = t;
-                    using var cts = new CancellationTokenSource();
-                    var log = new RunLog { CancelAt = (at, cts) };
-                    var train = new ShapeTrain(chain, log) { CancellationToken = cts.Token };
+                    var (chain, at, seed) = t;
+                    var choices = new Choices(seed);
+                    (await KeepsTheLawsWhenCancelled(chain, at, choices.Runner()))
+                        .Should()
+                        .BeEmpty(choices.ToString());
 
-                    var outcome = await Outcome.Of(train, "x").WaitAsync(Hang);
-
-                    if (!outcome.Cancelled)
-                        Violations(chain, outcome, log)
-                            .Should()
-                            .BeEmpty(
-                                $"a run is cancelled, or keeps the laws it keeps uncancelled ({Adr})"
-                            );
+                    await OnThePool(
+                        async () =>
+                            (
+                                await KeepsTheLawsWhenCancelled(
+                                    chain,
+                                    at,
+                                    ThreadPoolBranchRunner.Instance
+                                )
+                            )
+                                .Should()
+                                .BeEmpty("on the thread pool"),
+                        choices.ToString()
+                    );
                 },
                 iter: 1000,
-                print: t => $"cancel at {t.at}: {Describe(t.chain)}"
+                print: t => $"seed {t.seed}, cancel at {t.at}: {Describe(t.chain)}"
             );
+
+    /// <summary>
+    /// Runs <paramref name="chain"/> cancelled at step <paramref name="at"/>, and returns where a
+    /// run that was not cancelled after all breaks the laws it keeps uncancelled.
+    /// </summary>
+    private static async Task<List<string>> KeepsTheLawsWhenCancelled(
+        IReadOnlyList<Element> chain,
+        int at,
+        IBranchRunner runner
+    )
+    {
+        using var cts = new CancellationTokenSource();
+        var log = new RunLog { CancelAt = (at, cts) };
+        var train = new ShapeTrain(chain, log)
+        {
+            CancellationToken = cts.Token,
+            BranchRunner = runner,
+        };
+
+        var outcome = await Outcome.Of(train, "x").WaitAsync(Hang);
+
+        return outcome.Cancelled
+            ? []
+            : Violations(chain, outcome, log)
+                .Select(v =>
+                    $"{v} (a run is cancelled, or keeps the laws it keeps uncancelled, {Adr})"
+                )
+                .ToList();
+    }
 
     #endregion
 
@@ -102,32 +147,46 @@ public class ParallelLawsTests : TestSetup
 
     [Test]
     public Task AParallelOfOneBranch_IsThatBranchsChain() =>
-        AChain(1, 4, 8)
+        Gen.Select(AChain(1, 4, 8), Gen.Int)
             .SampleAsync(
-                async Task (IReadOnlyList<Element> body) =>
+                async Task (IReadOnlyList<Element> body, int seed) =>
                 {
                     var alone = Number(body);
                     var wrapped = Number([
                         new Fork([new Branch("", body)], BranchFailurePolicy.WaitForAll),
                     ]);
 
-                    var plain = await Run(alone, ThreadPoolBranchRunner.Instance);
-                    var parallel = await Run(wrapped, ThreadPoolBranchRunner.Instance);
+                    var plain = await Run(alone, new SequentialBranchRunner());
+                    var parallel = await RunScheduled(wrapped, seed);
+                    Same(
+                        alone,
+                        plain.Outcome,
+                        parallel.Outcome,
+                        $"Parallel(a) is a; {parallel.Replay}"
+                    );
 
-                    Same(alone, plain.Outcome, parallel.Outcome, "Parallel(a) is a");
+                    await OnThePool(
+                        async () =>
+                        {
+                            var pool = await Run(wrapped, ThreadPoolBranchRunner.Instance);
+                            Same(alone, plain.Outcome, pool.Outcome, "Parallel(a) is a");
+                        },
+                        parallel.Replay
+                    );
                 },
                 iter: 500,
-                print: body => Describe(Number(body))
+                print: t => $"seed {t.Item2}: {Describe(Number(t.Item1))}"
             );
 
     [Test]
     public Task ANestedParallel_FlattensIntoItsParent() =>
-        Gen.Select(AChain(1, 3, 8), AChain(1, 3, 8), AChain(1, 3, 8))
+        Gen.Select(AChain(1, 3, 8), AChain(1, 3, 8), AChain(1, 3, 8), Gen.Int)
             .SampleAsync(
                 async Task (
                     IReadOnlyList<Element> a,
                     IReadOnlyList<Element> b,
-                    IReadOnlyList<Element> c
+                    IReadOnlyList<Element> c,
+                    int seed
                 ) =>
                 {
                     var nested = Number([
@@ -153,20 +212,27 @@ public class ParallelLawsTests : TestSetup
                             BranchFailurePolicy.WaitForAll
                         ),
                     ]);
+                    const string law =
+                        "Parallel(a, Parallel(b, c)) is Parallel(a, b, c), but for node ids";
 
-                    var one = await Run(nested, ThreadPoolBranchRunner.Instance);
-                    var other = await Run(flat, ThreadPoolBranchRunner.Instance);
+                    var one = await RunScheduled(nested, seed);
+                    var other = await RunScheduled(flat, seed);
+                    var replay = $"nested {one.Replay}; flat {other.Replay}";
+                    Same(flat, one.Outcome, other.Outcome, $"{law}; {replay}");
 
-                    Same(
-                        flat,
-                        one.Outcome,
-                        other.Outcome,
-                        "Parallel(a, Parallel(b, c)) is Parallel(a, b, c), but for node ids"
+                    await OnThePool(
+                        async () =>
+                        {
+                            var poolOne = await Run(nested, ThreadPoolBranchRunner.Instance);
+                            var poolOther = await Run(flat, ThreadPoolBranchRunner.Instance);
+                            Same(flat, poolOne.Outcome, poolOther.Outcome, law);
+                        },
+                        replay
                     );
                 },
                 iter: 500,
                 print: t =>
-                    $"a: {Describe(Number(t.Item1))}; b: {Describe(Number(t.Item2))}; c: {Describe(Number(t.Item3))}"
+                    $"seed {t.Item4}; a: {Describe(Number(t.Item1))}; b: {Describe(Number(t.Item2))}; c: {Describe(Number(t.Item3))}"
             );
 
     [Test]
@@ -177,27 +243,43 @@ public class ParallelLawsTests : TestSetup
                 Gen.Shuffle(((Fork)chain[0]).Branches.ToArray())
                     .Select(shuffled => (chain, shuffled))
             )
+            .Select(Gen.Int, (t, seed) => (t.chain, t.shuffled, seed))
             .SampleAsync(
                 async Task (t) =>
                 {
-                    var (chain, shuffled) = t;
+                    var (chain, shuffled, seed) = t;
                     var reordered =
                         (IReadOnlyList<Element>)[((Fork)chain[0]) with { Branches = shuffled }];
 
-                    var declared = await Run(chain, ThreadPoolBranchRunner.Instance);
-                    var swapped = await Run(reordered, ThreadPoolBranchRunner.Instance);
+                    var declared = await RunScheduled(chain, seed);
+                    var swapped = await RunScheduled(reordered, seed);
+                    var replay = $"declared {declared.Replay}; swapped {swapped.Replay}";
+                    Same(chain, declared.Outcome, swapped.Outcome, $"the join commutes; {replay}");
 
-                    Same(chain, declared.Outcome, swapped.Outcome, "the join commutes");
+                    await OnThePool(
+                        async () =>
+                        {
+                            var poolDeclared = await Run(chain, ThreadPoolBranchRunner.Instance);
+                            var poolSwapped = await Run(reordered, ThreadPoolBranchRunner.Instance);
+                            Same(
+                                chain,
+                                poolDeclared.Outcome,
+                                poolSwapped.Outcome,
+                                "the join commutes"
+                            );
+                        },
+                        replay
+                    );
                 },
                 iter: 500,
-                print: t => Describe(t.chain)
+                print: t => $"seed {t.seed}: {Describe(t.chain)}"
             );
 
     [Test]
     public Task GraphIds_StayUnique_AndEveryJunctionThatRunsReportsOneOfThem() =>
-        AShape()
+        Gen.Select(AShape(), Gen.Int)
             .SampleAsync(
-                async Task (IReadOnlyList<Element> chain) =>
+                async Task (IReadOnlyList<Element> chain, int seed) =>
                 {
                     var declared = new ShapeTrain(chain, new RunLog()).DeclaredChain();
                     var graph = ChainGraph.From(
@@ -215,17 +297,31 @@ public class ParallelLawsTests : TestSetup
                         .BeEmpty("a generated chain is one the startup check accepts");
                     ids.Should().OnlyHaveUniqueItems($"a node id names one step ({Adr})");
 
-                    var (_, log) = await Run(chain, ThreadPoolBranchRunner.Instance);
-                    foreach (var (_, node, branch) in log.Ran)
-                    {
-                        ids.Should().Contain(node!, "a running junction says which node it is");
-                        if (branch is not null)
-                            node.Should().StartWith(branch + "/", "a branch's steps are inside it");
-                    }
+                    var scheduled = await RunScheduled(chain, seed);
+                    EveryJunctionReportsItsNode(ids, scheduled.Log, scheduled.Replay);
+
+                    await OnThePool(
+                        async () =>
+                        {
+                            var (_, log) = await Run(chain, ThreadPoolBranchRunner.Instance);
+                            EveryJunctionReportsItsNode(ids, log, "on the thread pool");
+                        },
+                        scheduled.Replay
+                    );
                 },
                 iter: 500,
-                print: Describe
+                print: t => $"seed {t.Item2}: {Describe(t.Item1)}"
             );
+
+    private static void EveryJunctionReportsItsNode(List<string> ids, RunLog log, string run)
+    {
+        foreach (var (_, node, branch) in log.Ran)
+        {
+            ids.Should().Contain(node!, $"a running junction says which node it is; {run}");
+            if (branch is not null)
+                node.Should().StartWith(branch + "/", $"a branch's steps are inside it; {run}");
+        }
+    }
 
     #endregion
 
@@ -321,6 +417,87 @@ public class ParallelLawsTests : TestSetup
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// A <see cref="ScheduledBranchRunner"/> that takes its choices at random from a seed, and
+    /// remembers them, so a failure names the interleaving as well as the input.
+    /// </summary>
+    private sealed class Choices(int seed)
+    {
+        private readonly Random _random = new(seed);
+        private readonly List<int> _taken = [];
+
+        public ScheduledBranchRunner Runner() =>
+            new(ready =>
+            {
+                var choice = _random.Next(ready.Count);
+                lock (_taken)
+                    _taken.Add(choice);
+                return choice;
+            });
+
+        public override string ToString()
+        {
+            lock (_taken)
+                return $"scheduled from seed {seed}, choices [{string.Join(", ", _taken)}]";
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="chain"/> on a <see cref="ScheduledBranchRunner"/> whose choices come
+    /// from <paramref name="seed"/>. The run is deterministic, so the seed CsCheck prints replays
+    /// the interleaving too, and <c>Replay</c> names the choices it took.
+    /// </summary>
+    private static async Task<(Outcome Outcome, RunLog Log, string Replay)> RunScheduled(
+        IReadOnlyList<Element> chain,
+        int seed
+    )
+    {
+        var choices = new Choices(seed);
+        var (outcome, log) = await Run(chain, choices.Runner());
+        return (outcome, log, choices.ToString());
+    }
+
+    /// <summary>
+    /// Checks a law again over runs on the thread pool: a smoke signal for an interleaving the
+    /// scheduled runner cannot make, such as two junctions truly at once. No seed replays the
+    /// thread pool's interleaving, so a failure here says so, rather than reading like one the
+    /// printed seed reproduces.
+    /// </summary>
+    private static async Task OnThePool(Func<Task> law, string scheduledReplay)
+    {
+        try
+        {
+            await law();
+        }
+        catch (Exception e)
+        {
+            Assert.Fail(
+                "Only the thread-pool run broke this law; the deterministic run of the same input "
+                    + $"passed ({scheduledReplay}). The seed CsCheck prints replays the input, not "
+                    + "the thread pool's interleaving, so it may not reproduce this failure: rerun "
+                    + "it, or search the input's interleavings with Interleavings.Every.\n"
+                    + e.Message
+            );
+        }
+    }
+
+    /// <summary>
+    /// A concurrent run agrees with the in-order one on the result, Memory and, unless a sibling
+    /// was stopped, what failed.
+    /// </summary>
+    private static void Agrees(
+        IReadOnlyList<Element> chain,
+        Outcome concurrent,
+        Outcome inOrder,
+        string run
+    )
+    {
+        concurrent.IsRight.Should().Be(inOrder.IsRight, run);
+        concurrent.Snapshot.Should().Be(inOrder.Snapshot, run);
+        if (!CancelsSiblings(chain))
+            concurrent.Leaves.Should().BeEquivalentTo(inOrder.Leaves, run);
+    }
 
     private static async Task<(Outcome Outcome, RunLog Log)> Run(
         IReadOnlyList<Element> chain,

@@ -35,7 +35,10 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
 /// with the machines, a worker without them (so nothing it runs is delivered by a hook), and a full host whose hook
 /// delivers what it runs.</para>
 /// <para>A failure prints the seed CsCheck shrank it to and the operations. Pin it as its own test with
-/// <c>SampleAsync(..., seed: "...")</c> before fixing the code, so the case keeps running.</para>
+/// <c>SampleAsync(..., seed: "...")</c> before fixing the code, so the case keeps running. The seed replays the
+/// operations, not the interleaving of a step that races hosts (a concurrent delivery or start, a leave raced with
+/// a delivery, dispatch or run): no deterministic scheduler stands between real hosts and the database, so a
+/// failure in such a step says that the seed may not reproduce it.</para>
 /// See <c>Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md</c> and
 /// <c>Trax.Docs/adr/0044-property-tests-use-cscheck-in-test-projects-only.md</c>.
 /// </remarks>
@@ -140,6 +143,17 @@ public class InvokesModelTests(ClusterStore store)
         SystemStartConcurrently,
         ExpireDraft,
     }
+
+    // The steps that run real hosts against each other at once. The thread pool and the database decide their
+    // interleaving, and no seed replays it.
+    private static readonly HashSet<Kind> Concurrent =
+    [
+        Kind.DeliverConcurrently,
+        Kind.RaceLeaveAndDeliver,
+        Kind.RaceLeaveAndDispatch,
+        Kind.RaceLeaveAndRun,
+        Kind.SystemStartConcurrently,
+    ];
 
     /// <summary>One generated step. <see cref="A"/> and <see cref="B"/> pick its subject and variant, modulo what exists.</summary>
     private readonly record struct Op(Kind Kind, int A, int B)
@@ -368,8 +382,13 @@ public class InvokesModelTests(ClusterStore store)
                 }
                 catch (Exception ex) when (ex is not StepFailed)
                 {
+                    var replay = Concurrent.Contains(op.Kind)
+                        ? " This step races hosts against each other: the seed CsCheck prints replays the "
+                            + "operations, not the interleaving the thread pool and the database chose, so it may "
+                            + "not reproduce this failure. Rerun it several times before trusting a pass."
+                        : "";
                     throw new StepFailed(
-                        $"Step {_step} ({op}) broke the model. Runs: [{string.Join(", ", _runs)}]. "
+                        $"Step {_step} ({op}) broke the model. Runs: [{string.Join(", ", _runs)}].{replay} "
                             + $"See {Adr}",
                         ex
                     );
