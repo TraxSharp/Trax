@@ -4,6 +4,7 @@ import { createMockStore } from "./store/mock-store";
 import {
   MACHINE_IDS,
   effectsScenario,
+  executionDetailScenario,
   groupScenario,
   machineScenario,
   manifestScenario,
@@ -98,6 +99,8 @@ describe("work queue / runs", () => {
     const c = createMockClient({
       store: createMockStore({ exposeOnWindow: false, persist: false }),
       fixtures: false,
+      // Runs that start with no cancel requested, so only the overlay can request one.
+      overrides: executionDetailScenario,
       overlays: [...defaultOverlays, userDraftRunsOverlay([7110], [7202])],
     });
     const one = get((await c.mutation(CANCEL_EXECUTION, { id: 7110 }).toPromise()).data, "operations.cancelExecution");
