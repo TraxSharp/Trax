@@ -10,7 +10,7 @@ status: accepted
 The conventions governing `Trax.Docs` (no em-dashes, internal links that resolve, an SDK
 reference block on every concept page with code, no leftover Jekyll syntax, C# examples marked
 to compile that do compile against the published packages, a description in every page's front
-matter) are checked by tests in CI rather
+matter, every public API and every migration named on a page) are checked by tests in CI rather
 than left to a reviewer.
 
 ## Status
@@ -68,14 +68,27 @@ these lints the moment they touch a page.
   owns, in both directions.
 - `PageDescriptionTests` requires a one-sentence `description` in every published page's front
   matter, no longer than the 160 characters at which the site truncates it.
+- `PublicApiIsDocumentedTests` requires every public type and member in each folder's public API
+  baseline to be named on a published page, as a reader would search for it (`runGraph` for
+  `GetRunGraph`, `NOT_REACHED` for `NotReached`). The dashboard's Blazor components and the EF
+  mappings `PersistentX` follow their documented type; the API that predated the guard is listed in
+  `tests/Trax.Docs.Tests/KnownUndocumentedPublicApi.txt`, which may only shrink.
+- `MigrationsAreDocumentedTests` requires every Postgres and SQLite migration to be named in the
+  database migrations guide, or recorded in its `NotInTheGuide` set with the reason it changes
+  nothing an upgrader sees.
 
-Not covered: compiling is opt in, and most fences are not marked. An unmarked example that no
+Not covered: compiling is opt in, and most fences are not marked. The public API guard checks
+that a name appears on some published page, not that it appears on the right one, nor that what the
+page says about it is true; a member whose name is a common word (`Id`, `Name`) always passes. An unmarked example that no
 longer compiles, a described parameter that was renamed, or a compiled example whose prose says
 something the code does not do, passes every one of these. A compiled snippet proves the API
 exists in the pinned release, not that the example behaves as the page says.
 
 ## Changelog
 
+- **2026-10-09**: Added the public API and migration guards. A milestone shipped a testing type
+  whose documented checks were three of eight, five migrations missing from the upgrade guide, and
+  public properties no page named, and no test noticed.
 - **2026-10-01**: Added the page description guard. The site's meta description and `llms.txt`
   fell back to each page's first paragraph, which is often a notice or a lead-in to a code block.
 - **2026-10-01**: The link guard now rejects relative links and checks anchors, and no longer
