@@ -306,9 +306,47 @@ public class ParallelTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task ACancellationCallbackThatThrows_StillReportsEveryBranch()
+    {
+        // Cancelling the siblings runs their token callbacks, and one that throws must not take
+        // the join down with it.
+        var waiter = new Waiter();
+
+        var result = await new ThrowingCallbackTrain(waiter).RunEither("abc").WaitAsync(Hang);
+
+        var failure = result
+            .Swap()
+            .ValueUnsafe()
+            .Should()
+            .BeOfType<BranchesFailedException>()
+            .Subject;
+        failure.Failures.Select(f => f.Branch).Should().Equal("Parallel#0/fails");
+        failure.CancelledBySibling.Should().Equal("Parallel#0/waits");
+    }
+
     #endregion
 
     #region Scopes
+
+    [Test]
+    public async Task ABranchWhoseScopeCannotBeOpened_Fails()
+    {
+        var result = await new SignalsWithServicesTrain(new NoScopes())
+            .RunEither("abc")
+            .WaitAsync(Hang);
+
+        result
+            .Swap()
+            .ValueUnsafe()
+            .Should()
+            .BeOfType<BranchesFailedException>(
+                $"a branch without its own scope does not run ({Adr})"
+            )
+            .Which.Failures.Should()
+            .HaveCount(2)
+            .And.OnlyContain(f => f.Exception.Message.Contains("could not prepare its scope"));
+    }
 
     [Test]
     public async Task EachBranch_GetsItsOwnScope_KeptUntilTheRunEnds_AndInitialized()
@@ -920,6 +958,54 @@ public class ParallelTests : TestSetup
                 .Parallel(p =>
                     p.Branch("asks", b => b.Chain<RequestsCancellation>())
                         .Branch("fails", b => b.Chain<Fails>())
+                        .OnFailure(BranchFailurePolicy.WaitForAll)
+                )
+                .Chain<Combine>()
+                .Resolve();
+    }
+
+    private sealed class WaitsWithThrowingCallback(Waiter waiter) : Junction<string, Embedding>
+    {
+        public override async Task<Embedding> Run(string input)
+        {
+            await using var callback = CancellationToken.Register(() =>
+                throw new InvalidOperationException("the callback throws")
+            );
+            waiter.Entered.TrySetResult();
+            await UntilCancelled(CancellationToken);
+            return new Embedding(0);
+        }
+    }
+
+    private sealed class ThrowingCallbackTrain(Waiter waiter) : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("waits", b => b.Chain(new WaitsWithThrowingCallback(waiter)))
+                        .Branch("fails", b => b.Chain(new FailsOnceEntered(waiter)))
+                )
+                .Resolve();
+    }
+
+    /// <summary>A container whose scope factory cannot open a scope.</summary>
+    private sealed class NoScopes : IServiceProvider, IServiceScopeFactory
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IServiceScopeFactory) ? this : null;
+
+        public IServiceScope CreateScope() =>
+            throw new ObjectDisposedException("the container is disposed");
+    }
+
+    private sealed class SignalsWithServicesTrain(IServiceProvider services) : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            AddServices(services)
+                .Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("embedding", b => b.Chain<ScoreEmbedding>())
+                        .Branch("cocitation", b => b.Chain<ScoreCoCitation>())
                         .OnFailure(BranchFailurePolicy.WaitForAll)
                 )
                 .Chain<Combine>()

@@ -185,7 +185,16 @@ public partial class Monad<TInput, TReturn>
             );
 
             if (declared.Policy == BranchFailurePolicy.CancelSiblings && !siblingsCancelled)
-                await siblings.CancelAsync().ConfigureAwait(false);
+            {
+                // Cancelling runs every callback registered on the siblings' tokens and then
+                // throws what they threw. The siblings are cancelled either way, and their
+                // outcomes are what the step reports, so a callback's exception is not.
+                try
+                {
+                    await siblings.CancelAsync().ConfigureAwait(false);
+                }
+                catch (AggregateException) { }
+            }
         }
     }
 
@@ -224,17 +233,19 @@ public partial class Monad<TInput, TReturn>
         if (Memory.GetValueOrDefault(typeof(IServiceProvider)) is not IServiceProvider run)
             return child;
 
-        if (run.GetService(typeof(IServiceScopeFactory)) is not IServiceScopeFactory scopes)
-            return child;
-
-        var scope = scopes.CreateAsyncScope();
-        lock (BranchScopes)
-            BranchScopes.Add(scope);
-
-        child.Memory[typeof(IServiceProvider)] = scope.ServiceProvider;
-
+        // Opening the scope can throw too (a disposed container), and that fails the branch
+        // like an initializer that throws, rather than escaping the step.
         try
         {
+            if (run.GetService(typeof(IServiceScopeFactory)) is not IServiceScopeFactory scopes)
+                return child;
+
+            var scope = scopes.CreateAsyncScope();
+            lock (BranchScopes)
+                BranchScopes.Add(scope);
+
+            child.Memory[typeof(IServiceProvider)] = scope.ServiceProvider;
+
             foreach (var initializer in run.GetServices<IBranchScopeInitializer>())
                 await initializer
                     .Initialize(run, scope.ServiceProvider, token)
