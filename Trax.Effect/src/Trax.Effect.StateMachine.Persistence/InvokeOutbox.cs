@@ -4,9 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.DataContextTransaction;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Services.SqlDialect;
 using Trax.Effect.Enums;
-using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 
 namespace Trax.Effect.StateMachine.Persistence;
@@ -46,17 +46,15 @@ internal abstract record InvokeWrite
 /// for a machine that never moved.
 /// </summary>
 /// <remarks>
-/// <para>The transaction belongs to the request's data context, never to the advance train's own: the train saves
-/// its metadata through the context its effect runner creates, and junction progress writes through one of its
-/// own (Effect ADR 0021), so neither can commit or roll back this one part-way.</para>
+/// <para>Every write goes through a data context of its own, created for it and disposed after it, never the
+/// request's. A train's junction may start or advance an instance while its run holds tracked writes on the scoped
+/// context, which commit once, when the run finishes (Effect ADR 0021); saving through that context here would
+/// commit them early inside this transaction, and a rollback would leave them marked saved and lose them. For the
+/// same reason a transaction the caller holds does not stop the write.</para>
 /// <para>On Postgres a failed statement aborts the transaction, a unique violation on the invoke token included, so
 /// every lost write is followed by a rollback and reported as a conflict; nothing is written after it.</para>
 /// </remarks>
-internal sealed class InvokeOutbox(
-    IDataContext context,
-    IMachineInstanceStore store,
-    IServiceProvider services
-)
+internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServiceProvider services)
 {
     /// <summary>The code an entry past the owner's live-run cap is refused with.</summary>
     public const string LimitReached = "invoke-limit-reached";
@@ -85,11 +83,18 @@ internal sealed class InvokeOutbox(
         CancellationToken cancellationToken
     ) =>
         await InTransaction(
-            async () =>
+            async (context, store) =>
             {
                 if (
                     entering is not null
-                    && await OverLimit(owner, next.Machine, id, entering.Limit, cancellationToken)
+                    && await OverLimit(
+                        context,
+                        owner,
+                        next.Machine,
+                        id,
+                        entering.Limit,
+                        cancellationToken
+                    )
                         is { } refused
                 )
                     return refused;
@@ -137,11 +142,12 @@ internal sealed class InvokeOutbox(
         CancellationToken cancellationToken
     ) =>
         await InTransaction(
-            async () =>
+            async (context, store) =>
             {
                 if (
                     entering is not null
                     && await OverLimit(
+                        context,
                         owner,
                         snapshot.Machine,
                         id,
@@ -193,7 +199,7 @@ internal sealed class InvokeOutbox(
         CancellationToken cancellationToken
     ) =>
         await InTransaction(
-            async () =>
+            async (context, store) =>
             {
                 // No user is present for a run an outcome queues, so only a system-owned instance may chain one;
                 // the startup check refuses a user-owned machine that declares such an edge, and this refuses the
@@ -211,7 +217,14 @@ internal sealed class InvokeOutbox(
 
                 if (
                     entering is not null
-                    && await OverLimit(owner, next.Machine, id, entering.Limit, cancellationToken)
+                    && await OverLimit(
+                        context,
+                        owner,
+                        next.Machine,
+                        id,
+                        entering.Limit,
+                        cancellationToken
+                    )
                         is { } refused
                 )
                     return refused;
@@ -295,6 +308,7 @@ internal sealed class InvokeOutbox(
     // being written. The count is taken under a transaction-scoped lock on (machine, user) on Postgres, so two
     // concurrent entries cannot both pass it; SQLite serializes writing transactions already.
     private async Task<InvokeWrite.Refused?> OverLimit(
+        IDataContext context,
         DraftOwner owner,
         string machine,
         Guid id,
@@ -338,30 +352,23 @@ internal sealed class InvokeOutbox(
                 + "AddMediator(...) after AddStateMachines(...); the startup check refuses such a host."
         );
 
-    // Runs the write in a transaction of its own on the request's data context. A refusal or conflict rolls back
+    // Runs the write in a transaction of its own, on a data context created for it. A refusal or conflict rolls back
     // whatever was written before it; an exception rolls back and propagates, except that a refused authorization
-    // is a refusal. The run's entry is never left tracked: committed, it would be served stale; rolled back, a
-    // later save on the shared context would insert it after all.
+    // is a refusal. The context goes with the write, so nothing it tracked outlives it.
     private async Task<InvokeWrite> InTransaction(
-        Func<Task<InvokeWrite>> write,
+        Func<IDataContext, IMachineInstanceStore, Task<InvokeWrite>> write,
         CancellationToken cancellationToken
     )
     {
-        var db = (DbContext)context;
-        if (db.Database.CurrentTransaction is not null)
-            throw new InvalidOperationException(
-                "A state that invokes a train is written in a transaction of its own, but the request's data "
-                    + "context already holds one. Write the snapshot outside it."
-            );
-
-        var tracked = db.ChangeTracker.Entries<WorkQueue>().Select(e => e.Entity).ToHashSet();
+        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var store = new EfSnapshotStore(context, services.GetService<ISqlDialect>());
         IDataContextTransaction? transaction = await context.BeginTransaction(cancellationToken);
         try
         {
             InvokeWrite result;
             try
             {
-                result = await write();
+                result = await write(context, store);
             }
             catch (UnauthorizedAccessException)
             {
@@ -387,12 +394,6 @@ internal sealed class InvokeOutbox(
             if (transaction is not null)
                 await RollbackQuietly(transaction);
             throw;
-        }
-        finally
-        {
-            foreach (var entry in db.ChangeTracker.Entries<WorkQueue>().ToList())
-                if (!tracked.Contains(entry.Entity))
-                    entry.State = EntityState.Detached;
         }
     }
 

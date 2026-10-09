@@ -7,6 +7,7 @@ using Trax.Effect.Data.Testing;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Effect.StateMachine.Persistence.Mutations;
 using Trax.Mediator.Services.TrainBus;
@@ -201,6 +202,58 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
                 row!.State.Should().Be("Idle", "and it does not commit the outbox's writes");
                 (await _host.Runs(id)).Should().BeEmpty();
             }
+        }
+    }
+
+    [Test]
+    public async Task Starting_an_instance_neither_saves_nor_loses_the_callers_tracked_writes()
+    {
+        // A junction that starts an instance shares its run's scoped data context, whose tracked writes commit when
+        // the junction's own code saves them, never inside the outbox's transaction, and a rolled-back outbox write
+        // leaves them pending rather than marked saved.
+        foreach (var fault in new[] { LaunchFault.None, LaunchFault.AfterEnqueue })
+        {
+            ObservedLauncher.Fault = fault;
+            var pending = Guid.NewGuid();
+            using var scope = _host.Scope();
+            var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
+            var tracked = new SnapshotDraft
+            {
+                Id = pending,
+                UserKey = User,
+                Machine = GoodMachine.MachineId,
+                Version = 1,
+                State = "Idle",
+                Context = """{"source":"repo"}""",
+                ConcurrencyToken = Guid.NewGuid(),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+            context.SnapshotDrafts.Add(tracked);
+
+            var start = () =>
+                scope
+                    .ServiceProvider.GetRequiredService<IMachineInstances>()
+                    .Start<PartitionMachine>(MachineKey.Of("tracked", Guid.NewGuid().ToString()));
+            if (fault == LaunchFault.None)
+                await start();
+            else
+                await start.Should().ThrowAsync<InvalidOperationException>();
+
+            (await _host.Row(pending, GoodMachine.MachineId))
+                .Should()
+                .BeNull(
+                    $"the caller's tracked write is not committed by the outbox ({fault}). See {Adr}"
+                );
+            ((DbContext)context)
+                .Entry(tracked)
+                .State.Should()
+                .Be(EntityState.Added, $"the caller's write is still pending ({fault})");
+
+            await context.SaveChanges(CancellationToken.None);
+            (await _host.Row(pending, GoodMachine.MachineId))
+                .Should()
+                .NotBeNull($"the caller's own save commits it ({fault})");
         }
     }
 
