@@ -47,7 +47,8 @@ when a second branch runs it; a branch and the branches nested in it run one aft
 **Failure.** A branch that fails fails the step with a `BranchesFailedException` carrying every branch that failed.
 Its class is the join of the branches' classes over `Transient < Conflict < Unclassified < Permanent`: the step can be
 retried as a whole only when every failure could be. Under `CancelSiblings` (the default) the other branches are
-cancelled when one fails, and a branch stopped that way is listed as cancelled by its sibling, not as a failure;
+cancelled when one fails, and a branch that fails after that is listed as cancelled by its sibling, not as a failure,
+whatever it threw (a client library may turn the cancellation into an exception of its own);
 `WaitForAll` lets every branch finish. A cancellation that came from outside the step (the caller, the dashboard's
 cancel flag, a timeout) cancels the run, never fails it. The cancel flag is read inside a branch, so it raises a
 `CancellationRequestedException` to say it was asked for; any other cancellation a branch raises on its own (an
@@ -95,4 +96,4 @@ branches together and one after another holds only while junctions follow that c
 - **2026-10-07**: Recorded.
 - **2026-10-08**: A cancellation a branch raises on its own fails the branch; only the run's token or its cancel flag
   (`CancellationRequestedException`) cancels the run. One junction instance found at run time in two branches fails the
-  step.
+  step. A branch that fails after its siblings were cancelled counts as cancelled by its sibling whatever it threw.

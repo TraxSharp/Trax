@@ -65,8 +65,8 @@ A branch that fails fails the step with a `BranchesFailedException`:
 | Member | Description |
 |---|---|
 | `Step` | The step's id, as in `Parallel#0`. |
-| `Failures` | Each `FailedBranch` (`Branch`, `Exception`, `FailureClass`), first to fail first. |
-| `CancelledBySibling` | Branches stopped because a sibling failed. They are not failures. |
+| `Failures` | Each `FailedBranch` (`Branch`, `Exception`, `FailureClass`), in the order the step recorded them. Branches failing at the same moment are ordered as the step happened to see them. |
+| `CancelledBySibling` | Branches that failed after a sibling's failure cancelled them, whatever they threw. They are not failures. |
 | `Combine(classes)` | The class of several failures: `Permanent` if any is, `Transient` only if every one is. |
 
 The run's recorded failure carries the combined class, so the step is retried as a whole only

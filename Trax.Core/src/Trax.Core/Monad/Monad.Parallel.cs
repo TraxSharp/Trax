@@ -325,13 +325,12 @@ public partial class Monad<TInput, TReturn>
             )
                 ExceptionDispatchInfo.Capture(asked.Failure).Throw();
 
+            // A branch that failed after its siblings were cancelled was stopped by a sibling's
+            // failure, whatever it threw: a client library may turn the cancellation into an
+            // exception of its own. One that failed before is a failure. The branch whose failure
+            // cancelled the others failed before, so there is always at least one.
             var failures = failed
-                .Where(f =>
-                    !(
-                        f.Outcome!.Failure is OperationCanceledException
-                        && f.Outcome.SiblingsCancelled
-                    )
-                )
+                .Where(f => !f.Outcome!.SiblingsCancelled)
                 .Select(f => new FailedBranch(
                     f.Path,
                     f.Outcome!.Failure,
@@ -340,9 +339,7 @@ public partial class Monad<TInput, TReturn>
                 .ToList();
 
             var stopped = failed
-                .Where(f =>
-                    f.Outcome!.Failure is OperationCanceledException && f.Outcome.SiblingsCancelled
-                )
+                .Where(f => f.Outcome!.SiblingsCancelled)
                 .Select(f => f.Path)
                 .ToList();
 

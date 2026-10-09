@@ -208,6 +208,29 @@ public class ParallelTests : TestSetup
     }
 
     [Test]
+    public async Task ASiblingStoppedByCancelSiblings_IsNotAFailure_WhateverItThrows()
+    {
+        // The stopped sibling turns its cancellation into an exception of its own, as a client
+        // library wrapping a cancelled request does. It still stopped because its sibling failed.
+        var waiter = new Waiter();
+
+        var result = await new WrappingSiblingTrain(waiter).RunEither("abc").WaitAsync(Hang);
+
+        await waiter.Cancelled.Task.WaitAsync(Hang);
+        var failure = result
+            .Swap()
+            .ValueUnsafe()
+            .Should()
+            .BeOfType<BranchesFailedException>()
+            .Subject;
+        failure.Failures.Select(f => f.Branch).Should().Equal("Parallel#0/fails");
+        failure.CancelledBySibling.Should().Equal(["Parallel#0/waits"], $"({Adr})");
+        ((TrainExceptionData)failure.Data["TrainExceptionData"]!)
+            .FailureClass.Should()
+            .Be(FailureClass.Transient, "a branch stopped by its sibling adds no class");
+    }
+
+    [Test]
     public async Task CancellingTheRun_DuringAParallel_FailsWithTheCancellation()
     {
         using var cts = new CancellationTokenSource();
@@ -961,6 +984,59 @@ public class ParallelTests : TestSetup
                         .OnFailure(BranchFailurePolicy.WaitForAll)
                 )
                 .Chain<Combine>()
+                .Resolve();
+    }
+
+    private sealed class WrapsItsCancellation(Waiter waiter) : Junction<string, Embedding>
+    {
+        public override async Task<Embedding> Run(string input)
+        {
+            waiter.Entered.TrySetResult();
+
+            try
+            {
+                await UntilCancelled(CancellationToken);
+            }
+            catch (OperationCanceledException e)
+            {
+                waiter.Cancelled.TrySetResult();
+                throw new InvalidOperationException("the request was aborted", e);
+            }
+
+            return new Embedding(0);
+        }
+    }
+
+    private sealed class FailsTransientOnceEntered(Waiter waiter)
+        : Junction<string, Functional.Unit>
+    {
+        public override async Task<Functional.Unit> Run(string input)
+        {
+            await waiter.Entered.Task;
+            throw new TrainException(
+                System.Text.Json.JsonSerializer.Serialize(
+                    new TrainExceptionData
+                    {
+                        TrainName = "t",
+                        TrainExternalId = "x",
+                        Type = nameof(InvalidOperationException),
+                        Junction = nameof(FailsTransientOnceEntered),
+                        Message = "transient",
+                        FailureClass = FailureClass.Transient,
+                    }
+                )
+            );
+        }
+    }
+
+    private sealed class WrappingSiblingTrain(Waiter waiter) : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("waits", b => b.Chain(new WrapsItsCancellation(waiter)))
+                        .Branch("fails", b => b.Chain(new FailsTransientOnceEntered(waiter)))
+                )
                 .Resolve();
     }
 

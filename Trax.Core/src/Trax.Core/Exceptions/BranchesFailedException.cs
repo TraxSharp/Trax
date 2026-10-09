@@ -20,9 +20,9 @@ public sealed record FailedBranch(string Branch, Exception Exception, FailureCla
 /// <para>Its <see cref="TrainExceptionData"/> names the first branch to fail and carries the
 /// combined <see cref="Exceptions.FailureClass"/> (<see cref="Combine"/>): the step can be retried
 /// as a whole only when every failure can.</para>
-/// <para>A branch stopped because a sibling failed, under
-/// <see cref="BranchFailurePolicy.CancelSiblings"/>, is not a failure and is listed in
-/// <see cref="CancelledBySibling"/> instead. A run that was cancelled fails with the cancellation,
+/// <para>A branch that failed after a sibling's failure cancelled it, under
+/// <see cref="BranchFailurePolicy.CancelSiblings"/>, is not a failure, whatever it threw, and is
+/// listed in <see cref="CancelledBySibling"/> instead. A run that was cancelled fails with the cancellation,
 /// never with this.</para>
 /// </remarks>
 [Experimental(ExperimentalIds.Parallel)]
@@ -49,7 +49,11 @@ public sealed class BranchesFailedException : TrainException
     /// <summary>The <c>Parallel</c> step's id.</summary>
     public string Step { get; }
 
-    /// <summary>The branches that failed, first to fail first.</summary>
+    /// <summary>
+    /// The branches that failed, in the order the step recorded their failures. Branches that
+    /// fail at the same moment are ordered as the step happened to see them, so only the first
+    /// is meaningful when failures race.
+    /// </summary>
     public IReadOnlyList<FailedBranch> Failures { get; }
 
     /// <summary>The paths of the branches stopped because a sibling failed.</summary>
