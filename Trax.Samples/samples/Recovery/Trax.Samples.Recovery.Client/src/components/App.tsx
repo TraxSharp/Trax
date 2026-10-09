@@ -30,7 +30,7 @@ export function App() {
   const locked = phase === "starting" || phase === "running" || phase === "backoff" || phase === "retrying" || phase === "requeue";
 
   // A clock for the countdown and the timeline's running bars.
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!locked) return;
     const timer = setInterval(() => setNow(Date.now()), 50);

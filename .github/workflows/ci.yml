@@ -372,6 +372,76 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
 
+  # The Recovery sample's page (Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client), its own
+  # npm project. It builds the engine from Trax.Api.StateMachine/src, which is upstream of
+  # Trax.Samples through Trax.Cli, so it runs whenever the Samples job does. Besides its lint, tests
+  # and build, it regenerates the topic map's twin from the C# machine with `trax machine generate`,
+  # as the sample's README says to, and fails when that changes a file: a twin out of step with the
+  # machine would let the page offer moves the server refuses.
+  recovery-client:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.folders), 'Trax.Samples')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      CLIENT: Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install Trax.Api.StateMachine (locked, no install scripts)
+        # The twin generator runs under node from this folder's tools.
+        working-directory: Trax.Api.StateMachine
+        run: npm ci --ignore-scripts
+      - name: Install (locked, no install scripts)
+        working-directory: ${{ env.CLIENT }}
+        run: npm ci --ignore-scripts
+      - name: Lint
+        working-directory: ${{ env.CLIENT }}
+        run: npm run lint
+      - name: Test
+        working-directory: ${{ env.CLIENT }}
+        run: npm test
+      - name: Build
+        # tsc -b typechecks it, then vite builds it.
+        working-directory: ${{ env.CLIENT }}
+        run: npm run build
+      - name: Audit runtime dependencies
+        working-directory: ${{ env.CLIENT }}
+        run: npm audit --omit=dev --audit-level=high
+      - name: The topic map's twin matches the C# machine
+        run: |
+          dotnet restore Trax.Samples/samples/Recovery/Trax.Samples.Recovery --locked-mode
+          dotnet restore Trax.Cli/src/Trax.Cli --locked-mode
+          dotnet build Trax.Samples/samples/Recovery/Trax.Samples.Recovery --configuration Release --no-restore
+          out="$CLIENT/src/topicMap"
+          dotnet run --project Trax.Cli/src/Trax.Cli --no-restore -- machine generate \
+            --assembly Trax.Samples/samples/Recovery/Trax.Samples.Recovery/bin/Release/net10.0/Trax.Samples.Recovery.dll \
+            --machine Trax.Samples.Recovery.Machines.TopicMapMachine \
+            --ir-out "$out" --twin-out "$out" \
+            --engine-src Trax.Api.StateMachine/src --import-style specifier
+          # Only the generated files: the folder also holds the page's own hook.
+          if [ -n "$(git status --porcelain -- "$out/topic-map.*")" ]; then
+            git --no-pager diff -- "$out/topic-map.*"
+            echo "::error::The topic map's twin is out of date. Regenerate it with the command in Trax.Samples/samples/Recovery/README.md and commit the result."
+            exit 1
+          fi
+
   # The TypeScript twin of Trax.Effect.StateMachine. Its machines/ corpus is also read by the
   # Trax.Effect conformance tests and the Trax.Cli byte-parity tests, which is why those
   # folders list it upstream.
@@ -414,7 +484,7 @@ jobs:
   # The coverage upload is not among them: it is information, and it never fails a run.
   result:
     name: CI result
-    needs: [changes, dotnet, adr-guard, website, website-dashboard, state-machine]
+    needs: [changes, dotnet, adr-guard, website, website-dashboard, recovery-client, state-machine]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2

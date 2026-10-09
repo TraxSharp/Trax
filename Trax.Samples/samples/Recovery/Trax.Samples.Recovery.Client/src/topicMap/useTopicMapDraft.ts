@@ -74,7 +74,9 @@ export function useTopicMapDraft(): TopicMapDraft {
       if (loaded.snapshot) return take(loading, loaded.snapshot);
       const saving = ++sent.current;
       const saved = await session.save(topicMap.serialize(topicMap.initial()));
-      if (live.current) (saved.ok ? take(saving, saved.snapshot) : setProblem(saved.message));
+      if (!live.current) return;
+      if (saved.ok) take(saving, saved.snapshot);
+      else setProblem(saved.message);
     })();
     return () => {
       live.current = false;

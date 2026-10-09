@@ -14,6 +14,7 @@ import {
   TRIGGER_ASK_AFRESH,
   WORK_QUEUE_ENTRY,
 } from "./graphql";
+import { LatestReads, mergeSteps as merged, RANK } from "./runReads";
 import {
   branchOf,
   restoredIn,
@@ -34,7 +35,6 @@ import {
 } from "./types";
 
 const POLL_MS = 500;
-const RANK = { IN_PROGRESS: 0, COMPLETED: 1, FAILED: 1, CANCELLED: 1 } as const;
 
 interface ExecutionRow {
   id: number;
@@ -59,8 +59,8 @@ export function useRecoveryRun() {
   const [starting, setStarting] = useState(false);
   const [forkTaken, setForkTaken] = useState<Fork>("none");
 
-  // When Run was pressed: console times and the timeline count from here.
-  const base = useRef(Date.now());
+  // When Run was pressed: console times and the timeline count from here. Set by start.
+  const base = useRef(0);
   const narrated = useRef(new Set<string>());
   const subscriptions = useRef(new Map<number, { unsubscribe(): void }>());
   const journaled = useRef(new Set<number>());
@@ -139,17 +139,7 @@ export function useRecoveryRun() {
         stepRank.current.set(key, RANK[step.state]);
         narrate(attemptId, step);
       }
-      setAttempts((all) =>
-        all.map((a) => {
-          if (a.id !== attemptId) return a;
-          const steps = { ...a.steps };
-          for (const step of incoming) {
-            const known = steps[step.position];
-            if (!known || RANK[known.state] < RANK[step.state]) steps[step.position] = step;
-          }
-          return { ...a, steps };
-        }),
-      );
+      setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, steps: merged(a.steps, incoming) } : a)));
     },
     [narrate],
   );
@@ -164,13 +154,12 @@ export function useRecoveryRun() {
 
   // Each attempt's graph reads are numbered, so a read that answers after a later one started (a
   // slow poll landing after the final read) is dropped rather than drawn over a newer graph.
-  const graphReads = useRef(new Map<number, number>());
+  const graphReads = useRef(new LatestReads());
   const readGraph = useCallback(
     async (attemptId: number): Promise<RunGraph | null | undefined> => {
-      const read = (graphReads.current.get(attemptId) ?? 0) + 1;
-      graphReads.current.set(attemptId, read);
+      const read = graphReads.current.begin(attemptId);
       const { data } = await client.query({ query: RUN_GRAPH, variables: { metadataId: attemptId } });
-      if (graphReads.current.get(attemptId) !== read) return undefined;
+      if (!graphReads.current.isLatest(attemptId, read)) return undefined;
       const flat = data.operations.runGraph as { hasGraph: boolean; allNodes: FlatGraphNode[] } | null;
       const graph: RunGraph | null = flat && { hasGraph: flat.hasGraph, nodes: treeOf(flat.allNodes) };
       setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, graph } : a)));
