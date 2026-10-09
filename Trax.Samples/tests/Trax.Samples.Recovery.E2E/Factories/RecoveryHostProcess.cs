@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using Trax.Samples.Recovery.E2E.Fixtures;
 using Trax.Samples.Shared.Testing;
 
@@ -47,14 +47,17 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts the host's build output with <c>dotnet</c>, on a free loopback port, and waits until its
-    /// health endpoint answers.
+    /// Starts the host's build output with <c>dotnet</c>, on a loopback port the host binds itself,
+    /// and waits until its health endpoint answers.
     /// </summary>
+    /// <remarks>
+    /// The host is given port 0 and reports the port it bound in Kestrel's "Now listening on" line.
+    /// Picking a free port here and handing it over would leave a window between releasing it and
+    /// the host binding it, in which another process on the machine can take it.
+    /// </remarks>
     /// <param name="stepDelay">How long each junction takes, so a test can catch a run in the middle.</param>
     public static async Task<RecoveryHostProcess> StartAsync(TimeSpan stepDelay)
     {
-        var port = FreePort();
-        var address = new Uri($"http://127.0.0.1:{port}");
         var assembly = HostAssembly();
 
         var start = new ProcessStartInfo("dotnet")
@@ -67,18 +70,51 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
         start.ArgumentList.Add(assembly);
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["ConnectionStrings__TraxDatabase"] = ConnectionString;
-        start.Environment["Kestrel__Endpoints__Http__Url"] = address.ToString();
+        start.Environment["Kestrel__Endpoints__Http__Url"] = "http://127.0.0.1:0";
+        start.Environment["Logging__LogLevel__Microsoft.Hosting.Lifetime"] = "Information";
         start.Environment["Recovery__StepDelay"] = stepDelay.ToString("c");
         start.Environment["Recovery__ModelLatencyMin"] = "00:00:00";
         start.Environment["Recovery__ModelLatencyMax"] = "00:00:00";
 
         var output = new StringBuilder();
-        var process = new Process { StartInfo = start };
-        process.OutputDataReceived += (_, e) => Append(output, e.Data);
+        var listening = new TaskCompletionSource<Uri>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var process = new Process { StartInfo = start, EnableRaisingEvents = true };
+        process.OutputDataReceived += (_, e) =>
+        {
+            Append(output, e.Data);
+            if (e.Data is not null && ListeningOn.Match(e.Data) is { Success: true } match)
+                listening.TrySetResult(new Uri(match.Groups["address"].Value));
+        };
         process.ErrorDataReceived += (_, e) => Append(output, e.Data);
+        process.Exited += (_, _) =>
+            listening.TrySetException(
+                new InvalidOperationException("The Recovery host exited before it listened.")
+            );
         process.Start();
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+
+        Uri address;
+        try
+        {
+            address = await listening.Task.WaitAsync(StartTimeout);
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            process.Dispose();
+            string wrote;
+            lock (output)
+                wrote = output.ToString();
+            throw new InvalidOperationException(
+                $"The Recovery host never said which port it bound. It wrote:\n{wrote}",
+                ex
+            );
+        }
 
         var host = new RecoveryHostProcess(process, output, address);
         var healthy = await Polling.WaitUntilAsync(
@@ -132,12 +168,11 @@ public sealed class RecoveryHostProcess : IAsyncDisposable
             output.AppendLine(line);
     }
 
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
+    // Kestrel's line once it is bound, e.g. "Now listening on: http://127.0.0.1:61234".
+    private static readonly Regex ListeningOn = new(
+        @"Now listening on: (?<address>http://127\.0\.0\.1:\d+)",
+        RegexOptions.Compiled
+    );
 
     // The host project's own build output, which carries its runtime config and dependencies. The test
     // project references the host, so it is built in the same configuration.
