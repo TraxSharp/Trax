@@ -318,6 +318,15 @@ follow the first.
   cancelling its run would move it through `OnCancelled` from outside. One message on both surfaces
   (`OperationsService.UserOwnedRunCancelRefusal`); the bulk forms skip such rows and count them in their message.
   `InvokesModelTests` checks the refusal; `InvokedRunOperationsTests` in `Trax.Api/tests` checks both surfaces.
+- **2026-10-08**: The reconciler reads the ended runs instead of every live token: one query per page joins each
+  instance of the machines its host registers to its entry and the entry's run, and returns only those whose run has
+  ended, so the entry and run are read as of one instant and a requeued dispatch (a run failed with
+  `DispatchRequeued`, its entry queued again) is never applied as an end. A dispatched entry that names no run falls
+  back to the runs under its token, and with none fails as `invoke-run-missing`. Notices go through a bounded buffer
+  and are drained, deduplicated and filtered by the same query; a full buffer asks for a full sweep. While the
+  notices are heard the sweep runs every `InvokeOutcomeSweepIntervalWhileListening` (1 minute), and in full on every
+  resubscription, whose delay doubles from 1 to 30 seconds. A row the host cannot read is tried again after a wait
+  that doubles from 30 seconds to an hour. `InvokeOutcomeReconcilerTests` live beside `InvokeOutcomeDeliveryTests`.
 
 - **2026-10-08**: `[Experimental("TRAXEXP002")]` lifted: the `Invokes` row of the interaction matrix is complete.
 

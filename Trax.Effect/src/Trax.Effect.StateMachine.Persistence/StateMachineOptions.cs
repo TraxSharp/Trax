@@ -20,7 +20,8 @@ public sealed class StateMachineOptions
     /// outcome to the state that invoked it. The default is 5 seconds. The sweep is the guarantee, not the usual
     /// path: the host that ran the train applies the outcome as soon as it is recorded, and on Postgres a
     /// notification wakes every host's reconciler sooner. It decides how long an outcome waits when both of those
-    /// miss it (a crash after the run, a run the reaper failed, a cancel before dispatch). Must be positive.
+    /// miss it (a crash after the run, a run the reaper failed, a cancel before dispatch), and how often the
+    /// sweep runs while the notifications are not being heard. Must be positive.
     /// </summary>
     public TimeSpan InvokeOutcomeSweepInterval
     {
@@ -31,4 +32,21 @@ public sealed class StateMachineOptions
             field = value;
         }
     } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How often this host's outcome reconciler sweeps while it hears the provider's notification of invoked runs
+    /// ending (Postgres): each notification delivers its run at once, and the reconciler sweeps in full whenever it
+    /// subscribes again after losing them, so the sweep only has to catch what both miss. The default is 1 minute.
+    /// Never shorter than <see cref="InvokeOutcomeSweepInterval"/>, which applies whenever the notifications are not
+    /// heard. Must be positive.
+    /// </summary>
+    public TimeSpan InvokeOutcomeSweepIntervalWhileListening
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, TimeSpan.Zero);
+            field = value;
+        }
+    } = TimeSpan.FromMinutes(1);
 }

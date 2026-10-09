@@ -127,14 +127,22 @@ ended, and delivers each. The hook is the fast path; the sweep is the guarantee,
 the run's terminal write and before its hook, a run the scheduler failed or cancelled itself, a cancel before
 dispatch, and a train run on a host that registers no machines (a dedicated scheduler host, typically). On Postgres
 a trigger notifies every host when an invoked run ends, and each reconciler delivers that run at once; on SQLite
-the sweep runs at its interval. Set the interval with `StateMachineOptions.InvokeOutcomeSweepInterval` (5 seconds
-by default):
+the sweep runs at its interval. Each sweep reads, in one query per page, only the instances of the machines its host
+registers whose run has ended, so instances waiting on a run still going cost it nothing; notifications are
+batched and deduplicated the same way. Set the interval with `StateMachineOptions.InvokeOutcomeSweepInterval` (5
+seconds by default). While a Postgres host hears the notifications it sweeps only every
+`InvokeOutcomeSweepIntervalWhileListening` (1 minute by default), and in full each time it subscribes again after
+losing them:
 
 ```csharp
 trax.AddStateMachines(
     o => o.InvokeOutcomeSweepInterval = TimeSpan.FromSeconds(10),
     typeof(IngestMachine).Assembly);
 ```
+
+A host that cannot read an instance's snapshot, such as one written under a newer version of the machine, leaves
+the outcome to a host that can, and tries that instance again only after a wait that doubles from 30 seconds to an
+hour, so it logs it rarely rather than at every sweep.
 
 **The output survives any crash.** A completed run writes the output its machine reads in its own terminal write,
 in the same statement that records it completed, serialized with the names the machine's guards and reductions
