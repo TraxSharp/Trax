@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Effect.Utils;
 
 namespace Trax.Effect.StateMachine.Persistence;
 
@@ -230,8 +231,29 @@ public abstract class Machine<TState, TTrigger> : IMachine, IMachineInternals
 
     string IMachineInternals.Serialize(Snapshot snapshot) => Built.Engine.Serialize(snapshot);
 
-    AdvanceResult IMachineInternals.ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome) =>
-        Built.Engine.ApplyOutcome(snapshot, outcome);
+    AdvanceResult IMachineInternals.ApplyOutcome(Snapshot snapshot, InvokeOutcome outcome)
+    {
+        // The startup check refuses a sensitive output and the launch refuses to queue its train; this refuses the
+        // output again, fail-closed, so it never reaches the context, which is stored as plain JSON. The delivery
+        // applies the state's OnFailed instead.
+        if (
+            outcome is InvokeOutcome.Done
+            && Built.Invokes.Values.FirstOrDefault(i => i.State.ToString() == snapshot.State)
+                is { } invoke
+            && TraxRedaction.ReachesSensitiveMember(invoke.OutputType)
+        )
+            return new AdvanceResult.Rejected(RejectionReasons.InternalError)
+            {
+                Exception = new InvalidOperationException(
+                    InvokeRefusals.SensitiveOutput(
+                        InvokeRefusals.At(Built.Definition.Id, snapshot.State, invoke.TrainType),
+                        invoke.OutputType
+                    )
+                ),
+            };
+
+        return Built.Engine.ApplyOutcome(snapshot, outcome);
+    }
 
     AdvanceResult IMachineInternals.Advance(Snapshot snapshot, string trigger, JsonNode? input) =>
         Built.Engine.Advance(snapshot, trigger, input);

@@ -66,11 +66,13 @@ internal sealed record InvokedTrainDeclaration(
 /// <param name="Input">The run's input, built from the context the state was entered with.</param>
 /// <param name="ExternalId">The id the run's work queue entry takes, which the instance stores as its invoke token.</param>
 /// <param name="InvokedBy">The instance invoking it, written on the entry and carried to the run.</param>
+/// <param name="State">The invoking state being entered, named in a refusal.</param>
 internal sealed record InvokedTrainLaunch(
     Type TrainType,
     object Input,
     string ExternalId,
-    InvokedBy InvokedBy
+    InvokedBy InvokedBy,
+    string State
 )
 {
     /// <summary>
@@ -81,4 +83,26 @@ internal sealed record InvokedTrainLaunch(
     /// refuses such a launch for a user-owned instance with <see cref="UnauthorizedAccessException"/>.
     /// </summary>
     public bool FromOutcome { get; init; }
+}
+
+/// <summary>
+/// The refusals the startup check makes and a launch makes again at runtime, worded once, so a run refused at entry
+/// says what the startup check would have said.
+/// </summary>
+internal static class InvokeRefusals
+{
+    /// <summary>Where a refusal is: the machine, the train and the state that invokes it.</summary>
+    public static string At(string machine, string state, Type train) =>
+        $"The machine '{machine}' invokes {train.Name} in {state}";
+
+    /// <summary>A train whose output reaches a <c>[TraxSensitive]</c> member, refused for every owner.</summary>
+    public static string SensitiveOutput(string at, Type output) =>
+        $"{at}, whose output {output.Name} reaches a [TraxSensitive] member. The output is reduced into the "
+        + "snapshot's context, which is stored as plain JSON and returned by loadSnapshot, so it cannot hold a "
+        + "sensitive value. Return a pointer to it instead.";
+
+    /// <summary>A <c>[TraxBroadcast]</c> train, refused for a user-owned machine.</summary>
+    public static string Broadcast(string at) =>
+        $"{at}, which is [TraxBroadcast]. Its subscribers see every run's output, so a user-owned machine's run "
+        + "would be broadcast to others; invoke a train that is not broadcast.";
 }

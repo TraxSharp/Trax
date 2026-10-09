@@ -17,6 +17,7 @@ using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.Services.ServiceTrain;
 using Trax.Effect.StateMachine.Persistence;
+using Trax.Effect.Utils;
 using Trax.Mediator.Configuration;
 using Trax.Mediator.Exceptions;
 using Trax.Mediator.Services.ConcurrencyLimiter;
@@ -277,6 +278,19 @@ public class TrainExecutionService(
             throw new InvalidOperationException(
                 $"{registration.ServiceTypeName} has an OnQueue hook, which commits on its own, so a "
                     + "state machine cannot queue it in the transaction that enters its state."
+            );
+
+        // The startup check refuses both; this refuses them again, fail-closed, so a host that skipped the check
+        // (its hosted services never started) still queues neither.
+        var at = InvokeRefusals.At(launch.InvokedBy.Machine, launch.State, launch.TrainType);
+        if (
+            launch.InvokedBy.OwnerKind != SnapshotOwnerKind.System
+            && registration.IsBroadcastEnabled
+        )
+            throw new InvalidOperationException(InvokeRefusals.Broadcast(at));
+        if (TraxRedaction.ReachesSensitiveMember(registration.OutputType))
+            throw new InvalidOperationException(
+                InvokeRefusals.SensitiveOutput(at, registration.OutputType)
             );
 
         // A run entered by the outcome of the run before it has no user present to authorize it. Only a

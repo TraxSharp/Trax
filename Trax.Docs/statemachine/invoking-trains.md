@@ -215,6 +215,7 @@ at fault:
 | anything the chain recorder refuses, or a chain that cannot be read outside a request | the chain cannot be checked |
 | no `AddJunctionProgress()` | it registers the junction effect that reads the cancel flag |
 | no `AddMediator(...)` | nothing can queue the runs |
+| an `ITrainExecutionService` registered in place of the mediator's | the runs are queued through the mediator's own, inside the transaction that enters the state |
 | an `OnQueue` hook or `DeferQueuePromotion` on the train | both commit on their own, outside the transaction that enters the state |
 | the InMemory provider | it has no transactions |
 | on a user-owned machine, a train whose `[TraxAuthorize]` names roles or a policy | entering the state would be a way around a requirement stricter than the machine's own mutations |
@@ -222,6 +223,10 @@ at fault:
 | on a system-owned machine, a train that declares `[TraxAuthorize]` | the trusted scope does not check user requirements |
 | on a user-owned machine, an `OnDone`, `OnFailed` or `OnCancelled` that enters a state invoking a train | the next run would be queued with no user present to authorize it; chain through a user event, or declare `SystemOwned()` |
 | an output type that reaches a `[TraxSensitive]` member | the output is reduced into a context stored as plain JSON and returned by `loadSnapshot` |
+
+The `[TraxBroadcast]` and `[TraxSensitive]` refusals are made again at runtime, so a host whose startup check never
+ran still cannot break them: entering the state throws and queues nothing, and a sensitive output that reaches a run
+anyway is neither recorded for the machine nor applied to the context; the state goes to its `OnFailed` instead.
 
 `EffectJunction`'s railway step is sealed, so a subclass cannot skip the check. Two limits remain: a slow decider in
 `Decide` or `Gate` runs outside any junction, so no cancel check happens while it runs, and a train started from

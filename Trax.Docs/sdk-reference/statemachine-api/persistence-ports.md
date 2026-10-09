@@ -96,8 +96,9 @@ internal: a host neither implements nor calls them, and `AddStateMachines` and `
 
 - **The launcher** queues the run. Trax.Mediator implements it. It authorizes the run and writes its work queue entry
   into the outbox's data context, inside the transaction that moves the snapshot, so the two commit together; it
-  commits nothing itself. A user-owned instance's run is authorized against the current caller. A system-owned instance's run is
-  authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
+  commits nothing itself. It refuses a train whose output reaches a `[TraxSensitive]` member, and, for a user-owned
+  instance, a `[TraxBroadcast]` train, as the startup check does. A user-owned instance's run is authorized against
+  the current caller. A system-owned instance's run is authorized in Trax's trusted execution scope, including one that the previous run's outcome started (no user is
   present). A user-owned instance never launches from an outcome: the startup check refuses such a machine, and the
   launcher refuses such a launch with `UnauthorizedAccessException`. The launcher also tells the startup check what
   about a train stops a machine from invoking it. It lives in the persistence package rather than the engine because

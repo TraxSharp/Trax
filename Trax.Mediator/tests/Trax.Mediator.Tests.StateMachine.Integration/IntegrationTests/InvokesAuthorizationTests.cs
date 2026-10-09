@@ -281,7 +281,8 @@ public class InvokesAuthorizationTests(StoreProvider provider)
                     typeof(IGoodTrain),
                     new GoodInput("repo"),
                     externalId,
-                    new InvokedBy(machine, Guid.NewGuid(), owner)
+                    new InvokedBy(machine, Guid.NewGuid(), owner),
+                    "Embedding"
                 )
                 {
                     FromOutcome = true,

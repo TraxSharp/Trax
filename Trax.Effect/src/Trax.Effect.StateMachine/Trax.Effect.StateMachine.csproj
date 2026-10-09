@@ -18,5 +18,7 @@
          state that invokes a train, reads the invoke declarations and the reserved states, and applies outcomes. -->
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+    <!-- Applies an outcome to a machine whose train only the mediator's tests can declare. -->
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.StateMachine.Integration" />
   </ItemGroup>
 </Project>

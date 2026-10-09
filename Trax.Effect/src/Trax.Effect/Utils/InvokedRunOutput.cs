@@ -35,10 +35,18 @@ internal static class InvokedRunOutput
     /// </summary>
     /// <returns>
     /// The JSON and false; null and true when it is larger than <see cref="MaxBytes"/>. A value that cannot be
-    /// serialized throws, as it would for the engine.
+    /// serialized throws, as it would for the engine, and so does an output type that reaches a
+    /// <c>[TraxSensitive]</c> member: the copy is stored unmasked and reduced into a context stored as plain JSON.
     /// </returns>
     public static (string? Json, bool Oversize) Serialize(object? output, Type declaredType)
     {
+        if (TraxRedaction.ReachesSensitiveMember(declaredType))
+            throw new InvalidOperationException(
+                $"The output {declaredType.Name} reaches a [TraxSensitive] member, so it is not recorded for the "
+                    + "machine that invoked the run: the copy would be stored unmasked and reduced into a context "
+                    + "stored as plain JSON. Return a pointer to it instead."
+            );
+
         var bytes = JsonSerializer.SerializeToUtf8Bytes(output, declaredType, Json);
         return bytes.Length > MaxBytes
             ? (null, true)

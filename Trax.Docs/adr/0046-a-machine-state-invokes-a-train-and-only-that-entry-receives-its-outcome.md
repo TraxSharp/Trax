@@ -161,8 +161,8 @@ user can hold is the largest limit among the host's machines. The count is taken
 concurrent entries in any machines, on any hosts, cannot pass it together. System owners are not capped here: the
 dispatcher's `MaxActiveJobs` bounds them.
 
-**A sensitive output is refused at startup.** The output is reduced into the context, stored as plain `jsonb` and
-returned by `loadSnapshot`, so an output type that reaches a `[TraxSensitive]` member is refused. `OnDone` is never
+**A sensitive output is refused at startup, and again at runtime.** The output is reduced into the context, stored as
+plain `jsonb` and returned by `loadSnapshot`, so an output type that reaches a `[TraxSensitive]` member is refused. `OnDone` is never
 built on the run's recorded output, which is redacted, size-limited and can be null.
 
 **A snapshot holds pointers, not data**: fingerprints and dataset URIs, never rows. Trax's database writes grow with
@@ -255,6 +255,11 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Post
 - `InvokesAuthorizationTests.System_owners_are_not_capped`
 - `InvokesAuthorizationTests.A_user_owned_machines_train_runs_as_the_entering_user`
 - `InvokesAuthorizationTests.A_system_owned_machines_train_runs_under_the_trusted_scope`
+- `InvokesRuntimeRefusalTests.A_user_owned_instance_cannot_queue_a_broadcast_train`
+- `InvokesRuntimeRefusalTests.No_instance_can_queue_a_train_whose_output_is_sensitive`
+- `InvokesRuntimeRefusalTests.A_sensitive_output_is_not_applied_to_the_context`
+- `InvokesRuntimeRefusalTests.A_host_that_replaced_the_execution_service_is_refused_at_startup`
+- `InvokedRunOutputTests.A_sensitive_output_is_not_recorded_for_the_machine`
 - `InvokesModelTests.Generated_triggers_autosaves_and_completions_keep_every_snapshot_valid_and_orphan_no_run`: a
   CsCheck model-based property over late, duplicated and out-of-order completions, completions after a cancel, from
   two hosts and after a reap; each entry into a state has at most one live run.
@@ -282,6 +287,12 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The `[TraxBroadcast]` and `[TraxSensitive]` refusals hold at runtime too, with the startup check's
+  words: the launch refuses a broadcast train for a user-owned instance and a sensitive output for any, the run's
+  terminal write does not record a sensitive output for its machine, and applying one is refused, so the state goes to
+  `OnFailed`. They lived only in a hosted service, which a host that starts no hosted services never runs. The startup
+  check also refuses a host whose `ITrainExecutionService` replaces the mediator's, which the launch needs and
+  otherwise found missing at the first entry. `InvokesRuntimeRefusalTests` and `InvokedRunOutputTests`.
 - **2026-10-08**: The invoked-run ports (the launcher and what it is handed, the run cancellation and the outcome
   delivery) are internal, visible to Trax.Mediator and Trax.Scheduler, which implement and call them; no host does.
   The run's link to its instance (`Metadata.InvokingMachine`, `InvokingInstanceId`, `InvokingOwnerKind`) is set only

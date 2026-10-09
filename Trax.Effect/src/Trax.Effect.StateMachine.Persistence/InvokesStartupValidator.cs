@@ -111,10 +111,10 @@ internal sealed class InvokesStartupValidator(
         {
             if (TraxRedaction.ReachesSensitiveMember(declaration.OutputType))
                 problems.Add(
-                    $"The machine '{name}' invokes {declaration.TrainType.Name} in {declaration.State}, whose output "
-                        + $"{declaration.OutputType.Name} reaches a [TraxSensitive] member. The output is reduced "
-                        + "into the snapshot's context, which is stored as plain JSON and returned by loadSnapshot, "
-                        + "so it cannot hold a sensitive value. Return a pointer to it instead."
+                    InvokeRefusals.SensitiveOutput(
+                        InvokeRefusals.At(name, declaration.State, declaration.TrainType),
+                        declaration.OutputType
+                    )
                 );
 
             if (launcher is not null)

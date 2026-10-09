@@ -53,9 +53,18 @@ internal sealed class InvokedTrainLauncher(
         IServiceProvider services
     )
     {
-        var at =
-            $"The machine '{declaration.Machine}' invokes {declaration.TrainType.Name} in "
-            + $"{declaration.State}";
+        var at = InvokeRefusals.At(declaration.Machine, declaration.State, declaration.TrainType);
+
+        // Launch queues through the mediator's own execution service, inside the caller's transaction; a host that
+        // replaced it would fail at the first entry, so it is refused here instead.
+        if (services.GetService<ITrainExecutionService>() is not TrainExecutionService)
+            return
+            [
+                $"{at}, but the ITrainExecutionService registered here replaces the mediator's, and a state's "
+                    + "invoked train is queued through the mediator's own. Remove the replacement, or invoke no "
+                    + "trains from machines.",
+            ];
+
         var registration = discovery
             .DiscoverTrains()
             .FirstOrDefault(r => r.ServiceType == declaration.TrainType);
@@ -107,10 +116,7 @@ internal sealed class InvokedTrainLauncher(
                         + "machine or relax it."
                 );
             if (registration.IsBroadcastEnabled)
-                problems.Add(
-                    $"{at}, which is [TraxBroadcast]. Its subscribers see every run's output, so a user-owned "
-                        + "machine's run would be broadcast to others; invoke a train that is not broadcast."
-                );
+                problems.Add(InvokeRefusals.Broadcast(at));
         }
 
         problems.AddRange(ChainProblems(at, registration, services));

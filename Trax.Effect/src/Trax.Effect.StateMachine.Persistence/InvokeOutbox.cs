@@ -296,7 +296,8 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                 entering.TrainType,
                 input,
                 Guid.NewGuid().ToString("N"),
-                new InvokedBy(snapshot.Machine, id, owner.Kind)
+                new InvokedBy(snapshot.Machine, id, owner.Kind),
+                snapshot.State
             )
             {
                 FromOutcome = fromOutcome,
