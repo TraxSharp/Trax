@@ -61,14 +61,15 @@ export function recordedWordingOverlays(recordings: Recordings, overlays = defau
     if (!overlay.mutations) return overlay;
     const mutations: Record<string, MutationOverlay> = {};
     for (const [op, write] of Object.entries(overlay.mutations)) {
-      mutations[op] = (variables, store) => {
+      mutations[op] = (variables, store, context) => {
         const { exact, all } = recordedMutations(recordings, op, variables);
         const current = exact?.current ? exact : undefined;
         if (current?.data && refused(current.data)) return current.data as Rec;
-        const ack = write(variables, store);
         const like = (m: RecordedMutation) => m.data && !refused(m.data);
         const source = current && like(current) ? current : all.find(like);
-        return source ? (withMessages(ack, source.data, source === current) as Rec) : ack;
+        const worded = (ack: Rec) => (source ? (withMessages(ack, source.data, source === current) as Rec) : ack);
+        const ack = write(variables, store, context);
+        return ack instanceof Promise ? ack.then(worded) : worded(ack);
       };
     }
     return { ...overlay, mutations };

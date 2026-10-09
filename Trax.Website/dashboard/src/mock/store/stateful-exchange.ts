@@ -1,10 +1,11 @@
 import type { Exchange, Operation, OperationResult } from "@urql/core";
 import { makeResult } from "@urql/core";
-import { filter, make, map, merge, mergeMap, pipe, share, takeUntil, fromValue } from "wonka";
+import { filter, fromPromise, fromValue, make, map, merge, mergeMap, pipe, share, takeUntil } from "wonka";
 import type { MockStore } from "./mock-store";
 import {
   defaultOverlays,
   mockedSubscriptions,
+  type MutationContext,
   type MutationOverlay,
   type QueryOverlay,
   type StatefulOverlay,
@@ -46,17 +47,27 @@ export function statefulExchange(
     (op.kind === "mutation" && Boolean(mutations[operationName(op)])) ||
     (op.kind === "subscription" && mockedSubscriptions.has(operationName(op)));
 
-  return ({ forward }) =>
+  return ({ forward, client }) =>
     (ops$) => {
       const shared$ = pipe(ops$, share);
+      // A mutation overlay's read goes through the whole client, so it is answered as a page's is.
+      const context: MutationContext = {
+        query: (document, variables) =>
+          client
+            .query(document, variables, { requestPolicy: "network-only" })
+            .toPromise()
+            .then((r) => r.data),
+      };
 
       const handled$ = pipe(
         shared$,
         filter((op) => op.kind !== "teardown" && handles(op)),
         mergeMap((op) => {
           if (op.kind === "mutation") {
-            const data = mutations[operationName(op)](op.variables ?? {}, store);
-            return fromValue(makeResult(op, { data }));
+            const data = mutations[operationName(op)](op.variables ?? {}, store, context);
+            return data instanceof Promise
+              ? fromPromise(data.then((d) => makeResult(op, { data: d })))
+              : fromValue(makeResult(op, { data }));
           }
           // Subscription: a long-lived source of store events matching this op name,
           // completed when its teardown arrives.

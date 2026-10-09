@@ -79,6 +79,19 @@ describe("work queue / runs", () => {
     expect((get(list.data, "operations.workQueue.workQueues.items") as Row[])[0].id).toBe(id);
   });
 
+  // Ids count per store, so what a story or test sees does not depend on what ran before it.
+  test("every store hands out the same ids from the start, each once", async () => {
+    const queue = (c: ReturnType<typeof client>) =>
+      c.mutation(QUEUE_TRAIN, { input: { trainName: "T", inputJson: "{}" } }).toPromise().then((r) => get(r.data, "operations.workQueue.queueTrain.id"));
+    const run = (c: ReturnType<typeof client>) =>
+      c.mutation(RUN_TRAIN, { input: { trainName: "T" } }).toPromise().then((r) => get(r.data, "operations.workQueue.runTrain.id"));
+    const first = client();
+    const ids = [await queue(first), await queue(first), await run(first), await run(first)];
+    expect(new Set(ids).size).toBe(4);
+    const second = client();
+    expect([await queue(second), await queue(second), await run(second), await run(second)]).toEqual(ids);
+  });
+
   test("queueTrain and runTrain refuse input that is not JSON", async () => {
     const c = client();
     const q = await c.mutation(QUEUE_TRAIN, { input: { trainName: "T", inputJson: "{bad" } }).toPromise();
@@ -187,6 +200,19 @@ describe("state machines", () => {
     });
     const missing = get((await cancel(c, "3f2c1a00-0000-4000-8000-0000000000ff")).data, "operations.cancelMachineInstance");
     expect(missing).toMatchObject({ success: false, outcome: "NOT_FOUND" });
+  });
+
+  // The answer does not depend on whether a page read the instance first.
+  test("answers a cancel for an instance no read has served", async () => {
+    const dispatched = get((await cancel(client(machineScenario), MACHINE_IDS.dispatched)).data, "operations.cancelMachineInstance");
+    expect(dispatched).toMatchObject({ success: true, outcome: "CANCEL_REQUESTED" });
+    const c = client(machineScenario);
+    const queued = get((await cancel(c, MACHINE_IDS.queued)).data, "operations.cancelMachineInstance");
+    expect(queued).toMatchObject({ success: true, outcome: "RUN_CANCELLED" });
+    const entry = await c.query(WORK_QUEUE_DETAIL, { id: 7201 }, NET).toPromise();
+    expect(get(entry.data, "operations.workQueue.detail.status")).toBe("CANCELLED");
+    const idle = get((await cancel(client(machineScenario), MACHINE_IDS.idle)).data, "operations.cancelMachineInstance");
+    expect(idle).toMatchObject({ success: false, outcome: "NO_LIVE_RUN" });
   });
 
   test("no read returns an instance's context", async () => {

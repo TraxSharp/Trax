@@ -1,3 +1,5 @@
+import type { DocumentNode } from "graphql";
+import { MACHINE_INSTANCE } from "../../graphql/queries";
 import type { MockStore } from "./mock-store";
 
 // An overlay teaches the mock how a slice of data is written by mutations and read back by
@@ -12,7 +14,17 @@ import type { MockStore } from "./mock-store";
 export type MutationOverlay = (
   variables: Record<string, unknown>,
   store: MockStore,
-) => Record<string, unknown>;
+  context: MutationContext,
+) => Record<string, unknown> | Promise<Record<string, unknown>>;
+
+/**
+ * What a mutation overlay can ask of the mock besides its store: a read through the same client, for
+ * a write whose answer depends on rows its variables do not carry. The read is answered as a page's
+ * would be (base data, then the overlays), so the answer never depends on what a page read first.
+ */
+export interface MutationContext {
+  query(document: DocumentNode, variables: Record<string, unknown>): Promise<unknown>;
+}
 
 export type QueryOverlay = (
   data: unknown,
@@ -119,10 +131,31 @@ const cancelWorkQueueEntry: MutationOverlay = (variables, store) => {
   });
 };
 
+// The ids the session hands out (a queued entry, a run, a history row), each sequence kept in the
+// store rather than the module, so every store (a story, a test, a tab) counts from the same first
+// id whatever ran before it, and a store restored from storage carries on past the ids it holds.
+const ID_SEQUENCES_KEY = "idSequences";
+
+function takeId(draft: Record<string, unknown>, sequence: string, first: number): number {
+  const sequences = { ...(draft[ID_SEQUENCES_KEY] as Record<string, number> | undefined) };
+  const id = sequences[sequence] ?? first;
+  sequences[sequence] = id + 1;
+  draft[ID_SEQUENCES_KEY] = sequences;
+  return id;
+}
+
+function nextId(store: MockStore, sequence: string, first: number): number {
+  let id = first;
+  store.update("NextId", (draft) => {
+    id = takeId(draft, sequence, first);
+  });
+  return id;
+}
+
 // Entries the session queued (queueTrain / requeueExecution), keyed by id, so the list shows
 // them and the detail page the queue dialog navigates to resolves them.
 const QUEUED_KEY = "workQueueQueued";
-let queuedSeq = 9_100_000;
+const nextQueuedId = (store: MockStore) => nextId(store, "workQueue", 9_100_000);
 
 function queuedEntry(id: number, trainName: string, priority: number, input: string | null): Rec {
   return {
@@ -172,7 +205,7 @@ const queueTrain: MutationOverlay = (variables, store) => {
   const input = asRecord(variables.input) ?? {};
   const refusal = invalidJson(input.inputJson);
   if (refusal) return wrap("operations.workQueue.queueTrain", { success: false, message: refusal, id: null });
-  const id = queuedSeq++;
+  const id = nextQueuedId(store);
   addQueued(
     store,
     "QueueTrain",
@@ -183,13 +216,12 @@ const queueTrain: MutationOverlay = (variables, store) => {
 
 // Runs started with runTrain, keyed by id: the execution detail page resolves them.
 const RUN_KEY = "runTrainRuns";
-let runSeq = 9_200_000;
 
 const runTrain: MutationOverlay = (variables, store) => {
   const input = asRecord(variables.input) ?? {};
   const refusal = invalidJson(input.inputJson);
   if (refusal) return wrap("operations.workQueue.runTrain", { success: false, message: refusal, id: null });
-  const id = runSeq++;
+  const id = nextId(store, "run", 9_200_000);
   store.update("RunTrain", (draft) => {
     draft[RUN_KEY] = {
       ...(draft[RUN_KEY] as Record<string, Rec> | undefined),
@@ -396,7 +428,7 @@ const cancelExecutions: MutationOverlay = (variables, store) => {
 
 // A re-queue queues a fresh entry; its id is what the detail page navigates to.
 const requeueExecution: MutationOverlay = (variables, store) => {
-  const id = queuedSeq++;
+  const id = nextQueuedId(store);
   addQueued(store, "RequeueExecution", queuedEntry(id, `Re-queue of run ${variables.id}`, 0, null));
   return wrap("operations.requeueExecution", {
     success: true,
@@ -420,7 +452,7 @@ const resumeExecution: MutationOverlay = (variables, store) => {
       message: `A resume of execution ${runId} is already queued (WorkQueue ${queued}); a run is resumed once at a time. Nothing was queued.`,
       id: null,
     });
-  const id = queuedSeq++;
+  const id = nextQueuedId(store);
   const at = variables.from ? ` at ${variables.from}` : "";
   addQueued(store, "ResumeExecution", queuedEntry(id, `Resume of run ${runId}${at}`, 0, null));
   store.update("ResumeExecution", (draft) => {
@@ -651,7 +683,7 @@ const triggerManifests: MutationOverlay = (variables, store) => {
     if (id >= DELETED_ID_FLOOR) notes.push({ id, message: `Manifest ${id} not found.` });
     else if (queuedByManifest.has(id)) alreadyQueued++;
     else {
-      const entry = queuedEntry(queuedSeq++, `Trax.Mock.Manifests.Manifest${id}`, 0, null);
+      const entry = queuedEntry(nextQueuedId(store), `Trax.Mock.Manifests.Manifest${id}`, 0, null);
       addQueued(store, "TriggerManifests", { ...entry, manifestId: id });
       queued++;
     }
@@ -990,7 +1022,6 @@ const readLogLevels: QueryOverlay = (data, store) => {
 const PO_KEY = "persistedOperations";
 const PO_PATCH_KEY = "persistedOperationPatches";
 const PO_HISTORY_KEY = "persistedOperationHistory";
-let poHistorySeq = 1;
 
 const poKey = (id: unknown, tenantKey: unknown) => `${(tenantKey as string | null) ?? ""}|${String(id)}`;
 
@@ -1017,7 +1048,7 @@ function poPayload(path: string, operation: Rec | null, errors: Rec[]): Rec {
 
 function addPoHistory(draft: Record<string, unknown>, key: string, entry: Rec) {
   const history = { ...(draft[PO_HISTORY_KEY] as Record<string, Rec[]> | undefined) };
-  history[key] = [{ historyId: 1_000_000 + poHistorySeq++, changedAt: nowIso(), ...entry }, ...(history[key] ?? [])];
+  history[key] = [{ historyId: takeId(draft, "persistedOperationHistory", 1_000_001), changedAt: nowIso(), ...entry }, ...(history[key] ?? [])];
   draft[PO_HISTORY_KEY] = history;
 }
 
@@ -1185,52 +1216,40 @@ const readPersistedOperationDetail: QueryOverlay = (data, store, variables) => {
 
 // ── State machines ─────────────────────────────────────────────────────────
 // CancelMachineInstance -> MachineInstance (the run its state waits on) / WorkQueue / ExecutionDetail.
-// The answer depends on the instance, which the mutation's variables do not carry, so the reads
-// note what each instance they served waits on, per store. The messages are the API's.
-
-interface SeenInstance {
-  state: string;
-  live: boolean;
-  queuedEntryId: number | null;
-  liveRunId: number | null;
-}
-
-const seenInstances = new WeakMap<MockStore, Map<string, SeenInstance>>();
-const instanceKey = (machine: unknown, id: unknown) => `${machine}|${id}`;
-
-function seen(store: MockStore): Map<string, SeenInstance> {
-  let map = seenInstances.get(store);
-  if (!map) seenInstances.set(store, (map = new Map()));
-  return map;
-}
+// The answer depends on the instance, which the mutation's variables do not carry, so the cancel
+// reads it as the API looks it up, whatever a page read before. The messages are the API's.
 
 const MACHINE_CANCEL_KEY = "machineInstancesCancelled";
+const instanceKey = (machine: unknown, id: unknown) => `${machine}|${id}`;
 
 export const USER_OWNED_CANCEL_REFUSAL =
   "Operators can cancel only a system-owned instance. A user-owned instance is read-only to operators: " +
   "its run is cancelled when its user leaves the state through one of the machine's own transitions.";
 
-const cancelMachineInstance: MutationOverlay = (variables, store) => {
+const cancelMachineInstance: MutationOverlay = async (variables, store, context) => {
   const { machine, id } = variables;
   const answer = (outcome: string, success: boolean, message: string) =>
     wrap("operations.cancelMachineInstance", { success, outcome, message, state: null });
   if (variables.ownerKind !== "SYSTEM") return answer("USER_OWNED", false, USER_OWNED_CANCEL_REFUSAL);
-  const instance = seen(store).get(instanceKey(machine, id));
+  const read = await context.query(MACHINE_INSTANCE, { machine, ownerKind: "SYSTEM", id, rowId: null });
+  const instance = asRecord(asRecord(asRecord(read)?.operations)?.machineInstance);
   if (!instance) return answer("NOT_FOUND", false, `No system-owned instance of '${machine}' has id ${id}.`);
-  if (!instance.live)
+  if (!instance.hasLiveInvokedRun)
     return answer(
       "NO_LIVE_RUN",
       false,
       `Instance ${id} of '${machine}' is in '${instance.state}', which waits on no train run: there is nothing to cancel.`,
     );
+  const queuedEntryId = (instance.queuedInvokedRunEntryId as number | null | undefined) ?? null;
+  const liveRunId = ((instance.invokedRuns as Rec[] | undefined) ?? []).find((r) => r.isLive)?.id as number | undefined;
   store.update("CancelMachineInstance", (draft) => {
     const current = (draft[MACHINE_CANCEL_KEY] as string[] | undefined) ?? [];
     draft[MACHINE_CANCEL_KEY] = [...new Set([...current, instanceKey(machine, id)])];
   });
   // A queued run is cancelled before it starts. This mock registers no machine, so the instance
   // moves when a host that does applies the outcome.
-  if (instance.queuedEntryId != null) {
-    addCancelled(store, [instance.queuedEntryId]);
+  if (queuedEntryId != null) {
+    addCancelled(store, [queuedEntryId]);
     return answer(
       "RUN_CANCELLED",
       true,
@@ -1239,10 +1258,10 @@ const cancelMachineInstance: MutationOverlay = (variables, store) => {
     );
   }
   // A dispatched run has its cancel requested and stops at its next junction.
-  if (instance.liveRunId != null)
+  if (liveRunId != null)
     store.update("CancelMachineInstance", (draft) => {
       const current = (draft[EXEC_CANCEL_KEY] as number[] | undefined) ?? [];
-      draft[EXEC_CANCEL_KEY] = [...new Set([...current, instance.liveRunId!])];
+      draft[EXEC_CANCEL_KEY] = [...new Set([...current, liveRunId])];
     });
   return answer(
     "CANCEL_REQUESTED",
@@ -1255,32 +1274,13 @@ const cancelMachineInstance: MutationOverlay = (variables, store) => {
 const readMachineInstance: QueryOverlay = (data, store) => {
   const instance = asRecord(asRecord(asRecord(data)?.operations)?.machineInstance);
   if (!instance) return data;
-  const key = instanceKey(instance.machine, instance.id);
+  if (!readDelta<string[]>(store, MACHINE_CANCEL_KEY, []).includes(instanceKey(instance.machine, instance.id))) return data;
   const runs = (instance.invokedRuns as Rec[] | undefined) ?? [];
-  const live = runs.find((r) => r.isLive);
-  if (instance.ownerKind === "SYSTEM")
-    seen(store).set(key, {
-      state: String(instance.state),
-      live: Boolean(instance.hasLiveInvokedRun),
-      queuedEntryId: (instance.queuedInvokedRunEntryId as number | null) ?? null,
-      liveRunId: (live?.id as number | undefined) ?? null,
-    });
-  if (!readDelta<string[]>(store, MACHINE_CANCEL_KEY, []).includes(key)) return data;
   // Cancelled: a queued run is no longer queued; a dispatched one has its cancel requested.
   return patchObjectAtPath(data, "operations.machineInstance", {
     queuedInvokedRunEntryId: null,
     invokedRuns: runs.map((r) => (r.isLive ? { ...r, cancellationRequested: true } : r)),
   });
-};
-
-const readMachineInstances: QueryOverlay = (data, store) => {
-  const page = asRecord(asRecord(asRecord(data)?.operations)?.machineInstances);
-  for (const row of (page?.items as Rec[] | undefined) ?? []) {
-    const key = instanceKey(row.machine, row.id);
-    if (row.ownerKind !== "SYSTEM" || seen(store).has(key)) continue;
-    seen(store).set(key, { state: String(row.state), live: Boolean(row.hasLiveInvokedRun), queuedEntryId: null, liveRunId: null });
-  }
-  return data;
 };
 
 // ── Registration ───────────────────────────────────────────────────────────
@@ -1319,7 +1319,7 @@ export const executionOverlay: StatefulOverlay = {
 
 export const machineInstanceOverlay: StatefulOverlay = {
   mutations: { CancelMachineInstance: cancelMachineInstance },
-  queries: { MachineInstance: readMachineInstance, MachineInstances: readMachineInstances },
+  queries: { MachineInstance: readMachineInstance },
 };
 
 export const manifestOverlay: StatefulOverlay = {
