@@ -14,7 +14,10 @@ namespace Trax.Effect.StateMachine.Persistence;
 /// <summary>The invoking state a write enters: its train, how the run's input is built, and the owner's cap.</summary>
 /// <param name="TrainType">The train's interface.</param>
 /// <param name="CreateInput">Builds the run's input from the context the state is entered with.</param>
-/// <param name="Limit">The most live invoked runs one user may hold in the machine; system owners are not capped.</param>
+/// <param name="Limit">
+/// The most live invoked runs the entering user may already hold, across every machine, for the entry to be allowed;
+/// system owners are not capped.
+/// </param>
 internal sealed record EnteringInvoke(
     Type TrainType,
     Func<JsonObject, object?> CreateInput,
@@ -90,8 +93,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     && await OverLimit(
                         context,
                         owner,
-                        next.Machine,
-                        id,
+                        leavingToken,
                         entering.Limit,
                         cancellationToken
                     )
@@ -149,8 +151,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     && await OverLimit(
                         context,
                         owner,
-                        snapshot.Machine,
-                        id,
+                        leavingToken: null,
                         entering.Limit,
                         cancellationToken
                     )
@@ -220,8 +221,7 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
                     && await OverLimit(
                         context,
                         owner,
-                        next.Machine,
-                        id,
+                        leavingToken: invokeToken,
                         entering.Limit,
                         cancellationToken
                     )
@@ -304,14 +304,16 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         );
     }
 
-    // A user may hold at most Limit live runs in this machine: rows of theirs holding a token, other than the one
-    // being written. The count is taken under a transaction-scoped lock on (machine, user) on Postgres, so two
-    // concurrent entries cannot both pass it; SQLite serializes writing transactions already.
+    // A user may hold at most Limit live invoked runs, counted across every machine: runs an instance they own
+    // queued that have not ended, whether still queued or dispatched and executing. A dispatched run whose state was
+    // left is only flagged for cancel and runs on to its next junction, so it counts until it ends; a queued run
+    // whose state is left now (leavingToken) is cancelled in this transaction, so it does not. The count is taken
+    // under a transaction-scoped lock on the user on Postgres, so two concurrent entries by one user, on any hosts
+    // and in any machines, cannot both pass it; SQLite serializes writing transactions already (BEGIN IMMEDIATE).
     private async Task<InvokeWrite.Refused?> OverLimit(
         IDataContext context,
         DraftOwner owner,
-        string machine,
-        Guid id,
+        string? leavingToken,
         int limit,
         CancellationToken cancellationToken
     )
@@ -322,24 +324,39 @@ internal sealed class InvokeOutbox(IDataContextProviderFactory contexts, IServic
         if (services.GetService<ISqlDialect>() is { } dialect && context is DbContext db)
             await db.Database.ExecuteSqlRawAsync(
                 dialect.LockSubject(),
-                [$"trax:invoke-limit:{machine}:{userKey}"],
+                [$"trax:invoke-limit:{userKey}"],
                 cancellationToken
             );
 
-        var live = await context.SnapshotDrafts.CountAsync(
-            x =>
-                x.OwnerKind == SnapshotOwnerKind.User
-                && x.UserKey == userKey
-                && x.Machine == machine
-                && x.InvokeToken != null
-                && x.Id != id,
+        // A run names the instance that queued it, not the user, so it is joined to the user's instances.
+        var instances = context.SnapshotDrafts.Where(x =>
+            x.OwnerKind == SnapshotOwnerKind.User && x.UserKey == userKey
+        );
+        var queued = await context.WorkQueues.CountAsync(
+            w =>
+                w.InvokingOwnerKind == SnapshotOwnerKind.User
+                && w.Status == WorkQueueStatus.Queued
+                && w.ExternalId != leavingToken
+                && instances.Any(x =>
+                    x.Id == w.InvokingInstanceId && x.Machine == w.InvokingMachine
+                ),
+            cancellationToken
+        );
+        var running = await context.Metadatas.CountAsync(
+            m =>
+                m.InvokingOwnerKind == SnapshotOwnerKind.User
+                && (m.TrainState == TrainState.Pending || m.TrainState == TrainState.InProgress)
+                && instances.Any(x =>
+                    x.Id == m.InvokingInstanceId && x.Machine == m.InvokingMachine
+                ),
             cancellationToken
         );
 
+        var live = queued + running;
         return live >= limit
             ? new InvokeWrite.Refused(
                 LimitReached,
-                $"You already have {live} steps running in this flow, the most allowed at once. "
+                $"You already have {live} steps running, the most allowed at once. "
                     + "Wait for one to finish, then try again."
             )
             : null;

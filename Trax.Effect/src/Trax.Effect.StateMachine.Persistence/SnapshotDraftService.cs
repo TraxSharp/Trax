@@ -290,7 +290,7 @@ internal sealed class SnapshotDraftService<TState, TTrigger>(
     /// </summary>
     internal InvokeRuntime? Invokes { get; init; }
 
-    /// <summary>The most live invoked runs one user may hold in this machine.</summary>
+    /// <summary>The most live invoked runs, across every machine, one user may hold to enter this machine's invoking states.</summary>
     internal int InvokedRunLimit { get; init; } =
         BuiltMachine<TState, TTrigger>.DefaultInvokedRunLimit;
 

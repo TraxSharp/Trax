@@ -5,9 +5,13 @@ using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Sqlite.Extensions;
+using Trax.Effect.Enums;
 using Trax.Effect.Extensions;
 using Trax.Effect.JunctionProvider.Progress.Extensions;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
+using Trax.Effect.Models.WorkQueue.DTOs;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainAuthorization;
@@ -128,6 +132,55 @@ public sealed class InvokeHost : IDisposable
             .Where(x => x.InvokingInstanceId == instance)
             .OrderBy(x => x.Id)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Dispatches an instance's queued runs the way the dispatcher does: each entry claimed, and its run recorded
+    /// in progress under the entry's external id, carrying the entry's link to the instance.
+    /// </summary>
+    public async Task Dispatch(Guid instance)
+    {
+        using var scope = Scope();
+        var db = scope.ServiceProvider.GetRequiredService<IDataContext>();
+        var queued = await db
+            .WorkQueues.AsNoTracking()
+            .Where(w => w.InvokingInstanceId == instance && w.Status == WorkQueueStatus.Queued)
+            .ToListAsync();
+        foreach (var entry in queued)
+        {
+            var run = Metadata.Create(
+                new CreateMetadata
+                {
+                    Name = entry.TrainName,
+                    ExternalId = entry.ExternalId,
+                    Input = null,
+                    InvokedBy = new InvokedBy(
+                        entry.InvokingMachine!,
+                        instance,
+                        entry.InvokingOwnerKind!.Value
+                    ),
+                }
+            );
+            run.TrainState = TrainState.InProgress;
+            await db.Track(run);
+            await db.SaveChanges(CancellationToken.None);
+            await db
+                .WorkQueues.Where(w => w.Id == entry.Id)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched)
+                        .SetProperty(w => w.MetadataId, run.Id)
+                );
+        }
+    }
+
+    /// <summary>Ends every dispatched run of an instance in <paramref name="state"/>.</summary>
+    public async Task End(Guid instance, TrainState state)
+    {
+        using var scope = Scope();
+        await scope
+            .ServiceProvider.GetRequiredService<IDataContext>()
+            .Metadatas.Where(m => m.InvokingInstanceId == instance)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.TrainState, state));
     }
 
     /// <summary>Creates <paramref name="user"/>'s draft of <paramref name="machine"/> in <c>Idle</c> and advances it into <c>Running</c>.</summary>

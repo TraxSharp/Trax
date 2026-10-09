@@ -61,8 +61,8 @@ public sealed record BuiltMachine<TState, TTrigger>(
     internal bool SystemOwned { get; init; }
 
     /// <summary>
-    /// The most invoked runs one user may have live in this machine at once; entering an invoking state past it is
-    /// refused. Declared with <see cref="IMachineBuilder{TState,TTrigger}.InvokedRunLimit"/>; system owners are not
+    /// The most live invoked runs one user may hold, counted across every machine, for entering one of this
+    /// machine's invoking states to be allowed. Declared with <see cref="IMachineBuilder{TState,TTrigger}.InvokedRunLimit"/>; system owners are not
     /// capped.
     /// </summary>
     internal int InvokedRunLimit { get; init; } = DefaultInvokedRunLimit;
@@ -121,10 +121,12 @@ public interface IMachineBuilder<TState, TTrigger>
         throw new NotSupportedException($"{GetType().Name} does not support SystemOwned.");
 
     /// <summary>
-    /// The most invoked runs one user may have live in this machine at once: entering an invoking state when the
-    /// user already holds that many is refused with <c>invoke-limit-reached</c>, and nothing is written. A run is
-    /// live from the entry that queued it until its state is left or its outcome is applied. Defaults to 10.
-    /// System-owned instances are not capped here; the dispatcher's <c>MaxActiveJobs</c> bounds them.
+    /// The most live invoked runs one user may hold for entering one of this machine's invoking states to be allowed:
+    /// the user's runs are counted across every machine, and entering when they already hold that many is refused
+    /// with <c>invoke-limit-reached</c>, and nothing is written. A run is live from the entry that queued it until it
+    /// ends; a dispatched run whose state was left runs on to its next junction, and counts until then. Defaults to
+    /// 10. The most one user can hold is the largest limit among the host's machines. System-owned instances are
+    /// not capped here; the dispatcher's <c>MaxActiveJobs</c> bounds them.
     /// </summary>
     /// <param name="limit">The limit, at least 1.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is less than 1.</exception>

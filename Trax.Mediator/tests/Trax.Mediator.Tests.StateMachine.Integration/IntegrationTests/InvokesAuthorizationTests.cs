@@ -67,25 +67,118 @@ public class InvokesAuthorizationTests(StoreProvider provider)
     }
 
     [Test]
-    public async Task A_machine_sets_its_own_cap_and_a_left_state_frees_its_slot()
+    public async Task A_machines_limit_counts_the_users_live_runs_in_every_machine()
     {
         var user = NewUser();
+        await _host.EnterRunning(user, Guid.NewGuid(), GoodMachine.MachineId);
         var first = Guid.NewGuid();
-        await _host.EnterRunning(user, first, CappedMachine.MachineId);
-        await _host.EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId);
+        (await _host.EnterRunning(user, first, CappedMachine.MachineId))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
 
         (await _host.EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId))
             .Should()
             .BeOfType<AdvanceOutcome.Rejected>()
             .Which.Reason.Should()
-            .Be("invoke-limit-reached");
+            .Be(
+                "invoke-limit-reached",
+                "the run in the other machine counts toward this machine's limit of 2, so N machines "
+                    + $"do not give N limits. See {Adr}"
+            );
 
+        // A queued run is cancelled outright when its state is left, so it stops counting at once.
         using (var scope = _host.Scope())
             await _host.Service(scope, CappedMachine.MachineId).Advance(user, first, "Stop");
 
         (await _host.EnterRunning(user, Guid.NewGuid(), CappedMachine.MachineId))
             .Should()
-            .BeOfType<AdvanceOutcome.Advanced>("leaving a state ends its run's hold on the cap");
+            .BeOfType<AdvanceOutcome.Advanced>("a cancelled queued run is no longer live");
+    }
+
+    [Test]
+    public async Task Leaving_and_entering_again_cannot_pile_up_runs_that_are_still_executing()
+    {
+        var user = NewUser();
+        var id = Guid.NewGuid();
+        (await _host.EnterRunning(user, id, CappedMachine.MachineId))
+            .Should()
+            .BeOfType<AdvanceOutcome.Advanced>();
+
+        // Each lap: the run is dispatched, the user leaves the state (which only flags the run, which goes on to its
+        // next junction), and enters it again.
+        var laps = 0;
+        AdvanceOutcome entered;
+        do
+        {
+            await _host.Dispatch(id);
+            using (var scope = _host.Scope())
+                (await _host.Service(scope, CappedMachine.MachineId).Advance(user, id, "Stop"))
+                    .Should()
+                    .BeOfType<AdvanceOutcome.Advanced>();
+            using (var scope = _host.Scope())
+                entered = await _host
+                    .Service(scope, CappedMachine.MachineId)
+                    .Advance(user, id, "Go");
+            laps++;
+        } while (entered is AdvanceOutcome.Advanced && laps < 10);
+
+        entered
+            .Should()
+            .BeOfType<AdvanceOutcome.Rejected>(
+                $"a run flagged for cancel is live until it ends, and counts. See {Adr}"
+            )
+            .Which.Reason.Should()
+            .Be("invoke-limit-reached");
+        laps.Should().Be(2, "the machine's limit is 2");
+
+        // Once the flagged runs end, their slots are free again.
+        await _host.End(id, TrainState.Cancelled);
+        using (var scope = _host.Scope())
+            (await _host.Service(scope, CappedMachine.MachineId).Advance(user, id, "Go"))
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
+    }
+
+    [Test]
+    public async Task Concurrent_entries_by_one_user_cannot_pass_the_limit_together()
+    {
+        var user = NewUser();
+        var ids = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToList();
+        TestPrincipal.Become(user);
+        foreach (var id in ids)
+            using (var scope = _host.Scope())
+                await _host
+                    .Service(scope, CappedMachine.MachineId)
+                    .Autosave(
+                        user,
+                        id,
+                        StageMachine<IGoodTrain, GoodInput, JobOutput>.Json(
+                            CappedMachine.MachineId,
+                            "Idle"
+                        )
+                    );
+
+        var outcomes = await Task.WhenAll(
+            ids.Select(id =>
+                Task.Run(async () =>
+                {
+                    using var scope = _host.Scope();
+                    return await _host
+                        .Service(scope, CappedMachine.MachineId)
+                        .Advance(user, id, "Go");
+                })
+            )
+        );
+
+        outcomes
+            .OfType<AdvanceOutcome.Advanced>()
+            .Should()
+            .HaveCount(2, $"the count is taken under a lock per user. See {Adr}");
+        outcomes
+            .OfType<AdvanceOutcome.Rejected>()
+            .Should()
+            .HaveCount(4)
+            .And.OnlyContain(r => r.Reason == "invoke-limit-reached");
     }
 
     [Test]

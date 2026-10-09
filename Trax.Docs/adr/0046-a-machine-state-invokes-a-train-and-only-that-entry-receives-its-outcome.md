@@ -152,9 +152,14 @@ through outcomes: a run an outcome queues has no user present to authorize it, s
 `OnDone`, `OnFailed` or `OnCancelled` enters an invoking state is refused at startup, and chains its stages through
 an event the user sends instead.
 
-**A user owner has at most 10 live invoked runs** by default, configurable per machine; entering an invoking state past
-the cap is refused with a typed reason. System owners are not capped here: the dispatcher's `MaxActiveJobs` bounds
-them.
+**A user owner has at most 10 live invoked runs**, counted across every machine; entering an invoking state past the
+cap is refused with a typed reason. A run is live from the entry that queues it until it ends, so a dispatched run
+whose state was left, which is only flagged for cancel and runs on to its next junction, still counts. A machine may
+set its own limit, which is compared with the same count: entering its invoking states is refused once the user holds
+that many live runs in all machines together. A lower limit tightens entry into that machine only, and the most a
+user can hold is the largest limit among the host's machines. The count is taken under a lock on the user, so
+concurrent entries in any machines, on any hosts, cannot pass it together. System owners are not capped here: the
+dispatcher's `MaxActiveJobs` bounds them.
 
 **A sensitive output is refused at startup.** The output is reduced into the context, stored as plain `jsonb` and
 returned by `loadSnapshot`, so an output type that reaches a `[TraxSensitive]` member is refused. `OnDone` is never
@@ -243,6 +248,9 @@ In `Trax.Effect/tests/Trax.Effect.StateMachine.Persistence.Integration`, on Post
 - `InvokesDraftExpiryTests.Draft_expiry_leaves_system_rows_alone`
 - `InvokesDraftExpiryTests.Deleting_a_draft_with_a_live_token_cancels_its_run_first`
 - `InvokesAuthorizationTests.The_eleventh_live_run_for_one_user_is_refused_with_its_reason`
+- `InvokesAuthorizationTests.A_machines_limit_counts_the_users_live_runs_in_every_machine`
+- `InvokesAuthorizationTests.Leaving_and_entering_again_cannot_pile_up_runs_that_are_still_executing`
+- `InvokesAuthorizationTests.Concurrent_entries_by_one_user_cannot_pass_the_limit_together`
 - `InvokesAuthorizationTests.System_owners_are_not_capped`
 - `InvokesAuthorizationTests.A_user_owned_machines_train_runs_as_the_entering_user`
 - `InvokesAuthorizationTests.A_system_owned_machines_train_runs_under_the_trusted_scope`
@@ -273,6 +281,12 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The live-run cap is per user across every machine, and counts runs, not tokens. It counted the
+  user's rows holding an invoke token in one machine, so N machines gave N caps, and leaving a state cleared its
+  token at once while a dispatched run only flagged for cancel kept executing: entering, waiting for dispatch and
+  leaving again piled up executing runs bounded only by `MaxActiveJobs`. It now counts the user's runs that are queued,
+  or dispatched and not ended, through the work queue's and the run's link to the instance, under a lock on the user;
+  `InvokedRunLimit(n)` is compared with that one count.
 - **2026-10-08**: `[Experimental("TRAXEXP002")]` lifted: the `Invokes` row of the interaction matrix is complete.
 
 - **2026-10-08**: `InvokesModelTests` lives in `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`, on Postgres

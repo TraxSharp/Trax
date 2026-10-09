@@ -191,10 +191,13 @@ it, so a user-owned machine whose `OnDone`, `OnFailed` or `OnCancelled` enters a
 refused at startup; it chains its stages through an event the user sends instead (a "continue" or "retry" edge into
 the next stage), which is authorized as that user.
 
-One user holds at most 10 live invoked runs in a machine; entering an invoking state past that is refused as
-`invoke-limit-reached`. A machine sets its own limit with `InvokedRunLimit(n)`. A run is live from the entry that
-queued it until its state is left or its outcome is applied. System owners are not capped here: the dispatcher's
-`MaxActiveJobs` bounds them.
+One user holds at most 10 live invoked runs, counted across every machine; entering an invoking state past that is
+refused as `invoke-limit-reached`. A run is live from the entry that queued it until it ends. Leaving its state
+cancels a queued run at once, but a run already dispatched is only flagged and stops at its next junction, so it
+counts until then. A machine sets its own limit with `InvokedRunLimit(n)`, compared with the same count: its invoking
+states are refused once the user holds `n` live runs in all machines together, so the most one user can hold is the
+largest limit among the host's machines. System owners are not capped here: the dispatcher's `MaxActiveJobs` bounds
+them.
 
 ## What the host must provide
 
