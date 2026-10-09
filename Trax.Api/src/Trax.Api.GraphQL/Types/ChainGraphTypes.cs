@@ -110,6 +110,11 @@ internal sealed class DeclaredNodeType : ObjectType<DeclaredNode>
     protected override void Configure(IObjectTypeDescriptor<DeclaredNode> descriptor)
     {
         descriptor.Name("DeclaredNode");
+        descriptor.Description(
+            "One step of a train's declared chain with where it sits, as declaredChain.allNodes "
+                + "lists every step at any depth. A client rebuilds the tree from each step's "
+                + "parentId and track."
+        );
         descriptor.BindFieldsExplicitly();
 
         descriptor
