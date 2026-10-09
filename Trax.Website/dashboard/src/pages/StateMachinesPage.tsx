@@ -5,6 +5,7 @@ import { MACHINE_INSTANCES, MACHINE_INSTANCE_COUNTS } from "../graphql/queries";
 import { formatTime } from "../lib/format";
 import { machineInstancePath, ownerLabel } from "../lib/machineInstances";
 import { usePoll } from "../lib/poll";
+import { useRefetchOnChange } from "../lib/useRefetchOnChange";
 import type { MachineInstance, MachineInstanceCount, SnapshotOwnerKind } from "../types";
 
 const PAGE_SIZE = 20;
@@ -41,10 +42,14 @@ export function StateMachinesPage() {
     query: MACHINE_INSTANCES,
     variables: { machine, state, ownerKind, skip, take: PAGE_SIZE },
   });
-  usePoll(() => {
+  const refetch = () => {
     reexecuteCounts({ requestPolicy: "network-only" });
     reexecute({ requestPolicy: "network-only" });
-  });
+  };
+  usePoll(refetch);
+  // Instances move as the runs they invoke start, finish and are cancelled, and as their queued runs
+  // are dispatched, as on the instance page.
+  useRefetchOnChange(["EXECUTION", "WORK_QUEUE"], refetch);
 
   const countRows = counts.data?.operations?.machineInstanceCounts ?? [];
   const machines = [...new Set(countRows.map((c) => c.machine))];
@@ -54,6 +59,12 @@ export function StateMachinesPage() {
   const page = result.data?.operations?.machineInstances;
   const rows = page?.items ?? [];
   const total = page?.totalCount ?? 0;
+
+  // A refresh can leave fewer instances than the page starts at: move back to the last page that
+  // has rows, rather than show an empty page numbered past the end. Set while rendering, as React
+  // adjusts state from what a render reads.
+  const pastTheEnd = page != null && skip > 0 && skip >= total;
+  if (pastTheEnd) setSkip(Math.max(0, Math.floor((total - 1) / PAGE_SIZE) * PAGE_SIZE));
 
   // A changed filter starts again from the first page.
   const filterTo = (next: { machine?: string | null; state?: string | null; ownerKind?: SnapshotOwnerKind | null }) => {
@@ -228,7 +239,7 @@ export function StateMachinesPage() {
 
       <div className="flex items-center justify-between mt-4 text-sm">
         <span className="text-muted">
-          {page && total > 0
+          {page && total > 0 && !pastTheEnd
             ? `${skip + 1}–${Math.min(skip + rows.length, total)} of ${total.toLocaleString("en-US")}${page.isCountCapped ? "+" : ""}`
             : page
               ? "0 total"
