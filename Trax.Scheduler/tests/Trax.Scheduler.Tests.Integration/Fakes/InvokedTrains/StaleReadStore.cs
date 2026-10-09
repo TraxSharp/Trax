@@ -95,10 +95,4 @@ internal sealed class StaleReadStore(IMachineInstanceStore inner) : IMachineInst
         Guid expectedToken,
         CancellationToken cancellationToken = default
     ) => inner.StrandByInvokeToken(invokeToken, snapshot, expectedToken, cancellationToken);
-
-    public Task<IReadOnlyList<InvokingInstance>> ListInvoking(
-        int limit,
-        string? afterToken = null,
-        CancellationToken cancellationToken = default
-    ) => inner.ListInvoking(limit, afterToken, cancellationToken);
 }

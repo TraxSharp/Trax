@@ -503,42 +503,6 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
         );
     }
 
-    async Task<IReadOnlyList<InvokingInstance>> IMachineInstanceStore.ListInvoking(
-        int limit,
-        string? afterToken,
-        CancellationToken cancellationToken
-    )
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
-
-        var query = db.SnapshotDrafts.AsNoTracking().Where(x => x.InvokeToken != null);
-        if (afterToken is not null)
-            query = query.Where(x => string.Compare(x.InvokeToken, afterToken) > 0);
-
-        var rows = await query
-            .OrderBy(x => x.InvokeToken)
-            .Take(limit)
-            .Select(x => new
-            {
-                x.OwnerKind,
-                x.UserKey,
-                x.Machine,
-                x.Id,
-                x.State,
-                x.InvokeToken,
-            })
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(x => new InvokingInstance(
-                new DraftOwner(x.OwnerKind, x.UserKey),
-                x.Machine,
-                x.Id,
-                x.State,
-                x.InvokeToken!
-            ))
-            .ToList();
-    }
-
     // One UPDATE that matches at most one row. A write that would give a second row the same invoke token is a
     // unique violation, which the dialect reads as a lost race like any other conflict; anything else propagates.
     // ExecuteUpdate throws the provider's exception unwrapped, so it is wrapped the way SaveChanges would wrap it

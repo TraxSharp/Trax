@@ -35,22 +35,6 @@ internal sealed record StoredInstance(
 );
 
 /// <summary>
-/// A row that holds a live invoke token, as <see cref="IMachineInstanceStore.ListInvoking"/> lists them.
-/// </summary>
-/// <param name="Owner">The row's owner.</param>
-/// <param name="Machine">The machine the row belongs to.</param>
-/// <param name="Id">The draft or instance id.</param>
-/// <param name="State">The state the row is in, the one whose invoked run the token names.</param>
-/// <param name="InvokeToken">The token, the external id of the run the state invoked.</param>
-internal sealed record InvokingInstance(
-    DraftOwner Owner,
-    string Machine,
-    Guid Id,
-    string State,
-    string InvokeToken
-);
-
-/// <summary>
 /// Owner-aware, server-only access to <c>trax.snapshot_draft</c>: system-owned instances, and the
 /// <c>invoke_token</c> that correlates an invoked train run with the state that queued it. Internal because no
 /// host or client writes either: a host's own <see cref="ISnapshotStore"/> stays user-scoped, and these rows and
@@ -171,17 +155,6 @@ internal interface IMachineInstanceStore
         string invokeToken,
         Snapshot snapshot,
         Guid expectedToken,
-        CancellationToken cancellationToken = default
-    );
-
-    /// <summary>
-    /// Up to <paramref name="limit"/> rows that hold a live invoke token, ordered by the token, starting after
-    /// <paramref name="afterToken"/> (keyset paging; null starts at the beginning), whether or not their runs have
-    /// ended. The reconciler reads only the ended ones, through <see cref="InvokeOutcomeDelivery.Ended"/>.
-    /// </summary>
-    Task<IReadOnlyList<InvokingInstance>> ListInvoking(
-        int limit,
-        string? afterToken = null,
         CancellationToken cancellationToken = default
     );
 }
