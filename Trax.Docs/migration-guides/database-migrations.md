@@ -326,6 +326,43 @@ default is a catalog change. SQLite cannot drop a table's unique constraint in p
 rebuilds the `decision` table with the same columns, ids and index. A host on the previous version
 inserts without the column and gets the empty branch, so a rolling deploy is safe.
 
+## Queued-work notify (069)
+
+`069_work_queue_notify.sql` (Postgres only) adds two triggers on `trax.work_queue` that send
+`pg_notify('trax_queued_work', '')` when work becomes dispatchable: `work_queue_inserted_notify`,
+once per inserting statement, and `work_queue_confirmed_notify`, when a staged entry is confirmed.
+The job dispatcher on every host listens on that channel through
+[`IQueuedWorkListener`](/docs/sdk-reference/configuration/i-queued-work-listener) and wakes at once
+instead of at its next poll. A notice is sent when the writing transaction commits and never when it
+rolls back, and identical notices in one transaction are folded into one. The poll stays the
+guarantee: a host on the previous version, or one whose listener is reconnecting, still dispatches
+at its usual interval. SQLite gets a wake within the process instead, so it has no migration.
+
+## State-machine owner kind and invoke token (070, SQLite 032)
+
+`070_snapshot_draft_owner_kind.sql` (SQLite `032`) prepares `trax.snapshot_draft` for
+[system-owned instances and invoked trains](/docs/statemachine/invoking-trains):
+
+- `owner_kind`, the new enum `trax.snapshot_owner_kind` (`user` or `system`; on SQLite the integer of
+  `SnapshotOwnerKind`, 0 or 1). Every existing row is a user's, so it defaults to `user`. A system
+  row has no `user_key`, so `user_key` becomes nullable.
+- `invoke_token`, the external id of the run the instance's current state invoked, unique where set
+  and never part of the snapshot a client sees.
+- `row_id`, a surrogate primary key, because a nullable `user_key` cannot stay in the key. Identity
+  is now two partial unique indexes: `(user_key, machine, id)` among user rows, the key every row
+  had before, and `(machine, id)` among system rows.
+
+On Postgres nothing rewrites the table or holds it locked for a scan, so drafts keep being saved
+while it runs: `owner_kind`'s default stays in the catalog, `row_id` is filled for existing rows in
+batches of 10,000 that each commit, `NOT NULL` and the owner check are validated under a lock that
+lets writes continue, the indexes are built `CONCURRENTLY`, and the swap to the new key is one short
+transaction that reads no rows. A script that stops partway runs again from the top. SQLite cannot
+drop a key in place, so there the table is rebuilt and every row copied across as a user's.
+
+A host on the previous version keeps working during a rolling deploy: it inserts without
+`owner_kind` or `row_id`, which both default, and its reads name a `user_key`, which a system row
+never matches.
+
 ## State-machine instance listing (071, SQLite 033)
 
 `071_snapshot_draft_operator_listing.sql` (SQLite `033`) serves the operator's list of state-machine
@@ -339,6 +376,34 @@ on Postgres includes `owner_kind` so the counts by state read the index alone, a
 `ix_snapshot_draft_updated` on `(updated_at DESC, row_id DESC)` for a list with no state filter. On
 Postgres both are built `CONCURRENTLY`, so drafts keep being saved while they build. At two million
 instances every page measured took under 10 ms.
+
+## Invoked-run link (072, SQLite 034)
+
+`072_invoked_run_link.sql` (SQLite `034`) adds the nullable `invoking_machine`,
+`invoking_instance_id` and `invoking_owner_kind` to `trax.work_queue` and `trax.metadata`: the
+machine, instance and owner kind whose invoking state queued the run. The enqueue writes them on the
+entry and the dispatcher copies them to the run, so the link outlives the instance's
+`invoke_token`. They are null on every other run. `invoking_owner_kind` reuses
+`trax.snapshot_owner_kind` from 070. The partial index `ix_metadata_invoking_instance` on
+`(invoking_machine, invoking_instance_id)` serves the operator's list of an instance's runs; on
+Postgres it is built `CONCURRENTLY`.
+
+A run carrying the link cannot be requeued: the machine retries it by entering its state again.
+
+## Invoked-run outcome (073, SQLite 035)
+
+`073_invoked_run_outcome.sql` (SQLite `035`) adds `trax.metadata.invoke_output`, the run's output
+as the machine's `OnDone` edges read it, and `invoke_output_oversize`, set instead when the output is
+past the 64 KiB snapshot cap (the invoking state then fails). The run writes both in the same update
+that records it completed, so a host applying the outcome after a crash finds it there. They are
+null and false on every other run, are never shown on an operator surface, and are separate from
+`output`, which is redacted and bounded by the host's policy.
+
+On Postgres it also adds triggers that send `pg_notify('trax_invoked_run_ended', <external id>)`
+when an invoked run ends (its metadata is updated or inserted as completed, failed or cancelled, or
+its still-queued entry is cancelled), so the state machine's outcome reconciler on every host
+applies the outcome at once. Its sweep stays the guarantee; on SQLite, which has no notification
+channel, the run's own host applies the outcome and the sweep covers the rest.
 
 ## Checkpoints and resume links (074, SQLite 036)
 
@@ -359,6 +424,15 @@ writes carry on while they build.
 
 The columns are new and nothing is backfilled. A host on the previous version never reads or writes
 them, so a rolling deploy is safe.
+
+## Stranded invoking state (075, SQLite 037)
+
+`075_snapshot_draft_invoke_stranded_state.sql` (SQLite `037`) adds the nullable
+`trax.snapshot_draft.invoke_stranded_state`: the invoking state an instance was left in when a run
+it invoked ended and not even its failure could be applied. The update that clears the token writes
+it, and a write that gives the row a token or moves it to another state clears it, so an instance
+stranded on purpose is told apart from one that lost its token. It is server-only and added without
+a default, so the table is not rewritten.
 
 ## Failure search (066)
 

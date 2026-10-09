@@ -80,6 +80,12 @@ From `IEffectProvider` it also has `Track(IModel)`, `Update(IModel)` and `SaveCh
 | `EffectClaims` | `trax.effect_claim` | Exactly-once state-machine effect intents |
 | `Checkpoints` | `trax.checkpoint` | The state a train declared with `Checkpoint<TState>()`, one row per run and node, from which a later run resumes. |
 
+A `Checkpoint` row holds the run (`MetadataId`), the declared node (`NodeId`, and `BranchPath` inside a
+`Parallel` branch), the stored state as JSON (`State`) with its type (`StateType`), the tracks the routing steps
+before it took (`Tracks`), and the two values a resume compares with the running code: `ChainHash`, the declared
+chain's hash, and `StateFingerprint`, a fingerprint of the state type's serialized shape. A resume refuses when
+either differs. `CreatedAt` is when it was written. See [Checkpoint](/docs/sdk-reference/train-methods/checkpoint).
+
 `RunnerNonces`, `RecordedDecisions`, `JunctionRuns`, `SnapshotDrafts`, `EffectClaims` and `Checkpoints` have default implementations on the interface, so an implementation written before they existed still loads.
 
 ## Members

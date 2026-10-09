@@ -458,8 +458,20 @@ public record MachineInstanceCancelResult(
 | `GetMachineInstanceRunsAsync(key, ct)` | The runs the instance invoked, newest first, at most `OperationsService.MachineInstanceRunCap` (50), with the one its state waits on marked `IsLive`; `QueuedEntryId` is that run's work queue entry while it is still queued. `null` when no row matches. A system instance lists every run linked to it (read through `ix_metadata_invoking_instance`); a user's draft lists only the run its own invoke token names, because a run does not record which user's draft queued it. Never a run's input or output. |
 | `CancelMachineInstanceAsync(key, ct)` | Cancels a system-owned instance's live run: a still-queued entry is marked Cancelled by one conditional statement, and a dispatched run is flagged as `CancelExecutionsAsync` flags one. The dispatcher claims an entry and writes its run in one transaction, so the run either never starts or is cancelled. When this host registers the machine (`AddStateMachines`), a queued run's Cancelled outcome is applied in the call (`Moved`); otherwise a host that does applies it (`RunCancelled`). Every delivery is the one conditional update on the token, so the outcome is applied once. A dispatched run's outcome is applied when it ends (`CancelRequested`). Refused, with a typed outcome and changing nothing: `UserOwned`, `NotFound`, `NoLiveRun`, `RunEnded`. |
 
-The messages are public (`OperationsService.UserOwnedCancelRefusal`, `NoLiveRunMessage(key, state)`
-and the rest), and both surfaces show them unchanged.
+The messages are public members of `OperationsService`, and both surfaces show them unchanged:
+
+| Outcome | Message |
+|---|---|
+| `Moved` | `MovedMessage(key, state)`: the queued run was cancelled and the instance moved to `state` in this call |
+| `RunCancelled` | `RunCancelledMessage(key)`: the queued run was cancelled; a host that registers the machine moves it |
+| `CancelRequested` | `CancelRequestedMessage(key, state)`: the dispatched run's cancel flag is set |
+| `UserOwned` | `UserOwnedCancelRefusal` |
+| `NotFound` | `InstanceNotFoundMessage(key)` |
+| `NoLiveRun` | `NoLiveRunMessage(key, state)` |
+| `RunEnded` | `RunEndedMessage(key, state)`: the run ended before the cancel reached it, and its outcome is on its way |
+
+A requeue of a run a machine invoked is refused with `InvokedRunRequeueRefusal(metadataId, machine)`,
+and an operator's cancel of a run a user's draft started with `UserOwnedRunCancelRefusal`.
 
 ### Masking a stored input
 

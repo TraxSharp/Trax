@@ -95,7 +95,12 @@ SQLite a dispatcher in the same process is woken.
 The enqueue goes through the mediator like any caller's: the train is found by its canonical name, authorized, its
 input capped and its subject key stamped. The entry and the run it becomes record which machine, instance and owner
 kind queued them (`invoking_machine`, `invoking_instance_id`, `invoking_owner_kind` on `trax.work_queue` and
-`trax.metadata`), so a run stays linked to its instance after the token is cleared.
+`trax.metadata`), so a run stays linked to its instance after the token is cleared. In code they are
+`InvokingMachine`, `InvokingInstanceId` and `InvokingOwnerKind` on `WorkQueue` and `Metadata`, null on every
+run no machine invoked. The launcher writes them through `CreateWorkQueue.InvokedBy`, an
+`InvokedBy(Machine, InstanceId, OwnerKind)`, and the dispatcher copies them to the run through
+`CreateMetadata.InvokedBy`; nothing else should set it, because a run carrying the link cannot be requeued and
+its end is delivered to that instance.
 
 Leaving the state through any declared transition (a user's own "stop" event, say) clears the token in the same
 write and cancels the run: a run still queued is marked cancelled, and one already dispatched has its cancel flag
@@ -171,7 +176,7 @@ state's `OnFailed`, with a reason, when its own outcome cannot be, or when the r
 Each is logged at warning level with the run, the machine, the instance and both states, never with the output or
 the context. If even `OnFailed` (or `OnCancelled`) cannot be applied, the token is cleared and the instance stays
 in the invoking state with no live run, logged at error level with its reason; it leaves through one of its declared
-transitions. The same write records the state in the row's `invoke_stranded_state`, so an instance stranded on
+transitions. The same write records the state in the row's `invoke_stranded_state` (`SnapshotDraft.InvokeStrandedState`), so an instance stranded on
 purpose is told apart from one that lost its token by mistake (`TraxInvariants` reports only the second); the mark
 is cleared when the instance is given a run or moves to another state.
 

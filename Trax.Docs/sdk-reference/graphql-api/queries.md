@@ -892,7 +892,8 @@ looked up, by name, so no name a caller sends makes the host load a type. `kind`
 `ChainStepKind` (`CHAIN`, `I_CHAIN`, `SHORT_CIRCUIT`, `EXTRACT`, `RESOLVE`, `SEED`, `DECIDE`,
 `SWITCH`, `GATE`, `SCALE`, `PARALLEL`), and `opaque` is true for a step whose junction is decided only at run
 time. A node's `id` names the step and the routing step and track it sits in, as in
-`Switch<Lane>#0/Fast/Ship#0`, and is what a recorded step's `nodeId` refers to.
+`Switch<Lane>#0/Fast/Ship#0`, and is what a recorded step's `nodeId` refers to. In C#, each entry of `allNodes` is a
+`DeclaredNode` (`Trax.Api.DTOs`) and each track a `DeclaredTrack`.
 
 A `PARALLEL` step's `tracks` are its branches, one per `Branch` in declared order, with
 `isFallback` false and no `description`. Unlike a routing step's tracks, every branch runs. A step
@@ -971,7 +972,8 @@ query {
 |-----------|------|---------|-------------|
 | `metadataId` | `Long!` | none | The execution's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
 
-**Returns**: `RunGraph`, or null for an id with no execution. A node's `state` is one of:
+**Returns**: `RunGraph`, or null for an id with no execution. In C# its nodes are `RunGraphNode`s, their
+tracks `RunGraphTrack`s, and a node's `state` a `RunNodeState` (all in `Trax.Api.DTOs`). A node's `state` is one of:
 
 | State | Meaning |
 |-------|---------|
