@@ -608,7 +608,6 @@ browser, so closing the tab and coming back loads the same draft at the same ste
 it on. Every load and step is numbered when it is sent, and an answer older than one already applied is
 dropped, so a slow load never puts back a draft a step the user just took has replaced.
 
-
 **A client cannot forge the result.** Every state an outcome reaches is reserved: an autosave cannot put a
 draft in `Built` (`state-reserved`), cannot move one out of `Building` (`draft-invoking`), and
 `advanceSnapshot` refuses `Building.done` (`outcome-bound`). `CancelBuild` leaves `Building`, which cancels
@@ -662,7 +661,6 @@ one flat list at any depth, and rebuilds the tree from each node's `parentId` an
 draws a chain nested deeper than a query could follow nested tracks. Each read is numbered and an
 answer older than one already drawn is dropped, and a poll waits for the one before it, so a slow
 answer never draws an older graph over the final one.
-
 
 A run that resumed records only the steps after its resume point, so its lane holds those alone and
 its graph draws the rest as restored, with a badge counting them. **Resume from Summarize** sends

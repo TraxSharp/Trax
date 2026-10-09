@@ -906,7 +906,6 @@ follow nested `tracks { nodes }` fields.
 
 The graph names the train's types, so it answers to the operations gate and nothing outside it.
 
-
 ---
 
 ### runGraph
