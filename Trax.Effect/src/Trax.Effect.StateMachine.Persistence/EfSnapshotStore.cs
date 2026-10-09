@@ -222,6 +222,9 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
 
     private static void Apply(SnapshotDraft record, Snapshot snapshot)
     {
+        // A stranded instance that moves to another state is no longer stranded.
+        if (record.State != snapshot.State)
+            record.InvokeStrandedState = null;
         record.Machine = snapshot.Machine;
         record.Version = snapshot.Version;
         record.State = snapshot.State;
@@ -369,6 +372,15 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                     .SetProperty(x => x.UpdatedAt, now);
                 if (invokeToken is { Value: var next })
                     setters.SetProperty(x => x.InvokeToken, next);
+
+                // A stranded instance that is given a run, or moves to another state, is no longer stranded.
+                if (invokeToken is { Value: not null })
+                    setters.SetProperty(x => x.InvokeStrandedState, (string?)null);
+                else
+                    setters.SetProperty(
+                        x => x.InvokeStrandedState,
+                        x => x.State == state ? x.InvokeStrandedState : null
+                    );
             },
             cancellationToken
         );
@@ -392,10 +404,14 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                     x.Id == id && x.Machine == machine && x.ConcurrencyToken == expectedToken
                 ),
             setters =>
+            {
                 setters
                     .SetProperty(x => x.InvokeToken, next)
                     .SetProperty(x => x.ConcurrencyToken, newToken)
-                    .SetProperty(x => x.UpdatedAt, now),
+                    .SetProperty(x => x.UpdatedAt, now);
+                if (next is not null)
+                    setters.SetProperty(x => x.InvokeStrandedState, (string?)null);
+            },
             cancellationToken
         );
     }
@@ -447,6 +463,40 @@ public sealed class EfSnapshotStore(IDataContext db, ISqlDialect? dialect = null
                     .SetProperty(x => x.State, state)
                     .SetProperty(x => x.Context, contextJson)
                     .SetProperty(x => x.InvokeToken, nextInvokeToken)
+                    .SetProperty(x => x.InvokeStrandedState, (string?)null)
+                    .SetProperty(x => x.ConcurrencyToken, newToken)
+                    .SetProperty(x => x.UpdatedAt, now),
+            cancellationToken
+        );
+    }
+
+    Task<bool> IMachineInstanceStore.StrandByInvokeToken(
+        string invokeToken,
+        Snapshot snapshot,
+        Guid expectedToken,
+        CancellationToken cancellationToken
+    )
+    {
+        var machineId = snapshot.Machine;
+        var version = snapshot.Version;
+        var state = snapshot.State;
+        var contextJson = snapshot.Context.ToJsonString();
+        var newToken = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        return Write(
+            db.SnapshotDrafts.Where(x =>
+                x.InvokeToken == invokeToken
+                && x.Machine == machineId
+                && x.ConcurrencyToken == expectedToken
+            ),
+            setters =>
+                setters
+                    .SetProperty(x => x.Version, version)
+                    .SetProperty(x => x.State, state)
+                    .SetProperty(x => x.Context, contextJson)
+                    .SetProperty(x => x.InvokeToken, (string?)null)
+                    .SetProperty(x => x.InvokeStrandedState, state)
                     .SetProperty(x => x.ConcurrencyToken, newToken)
                     .SetProperty(x => x.UpdatedAt, now),
             cancellationToken

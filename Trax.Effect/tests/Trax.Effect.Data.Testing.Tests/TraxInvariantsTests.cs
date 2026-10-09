@@ -260,6 +260,15 @@ public class TraxInvariantsTests
         var left = Guid.NewGuid();
         var stale = await SeedSnapshotAsync(left, "Built", await SeedInvokedEntryAsync(left, null));
         await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, machine: "Other");
+        // Stranded there on purpose: its run ended and not even the failure could be applied.
+        await SeedSnapshotAsync(Guid.NewGuid(), "Building", token: null, stranded: "Building");
+        // Stranded in a state it has since left, so the mark says nothing about this one.
+        var moved = await SeedSnapshotAsync(
+            Guid.NewGuid(),
+            "Building",
+            token: null,
+            stranded: "Queued"
+        );
 
         (await TraxInvariants.FindViolationsAsync(ConnectionString))
             .Should()
@@ -276,6 +285,12 @@ public class TraxInvariantsTests
                         "trax.snapshot_draft",
                         bare.ToString(),
                         $"{Machine} {ReadId(bare)} is in Building, which invokes a train, and holds no invoke token"
+                    ),
+                    new TraxInvariantViolation(
+                        TraxInvariants.InvokingStateWithoutToken,
+                        "trax.snapshot_draft",
+                        moved.ToString(),
+                        $"{Machine} {ReadId(moved)} is in Building, which invokes a train, and holds no invoke token"
                     ),
                     new TraxInvariantViolation(
                         TraxInvariants.InvokeTokenOutsideInvokingState,
@@ -392,7 +407,8 @@ public class TraxInvariantsTests
         Guid id,
         string state,
         string? token,
-        string machine = Machine
+        string machine = Machine,
+        string? stranded = null
     )
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
@@ -400,14 +416,16 @@ public class TraxInvariantsTests
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO trax.snapshot_draft
-                (id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at, invoke_token)
-            VALUES (@id, NULL, 'system', @machine, 1, @state, gen_random_uuid(), now(), @token)
+                (id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at, invoke_token,
+                 invoke_stranded_state)
+            VALUES (@id, NULL, 'system', @machine, 1, @state, gen_random_uuid(), now(), @token, @stranded)
             RETURNING row_id
             """;
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("machine", machine);
         command.Parameters.AddWithValue("state", state);
         command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
+        command.Parameters.AddWithValue("stranded", (object?)stranded ?? DBNull.Value);
         var row = (long)(await command.ExecuteScalarAsync())!;
         Snapshots[row] = (id, token);
         return row;

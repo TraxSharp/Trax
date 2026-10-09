@@ -575,6 +575,56 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
     }
 
     [Test]
+    public async Task A_failure_that_cannot_be_applied_strands_the_instance_and_marks_it()
+    {
+        var key = MachineKey.Of("delivery", Guid.NewGuid().ToString("N"));
+        MachineInstance instance;
+        using (var scope = _api.Services.CreateScope())
+            instance = await scope
+                .ServiceProvider.GetRequiredService<IMachineInstances>()
+                .Start<StrandingStepMachine>(key, StepMachine.Context(InvokedStepModes.Fail));
+        var token = (await _api.Row(instance.Id, StrandingStepMachine.MachineId))!.InvokeToken!;
+        await _worker.DispatchAndRun(token);
+
+        (await _api.Sweep())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new InvokeDelivery.Stranded(
+                    StrandingStepMachine.MachineId,
+                    instance.Id,
+                    "Running",
+                    InvokeOutcomeReasons.NextRunRefused
+                ),
+                $"OnFailed enters a state whose run cannot be queued, so nothing can be applied. See {Adr}"
+            );
+
+        var row = (await _api.Row(instance.Id, StrandingStepMachine.MachineId))!;
+        row.State.Should().Be("Running", "the instance stays where it was");
+        row.InvokeToken.Should().BeNull("nothing waits on a run that has finished");
+        row.InvokeStrandedState.Should()
+            .Be(
+                "Running",
+                "the write that clears the token records that the instance was stranded there"
+            );
+        (await _api.Deliver(token)).Should().BeOfType<InvokeDelivery.NoTransition>();
+
+        // Leaving through a declared transition ends the stranding.
+        using (var scope = _api.Services.CreateScope())
+            (
+                await scope
+                    .ServiceProvider.GetRequiredService<IMachineInstances>()
+                    .Advance<StrandingStepMachine>(key, nameof(StepTrigger.Stop))
+            )
+                .Should()
+                .BeOfType<AdvanceOutcome.Advanced>();
+        row = (await _api.Row(instance.Id, StrandingStepMachine.MachineId))!;
+        row.State.Should().Be("Idle");
+        row.InvokeStrandedState.Should().BeNull();
+    }
+
+    [Test]
     public async Task Metadata_cleanup_keeps_an_invoked_run_while_its_token_is_live()
     {
         await using var cleaner = _cluster.Host(

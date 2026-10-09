@@ -93,8 +93,9 @@ internal abstract record InvokeDelivery
 
     /// <summary>
     /// Not even the run's failure could be applied (the <c>OnFailed</c> or <c>OnCancelled</c> edge's reduction
-    /// is refused, or its target's run cannot be queued). The token is cleared, so the instance stays in the state
-    /// with no live run and leaves it only through one of its declared transitions; the reason is logged.
+    /// is refused, or its target's run cannot be queued). The token is cleared and the state recorded as stranded
+    /// (<c>invoke_stranded_state</c>), so the instance stays in the state with no live run and leaves it only
+    /// through one of its declared transitions; the reason is logged.
     /// </summary>
     /// <param name="Machine">The machine.</param>
     /// <param name="Id">The instance.</param>
@@ -584,16 +585,16 @@ internal sealed class InvokeOutcomeDelivery(
         CancellationToken cancellationToken
     )
     {
-        var write = await outbox.Deliver(
-            row.Owner,
-            row.Id,
-            invokeToken,
-            current,
-            row.Snapshot.Token,
-            entering: null,
-            cancellationToken
-        );
-        if (write is not InvokeWrite.Written)
+        // One conditional update that clears the token and marks the state stranded, so the instance in an
+        // invoking state with no run is recorded as deliberate. No run is queued, so the outbox is not needed.
+        if (
+            !await store.StrandByInvokeToken(
+                invokeToken,
+                current,
+                row.Snapshot.Token,
+                cancellationToken
+            )
+        )
             return null;
 
         logger.LogError(

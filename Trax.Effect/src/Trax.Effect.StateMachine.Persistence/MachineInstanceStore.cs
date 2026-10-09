@@ -159,6 +159,20 @@ internal interface IMachineInstanceStore
     );
 
     /// <summary>
+    /// Leaves the row that still holds <paramref name="invokeToken"/> and <paramref name="expectedToken"/> in
+    /// <paramref name="snapshot"/>'s state with no live run, in one conditional update: writes the snapshot, clears
+    /// the invoke token, records the state in <c>invoke_stranded_state</c>, and gives the row a fresh concurrency
+    /// token and <c>updated_at</c>. Used when a run ended and not even its failure could be applied. False when no
+    /// row holds both tokens.
+    /// </summary>
+    Task<bool> StrandByInvokeToken(
+        string invokeToken,
+        Snapshot snapshot,
+        Guid expectedToken,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Up to <paramref name="limit"/> rows that hold a live invoke token, ordered by the token, starting after
     /// <paramref name="afterToken"/> (keyset paging; null starts at the beginning). The reconciler sweeps these.
     /// </summary>

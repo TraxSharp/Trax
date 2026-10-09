@@ -1,6 +1,7 @@
 -- See the Postgres migration of the same name. SQLite cannot drop a primary key or make a column
 -- nullable in place, so the table is rebuilt: its columns in the same order, then row_id (the new
--- primary key), owner_kind and invoke_token, with every row copied across as a user's.
+-- primary key), owner_kind, invoke_token and invoke_stranded_state, with every row copied across as a
+-- user's.
 --
 -- owner_kind is the integer of SnapshotOwnerKind: 0 is a user, 1 is the system.
 CREATE TABLE snapshot_draft_owned (
@@ -18,6 +19,7 @@ CREATE TABLE snapshot_draft_owned (
     row_id                  INTEGER NOT NULL CONSTRAINT pk_snapshot_draft PRIMARY KEY AUTOINCREMENT,
     owner_kind              INTEGER NOT NULL DEFAULT 0,
     invoke_token            TEXT NULL,
+    invoke_stranded_state   TEXT NULL,
     CONSTRAINT ck_snapshot_draft_owner CHECK (
         (owner_kind = 0 AND user_key IS NOT NULL)
         OR (owner_kind = 1 AND user_key IS NULL)

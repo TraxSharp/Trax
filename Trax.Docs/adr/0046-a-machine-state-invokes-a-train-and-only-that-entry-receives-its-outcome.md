@@ -318,6 +318,12 @@ follow the first.
   cancelling its run would move it through `OnCancelled` from outside. One message on both surfaces
   (`OperationsService.UserOwnedRunCancelRefusal`); the bulk forms skip such rows and count them in their message.
   `InvokesModelTests` checks the refusal; `InvokedRunOperationsTests` in `Trax.Api/tests` checks both surfaces.
+- **2026-10-08**: An instance stranded in its invoking state (not even its run's failure could be applied) is
+  marked: the one conditional update that clears its token records the state in `snapshot_draft.invoke_stranded_state`
+  (migrations 070 and 032), and a write that gives the row a token or moves it to another state clears it.
+  `TraxInvariants`' `invoking-state-without-token` exempts a row marked for the state it is in, so the invariant and
+  the design agree; a Postgres test reaches the stranding with the invariants on.
+
 - **2026-10-08**: The reconciler reads the ended runs instead of every live token: one query per page joins each
   instance of the machines its host registers to its entry and the entry's run, and returns only those whose run has
   ended, so the entry and run are read as of one instant and a requeued dispatch (a run failed with

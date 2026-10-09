@@ -118,4 +118,13 @@ public class SnapshotDraft
     /// </summary>
     [Column("invoke_token")]
     public string? InvokeToken { get; set; }
+
+    /// <summary>
+    /// The invoking state the instance was stranded in, or null. Set when a run the state invoked ended and not
+    /// even its failure could be applied: the token is cleared and the instance stays in the state with no live
+    /// run, leaving it only through one of its declared transitions. The mark holds while the row is in that state
+    /// with no token; a write that gives the row a token, or moves it to another state, clears it. Server-only.
+    /// </summary>
+    [Column("invoke_stranded_state")]
+    public string? InvokeStrandedState { get; set; }
 }

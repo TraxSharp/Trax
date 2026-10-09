@@ -9,7 +9,8 @@ namespace Trax.Effect.Data.Testing;
 /// queue entry has its run, no completed run keeps a checkpoint, every resume names a run that
 /// exists, and every machine instance's invoke token names a run that instance queued. While a
 /// host runs, the first three are normal transient states; once they have all stopped, each one
-/// is work that was started and then lost. The rest hold at every moment.
+/// is work that was started and then lost. The rest hold whenever no write is half done: each is
+/// kept by the one statement or transaction that changes what it relates.
 /// </summary>
 /// <remarks>
 /// <para>Call it from a test fixture's teardown, after the hosts the test started are disposed. A
@@ -52,7 +53,10 @@ public static class TraxInvariants
 
     /// <summary>
     /// A <c>trax.snapshot_draft</c> row is in a state that invokes a train and holds no invoke
-    /// token, so no outcome can ever move it on.
+    /// token, so no outcome can ever move it on, and was not stranded there on purpose. A row whose
+    /// <c>invoke_stranded_state</c> is its state is exempt: its run ended and not even the failure
+    /// could be applied, so the token was cleared and the instance left to leave the state through
+    /// one of its declared transitions.
     /// </summary>
     public const string InvokingStateWithoutToken = "invoking-state-without-token";
 
@@ -273,7 +277,8 @@ public static class TraxInvariants
             var pairs = invoking.Select(s => s.Machine + "\n" + s.State).ToArray();
 
             // The token is set as the state is entered and cleared as it is left, in the write
-            // that moves the instance, so the two always agree.
+            // that moves the instance, so the two always agree. The one exception is an instance
+            // stranded in its invoking state, which the same write that clears its token marks.
             violations.AddRange(
                 await ReadAsync(
                     connection,
@@ -282,6 +287,7 @@ public static class TraxInvariants
                     FROM trax.snapshot_draft s
                     WHERE s.machine = ANY(@machines)
                       AND s.invoke_token IS NULL
+                      AND s.invoke_stranded_state IS DISTINCT FROM s.state
                       AND s.machine || E'\n' || s.state = ANY(@pairs)
                     ORDER BY s.row_id
                     """,

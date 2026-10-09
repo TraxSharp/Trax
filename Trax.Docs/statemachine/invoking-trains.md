@@ -171,7 +171,9 @@ state's `OnFailed`, with a reason, when its own outcome cannot be, or when the r
 Each is logged at warning level with the run, the machine, the instance and both states, never with the output or
 the context. If even `OnFailed` (or `OnCancelled`) cannot be applied, the token is cleared and the instance stays
 in the invoking state with no live run, logged at error level with its reason; it leaves through one of its declared
-transitions.
+transitions. The same write records the state in the row's `invoke_stranded_state`, so an instance stranded on
+purpose is told apart from one that lost its token by mistake (`TraxInvariants` reports only the second); the mark
+is cleared when the instance is given a run or moves to another state.
 
 A run's records cannot vanish while it is still to come: its work queue entry is written in the same transaction
 that gives the instance its token, and nothing deletes a queued entry. Metadata retention keeps an invoked run, and
