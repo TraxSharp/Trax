@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Trax.Effect.Data.Services.InvokedRunListener;
@@ -15,10 +14,10 @@ namespace Trax.Effect.Data.Services.InvokedRunListener;
 /// SQLite and InMemory register none: on them the run's own host applies the outcome through its lifecycle hook,
 /// and the sweep covers the rest.</para>
 ///
-/// <para>Infrastructure for <c>Trax.Effect.StateMachine.Persistence</c>; a host does not implement or call it.</para>
+/// <para>Infrastructure for <c>Trax.Effect.StateMachine.Persistence</c>, which alone sees it; a host does not
+/// implement or call it.</para>
 /// </remarks>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public interface IInvokedRunListener
+internal interface IInvokedRunListener
 {
     /// <summary>
     /// Starts listening. The returned subscription hears every notice sent after this completes, until it is
@@ -28,8 +27,7 @@ public interface IInvokedRunListener
 }
 
 /// <summary>One listening session opened by <see cref="IInvokedRunListener.SubscribeAsync"/>.</summary>
-[EditorBrowsable(EditorBrowsableState.Never)]
-public interface IInvokedRunSubscription : IAsyncDisposable
+internal interface IInvokedRunSubscription : IAsyncDisposable
 {
     /// <summary>
     /// Completes with the external id of the next invoked run that ended. Throws when the session is lost, for

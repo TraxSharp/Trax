@@ -28,4 +28,8 @@
     <InternalsVisibleTo Include="Trax.Effect.Data.Sqlite" />
     <InternalsVisibleTo Include="Trax.Effect.Data.InMemory" />
   </ItemGroup>
+  <!-- The invoked-run listener a provider registers and the state machine's outcome reconciler hears. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
+  </ItemGroup>
 </Project>
