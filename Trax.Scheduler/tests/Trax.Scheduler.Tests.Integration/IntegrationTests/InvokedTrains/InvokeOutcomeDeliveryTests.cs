@@ -3,10 +3,12 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Trax.Core.Functional;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.SnapshotDraft;
 using Trax.Effect.StateMachine.Persistence;
+using Trax.Scheduler.Services.JobSubmitter;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
@@ -622,6 +624,150 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
         row = (await _api.Row(instance.Id, StrandingStepMachine.MachineId))!;
         row.State.Should().Be("Idle");
         row.InvokeStrandedState.Should().BeNull();
+    }
+
+    [Test]
+    public async Task A_dispatch_that_fails_and_is_requeued_leaves_the_instance_waiting_for_its_run()
+    {
+        // Dispatches with a submitter that cannot reach its worker, and registers the machines, so the failed
+        // attempt's lifecycle event reaches a delivery on this host too.
+        await using var unreachable = _cluster.Host(
+            machines: true,
+            scheduler: true,
+            configure: s => s.AddScoped<IJobSubmitter, UnreachableSubmitter>()
+        );
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "again"));
+        var token = (await SystemRow(instance.Id)).InvokeToken!;
+
+        using (var scope = unreachable.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IJobDispatcherTrain>().Run(Unit.Default);
+
+        var entry = (await _api.Entry(token))!;
+        entry
+            .Status.Should()
+            .Be(WorkQueueStatus.Queued, "a dispatch with attempts left is requeued");
+        entry.DispatchAttempts.Should().Be(1);
+        using (var scope = _api.Services.CreateScope())
+            (
+                await scope
+                    .ServiceProvider.GetRequiredService<IDataContext>()
+                    .Metadatas.AsNoTracking()
+                    .SingleAsync(m => m.ExternalId == token)
+            )
+                .FailureException.Should()
+                .Be(DispatchFailure.Requeued);
+
+        (await _api.Sweep()).Should().BeEmpty();
+        (await _api.Deliver(token))
+            .Should()
+            .BeOfType<InvokeDelivery.Running>(
+                $"the failed attempt is not the run's end: its entry is queued again. See {Adr}"
+            );
+        var row = await SystemRow(instance.Id);
+        row.State.Should().Be("Running");
+        row.InvokeToken.Should().Be(token);
+
+        // Past its back-off, the entry is dispatched again, and that run's outcome comes back.
+        using (var scope = _api.Services.CreateScope())
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(w => w.ScheduledAt, DateTime.UtcNow.AddMinutes(-1))
+                );
+        await _worker.DispatchAndRun(token);
+        (await _api.Sweep())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { To = "Done", Applied = "done" });
+        Context(await SystemRow(instance.Id))["artifact"]!
+            .GetValue<string>()
+            .Should()
+            .Be("artifact:again");
+    }
+
+    [Test]
+    public async Task A_row_whose_concurrency_token_moves_under_every_attempt_is_contended()
+    {
+        await using var stale = _cluster.Host(
+            machines: true,
+            scheduler: false,
+            configure: StaleReadStore.Install
+        );
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var token = (await SystemRow(instance.Id)).InvokeToken!;
+        await _worker.DispatchAndRun(token);
+
+        (await stale.Deliver(token))
+            .Should()
+            .BeOfType<InvokeDelivery.Contended>(
+                $"each conditional update lost to a change of the row, so the next sweep takes it. See {Adr}"
+            );
+        var row = await SystemRow(instance.Id);
+        row.State.Should().Be("Running");
+        row.InvokeToken.Should().Be(token, "nothing was written");
+
+        (await _api.Sweep())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { To = "Done", Applied = "done" });
+    }
+
+    [Test]
+    public async Task A_row_of_a_machine_this_host_does_not_register_is_not_here()
+    {
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var token = (await SystemRow(instance.Id)).InvokeToken!;
+        await _worker.DispatchAndRun(token);
+        await RenameMachine(token, "registered-elsewhere");
+        try
+        {
+            (await _api.Deliver(token))
+                .Should()
+                .BeEquivalentTo(
+                    new InvokeDelivery.NotHere("registered-elsewhere"),
+                    $"another host, which registers the machine, applies it. See {Adr}"
+                );
+            (await _api.Sweep())
+                .Should()
+                .BeEmpty("a sweep reads only the machines its host registers");
+        }
+        finally
+        {
+            await RenameMachine(token, SystemStepMachine.MachineId);
+        }
+
+        // The sweep now waits before trying the row again; a delivery asked for by its run, as the hook asks,
+        // does not wait.
+        (await _api.Sweep())
+            .Should()
+            .BeEmpty();
+        (await _api.Deliver(token)).Should().BeOfType<InvokeDelivery.Moved>();
+    }
+
+    private async Task RenameMachine(string token, string machine)
+    {
+        using var scope = _api.Services.CreateScope();
+        (
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .SnapshotDrafts.Where(d => d.InvokeToken == token)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Machine, machine))
+        )
+            .Should()
+            .Be(1);
+    }
+
+    /// <summary>A submitter whose remote worker cannot be reached.</summary>
+    private sealed class UnreachableSubmitter : IJobSubmitter
+    {
+        public Task<string> EnqueueAsync(long metadataId) =>
+            throw new HttpRequestException("The remote worker is unreachable.");
+
+        public Task<string> EnqueueAsync(long metadataId, object input) =>
+            throw new HttpRequestException("The remote worker is unreachable.");
     }
 
     [Test]
