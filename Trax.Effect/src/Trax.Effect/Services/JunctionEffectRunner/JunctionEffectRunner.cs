@@ -77,6 +77,30 @@ internal class JunctionEffectRunner : IJunctionEffectRunner
     }
 
     /// <summary>
+    /// Waits for every provider that writes in the background to finish what it started, so
+    /// nothing it writes lands after the run's terminal write. A provider that fails to settle is
+    /// logged; the run's outcome is still recorded.
+    /// </summary>
+    internal async Task Settle()
+    {
+        foreach (var provider in ActiveJunctionEffectProviders.OfType<ISettlesBeforeTheRunEnds>())
+        {
+            try
+            {
+                await provider.Settle();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(
+                    ex,
+                    "Junction effect ({ProviderType}) did not settle before the run ended.",
+                    provider.GetType().Name
+                );
+            }
+        }
+    }
+
+    /// <summary>
     /// Disposes every provider, logging and swallowing each provider's exception so the rest are still disposed,
     /// then clears the list.
     /// </summary>

@@ -143,15 +143,65 @@ public class JunctionProgressProviderTests
     }
 
     [Test]
-    public async Task BeforeJunctionExecution_PassesTheCallersTokenToItsWrite()
+    public async Task BeforeJunctionExecution_ACancelledCallerStopsWaiting_AndTheRunSettlesTheWrite()
     {
+        // The write carries every caller's change, so no one caller's token may cancel it. The
+        // caller stops waiting; the run settles the write before its terminal write.
         var (train, junction) = CreateTestTrainAndJunction("ProcessDataJunction");
+        var gate = _factory.Hold();
         using var cts = new CancellationTokenSource();
 
-        await _provider.BeforeJunctionExecution(junction, train, cts.Token);
+        var before = _provider.BeforeJunctionExecution(junction, train, cts.Token);
+        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30));
+        await cts.CancelAsync();
 
-        _factory.Writes.Should().Be(1);
-        _factory.LastToken.Should().Be(cts.Token);
+        await FluentActions
+            .Awaiting(() => before)
+            .Should()
+            .ThrowAsync<OperationCanceledException>();
+
+        var settled = _provider.Settle();
+        settled.IsCompleted.Should().BeFalse("the write the caller left is still in flight");
+
+        gate.SetResult();
+        await settled;
+        _factory.LastToken.Should().Be(CancellationToken.None);
+        (await StoredRow(train)).CurrentlyRunningJunction.Should().Be("ProcessDataJunction");
+    }
+
+    [Test]
+    public async Task BeforeJunctionExecution_ConcurrentBranchesShareAWrite_RatherThanQueueForOne()
+    {
+        // Eight branches start a junction while a write is in flight. They wait for that write and
+        // the one after it, which carries all of their changes, not for eight writes in turn.
+        var train = CreateTestTrain();
+        var gate = _factory.Hold();
+
+        var first = _provider.BeforeJunctionExecution(
+            CreateTestJunction("Branch0"),
+            train,
+            CancellationToken.None
+        );
+        await _factory.Entered.WaitAsync(TimeSpan.FromSeconds(30));
+
+        var others = Enumerable
+            .Range(1, 7)
+            .Select(i =>
+                _provider.BeforeJunctionExecution(
+                    CreateTestJunction($"Branch{i}"),
+                    train,
+                    CancellationToken.None
+                )
+            )
+            .ToList();
+
+        gate.SetResult();
+        await Task.WhenAll([first, .. others]);
+
+        _factory
+            .Writes.Should()
+            .Be(2, "the seven changes made while the first write was in flight share one write");
+        (await StoredRow(train)).CurrentlyRunningJunction.Should().Be("Branch7");
     }
 
     [Test]
@@ -207,6 +257,7 @@ public class JunctionProgressProviderTests
         await _provider.BeforeJunctionExecution(junction, train, CancellationToken.None);
 
         await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await _provider.Settle();
 
         var row = await StoredRow(train);
         row.CurrentlyRunningJunction.Should().BeNull();
@@ -225,6 +276,7 @@ public class JunctionProgressProviderTests
         await cts.CancelAsync();
 
         await _provider.AfterJunctionExecution(junction, train, cts.Token);
+        await _provider.Settle();
 
         _factory.LastToken.Should().Be(CancellationToken.None);
     }
@@ -242,6 +294,10 @@ public class JunctionProgressProviderTests
             .NotThrowAsync(
                 "a failed progress write after finished work is logged, not the outcome"
             );
+        await FluentActions
+            .Awaiting(() => _provider.Settle())
+            .Should()
+            .NotThrowAsync("the run's terminal write follows whatever the writer did");
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
     }
 
@@ -279,6 +335,7 @@ public class JunctionProgressProviderTests
 
         // Act — After
         await _provider.AfterJunctionExecution(junction, train, CancellationToken.None);
+        await _provider.Settle();
 
         // Assert — progress is cleared
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
@@ -298,6 +355,7 @@ public class JunctionProgressProviderTests
         train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction1");
 
         await _provider.AfterJunctionExecution(junction1, train, CancellationToken.None);
+        await _provider.Settle();
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
 
         // Step 2 lifecycle
@@ -305,9 +363,11 @@ public class JunctionProgressProviderTests
         train.Metadata!.CurrentlyRunningJunction.Should().Be("Junction2");
 
         await _provider.AfterJunctionExecution(junction2, train, CancellationToken.None);
+        await _provider.Settle();
         train.Metadata!.CurrentlyRunningJunction.Should().BeNull();
 
-        // Four writes of the two columns (before and after each junction), none through the runner.
+        // Four writes of the two columns (before and after each junction, each settled before the
+        // next), none through the runner.
         _factory.Writes.Should().Be(4);
         _fakeEffectRunner.SaveChangesCallCount.Should().Be(0);
     }
@@ -374,25 +434,41 @@ public class JunctionProgressProviderTests
 
     /// <summary>
     /// The real in-memory factory, counting the contexts the provider opens to write and the
-    /// token it opens them with, and failing on request.
+    /// token it opens them with, failing on request, and holding a write until released.
     /// </summary>
     private sealed class RecordingFactory(IDataContextProviderFactory inner)
         : IDataContextProviderFactory
     {
-        public int Writes { get; private set; }
+        private int _writes;
+        private TaskCompletionSource? _gate;
+        private readonly TaskCompletionSource _entered = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+
+        public int Writes => _writes;
         public CancellationToken LastToken { get; private set; }
         public bool Throws { get; set; }
 
+        /// <summary>Completes once a write has started.</summary>
+        public Task Entered => _entered.Task;
+
+        /// <summary>Holds every write until the returned source is completed.</summary>
+        public TaskCompletionSource Hold() =>
+            _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public IEffectProvider Create() => inner.Create();
 
-        public Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
+        public async Task<IDataContext> CreateDbContextAsync(CancellationToken cancellationToken)
         {
             if (Throws)
                 throw new InvalidOperationException("database unavailable");
 
-            Writes++;
+            Interlocked.Increment(ref _writes);
             LastToken = cancellationToken;
-            return inner.CreateDbContextAsync(cancellationToken);
+            _entered.TrySetResult();
+            if (_gate is { } gate)
+                await gate.Task;
+            return await inner.CreateDbContextAsync(cancellationToken);
         }
     }
 

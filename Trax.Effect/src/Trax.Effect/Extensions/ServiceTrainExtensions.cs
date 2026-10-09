@@ -133,6 +133,14 @@ internal static class ServiceTrainExtensions
         serviceTrain.EffectRunner.AssertLoaded();
         serviceTrain.Metadata.AssertLoaded();
 
+        // A junction effect that writes in the background (junction progress) finishes first, so
+        // none of its writes lands after, and over, the outcome written below.
+        if (
+            serviceTrain.JunctionEffectRunner
+            is Services.JunctionEffectRunner.JunctionEffectRunner junctionEffects
+        )
+            await junctionEffects.Settle();
+
         var failureReason = result.IsRight ? null : result.Swap().ValueUnsafe();
 
         var resultState =
