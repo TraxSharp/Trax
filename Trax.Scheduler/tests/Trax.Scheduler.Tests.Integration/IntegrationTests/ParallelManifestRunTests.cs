@@ -381,8 +381,15 @@ public static class ParallelProbe
 
     public static ParallelProbeDecider Decider { get; } = new();
 
-    /// <summary>Whether the slow branch fails its next run.</summary>
+    /// <summary>
+    /// Whether the slow branch fails its next run. It fails only once the fast branch of the same run
+    /// has finished, so a failed run has asked and taken a track in both branches, whatever order
+    /// the thread pool starts them in: a failure cancels the branches still running.
+    /// </summary>
     public static bool Fail { get; set; }
+
+    // Completed by each run's fast branch as it finishes, keyed by the run.
+    private static readonly ConcurrentDictionary<long, TaskCompletionSource> FastFinished = new();
 
     /// <summary>Whether the fast branch holds its next run until <see cref="Release"/>.</summary>
     public static bool Hold { get; set; }
@@ -398,10 +405,19 @@ public static class ParallelProbe
         _held = New();
         _released = New();
         Taken.Clear();
+        FastFinished.Clear();
         Decider.Reset();
     }
 
     public static void Release() => _released.TrySetResult();
+
+    public static void FastBranchFinished(long run) => FastFinishedIn(run).TrySetResult();
+
+    public static Task FastBranchFinishedIn(long run) =>
+        FastFinishedIn(run).Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+    private static TaskCompletionSource FastFinishedIn(long run) =>
+        FastFinished.GetOrAdd(run, _ => New());
 
     public static async Task HoldIfAsked()
     {
@@ -477,7 +493,11 @@ public class ParallelProbeFastWork : EffectJunction<ParallelProbeInput, Parallel
 /// <summary>Runs after the held junction, so a cancel flag set while it was held is read here.</summary>
 public class ParallelProbeFastDone : EffectJunction<ParallelProbeFast, ParallelProbeFast>
 {
-    public override Task<ParallelProbeFast> Run(ParallelProbeFast input) => Task.FromResult(input);
+    public override Task<ParallelProbeFast> Run(ParallelProbeFast input)
+    {
+        ParallelProbe.FastBranchFinished(Metadata!.TrainMetadataId);
+        return Task.FromResult(input);
+    }
 }
 
 public class ParallelProbeSlowWork : EffectJunction<ParallelProbeInput, ParallelProbeSlow>
@@ -495,7 +515,10 @@ public class ParallelProbeSlowWork : EffectJunction<ParallelProbeInput, Parallel
         }
 
         if (ParallelProbe.Fail)
+        {
+            await ParallelProbe.FastBranchFinishedIn(Metadata!.TrainMetadataId);
             throw new TimeoutException("the slow branch timed out");
+        }
 
         return new ParallelProbeSlow(input.Value);
     }
