@@ -223,6 +223,7 @@
             RunNodeState.NotRecorded => "not recorded",
             RunNodeState.Withheld => "withheld",
             RunNodeState.Restored => "restored",
+            RunNodeState.Interrupted => "interrupted",
             _ => state.ToString(),
         };
 
@@ -234,6 +235,7 @@
             RunNodeState.Failed => "cs-jt--failed",
             RunNodeState.Cancelled => "cs-jt--cancelled",
             RunNodeState.Restored => "cs-rg--restored",
+            RunNodeState.Interrupted => "cs-rg--interrupted",
             _ => "cs-rg--idle",
         };
 

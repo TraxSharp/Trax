@@ -642,10 +642,14 @@ A step that ran in a branch is labelled with the branch.
 Under each lane the page draws the attempt's run graph from `operations.runGraph(metadataId:)`,
 polled while the attempt runs and read once more when it ends. Each declared step is a node in the
 order the chain declares it, coloured by its state (completed, failed, running, not reached,
-skipped), with the state also given as text for screen readers. A routing step shows its tracks
-next to each other with the one taken marked, and a `Parallel` step shows its branches as columns
-side by side, since they ran at the same time. The page asks for three levels of nesting, as deep as
-the topic map goes and as deep as the server's cycle-depth limit allows.
+skipped, interrupted), with the state also given as text for screen readers. A routing step shows
+its tracks next to each other with the one taken marked, and a `Parallel` step shows its branches
+as columns side by side, since they ran at the same time. The page reads the graph as `allNodes`,
+one flat list at any depth, and rebuilds the tree from each node's `parentId` and `track`, so it
+draws a chain nested deeper than a query could follow nested tracks. Each read is numbered and an
+answer older than one already drawn is dropped, and a poll waits for the one before it, so a slow
+answer never draws an older graph over the final one.
+
 
 A run that resumed records only the steps after its resume point, so its lane holds those alone and
 its graph draws the rest as restored, with a badge counting them. **Resume from Summarize** sends

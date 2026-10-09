@@ -1,9 +1,16 @@
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore.Storage;
+using NSubstitute;
 using Trax.Api.DTOs;
 using Trax.Api.Services.Runs;
 using Trax.Core.Monad;
+using Trax.Effect.Data.InMemory.Services.InMemoryContextFactory;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Models.JunctionRun;
+using Trax.Effect.Models.Metadata;
+using Trax.Effect.Models.Metadata.DTOs;
+using Trax.Mediator.Services.ChainVerification;
 
 namespace Trax.Api.Tests;
 
@@ -165,6 +172,93 @@ public class RunGraphMatchTests
         run.Nodes.Skip(3).Should().OnlyContain(n => n.State == RunNodeState.Withheld);
         run.Nodes[0].State.Should().Be(RunNodeState.Completed);
         run.UnmatchedSteps.Should().Equal(afterTheRoute);
+    }
+
+    [TestCase(TrainState.Completed)]
+    [TestCase(TrainState.Failed)]
+    [TestCase(TrainState.Cancelled)]
+    public async Task AStepStillInProgress_WhenTheRunHasEnded_IsInterrupted(TrainState ended)
+    {
+        // The junction's end event was dropped, so its row keeps the InProgress its start wrote.
+        var (factory, graphs, run) = await SeedAsync(ended, JunctionRunState.InProgress);
+        await using var db = await factory.CreateDbContextAsync(default);
+
+        var graph = await RunGraphs.ReadAsync(db, graphs, run, default);
+
+        graph!.Nodes[0].State.Should().Be(RunNodeState.Interrupted);
+        graph.Nodes[0].Steps.Should().ContainSingle();
+    }
+
+    [TestCase(TrainState.InProgress)]
+    [TestCase(TrainState.Pending)]
+    public async Task AStepStillInProgress_WhileTheRunRuns_IsInProgress(TrainState running)
+    {
+        var (factory, graphs, run) = await SeedAsync(running, JunctionRunState.InProgress);
+        await using var db = await factory.CreateDbContextAsync(default);
+
+        var graph = await RunGraphs.ReadAsync(db, graphs, run, default);
+
+        graph!.Nodes[0].State.Should().Be(RunNodeState.InProgress);
+    }
+
+    [Test]
+    public void AnInterruptedStep_RanksBelowAFailureOnTheSameNode()
+    {
+        var run = RunGraphs.Match(
+            1,
+            "t",
+            Graph,
+            [
+                Step(0, "Fetch#0", state: JunctionRunState.InProgress),
+                Step(1, "Finish#0", state: JunctionRunState.InProgress),
+                Step(2, "Finish#0", state: JunctionRunState.Failed),
+            ],
+            moreSteps: false,
+            resumes: null,
+            resumable: false,
+            ended: true
+        );
+
+        run.Nodes[0].State.Should().Be(RunNodeState.Interrupted);
+        run.Nodes[^1].State.Should().Be(RunNodeState.Failed);
+    }
+
+    private static async Task<(
+        IDataContextProviderFactory Factory,
+        ITrainChainGraphs Graphs,
+        long Run
+    )> SeedAsync(TrainState runState, JunctionRunState stepState)
+    {
+        var factory = new InMemoryContextProviderFactory(new InMemoryDatabaseRoot());
+        var graphs = Substitute.For<ITrainChainGraphs>();
+        graphs.Find("Acme.IRoutedTrain").Returns(Graph);
+
+        await using var db = await factory.CreateDbContextAsync(default);
+        var run = Metadata.Create(
+            new CreateMetadata
+            {
+                Name = "Acme.IRoutedTrain",
+                ExternalId = Guid.NewGuid().ToString("N"),
+                Input = null,
+            }
+        );
+        run.TrainState = runState;
+        await db.Track(run);
+        await db.SaveChanges(default);
+        db.JunctionRuns.Add(
+            new JunctionRun
+            {
+                MetadataId = run.Id,
+                Position = 0,
+                Kind = JunctionRunKind.Junction,
+                Name = "Fetch",
+                State = stepState,
+                StartedAt = DateTime.UtcNow,
+                NodeId = "Fetch#0",
+            }
+        );
+        await db.SaveChanges(default);
+        return (factory, graphs, run.Id);
     }
 
     [Test]

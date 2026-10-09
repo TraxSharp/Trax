@@ -19,8 +19,10 @@ import {
   restoredIn,
   RESUME_AT,
   shownAnswer,
+  treeOf,
   type Attempt,
   type ConsoleLine,
+  type FlatGraphNode,
   type Fork,
   type Journal,
   type Phase,
@@ -163,7 +165,8 @@ export function useRecoveryRun() {
   const readGraph = useCallback(
     async (attemptId: number) => {
       const { data } = await client.query({ query: RUN_GRAPH, variables: { metadataId: attemptId } });
-      const graph = data.operations.runGraph as RunGraph | null;
+      const flat = data.operations.runGraph as { hasGraph: boolean; allNodes: FlatGraphNode[] } | null;
+      const graph: RunGraph | null = flat && { hasGraph: flat.hasGraph, nodes: treeOf(flat.allNodes) };
       setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, graph } : a)));
       return graph;
     },

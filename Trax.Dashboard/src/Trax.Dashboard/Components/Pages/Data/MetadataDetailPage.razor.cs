@@ -259,7 +259,8 @@ public partial class MetadataDetailPage
             _junctionRuns,
             _moreJunctionSteps,
             resumes,
-            RunGraphs.Resumable(run)
+            RunGraphs.Resumable(run),
+            RunGraphs.Ended(run.TrainState)
         );
     }
 

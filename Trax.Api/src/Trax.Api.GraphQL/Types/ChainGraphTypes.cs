@@ -27,6 +27,17 @@ internal sealed class ChainGraphType : ObjectType<ChainGraph>
             .Type<NonNullType<ListType<NonNullType<ChainGraphNodeType>>>>()
             .Description("The chain's steps, in the order it declares them.");
         descriptor
+            .Field("allNodes")
+            .Type<NonNullType<ListType<NonNullType<DeclaredNodeType>>>>()
+            .Resolve(ctx => DeclaredNode.Flatten(ctx.Parent<ChainGraph>()))
+            .Description(
+                "Every step of the chain at any depth, in one list: depth first, each step before "
+                    + "the steps on its tracks, each track's steps in declared order. Each says "
+                    + "where it sits (parentId, track, depth), so a client can rebuild the tree "
+                    + "without following nested tracks, which a query cannot follow past the "
+                    + "server's field-cycle limit."
+            );
+        descriptor
             .Field(g => g.Refusals)
             .Description("What the declaration did that no step can express.");
         descriptor
@@ -90,6 +101,90 @@ internal sealed class ChainGraphTrackType : ObjectType<ChainGraphTrack>
 }
 
 /// <summary>
+/// The GraphQL shape of <see cref="DeclaredNode"/>, one entry of <c>declaredChain.allNodes</c>: the
+/// node's own fields and where it sits. Fields are bound explicitly.
+/// </summary>
+internal sealed class DeclaredNodeType : ObjectType<DeclaredNode>
+{
+    /// <inheritdoc/>
+    protected override void Configure(IObjectTypeDescriptor<DeclaredNode> descriptor)
+    {
+        descriptor.Name("DeclaredNode");
+        descriptor.BindFieldsExplicitly();
+
+        descriptor
+            .Field("id")
+            .Type<NonNullType<StringType>>()
+            .Resolve(ctx => ctx.Parent<DeclaredNode>().Node.Id)
+            .Description("The node's id, as ChainGraphNode.id.");
+        descriptor
+            .Field("kind")
+            .Type<NonNullType<EnumType<ChainStepKind>>>()
+            .Resolve(ctx => ctx.Parent<DeclaredNode>().Node.Kind);
+        descriptor
+            .Field("junction")
+            .Type<StringType>()
+            .Resolve(ctx => ctx.Parent<DeclaredNode>().Node.Junction);
+        descriptor
+            .Field("in")
+            .Type<StringType>()
+            .Resolve(ctx => ctx.Parent<DeclaredNode>().Node.In);
+        descriptor
+            .Field("out")
+            .Type<StringType>()
+            .Resolve(ctx => ctx.Parent<DeclaredNode>().Node.Out);
+        descriptor
+            .Field("opaque")
+            .Type<NonNullType<BooleanType>>()
+            .Resolve(ctx => ctx.Parent<DeclaredNode>().Node.Opaque)
+            .Description("True when what runs is decided only at run time.");
+        descriptor
+            .Field(n => n.ParentId)
+            .Description(
+                "The id of the routing or PARALLEL step whose track this node sits on, or null "
+                    + "at the chain's top level."
+            );
+        descriptor
+            .Field(n => n.Track)
+            .Description(
+                "The name of the track or branch this node sits on, or null at the chain's top "
+                    + "level."
+            );
+        descriptor
+            .Field(n => n.Depth)
+            .Description("How many tracks deep the node sits: 0 at the chain's top level.");
+        descriptor
+            .Field("tracks")
+            .Type<NonNullType<ListType<NonNullType<DeclaredTrackType>>>>()
+            .Resolve(ctx =>
+                ctx.Parent<DeclaredNode>()
+                    .Node.Tracks.Select(t => new DeclaredTrack(t.Name, t.Description, t.IsFallback))
+                    .ToList()
+            )
+            .Description(
+                "A routing step's tracks or a PARALLEL step's branches, in declared order, without "
+                    + "their nodes: the nodes on each are the entries of allNodes whose parentId "
+                    + "is this node's id and whose track is its name."
+            );
+    }
+}
+
+/// <summary>The GraphQL shape of <see cref="DeclaredTrack"/>. Fields are bound explicitly.</summary>
+internal sealed class DeclaredTrackType : ObjectType<DeclaredTrack>
+{
+    /// <inheritdoc/>
+    protected override void Configure(IObjectTypeDescriptor<DeclaredTrack> descriptor)
+    {
+        descriptor.Name("DeclaredTrack");
+        descriptor.BindFieldsExplicitly();
+
+        descriptor.Field(t => t.Name);
+        descriptor.Field(t => t.Description);
+        descriptor.Field(t => t.IsFallback);
+    }
+}
+
+/// <summary>
 /// The GraphQL shape of <see cref="RunGraph"/>, returned by <c>operations.runGraph</c>. Fields are
 /// bound explicitly.
 /// </summary>
@@ -112,6 +207,17 @@ internal sealed class RunGraphType : ObjectType<RunGraph>
             );
         descriptor.Field(g => g.Hash);
         descriptor.Field(g => g.Nodes).Type<NonNullType<ListType<NonNullType<RunGraphNodeType>>>>();
+        descriptor
+            .Field(g => g.AllNodes)
+            .Type<NonNullType<ListType<NonNullType<RunGraphNodeType>>>>()
+            .Description(
+                "Every node of the graph at any depth, in one list: depth first, each node before "
+                    + "the nodes on its tracks, each track's nodes in declared order. Each says "
+                    + "where it sits (parentId, track, depth), so a client can rebuild the tree "
+                    + "without following nested tracks, which a query cannot follow past the "
+                    + "server's field-cycle limit. Select only the tracks' own fields here (name, "
+                    + "taken, ...), not their nodes."
+            );
         descriptor
             .Field(g => g.UnmatchedSteps)
             .Type<NonNullType<ListType<NonNullType<JunctionStepGraphType>>>>()
@@ -156,10 +262,28 @@ internal sealed class RunGraphNodeType : ObjectType<RunGraphNode>
             .Description(
                 "Where the node stands in this run. A PARALLEL step records nothing itself: it is "
                     + "FAILED when any branch failed, CANCELLED when one was stopped, IN_PROGRESS "
-                    + "while any branch is still going, and COMPLETED once every branch has finished. "
-                    + "A CHECKPOINT is COMPLETED once the run stored it. In a resumed run, a node "
-                    + "before the point it resumed at is RESTORED: the run skipped it."
+                    + "while any branch is still going, down the tracks its routing steps took, "
+                    + "and COMPLETED once every branch has finished. A CHECKPOINT is COMPLETED once "
+                    + "the run stored it. In a resumed run, a node before the point it resumed at "
+                    + "is RESTORED: the run skipped it. Once the run has ended, a step whose end "
+                    + "was never recorded (the host stopped mid-junction, or the end event was "
+                    + "dropped) is INTERRUPTED, never IN_PROGRESS."
             );
+        descriptor
+            .Field(n => n.ParentId)
+            .Description(
+                "The id of the routing or PARALLEL step whose track this node sits on, or null "
+                    + "at the chain's top level."
+            );
+        descriptor
+            .Field(n => n.Track)
+            .Description(
+                "The name of the track or branch this node sits on, or null at the chain's top "
+                    + "level."
+            );
+        descriptor
+            .Field(n => n.Depth)
+            .Description("How many tracks deep the node sits: 0 at the chain's top level.");
         descriptor
             .Field(n => n.CanResume)
             .Description(

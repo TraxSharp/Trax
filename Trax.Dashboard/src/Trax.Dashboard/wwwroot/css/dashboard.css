@@ -479,6 +479,12 @@
     border: 2px solid var(--rz-success, #4caf50);
 }
 
+/* A step that started and never recorded an end in a run that has ended: not running, not done. */
+.cs-rg--interrupted {
+    background-color: transparent;
+    border: 2px dashed var(--rz-warning, #F9A825);
+}
+
 .cs-rg-kind,
 .cs-rg-state-label,
 .cs-rg-fallback {

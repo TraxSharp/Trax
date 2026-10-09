@@ -194,6 +194,44 @@ public class RunGraphParallelTests
     }
 
     [Test]
+    public void ABranchEndingInARoute_HoldsTheStepOpen_UntilTheTrackItTookHasRun()
+    {
+        // Every top-level node of both branches is done, but the route took Slow and Slow's
+        // junction has not run yet.
+        var run = Match(
+            Step(0, "Fetch#0"),
+            Step(1, CoCitation),
+            Step(2, Citations),
+            Step(3, Decide, JunctionRunKind.Choice, answer: "Slow"),
+            Step(4, Switch, JunctionRunKind.Route, answer: "Slow"),
+            Step(5, NestedA),
+            Step(6, NestedB)
+        );
+
+        var all = Flatten(run.Nodes);
+        all[Switch].State.Should().Be(RunNodeState.Completed);
+        all[SlowShip].State.Should().Be(RunNodeState.NotReached);
+        all[FastShip].State.Should().Be(RunNodeState.Skipped);
+        all[Parallel]
+            .State.Should()
+            .Be(RunNodeState.InProgress, "the track the route took has a node still to reach");
+
+        Match(
+            Step(0, "Fetch#0"),
+            Step(1, CoCitation),
+            Step(2, Citations),
+            Step(3, Decide, JunctionRunKind.Choice, answer: "Slow"),
+            Step(4, Switch, JunctionRunKind.Route, answer: "Slow"),
+            Step(5, NestedA),
+            Step(6, NestedB),
+            Step(7, SlowShip)
+        )
+            .Nodes[1]
+            .State.Should()
+            .Be(RunNodeState.Completed, "the track not taken holds nothing open");
+    }
+
+    [Test]
     public void AStepNoBranchHasStarted_IsNotReached_AndNoBranchIsTaken()
     {
         var run = Match(Step(0, "Fetch#0"));

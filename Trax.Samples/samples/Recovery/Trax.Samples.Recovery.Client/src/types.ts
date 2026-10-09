@@ -34,7 +34,9 @@ export type NodeState =
   | "NOT_RECORDED"
   | "WITHHELD"
   /** In a resumed run, a step before the point it resumed at: skipped, its result restored from the checkpoint. */
-  | "RESTORED";
+  | "RESTORED"
+  /** Started and never recorded an end, in a run that has ended: the host stopped mid-step, or its end event was lost. */
+  | "INTERRUPTED";
 
 /** One declared node of a run graph, with where the run stands there. */
 export interface GraphNode {
@@ -55,8 +57,7 @@ export interface GraphNode {
 export interface GraphTrack {
   name: string;
   taken: boolean;
-  /** Missing below the depth the page reads (see RUN_GRAPH). */
-  nodes?: GraphNode[];
+  nodes: GraphNode[];
 }
 
 /** operations.runGraph: the train's declared chain with the run's steps laid on it. */
@@ -64,6 +65,34 @@ export interface RunGraph {
   hasGraph: boolean;
   nodes: GraphNode[];
 }
+
+/**
+ * One entry of operations.runGraph's allNodes: a node without its tracks' nodes, and where it sits. The page reads
+ * the flat list because a query cannot follow nested tracks past the server's field-cycle limit.
+ */
+export interface FlatGraphNode extends Omit<GraphNode, "tracks"> {
+  /** The routing or Parallel step whose track the node sits on; null at the chain's top level. */
+  parentId: string | null;
+  /** The name of that track or branch; null at the chain's top level. */
+  track: string | null;
+  tracks: Omit<GraphTrack, "nodes">[];
+}
+
+/** Rebuilds the tree from allNodes, whose order is depth first with each track's nodes in declared order. */
+export const treeOf = (flat: FlatGraphNode[]): GraphNode[] => {
+  const under = new Map<string, FlatGraphNode[]>();
+  const keyOf = (parentId: string | null, track: string | null) => `${parentId ?? ""}\u0000${track ?? ""}`;
+  for (const node of flat) {
+    const key = keyOf(node.parentId, node.track);
+    under.set(key, [...(under.get(key) ?? []), node]);
+  }
+  const build = (parentId: string | null, track: string | null): GraphNode[] =>
+    (under.get(keyOf(parentId, track)) ?? []).map(({ parentId: _parent, track: _track, tracks, ...node }) => ({
+      ...node,
+      tracks: tracks.map((t) => ({ ...t, nodes: build(node.id, t.name) })),
+    }));
+  return build(null, null);
+};
 
 export interface JournalEntry {
   questionKey: string;

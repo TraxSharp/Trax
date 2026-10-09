@@ -663,7 +663,8 @@ export type RunNodeState =
   | "SKIPPED"
   | "NOT_RECORDED"
   | "WITHHELD"
-  | "RESTORED";
+  | "RESTORED"
+  | "INTERRUPTED";
 
 // The steps a node recorded, as far as the run graph draws them.
 export type RunGraphStep = Pick<JunctionStep, "state" | "failureClass" | "failureException">;

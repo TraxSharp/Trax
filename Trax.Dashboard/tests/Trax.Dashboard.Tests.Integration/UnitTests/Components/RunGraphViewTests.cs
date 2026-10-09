@@ -448,6 +448,37 @@ public class RunGraphViewTests
         );
     }
 
+    [Test]
+    public async Task A_step_whose_end_was_never_recorded_in_an_ended_run_shows_as_interrupted()
+    {
+        // The run failed; Ship's end event was dropped, so its row still says in progress.
+        _graphs.With(Train, Graph);
+        var runId = await SeedRunAsync(
+            Train,
+            Row(0, JunctionRunKind.Junction, "Fetch", "Fetch#0", JunctionRunState.Completed),
+            Row(1, JunctionRunKind.Route, "Lane", Switch, JunctionRunState.Completed, "Fast"),
+            Row(2, JunctionRunKind.Junction, "Ship", FastShip, JunctionRunState.InProgress)
+        );
+
+        var page = _ctx.RenderComponent<MetadataDetailPage>(p => p.Add(x => x.MetadataId, runId));
+        var api = await new OperationsQueries().GetRunGraph(runId, _data, _graphs, default);
+
+        api!.AllNodes.Single(n => n.Id == FastShip).State.Should().Be(RunNodeState.Interrupted);
+        page.WaitForAssertion(
+            () =>
+            {
+                var node = page.Find($"li[data-node-id='{FastShip}']");
+                node.GetAttribute("data-state").Should().Be(nameof(RunNodeState.Interrupted));
+                node.QuerySelector(".cs-rg-state-label")!.TextContent.Should().Be("interrupted");
+                node.QuerySelector(".cs-rg-dot")!
+                    .ClassList.Should()
+                    .Contain("cs-rg--interrupted")
+                    .And.NotContain("cs-jt--in-progress");
+            },
+            WaitTimeout
+        );
+    }
+
     private static IEnumerable<(string?, string?)> Flatten(IEnumerable<RunGraphNode> nodes) =>
         nodes.SelectMany(n =>
             new[] { ((string?)n.Id, (string?)n.State.ToString()) }.Concat(

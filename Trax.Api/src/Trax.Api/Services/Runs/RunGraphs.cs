@@ -110,9 +110,20 @@ public static class RunGraphs
             steps,
             more,
             checks,
-            Resumable(run.TrainState, run.InvokingMachine)
+            Resumable(run.TrainState, run.InvokingMachine),
+            Ended(run.TrainState)
         );
     }
+
+    /// <summary>
+    /// True when a run in <paramref name="state"/> has ended: it completed, failed or was
+    /// cancelled. A step of an ended run whose row still says in progress never recorded its end,
+    /// so <see cref="Match(long, string, ChainGraph, IReadOnlyList{JunctionStep}, bool, ResumeChecks, bool, bool)"/>
+    /// places it as <see cref="RunNodeState.Interrupted"/> rather than as still running.
+    /// </summary>
+    /// <param name="state">The run's state.</param>
+    public static bool Ended(TrainState state) =>
+        state is TrainState.Completed or TrainState.Failed or TrainState.Cancelled;
 
     /// <summary>
     /// True when a run in <paramref name="state"/> has resumes or checkpoints worth reading: it
@@ -200,7 +211,7 @@ public static class RunGraphs
         ChainGraph? graph,
         IReadOnlyList<JunctionStep> steps,
         bool moreSteps = false
-    ) => Match(metadataId, train, graph, steps, moreSteps, null, false);
+    ) => Match(metadataId, train, graph, steps, moreSteps, null, false, false);
 
     /// <summary>
     /// Matches a run's steps to its train's graph, and places what <paramref name="resumes"/>
@@ -218,6 +229,10 @@ public static class RunGraphs
     /// True when an operator may resume the run (<see cref="Resumable(TrainState, string)"/>); otherwise no node offers
     /// a resume, whatever the check says.
     /// </param>
+    /// <param name="ended">
+    /// True when the run has ended (<see cref="Ended(TrainState)"/>): a step still in progress then
+    /// never recorded its end, and its node is <see cref="RunNodeState.Interrupted"/>.
+    /// </param>
     public static RunGraph Match(
         long metadataId,
         string train,
@@ -225,7 +240,8 @@ public static class RunGraphs
         IReadOnlyList<JunctionStep> steps,
         bool moreSteps,
         ResumeChecks? resumes,
-        bool resumable
+        bool resumable,
+        bool ended
     )
     {
         ArgumentNullException.ThrowIfNull(train);
@@ -258,7 +274,17 @@ public static class RunGraphs
             train,
             true,
             graph.Hash,
-            Overlay(graph.Nodes, byNode, new Walk { Resume = resume }, skipped: false),
+            Place(
+                Overlay(
+                    graph.Nodes,
+                    byNode,
+                    new Walk { Resume = resume, Ended = ended },
+                    skipped: false
+                ),
+                null,
+                null,
+                0
+            ),
             unmatched,
             moreSteps
         )
@@ -301,7 +327,7 @@ public static class RunGraphs
         // A checkpoint records no step of its own: the row it stored says the run reached it,
         // unless a withheld route came before it, which the walk keeps withholding.
         var state =
-            steps.Count > 0 ? StateOf(steps)
+            steps.Count > 0 ? StateOf(steps, walk.Ended)
             : skipped ? RunNodeState.Skipped
             : walk.Resume.Restored(node.Id) ? RunNodeState.Restored
             : walk.Withheld ? RunNodeState.Withheld
@@ -389,14 +415,24 @@ public static class RunGraphs
         var branches = new List<(ChainGraphTrack Branch, List<RunGraphNode> Nodes)>();
         foreach (var branch in node.Tracks)
         {
-            var path = new Walk { Withheld = withheldBefore, Resume = walk.Resume };
+            var path = new Walk
+            {
+                Withheld = withheldBefore,
+                Resume = walk.Resume,
+                Ended = walk.Ended,
+            };
             branches.Add((branch, Overlay(branch.Nodes, byNode, path, skipped)));
             walk.Withheld |= path.Withheld;
         }
 
         var state = skipped
             ? RunNodeState.Skipped
-            : ParallelStateOf(steps, branches.Select(b => b.Nodes).ToList(), withheldBefore);
+            : ParallelStateOf(
+                steps,
+                branches.Select(b => b.Nodes).ToList(),
+                withheldBefore,
+                walk.Ended
+            );
 
         // A resumed run that skipped the whole step ran none of its branches.
         if (state == RunNodeState.NotReached && walk.Resume.Restored(node.Id))
@@ -436,17 +472,19 @@ public static class RunGraphs
     // Where a Parallel step stands, from its branches: failed when any branch failed, cancelled
     // when one was (a sibling's failure or the run's cancel stopped it), running while any node is
     // running or any branch has a node still to reach, completed once every branch has, and not
-    // reached when no branch recorded anything.
+    // reached when no branch recorded anything. Once the run has ended nothing is still running,
+    // so a step that would be is interrupted.
     private static RunNodeState ParallelStateOf(
         IReadOnlyList<JunctionStep> steps,
         IReadOnlyList<List<RunGraphNode>> branches,
-        bool withheldBefore
+        bool withheldBefore,
+        bool ended
     )
     {
         var states = branches
             .SelectMany(Descendants)
             .Select(n => n.State)
-            .Concat(steps.Count > 0 ? [StateOf(steps)] : [])
+            .Concat(steps.Count > 0 ? [StateOf(steps, ended)] : [])
             .ToList();
 
         if (!states.Any(Started))
@@ -456,16 +494,30 @@ public static class RunGraphs
             return RunNodeState.Failed;
         if (states.Contains(RunNodeState.Cancelled))
             return RunNodeState.Cancelled;
+        if (states.Contains(RunNodeState.Interrupted))
+            return RunNodeState.Interrupted;
         if (states.Contains(RunNodeState.InProgress))
             return RunNodeState.InProgress;
 
-        // A branch is done when none of its own nodes is still to reach. A node on a track it did
-        // not take is skipped, one that records nothing says so, and one past a withheld route
-        // cannot be told, so none of them holds the step open.
-        return branches.All(b => b.All(n => n.State != RunNodeState.NotReached))
-            ? RunNodeState.Completed
+        // A branch is done when no node on it is still to reach, at any depth along the tracks
+        // its routing steps took. A node on a track not taken is skipped, one that records nothing
+        // says so, and one past a withheld route cannot be told, so none of them holds the step
+        // open.
+        return !branches.Any(StillToReach) ? RunNodeState.Completed
+            : ended ? RunNodeState.Interrupted
             : RunNodeState.InProgress;
     }
+
+    // True when a node the run will reach has not been: on the given nodes, on every branch of a
+    // Parallel step among them, and on the track each routing step among them took. A track no
+    // route took holds nothing open, so neither does a route whose track cannot be told.
+    private static bool StillToReach(IEnumerable<RunGraphNode> nodes) =>
+        nodes.Any(n =>
+            n.State == RunNodeState.NotReached
+            || n.Tracks.Any(t =>
+                (n.Kind == ChainStepKind.Parallel || t.Taken) && StillToReach(t.Nodes)
+            )
+        );
 
     // A state only a recorded step gives a node.
     private static bool Started(RunNodeState state) =>
@@ -473,10 +525,38 @@ public static class RunGraphs
             is RunNodeState.InProgress
                 or RunNodeState.Completed
                 or RunNodeState.Failed
-                or RunNodeState.Cancelled;
+                or RunNodeState.Cancelled
+                or RunNodeState.Interrupted;
 
     private static IEnumerable<RunGraphNode> Descendants(IEnumerable<RunGraphNode> nodes) =>
         nodes.SelectMany(n => n.Tracks.SelectMany(t => Descendants(t.Nodes)).Prepend(n));
+
+    // Says where each node sits: the step whose track it is on, that track's name, and how deep,
+    // so a client reading RunGraph.AllNodes can rebuild the tree.
+    private static List<RunGraphNode> Place(
+        IReadOnlyList<RunGraphNode> nodes,
+        string? parentId,
+        string? track,
+        int depth
+    ) =>
+        nodes
+            .Select(n =>
+                n with
+                {
+                    ParentId = parentId,
+                    Track = track,
+                    Depth = depth,
+                    Tracks = n
+                        .Tracks.Select(t =>
+                            t with
+                            {
+                                Nodes = Place(t.Nodes, n.Id, t.Name, depth + 1),
+                            }
+                        )
+                        .ToList(),
+                }
+            )
+            .ToList();
 
     /// <summary>What the walk over the graph, in declared order, has passed so far.</summary>
     private sealed class Walk
@@ -486,6 +566,11 @@ public static class RunGraphs
 
         /// <summary>Where the run can resume and what it restored, the same for every path.</summary>
         public ResumeView Resume { get; init; } = ResumeView.None;
+
+        /// <summary>
+        /// True when the run has ended, so a step still in progress never recorded its end.
+        /// </summary>
+        public bool Ended { get; init; }
     }
 
     /// <summary>
@@ -533,11 +618,14 @@ public static class RunGraphs
     }
 
     // The worst state any of the node's steps reached, should a node have more than one: it fails
-    // if any of them did.
-    private static RunNodeState StateOf(IReadOnlyList<JunctionStep> steps) =>
+    // if any of them did. A step still in progress in a run that has ended never recorded its end
+    // (JunctionRunQueries.ForRun): it is interrupted, not running.
+    private static RunNodeState StateOf(IReadOnlyList<JunctionStep> steps, bool ended) =>
         steps.Any(s => s.State == JunctionRunState.Failed) ? RunNodeState.Failed
         : steps.Any(s => s.State == JunctionRunState.Cancelled) ? RunNodeState.Cancelled
-        : steps.Any(s => s.State == JunctionRunState.InProgress) ? RunNodeState.InProgress
+        : steps.Any(s => s.State == JunctionRunState.InProgress)
+            ? ended ? RunNodeState.Interrupted
+                : RunNodeState.InProgress
         : RunNodeState.Completed;
 
     // The route's recorded answer names the track. When it is withheld, the one track holding

@@ -899,7 +899,13 @@ A `PARALLEL` step's `tracks` are its branches, one per `Branch` in declared orde
 inside a branch has the branch in its id, as in `Parallel#0/cocitation/ScoreCoCitation#0`, and a
 `Parallel` or routing step inside a branch nests the same way.
 
+`allNodes` lists every step of the graph at any depth in one list, each with its `parentId`,
+`track` and `depth`, and its tracks' `name`, `description` and `isFallback` without their steps, as
+[`runGraph`'s `allNodes`](#rungraph) does: read it when the chain may nest deeper than a query can
+follow nested `tracks { nodes }` fields.
+
 The graph names the train's types, so it answers to the operations gate and nothing outside it.
+
 
 ---
 
@@ -938,6 +944,30 @@ query {
 }
 ```
 
+**Reading a graph at any depth.** `nodes` and each track's `nodes` nest, so a query that follows
+them repeats `tracks { nodes { ... } }` once per level, and the server refuses a query that repeats
+the same fields past a few levels (HotChocolate's field-cycle limit). A chain can nest `Parallel`
+and routing steps deeper than that. `allNodes` lists every node of the graph at any depth in one
+list instead: depth first, each node before the nodes on its tracks, and each track's nodes in
+declared order. Each node carries `parentId` (the routing or `Parallel` step whose track it sits on,
+null at the top level), `track` (that track's or branch's name) and `depth` (0 at the top level),
+so a client rebuilds the tree by grouping the list on `parentId` and `track`, in list order. Select
+only a node's tracks' own fields there (`name`, `taken`), not their `nodes`:
+
+```graphql
+query {
+  operations {
+    runGraph(metadataId: 100) {
+      hasGraph
+      allNodes {
+        id kind state parentId track depth
+        tracks { name taken }
+      }
+    }
+  }
+}
+```
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `metadataId` | `Long!` | none | The execution's id. 0 or less is refused with `TRAX_INVALID_ARGUMENT` |
@@ -947,6 +977,7 @@ query {
 | State | Meaning |
 |-------|---------|
 | `COMPLETED`, `FAILED`, `CANCELLED`, `IN_PROGRESS` | From the steps recorded for it, the worst of them |
+| `INTERRUPTED` | A step recorded for it started and never recorded its end, and the run has ended: the host stopped mid-junction, or the step's end event was dropped |
 | `SKIPPED` | It sits on a track the run did not take |
 | `NOT_REACHED` | Nothing was recorded for it |
 | `NOT_RECORDED` | An `Extract`, `Seed` or `Resolve`, which records nothing when it runs, or a `CHECKPOINT` the run did not store |
@@ -955,6 +986,12 @@ query {
 
 A `CHECKPOINT` node records no step of its own: it is `COMPLETED` once the run stored it, unless a
 withheld route came before it.
+
+A junction whose end event was dropped keeps the `IN_PROGRESS` row its start wrote (see
+[`junctionRuns`](#junctionruns)). The graph reads each step with the run's own state, so once the
+execution has completed, failed or been cancelled, such a node is `INTERRUPTED` rather than
+`IN_PROGRESS`: nothing is still running in a run that has ended. While the run runs, it stays
+`IN_PROGRESS`.
 
 `trackTaken` is the route's recorded answer, or the one track holding recorded steps when the
 answer is missing.
@@ -965,7 +1002,10 @@ once the step has started, and `trackTaken` is always null. The step records not
 its `state` is read from its branches: `FAILED` when any branch failed, `CANCELLED` when one was
 stopped (a sibling's failure cancels the others, as does cancelling the run), `IN_PROGRESS` while
 any branch has a step running or still to reach, `COMPLETED` once every branch has finished, and
-`NOT_REACHED` when no branch has started. A route whose answer is withheld inside one branch
+`NOT_REACHED` when no branch has started. A branch has finished only when every node on it has, at
+any depth along the tracks its routing steps took: a branch that ends in a routing step holds the
+`Parallel` step open until the track the route took has run. Once the run has ended, a step that
+would still be `IN_PROGRESS` is `INTERRUPTED`. A route whose answer is withheld inside one branch
 withholds that branch's later nodes and every node after the join, but not the other branches,
 which ran on their own. The graph is the chain as the host declares it now, so a step recorded before
 node ids were, after a withheld route, or for a node the chain no longer declares, is listed in

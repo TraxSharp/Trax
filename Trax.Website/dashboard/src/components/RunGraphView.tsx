@@ -8,6 +8,8 @@ const NODE_DOT: Partial<Record<RunNodeState, string>> = {
   FAILED: "bg-danger",
   CANCELLED: "bg-warn",
   RESTORED: "bg-accent",
+  // Started and never recorded an end in a run that has ended: neither running nor done.
+  INTERRUPTED: "border border-dashed border-warn",
 };
 
 const STEP_DOT: Record<JunctionRunState, string> = {
@@ -27,6 +29,7 @@ const STATE_LABEL: Record<RunNodeState, string> = {
   NOT_RECORDED: "not recorded",
   WITHHELD: "withheld",
   RESTORED: "restored",
+  INTERRUPTED: "interrupted",
 };
 
 function kindLabel(kind: ChainStepKind): string {

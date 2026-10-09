@@ -44,6 +44,32 @@ public sealed record RunGraph(
     /// refuse the run as a whole, for its saved input or a resume already queued, with the reason.
     /// </summary>
     public bool CanResume { get; init; }
+
+    /// <summary>
+    /// Every node of <see cref="Nodes"/> and of their tracks, at any depth, in one list: depth
+    /// first, each node before the nodes on its tracks, and each track's nodes in declared order.
+    /// A node's <see cref="RunGraphNode.ParentId"/> and <see cref="RunGraphNode.Track"/> say where
+    /// it sits, so a client can rebuild the tree from this list without asking for nested tracks,
+    /// whose depth a GraphQL query cannot follow past the server's field-cycle limit.
+    /// </summary>
+    public IReadOnlyList<RunGraphNode> AllNodes => Flatten(Nodes);
+
+    private static List<RunGraphNode> Flatten(IReadOnlyList<RunGraphNode> nodes)
+    {
+        var all = new List<RunGraphNode>();
+        Walk(nodes);
+        return all;
+
+        void Walk(IReadOnlyList<RunGraphNode> level)
+        {
+            foreach (var node in level)
+            {
+                all.Add(node);
+                foreach (var track in node.Tracks)
+                    Walk(track.Nodes);
+            }
+        }
+    }
 }
 
 /// <summary>One declared node of a <see cref="RunGraph"/>, with what the run did there.</summary>
@@ -69,7 +95,9 @@ public sealed record RunGraph(
 /// A <c>Parallel</c> step records no step of its own, so its <paramref name="State"/> is read from
 /// its branches: failed when any branch failed, cancelled when one was stopped (by a sibling's
 /// failure or by the run's cancel), in progress while any branch has a node running or still to
-/// reach, completed once every branch has finished, and not reached when none has started.
+/// reach, at any depth on the tracks its routing steps took, completed once every branch has
+/// finished, and not reached when none has started. Once the run has ended, a step that would
+/// still be in progress is interrupted.
 /// </remarks>
 public sealed record RunGraphNode(
     string Id,
@@ -99,6 +127,21 @@ public sealed record RunGraphNode(
     /// that it exists: what it holds is never on an operator surface.
     /// </summary>
     public bool Checkpointed { get; init; }
+
+    /// <summary>
+    /// The id of the routing or <c>Parallel</c> step whose track this node sits on, or null for a
+    /// node of the chain's top level.
+    /// </summary>
+    public string? ParentId { get; init; }
+
+    /// <summary>
+    /// The name of the track, or the <c>Parallel</c> branch, this node sits on, or null for a
+    /// node of the chain's top level.
+    /// </summary>
+    public string? Track { get; init; }
+
+    /// <summary>How many tracks deep the node sits: 0 at the chain's top level.</summary>
+    public int Depth { get; init; }
 }
 
 /// <summary>
@@ -163,4 +206,11 @@ public enum RunNodeState
     /// produced was restored from it instead.
     /// </summary>
     Restored,
+
+    /// <summary>
+    /// Its junction started and never recorded an end, and the run has ended: the host stopped
+    /// mid-junction, or the step's end event was dropped. The step's row stays in progress, so the
+    /// node is read with the run's state rather than shown as still running.
+    /// </summary>
+    Interrupted,
 }

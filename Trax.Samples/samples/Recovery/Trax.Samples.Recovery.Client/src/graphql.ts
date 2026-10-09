@@ -176,30 +176,28 @@ export const WORK_QUEUE_ENTRY = gql`
 `;
 
 // The run drawn on its train's declared chain: every node, its state, each routing step's tracks
-// and each Parallel step's branches. Three levels of nodes, as deep as the sample's trains go (the gate
-// inside the co-citation branch) and as deep as the server's cycle-depth limit allows.
-const NODE = `id kind junction state replayed trackTaken canResume checkpointed`;
+// and each Parallel step's branches. Read as allNodes, one flat list at any depth, which treeOf
+// rebuilds from each node's parentId and track: a query that followed nested tracks could go only
+// as deep as the server's field-cycle limit allows.
 export const RUN_GRAPH = gql`
   query RunGraph($metadataId: Long!) {
     operations {
       runGraph(metadataId: $metadataId) {
         hasGraph
-        nodes {
-          ${NODE}
+        allNodes {
+          id
+          kind
+          junction
+          state
+          replayed
+          trackTaken
+          canResume
+          checkpointed
+          parentId
+          track
           tracks {
             name
             taken
-            nodes {
-              ${NODE}
-              tracks {
-                name
-                taken
-                nodes {
-                  ${NODE}
-                  tracks { name taken }
-                }
-              }
-            }
           }
         }
       }

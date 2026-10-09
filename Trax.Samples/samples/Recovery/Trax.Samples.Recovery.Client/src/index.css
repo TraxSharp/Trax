@@ -258,6 +258,7 @@ code { font-family: var(--mono); font-size: 0.92em; color: var(--muted); }
 .graph-node.in_progress { background: var(--running); border-color: transparent; color: var(--bg); animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 .graph-node.skipped, .graph-node.not_reached { border-style: dashed; color: var(--faint); }
 .graph-node.restored { border-style: dashed; border-color: color-mix(in srgb, var(--replay) 60%, transparent); color: var(--replay); }
+.graph-node.interrupted { border-style: dashed; border-color: var(--fail); color: var(--fail); }
 .graph-replayed { padding: 0 5px; border-radius: 999px; background: var(--replay); color: var(--bg); font-size: 10px; }
 .graph-split { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .graph-tracks { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); gap: 6px; list-style: none; }

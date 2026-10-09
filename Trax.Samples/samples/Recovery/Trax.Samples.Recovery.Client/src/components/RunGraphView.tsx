@@ -10,6 +10,7 @@ const STATE_TEXT: Record<NodeState, string> = {
   NOT_RECORDED: "not recorded",
   WITHHELD: "withheld",
   RESTORED: "restored from the checkpoint, not run",
+  INTERRUPTED: "started, and its end was never recorded",
 };
 
 // Steps that record nothing when they run, so the graph has nothing to say about them.
@@ -72,7 +73,7 @@ function Node({ node }: { node: GraphNode }) {
               {parallel ? `${track.name} branch` : track.name}
               {!parallel && track.taken ? " (taken)" : ""}
             </span>
-            <Nodes nodes={track.nodes ?? []} />
+            <Nodes nodes={track.nodes} />
           </li>
         ))}
       </ul>
