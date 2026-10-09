@@ -70,13 +70,15 @@ A branch that fails fails the step with a `BranchesFailedException`:
 | `Combine(classes)` | The class of several failures: `Permanent` if any is, `Transient` only if every one is. |
 
 The run's recorded failure carries the combined class, so the step is retried as a whole only
-when every failure could be. A run that is cancelled while a `Parallel` runs is recorded as
-cancelled, never as failed branches.
+when every failure could be. A run that is cancelled while a `Parallel` runs (its token, or its
+cancel flag, which raises a `CancellationRequestedException` in the branch that reads it) is
+recorded as cancelled, never as failed branches. Any other `OperationCanceledException` a branch
+raises on its own, such as an `HttpClient` timeout, is that branch's failure.
 
 ## What the startup check refuses
 
 - two branches producing the same type: the join would have two values for one type
-- a branch producing a type that was in Memory before the step
+- a branch producing a type that was in Memory before the step, a tuple element included
 - a branch reading a type only a sibling produces: branches cannot see each other's work
 - `ShortCircuit` inside a branch, which would race its siblings for the run's result
 - a call on the train itself inside a branch (`Chain<A>()` instead of `b.Chain<A>()`)

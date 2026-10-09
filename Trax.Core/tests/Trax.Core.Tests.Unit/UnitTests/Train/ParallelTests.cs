@@ -225,6 +225,41 @@ public class ParallelTests : TestSetup
     }
 
     [Test]
+    public async Task ABranchsOwnTimeout_IsABranchFailure_NotACancelledRun()
+    {
+        // A cancellation nothing outside the step asked for (an HttpClient timeout, a junction's
+        // own token source) fails its branch like any exception, beside the other failures.
+        var result = await new TimeoutTrain().RunEither("abc").WaitAsync(Hang);
+
+        var failure = result
+            .Swap()
+            .ValueUnsafe()
+            .Should()
+            .BeOfType<BranchesFailedException>(
+                $"only a cancellation the run was asked for cancels it ({Adr})"
+            )
+            .Subject;
+        failure
+            .Failures.Select(f => f.Branch)
+            .Should()
+            .BeEquivalentTo(["Parallel#0/times-out", "Parallel#0/fails"]);
+        failure.Failures.Should().Contain(f => f.Exception is TaskCanceledException);
+    }
+
+    [Test]
+    public async Task ACancellationRequestedInABranch_CancelsTheRun()
+    {
+        // What the persisted cancel flag (the dashboard, the API) raises at a junction boundary.
+        var run = new RequestedCancellationTrain().Run("abc");
+        var act = async () => await run.WaitAsync(Hang);
+
+        await act.Should()
+            .ThrowAsync<CancellationRequestedException>(
+                $"a cancellation asked for from outside the step cancels the run ({Adr})"
+            );
+    }
+
+    [Test]
     public void Combine_IsAJoin_WherePermanentWinsAndTransientNeedsEveryPart()
     {
         BranchesFailedException
@@ -806,6 +841,55 @@ public class ParallelTests : TestSetup
                     p.Branch("waits", b => b.Chain(new WaitsForCancellation(waiter)))
                         .Branch("fails", b => b.Chain(new FailsOnceEntered(waiter)))
                 )
+                .Resolve();
+    }
+
+    private sealed class TimesOut : Junction<string, Embedding>
+    {
+        public override async Task<Embedding> Run(string input)
+        {
+            using var own = new CancellationTokenSource();
+            await own.CancelAsync();
+            await UntilCancelled(own.Token);
+            return new Embedding(0);
+        }
+    }
+
+    private sealed class Fails : Junction<string, CoCitation>
+    {
+        public override Task<CoCitation> Run(string input) =>
+            throw new InvalidOperationException("fails");
+    }
+
+    private sealed class TimeoutTrain : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("times-out", b => b.Chain<TimesOut>())
+                        .Branch("fails", b => b.Chain<Fails>())
+                        .OnFailure(BranchFailurePolicy.WaitForAll)
+                )
+                .Chain<Combine>()
+                .Resolve();
+    }
+
+    private sealed class RequestsCancellation : Junction<string, Embedding>
+    {
+        public override Task<Embedding> Run(string input) =>
+            throw new CancellationRequestedException("cancel requested");
+    }
+
+    private sealed class RequestedCancellationTrain : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("asks", b => b.Chain<RequestsCancellation>())
+                        .Branch("fails", b => b.Chain<Fails>())
+                        .OnFailure(BranchFailurePolicy.WaitForAll)
+                )
+                .Chain<Combine>()
                 .Resolve();
     }
 

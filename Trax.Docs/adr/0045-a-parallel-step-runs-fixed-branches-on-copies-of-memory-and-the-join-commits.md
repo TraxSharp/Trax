@@ -47,7 +47,9 @@ Its class is the join of the branches' classes over `Transient < Conflict < Uncl
 retried as a whole only when every failure could be. Under `CancelSiblings` (the default) the other branches are
 cancelled when one fails, and a branch stopped that way is listed as cancelled by its sibling, not as a failure;
 `WaitForAll` lets every branch finish. A cancellation that came from outside the step (the caller, the dashboard's
-cancel flag, a timeout) cancels the run, never fails it.
+cancel flag, a timeout) cancels the run, never fails it. The cancel flag is read inside a branch, so it raises a
+`CancellationRequestedException` to say it was asked for; any other cancellation a branch raises on its own (an
+`HttpClient` timeout, a junction's own token source) is that branch's failure.
 
 **Execution.** Every branch starts on the thread pool at once, so a junction that blocks or does CPU work before its
 first `await` cannot hold up its siblings. There is no concurrency limit: the branches are fixed in the code, and each
@@ -89,3 +91,5 @@ branches together and one after another holds only while junctions follow that c
 ## Changelog
 
 - **2026-10-07**: Recorded.
+- **2026-10-08**: A cancellation a branch raises on its own fails the branch; only the run's token or its cancel flag
+  (`CancellationRequestedException`) cancels the run.

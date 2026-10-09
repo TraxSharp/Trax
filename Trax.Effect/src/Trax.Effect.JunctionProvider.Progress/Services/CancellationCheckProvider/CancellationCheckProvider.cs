@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Trax.Core.Exceptions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
@@ -30,7 +31,7 @@ public class CancellationCheckProvider(IDataContextProviderFactory dataContextFa
     /// <param name="effectJunction">The junction about to run.</param>
     /// <param name="serviceTrain">The train whose run is checked.</param>
     /// <param name="cancellationToken">Cancels the database read.</param>
-    /// <exception cref="OperationCanceledException">Cancellation was requested for the run.</exception>
+    /// <exception cref="CancellationRequestedException">Cancellation was requested for the run.</exception>
     public async Task BeforeJunctionExecution<TIn, TOut, TTrainIn, TTrainOut>(
         EffectJunction<TIn, TOut> effectJunction,
         ServiceTrain<TTrainIn, TTrainOut> serviceTrain,
@@ -53,7 +54,7 @@ public class CancellationCheckProvider(IDataContextProviderFactory dataContextFa
             // train's own token was not cancelled, and an OperationCanceledException nothing
             // asked for is recorded as a failure.
             serviceTrain.Metadata.CancellationRequested = true;
-            throw new OperationCanceledException("Train cancellation requested via dashboard.");
+            throw new CancellationRequestedException("Train cancellation requested via dashboard.");
         }
     }
 

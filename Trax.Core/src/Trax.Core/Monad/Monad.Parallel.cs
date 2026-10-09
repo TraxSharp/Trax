@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Decisions;
 using Trax.Core.Exceptions;
@@ -245,26 +246,34 @@ public partial class Monad<TInput, TReturn>
         BranchOutcome[] outcomes
     )
     {
-        // A cancelled run fails with the cancellation, never with its branches' failures.
-        CancellationToken.ThrowIfCancellationRequested();
-
         var failed = outcomes
             .Select((o, i) => (Outcome: o, Path: children[i].BranchPath!))
             .Where(f => f.Outcome is not null)
             .OrderBy(f => f.Outcome!.Order)
             .ToList();
 
+        // A cancelled run fails with the cancellation, never with its branches' failures.
+        if (CancellationToken.IsCancellationRequested)
+        {
+            if (
+                failed.FirstOrDefault(f => f.Outcome!.Failure is OperationCanceledException) is
+                { Outcome: { } cancelled }
+            )
+                ExceptionDispatchInfo.Capture(cancelled.Failure).Throw();
+
+            CancellationToken.ThrowIfCancellationRequested();
+        }
+
         if (failed.Count > 0)
         {
-            // A cancellation that came before any sibling was cancelled was asked for from
-            // outside the step, by the run's cancel flag or a timeout: the run was cancelled.
+            // A cancellation asked for from outside the step, by the run's persisted cancel flag,
+            // cancels the run. Any other cancellation a branch raised on its own (an HttpClient
+            // timeout, a junction's own token source) is that branch's failure.
             if (
-                failed.FirstOrDefault(f =>
-                    f.Outcome!.Failure is OperationCanceledException && !f.Outcome.SiblingsCancelled
-                ) is
+                failed.FirstOrDefault(f => f.Outcome!.Failure is CancellationRequestedException) is
                 { Outcome: { } asked }
             )
-                throw asked.Failure;
+                ExceptionDispatchInfo.Capture(asked.Failure).Throw();
 
             var failures = failed
                 .Where(f =>

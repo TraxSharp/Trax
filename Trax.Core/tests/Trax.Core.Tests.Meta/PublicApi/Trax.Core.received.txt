@@ -281,6 +281,10 @@ namespace Trax.Core.Exceptions
         public string Step { get; }
         public static Trax.Core.Exceptions.FailureClass Combine(System.Collections.Generic.IEnumerable<Trax.Core.Exceptions.FailureClass?> classes) { }
     }
+    public sealed class CancellationRequestedException : System.OperationCanceledException
+    {
+        public CancellationRequestedException(string message) { }
+    }
     public sealed class ChainDeclarationException : System.Exception
     {
         public ChainDeclarationException(string trainName, string member) { }
