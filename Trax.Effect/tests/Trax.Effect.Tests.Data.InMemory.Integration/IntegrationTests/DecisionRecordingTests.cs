@@ -551,6 +551,77 @@ public class DecisionRecordingTests
     }
 
     [Test]
+    public async Task A_replay_of_a_run_on_another_input_fails_rather_than_take_its_answers()
+    {
+        Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
+        var original = await RunOn(
+            _provider,
+            new Order("o-replay-input", 20m),
+            replayDecisionsOf: null,
+            storeInput: true
+        );
+        var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
+
+        var run = () =>
+            RunOn(
+                _provider,
+                new Order("o-replay-input", 99m),
+                replayDecisionsOf: original,
+                storeInput: true
+            );
+
+        await run.Should()
+            .ThrowAsync<Exception>()
+            .WithMessage($"*run {original} ran on a different input*");
+        decider.Requests.Should().BeEmpty("nothing is asked before the replay is refused");
+    }
+
+    [Test]
+    public async Task A_replay_of_a_run_on_the_same_stored_input_replays_its_answers()
+    {
+        Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
+        var original = await RunOn(
+            _provider,
+            new Order("o-replay-same", 20m),
+            replayDecisionsOf: null,
+            storeInput: true
+        );
+        var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
+
+        await RunOn(
+            _provider,
+            new Order("o-replay-same", 20m),
+            replayDecisionsOf: original,
+            storeInput: true
+        );
+
+        decider.Requests.Should().BeEmpty("the same input replays the run's answers");
+    }
+
+    [Test]
+    public async Task A_manifest_retry_naming_a_run_on_another_input_asks_afresh()
+    {
+        Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
+        var original = await RunOn(
+            _provider,
+            new Order("o-retry-input", 20m),
+            replayDecisionsOf: null,
+            storeInput: true
+        );
+        var decider = Decider.Use(new ScriptedDecider().Choose(Fulfilment.Standard));
+
+        await RunOn(
+            _provider,
+            new Order("o-retry-input", 99m),
+            replayDecisionsOf: original,
+            manifestId: 1,
+            storeInput: true
+        );
+
+        decider.Requests.Should().ContainSingle("the retry asks afresh, with a warning");
+    }
+
+    [Test]
     public async Task A_manifest_retry_whose_recorded_answer_is_unreadable_asks_afresh()
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
@@ -588,7 +659,8 @@ public class DecisionRecordingTests
         IServiceProvider provider,
         Order order,
         long? replayDecisionsOf,
-        long? manifestId = null
+        long? manifestId = null,
+        bool storeInput = false
     )
     {
         using var scope = provider.CreateScope();
@@ -605,6 +677,11 @@ public class DecisionRecordingTests
                 ManifestId = manifestId,
             }
         );
+
+        // As a host that saves train inputs stores it, so a replay can compare it.
+        if (storeInput)
+            metadata.Input = System.Text.Json.JsonSerializer.Serialize(order);
+
         await train.Run(order, metadata);
         return train.Metadata!.Id;
     }

@@ -136,19 +136,21 @@ public sealed record QueueTrainOptions
 
     /// <summary>
     /// The metadata id of an earlier run whose recorded decisions the new run replays, so it takes
-    /// the tracks that run took instead of asking its deciders again. Set when repeating a run.
+    /// the tracks that run took instead of asking its deciders again. Set when repeating a run, by
+    /// the operations service only, which checks the run it names first; an implementation reads it.
     /// </summary>
-    public long? ReplayDecisionsOf { get; init; }
+    public long? ReplayDecisionsOf { get; internal init; }
 
     /// <summary>
     /// The metadata id of a failed run the new run resumes, skipping to the step after its latest
     /// checkpoint (or to <see cref="ResumeAt"/>) instead of running every step again. See
-    /// Trax.Docs/adr/0047.
+    /// Trax.Docs/adr/0047. Set by the operations service only, which checks the run it names
+    /// first; the resumed run checks it again as it starts.
     /// </summary>
-    public long? ResumeFrom { get; init; }
+    public long? ResumeFrom { get; internal init; }
 
     /// <summary>The step the new run resumes at, or null for after the latest checkpoint.</summary>
-    public string? ResumeAt { get; init; }
+    public string? ResumeAt { get; internal init; }
 }
 
 /// <summary>A completed run from <see cref="ITrainExecutionService.RunAsync"/> or <c>IRunExecutor</c>.</summary>

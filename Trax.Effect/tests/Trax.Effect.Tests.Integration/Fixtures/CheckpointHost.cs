@@ -11,6 +11,8 @@ using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Data.Sqlite.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.Models.Manifest.DTOs;
+using Trax.Effect.Models.ManifestGroup;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Services.ServiceTrain;
@@ -104,12 +106,15 @@ public sealed class CheckpointHost : IAsyncDisposable
     /// <summary>
     /// Runs <typeparamref name="TTrain"/> on <paramref name="input"/> in a scope of its own, with a
     /// row that resumes <paramref name="resumeFrom"/> at <paramref name="resumeAt"/> when given. A
-    /// failure is recorded on the row, which is what a test reads, and is returned too.
+    /// failure is recorded on the row, which is what a test reads, and is returned too. A run with
+    /// <paramref name="manifestId"/> is a manifest's, whose resume is an automatic retry; one
+    /// without is an operator's.
     /// </summary>
     public async Task<(Metadata Run, Exception? Failure)> Run<TTrain>(
         string input,
         long? resumeFrom = null,
-        string? resumeAt = null
+        string? resumeAt = null,
+        long? manifestId = null
     )
         where TTrain : class, IServiceTrain<string, string>
     {
@@ -125,8 +130,12 @@ public sealed class CheckpointHost : IAsyncDisposable
                 Input = input,
                 ResumeFrom = resumeFrom,
                 ResumeAt = resumeAt,
+                ManifestId = manifestId,
             }
         );
+
+        // As a host that saves train inputs stores it, so a resume compares it with its source's.
+        metadata.Input = System.Text.Json.JsonSerializer.Serialize(input);
 
         Exception? failure = null;
         try
@@ -168,7 +177,32 @@ public sealed class CheckpointHost : IAsyncDisposable
         await context.SaveChanges(CancellationToken.None);
     }
 
-    /// <summary>Deletes the runs a test made, their checkpoints going with them.</summary>
+    /// <summary>
+    /// A manifest, in a group of its own, for runs that stand for a scheduler's retries. Deleted by
+    /// <see cref="Delete"/> with the runs.
+    /// </summary>
+    public async Task<long> Manifest()
+    {
+        await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
+        var group = new ManifestGroup { Name = $"{ManifestPrefix}{Guid.NewGuid():N}" };
+        await context.Track(group);
+        await context.SaveChanges(CancellationToken.None);
+
+        var manifest = Models.Manifest.Manifest.Create(
+            new CreateManifest { Name = typeof(CheckpointHost) }
+        );
+        manifest.ManifestGroupId = group.Id;
+        await context.Track(manifest);
+        await context.SaveChanges(CancellationToken.None);
+        _manifests.Add(manifest.Id);
+        return manifest.Id;
+    }
+
+    private const string ManifestPrefix = "checkpoint-host-";
+
+    private readonly List<long> _manifests = [];
+
+    /// <summary>Deletes the runs a test made, their checkpoints going with them, and its manifests.</summary>
     public async Task Delete(params long[] ids)
     {
         await using var context = await Factory.CreateDbContextAsync(CancellationToken.None);
@@ -179,6 +213,19 @@ public sealed class CheckpointHost : IAsyncDisposable
         context.Checkpoints.RemoveRange(checkpoints);
         context.Metadatas.RemoveRange(rows);
         await context.SaveChanges(CancellationToken.None);
+
+        if (_manifests.Count == 0)
+            return;
+
+        var manifests = await context.Manifests.Where(m => _manifests.Contains(m.Id)).ToListAsync();
+        var groups = manifests.Select(m => m.ManifestGroupId).ToList();
+        context.Manifests.RemoveRange(manifests);
+        await context.SaveChanges(CancellationToken.None);
+        context.ManifestGroups.RemoveRange(
+            await context.ManifestGroups.Where(g => groups.Contains(g.Id)).ToListAsync()
+        );
+        await context.SaveChanges(CancellationToken.None);
+        _manifests.Clear();
     }
 
     private IDataContextProviderFactory Factory =>

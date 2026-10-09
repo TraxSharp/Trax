@@ -234,9 +234,9 @@ namespace Trax.Mediator.Services.TrainExecution
     {
         public QueueTrainOptions() { }
         public int Priority { get; init; }
-        public long? ReplayDecisionsOf { get; init; }
-        public string? ResumeAt { get; init; }
-        public long? ResumeFrom { get; init; }
+        public long? ReplayDecisionsOf { get; }
+        public string? ResumeAt { get; }
+        public long? ResumeFrom { get; }
         public System.DateTime? ScheduledAt { get; init; }
     }
     public class QueueTrainResult : System.IEquatable<Trax.Mediator.Services.TrainExecution.QueueTrainResult>

@@ -55,9 +55,23 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
             if (run is null)
                 break;
 
+            // Everything but the state, which can be a megabyte a row.
             var rows = await context
                 .Checkpoints.AsNoTracking()
                 .Where(c => c.MetadataId == id)
+                .Select(c => new Trax.Effect.Models.Checkpoint.Checkpoint
+                {
+                    Id = c.Id,
+                    MetadataId = c.MetadataId,
+                    NodeId = c.NodeId,
+                    BranchPath = c.BranchPath,
+                    StateType = c.StateType,
+                    State = null!,
+                    Tracks = c.Tracks,
+                    ChainHash = c.ChainHash,
+                    StateFingerprint = c.StateFingerprint,
+                    CreatedAt = c.CreatedAt,
+                })
                 .ToListAsync(cancellationToken);
 
             lineage.Add(new ResumedRun(run.Id, run.ResumeFrom, run.ResumeAt, rows));
@@ -65,6 +79,41 @@ internal sealed class CheckpointRows(IDataContextProviderFactory contexts) : ICh
         }
 
         return lineage;
+    }
+
+    public async Task<IReadOnlyDictionary<long, string>> States(
+        IReadOnlyCollection<long> rowIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (rowIds.Count == 0)
+            return new Dictionary<long, string>();
+
+        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        var ids = rowIds.ToList();
+
+        return await context
+            .Checkpoints.AsNoTracking()
+            .Where(c => ids.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.State, cancellationToken);
+    }
+
+    public async Task<ResumeSource?> Source(long runId, CancellationToken cancellationToken)
+    {
+        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+
+        return await context
+            .Metadatas.AsNoTracking()
+            .Where(m => m.Id == runId)
+            .Select(m => new ResumeSource(
+                m.Name,
+                m.Input,
+                m.TrainState,
+                context.Metadatas.Any(r =>
+                    r.ResumeFrom == runId && r.TrainState == Trax.Effect.Enums.TrainState.Completed
+                )
+            ))
+            .SingleOrDefaultAsync(cancellationToken);
     }
 
     public async Task DeleteFor(long runId, CancellationToken cancellationToken)

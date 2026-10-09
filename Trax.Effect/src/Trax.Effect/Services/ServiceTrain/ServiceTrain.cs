@@ -427,7 +427,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             checkpoints =
                 Metadata.Id > 0 ? new CheckpointRun(Metadata.Id, () => Declared()?.Hash) : null;
             CheckpointRun.Current = checkpoints;
-            Resume = await BeginResume();
+            Resume = await BeginResume(input);
 
             // The same for the run's junction events, when the host publishes them
             // (AddJunctionEvents): its junctions and decisions report against this run only.
@@ -654,8 +654,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
             e =>
                 Logger?.LogWarning(
                     e,
-                    "The chain of train ({TrainName}) could not be read, so its runs take no "
-                        + "checkpoints and do not resume.",
+                    "The chain of train ({TrainName}) could not be read, so this run takes no "
+                        + "checkpoint and does not resume; the next run reads it again.",
                     TrainName
                 )
         );
@@ -689,11 +689,18 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 
     /// <summary>
     /// The resume this run starts with, when it names a run to resume: the checkpoints of that
-    /// run and those it resumed, checked against this chain. A resume that can no longer be
-    /// trusted (the chain or the state type changed, a step would read a value nothing restores)
-    /// is logged and the run runs from the top, as a retry always did.
+    /// run and those it resumed, checked against this chain, once the run it names is shown to be
+    /// one this run may carry on: a run of the same train, on the same input, that failed or was
+    /// cancelled, and that no resume has already completed.
     /// </summary>
-    private async Task<ResumePlan?> BeginResume()
+    /// <remarks>
+    /// A resume that cannot be honoured is refused. An operator's resume (one queued by
+    /// <c>resumeExecution</c>, which belongs to no manifest) fails the run with the refusal, as a
+    /// <see cref="ResumeRefusedException"/>, because the operator asked to carry on, not to start
+    /// again. A manifest's retry or a dead letter's requeue logs the refusal and runs from the
+    /// top, as a retry always did. See Trax.Docs/adr/0047.
+    /// </remarks>
+    private async Task<ResumePlan?> BeginResume(TIn input)
     {
         Metadata.AssertLoaded();
         ServiceProvider.AssertLoaded();
@@ -701,23 +708,65 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
         if (Metadata.ResumeFrom is not { } from)
             return null;
 
-        if (
-            ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
-            || Declared() is not { } declared
-        )
+        var operatorAsked = Metadata.ManifestId is null;
+
+        ResumePlan? Refuse(string code, string reason)
         {
+            if (operatorAsked)
+            {
+                var refusal = new ResumeRefusedException(
+                    code,
+                    $"Run {ExternalId} of train '{TrainName}' was queued to resume run {from}, but "
+                        + $"it cannot: {reason} It is failed rather than run from the top, because a "
+                        + "resume was asked for, not a fresh run."
+                );
+                refusal.Data["TrainExceptionData"] = new TrainExceptionData
+                {
+                    TrainName = Metadata.Name,
+                    TrainExternalId = ExternalId,
+                    Type = nameof(ResumeRefusedException),
+                    Junction = "Resume",
+                    Message = refusal.Message,
+                    FailureClass = FailureClass.Permanent,
+                };
+                throw refusal;
+            }
+
             Logger?.LogWarning(
-                "Run ({ExternalId}) of ({TrainName}) resumes run ({From}), but this host stores "
-                    + "no checkpoints, so it runs from the top.",
+                "Run ({ExternalId}) of ({TrainName}) cannot resume run ({From}) and runs from the "
+                    + "top: {Reason}",
                 ExternalId,
                 TrainName,
-                from
+                from,
+                reason
             );
             return null;
         }
 
+        if (
+            ServiceProvider.GetService(typeof(ICheckpointRows)) is not ICheckpointRows rows
+            || Declared() is not { } declared
+        )
+            return Refuse(
+                ResumeRefusals.NoCheckpoint,
+                "this host stores no checkpoints, or cannot read the train's chain."
+            );
+
+        if (
+            ResumeSources.Refusal(
+                from,
+                await rows.Source(from, CancellationToken),
+                Metadata.Name,
+                Metadata.Input,
+                input,
+                typeof(TIn)
+            ) is
+            { } refused
+        )
+            return Refuse(refused.Code, refused.Reason);
+
         var lineage = await rows.Lineage(from, CancellationToken);
-        var (verdict, plan) = ResumePlanner.Plan(
+        var (verdict, plan) = await ResumePlanner.Plan(
             declared.Chain,
             declared.Hash,
             typeof(TIn),
@@ -726,20 +775,12 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                 typeof(Microsoft.Extensions.DependencyInjection.IServiceProviderIsService)
             ) as Microsoft.Extensions.DependencyInjection.IServiceProviderIsService,
             lineage,
-            Metadata.ResumeAt
+            Metadata.ResumeAt,
+            rows.States,
+            CancellationToken
         );
 
-        if (plan is null)
-            Logger?.LogWarning(
-                "Run ({ExternalId}) of ({TrainName}) cannot resume run ({From}) and runs from the "
-                    + "top: {Reason}",
-                ExternalId,
-                TrainName,
-                from,
-                verdict.Reason
-            );
-
-        return plan;
+        return plan ?? Refuse(verdict.Code!, verdict.Reason!);
     }
 
     /// <summary>

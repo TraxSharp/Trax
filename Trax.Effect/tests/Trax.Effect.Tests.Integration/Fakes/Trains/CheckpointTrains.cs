@@ -15,26 +15,78 @@ namespace Trax.Effect.Tests.Integration.Fakes.Trains;
 /// plan, route to a source, fetch, checkpoint, score, checkpoint, summarise. <see cref="Probe"/>
 /// records which junctions ran and arms the failures.
 /// </summary>
+/// <remarks>
+/// Its state is static, shared by every test in the process, so a fixture that uses it must be
+/// <c>[NonParallelizable]</c>: two tests arming it at once would see each other's failures and
+/// steps. <see cref="Reset"/> and every setter refuse a fixture that is not.
+/// </remarks>
 public static class CheckpointProbe
 {
     private static readonly object Gate = new();
 
+    private static string? _failIn;
+    private static CountdownEvent? _bothBranches;
+    private static Func<int>? _saveCount;
+    private static DirtyMode _dirty;
+    private static string _padding = "";
+
     public static List<string> Ran { get; } = [];
 
     /// <summary>The junction that throws when it runs, or null.</summary>
-    public static string? FailIn { get; set; }
+    public static string? FailIn
+    {
+        get => _failIn;
+        set => _failIn = Guarded(value);
+    }
 
     /// <summary>How <see cref="MakeDirty"/> leaves the step's data context.</summary>
-    public static DirtyMode Dirty { get; set; }
+    public static DirtyMode Dirty
+    {
+        get => _dirty;
+        set => _dirty = Guarded(value);
+    }
 
     /// <summary>The pages <see cref="FetchFullTexts"/> reports; a large value makes a large state.</summary>
-    public static string Padding { get; set; } = "";
+    public static string Padding
+    {
+        get => _padding;
+        set => _padding = Guarded(value);
+    }
 
     /// <summary>Released once both branches of <see cref="TwoBranchTrain"/> reach their checkpoint.</summary>
-    public static CountdownEvent? BothBranches { get; set; }
+    public static CountdownEvent? BothBranches
+    {
+        get => _bothBranches;
+        set => _bothBranches = Guarded(value);
+    }
 
     /// <summary>Reads how many saves the effect providers have made, when a test counts them.</summary>
-    public static Func<int>? SaveCount { get; set; }
+    public static Func<int>? SaveCount
+    {
+        get => _saveCount;
+        set => _saveCount = Guarded(value);
+    }
+
+    /// <summary>
+    /// Fails fast when the running test's fixture could run beside another test, since the probe's
+    /// state is shared by all of them.
+    /// </summary>
+    private static T Guarded<T>(T value)
+    {
+        var name = TestContext.CurrentContext.Test.ClassName;
+        var fixture = name is null ? null : typeof(CheckpointProbe).Assembly.GetType(name);
+
+        if (
+            fixture is not null
+            && !fixture.IsDefined(typeof(NonParallelizableAttribute), inherit: true)
+        )
+            throw new InvalidOperationException(
+                $"{fixture.Name} uses {nameof(CheckpointProbe)}, whose state every test shares, "
+                    + "so it must be [NonParallelizable]."
+            );
+
+        return value;
+    }
 
     /// <summary>The save count each junction saw when it ran.</summary>
     public static Dictionary<string, int> SavesAt { get; } = [];
@@ -470,5 +522,33 @@ public sealed class TwoBranchTrain : ServiceTrain<string, string>, ITwoBranchTra
                     .Branch("b", b => b.Chain<StartBranchB>().Chain<MeetB>().Checkpoint<BranchB>())
             )
             .Chain<Join>()
+            .Resolve();
+}
+
+/// <summary>Reports the vault's route, which no checkpoint keeps because its answer is sensitive.</summary>
+public sealed class ReadVaultRoute : Junction<TrackTaken<Vault>, string>
+{
+    public override Task<string> Run(TrackTaken<Vault> input)
+    {
+        CheckpointProbe.Note(nameof(ReadVaultRoute));
+        return Task.FromResult(input.Track);
+    }
+}
+
+/// <summary>Routes on the sensitive vault, checkpoints, then reads the vault's route.</summary>
+public interface IReadsVaultRouteTrain : IServiceTrain<string, string>;
+
+public sealed class ReadsVaultRouteTrain : ServiceTrain<string, string>, IReadsVaultRouteTrain
+{
+    protected override Task<Either<Exception, string>> Junctions() =>
+        Chain<PlanResearch>()
+            .Chain<SearchWebFromPlan>()
+            .Switch<Findings, Vault>(s =>
+                s.When(Vault.Left, l => l.Chain<OpenVaultLeft>())
+                    .When(Vault.Right, r => r.Chain<OpenVaultRight>())
+            )
+            .Chain<FetchFullTexts>()
+            .Checkpoint<CheckedFindings>()
+            .Chain<ReadVaultRoute>()
             .Resolve();
 }

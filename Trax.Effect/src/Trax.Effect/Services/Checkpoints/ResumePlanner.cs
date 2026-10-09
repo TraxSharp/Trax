@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Monad;
 using Trax.Core.Utils;
+using Trax.Effect.Services.JunctionEvents;
 
 namespace Trax.Effect.Services.Checkpoints;
 
@@ -147,13 +148,13 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
         var lineage = await store.Lineage(runId, cancellationToken).ConfigureAwait(false);
 
         return ResumePlanner
-            .Plan(
+            .Check(
                 chain,
                 ChainGraph.From(chain, train, input, output).Hash,
                 input,
                 output,
                 services.GetService<IServiceProviderIsService>(),
-                lineage,
+                ResumePlanner.Chosen(chain, lineage),
                 resumeAt
             )
             .Verdict;
@@ -180,25 +181,35 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
                 []
             );
 
-        // One lineage read for every point.
+        // One lineage read for every point, without any row's state: a verdict needs only the
+        // rows' nodes, hashes and fingerprints.
         var lineage = await store.Lineage(runId, cancellationToken).ConfigureAwait(false);
         var hash = ChainGraph.From(chain, train, input, output).Hash;
         var container = services.GetService<IServiceProviderIsService>();
+        var chosen = ResumePlanner.Chosen(chain, lineage);
 
         ResumeVerdict At(string? point) =>
-            ResumePlanner.Plan(chain, hash, input, output, container, lineage, point).Verdict;
+            ResumePlanner.Check(chain, hash, input, output, container, chosen, point).Verdict;
+
+        var (restored, restoredTracks) = ResumePlanner.Resumed(
+            chain,
+            input,
+            output,
+            container,
+            lineage
+        );
 
         return new ResumeChecks(
             At(null),
             points
                 .Distinct(StringComparer.Ordinal)
                 .ToDictionary(p => p, p => At(p), StringComparer.Ordinal),
-            ResumePlanner.Chosen(chain, lineage).Keys.ToList(),
+            chosen.Keys.ToList(),
             lineage.Count > 0 ? lineage[0].Rows.Select(r => r.NodeId).Distinct().ToList() : [],
-            ResumePlanner.Restored(chain, input, output, container, lineage)
+            restored
         )
         {
-            RestoredTracks = ResumePlanner.RestoredTracks(chain, input, output, container, lineage),
+            RestoredTracks = restoredTracks,
         };
     }
 }
@@ -207,6 +218,10 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
 /// Builds a resume from a run's lineage: which checkpoints count, whether the chain allows the
 /// resume, whether each restored checkpoint still matches the code, and the states read back.
 /// </summary>
+/// <remarks>
+/// A verdict is decided from the rows' nodes, chain hashes and state fingerprints alone; a row's
+/// state is read, and read back once, only when a run is about to restore it.
+/// </remarks>
 internal static class ResumePlanner
 {
     internal static readonly ResumeVerdict NoRows = new(
@@ -218,7 +233,71 @@ internal static class ResumePlanner
     );
 
     /// <summary>
-    /// The verdict, and when it allows the resume, the plan a run acts on.
+    /// Whether the store withholds a route: a checkpoint keeps no route whose key is marked
+    /// sensitive, so a resume restores none.
+    /// </summary>
+    internal static bool Withheld(Type key) => SensitiveQuestions.IsSensitive(key);
+
+    /// <summary>
+    /// The verdict on a resume at <paramref name="resumeAt"/>, and when it allows it, the outcome
+    /// a plan is built from. Reads no state.
+    /// </summary>
+    /// <param name="chain">The train's declared chain.</param>
+    /// <param name="chainHash">The running chain's hash.</param>
+    /// <param name="input">The train's input type.</param>
+    /// <param name="output">The train's output type.</param>
+    /// <param name="container">Whether the container supplies a type, or null.</param>
+    /// <param name="chosen">The checkpoints the lineage holds, as <see cref="Chosen"/> picks them.</param>
+    /// <param name="resumeAt">The step to resume at, or null for after the latest checkpoint.</param>
+    public static (ResumeVerdict Verdict, ResumeOutcome? Outcome) Check(
+        ChainRecorder chain,
+        string chainHash,
+        Type input,
+        Type output,
+        IServiceProviderIsService? container,
+        IReadOnlyDictionary<string, Models.Checkpoint.Checkpoint> chosen,
+        string? resumeAt
+    )
+    {
+        var outcome = ChainVerification.CheckResume(
+            chain,
+            input,
+            output,
+            container is null ? null : container.IsService,
+            chosen.Keys.ToList(),
+            resumeAt,
+            Withheld
+        );
+
+        if (!outcome.CanResume)
+            return (Refused(outcome.RefusalCode!, outcome.Refusal!), null);
+
+        foreach (var (_, node) in Targets(outcome))
+        {
+            var row = chosen[node];
+
+            if (
+                ChainVerification.CheckStored(
+                    node,
+                    row.ChainHash,
+                    chainHash,
+                    row.StateFingerprint,
+                    outcome.StateTypes[node]
+                ) is
+                { } changed
+            )
+                return (Refused(changed.RefusalCode!, changed.Refusal!), null);
+        }
+
+        return (
+            new ResumeVerdict(true, null, null, outcome.Target, outcome.MainCheckpoint),
+            outcome
+        );
+    }
+
+    /// <summary>
+    /// The verdict, and when it allows the resume, the plan a run acts on: the states of the
+    /// checkpoints it restores, read with <paramref name="states"/> and read back once each.
     /// </summary>
     /// <param name="chain">The train's declared chain.</param>
     /// <param name="chainHash">The running chain's hash.</param>
@@ -227,61 +306,61 @@ internal static class ResumePlanner
     /// <param name="container">Whether the container supplies a type, or null.</param>
     /// <param name="lineage">The run to resume and those it resumed, nearest first.</param>
     /// <param name="resumeAt">The step to resume at, or null for after the latest checkpoint.</param>
-    public static (ResumeVerdict Verdict, ResumePlan? Plan) Plan(
+    /// <param name="states">Reads the stored states of the rows with the given ids.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    public static async Task<(ResumeVerdict Verdict, ResumePlan? Plan)> Plan(
         ChainRecorder chain,
         string chainHash,
         Type input,
         Type output,
         IServiceProviderIsService? container,
         IReadOnlyList<ResumedRun> lineage,
-        string? resumeAt
+        string? resumeAt,
+        Func<
+            IReadOnlyCollection<long>,
+            CancellationToken,
+            Task<IReadOnlyDictionary<long, string>>
+        > states,
+        CancellationToken cancellationToken
     )
     {
         var chosen = Chosen(chain, lineage);
-
-        var outcome = ChainVerification.CheckResume(
+        var (verdict, outcome) = Check(
             chain,
+            chainHash,
             input,
             output,
-            container is null ? null : container.IsService,
-            chosen.Keys.ToList(),
+            container,
+            chosen,
             resumeAt
         );
 
-        if (!outcome.CanResume)
-            return (Refused(outcome.RefusalCode!, outcome.Refusal!), null);
+        if (outcome is null)
+            return (verdict, null);
 
+        var targets = Targets(outcome);
+        var stored = await states(
+                targets.Select(t => chosen[t.Node].Id).Distinct().ToList(),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
         var restored = new Dictionary<string, RestoredCheckpoint>();
-        var targets = new List<(string Key, string Node)>();
-        if (outcome.MainCheckpoint is { } main)
-            targets.Add(("", main));
-        targets.AddRange(outcome.BranchCheckpoints.Select(b => (b.Key, b.Value)));
 
         foreach (var (key, node) in targets)
         {
             var row = chosen[node];
             var stateType = outcome.StateTypes[node];
-
-            if (
-                ChainVerification.CheckStored(
-                    node,
-                    row.ChainHash,
-                    chainHash,
-                    row.StateFingerprint,
-                    stateType
-                ) is
-                { } changed
-            )
-                return (Refused(changed.RefusalCode!, changed.Refusal!), null);
-
             object state;
             IReadOnlyList<object> tracks;
 
             try
             {
                 state =
-                    JsonSerializer.Deserialize(row.State, stateType)
-                    ?? throw new JsonException("the stored state is null");
+                    JsonSerializer.Deserialize(
+                        stored.GetValueOrDefault(row.Id)
+                            ?? throw new JsonException("the stored state is gone"),
+                        stateType
+                    ) ?? throw new JsonException("the stored state is null");
                 tracks = Tracks(row.Tracks, outcome.TrackTypes[node]);
             }
             catch (JsonException e)
@@ -299,10 +378,17 @@ internal static class ResumePlanner
             restored[key] = new RestoredCheckpoint(node, stateType, state, tracks);
         }
 
-        return (
-            new ResumeVerdict(true, null, null, outcome.Target, outcome.MainCheckpoint),
-            new ResumePlan(outcome.Target, outcome.Inclusive, restored)
-        );
+        return (verdict, new ResumePlan(outcome.Target, outcome.Inclusive, restored));
+    }
+
+    /// <summary>The checkpoints an outcome restores: the main chain's under the empty key, then each branch's.</summary>
+    private static List<(string Key, string Node)> Targets(ResumeOutcome outcome)
+    {
+        var targets = new List<(string Key, string Node)>();
+        if (outcome.MainCheckpoint is { } main)
+            targets.Add(("", main));
+        targets.AddRange(outcome.BranchCheckpoints.Select(b => (b.Key, b.Value)));
+        return targets;
     }
 
     /// <summary>
@@ -333,13 +419,21 @@ internal static class ResumePlanner
     }
 
     /// <summary>
-    /// The nodes the first run of <paramref name="lineage"/> skipped because it resumed: every
-    /// node before the point it resumed at, the point too when it is the checkpoint it restored,
-    /// and in a branch that resumed from its own checkpoint, the branch's nodes up to that
-    /// checkpoint. Planned as the run planned it when it started; empty for a run that did not
-    /// resume, or whose resume the running chain no longer allows.
+    /// What the first run of <paramref name="lineage"/> skipped because it resumed, from one plan
+    /// of its resume as it planned it when it started; both empty for a run that did not resume,
+    /// or whose resume the running chain no longer allows.
     /// </summary>
-    internal static IReadOnlyCollection<string> Restored(
+    /// <returns>
+    /// The nodes it skipped (every node before the point it resumed at, the point too when it is
+    /// the checkpoint it restored, and in a branch that resumed from its own checkpoint, the
+    /// branch's nodes up to that checkpoint), and the track each routing step among them took,
+    /// read from the routes the checkpoint it restored stored: a routing step's id names the key
+    /// it routes on (<c>Switch&lt;Source&gt;#0</c>), and each stored route names its key's type.
+    /// </returns>
+    internal static (
+        IReadOnlyCollection<string> Restored,
+        IReadOnlyDictionary<string, string> Tracks
+    ) Resumed(
         ChainRecorder chain,
         Type input,
         Type output,
@@ -347,20 +441,23 @@ internal static class ResumePlanner
         IReadOnlyList<ResumedRun> lineage
     )
     {
+        var tracks = new Dictionary<string, string>(StringComparer.Ordinal);
         if (lineage.Count < 2 || lineage[0].ResumeFrom is null)
-            return [];
+            return ([], tracks);
 
+        var chosen = Chosen(chain, lineage.Skip(1).ToList());
         var outcome = ChainVerification.CheckResume(
             chain,
             input,
             output,
             container is null ? null : container.IsService,
-            Chosen(chain, lineage.Skip(1).ToList()).Keys.ToList(),
-            lineage[0].ResumeAt
+            chosen.Keys.ToList(),
+            lineage[0].ResumeAt,
+            Withheld
         );
 
         if (!outcome.CanResume)
-            return [];
+            return ([], tracks);
 
         var order = Order(chain);
         var target = outcome.Target is { } t && order.TryGetValue(t, out var at) ? at : -1;
@@ -379,44 +476,10 @@ internal static class ResumePlanner
                 restored.Add(id);
         }
 
-        return restored;
-    }
+        if (outcome.MainCheckpoint is not { } main)
+            return (restored, tracks);
 
-    /// <summary>
-    /// The track each routing step before a resumed run's point took, read from the routes the
-    /// checkpoint it restored stored: a routing step's id names the key it routes on
-    /// (<c>Switch&lt;Source&gt;#0</c>), and each stored route names its key's type.
-    /// </summary>
-    internal static IReadOnlyDictionary<string, string> RestoredTracks(
-        ChainRecorder chain,
-        Type input,
-        Type output,
-        IServiceProviderIsService? container,
-        IReadOnlyList<ResumedRun> lineage
-    )
-    {
-        var tracks = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (lineage.Count < 2 || lineage[0].ResumeFrom is null)
-            return tracks;
-
-        var chosen = Chosen(chain, lineage.Skip(1).ToList());
-        var outcome = ChainVerification.CheckResume(
-            chain,
-            input,
-            output,
-            container is null ? null : container.IsService,
-            chosen.Keys.ToList(),
-            lineage[0].ResumeAt
-        );
-
-        if (!outcome.CanResume || outcome.MainCheckpoint is not { } main)
-            return tracks;
-
-        var restored = Restored(chain, input, output, container, lineage)
-            .ToHashSet(StringComparer.Ordinal);
-        var stored = Tracks(chosen[main].Tracks, outcome.TrackTypes[main]);
-
-        foreach (var taken in stored)
+        foreach (var taken in Tracks(chosen[main].Tracks, outcome.TrackTypes[main]))
         {
             var key = taken.GetType().GetGenericArguments()[0].ReadableName();
             var name = (string)taken.GetType().GetProperty("Track")!.GetValue(taken)!;
@@ -433,7 +496,7 @@ internal static class ResumePlanner
             }
         }
 
-        return tracks;
+        return (restored, tracks);
     }
 
     private static Dictionary<string, int> Order(ChainRecorder chain) =>

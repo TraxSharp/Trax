@@ -10,6 +10,7 @@ using Trax.Effect.Enums;
 using Trax.Effect.Exceptions;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.RecordedDecision;
+using Trax.Effect.Services.Checkpoints;
 using Trax.Effect.Services.Decisions;
 using Trax.Effect.Services.JunctionEvents;
 using Trax.Effect.Services.ServiceTrain;
@@ -503,7 +504,14 @@ public sealed class DecisionJournal(
                     metadata.Name,
                     metadata.ExternalId,
                     source,
-                    metadata.ManifestId is not null
+                    metadata.ManifestId is not null,
+                    stored =>
+                        RunInputs.Same(
+                            stored,
+                            metadata.Input,
+                            (object?)metadata.GetInputObject(),
+                            RunInputs.InputTypeOf(train)
+                        )
                 ),
                 cancellationToken
             );
@@ -552,12 +560,17 @@ public sealed class DecisionJournal(
     /// True for a run of a manifest, whose replay is a retry the scheduler queued: one that cannot be
     /// honoured asks afresh, with a warning, instead of failing the retry.
     /// </param>
+    /// <param name="SameInput">
+    /// Whether the run it names ran on this run's input, given that run's stored input; null when
+    /// the run already checked it as it began.
+    /// </param>
     private sealed record Replaying(
         long Id,
         string Name,
         string ExternalId,
         long Source,
-        bool Retry
+        bool Retry,
+        Func<string?, bool>? SameInput = null
     );
 
     /// <summary>
@@ -618,6 +631,7 @@ public sealed class DecisionJournal(
                         m.ReplayDecisionsOf,
                         m.DecisionsRecorded,
                         m.ReplayAbandoned,
+                        Input = id == source ? m.Input : null,
                     })
                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -635,6 +649,14 @@ public sealed class DecisionJournal(
                 if (link.Name != metadata.Name)
                 {
                     broken = $"run {id} is a run of train '{link.Name}', not of this train";
+                    break;
+                }
+
+                // Its answers were given for its own input; the same answers for another input
+                // would route a different request down tracks chosen for that one.
+                if (id == source && metadata.SameInput?.Invoke(link.Input) == false)
+                {
+                    broken = $"run {id} ran on a different input";
                     break;
                 }
 

@@ -12,9 +12,23 @@ internal interface ICheckpointRows
 
     /// <summary>
     /// The run <paramref name="runId"/> and every run it resumed, following <c>resume_from</c>
-    /// back, nearest first, each with the checkpoints it wrote.
+    /// back, nearest first, each with the checkpoints it wrote. The rows carry everything but
+    /// their state, which is null: a verdict needs none, and a run reads only the states it
+    /// restores, with <see cref="States"/>.
     /// </summary>
     Task<IReadOnlyList<ResumedRun>> Lineage(long runId, CancellationToken cancellationToken);
+
+    /// <summary>The stored state of each checkpoint row in <paramref name="rowIds"/> that still exists, by row id.</summary>
+    Task<IReadOnlyDictionary<long, string>> States(
+        IReadOnlyCollection<long> rowIds,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>
+    /// What a resume of <paramref name="runId"/> checks about the run itself before trusting its
+    /// checkpoints, or null when no such run exists.
+    /// </summary>
+    Task<ResumeSource?> Source(long runId, CancellationToken cancellationToken);
 
     /// <summary>Deletes the checkpoints of <paramref name="runId"/>, which completed.</summary>
     Task DeleteFor(long runId, CancellationToken cancellationToken);
@@ -36,6 +50,18 @@ internal sealed record ResumedRun(
     long? ResumeFrom,
     string? ResumeAt,
     IReadOnlyList<Models.Checkpoint.Checkpoint> Rows
+);
+
+/// <summary>The run a resume names, as the resumed run checks it before restoring anything.</summary>
+/// <param name="Name">Its train's name.</param>
+/// <param name="Input">Its stored input, or null.</param>
+/// <param name="State">How it ended, or that it has not.</param>
+/// <param name="ResumedToCompletion">True when a run that resumed it already completed.</param>
+internal sealed record ResumeSource(
+    string Name,
+    string? Input,
+    Enums.TrainState State,
+    bool ResumedToCompletion
 );
 
 /// <summary>How large a checkpoint's state may be.</summary>

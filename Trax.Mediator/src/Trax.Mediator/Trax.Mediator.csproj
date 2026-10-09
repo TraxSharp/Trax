@@ -9,6 +9,13 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Mediator.Tests.MemoryLeak.Integration" />
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.Postgres.Integration" />
+  </ItemGroup>
+
+  <!-- A run's links to another run (the decisions it replays, the run it resumes) are set only by the operations
+       service, which checks the run it names first, so QueueTrainOptions sets them internally. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler" />
   </ItemGroup>
 
   <ItemGroup>
