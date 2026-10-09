@@ -977,25 +977,37 @@ public sealed class DecisionJournal(
         CancellationToken cancellationToken
     )
     {
-        // Read here, on the routing step's flow.
-        var branchPath = BranchPaths.Current;
+        // Read here, on the routing step's flow. As DecisionRun.TryLatest does, a branch routes on
+        // its own asking or, before it asked, on that of the nearest chain enclosing it, such as a
+        // decision made before the fork; never a sibling's.
+        var enclosing = BranchPaths.Enclosing(BranchPaths.Current);
 
         try
         {
             using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-            return await context
+            var candidates = await context
                 .RecordedDecisions.AsNoTracking()
                 .Where(d =>
                     d.MetadataId == metadataId
-                    && d.BranchPath == branchPath
+                    && enclosing.Contains(d.BranchPath)
                     && d.QuestionKey == key
                     && d.Refused == null
                 )
-                .OrderByDescending(d => d.Occurrence)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.BranchPath,
+                    d.Occurrence,
+                })
+                .ToListAsync(cancellationToken);
+
+            return candidates
+                .OrderByDescending(d => d.BranchPath.Length)
+                .ThenByDescending(d => d.Occurrence)
                 .ThenByDescending(d => d.Id)
                 .Select(d => (long?)d.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault();
         }
         catch (Exception e)
             when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

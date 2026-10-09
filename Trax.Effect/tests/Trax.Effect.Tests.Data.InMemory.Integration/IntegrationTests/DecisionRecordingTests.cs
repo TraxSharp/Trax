@@ -1191,6 +1191,26 @@ public class DecisionRecordingTests
     }
 
     [Test]
+    public async Task A_branch_routing_on_a_decision_made_before_the_fork_after_the_flow_was_lost_records_its_track()
+    {
+        Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
+
+        var (train, output) = await Run<ILoseFlowThenForkAndRoute>(new Order("o-lost-fork", 20m));
+
+        output.Should().Be("held for review|packed");
+        var decision = (await Recorded(train.Metadata!.Id)).Should().ContainSingle().Subject;
+        decision.BranchPath.Should().BeEmpty("the question was asked before the fork");
+        decision
+            .Tracks()
+            .Should()
+            .Equal(
+                ["ManualCheck"],
+                "the branch's routing is added to the row of the decision it routes on, which "
+                    + "the branch inherited from the chain it was forked from"
+            );
+    }
+
+    [Test]
     public async Task A_requeue_that_loses_its_flow_still_replays_the_runs_decisions()
     {
         Decider.Use(new ScriptedDecider().Choose(Fulfilment.ManualCheck));
@@ -1484,6 +1504,7 @@ internal static class DecisionTrains
             .AddScopedTraxRoute<IMeetThenRoute, MeetThenRoute>()
             .AddScopedTraxRoute<ILoseFlowThenRoute, LoseFlowThenRoute>()
             .AddScopedTraxRoute<IMeetThenLoseFlow, MeetThenLoseFlow>()
+            .AddScopedTraxRoute<ILoseFlowThenForkAndRoute, LoseFlowThenForkAndRoute>()
             .AddScopedTraxRoute<IRunAPlainTrainOffFlow, RunAPlainTrainOffFlow>()
             .AddScopedTraxRoute<IReadThenRoute, ReadThenRoute>();
 }
@@ -1732,6 +1753,53 @@ public class LoseFlowThenRoute : ServiceTrain<Order, string>, ILoseFlowThenRoute
         built.SetResult();
         return chain;
     }
+}
+
+public interface ILoseFlowThenForkAndRoute : IServiceTrain<Order, string>;
+
+/// <summary>
+/// Builds its chain with its run's async flow suppressed, decides, then forks, and one branch
+/// routes on the decision made before the fork.
+/// </summary>
+public class LoseFlowThenForkAndRoute : ServiceTrain<Order, string>, ILoseFlowThenForkAndRoute
+{
+    protected override Task<Either<Exception, string>> Junctions()
+    {
+        var built = LoseTheFlow.Now();
+
+        var chain = Chain(new AfterTheChainIsBuilt(built.Task))
+            .Decide<Order>(q => q.Choice<Fulfilment>())
+            .Parallel(p =>
+                p.Branch(
+                        "routes",
+                        b =>
+                            b.Switch<Fulfilment>(tracks =>
+                                tracks
+                                    .When(Fulfilment.Standard, t => t.Chain<Ship>())
+                                    .When(Fulfilment.ManualCheck, t => t.Chain<HoldForReview>())
+                            )
+                    )
+                    .Branch("packs", b => b.Chain<PackOrder>())
+            )
+            .Chain<JoinRoutedAndPacked>()
+            .Resolve();
+
+        built.SetResult();
+        return chain;
+    }
+}
+
+public sealed record Packed(string Note);
+
+public class PackOrder : Junction<Order, Packed>
+{
+    public override Task<Packed> Run(Order input) => Task.FromResult(new Packed("packed"));
+}
+
+public class JoinRoutedAndPacked : Junction<(string, Packed), string>
+{
+    public override Task<string> Run((string, Packed) input) =>
+        Task.FromResult($"{input.Item1}|{input.Item2.Note}");
 }
 
 public interface IMeetThenLoseFlow : IServiceTrain<Order, string>;

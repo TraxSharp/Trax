@@ -38,6 +38,23 @@ internal static class BranchPaths
         );
 
     /// <summary>
+    /// Every path that <see cref="Encloses"/> <paramref name="path"/>: the run's own, each branch
+    /// it is inside, and itself, shortest first.
+    /// </summary>
+    public static List<string> Enclosing(string path)
+    {
+        var paths = new List<string> { Run };
+
+        for (var i = path.IndexOf('/'); i >= 0; i = path.IndexOf('/', i + 1))
+            paths.Add(path[..i]);
+
+        if (path.Length > 0)
+            paths.Add(path);
+
+        return paths;
+    }
+
+    /// <summary>
     /// Whether the branches <paramref name="a"/> and <paramref name="b"/> run side by side: they
     /// part at the same <c>Parallel</c> step, into different branches of it. Otherwise one of
     /// them encloses the other, or they part at different steps of one chain, which ran one
