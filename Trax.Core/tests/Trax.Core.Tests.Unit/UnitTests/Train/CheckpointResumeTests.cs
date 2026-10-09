@@ -313,7 +313,13 @@ public class CheckpointResumeTests : TestSetup
     {
         var store = new Store();
         var crash = new Crash();
-        var weigh = new Crash { Failing = true };
+        // A failing branch cancels its sibling, so the web branch must have stored its checkpoint
+        // before weighing fails, or the resume finds none for it and reruns it.
+        var weigh = new Crash
+        {
+            Failing = true,
+            FailsAfter = store.Written("Parallel#0/web/Checkpoint<Checked>#0"),
+        };
         var first = await new BranchesTrain(
             new Ran(),
             crash,
@@ -485,14 +491,18 @@ public class CheckpointResumeTests : TestSetup
 
     private sealed class Weigh(Ran ran, Crash weigh) : Junction<Score, Weighed>
     {
-        public override Task<Weighed> Run(Score input)
+        public override async Task<Weighed> Run(Score input)
         {
             ran.Note(nameof(Weigh));
 
             if (weigh.Failing)
+            {
+                if (weigh.FailsAfter is { } after)
+                    await after.WaitAsync(TimeSpan.FromSeconds(30));
                 throw new TimeoutException("weighing timed out");
+            }
 
-            return Task.FromResult(new Weighed(input.Value));
+            return new Weighed(input.Value);
         }
     }
 

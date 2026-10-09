@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Trax.Core.Decisions;
 using Trax.Core.Functional;
 using Trax.Core.Junction;
@@ -51,6 +52,8 @@ internal static class CheckpointFixtures
     /// <summary>Remembers every checkpoint a run took.</summary>
     public sealed class Store : ICheckpointStore
     {
+        private readonly ConcurrentDictionary<string, TaskCompletionSource> _written = new();
+
         public List<CheckpointTaken> Taken { get; } = [];
 
         public Exception? Fails { get; set; }
@@ -63,8 +66,18 @@ internal static class CheckpointFixtures
             lock (Taken)
                 Taken.Add(checkpoint);
 
+            WrittenTo(checkpoint.NodeId).TrySetResult();
             return Task.CompletedTask;
         }
+
+        /// <summary>Completes once a checkpoint at <paramref name="nodeId"/> is stored.</summary>
+        public Task Written(string nodeId) => WrittenTo(nodeId).Task;
+
+        private TaskCompletionSource WrittenTo(string nodeId) =>
+            _written.GetOrAdd(
+                nodeId,
+                _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+            );
 
         /// <summary>The checkpoint at <paramref name="nodeId"/>, read back as a resume restores it.</summary>
         public RestoredCheckpoint Restored(string nodeId)
@@ -162,6 +175,12 @@ internal static class CheckpointFixtures
     public sealed class Crash
     {
         public bool Failing { get; set; }
+
+        /// <summary>
+        /// What the failing junction waits for before it throws, so a failure in one Parallel
+        /// branch comes after its sibling reached a given point instead of cancelling it first.
+        /// </summary>
+        public Task? FailsAfter { get; set; }
     }
 
     /// <summary>
