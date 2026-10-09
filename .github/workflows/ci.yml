@@ -146,6 +146,39 @@ jobs:
         if: matrix.package['state-machine']
         working-directory: Trax.Api.StateMachine
         run: npm ci --ignore-scripts
+      - name: Raise the Postgres connection limit
+        # dotnet test runs a solution's test projects in parallel, all against this one service,
+        # and Postgres allows 100 connections by default. The Samples suites alone declare pools
+        # summing to about 94 (Recovery 20+10, Scheduling 20, Auth 10, StateMachine 10, ...),
+        # before the unpooled LISTEN session each host holds, the child processes the restart
+        # tests start, and the admin and migration connections: past 100 a suite fails with
+        # "too many clients already" depending only on which projects happened to overlap.
+        # A service container takes no command line, so the setting cannot be passed as
+        # `-c max_connections=`. ALTER SYSTEM writes it to postgresql.auto.conf in the
+        # container's data directory, which a restart of the same container keeps (the
+        # entrypoint skips initdb on an initialised directory), and max_connections is read
+        # only at server start, hence the restart. The service's container id is the job
+        # context's job.services.postgres.id.
+        if: matrix.package.postgres != ''
+        env:
+          PGPASSWORD: trax123
+          POSTGRES_DB: ${{ matrix.package.postgres }}
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          psql -h localhost -U trax -d "$POSTGRES_DB" -c "ALTER SYSTEM SET max_connections = 500;"
+          docker restart "$POSTGRES_CONTAINER"
+          for _ in $(seq 1 60); do
+            if docker exec "$POSTGRES_CONTAINER" pg_isready -h localhost -U trax > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          limit=$(psql -h localhost -U trax -d "$POSTGRES_DB" -tAc "SHOW max_connections;")
+          echo "max_connections = $limit"
+          if [ "$limit" != 500 ]; then
+            echo "::error::Postgres did not take the raised connection limit."
+            exit 1
+          fi
       - name: Create test databases
         if: matrix.package.databases[0] != null
         env:
