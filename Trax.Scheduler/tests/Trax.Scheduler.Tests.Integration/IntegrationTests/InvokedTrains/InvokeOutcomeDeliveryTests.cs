@@ -10,6 +10,7 @@ using Trax.Effect.StateMachine.Persistence;
 using Trax.Scheduler.Services.Operations;
 using Trax.Scheduler.Tests.Integration.Fakes.InvokedTrains;
 using Trax.Scheduler.Tests.Integration.Fixtures;
+using Trax.Scheduler.Trains.JobDispatcher;
 using Trax.Scheduler.Trains.MetadataCleanup;
 
 namespace Trax.Scheduler.Tests.Integration.IntegrationTests.InvokedTrains;
@@ -476,6 +477,101 @@ public class InvokeOutcomeDeliveryTests(ClusterStore store)
             row.InvokeToken.Should().BeNull();
         }
         (await _api.Deliver(finishedToken)).Should().BeOfType<InvokeDelivery.NoTransition>();
+    }
+
+    [Test]
+    public void The_delivery_knows_the_mark_the_dispatcher_gives_a_requeued_dispatch() =>
+        InvokeOutcomeDelivery
+            .RequeuedDispatch.Should()
+            .Be(
+                DispatchFailure.Requeued,
+                "the delivery reads a run with this mark as a dispatch attempt, never as the run's end"
+            );
+
+    [Test]
+    public async Task A_run_failed_and_marked_requeued_by_its_dispatch_is_not_an_end()
+    {
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok, note: "requeued"));
+        var token = (await SystemRow(instance.Id)).InvokeToken!;
+        var runId = await _worker.Dispatch(token);
+
+        // What a reader sees when a failed dispatch with attempts left commits between its read of the entry and
+        // its read of the run: the entry still dispatched to the run, and the run failed with the requeue mark.
+        // The entry is queued again in the same transaction, so the run that will carry the outcome is still to
+        // come.
+        using (var scope = _api.Services.CreateScope())
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .Metadatas.Where(m => m.Id == runId)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(m => m.TrainState, TrainState.Failed)
+                        .SetProperty(m => m.FailureException, DispatchFailure.Requeued)
+                );
+
+        (await _api.Deliver(token))
+            .Should()
+            .BeOfType<InvokeDelivery.Running>(
+                $"a dispatch that failed and was requeued is not the run's end. See {Adr}"
+            );
+        (await _api.Sweep()).Should().BeEmpty();
+        var row = await SystemRow(instance.Id);
+        row.State.Should().Be("Running");
+        row.InvokeToken.Should().Be(token);
+
+        // Put back as the dispatcher leaves it, and run to its end.
+        using (var scope = _api.Services.CreateScope())
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(w => w.Status, WorkQueueStatus.Queued)
+                        .SetProperty(w => w.MetadataId, (long?)null)
+                        .SetProperty(w => w.DispatchedAt, (DateTime?)null)
+                );
+        await _worker.DispatchAndRun(token);
+        (await _api.Sweep())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(new { To = "Done", Applied = "done" });
+    }
+
+    [Test]
+    public async Task A_dispatched_entry_that_names_no_run_reaches_OnFailed()
+    {
+        var instance = await _api.Start(StepMachine.Context(InvokedStepModes.Ok));
+        var token = (await SystemRow(instance.Id)).InvokeToken!;
+
+        // Marked dispatched, but its run was never recorded: nothing will ever end it.
+        using (var scope = _api.Services.CreateScope())
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Dispatched));
+
+        (await _api.Sweep())
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new
+                {
+                    To = "Failed",
+                    Applied = "failed",
+                    Reason = InvokeOutcomeReasons.RunMissing,
+                },
+                $"a dispatched entry whose run can no longer be found never ends. See {Adr}"
+            );
+        var row = await SystemRow(instance.Id);
+        row.State.Should().Be("Failed");
+        row.InvokeToken.Should().BeNull();
+
+        // The entry is settled, so the invariants see no dispatched entry without its run.
+        using (var scope = _api.Services.CreateScope())
+            await scope
+                .ServiceProvider.GetRequiredService<IDataContext>()
+                .WorkQueues.Where(w => w.ExternalId == token)
+                .ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, WorkQueueStatus.Cancelled));
     }
 
     [Test]

@@ -78,35 +78,20 @@ internal sealed class InvokeOutcomeReconciler(
             return results;
 
         string? after = null;
-        while (true)
+        do
         {
-            IReadOnlyList<InvokingInstance> page;
-            IReadOnlyList<string> ended;
+            EndedPage page;
             await using (var scope = scopes.CreateAsyncScope())
-            {
                 page = await scope
-                    .ServiceProvider.GetRequiredService<IMachineInstanceStore>()
-                    .ListInvoking(PageSize, after, cancellationToken);
-                if (page.Count == 0)
-                    break;
-                after = page[^1].InvokeToken;
+                    .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
+                    .Ended(_invoking.Value, PageSize, after, among: null, cancellationToken);
 
-                var mine = page.Where(p => Handles(p.Machine)).Select(p => p.InvokeToken).ToList();
-                ended =
-                    mine.Count == 0
-                        ? []
-                        : await scope
-                            .ServiceProvider.GetRequiredService<InvokeOutcomeDelivery>()
-                            .EndedAmong(mine, cancellationToken);
-            }
-
-            foreach (var token in ended)
+            foreach (var token in page.Tokens)
                 if (await TryDeliver(token, cancellationToken) is { } delivered)
                     results.Add(delivered);
 
-            if (page.Count < PageSize)
-                break;
-        }
+            after = page.Next;
+        } while (after is not null);
 
         return results;
     }
