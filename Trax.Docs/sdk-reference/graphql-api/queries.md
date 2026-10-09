@@ -1141,7 +1141,7 @@ query {
 | `machine` | `String` | `null` | Only instances of this machine, by its id, matched exactly |
 | `state` | `String` | `null` | Only instances in this state, matched exactly |
 | `ownerKind` | `SnapshotOwnerKind` | `null` | `SYSTEM` for instances created from code, `USER` for users' drafts; null for both |
-| `skip` | `Int!` | `0` | Offset; above 10,000 is refused with `TRAX_SKIP_TOO_DEEP` |
+| `skip` | `Int!` | `0` | Offset; above 10,000 is refused with `TRAX_SKIP_TOO_DEEP`, and the service the dashboard reads through refuses it too |
 | `take` | `Int!` | `25` | Page size, from 1 to 500 |
 
 **Returns**: `PagedResultOfMachineInstance!`. There is no keyset cursor (`nextCursor` is always
@@ -1252,7 +1252,9 @@ query {
 
 **Returns**: `[MachineInstanceCount!]!`, each with `machine: String!`, `state: String!`,
 `ownerKind: SnapshotOwnerKind!` and `count: Long!`. On Postgres the counts are read from the
-listing's index alone: about 120 ms over two million instances.
+listing's index alone: about 120 ms over two million instances. Each host keeps the counts it read
+for 5 seconds, per `machine` filter, and callers asking meanwhile share that read, so every
+dashboard and API client polling them costs one read, not one each; a count can be that old.
 
 ---
 

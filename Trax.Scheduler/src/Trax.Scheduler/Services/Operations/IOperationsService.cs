@@ -575,8 +575,10 @@ public interface IOperationsService
     /// state and owner kind (each optional), newest first by when each was last written. Each
     /// carries its state, timestamps, owner kind and whether it waits on an invoked run; never
     /// its context or its owner's key (see <see cref="MachineInstanceRecord"/>). The page size is
-    /// clamped to 1 through <c>OperationsService.MaxPageSize</c>. The dashboard's State machines
-    /// page and the API's <c>operations.machineInstances</c> both read it here.
+    /// clamped to 1 through <c>OperationsService.MaxPageSize</c>, and a skip above
+    /// <c>OperationsService.MachineInstanceCountCap</c> is refused with an
+    /// <see cref="ArgumentOutOfRangeException"/>. The dashboard's State machines page and the
+    /// API's <c>operations.machineInstances</c> both read it here.
     /// </summary>
     /// <param name="query">The filter and the page.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -614,7 +616,9 @@ public interface IOperationsService
 
     /// <summary>
     /// How many instances each machine has in each state, for each owner kind, ordered by
-    /// machine, state and owner kind. Exact, never capped.
+    /// machine, state and owner kind. Exact, never capped, and kept for
+    /// <c>OperationsService.MachineInstanceCountCacheDuration</c> per host and machine filter, so
+    /// a count can be that many seconds old.
     /// </summary>
     /// <param name="machine">Only this machine's counts; null counts every machine.</param>
     /// <param name="ct">Cancellation token.</param>

@@ -1,7 +1,9 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.Data.Services.DataContext;
+using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Enums;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.StateMachine.Persistence;
@@ -23,18 +25,38 @@ public partial class OperationsService
     /// </summary>
     public const int MachineInstanceCountCap = 10_000;
 
+    /// <summary>
+    /// How long <see cref="GetMachineInstanceStateCountsAsync"/> keeps the counts it read, per
+    /// host and per machine filter, so every dashboard open on the State machines page and every
+    /// API caller polling <c>machineInstanceCounts</c> share one read of the table.
+    /// </summary>
+    public static readonly TimeSpan MachineInstanceCountCacheDuration = TimeSpan.FromSeconds(5);
+
     /// <inheritdoc />
     /// <remarks>
     /// Newest first by <c>updated_at</c>, then by row id so rows written in the same instant keep
     /// one order between pages. A page under one machine and state reads
     /// <c>ix_snapshot_draft_machine_state_updated</c> in that order; any other filter reads
-    /// <c>ix_snapshot_draft_updated</c> (Trax.Effect's Postgres migration 071).
+    /// <c>ix_snapshot_draft_updated</c> (Trax.Effect's Postgres migration 071). A negative skip
+    /// reads from the start, and one past <see cref="MachineInstanceCountCap"/>, the deepest page
+    /// a capped count lets a pager reach, is refused, as the API's <c>machineInstances</c> refuses
+    /// it, so no caller makes the database walk further.
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="MachineInstanceQuery.Skip"/> is greater than <see cref="MachineInstanceCountCap"/>.
+    /// </exception>
     public async Task<MachineInstancePage> GetMachineInstancesAsync(
         MachineInstanceQuery query,
         CancellationToken ct
     )
     {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            query.Skip,
+            MachineInstanceCountCap,
+            nameof(query)
+        );
+
         var take = Math.Clamp(query.Take, 1, MaxPageSize);
         var skip = Math.Max(query.Skip, 0);
 
@@ -327,13 +349,74 @@ public partial class OperationsService
 
     /// <inheritdoc />
     /// <remarks>
-    /// On Postgres the counts read <c>ix_snapshot_draft_machine_state_updated</c> alone, which
-    /// includes the owner kind, so they cost the index rather than the table.
+    /// <para>On Postgres the counts read <c>ix_snapshot_draft_machine_state_updated</c> alone,
+    /// which includes the owner kind, so they cost the index rather than the table.</para>
+    /// <para>The counts are kept for <see cref="MachineInstanceCountCacheDuration"/>, per host (per
+    /// data context factory) and per machine filter, and callers that ask while a read is under way
+    /// share it, so N dashboards polling the page make one read, not N. A count can therefore be
+    /// that many seconds old.</para>
     /// </remarks>
     public async Task<IReadOnlyList<MachineInstanceStateCount>> GetMachineInstanceStateCountsAsync(
         string? machine,
         CancellationToken ct
     )
+    {
+        var key = string.IsNullOrWhiteSpace(machine) ? "" : machine;
+        var cache = StateCountCaches.GetValue(_dataContextFactory, _ => new StateCountCache());
+        var clock = _services?.GetService<TimeProvider>() ?? TimeProvider.System;
+
+        Task<IReadOnlyList<MachineInstanceStateCount>> read;
+        lock (cache)
+        {
+            var now = clock.GetUtcNow();
+            if (
+                !cache.Entries.TryGetValue(key, out var entry)
+                || entry.Expires <= now
+                || entry.Read.IsFaulted
+                || entry.Read.IsCanceled
+            )
+            {
+                // A caller names the machine filter, so drop what has expired rather than keep
+                // one entry per name anyone ever sent.
+                foreach (var stale in cache.Entries.Where(e => e.Value.Expires <= now).ToList())
+                    cache.Entries.Remove(stale.Key);
+
+                // Not tied to this caller's token: other callers wait on the same read.
+                entry = new StateCountEntry(
+                    ReadMachineInstanceStateCountsAsync(
+                        string.IsNullOrWhiteSpace(machine) ? null : machine,
+                        CancellationToken.None
+                    ),
+                    now + MachineInstanceCountCacheDuration
+                );
+                cache.Entries[key] = entry;
+            }
+            read = entry.Read;
+        }
+
+        return await read.WaitAsync(ct);
+    }
+
+    // One cache per data context factory, which is one per host, so two hosts in one process (a
+    // test, or a host running two stores) never share counts.
+    private static readonly ConditionalWeakTable<
+        IDataContextProviderFactory,
+        StateCountCache
+    > StateCountCaches = new();
+
+    private sealed class StateCountCache
+    {
+        public Dictionary<string, StateCountEntry> Entries { get; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed record StateCountEntry(
+        Task<IReadOnlyList<MachineInstanceStateCount>> Read,
+        DateTimeOffset Expires
+    );
+
+    private async Task<
+        IReadOnlyList<MachineInstanceStateCount>
+    > ReadMachineInstanceStateCountsAsync(string? machine, CancellationToken ct)
     {
         using var db = await _dataContextFactory.CreateDbContextAsync(ct);
         var rows = db.SnapshotDrafts.AsNoTracking();

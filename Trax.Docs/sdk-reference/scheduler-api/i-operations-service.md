@@ -415,10 +415,10 @@ public record MachineInstanceStateCount(string Machine, string State, SnapshotOw
 
 | Method | Returns |
 |--------|---------|
-| `GetMachineInstancesAsync(query, ct)` | A page of instances matching the query's machine, state and owner kind (each optional), newest first by `UpdatedAt`, then by row. `Take` is clamped to 1 through 500. |
+| `GetMachineInstancesAsync(query, ct)` | A page of instances matching the query's machine, state and owner kind (each optional), newest first by `UpdatedAt`, then by row. `Take` is clamped to 1 through 500, a negative `Skip` reads from the start, and a `Skip` above `MachineInstanceCountCap` (10,000) throws `ArgumentOutOfRangeException`, as the API's `machineInstances` refuses it. |
 | `CountMachineInstancesAsync(query, ct)` | How many match, counted up to `OperationsService.MachineInstanceCountCap` (10,000): more give `Count = 10000, Capped = true`. |
 | `GetMachineInstanceAsync(key, ct)` | One instance, or `null`. The owner kind is part of every lookup, so a user's draft never answers for a system instance under the same id. A user's draft also needs `RowId`, because several users can hold a draft under one id: without it the method throws `ArgumentException`. |
-| `GetMachineInstanceStateCountsAsync(machine, ct)` | Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. |
+| `GetMachineInstanceStateCountsAsync(machine, ct)` | Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. Kept for `MachineInstanceCountCacheDuration` (5 seconds) per host and per `machine`, with callers asking meanwhile sharing one read, so a count can be that old. |
 
 A record never carries the snapshot's context or the owning user's key. The context is an untyped
 JSON object, so nothing could mask its sensitive parts; an operator sees where an instance is and

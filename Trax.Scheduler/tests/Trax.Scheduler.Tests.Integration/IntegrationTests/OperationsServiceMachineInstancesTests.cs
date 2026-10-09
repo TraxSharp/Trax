@@ -131,6 +131,81 @@ public class OperationsServiceMachineInstancesTests : TestSetup
     }
 
     [Test]
+    public async Task A_page_deeper_than_the_count_cap_is_refused_as_the_api_refuses_it()
+    {
+        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+
+        var deepest = await _operations.GetMachineInstancesAsync(
+            new MachineInstanceQuery(
+                Machine: _machine,
+                Skip: OperationsService.MachineInstanceCountCap
+            ),
+            CancellationToken.None
+        );
+        var tooDeep = () =>
+            _operations.GetMachineInstancesAsync(
+                new MachineInstanceQuery(
+                    Machine: _machine,
+                    Skip: OperationsService.MachineInstanceCountCap + 1
+                ),
+                CancellationToken.None
+            );
+
+        deepest.Items.Should().BeEmpty();
+        deepest.Skip.Should().Be(OperationsService.MachineInstanceCountCap);
+        await tooDeep
+            .Should()
+            .ThrowAsync<ArgumentOutOfRangeException>(
+                "the API's machineInstances refuses a skip past it, and the dashboard reads the same call"
+            );
+    }
+
+    [Test]
+    public async Task The_state_counts_are_read_once_for_every_caller_within_a_few_seconds()
+    {
+        var clock = new ManualTimeProvider(DateTimeOffset.UtcNow);
+        var operations = new OperationsService(
+            Scope.ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainDiscovery.ITrainDiscoveryService>(),
+            Scope.ServiceProvider.GetRequiredService<Trax.Effect.Data.Services.IDataContextFactory.IDataContextProviderFactory>(),
+            new Trax.Scheduler.Configuration.SchedulerConfiguration(),
+            Scope.ServiceProvider.GetRequiredService<Trax.Mediator.Services.TrainExecution.ITrainExecutionService>(),
+            new ServiceCollection().AddSingleton<TimeProvider>(clock).BuildServiceProvider()
+        );
+        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+
+        var first = await operations.GetMachineInstanceStateCountsAsync(
+            _machine,
+            CancellationToken.None
+        );
+        await Seed(SnapshotOwnerKind.System, "Running", DateTimeOffset.UtcNow);
+        var cached = await operations.GetMachineInstanceStateCountsAsync(
+            _machine,
+            CancellationToken.None
+        );
+        clock.Advance(OperationsService.MachineInstanceCountCacheDuration);
+        var fresh = await operations.GetMachineInstanceStateCountsAsync(
+            _machine,
+            CancellationToken.None
+        );
+
+        first.Single().Count.Should().Be(1);
+        cached.Should().Equal(first, "a second poll within the window reads no table");
+        fresh
+            .Single()
+            .Count.Should()
+            .Be(2, "once the window has passed, the counts are read again");
+    }
+
+    private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset _now = start;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
+    [Test]
     public async Task The_count_stops_at_its_cap()
     {
         await ((DbContext)DataContext).Database.ExecuteSqlInterpolatedAsync(

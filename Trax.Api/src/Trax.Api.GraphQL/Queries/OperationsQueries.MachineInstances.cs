@@ -126,7 +126,8 @@ public partial class OperationsQueries
     /// <summary>
     /// How many instances each machine has in each state, for each owner kind, ordered by machine,
     /// state and owner kind. Exact. Read through the call the dashboard's State machines page
-    /// makes for its counts.
+    /// makes for its counts, which each host keeps for 5 seconds per machine filter, so every
+    /// caller polling them shares one read and a count can be that old.
     /// </summary>
     /// <param name="operationsService">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
