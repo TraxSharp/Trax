@@ -545,6 +545,56 @@ export const ResumedRunRestored: Story = {
   },
 };
 
+// A resumed run names the run it resumed, linked, and the node it resumed at.
+export const ResumedRunNamesItsSource: Story = {
+  parameters: { route: "/executions/952" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
+    expect(within(resumes).getByRole("link", { name: "902" })).toHaveAttribute("href", "/executions/902");
+    expect(resumes).toHaveTextContent("902 at Summarize#2");
+  },
+};
+
+// A run that resumed after the latest checkpoint names no node.
+export const ResumedAfterLatestCheckpoint: Story = {
+  parameters: {
+    route: "/executions/952",
+    mock: {
+      resolvers: () => {
+        const r = (executionDetailScenario.resolvers as () => Record<string, Record<string, (...a: unknown[]) => unknown>>)();
+        return {
+          ...r,
+          OperationsQueries: {
+            ...r.OperationsQueries,
+            executionDetail: (...args: unknown[]) => ({
+              ...(r.OperationsQueries.executionDetail(...args) as object),
+              resumeAt: null,
+            }),
+          },
+        };
+      },
+    } satisfies MockSchemaOverrides,
+  },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    const resumes = c.getByText("Resumes", { selector: "dt" }).nextElementSibling as HTMLElement;
+    expect(resumes).toHaveTextContent("902 after its latest checkpoint");
+  },
+};
+
+// A run that was not resumed shows no Resumes field.
+export const NotResumedHasNoResumesField: Story = {
+  parameters: { route: "/executions/902" },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    await waitFor(() => expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument());
+    expect(c.queryByText("Resumes", { selector: "dt" })).not.toBeInTheDocument();
+  },
+};
+
 // A run with no saved input cannot be resumed, as it cannot be re-queued: the checkpoint still
 // shows, but nothing offers a resume.
 export const NoInputNoResume: Story = {
