@@ -340,6 +340,109 @@ public class CheckpointResumeTests : TestSetup
             );
     }
 
+    [Test]
+    public async Task Resuming_at_a_step_before_a_Parallel_reruns_its_branches_rather_than_restoring_them()
+    {
+        var (store, crash, round) = await RefinedRunThatFailedAtCombine();
+
+        var ran = new Ran();
+        var resumed = new RefinedBranchesTrain(
+            ran,
+            crash,
+            round,
+            With(new Store(), new ScriptedDecider())
+        );
+        resumed.Resume = PlanFor(resumed, store, resumeAt: "Refine#0");
+
+        var result = await resumed.RunEither("graphs");
+
+        result
+            .ValueUnsafe()
+            .Should()
+            .Be(
+                new Report("graphs-v2 from web, 12 pages, weighed 9"),
+                $"Refine ran again, so each branch's checkpoint holds work from the old brief ({Adr})"
+            );
+        ran.Junctions.Should()
+            .BeEquivalentTo([
+                "Refine",
+                "SearchWeb",
+                "FetchFullTexts",
+                "ScoreBrief",
+                "Weigh",
+                "Combine",
+            ]);
+    }
+
+    [Test]
+    public async Task Resuming_after_a_checkpoint_with_a_step_before_the_Parallel_reruns_its_branches()
+    {
+        var (store, crash, round) = await RefinedRunThatFailedAtCombine();
+
+        var ran = new Ran();
+        var resumed = new RefinedBranchesTrain(
+            ran,
+            crash,
+            round,
+            With(new Store(), new ScriptedDecider())
+        );
+        resumed.Resume = PlanFor(resumed, store, resumeAt: null);
+
+        var result = await resumed.RunEither("graphs");
+
+        result.ValueUnsafe().Should().Be(new Report("graphs-v2 from web, 12 pages, weighed 9"));
+        ran.Junctions.Should()
+            .BeEquivalentTo(
+                ["Refine", "SearchWeb", "FetchFullTexts", "ScoreBrief", "Weigh", "Combine"],
+                $"Refine runs again after the checkpoint, so the branches cannot restore ({Adr})"
+            );
+    }
+
+    [Test]
+    public async Task Resuming_at_the_Parallel_itself_restores_its_branches()
+    {
+        var (store, crash, round) = await RefinedRunThatFailedAtCombine();
+
+        var ran = new Ran();
+        var resumed = new RefinedBranchesTrain(
+            ran,
+            crash,
+            round,
+            With(new Store(), new ScriptedDecider())
+        );
+        resumed.Resume = PlanFor(resumed, store, resumeAt: "Parallel#0");
+
+        var result = await resumed.RunEither("graphs");
+
+        result
+            .ValueUnsafe()
+            .Should()
+            .Be(
+                new Report("graphs-v1 from web, 12 pages, weighed 9"),
+                "nothing before the Parallel ran again, so its branches' checkpoints still hold"
+            );
+        ran.Junctions.Should().Equal(["Weigh", "Combine"]);
+    }
+
+    /// <summary>A run of <see cref="RefinedBranchesTrain"/> that failed at Combine, with the next round armed.</summary>
+    private static async Task<(Store, Crash, Round)> RefinedRunThatFailedAtCombine()
+    {
+        var store = new Store();
+        var crash = new Crash { Failing = true };
+        var round = new Round { Value = 1 };
+        var first = await new RefinedBranchesTrain(
+            new Ran(),
+            crash,
+            round,
+            With(store, new ScriptedDecider())
+        ).RunEither("graphs");
+        first.IsLeft.Should().BeTrue();
+
+        crash.Failing = false;
+        round.Value = 2;
+        return (store, crash, round);
+    }
+
     /// <summary>The plan a host builds: the check's outcome, with the stored states read back.</summary>
     internal static ResumePlan PlanFor<TIn, TOut>(
         Train<TIn, TOut> train,
@@ -433,6 +536,50 @@ public class CheckpointResumeTests : TestSetup
                                 b.Chain<ScoreBrief>()
                                     .Checkpoint<Score>()
                                     .Chain(new Weigh(ran, weigh ?? new Crash()))
+                        )
+                )
+                .Chain<Combine>()
+                .Resolve();
+    }
+
+    public sealed class Round
+    {
+        public int Value { get; set; }
+    }
+
+    /// <summary>Rewrites the brief, a little differently each round.</summary>
+    private sealed class Refine(Ran ran, Round round) : Junction<Brief, Brief>
+    {
+        public override Task<Brief> Run(Brief input)
+        {
+            ran.Note(nameof(Refine));
+            return Task.FromResult(new Brief($"{input.Topic}-v{round.Value}"));
+        }
+    }
+
+    /// <summary>
+    /// <c>PlanResearch → Checkpoint&lt;Brief&gt; → Refine → Parallel(web: search, fetch,
+    /// checkpoint | score: score, checkpoint, weigh) → Combine</c>.
+    /// </summary>
+    private sealed class RefinedBranchesTrain(Ran ran, Crash crash, Round round, Services services)
+        : Train<string, Report>
+    {
+        protected override Task<Either<Exception, Report>> Junctions() =>
+            AddServices<IServiceProvider>(services.With(ran).With(crash))
+                .Chain<PlanResearch>()
+                .Checkpoint<Brief>()
+                .Chain(new Refine(ran, round))
+                .Parallel(p =>
+                    p.Branch(
+                            "web",
+                            b => b.Chain<SearchWeb>().Chain<FetchFullTexts>().Checkpoint<Checked>()
+                        )
+                        .Branch(
+                            "score",
+                            b =>
+                                b.Chain<ScoreBrief>()
+                                    .Checkpoint<Score>()
+                                    .Chain(new Weigh(ran, new Crash()))
                         )
                 )
                 .Chain<Combine>()

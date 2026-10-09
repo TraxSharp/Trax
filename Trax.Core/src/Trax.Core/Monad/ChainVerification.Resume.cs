@@ -98,13 +98,19 @@ public static partial class ChainVerification
     /// <param name="availableElsewhere">Whether the container supplies a type.</param>
     /// <param name="written">The ids of the checkpoints the earlier run, and those it resumed, wrote.</param>
     /// <param name="resumeAt">The step to resume at, or null for after the latest checkpoint.</param>
+    /// <param name="withheld">
+    /// Whether the store withholds the route a routing step on this key took: a checkpoint holds no
+    /// <see cref="TrackTaken{TKey}"/> for it, so a resume does not restore one. Null when the store
+    /// keeps every route.
+    /// </param>
     internal static ResumeOutcome CheckResume(
         ChainRecorder chain,
         Type input,
         Type output,
         Func<Type, bool>? availableElsewhere,
         IReadOnlyCollection<string> written,
-        string? resumeAt
+        string? resumeAt,
+        Func<Type, bool>? withheld = null
     )
     {
         var nodes = Walk(chain);
@@ -114,7 +120,7 @@ public static partial class ChainVerification
             .Where(n => n.Step.Kind == ChainStepKind.Checkpoint && written.Contains(n.Id))
             .ToList();
 
-        var branchCheckpoints = checkpoints
+        var latestInBranch = checkpoints
             .Where(n => n.BranchPath is not null)
             .GroupBy(n => n.BranchPath!)
             .ToDictionary(g => g.Key, g => g.MaxBy(n => n.Order)!);
@@ -122,10 +128,12 @@ public static partial class ChainVerification
         Node? main;
         string? target;
         bool inclusive;
+        Dictionary<string, Node> branchCheckpoints;
 
         if (resumeAt is null)
         {
             main = checkpoints.Where(n => n.BranchPath is null).MaxBy(n => n.Order);
+            branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, null);
 
             if (main is null && branchCheckpoints.Count == 0)
                 return ResumeOutcome.Refused(
@@ -179,13 +187,9 @@ public static partial class ChainVerification
                 .Where(n => n.BranchPath is null && n.Order < point.Order)
                 .MaxBy(n => n.Order);
 
-            var branchesApply =
-                point.Step.Kind == ChainStepKind.Parallel
-                && branchCheckpoints.Keys.Any(b =>
-                    b.StartsWith(point.Id + "/", StringComparison.Ordinal)
-                );
+            branchCheckpoints = BranchesThatHold(nodes, byId, latestInBranch, main, point);
 
-            if (main is null && !branchesApply)
+            if (main is null && branchCheckpoints.Count == 0)
                 return ResumeOutcome.Refused(
                     ResumeRefusals.NoCheckpoint,
                     $"No checkpoint the run wrote comes before '{resumeAt}', so it can only run "
@@ -213,7 +217,7 @@ public static partial class ChainVerification
         var stateTypes = restored.ToDictionary(n => n.Id, n => n.Step.In!);
         var trackTypes = restored.ToDictionary(
             n => n.Id,
-            n => (IReadOnlyList<Type>)TracksBefore(nodes, n).ToList()
+            n => (IReadOnlyList<Type>)TracksBefore(nodes, n, withheld).ToList()
         );
 
         // The walk: Memory as the resumed run starts, then every step from the point on.
@@ -313,6 +317,45 @@ public static partial class ChainVerification
     }
 
     /// <summary>
+    /// The branch checkpoints a resume can restore. A branch's checkpoint holds what the branch
+    /// computed from Memory as it was when the run reached its <c>Parallel</c>, so it holds only
+    /// while that Memory is what the resumed run has there too: when the run resumes at the
+    /// <c>Parallel</c> itself, or after a main checkpoint with nothing between it and the
+    /// <c>Parallel</c> that runs again but a value handed to the chain or extracted from Memory.
+    /// Any other step between would run again and could produce a different value, which a
+    /// restored branch would never read. A <c>Parallel</c> inside a branch has its enclosing
+    /// <c>Parallel</c> between, so its branches never restore and run from their start.
+    /// </summary>
+    /// <param name="nodes">The chain's nodes, in order.</param>
+    /// <param name="byId">The same nodes, by id.</param>
+    /// <param name="written">The latest checkpoint each branch wrote, by branch path.</param>
+    /// <param name="main">The checkpoint the main chain restores, or null.</param>
+    /// <param name="point">The step an operator resumes at, or null for after the latest checkpoint.</param>
+    private static Dictionary<string, Node> BranchesThatHold(
+        List<Node> nodes,
+        Dictionary<string, Node> byId,
+        Dictionary<string, Node> written,
+        Node? main,
+        Node? point
+    ) =>
+        written
+            .Where(b =>
+                byId.TryGetValue(b.Key[..b.Key.LastIndexOf('/')], out var parallel)
+                && (
+                    point is not null
+                        ? parallel.Id == point.Id
+                        : parallel.Order > (main?.Order ?? -1)
+                            && nodes
+                                .Skip((main?.Order ?? -1) + 1)
+                                .Take(parallel.Order - (main?.Order ?? -1) - 1)
+                                .All(n =>
+                                    n.Step.Kind is ChainStepKind.Seed or ChainStepKind.Extract
+                                )
+                )
+            )
+            .ToDictionary(b => b.Key, b => b.Value);
+
+    /// <summary>
     /// The ids of every step of the chain, its tracks' and its branches', in the order a run
     /// reaches them.
     /// </summary>
@@ -355,9 +398,13 @@ public static partial class ChainVerification
     /// <summary>
     /// The <see cref="TrackTaken{TKey}"/> types a checkpoint can hold: one for each routing step a
     /// run passed before reaching it, which is every routing step before it in a chain or track
-    /// that encloses it.
+    /// that encloses it, but one whose route the store withholds.
     /// </summary>
-    private static IEnumerable<Type> TracksBefore(List<Node> nodes, Node checkpoint) =>
+    private static IEnumerable<Type> TracksBefore(
+        List<Node> nodes,
+        Node checkpoint,
+        Func<Type, bool>? withheld
+    ) =>
         nodes
             .Where(n =>
                 n.Order < checkpoint.Order
@@ -365,6 +412,7 @@ public static partial class ChainVerification
                 && checkpoint.Scope.StartsWith(n.Scope, StringComparison.Ordinal)
                 && n.Step.Out is { IsGenericType: true } taken
                 && taken.GetGenericTypeDefinition() == typeof(TrackTaken<>)
+                && withheld?.Invoke(taken.GetGenericArguments()[0]) != true
             )
             .Select(n => n.Step.Out!)
             .Distinct();
@@ -387,8 +435,11 @@ internal sealed class ResumeWalk(
     /// <summary>The types a skipped step wrote that nothing restores.</summary>
     public System.Collections.Generic.HashSet<Type> Stale { get; } = [];
 
-    /// <summary>True once a step from the point on read a stale type.</summary>
+    /// <summary>True once a step from the point on read a stale type, here or in a branch.</summary>
     public bool ReadStale { get; private set; }
+
+    /// <summary>The walk a branch's walk started from, which learns that a branch read a stale type.</summary>
+    private ResumeWalk? _parent;
 
     /// <summary>Whether <paramref name="type"/> is stale, noting that a step read it.</summary>
     public bool ReadsStale(Type type)
@@ -396,7 +447,9 @@ internal sealed class ResumeWalk(
         if (!Stale.Contains(type))
             return false;
 
-        ReadStale = true;
+        for (var walk = this; walk is not null; walk = walk._parent)
+            walk.ReadStale = true;
+
         return true;
     }
 
@@ -408,14 +461,24 @@ internal sealed class ResumeWalk(
 
     /// <summary>
     /// The walk of the branch at <paramref name="path"/>: from its own checkpoint when it has one,
-    /// whose state and routes go into <paramref name="memory"/>, else from its start.
+    /// whose state and routes go into <paramref name="memory"/>, else from its start. A type a
+    /// skipped step before the <c>Parallel</c> overwrote is stale in the branch too, unless the
+    /// branch's own checkpoint holds it.
     /// </summary>
     public ResumeWalk ForBranch(string path, System.Collections.Generic.HashSet<Type> memory)
     {
-        if (!branches.TryGetValue(path, out var restored))
-            return new ResumeWalk(null, false, [], branches);
+        ResumeWalk walk;
 
-        memory.UnionWith(restored.Restores);
-        return new ResumeWalk(restored.Checkpoint, true, restored.Restores, branches);
+        if (branches.TryGetValue(path, out var restored))
+        {
+            memory.UnionWith(restored.Restores);
+            walk = new ResumeWalk(restored.Checkpoint, true, restored.Restores, branches);
+        }
+        else
+            walk = new ResumeWalk(null, false, [], branches);
+
+        walk._parent = this;
+        walk.Stale.UnionWith(Stale.Where(t => !walk.Restores.Contains(t)));
+        return walk;
     }
 }

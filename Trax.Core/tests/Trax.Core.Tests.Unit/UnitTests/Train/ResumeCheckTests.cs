@@ -88,13 +88,54 @@ public class ResumeCheckTests : TestSetup
     {
         var outcome = Check(
             new BranchKeepsTooLittleTrain(),
-            ["Parallel#0/web/Checkpoint<Findings>#0"]
+            ["Parallel#0/web/Checkpoint<Findings>#0"],
+            "Parallel#0"
         );
 
         outcome.RefusalCode.Should().Be(ResumeRefusals.MissingInput, Adr);
         outcome
             .Refusal.Should()
             .Contain("Checked", "the skipped branch gives the join only what its checkpoint holds");
+    }
+
+    [Test]
+    public void A_branch_checkpoint_is_not_restored_when_a_step_before_its_Parallel_runs_again()
+    {
+        // From the top, PlanResearch runs again before the Parallel, so the branch's checkpoint
+        // may hold work from a brief the resumed run no longer has.
+        var outcome = Check(
+            new BranchKeepsTooLittleTrain(),
+            ["Parallel#0/web/Checkpoint<Findings>#0"]
+        );
+
+        outcome.RefusalCode.Should().Be(ResumeRefusals.NoCheckpoint, Adr);
+        outcome.BranchCheckpoints.Should().BeEmpty();
+    }
+
+    [Test]
+    public void A_step_reading_a_route_the_store_withholds_is_refused()
+    {
+        var chain = new ReadsItsRouteTrain().DeclaredChain();
+        string[] written = ["Checkpoint<Findings>#0"];
+
+        ChainVerification
+            .CheckResume(chain, typeof(string), typeof(Report), t => t.IsInterface, written, null)
+            .CanResume.Should()
+            .BeTrue("the checkpoint holds the route when the store keeps it");
+
+        var withheld = ChainVerification.CheckResume(
+            chain,
+            typeof(string),
+            typeof(Report),
+            t => t.IsInterface,
+            written,
+            null,
+            withheld: key => key == typeof(Source)
+        );
+
+        withheld.RefusalCode.Should().Be(ResumeRefusals.MissingInput, Adr);
+        withheld.Refusal.Should().Contain("TrackTaken");
+        withheld.TrackTypes.Should().BeEmpty();
     }
 
     [Test]
@@ -283,6 +324,27 @@ public class ResumeCheckTests : TestSetup
                 )
                 .Chain<FetchFullTexts>()
                 .Chain<Summarize>()
+                .Resolve();
+    }
+
+    private sealed class ReportRoute : Junction<TrackTaken<Source>, Report>
+    {
+        public override Task<Report> Run(TrackTaken<Source> input) =>
+            Task.FromResult(new Report(input.Track));
+    }
+
+    /// <summary>Routes, checkpoints, then reads the route it took.</summary>
+    private sealed class ReadsItsRouteTrain : Train<string, Report>
+    {
+        protected override Task<Either<Exception, Report>> Junctions() =>
+            AddServices<IServiceProvider>(new Services().With(new Ran()).With(new Crash()))
+                .Chain<PlanResearch>()
+                .Switch<Brief, Source>(s =>
+                    s.When(Source.Web, w => w.Chain<SearchWeb>())
+                        .When(Source.Papers, p => p.Chain<SearchPapers>())
+                )
+                .Checkpoint<Findings>()
+                .Chain<ReportRoute>()
                 .Resolve();
     }
 
