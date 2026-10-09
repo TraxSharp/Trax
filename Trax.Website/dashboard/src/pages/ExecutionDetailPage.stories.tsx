@@ -549,3 +549,32 @@ export const NoDeclaredGraph: Story = {
     expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
   },
 };
+
+const runGraphError: MockSchemaOverrides = {
+  resolvers: () => {
+    const base = executionDetailScenario.resolvers as () => Record<string, Record<string, unknown>>;
+    const r = base();
+    return {
+      ...r,
+      OperationsQueries: {
+        ...r.OperationsQueries,
+        runGraph: () => {
+          throw new Error("Simulated run graph read failure");
+        },
+      },
+    };
+  },
+};
+
+// A run graph that could not be read says so in its section, rather than looking like a run that
+// cannot be resumed; the rest of the page still shows.
+export const RunGraphReadFailed: Story = {
+  parameters: { route: "/executions/902", mock: runGraphError },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const graph = await graphOf(c);
+    expect(await within(graph).findByText(/Simulated run graph read failure/)).toBeInTheDocument();
+    expect(c.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(c.getByRole("heading", { name: "BetaJob" })).toBeInTheDocument();
+  },
+};

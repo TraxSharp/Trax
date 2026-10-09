@@ -323,7 +323,16 @@ export function ExecutionDetailPage() {
         </div>
       )}
 
-      {graph && (
+      {graphResult.error && !graph ? (
+        // A read that failed, told apart from a run that cannot be resumed: nothing offers a resume
+        // until the graph can be read.
+        <section aria-label="Run graph" className="bg-surface rounded-lg border border-line p-5 mb-6">
+          <h2 className="text-sm font-semibold text-fg mb-3">Run graph</h2>
+          <p className="text-sm text-danger-fg">
+            Could not read the run graph: {graphResult.error.message}
+          </p>
+        </section>
+      ) : graph && (
         <RunGraphView
           graph={graph}
           onResume={hasInput ? (from) => void onResume(from) : undefined}
