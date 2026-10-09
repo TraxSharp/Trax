@@ -41,8 +41,7 @@ public class ResearchResumeTests : RecoveryTestFixture
         // the failed runs are left for an operator to resume.
         await Run.StartAsync("RESEARCH", crashOnce: true);
         var faults = SharedRecoverySetup.Factory.Services.GetRequiredService<FaultInjector>();
-        using var keepCrashing = new CancellationTokenSource();
-        var rearming = KeepArmedAsync(faults, Run.RunId, keepCrashing.Token);
+        faults.ArmEveryAttempt(Run.RunId, CrashPoint.Report);
 
         var failed = await Run.FollowAttemptAsync(1);
         (await Run.WaitForEndAsync(failed)).Should().Be("FAILED");
@@ -57,8 +56,6 @@ public class ResearchResumeTests : RecoveryTestFixture
         var lastRetry = await Run.FollowAttemptAsync(ScheduleDemoRun.MaxRetries + 1);
         (await Run.WaitForEndAsync(lastRetry)).Should().Be("FAILED");
 
-        await keepCrashing.CancelAsync();
-        await rearming;
         faults.Disarm(Run.RunId);
 
         // What the operator sees on the failed run: a checkpoint after the Scale step, and Summarize
@@ -119,29 +116,6 @@ public class ResearchResumeTests : RecoveryTestFixture
             .Select(v => v.Id)
             .Should()
             .NotIntersectWith(runs, "every run this test started has ended");
-    }
-
-    /// <summary>Re-arms the crash for <paramref name="runId"/> each time it fires, until cancelled.</summary>
-    private static async Task KeepArmedAsync(
-        FaultInjector faults,
-        string runId,
-        CancellationToken cancellationToken
-    )
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            if (!faults.IsArmed(runId))
-                faults.Arm(runId, CrashPoint.Report);
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(5), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-        }
     }
 
     private async Task<string> RefusedOverGraphQLAsync(long run)
