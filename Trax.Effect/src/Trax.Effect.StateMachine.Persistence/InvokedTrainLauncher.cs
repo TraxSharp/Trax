@@ -5,8 +5,8 @@ using Trax.Effect.Models.WorkQueue.DTOs;
 namespace Trax.Effect.StateMachine.Persistence;
 
 /// <summary>
-/// Queues the run of a train a machine state invokes, through the caller's own data context so the run's work
-/// queue entry commits in the transaction that moves the snapshot into the state, or not at all. Trax.Mediator
+/// Queues the run of a train a machine state invokes, through the data context it is handed (the outbox's) so the
+/// run's work queue entry commits in the transaction that moves the snapshot into the state, or not at all. Trax.Mediator
 /// implements it (<c>AddMediator</c> registers it), so the enqueue goes through the mediator: the train is resolved
 /// by its canonical name, authorized, its input capped and its subject key applied as any caller's enqueue is. A
 /// host that declares <c>Invokes</c> without registering one is refused at startup.

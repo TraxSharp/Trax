@@ -85,10 +85,11 @@ started from. An `advanceSnapshot` with an outcome trigger is refused as `outcom
 ## Entering and leaving the state
 
 Entering an invoking state, by an advance, a send, or `IMachineInstances.Start` when the initial state invokes,
-writes three things in one transaction on the request's data context: the snapshot, the run's work queue entry,
-and the row's server-only invoke token, which is the entry's external id. A crash or a refusal anywhere in between
-leaves none of them, so no machine waits on a run that was never queued and no run is queued for a machine that
-never moved. On Postgres the entry's insert wakes the dispatchers on every host when the transaction commits; on
+writes three things in one transaction: the snapshot, the run's work queue entry, and the row's server-only invoke
+token, which is the entry's external id. A crash or a refusal anywhere in between leaves none of them, so no machine
+waits on a run that was never queued and no run is queued for a machine that never moved. The transaction is on a
+data context of its own, never the request's, so a junction that starts or advances an instance does not commit or
+lose the writes its own run has tracked. On Postgres the entry's insert wakes the dispatchers on every host when the transaction commits; on
 SQLite a dispatcher in the same process is woken.
 
 The enqueue goes through the mediator like any caller's: the train is found by its canonical name, authorized, its

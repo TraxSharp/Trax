@@ -90,9 +90,10 @@ internal sealed class SnapshotMachineRegistry : ISnapshotMachineRegistry
         ISnapshotDraftService service;
         if (found is IMachineInternals internals)
         {
-            // A machine that invokes trains reads and writes its drafts through the owner-aware store over the
-            // request's data context, the one the outbox writes the run's entry through, so the snapshot and the
-            // run commit in one transaction whatever ISnapshotStore the host registered.
+            // A machine that invokes trains reads and expires its drafts through the owner-aware store over the
+            // request's data context, and writes them through the outbox, on a context of its own, together with
+            // the run's entry, so the snapshot and the run commit in one transaction whatever ISnapshotStore the
+            // host registered.
             var invokes =
                 internals.InvokedTrains.Count > 0
                     ? new InvokeRuntime(
