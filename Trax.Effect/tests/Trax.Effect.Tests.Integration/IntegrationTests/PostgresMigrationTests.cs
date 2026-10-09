@@ -517,6 +517,114 @@ public class PostgresMigrationTests
     /// <c>IF NOT EXISTS</c> would then skip it at every later start. The migrator drops the
     /// leftover, so the script builds it properly.
     /// </summary>
+    /// <summary>
+    /// 070 moves <c>snapshot_draft</c>'s key to a surrogate <c>row_id</c> and adds the owner check
+    /// and the identity indexes. A table of drafts may be large and is written all the time, so
+    /// none of it may rewrite the table or hold it locked for a scan: the column is added without
+    /// a default and filled in batches, NOT NULL and the check are proved by validation that lets
+    /// writes continue, and every index is built concurrently. The table keeps its storage, and
+    /// every existing draft ends with a key of its own.
+    /// </summary>
+    [Test]
+    public async Task Migration070_keys_existing_drafts_without_rewriting_the_table() =>
+        await WithDatabaseMigratedTo(
+            69,
+            async connectionString =>
+            {
+                const int drafts = 25_000;
+                string storage;
+                await using (var before = new NpgsqlConnection(connectionString))
+                {
+                    await before.OpenAsync();
+                    await Exec(
+                        before,
+                        "INSERT INTO trax.snapshot_draft "
+                            + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
+                            + "SELECT gen_random_uuid(), 'user-' || (n % 7), 'machine-' || (n % 3), 1, 'Draft', "
+                            + $"'{{}}'::jsonb, gen_random_uuid(), now() FROM generate_series(1, {drafts}) AS n"
+                    );
+                    storage = await Filenode(before, "snapshot_draft");
+                }
+
+                await DatabaseMigrator.Migrate(connectionString);
+
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                (await Filenode(connection, "snapshot_draft"))
+                    .Should()
+                    .Be(storage, "no statement of the upgrade rewrote the table");
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT count(*) || ' ' || count(row_id) || ' ' || count(DISTINCT row_id) "
+                            + "FROM trax.snapshot_draft"
+                    )
+                )
+                    .Should()
+                    .Equal([$"{drafts} {drafts} {drafts}"], "every draft has a key of its own");
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT c.conname || ' ' || a.attname FROM pg_constraint c "
+                            + "JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey) "
+                            + "WHERE c.conrelid = 'trax.snapshot_draft'::regclass AND c.contype = 'p'"
+                    )
+                )
+                    .Should()
+                    .Equal("pk_snapshot_draft row_id");
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'trax' "
+                            + "AND table_name = 'snapshot_draft' AND column_name = 'row_id'"
+                    )
+                )
+                    .Should()
+                    .Equal("NO");
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT conname || ' ' || convalidated FROM pg_constraint "
+                            + "WHERE conrelid = 'trax.snapshot_draft'::regclass AND contype = 'c'"
+                    )
+                )
+                    .Should()
+                    .Equal(
+                        ["ck_snapshot_draft_owner true"],
+                        "the owner check is proved, and the check that stood in for NOT NULL's scan is gone"
+                    );
+                foreach (
+                    var index in new[]
+                    {
+                        "ux_snapshot_draft_user_machine_id",
+                        "ux_snapshot_draft_system_machine_id",
+                        "ux_snapshot_draft_invoke_token",
+                    }
+                )
+                    (await IndexState(connection, index)).Should().Be("valid, unique", index);
+
+                // A host still on the previous version inserts naming neither column, and the row is
+                // keyed after every existing one.
+                await Exec(
+                    connection,
+                    "INSERT INTO trax.snapshot_draft "
+                        + "(id, user_key, machine, version, state, context, concurrency_token, updated_at) "
+                        + "VALUES (gen_random_uuid(), 'late', 'machine-0', 1, 'Draft', '{}'::jsonb, "
+                        + "gen_random_uuid(), now())"
+                );
+                (
+                    await ExternalIds(
+                        connection,
+                        "SELECT (row_id > (SELECT max(row_id) FROM trax.snapshot_draft WHERE user_key <> 'late'))::text "
+                            + "|| ' ' || owner_kind FROM trax.snapshot_draft WHERE user_key = 'late'"
+                    )
+                )
+                    .Should()
+                    .Equal("true user");
+            }
+        );
+
     [Test]
     public async Task An_index_left_invalid_by_an_interrupted_build_is_built_again()
     {
