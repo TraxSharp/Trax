@@ -189,7 +189,12 @@ internal sealed class ResumeHost : IAsyncDisposable
                 ResumeAt = entry.ResumeAt,
             }
         );
-        await train.Run(JsonSerializer.Deserialize<ResumableInput>(entry.Input!)!, metadata);
+        // Read as the dispatcher reads a queued input: its members are camelCase.
+        var input = JsonSerializer.Deserialize<ResumableInput>(
+            entry.Input!,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+        )!;
+        await train.Run(input, metadata);
         await FlushJunctionEventsAsync();
         return train.Metadata!.Id;
     }

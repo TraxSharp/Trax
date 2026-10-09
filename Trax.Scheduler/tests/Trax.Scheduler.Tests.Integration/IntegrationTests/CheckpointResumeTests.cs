@@ -344,13 +344,8 @@ public class CheckpointResumeTests(ClusterStore store)
         var manifest = await _cluster.Manifest("refusals");
         var early = await Crash(manifest, nameof(FetchFullTexts));
         var late = await Crash(manifest, nameof(SummarizeLong));
-        var completed = await _cluster.Cycle(manifest);
-        completed.TrainState.Should().Be(TrainState.Completed);
 
         (await Resume(9_999_999)).Should().Be("Execution 9999999 not found.");
-        (await Resume(completed.Id))
-            .Should()
-            .Contain("is Completed; only a failed or cancelled run can be resumed");
         (await Resume(early.Id))
             .Should()
             .Contain("checkpoint", "the check's own reason is given verbatim");
@@ -358,11 +353,23 @@ public class CheckpointResumeTests(ClusterStore store)
             .Should()
             .Contain("No checkpoint", "the step comes before the checkpoint");
 
+        // The manifest's retry resumes the late run and completes it.
+        var completed = await _cluster.Cycle(manifest);
+        completed.TrainState.Should().Be(TrainState.Completed);
+        completed.ResumeFrom.Should().Be(late.Id);
+
+        (await Resume(completed.Id))
+            .Should()
+            .Contain("is Completed; only a failed or cancelled run can be resumed");
+        (await Resume(late.Id))
+            .Should()
+            .Contain($"a resume of run {late.Id} already completed", $"its work is done ({Adr})");
+
         await _cluster.With(d =>
-            d.Metadatas.Where(m => m.Id == late.Id)
+            d.Metadatas.Where(m => m.Id == early.Id)
                 .ExecuteUpdateAsync(s => s.SetProperty(m => m.InvokingMachine, "Research.Machine"))
         );
-        (await Resume(late.Id))
+        (await Resume(early.Id))
             .Should()
             .Contain("state machine 'Research.Machine'")
             .And.Contain("cannot be resumed");

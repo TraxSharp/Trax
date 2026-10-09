@@ -164,6 +164,39 @@ public class ResumeExecutionOperationsTests
     }
 
     [Test]
+    public async Task A_run_whose_resume_already_completed_is_refused_on_both_surfaces()
+    {
+        var run = await FailedRunAsync();
+        var queued = Result(await _host.ResumeOverGraphQLAsync(run, null));
+        queued.Success.Should().BeTrue(queued.Message);
+        await _host.With(d =>
+            d.WorkQueues.Where(q => q.Id == queued.Id!.Value)
+                .ExecuteUpdateAsync(s => s.SetProperty(q => q.Status, WorkQueueStatus.Dispatched))
+        );
+        var resumed = await _host.RunResumeAsync<IResumableTrain>(queued.Id!.Value);
+        (
+            await _host.With(d =>
+                d.Metadatas.AsNoTracking()
+                    .Where(m => m.Id == resumed)
+                    .Select(m => m.TrainState)
+                    .SingleAsync()
+            )
+        )
+            .Should()
+            .Be(TrainState.Completed);
+
+        (await BothRefuse(run, null))
+            .Should()
+            .Contain($"a resume of run {run} already completed", $"its work is done ({Adr})");
+
+        var graph = await DashboardGraphAsync(run);
+        graph
+            .CanResume.Should()
+            .BeFalse("the run graph no longer offers what both surfaces refuse");
+        graph.Nodes.Should().OnlyContain(n => !n.CanResume);
+    }
+
+    [Test]
     public async Task A_resume_of_an_invoked_run_is_refused_with_its_reason()
     {
         var run = await FailedRunAsync();

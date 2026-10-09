@@ -353,6 +353,16 @@ public partial class OperationsService : IOperationsService
             if (queued is { } entry)
                 return new OperationResult(false, Message: QueuedResumeRefusal(metadataId, entry));
 
+            // A resume that completed did the run's remaining work; resuming it again would do it
+            // twice. The resumed run checks this too as it starts (Trax.Docs/adr/0047).
+            if (
+                await db.Metadatas.AnyAsync(
+                    m => m.ResumeFrom == metadataId && m.TrainState == TrainState.Completed,
+                    ct
+                )
+            )
+                return new OperationResult(false, Message: CompletedResumeRefusal(metadataId));
+
             trainName = source.Name;
             savedInput = input;
 
@@ -455,6 +465,12 @@ public partial class OperationsService : IOperationsService
         $"A resume of execution {metadataId} is already queued"
         + (entry is { } id ? $" (WorkQueue {id})" : "")
         + "; a run is resumed once at a time. Nothing was queued.";
+
+    /// <summary>The reason a run whose resume already completed is refused another.</summary>
+    internal static string CompletedResumeRefusal(long metadataId) =>
+        $"Execution {metadataId} cannot be resumed: "
+        + ResumeSources.AlreadyResumedReason(metadataId)
+        + " Nothing was queued.";
 
     /// <summary>
     /// Test seam: awaited between a resume's checks and its insert, so a test can queue a

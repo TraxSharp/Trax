@@ -145,6 +145,9 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
         if (rows.FirstOrDefault() is not { } store)
             return ResumePlanner.NoRows;
 
+        if (await Done(store, runId, cancellationToken).ConfigureAwait(false) is { } done)
+            return done;
+
         var lineage = await store.Lineage(runId, cancellationToken).ConfigureAwait(false);
 
         return ResumePlanner
@@ -187,9 +190,11 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
         var hash = ChainGraph.From(chain, train, input, output).Hash;
         var container = services.GetService<IServiceProviderIsService>();
         var chosen = ResumePlanner.Chosen(chain, lineage);
+        var done = await Done(store, runId, cancellationToken).ConfigureAwait(false);
 
         ResumeVerdict At(string? point) =>
-            ResumePlanner.Check(chain, hash, input, output, container, chosen, point).Verdict;
+            done
+            ?? ResumePlanner.Check(chain, hash, input, output, container, chosen, point).Verdict;
 
         var (restored, restoredTracks) = ResumePlanner.Resumed(
             chain,
@@ -212,6 +217,26 @@ internal sealed class RunResumes(IEnumerable<ICheckpointRows> rows, IServiceProv
             RestoredTracks = restoredTracks,
         };
     }
+
+    /// <summary>
+    /// The refusal for a run a resume of which already completed, whose work is done, at any
+    /// point; null for any other run.
+    /// </summary>
+    private static async Task<ResumeVerdict?> Done(
+        ICheckpointRows store,
+        long runId,
+        CancellationToken cancellationToken
+    ) =>
+        await store.Source(runId, cancellationToken).ConfigureAwait(false)
+            is { ResumedToCompletion: true }
+            ? new ResumeVerdict(
+                false,
+                ResumeSources.AlreadyResumed,
+                "A" + ResumeSources.AlreadyResumedReason(runId)[1..],
+                null,
+                null
+            )
+            : null;
 }
 
 /// <summary>

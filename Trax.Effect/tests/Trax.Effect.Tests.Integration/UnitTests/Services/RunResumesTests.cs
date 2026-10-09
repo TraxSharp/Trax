@@ -106,7 +106,7 @@ public class RunResumesTests
         }
 
         public Task<ResumeSource?> Source(long runId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult<ResumeSource?>(null);
 
         public Task DeleteFor(long runId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

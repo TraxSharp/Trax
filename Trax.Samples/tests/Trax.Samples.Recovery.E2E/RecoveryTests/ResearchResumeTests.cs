@@ -4,6 +4,8 @@ using Trax.Effect.Data.Testing;
 using Trax.Mediator.Services.TrustedExecution;
 using Trax.Samples.Recovery.E2E.Factories;
 using Trax.Samples.Recovery.E2E.Fixtures;
+using Trax.Samples.Recovery.Faults;
+using Trax.Samples.Recovery.Trains.StartRun.Junctions;
 using Trax.Scheduler.Services.Operations;
 
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
@@ -35,17 +37,29 @@ public class ResearchResumeTests : RecoveryTestFixture
     {
         var before = await TraxInvariants.FindViolationsAsync(ConnectionString);
 
+        // Summarize crashes on every attempt, so the manifest's retries resume and fail too, and
+        // the failed runs are left for an operator to resume.
         await Run.StartAsync("RESEARCH", crashOnce: true);
+        var faults = SharedRecoverySetup.Factory.Services.GetRequiredService<FaultInjector>();
+        using var keepCrashing = new CancellationTokenSource();
+        var rearming = KeepArmedAsync(faults, Run.RunId, keepCrashing.Token);
+
         var failed = await Run.FollowAttemptAsync(1);
         (await Run.WaitForEndAsync(failed)).Should().Be("FAILED");
         var crashed = await Run.TimelineAsync(failed);
         Names(crashed).Should().Contain("FetchFullTexts", "the papers' findings are cross-checked");
         crashed.Last().GetProperty("name").GetString().Should().Be("Summarize");
 
-        // The manifest's retry resumes the failed run by itself and completes it.
+        // The manifest's retries resume the failed run by themselves: each runs only Summarize.
         var retry = await Run.FollowAttemptAsync(2);
-        (await Run.WaitForEndAsync(retry)).Should().Be("COMPLETED");
-        var report = await OutputAsync(retry);
+        (await Run.WaitForEndAsync(retry)).Should().Be("FAILED");
+        Names(await Run.TimelineAsync(retry)).Should().Equal(["Summarize"]);
+        var lastRetry = await Run.FollowAttemptAsync(ScheduleDemoRun.MaxRetries + 1);
+        (await Run.WaitForEndAsync(lastRetry)).Should().Be("FAILED");
+
+        await keepCrashing.CancelAsync();
+        await rearming;
+        faults.Disarm(Run.RunId);
 
         // What the operator sees on the failed run: a checkpoint after the Scale step, and Summarize
         // offered as a point to resume at; nothing before the checkpoint is.
@@ -61,11 +75,20 @@ public class ResearchResumeTests : RecoveryTestFixture
 
         // On GraphQL, at the step the page's button names.
         var overGraphQL = await ResumeOverGraphQLAsync(failed, Summarize);
-        await ShouldHaveRunOnlySummarize(overGraphQL, report, "resumeExecution on GraphQL");
+        await ShouldHaveRunOnlySummarize(overGraphQL, null, "resumeExecution on GraphQL");
+        var report = await OutputAsync(overGraphQL);
 
-        // From the dashboard, after the latest checkpoint, as its Resume button asks.
-        var fromDashboard = await ResumeAsTheDashboardAsync(failed);
+        // From the dashboard, after the latest checkpoint, as its Resume button asks, on the
+        // retry, which reads the failed run's checkpoint back through the run it resumed.
+        var fromDashboard = await ResumeAsTheDashboardAsync(retry);
         await ShouldHaveRunOnlySummarize(fromDashboard, report, "the dashboard's Resume");
+
+        // A run whose resume completed has no work left: neither surface resumes it again, and
+        // its graph no longer offers it.
+        (await Run.RunGraphAsync(failed))
+            .CanResume.Should()
+            .BeFalse($"its resume completed ({Adr})");
+        (await RefusedOverGraphQLAsync(failed)).Should().Contain("already completed");
 
         Decider
             .Asked(Run.RunId, "Source")
@@ -88,7 +111,9 @@ public class ResearchResumeTests : RecoveryTestFixture
             .Where(v => !transient.Contains(v.Invariant))
             .Should()
             .BeEmpty(TraxInvariants.Describe(added));
-        var runs = new[] { failed, retry, overGraphQL, fromDashboard }.Select(id => id.ToString());
+        var runs = new[] { failed, retry, lastRetry, overGraphQL, fromDashboard }.Select(id =>
+            id.ToString()
+        );
         added
             .Where(v => v.Invariant == TraxInvariants.RunInProgress)
             .Select(v => v.Id)
@@ -96,7 +121,44 @@ public class ResearchResumeTests : RecoveryTestFixture
             .NotIntersectWith(runs, "every run this test started has ended");
     }
 
-    private async Task ShouldHaveRunOnlySummarize(long resumed, string report, string surface)
+    /// <summary>Re-arms the crash for <paramref name="runId"/> each time it fires, until cancelled.</summary>
+    private static async Task KeepArmedAsync(
+        FaultInjector faults,
+        string runId,
+        CancellationToken cancellationToken
+    )
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            if (!faults.IsArmed(runId))
+                faults.Arm(runId, CrashPoint.Report);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(5), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task<string> RefusedOverGraphQLAsync(long run)
+    {
+        var response = await GraphQL.SendAsync(
+            $$"""
+            mutation { operations { resumeExecution(id: {{run}}) { success message id } } }
+            """,
+            OperatorKey
+        );
+        response.HasErrors.Should().BeFalse(response.FirstErrorMessage);
+        var result = response.GetData("operations", "resumeExecution");
+        result.GetProperty("success").GetBoolean().Should().BeFalse();
+        return result.GetProperty("message").GetString()!;
+    }
+
+    private async Task ShouldHaveRunOnlySummarize(long resumed, string? report, string surface)
     {
         await Stream.SubscribeAsync(resumed);
         (await Run.WaitForEndAsync(resumed)).Should().Be("COMPLETED", surface);
@@ -112,10 +174,10 @@ public class ResearchResumeTests : RecoveryTestFixture
         steps.Single().GetProperty("nodeId").GetString().Should().Be(Summarize);
         Questions(steps).Should().BeEmpty();
 
-        // The report it wrote is the one the retry wrote: the stored findings came back whole.
-        (await OutputAsync(resumed))
-            .Should()
-            .Be(report, surface);
+        // The report it wrote is the one the other resume wrote: the stored findings came back
+        // whole.
+        if (report is not null)
+            (await OutputAsync(resumed)).Should().Be(report, surface);
 
         // Its run graph marks what it skipped as restored.
         var (_, nodes) = await Run.RunGraphAsync(resumed);
