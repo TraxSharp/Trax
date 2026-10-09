@@ -320,7 +320,7 @@ follow the first.
   `InvokesModelTests` checks the refusal; `InvokedRunOperationsTests` in `Trax.Api/tests` checks both surfaces.
 - **2026-10-08**: An instance stranded in its invoking state (not even its run's failure could be applied) is
   marked: the one conditional update that clears its token records the state in `snapshot_draft.invoke_stranded_state`
-  (migrations 070 and 032), and a write that gives the row a token or moves it to another state clears it.
+  (migrations 075 and 037), and a write that gives the row a token or moves it to another state clears it.
   `TraxInvariants`' `invoking-state-without-token` exempts a row marked for the state it is in, so the invariant and
   the design agree; a Postgres test reaches the stranding with the invariants on.
 

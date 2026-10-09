@@ -34,7 +34,9 @@ internal sealed record StoredInstance(
     StoredSnapshot Snapshot
 );
 
-/// <summary>A row that holds a live invoke token, as the outcome reconciler lists them.</summary>
+/// <summary>
+/// A row that holds a live invoke token, as <see cref="IMachineInstanceStore.ListInvoking"/> lists them.
+/// </summary>
 /// <param name="Owner">The row's owner.</param>
 /// <param name="Machine">The machine the row belongs to.</param>
 /// <param name="Id">The draft or instance id.</param>
@@ -174,7 +176,8 @@ internal interface IMachineInstanceStore
 
     /// <summary>
     /// Up to <paramref name="limit"/> rows that hold a live invoke token, ordered by the token, starting after
-    /// <paramref name="afterToken"/> (keyset paging; null starts at the beginning). The reconciler sweeps these.
+    /// <paramref name="afterToken"/> (keyset paging; null starts at the beginning), whether or not their runs have
+    /// ended. The reconciler reads only the ended ones, through <see cref="InvokeOutcomeDelivery.Ended"/>.
     /// </summary>
     Task<IReadOnlyList<InvokingInstance>> ListInvoking(
         int limit,

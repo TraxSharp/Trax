@@ -277,6 +277,7 @@ namespace Trax.Effect.StateMachine.Persistence
         public StateMachineOptions() { }
         public System.TimeSpan? DraftTtl { get; set; }
         public System.TimeSpan InvokeOutcomeSweepInterval { get; set; }
+        public System.TimeSpan InvokeOutcomeSweepIntervalWhileListening { get; set; }
     }
     public static class StateMachinesBuilderExtensions
     {
