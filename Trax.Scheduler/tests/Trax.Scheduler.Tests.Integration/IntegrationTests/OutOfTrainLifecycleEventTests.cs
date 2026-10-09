@@ -135,6 +135,37 @@ public class OutOfTrainLifecycleEventTests
     }
 
     [Test]
+    public async Task The_runs_a_reaper_failed_are_published_side_by_side_each_once()
+    {
+        var stale = new List<long>();
+        for (var i = 0; i < 4; i++)
+            stale.Add(await SeedRunAsync(TrainState.InProgress, DateTime.UtcNow.AddHours(-1)));
+
+        // Each OnFailed waits for a second one to be in flight with it, or gives up after a while.
+        _lifecycle.MeetOnFailed(TimeSpan.FromSeconds(5));
+
+        var polling = new ManifestManagerPollingService(
+            _provider,
+            _provider.GetRequiredService<SchedulerConfiguration>(),
+            NullLogger<ManifestManagerPollingService>.Instance,
+            _provider.GetRequiredService<ISqlDialect>()
+        );
+        await polling.RunManifestManager(CancellationToken.None);
+
+        _lifecycle
+            .Alone.Should()
+            .Be(
+                0,
+                "a reaper's runs are published several at a time, so one slow hook does not hold up the rest"
+            );
+        _lifecycle
+            .Events.Where(e => e.Event == "Failed")
+            .Select(e => e.Id)
+            .Should()
+            .BeEquivalentTo(stale, "the one statement that failed them all published each once");
+    }
+
+    [Test]
     public async Task An_operator_cancel_of_a_pending_run_publishes_Cancelled_once()
     {
         var pending = await SeedRunAsync(TrainState.Pending, DateTime.UtcNow);
@@ -320,12 +351,43 @@ public class OutOfTrainLifecycleEventTests
                 _failures.Add((data?.Type, metadata.FailureReason));
         }
 
+        private TimeSpan? _meetWithin;
+        private TaskCompletionSource _met = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _inFlight;
+        private int _alone;
+
+        /// <summary>How many <c>OnFailed</c> calls met no other in flight with them.</summary>
+        public int Alone => Volatile.Read(ref _alone);
+
+        /// <summary>Makes each <c>OnFailed</c> wait, up to <paramref name="within"/>, for a second one in flight.</summary>
+        public void MeetOnFailed(TimeSpan within) => _meetWithin = within;
+
+        public async Task MeetAsync()
+        {
+            if (_meetWithin is not { } within)
+                return;
+            if (Interlocked.Increment(ref _inFlight) >= 2)
+                _met.TrySetResult();
+            try
+            {
+                await _met.Task.WaitAsync(within);
+            }
+            catch (TimeoutException)
+            {
+                Interlocked.Increment(ref _alone);
+            }
+        }
+
         public void Clear()
         {
             lock (_events)
                 _events.Clear();
             lock (_failures)
                 _failures.Clear();
+            _meetWithin = null;
+            _met = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _inFlight = 0;
+            _alone = 0;
         }
     }
 
@@ -337,10 +399,12 @@ public class OutOfTrainLifecycleEventTests
         public Task OnCompleted(Metadata metadata, CancellationToken ct) =>
             Record("Completed", metadata);
 
-        public Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
+        public async Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
         {
+            if (metadata.Name == TrainName)
+                await recorder.MeetAsync();
             recorder.AddFailure(metadata, exception);
-            return Record("Failed", metadata);
+            await Record("Failed", metadata);
         }
 
         public Task OnCancelled(Metadata metadata, CancellationToken ct) =>

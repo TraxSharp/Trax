@@ -107,33 +107,19 @@ internal class ReapStaleInProgressMetadataJunction(
             );
         }
 
-        // One conditional write per run, so the runs this pass moved to Failed are known: a run
+        // One conditional write for every run, which also tells the runs it moved to Failed: a run
         // that finished, or that another pass reaped, matches nothing and is not published again.
-        var reaped = new List<long>(staleIds.Count);
-
-        foreach (var id in staleIds)
-        {
-            var failed = await dataContext
-                .Metadatas.Where(m => m.Id == id && m.TrainState == TrainState.InProgress)
-                .ExecuteUpdateAsync(
-                    s =>
-                        s.SetProperty(m => m.TrainState, TrainState.Failed)
-                            .SetProperty(m => m.EndTime, now)
-                            .SetProperty(
-                                m => m.FailureReason,
-                                "Job was stuck InProgress beyond the configured stale in-progress timeout"
-                            )
-                            .SetProperty(m => m.FailureException, "StaleInProgressTimeout")
-                            .SetProperty(
-                                m => m.FailureJunction,
-                                nameof(ReapStaleInProgressMetadataJunction)
-                            ),
-                    CancellationToken
-                );
-
-            if (failed > 0)
-                reaped.Add(id);
-        }
+        var reaped = await ReapedRuns.FailAsync(
+            dataContext,
+            dataContext.Metadatas.Where(m =>
+                staleIds.Contains(m.Id) && m.TrainState == TrainState.InProgress
+            ),
+            staleIds,
+            "Job was stuck InProgress beyond the configured stale in-progress timeout",
+            "StaleInProgressTimeout",
+            nameof(ReapStaleInProgressMetadataJunction),
+            CancellationToken
+        );
 
         logger.LogInformation(
             "ReapStaleInProgressMetadataJunction completed: {Count} stale in-progress job(s) marked as failed",

@@ -50,12 +50,17 @@ internal static class OutOfTrainOutcomes
     /// them. Defaults to <see cref="RecordedFailure"/>, the failure the row records.
     /// </param>
     /// <param name="timeout">Overrides <see cref="PublishTimeout"/>.</param>
+    /// <param name="parallelism">
+    /// How many runs are published at once. One, the default, publishes them in order; each run's
+    /// read and hooks are bounded by the timeout either way.
+    /// </param>
     internal static Task PublishFailedAsync(
         IServiceProvider services,
         IEnumerable<long> runIds,
         ILogger logger,
         Func<Metadata, Exception>? describe = null,
-        TimeSpan? timeout = null
+        TimeSpan? timeout = null,
+        int parallelism = 1
     ) =>
         PublishAsync(
             services,
@@ -63,7 +68,8 @@ internal static class OutOfTrainOutcomes
             TrainState.Failed,
             logger,
             timeout,
-            (hooks, run, ct) => hooks.OnFailed(run, (describe ?? RecordedFailure)(run), ct)
+            (hooks, run, ct) => hooks.OnFailed(run, (describe ?? RecordedFailure)(run), ct),
+            parallelism
         );
 
     /// <summary>
@@ -114,12 +120,13 @@ internal static class OutOfTrainOutcomes
         TrainState state,
         ILogger logger,
         TimeSpan? timeout,
-        Func<ILifecycleHookRunner, Metadata, CancellationToken, Task> publish
+        Func<ILifecycleHookRunner, Metadata, CancellationToken, Task> publish,
+        int parallelism = 1
     )
     {
         var bound = timeout ?? PublishTimeout;
 
-        foreach (var runId in runIds)
+        async Task PublishBoundedAsync(long runId)
         {
             try
             {
@@ -140,6 +147,20 @@ internal static class OutOfTrainOutcomes
                 );
             }
         }
+
+        if (parallelism <= 1)
+        {
+            foreach (var runId in runIds)
+                await PublishBoundedAsync(runId);
+            return;
+        }
+
+        // Each run in a scope of its own, as in order; a slow hook holds up only its own run.
+        await Parallel.ForEachAsync(
+            runIds,
+            new ParallelOptions { MaxDegreeOfParallelism = parallelism },
+            async (runId, _) => await PublishBoundedAsync(runId)
+        );
     }
 
     private static async Task PublishOneAsync(
