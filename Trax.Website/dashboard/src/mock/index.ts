@@ -2,7 +2,7 @@ export { createMockClient, createRealClient } from "./client";
 export type { MockClientOptions, RealClientOptions } from "./client";
 export { createMockStore } from "./store/mock-store";
 export type { MockStore } from "./store/mock-store";
-export { defaultOverlays, noLogLevelServiceOverlay } from "./store/overlays";
+export { defaultOverlays, noLogLevelServiceOverlay, userDraftRunsOverlay } from "./store/overlays";
 export type { StatefulOverlay } from "./store/overlays";
 export { devMockSeed, workQueueSeed } from "./seeds";
 export { startTrainEventSimulator } from "./simulator";

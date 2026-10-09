@@ -71,7 +71,10 @@ export function WorkQueuePage() {
   async function onCancel(id: number) {
     if (!confirm(`Cancel queued entry #${id}?`)) return;
     const r = await cancelEntry({ id });
+    const res = r.data?.operations?.workQueue?.cancelWorkQueueEntry;
     if (r.error) toast(r.error.message, "error");
+    // A refusal says why: an entry a user's state-machine draft queued is read-only to operators.
+    else if (!res?.success) toast(res?.message ?? "Could not cancel.", "error");
     else toast(`Entry #${id} cancelled.`, "success");
     refetch();
   }
@@ -82,11 +85,11 @@ export function WorkQueuePage() {
     setBusy(true);
     const r = await cancelMany({ ids: selectedIds });
     setBusy(false);
+    const res = r.data?.operations?.workQueue?.cancelWorkQueueEntries;
     if (r.error) toast(r.error.message, "error");
-    else {
-      const c = r.data?.operations.workQueue.cancelWorkQueueEntries.count ?? 0;
-      toast(`${c} entr(ies) cancelled.`, "success");
-    }
+    else if (!res?.success) toast(res?.message ?? "Could not cancel.", "error");
+    // The API's message counts what it cancelled and says why it skipped any.
+    else toast(res.message ?? `${res.count ?? 0} entr(ies) cancelled.`, "success");
     refetch();
   }
 

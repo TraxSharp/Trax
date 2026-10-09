@@ -172,11 +172,14 @@ export function ExecutionsPage() {
     const res = r.data?.operations?.cancelExecutions;
     if (r.error) toast(r.error.message, "error");
     else if (res?.success) {
+      // The API's message counts what it flagged and says why it skipped any (a run a user's
+      // state-machine draft started is read-only to operators).
       const n = res.count ?? 0;
       toast(
-        n > 0
-          ? `Cancellation requested for ${n} execution(s).`
-          : "None of the selected executions is still cancellable.",
+        res.message ??
+          (n > 0
+            ? `Cancellation requested for ${n} execution(s).`
+            : "None of the selected executions is still cancellable."),
         n > 0 ? "success" : "info",
       );
     } else toast(res?.message ?? "Could not request cancellation.", "error");

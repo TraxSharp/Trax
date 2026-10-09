@@ -10,7 +10,7 @@ import {
   persistedOperationsScenario,
   schedulerConfigScenario,
 } from "./scenarios";
-import { USER_OWNED_CANCEL_REFUSAL } from "./store/overlays";
+import { USER_OWNED_CANCEL_REFUSAL, USER_OWNED_RUN_CANCEL_REFUSAL, defaultOverlays, userDraftRunsOverlay } from "./store/overlays";
 import type { MockSchemaOverrides } from "./build-mock-schema";
 import {
   EFFECTS,
@@ -28,7 +28,9 @@ import {
   WORK_QUEUE_DETAIL,
 } from "../graphql/queries";
 import {
+  CANCEL_EXECUTION,
   CANCEL_EXECUTIONS,
+  CANCEL_WORK_QUEUE_ENTRIES,
   CANCEL_GROUPS,
   CANCEL_MACHINE_INSTANCE,
   CANCEL_WORK_QUEUE_ENTRY,
@@ -90,6 +92,37 @@ describe("work queue / runs", () => {
     expect(new Set(ids).size).toBe(4);
     const second = client();
     expect([await queue(second), await queue(second), await run(second), await run(second)]).toEqual(ids);
+  });
+
+  test("a host whose users' drafts started runs refuses their cancel and skips them in bulk, in the API's words", async () => {
+    const c = createMockClient({
+      store: createMockStore({ exposeOnWindow: false, persist: false }),
+      fixtures: false,
+      overlays: [...defaultOverlays, userDraftRunsOverlay([7110], [7202])],
+    });
+    const one = get((await c.mutation(CANCEL_EXECUTION, { id: 7110 }).toPromise()).data, "operations.cancelExecution");
+    expect(one).toEqual({ success: false, count: 0, message: USER_OWNED_RUN_CANCEL_REFUSAL });
+    const many = get((await c.mutation(CANCEL_EXECUTIONS, { ids: [7110, 7] }).toPromise()).data, "operations.cancelExecutions");
+    expect(many).toEqual({
+      success: true,
+      count: 1,
+      message: `Cancellation requested for 1 of 2 execution(s). 1 skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`,
+    });
+    for (const [id, flagged] of [[7110, false], [7, true]] as const) {
+      const d = await c.query(EXECUTION_DETAIL, { id }, NET).toPromise();
+      expect(get(d.data, "operations.executionDetail.cancellationRequested")).toBe(flagged);
+    }
+    const entry = get((await c.mutation(CANCEL_WORK_QUEUE_ENTRY, { id: 7202 }).toPromise()).data, "operations.workQueue.cancelWorkQueueEntry");
+    expect(entry).toEqual({ success: false, message: USER_OWNED_RUN_CANCEL_REFUSAL });
+    const entries = get(
+      (await c.mutation(CANCEL_WORK_QUEUE_ENTRIES, { ids: [7202, 7203] }).toPromise()).data,
+      "operations.workQueue.cancelWorkQueueEntries",
+    );
+    expect(entries).toEqual({
+      success: true,
+      count: 1,
+      message: `1 of 2 work queue entry(s) cancelled. 1 skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`,
+    });
   });
 
   test("queueTrain and runTrain refuse input that is not JSON", async () => {

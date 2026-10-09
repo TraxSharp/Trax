@@ -3,6 +3,7 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 import { ExecutionDetailPage } from "./ExecutionDetailPage";
 import { executionDetailScenario } from "../mock/scenarios";
 import { getGlobalMockStore } from "../mock/global-store";
+import { USER_OWNED_RUN_CANCEL_REFUSAL, userDraftRunsOverlay } from "../mock/store/overlays";
 import type { MockSchemaOverrides } from "../mock/build-mock-schema";
 
 const meta = {
@@ -39,6 +40,25 @@ export const CancelActive: Story = {
       await waitFor(() => expect(c.getByRole("heading", { name: "AlphaJob" })).toBeInTheDocument());
       await userEvent.click(c.getByRole("button", { name: "Cancel" }));
       await waitFor(() => expect(c.getByText("Cancellation requested")).toBeInTheDocument());
+    } finally {
+      restore();
+    }
+  },
+};
+
+// A run a step of a user's state-machine draft started is read-only to operators: its cancel is
+// refused with the API's reason, and nothing is requested.
+export const CancelUserDraftRunRefused: Story = {
+  parameters: { overlays: [userDraftRunsOverlay([903])] },
+  play: async ({ canvasElement }) => {
+    const c = within(canvasElement);
+    const restore = acceptConfirm();
+    try {
+      await waitFor(() => expect(c.getByRole("heading", { name: "AlphaJob" })).toBeInTheDocument());
+      await userEvent.click(c.getByRole("button", { name: "Cancel" }));
+      expect(await c.findByText(USER_OWNED_RUN_CANCEL_REFUSAL)).toBeInTheDocument();
+      expect(c.queryByText("Cancellation requested")).not.toBeInTheDocument();
+      expect(c.queryByText("Execution is no longer cancellable.")).not.toBeInTheDocument();
     } finally {
       restore();
     }

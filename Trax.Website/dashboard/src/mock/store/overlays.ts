@@ -1283,6 +1283,67 @@ const readMachineInstance: QueryOverlay = (data, store) => {
   });
 };
 
+// ── Runs a user's draft started ────────────────────────────────────────────
+// A user's state-machine draft is read-only to operators: the API refuses an operator's cancel of a
+// run one of its steps started, or of a work queue entry one queued, and a bulk cancel skips them
+// and says why. Which runs those are is the host's data, which no read returns, so a story names
+// them (userDraftRunsOverlay).
+
+export const USER_OWNED_RUN_CANCEL_REFUSAL =
+  "A run a step of a user's state-machine draft started is read-only to operators: it is " +
+  "cancelled only when its user leaves the state through one of the machine's own transitions.";
+
+const skippedUserOwned = (message: string, skipped: number) =>
+  skipped === 0 ? message : `${message} ${skipped} skipped: ${USER_OWNED_RUN_CANCEL_REFUSAL}`;
+
+/**
+ * A host where steps of users' state-machine drafts started the runs `runIds` and queued the work
+ * queue entries `entryIds`: an operator's cancel of one is refused, and a bulk cancel skips them,
+ * in the API's words. Layer it over the defaults (a story's `parameters.overlays`).
+ */
+export function userDraftRunsOverlay(runIds: number[], entryIds: number[] = []): StatefulOverlay {
+  const runs = new Set(runIds);
+  const entries = new Set(entryIds);
+  const refused = (path: string, extra: Rec = {}) =>
+    wrap(path, { success: false, message: USER_OWNED_RUN_CANCEL_REFUSAL, ...extra });
+  return {
+    mutations: {
+      CancelExecution: (variables, store, context) =>
+        runs.has(variables.id as number)
+          ? refused("operations.cancelExecution", { count: 0 })
+          : cancelExecution(variables, store, context),
+      CancelExecutions: (variables, store, context) => {
+        const ids = [...new Set((variables.ids as number[] | undefined) ?? [])];
+        const skipped = ids.filter((id) => runs.has(id)).length;
+        if (ids.length === 1 && skipped === 1) return refused("operations.cancelExecutions", { count: 0 });
+        const rest = ids.filter((id) => !runs.has(id));
+        void cancelExecutions({ ids: rest }, store, context);
+        return wrap("operations.cancelExecutions", {
+          success: true,
+          count: rest.length,
+          message: skippedUserOwned(`Cancellation requested for ${rest.length} of ${ids.length} execution(s).`, skipped),
+        });
+      },
+      CancelWorkQueueEntry: (variables, store, context) =>
+        entries.has(variables.id as number)
+          ? refused("operations.workQueue.cancelWorkQueueEntry")
+          : cancelWorkQueueEntry(variables, store, context),
+      CancelWorkQueueEntries: (variables, store, context) => {
+        const ids = [...new Set((variables.ids as number[] | undefined) ?? [])];
+        const skipped = ids.filter((id) => entries.has(id)).length;
+        if (ids.length === 1 && skipped === 1) return refused("operations.workQueue.cancelWorkQueueEntries", { count: 0 });
+        const rest = ids.filter((id) => !entries.has(id));
+        void cancelWorkQueueEntries({ ids: rest }, store, context);
+        return wrap("operations.workQueue.cancelWorkQueueEntries", {
+          success: true,
+          count: rest.length,
+          message: skippedUserOwned(`${rest.length} of ${ids.length} work queue entry(s) cancelled.`, skipped),
+        });
+      },
+    },
+  };
+}
+
 // ── Registration ───────────────────────────────────────────────────────────
 
 export const workQueueOverlay: StatefulOverlay = {

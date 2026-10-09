@@ -87,9 +87,11 @@ export function ExecutionDetailPage() {
     setBusy(true);
     const r = await cancelExecution({ id });
     setBusy(false);
+    const res = r.data?.operations?.cancelExecution;
     if (r.error) toast(r.error.message, "error");
-    else if (r.data?.operations.cancelExecution.count === 0)
-      toast("Execution is no longer cancellable.", "info");
+    // A refusal says why: a run a user's state-machine draft started is read-only to operators.
+    else if (res && !res.success) toast(res.message ?? "Could not request cancellation.", "error");
+    else if (res?.count === 0) toast("Execution is no longer cancellable.", "info");
     else toast("Cancellation requested.", "success");
     reexecute({ requestPolicy: "network-only" });
   }
