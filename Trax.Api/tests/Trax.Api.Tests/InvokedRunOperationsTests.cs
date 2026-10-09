@@ -401,6 +401,35 @@ public class InvokedRunOperationsTests
         statuses[plain].Should().Be(WorkQueueStatus.Cancelled);
     }
 
+    [Test]
+    public async Task A_system_instance_asked_for_with_a_row_id_that_is_not_its_own_is_null()
+    {
+        var machine = "ingest-" + Guid.NewGuid().ToString("N");
+        var system = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", null);
+        var other = await SeedDraftAsync(machine, SnapshotOwnerKind.System, "{}", null);
+        var operations = Operations();
+
+        var right = await new OperationsQueries().GetMachineInstance(
+            machine,
+            SnapshotOwnerKind.System,
+            system.Id,
+            operations,
+            default,
+            rowId: system.RowId
+        );
+        var wrong = await new OperationsQueries().GetMachineInstance(
+            machine,
+            SnapshotOwnerKind.System,
+            system.Id,
+            operations,
+            default,
+            rowId: other.RowId
+        );
+
+        right!.RowId.Should().Be(system.RowId);
+        wrong.Should().BeNull("a row id names one row, and this one is another instance's");
+    }
+
     private static (bool, int?, string?) Unpack(OperationResponse r) =>
         (r.Success, r.Count, r.Message);
 
