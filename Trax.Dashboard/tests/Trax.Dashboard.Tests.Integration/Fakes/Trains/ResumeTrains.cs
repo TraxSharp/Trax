@@ -59,7 +59,7 @@ public sealed class PublishPages : EffectJunction<PageSummary, string>
 /// refused everywhere else with <see cref="Refusal"/>. The one check the run page's buttons and the
 /// operations service both ask, as in a host.
 /// </summary>
-public sealed class ScriptedRunResumes : IRunResumes
+internal sealed class ScriptedRunResumes : IRunResumes
 {
     public const string Refusal = "No checkpoint the run wrote lets it resume there.";
 

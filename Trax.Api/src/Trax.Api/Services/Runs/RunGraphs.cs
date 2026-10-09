@@ -22,7 +22,7 @@ namespace Trax.Api.Services.Runs;
 /// name or position: two nodes can run the same junction, and a chain can change between a run and
 /// the read.</para>
 /// </remarks>
-public static class RunGraphs
+internal static class RunGraphs
 {
     /// <summary>
     /// The most steps one read matches, the largest page <c>operations.junctionRuns</c> returns.

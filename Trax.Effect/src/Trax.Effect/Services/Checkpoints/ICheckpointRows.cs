@@ -65,7 +65,7 @@ internal sealed record ResumeSource(
 );
 
 /// <summary>How large a checkpoint's state may be.</summary>
-public sealed class CheckpointOptions
+internal sealed class CheckpointOptions
 {
     /// <summary>
     /// The largest state a checkpoint stores, in bytes of JSON: 1 MiB unless the mediator sets it

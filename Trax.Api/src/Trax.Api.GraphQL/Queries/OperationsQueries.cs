@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Api.DTOs;
 using Trax.Api.GraphQL.Validation;
 using Trax.Api.Services.HealthCheck;
@@ -1133,19 +1134,28 @@ public partial class OperationsQueries
     /// <param name="dataContextFactory">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="chainGraphs">Resolved from DI; not a GraphQL argument.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="resumes">Resolved from DI; not a GraphQL argument. Without it no resume is offered.</param>
+    /// <param name="services">
+    /// Resolved from DI; not a GraphQL argument. The resume check is read from it; without one no
+    /// resume is offered.
+    /// </param>
     public async Task<RunGraph?> GetRunGraph(
         long metadataId,
         [Service] IDataContextProviderFactory dataContextFactory,
         [Service] ITrainChainGraphs chainGraphs,
         CancellationToken ct,
-        [Service] IRunResumes? resumes = null
+        [Service] IServiceProvider? services = null
     )
     {
         RunIdArgument.Require(metadataId);
 
         using var db = await dataContextFactory.CreateDbContextAsync(ct);
-        return await RunGraphs.ReadAsync(db, chainGraphs, resumes, metadataId, ct);
+        return await RunGraphs.ReadAsync(
+            db,
+            chainGraphs,
+            services?.GetService<IRunResumes>(),
+            metadataId,
+            ct
+        );
     }
 
     // Names and enum spellings follow the options the queue and run paths deserialize input

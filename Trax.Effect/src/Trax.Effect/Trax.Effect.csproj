@@ -56,4 +56,18 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.Data" />
   </ItemGroup>
+
+  <!-- Whether a run can resume (IRunResumes and its verdicts) and how large a checkpoint may be (CheckpointOptions)
+       are Trax's own plumbing between the scheduler's retries, the operations service and both operator surfaces;
+       no consumer calls or configures them (Trax.Docs/adr/0047). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Scheduler" />
+    <InternalsVisibleTo Include="Trax.Api" />
+    <InternalsVisibleTo Include="Trax.Api.GraphQL" />
+    <InternalsVisibleTo Include="Trax.Dashboard" />
+    <InternalsVisibleTo Include="Trax.Mediator.Tests.MemoryLeak.Integration" />
+    <InternalsVisibleTo Include="Trax.Scheduler.Tests.Integration" />
+    <InternalsVisibleTo Include="Trax.Api.Tests" />
+    <InternalsVisibleTo Include="Trax.Dashboard.Tests.Integration" />
+  </ItemGroup>
 </Project>

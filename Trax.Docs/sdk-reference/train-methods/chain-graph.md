@@ -156,7 +156,7 @@ node by the `nodeId` junction events record; the dashboard's run page shows the 
 
 `ITrainChainGraphs.FindDeclared(name)` looks a train up the same way and
 returns the `ChainRecorder` the graph was drawn from, with the train's class and its input and output
-types, as a `DeclaredTrainChain`. It is what `IRunResumes.Check` needs to decide whether a failed run
+types, as a `DeclaredTrainChain`. It is what Trax's resume check needs to decide whether a failed run
 can resume from a checkpoint; the scheduler's retries and the operator's resume ask through it.
 
 ## Example

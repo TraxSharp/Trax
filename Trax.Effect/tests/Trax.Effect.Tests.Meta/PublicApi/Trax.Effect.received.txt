@@ -235,6 +235,11 @@ namespace Trax.Effect.Enums
 }
 namespace Trax.Effect.Exceptions
 {
+    public class ResumeRefusedException : Trax.Core.Exceptions.TrainException
+    {
+        public ResumeRefusedException(string code, string message) { }
+        public string Code { get; }
+    }
     public class StoreRefusedContentException : System.Exception
     {
         public StoreRefusedContentException(System.Exception innerException) { }
@@ -1221,38 +1226,6 @@ namespace Trax.Effect.Services.ChangeSignal
         public void Complete() { }
         public void Dispose() { }
         public void Notify(Trax.Effect.Services.ChangeSignal.ChangeDomain domain) { }
-    }
-}
-namespace Trax.Effect.Services.Checkpoints
-{
-    public sealed class CheckpointOptions
-    {
-        public CheckpointOptions() { }
-        public int MaxStateBytes { get; set; }
-    }
-    public interface IRunResumes
-    {
-        System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeVerdict> Check(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, string? resumeAt, System.Threading.CancellationToken cancellationToken);
-        System.Threading.Tasks.Task<Trax.Effect.Services.Checkpoints.ResumeChecks> CheckMany(System.Type train, Trax.Core.Monad.ChainRecorder chain, System.Type input, System.Type output, long runId, System.Collections.Generic.IReadOnlyCollection<string> points, System.Threading.CancellationToken cancellationToken);
-    }
-    public sealed class ResumeChecks : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeChecks>
-    {
-        public ResumeChecks(Trax.Effect.Services.Checkpoints.ResumeVerdict Latest, System.Collections.Generic.IReadOnlyDictionary<string, Trax.Effect.Services.Checkpoints.ResumeVerdict> At, System.Collections.Generic.IReadOnlyCollection<string> Checkpoints, System.Collections.Generic.IReadOnlyCollection<string> Written, System.Collections.Generic.IReadOnlyCollection<string> Restored) { }
-        public System.Collections.Generic.IReadOnlyDictionary<string, Trax.Effect.Services.Checkpoints.ResumeVerdict> At { get; init; }
-        public System.Collections.Generic.IReadOnlyCollection<string> Checkpoints { get; init; }
-        public Trax.Effect.Services.Checkpoints.ResumeVerdict Latest { get; init; }
-        public System.Collections.Generic.IReadOnlyCollection<string> Restored { get; init; }
-        public System.Collections.Generic.IReadOnlyDictionary<string, string> RestoredTracks { get; init; }
-        public System.Collections.Generic.IReadOnlyCollection<string> Written { get; init; }
-    }
-    public sealed class ResumeVerdict : System.IEquatable<Trax.Effect.Services.Checkpoints.ResumeVerdict>
-    {
-        public ResumeVerdict(bool CanResume, string? Code, string? Reason, string? Target, string? Checkpoint) { }
-        public bool CanResume { get; init; }
-        public string? Checkpoint { get; init; }
-        public string? Code { get; init; }
-        public string? Reason { get; init; }
-        public string? Target { get; init; }
     }
 }
 namespace Trax.Effect.Services.EffectJunction
