@@ -5,8 +5,8 @@ using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using static Trax.Effect.StateMachine.Rules;
 
-// The train's contract is declared in the same namespace as in Trax.Effect.StateMachine.Tests: the IR names the
-// train by its full name, so both must export the one committed ingest.ir.json.
+// The train's contract is declared as in Trax.Effect.StateMachine.Tests, so both describe the same machine and
+// export the one committed ingest.ir.json.
 namespace Ingest.Contracts
 {
     public sealed record FetchInput(string Source);

@@ -542,7 +542,12 @@ public class InvokesDeclarationTests
         var done = (JsonObject)outcomes["Fetching.done"]!;
         done["state"]!.GetValue<string>().Should().Be("Fetching");
         done["outcome"]!.GetValue<string>().Should().Be("done");
-        done["train"]!.GetValue<string>().Should().Be(typeof(IFetchTrain).FullName);
+        done.ContainsKey("train")
+            .Should()
+            .BeFalse(
+                "the twin never starts a train, so the IR shipped to the browser does not name the server's "
+                    + "train interface"
+            );
         var edges = done["edges"]!.AsArray().Select(e => (JsonObject)e!).ToList();
         edges.Select(e => e["to"]!.GetValue<string>()).Should().Equal("NeedsReview", "Fetched");
         edges[0]["guard"]!["rule"]!.GetValue<string>().Should().Be("boolEquals");
@@ -571,7 +576,7 @@ public class InvokesDeclarationTests
             .Select(t => t!["trigger"]!.GetValue<string>())
             .Should()
             .NotContain(t => t.Contains('.'));
-        done.Select(kv => kv.Key).Should().BeEquivalentTo("edges", "outcome", "state", "train");
+        done.Select(kv => kv.Key).Should().BeEquivalentTo("edges", "outcome", "state");
     }
 
     [Test]

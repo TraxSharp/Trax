@@ -523,8 +523,7 @@ const ir = {
         }
       ],
       "outcome": "cancelled",
-      "state": "Building",
-      "train": "Trax.Samples.Recovery.Trains.Topics.IBuildTopicMapTrain"
+      "state": "Building"
     },
     "Building.done": {
       "edges": [
@@ -562,8 +561,7 @@ const ir = {
         }
       ],
       "outcome": "done",
-      "state": "Building",
-      "train": "Trax.Samples.Recovery.Trains.Topics.IBuildTopicMapTrain"
+      "state": "Building"
     },
     "Building.failed": {
       "edges": [
@@ -572,8 +570,7 @@ const ir = {
         }
       ],
       "outcome": "failed",
-      "state": "Building",
-      "train": "Trax.Samples.Recovery.Trains.Topics.IBuildTopicMapTrain"
+      "state": "Building"
     }
   },
   "states": [
@@ -702,7 +699,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "96869600c6682ca3f57e89f2e777a6fcafe3dfdc5654c3530ad0fc116dd625ec";
+export const irHash = "4a617ad1b59be7b12e8a294ebdc810e39253030007abb856652cce26eb746f0d";
 
 /** The topic-map machine, built from the IR and typed by TopicMapSpec. No hand-written twin. */
 export const topicMap = typedMachineFromIr<TopicMapSpec>(ir, irHash);

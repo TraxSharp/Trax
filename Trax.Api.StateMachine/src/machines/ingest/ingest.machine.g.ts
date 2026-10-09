@@ -187,8 +187,7 @@ const ir = {
         }
       ],
       "outcome": "cancelled",
-      "state": "Fetching",
-      "train": "Ingest.Contracts.IFetchTrain"
+      "state": "Fetching"
     },
     "Fetching.done": {
       "edges": [
@@ -228,8 +227,7 @@ const ir = {
         }
       ],
       "outcome": "done",
-      "state": "Fetching",
-      "train": "Ingest.Contracts.IFetchTrain"
+      "state": "Fetching"
     },
     "Fetching.failed": {
       "edges": [
@@ -238,8 +236,7 @@ const ir = {
         }
       ],
       "outcome": "failed",
-      "state": "Fetching",
-      "train": "Ingest.Contracts.IFetchTrain"
+      "state": "Fetching"
     }
   },
   "states": [
@@ -288,7 +285,7 @@ const ir = {
 } as IrDocument;
 
 /** SHA-256 of this machine's IR — the version-skew handshake token (matches C#'s IMachine.SchemaHash). */
-export const irHash = "33f0b1ab8aa22acae856477e43887d4235d0bfc8785140ca6e2539f7d610b79c";
+export const irHash = "43d06dde52f36f199c32530c8253286dcbdd561854bcc27a354c42e07e78481e";
 
 /** The ingest machine, built from the IR and typed by IngestSpec. No hand-written twin. */
 export const ingest = typedMachineFromIr<IngestSpec>(ir, irHash);

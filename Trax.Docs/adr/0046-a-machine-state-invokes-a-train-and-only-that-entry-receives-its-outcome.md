@@ -287,6 +287,8 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-08**: The IR's outcome entries no longer name the train. The twin never used the name, and the IR is
+  shipped to the browser in the generated twin, so it disclosed the server's train interfaces for nothing.
 - **2026-10-08**: The `[TraxBroadcast]` and `[TraxSensitive]` refusals hold at runtime too, with the startup check's
   words: the launch refuses a broadcast train for a user-owned instance and a sensitive output for any, the run's
   terminal write does not record a sensitive output for its machine, and applying one is refused, so the state goes to

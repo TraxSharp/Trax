@@ -241,7 +241,6 @@ public static class IrExporter
             {
                 ["state"] = invoke.State.ToString(),
                 ["outcome"] = OutcomeTriggers.Suffix(kind),
-                ["train"] = invoke.TrainName,
                 ["edges"] = edges,
             };
         }

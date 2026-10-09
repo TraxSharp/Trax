@@ -38,12 +38,11 @@ export interface IrOutcomeEdge {
 /**
  * An outcome trigger of a state that invokes a train, keyed in `IrDocument.outcomes` by its name
  * (`<state>.done`, `.failed`, `.cancelled`). `edges` are in declaration order, which is the order they are
- * tried in. `train` is the train's canonical name; the twin never starts it.
+ * tried in. The train is not named: the twin never starts it.
  */
 export interface IrOutcome {
   state: string;
   outcome: "done" | "failed" | "cancelled";
-  train: string;
   edges: IrOutcomeEdge[];
 }
 

@@ -70,18 +70,18 @@ so they never collide with `triggers`, which lists only the machine's own. Each 
 | --- | --- | --- |
 | `state` | string | the invoking state |
 | `outcome` | string | `done`, `failed` or `cancelled` |
-| `train` | string | the train's canonical name, its interface's full name |
 | `edges` | object[] | `{ "to", "guard"?, "reduce"? }` in declaration order, which is the order they are tried in; `failed` and `cancelled` have exactly one, without a guard |
 
 `inputs["<State>.done"]` is the schema of the train's output, the success outcome's input; `failed` and
 `cancelled` carry none. A runtime applies an outcome like any trigger, through its own edges: the first edge whose
 guard holds is taken, and when none does the result is `no-transition`, not `guard-failed`. The run's input
-mapping is not exported; the twin never starts a train. `differential.samples` may hold sample outputs under
+mapping is not exported, and neither is the train's name: the twin never starts a train, and the IR it ships to a
+browser does not name the server's train interfaces. `differential.samples` may hold sample outputs under
 `<State>.done`. A machine that invokes nothing has no `outcomes` key, so its IR is unchanged.
 
 ```json
 "outcomes": {
-  "Fetching.done": { "state": "Fetching", "outcome": "done", "train": "Ingest.Contracts.IFetchTrain",
+  "Fetching.done": { "state": "Fetching", "outcome": "done",
     "edges": [
       { "to": "NeedsReview",
         "guard": { "rule": "boolEquals", "source": "input", "field": "unsure", "value": true },
@@ -89,9 +89,9 @@ mapping is not exported; the twin never starts a train. `differential.samples` m
       { "to": "Fetched",
         "reduce": { "reduce": "set", "steps": [ { "field": "fingerprint", "value": { "input": "fingerprint" } } ] } }
     ] },
-  "Fetching.failed": { "state": "Fetching", "outcome": "failed", "train": "Ingest.Contracts.IFetchTrain",
+  "Fetching.failed": { "state": "Fetching", "outcome": "failed",
     "edges": [ { "to": "FetchFailed" } ] },
-  "Fetching.cancelled": { "state": "Fetching", "outcome": "cancelled", "train": "Ingest.Contracts.IFetchTrain",
+  "Fetching.cancelled": { "state": "Fetching", "outcome": "cancelled",
     "edges": [ { "to": "Cancelled" } ] }
 }
 ```
