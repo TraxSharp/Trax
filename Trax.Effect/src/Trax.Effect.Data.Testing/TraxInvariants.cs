@@ -1,10 +1,13 @@
+using System.Data.Common;
+using System.Globalization;
 using System.Reflection;
 using Npgsql;
+using Trax.Effect.Enums;
 
 namespace Trax.Effect.Data.Testing;
 
 /// <summary>
-/// Checks that a Trax Postgres database is consistent once every host using it has stopped: no run
+/// Checks that a Trax Postgres or SQLite database is consistent once every host using it has stopped: no run
 /// is still in progress, no state-machine effect is still claimed in flight, every dispatched
 /// queue entry has its run, no completed run keeps a checkpoint, every resume names a run that
 /// exists, and every machine instance's invoke token names a run that instance queued. While a
@@ -20,7 +23,9 @@ namespace Trax.Effect.Data.Testing;
 /// <para>The database does not know which states invoke a train, so whether an instance in an
 /// invoking state holds a token, and only one in such a state does, is checked only for the
 /// machines whose invoking states the caller passes as <see cref="InvokingState"/>s.</para>
-/// <para>It reads the <c>trax</c> schema the shipped migrations create, and only Postgres.</para>
+/// <para>It reads the tables the shipped migrations create: the <c>trax</c> schema on Postgres, by
+/// connection string or open connection, and the same tables on SQLite, by open connection. The
+/// checks are the same on both.</para>
 /// </remarks>
 public static class TraxInvariants
 {
@@ -67,8 +72,8 @@ public static class TraxInvariants
     public const string InvokeTokenOutsideInvokingState = "invoke-token-outside-invoking-state";
 
     /// <summary>
-    /// Every violation in the database at <paramref name="connectionString"/>, in a stable order:
-    /// by invariant, then by id.
+    /// Every violation in the Postgres database at <paramref name="connectionString"/>, in a stable
+    /// order: by invariant, then by id.
     /// </summary>
     public static Task<IReadOnlyList<TraxInvariantViolation>> FindViolationsAsync(
         string connectionString,
@@ -76,11 +81,12 @@ public static class TraxInvariants
     ) => FindViolationsAsync(connectionString, [], cancellationToken);
 
     /// <summary>
-    /// Every violation in the database at <paramref name="connectionString"/>, in a stable order:
-    /// by invariant, then by id. Instances of a machine named in <paramref name="invokingStates"/>
-    /// are also checked to hold a token exactly when they are in one of its invoking states.
+    /// Every violation in the Postgres database at <paramref name="connectionString"/>, in a stable
+    /// order: by invariant, then by id. Instances of a machine named in
+    /// <paramref name="invokingStates"/> are also checked to hold a token exactly when they are in
+    /// one of its invoking states.
     /// </summary>
-    /// <param name="connectionString">The database to check.</param>
+    /// <param name="connectionString">The Postgres database to check.</param>
     /// <param name="invokingStates">
     /// Every state that invokes a train, for each machine to check. A machine with no entry here
     /// is checked only for tokens that name no run.
@@ -95,11 +101,37 @@ public static class TraxInvariants
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentNullException.ThrowIfNull(invokingStates);
 
-        var invoking = invokingStates.Distinct().ToList();
-
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
+        return await FindViolationsAsync(connection, invokingStates, cancellationToken);
+    }
 
+    /// <summary>
+    /// Every violation in the database <paramref name="connection"/> is open on, a Postgres or a
+    /// SQLite one, in a stable order: by invariant, then by id. The checks are the same on both;
+    /// only their SQL differs, and on SQLite a violation names its table without the schema.
+    /// </summary>
+    /// <param name="connection">
+    /// An open <c>NpgsqlConnection</c>, or an open <c>Microsoft.Data.Sqlite.SqliteConnection</c> on
+    /// a database the shipped SQLite migrations built. The caller keeps owning it.
+    /// </param>
+    /// <param name="invokingStates">
+    /// Every state that invokes a train, for each machine to check. A machine with no entry here
+    /// is checked only for tokens that name no run.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the reads.</param>
+    /// <exception cref="NotSupportedException">The connection is to neither Postgres nor SQLite.</exception>
+    public static async Task<IReadOnlyList<TraxInvariantViolation>> FindViolationsAsync(
+        DbConnection connection,
+        IEnumerable<InvokingState> invokingStates,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(invokingStates);
+
+        var dialect = Dialect.Of(connection);
+        var invoking = invokingStates.Distinct().ToList();
         var violations = new List<TraxInvariantViolation>();
 
         // A run a host had started and never finished. After every host has stopped, nothing will
@@ -107,16 +139,16 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT id::text, name
-                FROM trax.metadata
-                WHERE train_state = 'in_progress'
+                $"""
+                SELECT {dialect.Text("id")}, name
+                FROM {dialect.Table("metadata")}
+                WHERE train_state = {dialect.State(TrainState.InProgress)}
                 ORDER BY id
                 """,
                 (id, name) =>
                     new TraxInvariantViolation(
                         RunInProgress,
-                        "trax.metadata",
+                        dialect.Table("metadata"),
                         id,
                         $"run {id} of '{name}' is still in progress"
                     ),
@@ -130,16 +162,16 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT effect_key, owner_token::text
-                FROM trax.effect_claim
+                $"""
+                SELECT effect_key, {dialect.Text("owner_token")}
+                FROM {dialect.Table("effect_claim")}
                 WHERE receipt IS NULL
                 ORDER BY effect_key
                 """,
                 (key, owner) =>
                     new TraxInvariantViolation(
                         EffectClaimInFlight,
-                        "trax.effect_claim",
+                        dialect.Table("effect_claim"),
                         key,
                         $"effect '{key}' is claimed by {owner} with no receipt"
                     ),
@@ -152,17 +184,17 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT w.id::text, coalesce(w.metadata_id::text, 'null')
-                FROM trax.work_queue w
-                LEFT JOIN trax.metadata m ON m.id = w.metadata_id
-                WHERE w.status = 'dispatched' AND m.id IS NULL
+                $"""
+                SELECT {dialect.Text("w.id")}, coalesce({dialect.Text("w.metadata_id")}, 'null')
+                FROM {dialect.Table("work_queue")} w
+                LEFT JOIN {dialect.Table("metadata")} m ON m.id = w.metadata_id
+                WHERE w.status = {dialect.Status(WorkQueueStatus.Dispatched)} AND m.id IS NULL
                 ORDER BY w.id
                 """,
                 (id, run) =>
                     new TraxInvariantViolation(
                         DispatchedWithoutRun,
-                        "trax.work_queue",
+                        dialect.Table("work_queue"),
                         id,
                         $"queue entry {id} is dispatched but its run ({run}) does not exist"
                     ),
@@ -175,17 +207,19 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT c.id::text, c.node_id || ' of run ' || m.id::text || ' of ' || m.name
-                FROM trax.checkpoint c
-                JOIN trax.metadata m ON m.id = c.metadata_id
-                WHERE m.train_state = 'completed'
+                $"""
+                SELECT {dialect.Text("c.id")}, c.node_id || ' of run ' || {dialect.Text(
+                    "m.id"
+                )} || ' of ' || m.name
+                FROM {dialect.Table("checkpoint")} c
+                JOIN {dialect.Table("metadata")} m ON m.id = c.metadata_id
+                WHERE m.train_state = {dialect.State(TrainState.Completed)}
                 ORDER BY c.id
                 """,
                 (id, what) =>
                     new TraxInvariantViolation(
                         CheckpointOfCompletedRun,
-                        "trax.checkpoint",
+                        dialect.Table("checkpoint"),
                         id,
                         $"checkpoint {id} at {what} is kept, but that run completed"
                     ),
@@ -199,17 +233,19 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT w.id::text, w.resume_from::text
-                FROM trax.work_queue w
+                $"""
+                SELECT {dialect.Text("w.id")}, {dialect.Text("w.resume_from")}
+                FROM {dialect.Table("work_queue")} w
                 WHERE w.resume_from IS NOT NULL
-                  AND NOT EXISTS (SELECT 1 FROM trax.metadata m WHERE m.id = w.resume_from)
+                  AND NOT EXISTS (SELECT 1 FROM {dialect.Table(
+                    "metadata"
+                )} m WHERE m.id = w.resume_from)
                 ORDER BY w.id
                 """,
                 (id, source) =>
                     new TraxInvariantViolation(
                         ResumeFromMissingRun,
-                        "trax.work_queue",
+                        dialect.Table("work_queue"),
                         id,
                         $"queue entry {id} resumes run {source}, which does not exist"
                     ),
@@ -220,17 +256,19 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT r.id::text, r.resume_from::text
-                FROM trax.metadata r
+                $"""
+                SELECT {dialect.Text("r.id")}, {dialect.Text("r.resume_from")}
+                FROM {dialect.Table("metadata")} r
                 WHERE r.resume_from IS NOT NULL
-                  AND NOT EXISTS (SELECT 1 FROM trax.metadata m WHERE m.id = r.resume_from)
+                  AND NOT EXISTS (SELECT 1 FROM {dialect.Table(
+                    "metadata"
+                )} m WHERE m.id = r.resume_from)
                 ORDER BY r.id
                 """,
                 (id, source) =>
                     new TraxInvariantViolation(
                         ResumeFromMissingRun,
-                        "trax.metadata",
+                        dialect.Table("metadata"),
                         id,
                         $"run {id} resumes run {source}, which does not exist"
                     ),
@@ -244,17 +282,19 @@ public static class TraxInvariants
         violations.AddRange(
             await ReadAsync(
                 connection,
-                """
-                SELECT s.row_id::text, s.machine || ' ' || s.id::text || ' in ' || s.state || ' holds ' || s.invoke_token
-                FROM trax.snapshot_draft s
+                $"""
+                SELECT {dialect.Text("s.row_id")}, s.machine || ' ' || {dialect.Text(
+                    "s.id"
+                )} || ' in ' || s.state || ' holds ' || s.invoke_token
+                FROM {dialect.Table("snapshot_draft")} s
                 WHERE s.invoke_token IS NOT NULL
                   AND NOT EXISTS (
-                      SELECT 1 FROM trax.work_queue w
+                      SELECT 1 FROM {dialect.Table("work_queue")} w
                       WHERE w.external_id = s.invoke_token
                         AND w.invoking_machine = s.machine
                         AND w.invoking_instance_id = s.id)
                   AND NOT EXISTS (
-                      SELECT 1 FROM trax.metadata m
+                      SELECT 1 FROM {dialect.Table("metadata")} m
                       WHERE trim(m.external_id) = s.invoke_token
                         AND m.invoking_machine = s.machine
                         AND m.invoking_instance_id = s.id)
@@ -263,7 +303,7 @@ public static class TraxInvariants
                 (id, what) =>
                     new TraxInvariantViolation(
                         InvokeTokenWithoutRun,
-                        "trax.snapshot_draft",
+                        dialect.Table("snapshot_draft"),
                         id,
                         $"{what}, which names no run this instance queued"
                     ),
@@ -272,64 +312,78 @@ public static class TraxInvariants
         );
 
         if (invoking.Count > 0)
-        {
-            var machines = invoking.Select(s => s.Machine).Distinct().ToArray();
-            var pairs = invoking.Select(s => s.Machine + "\n" + s.State).ToArray();
-
-            // The token is set as the state is entered and cleared as it is left, in the write
-            // that moves the instance, so the two always agree. The one exception is an instance
-            // stranded in its invoking state, which the same write that clears its token marks.
             violations.AddRange(
-                await ReadAsync(
+                await FindInvokingStateViolationsAsync(
                     connection,
-                    """
-                    SELECT s.row_id::text, s.machine || ' ' || s.id::text || ' is in ' || s.state
-                    FROM trax.snapshot_draft s
-                    WHERE s.machine = ANY(@machines)
-                      AND s.invoke_token IS NULL
-                      AND s.invoke_stranded_state IS DISTINCT FROM s.state
-                      AND s.machine || E'\n' || s.state = ANY(@pairs)
-                    ORDER BY s.row_id
-                    """,
-                    (id, what) =>
-                        new TraxInvariantViolation(
-                            InvokingStateWithoutToken,
-                            "trax.snapshot_draft",
-                            id,
-                            $"{what}, which invokes a train, and holds no invoke token"
-                        ),
-                    cancellationToken,
-                    ("machines", machines),
-                    ("pairs", pairs)
+                    dialect,
+                    invoking,
+                    cancellationToken
                 )
             );
-
-            violations.AddRange(
-                await ReadAsync(
-                    connection,
-                    """
-                    SELECT s.row_id::text, s.machine || ' ' || s.id::text || ' is in ' || s.state || ' and holds ' || s.invoke_token
-                    FROM trax.snapshot_draft s
-                    WHERE s.machine = ANY(@machines)
-                      AND s.invoke_token IS NOT NULL
-                      AND NOT (s.machine || E'\n' || s.state = ANY(@pairs))
-                    ORDER BY s.row_id
-                    """,
-                    (id, what) =>
-                        new TraxInvariantViolation(
-                            InvokeTokenOutsideInvokingState,
-                            "trax.snapshot_draft",
-                            id,
-                            $"{what}, but that state invokes nothing"
-                        ),
-                    cancellationToken,
-                    ("machines", machines),
-                    ("pairs", pairs)
-                )
-            );
-        }
 
         return violations;
+    }
+
+    // The token is set as the state is entered and cleared as it is left, in the write that moves
+    // the instance, so the two always agree. The one exception is an instance stranded in its
+    // invoking state, which the same write that clears its token marks. The rows are read and
+    // compared here rather than in SQL, so both dialects run the one comparison.
+    private static async Task<List<TraxInvariantViolation>> FindInvokingStateViolationsAsync(
+        DbConnection connection,
+        Dialect dialect,
+        IReadOnlyCollection<InvokingState> invoking,
+        CancellationToken cancellationToken
+    )
+    {
+        var machines = invoking.Select(s => s.Machine).ToHashSet();
+        var table = dialect.Table("snapshot_draft");
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {dialect.Text("s.row_id")}, s.machine, {dialect.Text(
+                "s.id"
+            )}, s.state, s.invoke_token, s.invoke_stranded_state
+            FROM {table} s
+            ORDER BY s.row_id
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var missing = new List<TraxInvariantViolation>();
+        var outside = new List<TraxInvariantViolation>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var machine = reader.GetString(1);
+            if (!machines.Contains(machine))
+                continue;
+
+            var rowId = reader.GetString(0);
+            var id = reader.GetString(2);
+            var state = reader.GetString(3);
+            var token = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var stranded = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var invokes = invoking.Contains(new InvokingState(machine, state));
+
+            if (invokes && token is null && stranded != state)
+                missing.Add(
+                    new TraxInvariantViolation(
+                        InvokingStateWithoutToken,
+                        table,
+                        rowId,
+                        $"{machine} {id} is in {state}, which invokes a train, and holds no invoke token"
+                    )
+                );
+            else if (!invokes && token is not null)
+                outside.Add(
+                    new TraxInvariantViolation(
+                        InvokeTokenOutsideInvokingState,
+                        table,
+                        rowId,
+                        $"{machine} {id} is in {state} and holds {token}, but that state invokes nothing"
+                    )
+                );
+        }
+
+        return [.. missing, .. outside];
     }
 
     /// <summary>
@@ -399,17 +453,14 @@ public static class TraxInvariants
     }
 
     private static async Task<List<TraxInvariantViolation>> ReadAsync(
-        NpgsqlConnection connection,
+        DbConnection connection,
         string sql,
         Func<string, string, TraxInvariantViolation> violation,
-        CancellationToken cancellationToken,
-        params (string Name, string[] Value)[] parameters
+        CancellationToken cancellationToken
     )
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        foreach (var (name, value) in parameters)
-            command.Parameters.AddWithValue(name, value);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var found = new List<TraxInvariantViolation>();
@@ -417,6 +468,50 @@ public static class TraxInvariants
             found.Add(violation(reader.GetString(0), reader.GetString(1)));
 
         return found;
+    }
+
+    /// <summary>
+    /// Where the two stores' SQL differs: Postgres keeps the tables in the <c>trax</c> schema and
+    /// the enums as their snake_case names; SQLite has no schemas and stores each enum as its
+    /// number (its migration 014).
+    /// </summary>
+    private sealed class Dialect(bool postgres)
+    {
+        public static Dialect Of(DbConnection connection) =>
+            connection switch
+            {
+                NpgsqlConnection => new Dialect(postgres: true),
+                _ when connection.GetType().FullName == "Microsoft.Data.Sqlite.SqliteConnection" =>
+                    new Dialect(postgres: false),
+                _ => throw new NotSupportedException(
+                    $"TraxInvariants reads Postgres and SQLite, not {connection.GetType().FullName}."
+                ),
+            };
+
+        public string Table(string name) => postgres ? $"trax.{name}" : name;
+
+        public string Text(string column) =>
+            postgres ? $"{column}::text" : $"CAST({column} AS TEXT)";
+
+        public string State(TrainState state) =>
+            postgres
+                ? $"'{SnakeCase(state.ToString())}'"
+                : ((int)state).ToString(CultureInfo.InvariantCulture);
+
+        public string Status(WorkQueueStatus status) =>
+            postgres
+                ? $"'{SnakeCase(status.ToString())}'"
+                : ((int)status).ToString(CultureInfo.InvariantCulture);
+
+        private static string SnakeCase(string name) =>
+            string.Concat(
+                name.Select(
+                    (c, i) =>
+                        i > 0 && char.IsUpper(c)
+                            ? "_" + char.ToLowerInvariant(c)
+                            : char.ToLowerInvariant(c).ToString()
+                )
+            );
     }
 }
 

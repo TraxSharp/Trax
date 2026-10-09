@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Npgsql;
 using NUnit.Framework.Interfaces;
 using Trax.Effect.Data.Testing;
@@ -7,8 +8,8 @@ using Trax.Effect.Data.Testing;
 namespace Trax.Scheduler.Tests.Integration.Fixtures;
 
 /// <summary>
-/// Checks the shared test database, and the database of every open Postgres
-/// <see cref="InvokeCluster"/>, with <see cref="TraxInvariants"/> after every test in this
+/// Checks the shared test database, and the database of every open
+/// <see cref="InvokeCluster"/> on Postgres or SQLite, with <see cref="TraxInvariants"/> after every test in this
 /// assembly, once its teardown has run and the hosts it started are disposed.
 /// </summary>
 /// <remarks>
@@ -51,11 +52,54 @@ public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
     private static IReadOnlyList<TraxInvariantViolation> Find() =>
         Find(TestPostgres.ConnectionString, [])
             .Concat(
-                InvokeCluster.OpenOnPostgres.SelectMany(c =>
-                    Find(c.ConnectionString, c.InvokingStates)
+                InvokeCluster.OpenClusters.SelectMany(c =>
+                    c.Store == ClusterStore.Postgres
+                        ? Find(c.ConnectionString, c.InvokingStates)
+                        : FindOnSqlite(c.ConnectionString, c.InvokingStates)
                 )
             )
             .ToList();
+
+    // A SQLite cluster's file. Read on an unpooled connection that may not create the file, so the
+    // check neither holds the file open nor makes one before the cluster's first host has.
+    private static IEnumerable<TraxInvariantViolation> FindOnSqlite(
+        string connectionString,
+        IReadOnlyList<InvokingState> invokingStates
+    )
+    {
+        var file = new SqliteConnectionStringBuilder(connectionString).DataSource;
+        using var connection = new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = file,
+                Mode = SqliteOpenMode.ReadWrite,
+                Pooling = false,
+            }.ConnectionString
+        );
+        try
+        {
+            connection.Open();
+        }
+        catch (SqliteException)
+        {
+            return [];
+        }
+
+        using (var migrated = connection.CreateCommand())
+        {
+            migrated.CommandText =
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('work_queue', 'effect_claim')";
+            if ((long)migrated.ExecuteScalar()! < 2)
+                return [];
+        }
+
+        return TraxInvariants
+            .FindViolationsAsync(connection, invokingStates)
+            .GetAwaiter()
+            .GetResult()
+            .Select(v => v with { Detail = $"{v.Detail} (in {Path.GetFileName(file)})" })
+            .ToList();
+    }
 
     // Two databases can hold the same row id, so each violation names the database it is in. The
     // check reads on unpooled connections, so it leaves no idle session in the pool the tests share:

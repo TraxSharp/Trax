@@ -33,11 +33,14 @@ public enum CheckpointStoreKind
 /// </summary>
 /// <remarks>
 /// Postgres is the shared test database, which <see cref="CheckTraxInvariantsAttribute"/> checks
-/// after each test, so each test deletes the runs it made. SQLite is a file of its own and InMemory
-/// a store of its own, both dropped with the host.
+/// after each test, so each test deletes the runs it made. SQLite is a file of its own, which the
+/// same attribute checks after each test while the host is open, and InMemory a store of its own;
+/// both are dropped with the host.
 /// </remarks>
 public sealed class CheckpointHost : IAsyncDisposable
 {
+    private static readonly ConcurrentDictionary<string, byte> SqliteFiles = new();
+
     private readonly string? _sqliteFile;
 
     private CheckpointHost(
@@ -52,6 +55,12 @@ public sealed class CheckpointHost : IAsyncDisposable
     }
 
     public ServiceProvider Services { get; }
+
+    /// <summary>
+    /// The SQLite files of the hosts created and not yet disposed, which
+    /// <see cref="CheckTraxInvariantsAttribute"/> checks after each test.
+    /// </summary>
+    internal static IReadOnlyList<string> OpenOnSqlite => SqliteFiles.Keys.ToList();
 
     /// <summary>Every log line the host wrote, with its level.</summary>
     public ConcurrentQueue<(LogLevel Level, string Message)> Logs { get; }
@@ -91,6 +100,8 @@ public sealed class CheckpointHost : IAsyncDisposable
 
         configure(services);
 
+        if (sqliteFile is not null)
+            SqliteFiles[sqliteFile] = 0;
         return new CheckpointHost(services.BuildServiceProvider(), sqliteFile, logs);
     }
 
@@ -238,6 +249,7 @@ public sealed class CheckpointHost : IAsyncDisposable
         if (_sqliteFile is null)
             return;
 
+        SqliteFiles.TryRemove(_sqliteFile, out _);
         SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { "", "-wal", "-shm" })
             try

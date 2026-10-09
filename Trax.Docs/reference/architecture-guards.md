@@ -143,7 +143,7 @@ What catches those is a **cross-user behavioural test**: sign in as one user, cr
 
 ## Database invariants after a test
 
-`TraxInvariants` (`Trax.Effect.Data.Testing`) checks a Trax Postgres database once every host a test started has stopped. While a host runs, each of these states is normal; after it stops, each is work that was started and lost:
+`TraxInvariants` (`Trax.Effect.Data.Testing`) checks a Trax Postgres or SQLite database once every host a test started has stopped. While a host runs, each of these states is normal; after it stops, each is work that was started and lost:
 
 | Check | Fails on |
 |---|---|
@@ -151,7 +151,7 @@ What catches those is a **cross-user behavioural test**: sign in as one user, cr
 | `effect-claim-in-flight` | a `trax.effect_claim` row with no receipt: a state-machine effect claimed and neither completed nor released |
 | `dispatched-without-run` | a `trax.work_queue` row `dispatched` whose run does not exist |
 
-`FindViolationsAsync(connectionString)` returns every violation with its table and id; `AssertConsistentAsync(connectionString)` throws listing all of them. Call it from teardown, after the hosts are disposed. A test that leaves one of these states on purpose, such as a crash simulation or a cancelled effect whose claim must hold until its lease passes, carries `[LeavesStuckRuns("why")]`, and `TraxInvariants.IsExempt(fixtureType, methodName)` tells the teardown to skip it.
+`FindViolationsAsync(connectionString)` returns every violation in a Postgres database with its table and id; `AssertConsistentAsync(connectionString)` throws listing all of them. `FindViolationsAsync(connection, invokingStates)` runs the same checks over an open connection, Postgres or SQLite; on SQLite a violation names its table without the `trax.` schema. Call it from teardown, after the hosts are disposed. A test that leaves one of these states on purpose, such as a crash simulation or a cancelled effect whose claim must hold until its lease passes, carries `[LeavesStuckRuns("why")]`, and `TraxInvariants.IsExempt(fixtureType, methodName)` tells the teardown to skip it.
 
 A claim names its effect's intent, not a run, so the claim check cannot ask whether the claim's run finished; it reports every claim left without a receipt.
 

@@ -78,10 +78,10 @@ public sealed class InvokeCluster : IAsyncDisposable
     public string ConnectionString { get; }
 
     /// <summary>
-    /// The Postgres clusters created and not yet disposed, whose databases
+    /// The clusters created and not yet disposed, on either store, whose databases
     /// <see cref="CheckTraxInvariantsAttribute"/> checks after each test.
     /// </summary>
-    internal static IReadOnlyList<InvokeCluster> OpenOnPostgres => Open.Keys.ToList();
+    internal static IReadOnlyList<InvokeCluster> OpenClusters => Open.Keys.ToList();
 
     /// <summary>Every state that invokes a train, of the machines this cluster's hosts register.</summary>
     internal IReadOnlyList<InvokingState> InvokingStates => _invokingStates.Keys.ToList();
@@ -94,7 +94,9 @@ public sealed class InvokeCluster : IAsyncDisposable
                 Path.GetTempPath(),
                 $"trax_invoke_delivery_{Guid.NewGuid():N}.db"
             );
-            return new InvokeCluster(store, $"Data Source={file}", file, null);
+            var onSqlite = new InvokeCluster(store, $"Data Source={file}", file, null);
+            Open[onSqlite] = 0;
+            return onSqlite;
         }
 
         var database =

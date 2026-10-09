@@ -79,6 +79,7 @@ namespace Trax.Effect.Data.Testing
         public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static string Describe(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Data.Testing.TraxInvariantViolation> violations) { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(System.Data.Common.DbConnection connection, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static bool IsExempt(System.Type fixture, string? methodName) { }
     }

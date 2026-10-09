@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CsCheck;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Trax.Core.Functional;
@@ -1266,20 +1267,26 @@ public class InvokesModelTests(ClusterStore store)
 
         // The database's own invariants, read from the rows rather than from the model, so a token the model and
         // the system agree on wrongly still fails. Between steps a run may be in progress and an effect claimed,
-        // so only the invariants that hold at every moment are checked here. TraxInvariants reads only Postgres.
+        // so only the invariants that hold at every moment are checked here, on either store.
         private async Task CheckInvariants(IEnumerable<IMachineInternals> machines)
         {
-            if (test._cluster.Store != ClusterStore.Postgres)
-                return;
-
             var invoking = machines
                 .SelectMany(m => m.InvokedTrains)
                 .Select(i => new InvokingState(i.Machine, i.State));
-            var violations = (
-                await TraxInvariants.FindViolationsAsync(test._cluster.ConnectionString, invoking)
-            )
-                .Where(v => AlwaysHold.Contains(v.Invariant))
-                .ToList();
+            IReadOnlyList<TraxInvariantViolation> found;
+            if (test._cluster.Store == ClusterStore.Postgres)
+                found = await TraxInvariants.FindViolationsAsync(
+                    test._cluster.ConnectionString,
+                    invoking
+                );
+            else
+            {
+                await using var connection = new SqliteConnection(test._cluster.ConnectionString);
+                await connection.OpenAsync();
+                found = await TraxInvariants.FindViolationsAsync(connection, invoking);
+            }
+
+            var violations = found.Where(v => AlwaysHold.Contains(v.Invariant)).ToList();
 
             violations.Should().BeEmpty(TraxInvariants.Describe(violations));
         }
