@@ -82,7 +82,8 @@ raises on its own, such as an `HttpClient` timeout, is that branch's failure.
 - a branch reading a type only a sibling produces: branches cannot see each other's work
 - `ShortCircuit` inside a branch, which would race its siblings for the run's result
 - a call on the train itself inside a branch (`Chain<A>()` instead of `b.Chain<A>()`)
-- one junction instance handed to two branches
+- one junction instance handed to two branches (one the declaration cannot see, found by `IChain`
+  in Memory or registered as a singleton, fails the step when a second branch runs it)
 - a branch with no name, a repeated name, or a name containing `/` or `#`
 
 ## Branches compute; the join commits

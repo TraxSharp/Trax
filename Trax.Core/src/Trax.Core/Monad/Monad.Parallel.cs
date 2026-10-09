@@ -47,6 +47,13 @@ public partial class Monad<TInput, TReturn>
     internal List<AsyncServiceScope> BranchScopes { get; private set; } = [];
 
     /// <summary>
+    /// For each <c>Parallel</c> this monad runs inside, innermost last: the junction instances its
+    /// branches have run, each with the branch that ran it, and the path of the branch this monad
+    /// is part of at that level.
+    /// </summary>
+    private List<(Dictionary<object, string> Run, string Branch)> JunctionClaims { get; set; } = [];
+
+    /// <summary>
     /// Runs a fixed set of branches side by side, each on its own copy of Memory, and joins them
     /// before the next step.
     /// </summary>
@@ -104,9 +111,12 @@ public partial class Monad<TInput, TReturn>
         var outcomes = new BranchOutcome[declared.Declared.Count];
         var failedFirst = 0;
 
+        var claims = new Dictionary<object, string>(ReferenceEqualityComparer.Instance);
         var children = new List<Monad<TInput, TReturn>>(declared.Declared.Count);
         foreach (var branch in declared.Declared)
-            children.Add(await Fork(step, branch.Name, siblings.Token).ConfigureAwait(false));
+            children.Add(
+                await Fork(step, branch.Name, claims, siblings.Token).ConfigureAwait(false)
+            );
 
         var runner = Train.BranchRunner;
 
@@ -186,6 +196,7 @@ public partial class Monad<TInput, TReturn>
     private async Task<Monad<TInput, TReturn>> Fork(
         string step,
         string name,
+        Dictionary<object, string> claims,
         CancellationToken token
     )
     {
@@ -196,6 +207,7 @@ public partial class Monad<TInput, TReturn>
             BranchPath = $"{step}/{name}",
             BranchScopes = BranchScopes,
         };
+        child.JunctionClaims = [.. JunctionClaims, (claims, child.BranchPath)];
 
         foreach (var (key, count) in _askings)
             child._askings[key] = count;
@@ -237,6 +249,33 @@ public partial class Monad<TInput, TReturn>
         }
 
         return child;
+    }
+
+    /// <summary>
+    /// Claims <paramref name="junction"/> for this monad's branch, or returns why it cannot be:
+    /// another branch of the same <c>Parallel</c> has run the same instance.
+    /// </summary>
+    /// <remarks>
+    /// A junction instance holds the state of the step it runs (its result, its token), so two
+    /// branches running one instance at once overwrite each other's. Handing one to two branches
+    /// is refused when the chain is read; an instance found at run time, by <c>IChain</c> in
+    /// Memory or a singleton in the container, is refused here. A branch and the branches of a
+    /// <c>Parallel</c> nested in it run one after the other, so they may share one.
+    /// </remarks>
+    internal Exception? ClaimJunction(object junction)
+    {
+        foreach (var (run, branch) in JunctionClaims)
+            lock (run)
+                if (!run.TryAdd(junction, branch) && run[junction] != branch)
+                    return new TrainException(
+                        $"Parallel branches '{run[junction]}' and '{branch}' (train "
+                            + $"'{Train.GetType().ReadableName()}') run the same "
+                            + $"{junction.GetType().ReadableName()} instance, which holds the state "
+                            + "of the step it runs. Register the junction as scoped or transient, "
+                            + "or chain it by type, so each branch runs its own."
+                    );
+
+        return null;
     }
 
     private Monad<TInput, TReturn> Join(

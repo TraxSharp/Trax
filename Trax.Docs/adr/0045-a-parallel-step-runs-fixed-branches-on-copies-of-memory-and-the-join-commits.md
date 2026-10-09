@@ -40,7 +40,9 @@ the branch by itself; scoped state a consumer sets imperatively (a tenant, a uni
 `IBranchScopeInitializer`, and a branch whose initializer throws fails rather than running without it. Branch scopes
 are disposed when the run ends, not at the join, because what a branch put in Memory may still hold on to its scope.
 A value handed to `AddServices` is one instance seen by every branch, as it is seen by every step; it has to be safe
-to share. A junction instance holds the state of the step it runs, so one instance handed to two branches is refused.
+to share. A junction instance holds the state of the step it runs, so one instance handed to two branches is refused. One the
+declaration cannot see, because `IChain` finds it in Memory or the container holds it as a singleton, fails the step
+when a second branch runs it; a branch and the branches nested in it run one after another and may share one.
 
 **Failure.** A branch that fails fails the step with a `BranchesFailedException` carrying every branch that failed.
 Its class is the join of the branches' classes over `Transient < Conflict < Unclassified < Permanent`: the step can be
@@ -92,4 +94,5 @@ branches together and one after another holds only while junctions follow that c
 
 - **2026-10-07**: Recorded.
 - **2026-10-08**: A cancellation a branch raises on its own fails the branch; only the run's token or its cancel flag
-  (`CancellationRequestedException`) cancels the run.
+  (`CancellationRequestedException`) cancels the run. One junction instance found at run time in two branches fails the
+  step.

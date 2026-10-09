@@ -444,6 +444,39 @@ public class ParallelTests : TestSetup
     }
 
     [Test]
+    public async Task OneJunctionInstanceResolvedByIChainInTwoBranches_FailsTheStep()
+    {
+        // IChain finds the junction in Memory, which every branch copies with the same
+        // references, so both branches would run the one instance at the same time.
+        var result = await new SharedIChainTrain(new SharedNote()).RunEither("abc").WaitAsync(Hang);
+
+        result
+            .Swap()
+            .ValueUnsafe()
+            .Should()
+            .BeOfType<BranchesFailedException>(
+                $"one junction instance is never run by two branches ({Adr})"
+            )
+            .Which.Failures.Should()
+            .ContainSingle()
+            .Which.Exception.Message.Should()
+            .Contain("same")
+            .And.Contain(nameof(SharedNote));
+    }
+
+    [Test]
+    public async Task OneJunctionInstanceInAnOuterBranchAndItsNestedBranch_RunsInTurn()
+    {
+        // The outer branch waits at its nested join, so the instance never runs twice at once.
+        var note = new SharedNote();
+
+        var result = await new NestedSharedIChainTrain(note).RunEither("abc").WaitAsync(Hang);
+
+        result.IsRight.Should().BeTrue();
+        note.Runs.Should().Be(2);
+    }
+
+    [Test]
     public async Task TheSameSwitchEnum_InTwoBranches_RoutesEachBranchOnItsOwn()
     {
         var capture = new Capture();
@@ -1110,6 +1143,50 @@ public class ParallelTests : TestSetup
         protected override Task<Either<Exception, string>> Junctions() =>
             Chain<Echo>()
                 .Parallel(p => p.Branch("a", b => b.Chain(_echo)).Branch("b", b => b.Chain(_echo)))
+                .Resolve();
+    }
+
+    public interface INote : IJunction<string, Functional.Unit>;
+
+    public sealed class SharedNote : Junction<string, Functional.Unit>, INote
+    {
+        private int _runs;
+
+        public int Runs => _runs;
+
+        public override Task<Functional.Unit> Run(string input)
+        {
+            Interlocked.Increment(ref _runs);
+            return Task.FromResult(Functional.Unit.Default);
+        }
+    }
+
+    private sealed class SharedIChainTrain(SharedNote note) : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            AddServices<INote>(note)
+                .Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch("a", b => b.IChain<INote>())
+                        .Branch("b", b => b.IChain<INote>())
+                        .OnFailure(BranchFailurePolicy.WaitForAll)
+                )
+                .Resolve();
+    }
+
+    private sealed class NestedSharedIChainTrain(SharedNote note) : Train<string, string>
+    {
+        protected override Task<Either<Exception, string>> Junctions() =>
+            AddServices<INote>(note)
+                .Chain<Echo>()
+                .Parallel(p =>
+                    p.Branch(
+                        "outer",
+                        b =>
+                            b.IChain<INote>()
+                                .Parallel(inner => inner.Branch("inner", i => i.IChain<INote>()))
+                    )
+                )
                 .Resolve();
     }
 

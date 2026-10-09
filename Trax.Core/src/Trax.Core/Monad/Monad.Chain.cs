@@ -28,6 +28,12 @@ public partial class Monad<TInput, TReturn>
         if (Exception is not null)
             return (this, Exception);
 
+        if (ClaimJunction(junction) is { } shared)
+        {
+            Exception = shared;
+            return (this, shared);
+        }
+
         var node = Nodes.Next(ChainNodeScope.JunctionKey(typeof(TJunction)));
         ChainGraph.Enter(node, BranchPath);
 
