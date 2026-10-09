@@ -10,10 +10,10 @@ namespace Trax.Effect.Data.Services.InvokedRunListener;
 /// </summary>
 /// <remarks>
 /// <para><c>UsePostgres</c> registers one that hears every host: triggers on <c>metadata</c> and <c>work_queue</c>
-/// send a <c>NOTIFY</c> carrying the run's external id when an invoked run's row becomes completed, failed or
-/// cancelled, or its still-queued entry is cancelled, delivered when that transaction commits. SQLite and InMemory
-/// register none: on them the run's own host applies the outcome through its lifecycle hook, and the sweep covers
-/// the rest.</para>
+/// send a <c>NOTIFY</c> carrying the run's external id when an invoked run's row is inserted as, or becomes,
+/// completed, failed or cancelled, or its still-queued entry is cancelled, delivered when that transaction commits.
+/// SQLite and InMemory register none: on them the run's own host applies the outcome through its lifecycle hook,
+/// and the sweep covers the rest.</para>
 ///
 /// <para>Infrastructure for <c>Trax.Effect.StateMachine.Persistence</c>; a host does not implement or call it.</para>
 /// </remarks>

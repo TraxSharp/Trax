@@ -7,12 +7,18 @@
 -- host policy. An output past the 64 KiB snapshot cap is not stored; the flag says so, and the
 -- invoking state fails. Both stay null/false on every other run. Neither is on any operator view.
 --
--- The notify: a run that a machine is waiting on reaching an end (its metadata becomes completed,
--- failed or cancelled, or its still-queued entry is cancelled) wakes the outcome reconciler on every
--- host, instead of leaving it to the next sweep. pg_notify inside the writing transaction is
+-- The notify: a run that a machine is waiting on reaching an end wakes the outcome reconciler on
+-- every host, instead of leaving it to the next sweep. Three writes reach an end: an update of its
+-- metadata to completed, failed or cancelled; an insert of metadata already in one of those states
+-- (the dispatcher records an entry whose input cannot be read as a failed run in one insert); and an
+-- update of its still-queued entry to cancelled. pg_notify inside the writing transaction is
 -- delivered when it commits and never when it rolls back. The payload is the run's external id, the
--- token the waiting snapshot holds. A requeued dispatch failure notifies too; the reconciler finds
--- the entry queued again and applies nothing.
+-- token the waiting snapshot holds.
+--
+-- A dispatch that fails with attempts left notifies as well: it updates its metadata to failed,
+-- marked DispatchRequeued, in the transaction that queues the entry again. That run never started
+-- and is not the end; the reconciler reads the entry and its run in one statement, finds the entry
+-- queued, and applies nothing until the run a later dispatch records has ended.
 --
 -- PostgresInvokedRunListener in Trax.Effect.Data.Postgres listens on this channel by name.
 --
@@ -61,6 +67,22 @@ BEGIN
             WHEN (NEW.invoking_machine IS NOT NULL
                   AND OLD.status IS DISTINCT FROM NEW.status
                   AND NEW.status = 'cancelled')
+            EXECUTE FUNCTION trax.notify_invoked_run_ended();
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'metadata_invoked_run_recorded_ended_notify'
+          AND tgrelid = 'trax.metadata'::regclass
+    ) THEN
+        CREATE TRIGGER metadata_invoked_run_recorded_ended_notify
+            AFTER INSERT ON trax.metadata
+            FOR EACH ROW
+            WHEN (NEW.invoking_machine IS NOT NULL
+                  AND NEW.train_state IN ('completed', 'failed', 'cancelled'))
             EXECUTE FUNCTION trax.notify_invoked_run_ended();
     END IF;
 END$$;
