@@ -72,8 +72,10 @@ describe("stories on the recordings", () => {
     const composed = composeStories(mod as StoryModule);
     for (const [name, Story] of Object.entries(composed) as [string, ComposedStory][]) {
       if (Story.parameters?.real) continue;
-      test(`${path.replace("../", "")} ${name}`, async () => {
-        current = `${path.replace("../", "")} ${name}`;
+      // The glob's paths start with "../"; the label drops that prefix only.
+      const label = `${path.replace(/^\.\.\//, "")} ${name}`;
+      test(label, async () => {
+        current = label;
         const { container } = render(<Story />);
         await settle();
         try {
