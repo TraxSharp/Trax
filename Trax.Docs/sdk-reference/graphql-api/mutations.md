@@ -677,6 +677,7 @@ It is refused with `success: false`, the reason as the message, and nothing queu
 - a state machine's step started it, since only that step receives its outcome;
 - its saved input is missing, a placeholder or masked, for the reasons `requeueExecution` gives;
 - a resume of it is already queued (`"A resume of execution 100 is already queued (WorkQueue 7); a run is resumed once at a time. Nothing was queued."`);
+- a resume of it already completed, so its work is done (`"Execution 100 cannot be resumed: a resume of run 100 already completed, so its work is done. Requeue it to run it again from the top. Nothing was queued."`);
 - its train is no longer registered here, or its chain cannot be read;
 - no checkpoint it wrote lets it resume at that step: none comes before it, a step from the point
   on needs a value nothing restores, or the stored checkpoint no longer matches the running chain
@@ -702,6 +703,11 @@ mutation {
 **Returns**: `OperationResponse`. On success, `id` is the new **work queue entry**'s id, as for
 `requeueExecution`. The entry names the execution it resumes and the step (`resume_from` and
 `resume_at` on the work queue row), and the run copies both when it is dispatched.
+
+The run checks the resume again as it starts. If it can no longer be honoured (a deploy changed
+the chain or the state between the queueing and the dispatch, say), the run fails, classified
+permanent, with `ResumeRefusedException` and the reason as its failure, rather than running from
+the top: a resume was asked for, not a fresh run.
 
 ---
 

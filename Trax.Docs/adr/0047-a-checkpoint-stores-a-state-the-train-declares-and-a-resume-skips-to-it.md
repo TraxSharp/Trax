@@ -52,8 +52,9 @@ stored tracks, as it is withheld from junction events, so a checkpoint inside su
 resume could not find its way back into it.
 
 **A checkpoint row is guarded against deploys.** Each row carries the chain's hash (`ChainGraph.Hash`, over the
-declared graph) and a fingerprint of `TState`'s serializer contract, and a resume refuses, with the reason, when
-either differs from the running code. A full rerun stays possible. The plan put the chain hash on the run's metadata
+declared graph) and a fingerprint of `TState`'s serializer contract (each member's JSON name and type, the serializer
+attributes on it, and each enum's members with their values, since the serializer writes an enum as its number), and
+a resume refuses, with the reason, when either differs from the running code. A full rerun stays possible. The plan put the chain hash on the run's metadata
 at start; it is on the checkpoint row instead, since that is the only place it is compared, and putting it on every
 run would add a write to runs that never checkpoint. The hash covers names, types and tracks, not a gate's
 threshold or a seed's value: a resume takes the routes the stored run took, even if the code would now route
@@ -62,7 +63,9 @@ differently.
 **The size cap is requeue's.** A checkpoint is stored as canonical JSON under the cap a requeue's stored input uses
 (4 times `MaxInputJsonBytes`, 1 MiB by default). Over it, the step fails, classified permanent, naming the size and
 the cap. A placeholder is never stored: the parameter provider's truncation is the wrong model here, because a
-truncated checkpoint is a resume that cannot happen.
+truncated checkpoint is a resume that cannot happen. A state holding a NUL character in a string fails the step
+the same way, on every provider: Postgres cannot store one, and its provider replaces it rather than fail the write,
+so the state would read back as a different value.
 
 **A new table in the core provider set** ([0009](./0009-feature-tables-ship-in-the-core-provider-set.md),
 [0036](./0036-a-feature-table-ships-with-its-model-in-effect.md)): `trax.checkpoint`, one row per run and node, for
@@ -110,7 +113,11 @@ hash and age.
 branch's path. A resume into a failed `Parallel` reruns each branch from its own latest checkpoint, and from the
 start when it has none; a branch whose last step is a checkpoint it reached runs nothing, and what it gives the join
 is what its checkpoint restores. A branch's other outputs are not kept automatically: an author who needs them at
-the join puts them in the branch's checkpoint state, and the check refuses a join that would miss one.
+the join puts them in the branch's checkpoint state, and the check refuses a join that would miss one. A branch's
+checkpoint holds what the branch computed from Memory as the run reached the `Parallel`, so it is restored only when
+nothing before the `Parallel` runs again: a resume at the `Parallel` itself, or after a main checkpoint with nothing
+between it and the `Parallel` but seeds and extractions. A resume at an earlier step runs every branch from its
+start.
 
 ### Which runs resume
 
@@ -137,8 +144,18 @@ also settles an operator's resume racing a scheduled retry: one is queued and th
 - **Ad-hoc runs** have no automatic retry; an operator may resume them.
 
 **An operator's resume is a requeue in every check but where it starts.** It refuses a run that is not Failed or
-Cancelled, a run that already has a queued resume, a run a machine invoked (0046's reason), and an input the
-requeue's input check refuses (missing, a placeholder, or masked). On GraphQL it needs the operations gate and the
+Cancelled, a run that already has a queued resume, a run a resume of which already completed (its work is done), a
+run a machine invoked (0046's reason), and an input the requeue's input check refuses (missing, a placeholder, or
+masked).
+
+**The resumed run checks the link again as it starts.** `resume_from` is a column any enqueue could set, so the
+run refuses a source that is not a run of the same train, on the same input, that failed or was cancelled, and
+that no resume has completed, before it trusts a checkpoint of it; a run's `replay_decisions_of` is held to the
+same train and input. The mediator's `QueueTrainOptions` sets both links internally, for the operations service
+alone. A refusal at start is handled by who asked: a manifest's retry or a dead letter's requeue logs it and runs
+from the top, as a retry always did; an operator's resume (a run of no manifest) fails, classified permanent, with
+a `ResumeRefusedException` carrying the refusal's code and reason, because the operator asked to carry on, not to
+start again, and a silent rerun would repeat the expensive steps the resume was meant to skip. On GraphQL it needs the operations gate and the
 train's own `[TraxAuthorize]`, through the mediator, as a requeue does; resuming does strictly less than requeueing
 the same input, so it needs no stronger role. The dashboard calls it in its trusted scope and records no actor, as
 it records none for a requeue; adding one is a change to every dashboard action, not to this one.
@@ -190,6 +207,8 @@ In `Trax.Core/tests/Trax.Core.Tests.Unit`:
 - `ResumeCheckPropertyTests.The_check_agrees_with_running_from_the_point_over_generated_chains`: when it allows a
   resume, the resumed run equals a full run; when it refuses, running from the point hits a missing input.
 - `CheckpointStatePropertyTests.StateDigest_of_a_generated_state_survives_a_round_trip`
+- `CheckpointResumeTests.Resuming_at_a_step_before_a_Parallel_reruns_its_branches_rather_than_restoring_them`
+- `CheckpointFingerprintTests.An_enum_member_whose_value_changes_fingerprints_differently`
 
 In `Trax.Effect/tests/Trax.Effect.Tests.Integration`, on Postgres and Sqlite, and InMemory where it has the table:
 - `CheckpointWriteTests.A_checkpoint_stores_its_state_tracks_hash_and_fingerprint_once_per_node`
@@ -200,6 +219,9 @@ In `Trax.Effect/tests/Trax.Effect.Tests.Integration`, on Postgres and Sqlite, an
 - `CheckpointWriteTests.A_sensitive_routing_track_is_never_stored_and_a_checkpoint_inside_it_is_refused`
 - `CheckpointWriteTests.A_completed_run_deletes_its_checkpoints`
 - `CheckpointWriteTests.Two_branches_writing_checkpoints_at_once_store_both`
+- `CheckpointWriteTests.A_state_holding_a_NUL_character_fails_the_step_as_permanent_and_stores_nothing`
+- `ServiceTrainResumeTests.An_operators_resume_refused_at_start_fails_with_the_refusal_instead_of_running_from_the_top`
+- `ServiceTrainResumeTests.A_resume_on_another_input_is_refused`
 
 In `Trax.Scheduler/tests/Trax.Scheduler.Tests.Integration`, on Postgres and Sqlite:
 - `CheckpointResumeTests.A_manifest_retry_after_a_crash_in_Summarize_does_not_rerun_FetchFullTexts`, proved by its
@@ -220,6 +242,7 @@ In `Trax.Api/tests`, on GraphQL and the dashboard alike:
 - `ResumeExecutionOperationsTests.A_point_no_checkpoint_covers_is_refused_with_one_reason_on_both_surfaces`
 - `ResumeExecutionOperationsTests.A_running_pending_or_completed_run_is_refused`
 - `ResumeExecutionOperationsTests.A_second_resume_while_one_is_queued_is_refused`
+- `ResumeExecutionOperationsTests.A_run_whose_resume_already_completed_is_refused_on_both_surfaces`
 - `ResumeExecutionOperationsTests.A_resume_of_an_invoked_run_is_refused_with_its_reason`
 - `ResumeExecutionOperationsTests.A_placeholder_or_masked_input_is_refused`
 - `ResumeExecutionOperationsTests.A_caller_past_the_gate_but_not_the_trains_authorize_is_refused`
@@ -242,6 +265,12 @@ Not covered: nothing can check that the steps after a checkpoint are idempotent,
 other than Trax's own has committed its work when a checkpoint is written. Both are conventions the docs state.
 
 ## Changelog
+
+- **2026-10-08**: Amended after an audit of the stage. A branch checkpoint is restored only when nothing before
+  its `Parallel` runs again. The resumed run checks its source (same train, same input, failed or cancelled, no
+  completed resume) and its replay source (same train, same input); an operator's resume refused at start fails
+  the run rather than rerunning it from the top. A run whose resume completed cannot be resumed again. The state
+  fingerprint covers enum values and serializer attributes. A state holding a NUL character is refused.
 
 - **2026-10-08**: `[Experimental("TRAXEXP003")]` lifted: the `Checkpoint` row of the interaction matrix is
   complete, every cell a test.

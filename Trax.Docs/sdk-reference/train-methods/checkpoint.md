@@ -60,13 +60,16 @@ when:
   after the commit.
 - the state's JSON is larger than the cap a requeue's stored input has: four times the mediator's
   `MaxInputJsonBytes`, 1 MiB by default.
+- a string in the state holds a NUL character (`\u0000`). Postgres cannot store one, and would read
+  back a different value, so every provider refuses it alike. Store such data encoded (Base64, say).
 
 A run that completes deletes its checkpoints. A failed or cancelled run's checkpoints are deleted
 with it by metadata cleanup, which keeps a run while a queued resume still needs it.
 
 ## Resuming
 
-A run resumes from an earlier run of the same input that failed or was cancelled:
+A run resumes from an earlier run of the same train and the same input that failed or was
+cancelled, and that no resume has already completed:
 
 | How | Resumes |
 |---|---|
@@ -99,13 +102,22 @@ input, the container, or a step after the point. A refusal names the step and th
 | `off-the-path` | The point is in a track of a routing step after the checkpoint, which the resumed run would not ask. |
 | `inside-a-branch` | The point is inside a `Parallel` branch: resume at the `Parallel`, and each branch resumes from its own checkpoint. |
 | `chain-changed` | The chain's hash differs from the one stored with the checkpoint: a deploy changed it. |
-| `state-changed` | The state type's shape differs from the one stored, so reading it back would quietly default members. |
+| `state-changed` | The state type's shape differs from the one stored, so reading it back would quietly default or change members. The shape covers each member's JSON name and type, the serializer attributes on it (`[JsonConverter]`, `[JsonNumberHandling]` and the rest), and each enum's members with their values. |
 
 A decision made before the checkpoint is not stored: a step after it that reads one makes the
 check refuse. Put what it needs in the state.
 
-A retry or a dead letter whose run can no longer resume (a deploy changed the chain, say) runs from
-the top and logs why.
+The resumed run checks all of this again as it starts, with the run it names: that it is a run of
+the same train, on the same input, that failed or was cancelled, that no resume of it completed,
+and that the check above still allows the resume. When one fails:
+
+- a retry or a dead letter's requeue runs from the top and logs why, as a retry always did;
+- an operator's resume (`resumeExecution`, or the dashboard's buttons) fails, classified permanent,
+  with a `ResumeRefusedException` whose message is the reason: the operator asked to carry on, not
+  to start again, so the run is not silently rerun. Requeue it to run it from the top.
+
+The run-level refusals have codes of their own: `unknown-run`, `another-train`, `not-failed`,
+`already-resumed` and `different-input`.
 
 ### Inside a Parallel
 
@@ -120,6 +132,12 @@ holds:
     .Branch("cocitation", b => b.Chain<CoCitationOverlap>()))
 .Chain<CombineSignals>()
 ```
+
+A branch's checkpoint holds what the branch computed from Memory as the run reached the
+`Parallel`, so it is restored only when nothing before the `Parallel` runs again: when the run
+resumes at the `Parallel` itself, or after a main checkpoint with nothing between it and the
+`Parallel` but values handed to the chain and extractions. Resuming at a step before the
+`Parallel` runs every branch from its start.
 
 ## Example
 
