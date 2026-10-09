@@ -235,9 +235,11 @@ builder.Services.AddTraxGraphQL(graphql =>
 ```
 
 The research and refund trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
-so the viewer key follows their steps through the broadcast view. The topic map's train carries the
-same `[TraxAuthorize]` but not `[TraxBroadcast]`: a train a user's own state machine runs may not
-broadcast every run to every subscriber, and the page follows it through the operations view anyway.
+so the viewer key follows their steps through the broadcast view. The topic map's train carries a bare
+`[TraxAuthorize]`, which admits any authenticated caller and names no role, and no `[TraxBroadcast]`:
+the `topic-map` machine invokes it, and a user's own machine may not invoke a train stricter than its
+own mutations, nor one that broadcasts every run to every subscriber. Every caller this host
+authenticates holds `Operator` or `Viewer`, and the page follows its steps through the operations view.
 
 Once a token scheme is registered, a subscription socket without a credential is refused at
 `connection_init`, so a "public" watcher still needs a key. The alternative to an operator key is
