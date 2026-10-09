@@ -11,7 +11,7 @@ namespace Trax.Effect.Services.Checkpoints;
 /// </summary>
 internal static class DeclaredChains
 {
-    private static readonly ConcurrentDictionary<Type, Declared?> Chains = new();
+    private static readonly ConcurrentDictionary<Type, Declared> Chains = new();
 
     /// <summary>
     /// Remembers <paramref name="train"/>'s chain, read by someone who already had to read it.
@@ -20,8 +20,11 @@ internal static class DeclaredChains
         Chains.TryAdd(train, Of(train, chain, input, output));
 
     /// <summary>
-    /// <paramref name="train"/>'s chain, read with <paramref name="declare"/> the first time no one
-    /// has remembered it, or null when it cannot be read.
+    /// <paramref name="train"/>'s chain, read with <paramref name="declare"/> until a read
+    /// succeeds, or null when it cannot be read this time. A failed read is not remembered: it may
+    /// have failed for a reason that passes (a dependency down while the train was built), and
+    /// remembering it would leave every run of the train unable to checkpoint or resume until the
+    /// process restarts.
     /// </summary>
     public static Declared? For(
         Type train,
@@ -29,22 +32,25 @@ internal static class DeclaredChains
         Type output,
         Func<ChainRecorder> declare,
         Action<Exception> unreadable
-    ) =>
-        Chains.GetOrAdd(
-            train,
-            _ =>
-            {
-                try
-                {
-                    return Of(train, declare(), input, output);
-                }
-                catch (Exception e)
-                {
-                    unreadable(e);
-                    return null;
-                }
-            }
-        );
+    )
+    {
+        if (Chains.TryGetValue(train, out var known))
+            return known;
+
+        Declared read;
+
+        try
+        {
+            read = Of(train, declare(), input, output);
+        }
+        catch (Exception e)
+        {
+            unreadable(e);
+            return null;
+        }
+
+        return Chains.GetOrAdd(train, read);
+    }
 
     private static Declared Of(Type train, ChainRecorder chain, Type input, Type output) =>
         new(chain, ChainGraph.From(chain, train, input, output).Hash, HasCheckpoint(chain));
