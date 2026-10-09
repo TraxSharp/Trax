@@ -35,15 +35,18 @@ namespace Trax.Scheduler.Tests.Integration.IntegrationTests;
 /// for its next poll, and hears nothing from a transaction that rolls back.
 /// </summary>
 /// <remarks>
-/// Each test runs a real dispatcher host polling every 30 seconds, and queues from a second
-/// service provider with its own data source, the way an API host would. Every wait is on a
-/// signal (a dispatcher cycle, a subscription, a notice) with a timeout the test owns.
+/// Each test runs a real dispatcher host polling once an hour, and queues from a second service
+/// provider with its own data source, the way an API host would. After the startup cycle no poll
+/// can come within any test's timeout, so every later cycle is one a notice began: a run reaching
+/// the dispatcher at all proves the wake, and no assertion depends on how fast the machine is.
+/// Every wait is on a signal (a dispatcher cycle, a subscription, a notice) with a timeout the
+/// test owns, and a test ends only once the runs it queued have finished, so stopping the host
+/// cancels none of them.
 /// </remarks>
 [TestFixture]
 public class DispatcherWakeTests
 {
-    private static readonly TimeSpan Poll = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan Budget = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan Poll = TimeSpan.FromHours(1);
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(20);
 
     private const string ListenerApplicationName = "trax_queued_work_listener";
@@ -101,21 +104,22 @@ public class DispatcherWakeTests
     }
 
     [Test]
-    public async Task A_run_queued_on_another_host_starts_within_a_second_despite_a_30_second_poll()
+    public async Task A_run_queued_on_another_host_is_dispatched_by_its_notice_not_by_a_poll()
     {
-        // The first dispatch through a fresh host compiles its queries; that is not the latency
-        // under test, so one run goes through first.
-        var warmUp = await QueueFromApiHostAsync();
-        await WaitUntilDispatchedAsync(warmUp, SetupTimeout);
+        var cyclesBefore = _cycles.Count;
+        var noticesBefore = Listener.Notices;
 
         var queued = await QueueFromApiHostAsync();
-        var sinceCommit = Stopwatch.StartNew();
 
-        await WaitUntilDispatchedAsync(queued, Budget);
+        await _notices.WhenReached(noticesBefore + 1).WaitAsync(SetupTimeout);
+        await WaitUntilDispatchedAsync(queued, SetupTimeout);
 
-        sinceCommit
-            .Elapsed.Should()
-            .BeLessThan(Budget, "the commit wakes the dispatcher; its next poll is 30 s away");
+        // The next poll is an hour after the startup cycle, far past any timeout here, so the
+        // cycle that ran the entry is one the notice began.
+        SetupTimeout.Should().BeLessThan(Poll);
+        _cycles
+            .Count.Should()
+            .BeGreaterThan(cyclesBefore, "the notice woke the dispatcher; no poll was due");
     }
 
     [Test]
@@ -201,8 +205,10 @@ public class DispatcherWakeTests
     }
 
     /// <summary>
-    /// Waits, cycle by cycle, until the entry is dispatched, and fails when that takes longer than
-    /// <paramref name="timeout"/> from the call.
+    /// Waits, cycle by cycle, until the entry is dispatched and its run has finished, and fails
+    /// when that takes longer than <paramref name="timeout"/> from the call. The run is part of
+    /// the wait because the entry is marked dispatched before the cycle runs it: a test that
+    /// stopped the host in between would cancel the run and leave it in progress.
     /// </summary>
     private async Task WaitUntilDispatchedAsync(long workQueueId, TimeSpan timeout)
     {
@@ -226,19 +232,22 @@ public class DispatcherWakeTests
 
         (await IsDispatchedAsync(workQueueId))
             .Should()
-            .BeTrue($"work queue entry {workQueueId} should be dispatched within {timeout}");
+            .BeTrue(
+                $"work queue entry {workQueueId} should be dispatched and run within {timeout}"
+            );
     }
 
     private async Task<bool> IsDispatchedAsync(long workQueueId)
     {
         using var scope = _apiHost.CreateScope();
         var dataContext = scope.ServiceProvider.GetRequiredService<IDataContext>();
-        var status = await dataContext
+        var entry = await dataContext
             .WorkQueues.AsNoTracking()
             .Where(w => w.Id == workQueueId)
-            .Select(w => w.Status)
+            .Select(w => new { w.Status, RunState = (TrainState?)w.Metadata!.TrainState })
             .SingleAsync();
-        return status == WorkQueueStatus.Dispatched;
+        return entry.Status == WorkQueueStatus.Dispatched
+            && entry.RunState is not (null or TrainState.Pending or TrainState.InProgress);
     }
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
