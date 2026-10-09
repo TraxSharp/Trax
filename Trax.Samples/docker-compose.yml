@@ -6,6 +6,9 @@ services:
     image: postgres:17@sha256:2203e6282d9e7de7c24d7da234e2a744fb325df366a3fd8ed940e8abbee39527
     restart: unless-stopped
     shm_size: 512m
+    # The test projects run in parallel against this one server, and their pools and LISTEN
+    # sessions outgrow the default 100 connections; CI raises its service to the same 500.
+    command: ["postgres", "-c", "max_connections=500"]
     environment:
       POSTGRES_USER: trax
       POSTGRES_PASSWORD: trax123
