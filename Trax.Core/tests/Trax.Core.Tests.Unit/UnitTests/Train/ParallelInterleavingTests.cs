@@ -243,7 +243,7 @@ public class ParallelInterleavingTests : TestSetup
     {
         // The first branch blocks its thread until the second has run. Started on the caller's
         // thread rather than the pool, the second would never start.
-        using var signal = new ManualResetEventSlim();
+        var signal = new TaskCompletionSource();
 
         var result = await new BlockingTrain(signal, Hang).RunEither("x").WaitAsync(Hang * 2);
 
@@ -253,7 +253,7 @@ public class ParallelInterleavingTests : TestSetup
     [Test]
     public async Task ABlockingJunction_RunInOrder_DoesStopItsSibling_SoTheBudgetCanFail()
     {
-        using var signal = new ManualResetEventSlim();
+        var signal = new TaskCompletionSource();
 
         // negative-wait: the blocked branch has to give up for the run to end at all.
         var result = await new BlockingTrain(signal, TimeSpan.FromMilliseconds(200))
@@ -414,25 +414,28 @@ public class ParallelInterleavingTests : TestSetup
                 .Resolve();
     }
 
-    private sealed class BlocksUntil(ManualResetEventSlim signal, TimeSpan wait)
+    // Blocks with Task.Wait, which the thread pool sees: it adds a thread at once for a pool thread
+    // blocked that way, so the sibling starts even when other work in the process holds every pool
+    // thread, instead of waiting for the pool's slow starvation injection.
+    private sealed class BlocksUntil(TaskCompletionSource signal, TimeSpan wait)
         : Junction<string, ReadA>
     {
         public override Task<ReadA> Run(string input) =>
-            signal.Wait(wait)
+            signal.Task.Wait(wait)
                 ? Task.FromResult(new ReadA(1))
                 : throw new TimeoutException("the sibling never ran");
     }
 
-    private sealed class Releases(ManualResetEventSlim signal) : Junction<string, ReadB>
+    private sealed class Releases(TaskCompletionSource signal) : Junction<string, ReadB>
     {
         public override Task<ReadB> Run(string input)
         {
-            signal.Set();
+            signal.TrySetResult();
             return Task.FromResult(new ReadB(1));
         }
     }
 
-    private sealed class BlockingTrain(ManualResetEventSlim signal, TimeSpan wait)
+    private sealed class BlockingTrain(TaskCompletionSource signal, TimeSpan wait)
         : Train<string, string>
     {
         protected override Task<Either<Exception, string>> Junctions() =>
