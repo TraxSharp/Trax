@@ -49,7 +49,11 @@ export function StateMachineInstancePage() {
     variables: { machine, ownerKind, id, rowId },
     pause: refusal != null,
   });
-  const refetch = () => reexecute({ requestPolicy: "network-only" });
+  // reexecute ignores pause, so a route the API cannot look up must not refetch at all: every
+  // change would send a read that can only fail.
+  const refetch = () => {
+    if (refusal == null) reexecute({ requestPolicy: "network-only" });
+  };
   usePoll(refetch);
   // Its runs move with the work queue and the runs themselves.
   useRefetchOnChange(["EXECUTION", "WORK_QUEUE"], refetch);

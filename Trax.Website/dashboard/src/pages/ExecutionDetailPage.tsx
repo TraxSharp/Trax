@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "urql";
 import { EXECUTION_DETAIL, RUN_GRAPH } from "../graphql/queries";
@@ -45,15 +45,29 @@ export function ExecutionDetailPage() {
   });
   // The run drawn on its train's declared graph, with the checkpoints it can resume from. Not asked
   // of a client that cannot answer it (the demo, until its recordings hold run graphs).
+  const answersGraph = useAnswers("RunGraph");
   const [graphResult, reexecuteGraph] = useQuery<RunGraphData>({
     query: RUN_GRAPH,
     variables: { metadataId: id },
-    pause: !useAnswers("RunGraph"),
+    pause: !answersGraph,
   });
+  // An EXECUTION change names no run, so it refetches the run on any run's change. The graph is the
+  // heavier read and changes only while this run is going, so it is read again only then, and once
+  // more when the run's state moves (as it ends), so a finished run shows the graph it ended with.
+  // reexecute ignores pause, so a client that cannot answer the graph is never sent one.
+  const trainState = result.data?.operations?.executionDetail?.trainState;
+  const active = trainState != null && ACTIVE_STATES.has(trainState);
   useRefetchOnChange("EXECUTION", () => {
     reexecute({ requestPolicy: "network-only" });
-    reexecuteGraph({ requestPolicy: "network-only" });
+    if (answersGraph && active) reexecuteGraph({ requestPolicy: "network-only" });
   });
+  const seenState = useRef(trainState);
+  useEffect(() => {
+    const before = seenState.current;
+    seenState.current = trainState;
+    if (answersGraph && before != null && trainState != null && before !== trainState)
+      reexecuteGraph({ requestPolicy: "network-only" });
+  }, [trainState, answersGraph, reexecuteGraph]);
   const [, cancelExecution] = useMutation(CANCEL_EXECUTION);
   const [, requeueExecution] = useMutation(REQUEUE_EXECUTION);
   const [, resumeExecution] = useMutation(RESUME_EXECUTION);
