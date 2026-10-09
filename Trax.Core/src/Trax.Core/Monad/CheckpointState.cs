@@ -36,14 +36,19 @@ internal static class CheckpointState
 
     /// <summary>
     /// A fingerprint of how <paramref name="state"/> is written as JSON: every member's JSON name
-    /// and type, recursively, as 64 lowercase hex digits. A stored state whose fingerprint differs
-    /// from the type's now would be read with members quietly defaulted, so a resume refuses it.
+    /// and type, the serializer attributes on each, and each enum's members with their values,
+    /// recursively, as 64 lowercase hex digits. A stored state whose fingerprint differs from the
+    /// type's now would be read with members quietly defaulted or changed, so a resume refuses it.
     /// </summary>
-    public static string Fingerprint(Type state)
+    public static string Fingerprint(Type state) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Shape(state))));
+
+    /// <summary>What <see cref="Fingerprint"/> hashes.</summary>
+    internal static string Shape(Type state)
     {
         var shape = new StringBuilder();
         Describe(state, shape, []);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(shape.ToString())));
+        return shape.ToString();
     }
 
     private static void Describe(
@@ -59,10 +64,30 @@ internal static class CheckpointState
         }
 
         shape.Append(type.FullName ?? type.Name);
+        Attributes(type, shape);
 
+        // The serializer writes an enum as its number unless a converter says otherwise, so each
+        // member's value counts as much as its name; a renamed member counts when it is written
+        // as a string.
         if (type.IsEnum)
         {
-            shape.Append('{').AppendJoin(',', Enum.GetNames(type)).Append('}');
+            shape.Append(':').Append(Enum.GetUnderlyingType(type).FullName).Append('{');
+            foreach (var member in type.GetFields(BindingFlags.Public | BindingFlags.Static))
+            {
+                shape
+                    .Append(member.Name)
+                    .Append('=')
+                    .Append(
+                        Convert.ToString(
+                            member.GetRawConstantValue(),
+                            System.Globalization.CultureInfo.InvariantCulture
+                        )
+                    );
+                if (member.GetCustomAttribute<JsonStringEnumMemberNameAttribute>() is { } named)
+                    shape.Append('"').Append(named.Name).Append('"');
+                shape.Append(',');
+            }
+            shape.Append('}');
             return;
         }
 
@@ -97,11 +122,47 @@ internal static class CheckpointState
                 .OrderBy(p => JsonName(p), StringComparer.Ordinal)
         )
         {
-            shape.Append(JsonName(property)).Append(':');
+            shape.Append(JsonName(property));
+            Attributes(property, shape);
+            shape.Append(':');
             Describe(property.PropertyType, shape, seen);
             shape.Append(';');
         }
         shape.Append('}');
+    }
+
+    /// <summary>
+    /// The serializer attributes on <paramref name="member"/> that change how its value is written
+    /// or read back: a converter, number handling, how a member is populated, whether it is
+    /// required, and an extension-data bag. A state whose JSON reads back differently once one of
+    /// them changes fingerprints differently.
+    /// </summary>
+    private static void Attributes(MemberInfo member, StringBuilder shape)
+    {
+        foreach (
+            var attribute in member
+                .GetCustomAttributes(inherit: true)
+                .OfType<JsonAttribute>()
+                .Select(Describe)
+                .Where(a => a is not null)
+                .Order(StringComparer.Ordinal)
+        )
+            shape.Append('[').Append(attribute).Append(']');
+
+        static string? Describe(JsonAttribute attribute) =>
+            attribute switch
+            {
+                JsonConverterAttribute converter =>
+                    $"converter:{(converter.ConverterType ?? converter.GetType()).FullName}",
+                JsonNumberHandlingAttribute numbers => $"numbers:{numbers.Handling}",
+                JsonObjectCreationHandlingAttribute creation => $"creation:{creation.Handling}",
+                JsonUnmappedMemberHandlingAttribute unmapped =>
+                    $"unmapped:{unmapped.UnmappedMemberHandling}",
+                JsonRequiredAttribute => "required",
+                JsonExtensionDataAttribute => "extension-data",
+                JsonIncludeAttribute => "include",
+                _ => null,
+            };
     }
 
     private static string JsonName(PropertyInfo property) =>
