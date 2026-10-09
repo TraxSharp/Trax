@@ -437,7 +437,8 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
                     Metadata,
                     GetType(),
                     ServiceProvider,
-                    CancellationToken
+                    CancellationToken,
+                    this
                 )
                 : null;
 

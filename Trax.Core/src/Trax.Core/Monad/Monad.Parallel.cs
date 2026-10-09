@@ -155,7 +155,11 @@ public partial class Monad<TInput, TReturn>
             int i
         )
         {
-            RunningBranch.Enter(Train, child.CancellationToken);
+            RunningBranch.Enter(
+                Train,
+                child.CancellationToken,
+                child.Memory.GetValueOrDefault(typeof(IServiceProvider)) as IServiceProvider
+            );
             Exception? failure;
 
             try

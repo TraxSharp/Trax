@@ -53,7 +53,8 @@ internal sealed class JunctionEventPublisher
 
     /// <summary>
     /// Begins the junction events of the run <paramref name="metadata"/> records, working out once
-    /// which attempt of its manifest it is. Null for a run that was never persisted, which has no
+    /// which attempt of its manifest it is. <paramref name="running"/> is the train instance, so a
+    /// step in one of its <c>Parallel</c> branches resolves its handlers from the branch's scope. Null for a run that was never persisted, which has no
     /// junction events. Never throws: an attempt that cannot be worked out is
     /// logged and left out.
     /// </summary>
@@ -61,7 +62,8 @@ internal sealed class JunctionEventPublisher
         Metadata metadata,
         Type train,
         IServiceProvider services,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        object? running = null
     )
     {
         // A run that was never persisted has no row its steps could be read back or told apart by,
@@ -100,7 +102,7 @@ internal sealed class JunctionEventPublisher
             }
         }
 
-        return new(this, metadata, train, services, attempt);
+        return new(this, metadata, train, services, attempt) { Train = running };
     }
 
     /// <summary>Stores, broadcasts and hands out one step. Never throws.</summary>
@@ -163,7 +165,7 @@ internal sealed class JunctionEventPublisher
         IEnumerable<IJunctionEventHandler> handlers;
         try
         {
-            handlers = run.Services.GetServices<IJunctionEventHandler>().ToList();
+            handlers = run.HandlerServices.GetServices<IJunctionEventHandler>().ToList();
         }
         catch (Exception e)
         {

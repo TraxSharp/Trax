@@ -191,8 +191,10 @@ after the step is published, so the next junction waits for it: return quickly a
 slow. On other hosts it is called by the receiver, from a fresh scope per message. Whatever a
 handler throws is logged and never reaches the run or the other handlers. In a train with
 [`Parallel`](/docs/sdk-reference/train-methods/parallel) branches, steps of different branches are
-published at the same time, so the same handler instance can be called from two branches at once:
-keep a handler thread-safe, or keep no state in it.
+published at the same time. A step inside a branch is handed to handlers resolved from that branch's
+own scope, as the branch's junctions are, so a scoped handler (one holding a database context, say)
+is never called from two branches at once. A singleton handler is shared by every branch and every
+run: keep it thread-safe, or keep no state in it.
 
 Publishing never fails a run and never changes a junction's result. A failure to store, broadcast
 or hand out a step is logged and swallowed. A custom `ITrainEventBroadcaster` is handed junction

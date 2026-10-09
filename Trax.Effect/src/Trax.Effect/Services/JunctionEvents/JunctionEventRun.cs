@@ -75,8 +75,27 @@ internal sealed class JunctionEventRun
     /// </summary>
     public int? Attempt { get; }
 
-    /// <summary>The run's scope, which local junction event handlers are resolved from.</summary>
+    /// <summary>
+    /// The run's scope, which local junction event handlers are resolved from outside a
+    /// <c>Parallel</c> branch.
+    /// </summary>
     public IServiceProvider Services { get; }
+
+    /// <summary>
+    /// The running train, which tells a step in one of its <c>Parallel</c> branches apart from a
+    /// step of another run on the same flow. Null when the run was begun without it.
+    /// </summary>
+    public object? Train { get; init; }
+
+    /// <summary>
+    /// The scope local junction event handlers are resolved from for a step on this flow: the
+    /// branch's own inside a <c>Parallel</c> branch of this run, else the run's. Branches run side
+    /// by side, and a scoped handler (one holding a database context, say) is not made to be used
+    /// from two threads, so each branch gets its own, as the branch's junctions do
+    /// (Trax.Docs/adr/0045).
+    /// </summary>
+    public IServiceProvider HandlerServices =>
+        (Train is null ? null : RunningBranch.ServicesFor(Train)) ?? Services;
 
     /// <summary>
     /// The track and withholding of each branch that has taken a track, keyed by branch path

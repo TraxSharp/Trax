@@ -735,6 +735,33 @@ public class JunctionEventsTests
     }
 
     [Test]
+    public async Task A_scoped_handler_is_never_called_from_two_branches_at_once()
+    {
+        // Each branch has its own scope (Trax.Docs/adr/0045), and a scoped handler resolved from
+        // the run's scope was one instance called from both branches at once: one holding a
+        // database context threw "a second operation was started", which was swallowed, and the
+        // event was lost.
+        BranchMeeting.Reset();
+        await using var provider = new ServiceCollection()
+            .AddScopedTraxRoute<IMeetingTrain, MeetingTrain>()
+            .AddScoped<IJunctionEventHandler, OneAtATimeHandler>()
+            .AddTrax(trax => trax.AddEffects(effects => effects.UseInMemory().AddJunctionEvents()))
+            .BuildServiceProvider();
+
+        using var scope = provider.CreateScope();
+        var train = scope.ServiceProvider.GetRequiredService<IMeetingTrain>();
+        await train.Run(Unit.Default);
+
+        BranchMeeting
+            .ConcurrentUse.Should()
+            .BeFalse("each branch resolves its handlers from its own scope");
+        BranchMeeting
+            .Handled.Where(n => n is nameof(MeetA) or nameof(MeetB))
+            .Should()
+            .HaveCount(4, "every branch junction's start and end reaches a handler");
+    }
+
+    [Test]
     public async Task Junction_events_are_off_unless_the_host_asks_for_them()
     {
         var handler = new CapturingHandler();
@@ -1291,6 +1318,106 @@ internal sealed class CapturingJournalLogger : ILogger<DecisionJournal>
         Exception? exception,
         Func<TState, Exception?, string> formatter
     ) => _messages.Enqueue(formatter(state, exception));
+}
+
+/// <summary>
+/// What <see cref="OneAtATimeHandler"/> saw: whether any instance was used from two threads at
+/// once, and the junctions whose events it handled.
+/// </summary>
+internal static class BranchMeeting
+{
+    private static TaskCompletionSource _a = New();
+    private static TaskCompletionSource _b = New();
+
+    public static bool ConcurrentUse;
+    public static ConcurrentQueue<string> Handled = new();
+
+    public static void Reset()
+    {
+        _a = New();
+        _b = New();
+        ConcurrentUse = false;
+        Handled = new();
+    }
+
+    /// <summary>
+    /// Holds a branch junction's start event until the other branch's has arrived too, so the
+    /// two are handled at the same time.
+    /// </summary>
+    public static Task Meet(string junction)
+    {
+        var (mine, theirs) = junction == nameof(MeetA) ? (_a, _b) : (_b, _a);
+        mine.TrySetResult();
+        return theirs.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    private static TaskCompletionSource New() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+/// <summary>A scoped handler that, like one holding a database context, must not be used concurrently.</summary>
+internal sealed class OneAtATimeHandler : IJunctionEventHandler
+{
+    private int _inUse;
+
+    public async Task HandleAsync(TrainLifecycleEventMessage message, CancellationToken ct)
+    {
+        if (Interlocked.Increment(ref _inUse) > 1)
+            BranchMeeting.ConcurrentUse = true;
+
+        try
+        {
+            var name = message.Junction?.Name;
+            if (
+                message.EventType == TrainLifecycleEventMessage.JunctionStartedEventType
+                && name is nameof(MeetA) or nameof(MeetB)
+            )
+                await BranchMeeting.Meet(name);
+
+            if (name is not null)
+                BranchMeeting.Handled.Enqueue(name);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inUse);
+        }
+    }
+}
+
+public sealed record MetA;
+
+public sealed record MetB;
+
+public class MeetStart : EffectJunction<Unit, Unit>
+{
+    public override Task<Unit> Run(Unit input) => Task.FromResult(Unit.Default);
+}
+
+public class MeetA : EffectJunction<Unit, MetA>
+{
+    public override Task<MetA> Run(Unit input) => Task.FromResult(new MetA());
+}
+
+public class MeetB : EffectJunction<Unit, MetB>
+{
+    public override Task<MetB> Run(Unit input) => Task.FromResult(new MetB());
+}
+
+public class MeetJoin : EffectJunction<(MetA, MetB), Unit>
+{
+    public override Task<Unit> Run((MetA, MetB) input) => Task.FromResult(Unit.Default);
+}
+
+public interface IMeetingTrain : IServiceTrain<Unit, Unit>;
+
+/// <summary>Two branches whose junctions start at the same time.</summary>
+public class MeetingTrain : ServiceTrain<Unit, Unit>, IMeetingTrain
+{
+    protected override Task<Either<Exception, Unit>> Junctions() =>
+        Chain<MeetStart>()
+            .Parallel(p => p.Branch("a", b => b.Chain<MeetA>()).Branch("b", b => b.Chain<MeetB>()))
+            .Chain<MeetJoin>()
+            .Resolve();
 }
 
 internal sealed class ThrowingHandler : IJunctionEventHandler
