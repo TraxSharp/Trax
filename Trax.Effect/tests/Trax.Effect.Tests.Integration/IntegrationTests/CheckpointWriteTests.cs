@@ -161,6 +161,22 @@ public class CheckpointWriteTests(CheckpointStoreKind store)
         }
     }
 
+    [Test]
+    public async Task A_state_holding_a_NUL_character_fails_the_step_as_permanent_and_stores_nothing()
+    {
+        // Postgres cannot store a NUL, and its provider rewrites one rather than fail the write,
+        // so a resume would read back a different value. Every provider refuses it alike.
+        CheckpointProbe.Padding = "before\0after";
+
+        var run = await Run<IResearchTrain>();
+
+        run.TrainState.Should().Be(TrainState.Failed);
+        run.FailureClass.Should().Be(FailureClass.Permanent, $"a retry fails the same ({Adr})");
+        run.FailureReason.Should().Contain("NUL character");
+        (await _host.Checkpoints(run.Id)).Should().BeEmpty();
+        CheckpointProbe.Ran.Should().NotContain(nameof(ScoreFindings));
+    }
+
     [TestCase(DirtyMode.UnsavedChange)]
     [TestCase(DirtyMode.OpenTransaction)]
     public async Task A_checkpoint_over_uncommitted_changes_or_an_open_transaction_fails_and_stores_nothing(

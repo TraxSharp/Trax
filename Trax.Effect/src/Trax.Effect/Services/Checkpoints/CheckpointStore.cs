@@ -66,6 +66,17 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
             );
 
         var state = JsonSerializer.Serialize(checkpoint.State, checkpoint.StateType);
+
+        // Postgres cannot store a NUL, and its provider replaces one rather than fail the write, so
+        // the state would read back as a different value. Refused on every provider alike.
+        if (HoldsNul(state))
+            throw Refused(
+                checkpoint,
+                $"The {step} holds '{checkpoint.StateType.FullName}' with a NUL character (\\u0000) "
+                    + "in a string, which the store cannot keep as it is, so a resume would read "
+                    + "back a different value. Remove it, or store the data encoded (Base64, say)."
+            );
+
         var size = Encoding.UTF8.GetByteCount(state);
 
         if (size > options.MaxStateBytes)
@@ -102,6 +113,23 @@ internal sealed class CheckpointStore(IEnumerable<ICheckpointRows> rows, Checkpo
             .ConfigureAwait(false);
 
         run.Wrote = true;
+    }
+
+    /// <summary>Whether a string or property name in the JSON text <paramref name="json"/> holds a NUL.</summary>
+    internal static bool HoldsNul(string json)
+    {
+        if (!json.Contains("\\u0000", StringComparison.OrdinalIgnoreCase) && !json.Contains('\0'))
+            return false;
+
+        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
+        while (reader.Read())
+            if (
+                reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName
+                && reader.GetString()!.Contains('\0')
+            )
+                return true;
+
+        return false;
     }
 
     /// <summary>
