@@ -3,6 +3,7 @@ using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Radzen;
 using Trax.Api.GraphQL.Queries;
 using Trax.Dashboard.Components.Pages.Data;
@@ -306,6 +307,73 @@ public class StateMachinesPageTests
         var idlePage = RenderDetail(Machine, "system", idle.Id, rowId: null);
         idlePage.WaitForAssertion(() => idlePage.Markup.Should().Contain("Done"), WaitTimeout);
         idlePage.FindAll(".cs-machine-cancel").Should().BeEmpty("there is no run to cancel");
+    }
+
+    [Test]
+    public async Task A_cancel_that_throws_shows_a_generic_message_and_logs_the_exception()
+    {
+        const string Secret = "Host=db-internal.example;Password=hunter2";
+        var logs = new ListLoggerProvider();
+        _ctx.Services.AddLogging(b => b.AddProvider(logs));
+        var calls = RecordingOperationsService.Register(_ctx.Services, _data);
+        calls.Respond = (name, _) =>
+            name == nameof(IOperationsService.CancelMachineInstanceAsync)
+                ? Task.FromException<MachineInstanceCancelResult>(
+                    new InvalidOperationException(Secret)
+                )
+                : null;
+        var token = await SeedQueuedRunAsync();
+        var instance = await SeedAsync(
+            SnapshotOwnerKind.System,
+            "Shipping",
+            DateTimeOffset.UtcNow,
+            invokeToken: token
+        );
+
+        var page = RenderDetail(Machine, "system", instance.Id, rowId: null);
+        page.WaitForAssertion(() => page.Markup.Should().Contain("Shipping"), WaitTimeout);
+        await page.InvokeAsync(() => page.Instance.CancelInstance());
+
+        page.WaitForAssertion(
+            () =>
+                page.Find(".cs-machine-action-error")
+                    .TextContent.Should()
+                    .Contain("The cancel could not be sent. The error has been logged")
+                    .And.NotContain(Secret, "an exception's text can name the host's internals"),
+            WaitTimeout
+        );
+        page.Markup.Should().NotContain(Secret);
+        logs.Entries.Should()
+            .Contain(e => e.Level == LogLevel.Error && e.Exception is InvalidOperationException);
+    }
+
+    private sealed class ListLoggerProvider : ILoggerProvider
+    {
+        public List<(LogLevel Level, Exception? Exception)> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new ListLogger(Entries);
+
+        public void Dispose() { }
+
+        private sealed class ListLogger(List<(LogLevel, Exception?)> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter
+            )
+            {
+                lock (entries)
+                    entries.Add((logLevel, exception));
+            }
+        }
     }
 
     private async Task<long> SeedRunAsync(Guid instance, string externalId)

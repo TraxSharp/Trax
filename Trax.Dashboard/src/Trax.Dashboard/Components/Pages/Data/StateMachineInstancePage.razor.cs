@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 using Radzen;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;
@@ -23,6 +24,9 @@ public partial class StateMachineInstancePage
 
     [Inject]
     private NotificationService NotificationService { get; set; } = default!;
+
+    [Inject]
+    private ILogger<StateMachineInstancePage> Logger { get; set; } = default!;
 
     /// <summary>The machine's id, from the route.</summary>
     [Parameter]
@@ -118,7 +122,8 @@ public partial class StateMachineInstancePage
     /// <summary>
     /// Cancels the instance through <see cref="IOperationsService.CancelMachineInstanceAsync"/>,
     /// the call the API's <c>cancelMachineInstance</c> makes, after the operator has confirmed.
-    /// A refusal is shown in the service's words.
+    /// A refusal is shown in the service's words. An exception is logged and shown as a generic
+    /// message, because its text can name the host's internals.
     /// </summary>
     internal async Task CancelInstance()
     {
@@ -149,7 +154,15 @@ public partial class StateMachineInstancePage
         }
         catch (Exception ex)
         {
-            _actionError = ex.Message;
+            Logger.LogError(
+                ex,
+                "Could not cancel instance {Id} of state machine {Machine}",
+                InstanceId,
+                Machine
+            );
+            _confirmingCancel = false;
+            _actionError =
+                "The cancel could not be sent. The error has been logged; try again shortly.";
         }
         finally
         {
