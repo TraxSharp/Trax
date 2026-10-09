@@ -41,7 +41,7 @@ Every invoking state says where each outcome goes, and `Build` refuses one that 
   the server the run has finished, so the instance must not wait on it: such an output is applied as the state's
   `OnFailed`, with the reason `invoke-output-unaccepted` (see [How an outcome comes back](#how-an-outcome-comes-back)).
 - **`OnFailed`**, exactly once. A run the scheduler reaps arrives here too.
-- **`OnCancelled`**, exactly once, and required: a timeout or an operator's cancel always has a declared edge.
+- **`OnCancelled`**, exactly once, and required: a timeout or, for a system-owned instance, an operator's cancel always has a declared edge.
 
 The output is a record with properties. `Build` refuses a tuple output, naming the state: a tuple's elements are
 fields, which the output's stored JSON does not carry, so no guard or reduction could read them.

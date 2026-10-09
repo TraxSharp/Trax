@@ -52,8 +52,11 @@ public interface IInvokeBuilder<TState, TTrigger> : IStateBuilder<TState, TTrigg
     IInvokeBuilder<TState, TTrigger> OnFailed(TState target, Reduction? reduce = null);
 
     /// <summary>
-    /// When the run is cancelled (a timeout, or an operator's cancel), go to <paramref name="target"/>. Required,
-    /// and declared exactly once.
+    /// When the run is cancelled (a timeout, or, for a system-owned instance, an operator's cancel of the
+    /// instance, its run or its queued entry), go to <paramref name="target"/>. Operators cannot cancel a
+    /// user-owned instance's run: its user does, by leaving the state through one of the machine's own
+    /// transitions, which moves the instance itself and so never takes this edge. Required, and declared exactly
+    /// once.
     /// </summary>
     /// <param name="target">The state the machine enters.</param>
     /// <param name="reduce">How the context changes; null keeps it. The outcome carries no input.</param>
