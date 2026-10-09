@@ -114,6 +114,64 @@ public class TrainChainGraphsTests
     }
 
     [Test]
+    public async Task Find_DrawsATrainWhoseConstructorNeedsWhatOnlyARequestSupplies()
+    {
+        await using var provider = Provider(services =>
+            services.AddScoped<IRequestOnlyTrain, RequestOnlyTrain>()
+        );
+        var graphs = Graphs(provider, Registration<IRequestOnlyTrain, RequestOnlyTrain>());
+
+        graphs
+            .Find(typeof(IRequestOnlyTrain).FullName!)
+            .Should()
+            .NotBeNull("reading a declaration needs the class, not the request");
+    }
+
+    [Test]
+    public async Task Find_DrawsATrainWhoseScopedDependencyIsOnlyAsyncDisposable()
+    {
+        await using var provider = Provider(services =>
+            services
+                .AddScoped<AsyncOnlyDisposable>()
+                .AddScoped<IAsyncDependentTrain, AsyncDependentTrain>()
+        );
+        var graphs = Graphs(provider, Registration<IAsyncDependentTrain, AsyncDependentTrain>());
+
+        graphs
+            .Find(typeof(IAsyncDependentTrain).FullName!)
+            .Should()
+            .NotBeNull("the scope it was built in is disposed asynchronously, as a request's is");
+    }
+
+    [Test]
+    public async Task Find_ReadsAChainThatFailedAgain_OnceTheWaitHasPassed()
+    {
+        FlakyTrain.Fails = true;
+        FlakyTrain.Built = 0;
+        await using var provider = Provider(services =>
+            services.AddScoped<IFlakyTrain, FlakyTrain>()
+        );
+        var time = new ManualTime();
+        var graphs = Graphs(provider, Registration<IFlakyTrain, FlakyTrain>(), time);
+        var name = typeof(IFlakyTrain).FullName!;
+
+        graphs.Find(name).Should().BeNull("building the train failed");
+        var attempts = FlakyTrain.Built;
+        FlakyTrain.Fails = false;
+
+        graphs.Find(name).Should().BeNull("a failure is answered for a while without rebuilding");
+        FlakyTrain.Built.Should().Be(attempts);
+
+        time.Advance(TrainChainGraphs.RetryAfter);
+
+        graphs
+            .Find(name)
+            .Should()
+            .NotBeNull("a failure is not kept for the life of the host; the chain is read again");
+        FlakyTrain.Built.Should().Be(attempts + 1);
+    }
+
+    [Test]
     public async Task AddMediator_RegistersTheGraphs()
     {
         var services = new ServiceCollection();
@@ -139,13 +197,28 @@ public class TrainChainGraphsTests
 
     private static TrainChainGraphs Graphs(
         IServiceProvider provider,
-        TrainRegistration registration
+        TrainRegistration registration,
+        TimeProvider? time = null
     )
     {
         var discovery = Substitute.For<ITrainDiscoveryService>();
         discovery.DiscoverTrains().Returns([registration]);
 
-        return new TrainChainGraphs(discovery, provider.GetRequiredService<IServiceScopeFactory>());
+        return new TrainChainGraphs(
+            discovery,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            time: time
+        );
+    }
+
+    /// <summary>A clock that moves only when the test moves it.</summary>
+    private sealed class ManualTime : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
     }
 
     private static TrainRegistration Registration<TService, TTrain>() =>
@@ -199,11 +272,66 @@ public class TrainChainGraphsTests
 
     public sealed class Missing;
 
-    public class UnbuildableTrain(Missing missing)
-        : ServiceTrain<GraphInput, bool>,
-            IUnbuildableTrain
+    /// <summary>Refuses to be built without what it needs, wherever it is built.</summary>
+    public class UnbuildableTrain : ServiceTrain<GraphInput, bool>, IUnbuildableTrain
     {
-        public Missing Needs { get; } = missing;
+        public UnbuildableTrain(Missing missing)
+        {
+            ArgumentNullException.ThrowIfNull(missing);
+            Needs = missing;
+        }
+
+        public Missing Needs { get; }
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToCount>().Chain<CountToFlag>().Resolve();
+    }
+
+    public interface IRequestOnlyTrain : IServiceTrain<GraphInput, bool>;
+
+    /// <summary>Needs what only a request's container supplies, as a train reading the caller does.</summary>
+    public class RequestOnlyTrain(Missing caller)
+        : ServiceTrain<GraphInput, bool>,
+            IRequestOnlyTrain
+    {
+        public Missing? Caller { get; } = caller;
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToCount>().Chain<CountToFlag>().Resolve();
+    }
+
+    /// <summary>A scoped service that can only be disposed asynchronously.</summary>
+    public sealed class AsyncOnlyDisposable : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    public interface IAsyncDependentTrain : IServiceTrain<GraphInput, bool>;
+
+    public class AsyncDependentTrain(AsyncOnlyDisposable dependency)
+        : ServiceTrain<GraphInput, bool>,
+            IAsyncDependentTrain
+    {
+        public AsyncOnlyDisposable Dependency { get; } = dependency;
+
+        protected override Task<Either<Exception, bool>> Junctions() =>
+            Chain<TextToCount>().Chain<CountToFlag>().Resolve();
+    }
+
+    public interface IFlakyTrain : IServiceTrain<GraphInput, bool>;
+
+    /// <summary>Fails to build while <see cref="Fails"/> is set, and counts its builds.</summary>
+    public class FlakyTrain : ServiceTrain<GraphInput, bool>, IFlakyTrain
+    {
+        public static bool Fails;
+        public static int Built;
+
+        public FlakyTrain()
+        {
+            Interlocked.Increment(ref Built);
+            if (Fails)
+                throw new InvalidOperationException("the database is down");
+        }
 
         protected override Task<Either<Exception, bool>> Junctions() =>
             Chain<TextToCount>().Chain<CountToFlag>().Resolve();
