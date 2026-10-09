@@ -111,6 +111,14 @@ public class InteractionMatrixTests
             .BeTrue("the unit tests are under Trax.Core/tests, which the index reads");
         index.Exists("ChainGraphTests", "NoSuchMethod").Should().BeFalse();
         index
+            .Exists("ChainGraphTests", "Ids")
+            .Should()
+            .BeFalse("a helper the class declares is not a test, so it covers nothing");
+        index
+            .Exists("ParallelTests", "Declaration_RefusesABadBranchName")
+            .Should()
+            .BeTrue("a [TestCase] method is a test");
+        index
             .Exists("NoSuchTests", "From_NumbersARepeatedJunctionByItsOccurrence")
             .Should()
             .BeFalse();
@@ -517,14 +525,40 @@ public class InteractionMatrixTests
                 .ToList()
         );
 
+        private static readonly Regex TestAttribute = new(
+            @"\[\s*(?:NUnit\.Framework\.)?(?:Test|TestCase|TestCaseSource|Theory|Fact)\b"
+        );
+
+        /// <summary>
+        /// Whether a file that declares the class <paramref name="type"/> declares
+        /// <paramref name="method"/> as a test: with a <c>[Test]</c>, <c>[TestCase]</c>,
+        /// <c>[TestCaseSource]</c>, <c>[Theory]</c> or <c>[Fact]</c> attribute on it. A helper of
+        /// the same name, or a call to one, covers nothing.
+        /// </summary>
         public bool Exists(string type, string method)
         {
             var declaresClass = new Regex($@"\bclass\s+{Regex.Escape(type)}\b");
-            var declaresMethod = new Regex($@"\b{Regex.Escape(method)}\s*\(");
+            var namesMethod = new Regex($@"\b{Regex.Escape(method)}\s*(?:<[^<>()]*>)?\s*\(");
 
             return _sources.Value.Any(source =>
-                declaresClass.IsMatch(source) && declaresMethod.IsMatch(source)
+                declaresClass.IsMatch(source)
+                && namesMethod.Matches(source).Any(m => DeclaredAsATest(source, m.Index))
             );
+        }
+
+        /// <summary>
+        /// Whether the name at <paramref name="at"/> is a method declaration carrying a test
+        /// attribute: the text since the previous member or statement holds the attribute, and
+        /// after its last attribute only modifiers and a return type, no call or assignment.
+        /// </summary>
+        private static bool DeclaredAsATest(string source, int at)
+        {
+            var start = source.LastIndexOfAny([';', '{', '}'], at - 1) + 1;
+            var preamble = source[start..at];
+            var afterAttributes = preamble[(preamble.LastIndexOf(']') + 1)..];
+
+            return TestAttribute.IsMatch(preamble)
+                && afterAttributes.IndexOfAny(['(', ')', '=', ',']) < 0;
         }
     }
 }
