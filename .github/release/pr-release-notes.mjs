@@ -58,13 +58,21 @@ export function extractReleaseNotes(body) {
   }
   if (start < 0) return null;
 
-  const section = lines
-    .slice(start, end)
-    .join('\n')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .trim();
+  const section = stripComments(lines.slice(start, end).join('\n')).trim();
   if (!section) return null;
   return shiftHeadings(section, 3 - (level + 1));
+}
+
+// Removes HTML comments until none is left, since removing one can join the text around it into
+// a new one ("<!<!-- -->-- -->"). An unclosed comment hides the rest of the text, as it does on
+// GitHub.
+function stripComments(text) {
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  } while (text !== previous);
+  return text;
 }
 
 function shiftHeadings(text, by) {

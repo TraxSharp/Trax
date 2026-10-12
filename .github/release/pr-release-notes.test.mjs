@@ -34,6 +34,11 @@ describe('extractReleaseNotes', () => {
     assert.equal(extractReleaseNotes('## Background\nText.'), null);
     assert.equal(extractReleaseNotes('## Release notes\n<!-- what users will notice -->\n## Next'), null);
   });
+
+  it('leaves no comment opener behind when removing one joins the text around it', () => {
+    assert.equal(extractReleaseNotes('## Release notes\nA<!<!-- x -->-- y -->B'), 'AB');
+    assert.equal(extractReleaseNotes('## Release notes\nShown.\n<!-- never closed\nHidden.'), 'Shown.');
+  });
 });
 
 describe('composeNotes', () => {
