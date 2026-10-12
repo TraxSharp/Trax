@@ -75,6 +75,10 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+    <!-- NUnit3TestAdapter pulls these; every version it asks for, up to 6.3.1's 2.4.1, is
+         deprecated as Legacy. Referenced next to the adapter so Dependabot keeps them moving. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.VSTestBridge" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="Microsoft.OpenApi.Readers" Version="1.6.31" />
     <PackageVersion Include="Moq" Version="4.21.0" />
