@@ -6,6 +6,12 @@ internal static class RepoRoot
 
     public static string Path => Cached.Value;
 
+    /// <summary>
+    /// The repository root: the folder holding Trax.Docs and every Trax.* folder. The paths in
+    /// <c>source:</c> front matter and <c>from=</c> fences are relative to it.
+    /// </summary>
+    public static string Monorepo => Directory.GetParent(Path)!.FullName;
+
     public static string Combine(params string[] segments) =>
         System.IO.Path.Combine(new[] { Path }.Concat(segments).ToArray());
 
@@ -37,6 +43,43 @@ internal static class RepoRoot
         && !relative.StartsWith("tools/", StringComparison.Ordinal)
         && !relative.StartsWith("tests/", StringComparison.Ordinal)
         && !relative.StartsWith(".github/", StringComparison.Ordinal);
+
+    /// <summary>Every page traxsharp.net publishes, docs-relative with forward slashes, in ordinal order.</summary>
+    public static IEnumerable<string> PublishedPages() =>
+        MarkdownFiles()
+            .Select(f => Relative(f).Replace('\\', '/'))
+            .Where(IsPublished)
+            .Order(StringComparer.Ordinal);
+
+    /// <summary>Whether a file or directory exists at a repository-root-relative path.</summary>
+    public static bool ExistsInMonorepo(string relative)
+    {
+        var full = System.IO.Path.Combine(
+            new[] { Monorepo }.Concat(relative.TrimEnd('/').Split('/')).ToArray()
+        );
+        return File.Exists(full) || Directory.Exists(full);
+    }
+
+    /// <summary>
+    /// The files matching <paramref name="pattern"/> under <paramref name="directory"/>, never
+    /// descending into bin, obj, .git or node_modules.
+    /// </summary>
+    public static IEnumerable<string> FilesUnder(string directory, string pattern)
+    {
+        if (!Directory.Exists(directory))
+            yield break;
+
+        foreach (var file in Directory.EnumerateFiles(directory, pattern))
+            yield return file;
+
+        foreach (var child in Directory.EnumerateDirectories(directory))
+        {
+            if (System.IO.Path.GetFileName(child) is "bin" or "obj" or ".git" or "node_modules")
+                continue;
+            foreach (var file in FilesUnder(child, pattern))
+                yield return file;
+        }
+    }
 
     private static bool IsExcluded(string path)
     {
