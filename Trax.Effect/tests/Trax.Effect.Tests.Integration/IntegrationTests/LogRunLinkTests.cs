@@ -99,7 +99,9 @@ public class LogRunLinkTests
             await scope.ServiceProvider.GetRequiredService<IProviderBuildingTrain>().Run(tag);
         }
 
-        // Disposing drains the writer, so the line it logged itself is stored by now.
+        // The writer logs its line when it opens its data context, on its own schedule. Disposing
+        // closes the queue, so wait for that line to be queued first; disposing then drains it.
+        await _writerLogged!.Task.WaitAsync(TimeSpan.FromSeconds(15));
         _builtInRun!.Dispose();
 
         var rows = await WaitForLines(tag, count: 2);
@@ -115,6 +117,7 @@ public class LogRunLinkTests
 
     private static long? _buildingRunId;
     private static DataContextLoggingProvider? _builtInRun;
+    private static TaskCompletionSource? _writerLogged;
 
     private static long? _outerRunId;
     private static long? _innerRunId;
@@ -178,7 +181,10 @@ public class LogRunLinkTests
         {
             _buildingRunId = Metadata!.TrainMetadataId;
 
-            var writerFactory = new LoggingOnOpenFactory(factory, tag);
+            _writerLogged = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var writerFactory = new LoggingOnOpenFactory(factory, tag, _writerLogged);
             var provider = new DataContextLoggingProvider(
                 writerFactory,
                 new DataContextLoggingProviderConfiguration
@@ -194,8 +200,11 @@ public class LogRunLinkTests
         }
     }
 
-    private sealed class LoggingOnOpenFactory(IDataContextProviderFactory inner, string tag)
-        : IDataContextProviderFactory
+    private sealed class LoggingOnOpenFactory(
+        IDataContextProviderFactory inner,
+        string tag,
+        TaskCompletionSource logged
+    ) : IDataContextProviderFactory
     {
         public DataContextLoggingProvider? Provider { get; set; }
 
@@ -209,6 +218,7 @@ public class LogRunLinkTests
                 await Task.Yield();
 
             Provider.CreateLogger(Category).LogInformation("{Tag} from the writer", tag);
+            logged.TrySetResult();
             return await inner.CreateDbContextAsync(cancellationToken);
         }
     }
