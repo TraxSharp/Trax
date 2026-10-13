@@ -6,6 +6,7 @@ namespace Trax.Mediator.Services.ConcurrencyLimiter;
 /// through it. Infrastructure used by the train execution service; not intended to be called
 /// directly.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-concurrency-limiter">SDK reference</seealso>
 public interface IConcurrencyLimiter
 {
     /// <summary>

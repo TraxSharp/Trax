@@ -10,6 +10,7 @@ namespace Trax.Mediator.Exceptions;
 /// messages would let unauthenticated callers probe the API surface. Diagnostic
 /// detail lives in <see cref="RequestedName"/> for server-side logging only.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class TrainNotFoundException : InvalidOperationException
 {
     /// <summary>

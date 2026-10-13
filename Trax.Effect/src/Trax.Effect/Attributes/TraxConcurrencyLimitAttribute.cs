@@ -25,6 +25,7 @@ namespace Trax.Effect.Attributes;
 /// </code>
 /// </example>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/concurrency-limiting">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public class TraxConcurrencyLimitAttribute(int maxConcurrent) : Attribute
 {

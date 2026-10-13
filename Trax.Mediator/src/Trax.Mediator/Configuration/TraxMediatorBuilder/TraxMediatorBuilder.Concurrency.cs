@@ -1,5 +1,6 @@
 namespace Trax.Mediator.Configuration;
 
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/concurrency-limiting">SDK reference</seealso>
 public partial class TraxMediatorBuilder
 {
     /// <summary>

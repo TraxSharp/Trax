@@ -25,6 +25,7 @@ namespace Trax.Mediator.Services.Principal;
 /// for a slot.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-current-principal-provider">SDK reference</seealso>
 public interface ICurrentPrincipalProvider
 {
     /// <summary>

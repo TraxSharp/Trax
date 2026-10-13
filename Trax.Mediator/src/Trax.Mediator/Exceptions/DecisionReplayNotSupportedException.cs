@@ -16,6 +16,7 @@ namespace Trax.Mediator.Exceptions;
 /// track from the run it repeats. It derives from <see cref="NotSupportedException"/>, the type
 /// thrown here before it existed, so existing catches still see it.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class DecisionReplayNotSupportedException : NotSupportedException
 {
     /// <summary>The registered <c>ITrainExecutionService</c> that lacks the overload.</summary>

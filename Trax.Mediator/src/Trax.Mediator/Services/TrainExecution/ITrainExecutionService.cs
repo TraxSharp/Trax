@@ -4,6 +4,7 @@ namespace Trax.Mediator.Services.TrainExecution;
 /// Provides train execution via two paths: queueing for async scheduler dispatch
 /// or direct synchronous execution via ITrainBus.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-train-execution-service">SDK reference</seealso>
 public interface ITrainExecutionService
 {
     /// <summary>

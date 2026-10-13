@@ -16,6 +16,7 @@ namespace Trax.Mediator.Exceptions;
 /// Derives from <see cref="InvalidOperationException"/>, so code that caught that type for this
 /// case still catches it.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class QueuedWorkCancelledException : InvalidOperationException
 {
     /// <summary>The cancelled work queue entry.</summary>

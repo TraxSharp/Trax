@@ -12,6 +12,7 @@ namespace Trax.Mediator.Exceptions;
 /// surface may pass through as a train author's words; a surface that masks other exceptions masks
 /// this one too.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class NoTrainForInputException : InvalidOperationException
 {
     /// <summary>The runtime type of the input no registered train takes.</summary>

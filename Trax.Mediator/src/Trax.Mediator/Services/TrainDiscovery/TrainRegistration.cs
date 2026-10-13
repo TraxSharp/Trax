@@ -8,6 +8,7 @@ namespace Trax.Mediator.Services.TrainDiscovery;
 /// authorization requirements, and the attributes that decide how Trax exposes and runs it.
 /// Built by discovery; the Scheduler, Api and Dashboard read it.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-train-discovery-service#trainregistration">SDK reference</seealso>
 public class TrainRegistration
 {
     /// <summary>

@@ -3,6 +3,7 @@ namespace Trax.Mediator.Services.TrainDiscovery;
 /// <summary>
 /// Discovers all IServiceTrain registrations available in the DI container.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/i-train-discovery-service">SDK reference</seealso>
 public interface ITrainDiscoveryService
 {
     /// <summary>

@@ -10,6 +10,7 @@ namespace Trax.Mediator.Exceptions;
 /// thrown, and a side-effect it writes elsewhere may land after it. Derives from
 /// <see cref="InvalidOperationException"/>, the type the other enqueue refusals share.
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/mediator-api/exceptions">SDK reference</seealso>
 public class QueueHookTimeoutException : InvalidOperationException
 {
     /// <summary>The fully qualified service type name of the train that was being queued.</summary>
