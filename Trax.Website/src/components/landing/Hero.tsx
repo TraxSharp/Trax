@@ -9,7 +9,8 @@ export default function Hero() {
             a headless web framework for .NET
           </h1>
           <p className="mt-6 text-lg leading-relaxed text-text-secondary">
-            Whatever goes wrong, the backend gets it right.
+            Build a more robust frontend. Whatever goes wrong, the backend gets
+            it right.
           </p>
           <div className="mt-10 flex items-center gap-4">
             <Link
