@@ -81,6 +81,10 @@ a release note) marks the layers it touches with these squares, inner to outer, 
 crosses layers. The square always sits next to words or an id; colour never carries the meaning
 alone.
 
+A one-liner (a list item, a release note) starts with its squares. Anything with a body is a
+callout, the way GitHub draws its alerts: a `>` quote whose first line is the squares and a bold
+title, the body below it. A security change or an open hotspot uses GitHub's `> [!CAUTION]`.
+
 | | Layer (scope) | What's in it |
 |---|---|---|
 | 🟨 | Data (`data`) | `Trax.Effect.Data.*` (Postgres, Sqlite, InMemory), migrations, SQL, the run-record tables |
