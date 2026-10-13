@@ -8,5 +8,6 @@ public record User(string Email);
 
 public class CreateUserJunction : Junction<CreateUserRequest, User>
 {
-    public override Task<User> Run(CreateUserRequest input) => Task.FromResult(new User(input.Email));
+    public override Task<User> Run(CreateUserRequest input) =>
+        Task.FromResult(new User(input.Email));
 }
