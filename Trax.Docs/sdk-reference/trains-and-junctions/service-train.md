@@ -3,6 +3,11 @@ title: ServiceTrain
 description: "Reference for ServiceTrain, the train base class applications derive from: metadata per run, effects, lifecycle hooks, registration and disposal."
 type: reference
 area: effects
+package: Trax.Effect
+namespace: Trax.Effect.Services.ServiceTrain
+source:
+  - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/ServiceTrain.cs
+  - Trax.Effect/src/Trax.Effect/Services/ServiceTrain/IServiceTrain.cs
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 2
@@ -16,7 +21,7 @@ A service train implements its own interface, which derives from `IServiceTrain<
 
 ## Signature
 
-```csharp
+```csharp fragment
 namespace Trax.Effect.Services.ServiceTrain;
 
 public interface IServiceTrain<in TIn, TOut> : IRoute<TIn, TOut>, IDisposable
@@ -50,7 +55,11 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
     protected virtual string? QueueSubjectKey(Metadata metadata);
     protected virtual bool DeferQueuePromotion { get; }
 
-    // Filled by property injection; see "Registration" below.
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public IDisposable EnterQueueHooks(Metadata metadata);
+    protected sealed override Monad<TIn, TOut> NewMonad();
+
+    // Filled by property injection; see Registration below
     [Inject] public IEffectRunner? EffectRunner { get; set; }
     [Inject] public IJunctionEffectRunner? JunctionEffectRunner { get; set; }
     [Inject] public ILifecycleHookRunner? LifecycleHookRunner { get; set; }
@@ -59,7 +68,7 @@ public abstract class ServiceTrain<TIn, TOut> : Train<TIn, TOut>, IServiceTrain<
 }
 ```
 
-Everything on [Train](/docs/sdk-reference/trains-and-junctions/train) (`Junctions()`, the chain methods, `ExternalId`, `CancellationToken`, `RunEither`, `DeclaredChain()`) is inherited unchanged. `NewMonad()` is sealed. `EnterQueueHooks(Metadata)` is public for the mediator's enqueue path and hidden from completion; consumers do not call it.
+Everything on [Train](/docs/sdk-reference/trains-and-junctions/train) (`Junctions()`, the chain methods, `ExternalId`, `CancellationToken`, `RunEither`, `DeclaredChain()`) is inherited unchanged.
 
 ## Properties
 
@@ -73,8 +82,11 @@ Everything on [Train](/docs/sdk-reference/trains-and-junctions/train) (`Junction
 | `TrainOutput` | `TOut` | The run's typed output. Meaningful only in `OnCompleted`; `default` elsewhere. Throws `ChainDeclarationException` while the chain is being read. |
 | `EffectRunner`, `JunctionEffectRunner`, `LifecycleHookRunner`, `ServiceProvider` | | Framework services filled by property injection. `Run` throws when any of them is `null`. |
 | `Logger` | `ILogger<ServiceTrain<TIn, TOut>>?` | Filled by property injection; optional. |
+| `EnterQueueHooks(metadata)` | `IDisposable` | Public for the mediator's enqueue path and hidden from completion. |
 
-## Run
+## Behavior
+
+### Run
 
 | Overload | Description |
 |----------|-------------|
@@ -82,9 +94,9 @@ Everything on [Train](/docs/sdk-reference/trains-and-junctions/train) (`Junction
 | `Run(input, metadata)` | Runs as a `Pending` row the caller already created, instead of creating one. Used by the mediator and the scheduler. Throws `TrainException` when the row is not `Pending`. Runs with the train's current `CancellationToken`. |
 | `Run(input, metadata, cancellationToken)` | As above, with a token. |
 
-`Run` throws the failure, as on `Train`. See [Run / RunEither](/docs/sdk-reference/train-methods/run).
+`Run` throws the failure, as on `Train`. See [Run](/docs/sdk-reference/train-methods/run).
 
-## Lifecycle hooks
+### Lifecycle hooks
 
 | Hook | When it runs | An exception thrown in it |
 |------|--------------|---------------------------|
@@ -98,7 +110,7 @@ Everything on [Train](/docs/sdk-reference/trains-and-junctions/train) (`Junction
 
 The enqueue-time hooks are covered in depth in [OnQueue](/docs/core/trains-and-junctions#onqueue-enqueue-time-hook) and [QueueSubjectKey](/docs/core/trains-and-junctions#queuesubjectkey-serializing-work-that-touches-the-same-thing). For hooks that apply to every train, register an `ITrainLifecycleHook` with [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook).
 
-## Registration
+### Registration
 
 A service train is resolved through its interface, which is what fills the `[Inject]` properties and sets `CanonicalName`.
 
@@ -109,9 +121,13 @@ A service train cannot be a singleton: `AddSingletonTraxRoute` refuses one with 
 
 Resolving the concrete class instead of the interface skips the property injection, and `Run` then throws because the framework services are `null`.
 
+### Dispose
+
+`Dispose()` clears the in-memory input and output, disposes the effect, junction effect and lifecycle hook runners (and through them their providers) and the metadata, and drops the logger and service provider. The instance cannot run again afterwards. The container disposes a transient or scoped train for you.
+
 ## Example
 
-```csharp
+```csharp compile
 using Trax.Core.Functional;
 using Trax.Effect.Models.Metadata;
 using Trax.Effect.Services.ServiceTrain;
@@ -129,20 +145,15 @@ public class CreateOrderTrain(IOrderAlerts alerts)
 
     protected override Task OnFailed(Metadata metadata, Exception exception, CancellationToken ct)
         // TrainInput is the typed input of the run that failed.
-        => alerts.OrderFailed(TrainInput.OrderId, exception.Message, ct);
+        => alerts.OrderFailed(TrainInput.CustomerId, exception.Message, ct);
 }
 ```
 
 The train's own dependencies, `IOrderAlerts` here, come through its constructor like any other service. The junctions take theirs through their own constructors.
 
-## Dispose
+## See also
 
-`Dispose()` clears the in-memory input and output, disposes the effect, junction effect and lifecycle hook runners (and through them their providers) and the metadata, and drops the logger and service provider. The instance cannot run again afterwards. The container disposes a transient or scoped train for you.
-
-See [Trains and Junctions](/docs/core/trains-and-junctions) and [Effect](/docs/effect) for the concepts.
-
-## Package
-
-```
-dotnet add package Trax.Effect
-```
+- [Train](/docs/sdk-reference/trains-and-junctions/train), the base class it extends
+- [Route and Junction Registration](/docs/sdk-reference/trains-and-junctions/route-registration)
+- [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook), hooks that apply to every train
+- [Trains and Junctions](/docs/core/trains-and-junctions) and [Effect](/docs/effect), how a service train runs and what it records
