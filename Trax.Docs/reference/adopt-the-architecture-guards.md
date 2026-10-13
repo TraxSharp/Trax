@@ -25,45 +25,48 @@ the [Recovery](/docs/samples/recovery) suites run the database check after each 
    GraphQL edges, `Trax.Mediator.Testing` for trains. Each brings `Trax.Core.Testing` with it.
 
 2. Subclass the fixture for each concern and supply its configuration. The fixtures carry the
-   `[Test]` methods; you write no test bodies.
+   `[Test]` methods; you write no test bodies. Bookworm's, less the owner-scope census:
 
-   ```csharp compile
+   ```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs
    using System.Reflection;
+   using Microsoft.EntityFrameworkCore;
+   using Microsoft.EntityFrameworkCore.Metadata;
    using NUnit.Framework;
    using Trax.Api.GraphQL.DataLoaders.CrossSchema;
    using Trax.Api.GraphQL.Testing;
    using Trax.Core.Testing;
    using Trax.Effect.Data.Testing;
    using Trax.Mediator.Testing;
-
+   // ...
    [TestFixture]
-   public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
+   public sealed class BookwormDataLayerGuards : DomainDataLayerGuardFixture
    {
-       protected override ArchitectureGuardOptions Options =>
-           new() { SourceScanRoots = ["libs", "apps"] };
+       protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["samples"] };
 
        protected override IReadOnlyList<Type> DomainContexts =>
            [typeof(CatalogDbContext), typeof(LendingDbContext)];
-
-       // Only contexts that use EF migrations; omit any bootstrapped with EnsureSchemaCreatedAsync.
-       protected override IReadOnlyList<Type> MigrationContexts => [typeof(CatalogDbContext)];
+   // ...
    }
 
    [TestFixture]
-   public sealed class MyCrossSchemaGuards : CrossSchemaGuardFixture
+   public sealed class BookwormCrossSchemaGuards : CrossSchemaGuardFixture
    {
-       protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["libs"] };
+       protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["samples"] };
 
-       protected override IReadOnlyList<CrossSchemaEdge> Edges => MyCrossSchemaEdges.All;
+       protected override IReadOnlyList<CrossSchemaEdge> Edges => CrossSchemaEdges.All;
    }
 
    [TestFixture]
-   public sealed class MyTrainGuards : TrainGuardFixture
+   public sealed class BookwormTrainGuards : TrainGuardFixture
    {
        protected override IReadOnlyList<Assembly> TrainAssemblies =>
-           [typeof(MyAssemblyMarker).Assembly];
+           [typeof(Trax.Samples.Bookworm.AssemblyMarker).Assembly];
    }
    ```
+
+   A context that uses EF migrations also goes in `MigrationContexts`, which checks its model
+   against the latest snapshot; Bookworm's contexts create their schemas with
+   `EnsureSchemaCreatedAsync`, so it lists none.
 
    Keep `[TestFixture]` on each subclass: the runner discovers the inherited tests through it.
    Subclass only the fixtures for concerns you have.
@@ -79,29 +82,19 @@ the [Recovery](/docs/samples/recovery) suites run the database check after each 
 ## Configure the owner-scope census
 
 For a context whose rows belong to a user, give the data-layer fixture the context's model and the
-types the census reads. Building the model needs no database, only a provider:
+types the census reads. Building the model needs no database, only a provider. Bookworm's lending
+context, whose members see only their own loans:
 
-```csharp compile
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
-using NUnit.Framework;
-using Trax.Core.Testing;
-using Trax.Effect.Data.Testing;
-
-[TestFixture]
-public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
-{
-    protected override ArchitectureGuardOptions Options =>
-        new() { SourceScanRoots = ["libs", "apps"] };
-
+```csharp from=Trax.Samples/tests/Trax.Samples.Tests.Reflection/BookwormArchitectureGuards.cs
+    // The lending model, built offline (no database, no caller), for the owner-scope census.
     protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
     {
         get
         {
-            var options = new DbContextOptionsBuilder<ClientDbContext>()
+            var options = new DbContextOptionsBuilder<LendingDbContext>()
                 .UseNpgsql("Host=localhost;Database=model_only")
                 .Options;
-            using var context = new ClientDbContext(options, new SystemPrincipal());
+            using var context = new LendingDbContext(options, NoLendingCaller.Instance);
             return [context.Model];
         }
     }
@@ -109,50 +102,28 @@ public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
     protected override OwnerScopeCensusOptions OwnerScope =>
         new()
         {
-            OwnerType = typeof(UserProfile),
-            PrincipalAccessorType = typeof(IPrincipalAccessor),
-            NavigationScoped = new Dictionary<Type, string>
+            OwnerType = typeof(Member),
+            PrincipalAccessorType = typeof(ILendingCaller),
+            FilterBypassAllowlist = new Dictionary<string, string>
             {
-                [typeof(PollQuestionAnswer)] = "belongs to the PollAnswer that holds the UserId",
+                [
+                    "samples/Bookworm/Trax.Samples.Bookworm/Trains/Lending/BorrowBook/Junctions/BorrowBookJunction.cs"
+                ] =
+                    "a book's availability depends on every member's open loans; the read returns a yes or no, no row",
+// ...
             },
         };
-}
 ```
 
 1. Set `OwnerType` to the type whose key marks a row as someone's, and `PrincipalAccessorType` to
-   the type your query filters read the caller from.
+   the type your query filters read the caller from. A context whose constructor takes the caller
+   is built here with a caller that is no one.
 2. Run the tests. Each failure names an entity: add the missing query filter, declare an entity
-   that reaches its owner through a navigation in `NavigationScoped`, list a deliberate role or
-   policy gate in `Gated`, or leave an entity out with `Exemptions`. Each of the last three takes a
-   written reason.
-3. When a file switches the owner scope off on purpose, list it with the reason in
-   `FilterBypassAllowlist`:
-
-   ```csharp compile
-   using NUnit.Framework;
-   using Trax.Core.Testing;
-   using Trax.Effect.Data.Testing;
-
-   [TestFixture]
-   public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
-   {
-       protected override ArchitectureGuardOptions Options =>
-           new() { SourceScanRoots = ["libs", "apps"] };
-
-       protected override OwnerScopeCensusOptions OwnerScope =>
-           new()
-           {
-               OwnerType = typeof(UserProfile),
-               PrincipalAccessorType = typeof(IPrincipalAccessor),
-               FilterBypassAllowlist = new Dictionary<string, string>
-               {
-                   ["apps/Worker/Trains/EraseAccount/EraseAccountTrain.cs"] =
-                       "erasing an account deletes that owner's rows from a system context",
-               },
-           };
-   }
-   ```
-
+   that reaches its owner only through a navigation in `NavigationScoped`, list a deliberate role
+   or policy gate in `Gated`, or leave an entity out with `Exemptions`. Each of the last three
+   takes a written reason.
+3. When a file switches the owner scope off on purpose, list it in `FilterBypassAllowlist` with
+   the reason, as Bookworm does for the availability check that reads every member's loans.
 4. Write a cross-user test for each per-user entity, against the running API: sign in as one
    user, create a row, sign in as a second user, and assert that every surface the row can be read
    through (each GraphQL query and model, each train that returns it) gives the second user
@@ -161,28 +132,43 @@ public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
 
 ## Check the database after each test
 
-Call `TraxInvariants` from teardown, after every host the test started has been disposed, and skip
-the tests that leave a stuck state on purpose:
+Run `TraxInvariants` after each test, once every host the test started has finished its work, and
+skip the tests that leave a stuck state on purpose. A suite that disposes its hosts per test calls
+`TraxInvariants.AssertConsistentAsync(connectionString)` from `[TearDown]`. The Recovery browser
+suite keeps one host and one database across tests, so it does it with an assembly-wide NUnit
+action that reports only the violations each test added:
 
-```csharp compile
-using NUnit.Framework;
-using Trax.Effect.Data.Testing;
-
-public abstract class DatabaseTest
+```csharp from=Trax.Samples/tests/Trax.Samples.Recovery.Browser/Fixtures/CheckTraxInvariantsAttribute.cs
+[AttributeUsage(AttributeTargets.Assembly)]
+public sealed class CheckTraxInvariantsAttribute : Attribute, ITestAction
 {
-    protected abstract string ConnectionString { get; }
+    private static readonly InvokingState[] InvokingStates = [new("topic-map", "Building")];
 
-    [TearDown]
-    public async Task The_database_is_left_consistent()
+    private IReadOnlyList<TraxInvariantViolation> _before = [];
+
+    public ActionTargets Targets => ActionTargets.Test;
+
+    public void BeforeTest(ITest test) => _before = Find();
+
+    public void AfterTest(ITest test)
     {
-        // Dispose the hosts the test started before this runs.
-        if (TraxInvariants.IsExempt(GetType(), TestContext.CurrentContext.Test.MethodName))
+        if (
+            test.Fixture is null
+            || TraxInvariants.IsExempt(test.Fixture.GetType(), test.MethodName)
+        )
             return;
-
-        await TraxInvariants.AssertConsistentAsync(ConnectionString);
+// ...
+        if (added.Count > 0)
+            Assert.Fail(TraxInvariants.Describe(added));
     }
+
+    private List<TraxInvariantViolation> Added() => Find().Except(_before).ToList();
+// ...
 }
 ```
+
+`InvokingStates` names each machine state that invokes a train, so the check also holds those
+instances to their run tokens.
 
 A test that leaves a run or a claim behind on purpose, such as a crash simulation, carries
 `[LeavesStuckRuns("why")]` on the method or the fixture.
