@@ -24,6 +24,7 @@ export interface ControllerView<Spec extends MachineSpec> {
  * A framework-free store over a {@link TypedMachine}. Holds the current snapshot, performs transitions,
  * persists after each success, and notifies subscribers. Critically, a DECLINED action still emits a new
  * view (with `problem` set) so a UI re-renders and surfaces the rejection instead of silently swallowing it.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#driving-a-machine-the-client-owns
  */
 export class MachineController<Spec extends MachineSpec> {
   private view: ControllerView<Spec>;

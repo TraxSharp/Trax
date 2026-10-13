@@ -36,7 +36,10 @@ export type TypedRehydrationResult<Spec extends MachineSpec> =
   | { result: 'ok'; snapshot: TypedSnapshot<Spec> }
   | { result: 'error'; code: string; message: string };
 
-/** A thin, types-only wrapper over the raw engine. Adds no behavior — just compile-time safety. */
+/**
+ * A thin, types-only wrapper over the raw engine. Adds no behavior — just compile-time safety.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#the-engine-and-the-typed-view
+ */
 export class TypedMachine<Spec extends MachineSpec> {
   /**
    * @param schemaHash SHA-256 of the machine's IR (the same value C#'s `IMachine.SchemaHash` computes),
@@ -132,6 +135,7 @@ export class TypedMachine<Spec extends MachineSpec> {
  * state/trigger unions is confined here so generated twins (and hand callers) never emit the `as unknown as`
  * themselves. Safe by construction: the codegen emits the Spec and the IR from the same C# source, and the
  * drift tests pin the two together.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#the-engine-and-the-typed-view
  */
 export function typedMachineFromIr<Spec extends MachineSpec>(
   ir: IrDocument,

@@ -181,6 +181,7 @@ const transportFailure = (error: unknown): Problem => ({
  *   answer that cannot know it leaves it out.
  *
  * Framework-free; `useServerMachine` binds it to React through `subscribe` and `get`.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export class ServerMachineController<Spec extends MachineSpec> {
   private readonly machine: TypedMachine<Spec>;

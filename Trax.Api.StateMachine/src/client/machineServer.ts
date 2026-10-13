@@ -122,6 +122,7 @@ const answered = (output: SnapshotOutput): { kind: 'ok'; snapshot: ServerSnapsho
  * it gives a missing id), `client-outdated`, and `reconnected` when the server asks for a reload. A stream that ends
  * any other way is subscribed again after {@link MachineServerOptions.resubscribeDelays}; the new stream's first
  * event is the instance as it is then, so nothing written meanwhile is lost and nothing is read again.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createMachineServer(endpoint: string, options: MachineServerOptions): TypedMachineServer {
   const { machine, documents, socket } = options;

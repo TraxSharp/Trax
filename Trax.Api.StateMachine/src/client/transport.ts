@@ -114,6 +114,7 @@ const EMPTY: SnapshotOutput = { snapshot: null, problem: null };
  * `schemaHash` is threaded through every call because the server's version-skew handshake is per-request:
  * a client whose machine has drifted from the deployed one is refused with `schema-mismatch` (telling it
  * to reload) instead of writing under an outdated contract. Omitting it opts out of the check.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createSnapshotClient(execute: SnapshotExecutor): SnapshotClient {
   const run = async (
@@ -177,6 +178,7 @@ export interface HttpExecutorOptions {
  * An executor over plain `fetch` for a host with no GraphQL client. It builds the six documents itself,
  * so nothing outside this file needs to know their text. A host that already has generated typed
  * documents should write a five-line executor against those instead of using this.
+ * @see https://traxsharp.net/docs/sdk-reference/statemachine-api/typescript-package#talking-to-a-server
  */
 export function createHttpExecutor(
   endpoint: string,
