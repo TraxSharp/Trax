@@ -27,15 +27,6 @@ synchronous run and waits for the answer.
 | The runner's lifecycle events reaching a GraphQL subscriber on the API over RabbitMQ, on the sample's own `contentshield.lifecycle` exchange | `CrossProcessEventTests` |
 | Testing a Lambda runner end to end without AWS | `tests/Trax.Samples.ContentShield.E2E/Fixtures/TestRunner.cs` |
 
-## Layout
-
-```
-samples/EphemeralWorkers/
-├── Trax.Samples.ContentShield/          trains, roles, RunnerSigningKey
-├── Trax.Samples.ContentShield.Api/      GraphQL + dispatch + dashboard (port 5204)
-└── Trax.Samples.ContentShield.Runner/   Function : TraxLambdaFunction; Program.cs runs it locally (port 5205)
-```
-
 ## Run
 
 From the `Trax.Samples` root:
@@ -82,26 +73,45 @@ key answers `Not authorized.` with code `TRAX_AUTHORIZATION`.
 
 ## How it works
 
+### Layout
+
+```
+samples/EphemeralWorkers/
+├── Trax.Samples.ContentShield/          trains, roles, RunnerSigningKey
+├── Trax.Samples.ContentShield.Api/      GraphQL + dispatch + dashboard (port 5204)
+└── Trax.Samples.ContentShield.Runner/   Function : TraxLambdaFunction; Program.cs runs it locally (port 5205)
+```
+
 ### The API dispatches everything
 
-```csharp
-using Trax.Samples.ContentShield;
-using Trax.Scheduler.Extensions;
-
+```csharp from=Trax.Samples/samples/EphemeralWorkers/Trax.Samples.ContentShield.Api/Program.cs
+// Where the Runner listens. RunLocalAsync serves /trax/execute and /trax/run on it.
 var runnerBaseUrl = builder.Configuration["Runner:BaseUrl"] ?? "http://localhost:5205";
-var runnerKey = RunnerSigningKey.Resolve(builder.Configuration, builder.Environment.IsDevelopment());
-
+var runnerKey = RunnerSigningKey.Resolve(
+    builder.Configuration,
+    builder.Environment.IsDevelopment()
+);
+// ...
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
+                .AddDataContextLogging()
                 .UseBroadcaster(b =>
-                    b.UseRabbitMq(rabbitMqConnectionString, o => o.ExchangeName = LifecycleEvents.ExchangeName)
+                    b.UseRabbitMq(
+                        rabbitMqConnectionString,
+                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                    )
                 )
         )
-        .AddMediator(mediator => mediator.ScanAssemblies(typeof(ReviewContentTrain).Assembly))
+        .AddMediator(mediator =>
+            mediator
+                .ScanAssemblies(typeof(ReviewContentTrain).Assembly)
+                .GlobalConcurrentRunLimit(25)
+        )
         .AddScheduler(scheduler =>
             scheduler
+                // ...
                 .UseRemoteWorkers(
                     remote =>
                     {
@@ -114,6 +124,11 @@ builder.Services.AddTrax(trax =>
                             .ForTrain<ISendViolationNoticeTrain>()
                             .ForTrain<IGenerateModerationReportTrain>()
                 )
+                // ── Remote run offloading ────────────────────────────────────────
+                // UseRemoteRun replaces the in-process run executor. Every
+                // synchronous run (a mutation in RUN mode, and every [TraxQuery]) is
+                // POSTed to the Runner and waits until the train completes. Without
+                // this, runs execute in-process on this API.
                 .UseRemoteRun(remote =>
                 {
                     remote.BaseUrl = $"{runnerBaseUrl}/trax/run";
@@ -133,7 +148,7 @@ the runner. Leave `UseRemoteRun` out if queries should run on the API.
 
 ### The runner is a Lambda function
 
-```csharp
+```csharp from=Trax.Samples/samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner/Function.cs
 using Amazon.Lambda.Core;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using Microsoft.Extensions.Configuration;
@@ -144,21 +159,35 @@ using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Runner.Lambda;
 using Trax.Samples.ContentShield;
+using Trax.Samples.ContentShield.Trains.ContentReview.ReviewContent;
 using Trax.Scheduler.Configuration;
 
 [assembly: LambdaSerializer(typeof(DefaultLambdaJsonSerializer))]
 
+namespace Trax.Samples.ContentShield.Runner;
+
 public class Function : TraxLambdaFunction
 {
-    protected override void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    protected override void ConfigureServices(
+        IServiceCollection services,
+        IConfiguration configuration
+    )
     {
+        var connectionString =
+            configuration.GetConnectionString("TraxDatabase")
+            ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
+
+        var rabbitMqConnectionString =
+            configuration.GetConnectionString("RabbitMQ")
+            ?? throw new InvalidOperationException("Connection string 'RabbitMQ' not found.");
+
         services.AddTrax(trax =>
             trax.AddEffects(effects =>
                     effects
-                        .UsePostgres(configuration.GetConnectionString("TraxDatabase")!)
+                        .UsePostgres(connectionString)
                         .UseBroadcaster(b =>
                             b.UseRabbitMq(
-                                configuration.GetConnectionString("RabbitMQ")!,
+                                rabbitMqConnectionString,
                                 o => o.ExchangeName = LifecycleEvents.ExchangeName
                             )
                         )
@@ -167,9 +196,19 @@ public class Function : TraxLambdaFunction
         );
     }
 
-    // Without a posture the function refuses every request.
-    protected override void ConfigureRunner(TraxJobRunnerOptions runner, IConfiguration configuration) =>
-        runner.SigningKey = RunnerSigningKey.Resolve(configuration, IsDevelopment(configuration));
+    // A runner runs what it is sent as already authorized, so it refuses every request until it
+    // knows who may send it work. Here: only a caller holding the key the API signs with.
+    protected override void ConfigureRunner(
+        TraxJobRunnerOptions runner,
+        IConfiguration configuration
+    ) => runner.SigningKey = RunnerSigningKey.Resolve(configuration, IsDevelopment(configuration));
+
+    private static bool IsDevelopment(IConfiguration configuration) =>
+        string.Equals(
+            configuration["DOTNET_ENVIRONMENT"] ?? configuration["ASPNETCORE_ENVIRONMENT"],
+            "Development",
+            StringComparison.OrdinalIgnoreCase
+        );
 }
 ```
 
@@ -180,21 +219,23 @@ checks the `Trax-Signature` header before reading the body. See
 
 The function reads its configuration from `appsettings.json` next to the binary and from environment
 variables (`ConnectionStrings__TraxDatabase`, `Trax__RunnerSigningKey`, `DOTNET_ENVIRONMENT`). It does
-not see command-line arguments, and it has no `IHostEnvironment`, which is why `IsDevelopment` reads
-`DOTNET_ENVIRONMENT` from configuration.
+not see command-line arguments, and it has no `IHostEnvironment`, which is why its own
+`IsDevelopment` helper reads `DOTNET_ENVIRONMENT` (or `ASPNETCORE_ENVIRONMENT`) from configuration.
 
 Locally, `Program.cs` serves the function over HTTP:
 
-```csharp
+```csharp from=Trax.Samples/samples/EphemeralWorkers/Trax.Samples.ContentShield.Runner/Program.cs
+using Trax.Samples.ContentShield.Runner;
+
 await new Function().RunLocalAsync([$"--contentRoot={AppContext.BaseDirectory}", .. args]);
 ```
 
-The Kestrel server `RunLocalAsync` starts reads `appsettings.json` from its content root, and so
-does the function, from the copy next to the binary. The `--contentRoot` argument names that
-directory explicitly. From the next Trax.Runner.Lambda release `RunLocalAsync` defaults to it, but
-the released versions default to the current directory: started from the repository root without the
-argument, that runner found no Kestrel endpoint and listened on 5000 instead of 5205, and the API's
-requests went nowhere.
+The Kestrel server `RunLocalAsync` starts reads `appsettings.json` from its content root, and the
+function reads the copy next to the binary. `RunLocalAsync` uses the binary's directory as the
+content root unless an argument names another, so both read the same file and the runner listens on
+the 5205 that `appsettings.json` names wherever `dotnet run` starts. The sample passes
+`--contentRoot` explicitly anyway: older Trax.Runner.Lambda releases defaulted to the current
+directory, and a runner started from the repository root found no endpoint and listened on 5000.
 
 For production, swap `UseRemoteWorkers` and `UseRemoteRun` for `UseLambdaWorkers` and `UseLambdaRun`
 (package `Trax.Scheduler.Lambda`), which invoke the function through the AWS SDK with no public
