@@ -1,6 +1,6 @@
 ---
 title: Architecture Guards
-description: The Trax architecture-guard packages, the conventions they check (schemas, cross-schema reads, train interfaces, test hygiene) and how to consume them.
+description: "The Trax architecture-guard packages, their base fixtures and options, and the conventions they check: schemas, cross-schema reads, train interfaces, test hygiene."
 type: reference
 area: tooling
 nav_order: 3
@@ -8,7 +8,7 @@ nav_order: 3
 
 # Architecture Guards
 
-Trax ships per-concern "guard" packages that let any repo enforce the same architectural conventions the Trax samples follow: one project / one schema / one context, cross-schema reads that never leak the model graph, cross-schema GraphQL edges that batch, trains that each have their own train interface, and basic test hygiene. The rules are framework-agnostic checkers that return an offender list; you assert on them with your own test framework.
+Trax ships per-concern guard packages that let a repository enforce the same architectural conventions the Trax samples follow: one project / one schema / one context, cross-schema reads that never leak the model graph, cross-schema GraphQL edges that batch, trains that each have their own train interface, and basic test hygiene. The rules are framework-agnostic checkers that return an offender list; you assert on them with your own test framework.
 
 ## Packages
 
@@ -27,35 +27,29 @@ A checker returns a `GuardResult` with the offenders it found, how many items it
 
 Most guards scan source on disk. `NoPendingModelChanges` and `OwnerScopeCompleteness` are the exceptions. `NoPendingModelChanges` builds each migration-based context offline (no database) and asserts its EF model matches the latest migration snapshot, catching a model edit that shipped without `dotnet ef migrations add` before it trips `PendingModelChangesWarning` at host startup.
 
-## Consuming the guards
+## Base fixtures
 
-Each package ships abstract NUnit base fixtures with the `[Test]` methods already written. Reference the packages in a test project, subclass the fixtures you want, supply your configuration, and run `dotnet test`. You write no test bodies, only configuration:
+Each package ships abstract NUnit base fixtures with the `[Test]` methods already written. A test
+project subclasses them, marks each subclass `[TestFixture]` (the runner discovers the inherited
+tests through it), and overrides the members below. [Adopt the architecture guards](/docs/reference/adopt-the-architecture-guards)
+has the steps.
 
-```csharp
-[TestFixture]
-public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
-{
-    protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["libs", "apps"] };
-    protected override IReadOnlyList<Type> DomainContexts => [typeof(CatalogDbContext), typeof(LendingDbContext)];
-    // Only contexts that use EF migrations; omit any bootstrapped with EnsureSchemaCreatedAsync.
-    protected override IReadOnlyList<Type> MigrationContexts => [typeof(CatalogDbContext)];
-}
+| Fixture | Package | Member | Default |
+|---|---|---|---|
+| `DomainDataLayerGuardFixture` | `Trax.Effect.Data.Testing` | `Options` | abstract |
+| | | `DomainContexts`, `MigrationContexts`, `OwnerScopedModels` | empty |
+| | | `OwnerScope` (`OwnerScopeCensusOptions`) | `null`: the census does not run |
+| | | `ScanForOwnerScopeFilterBypasses` | `true` |
+| | | `BaseTypeName` | `"DomainDataContext"` |
+| `CrossSchemaGuardFixture` | `Trax.Api.GraphQL.Testing` | `Options` | `new()` |
+| | | `Edges` | empty |
+| | | `ExpectsCrossSchemaResolvers`, `ExpectsParentResolvers` | `true` |
+| `TrainGuardFixture` | `Trax.Mediator.Testing` | `TrainAssemblies` | abstract |
 
-[TestFixture]
-public sealed class MyCrossSchemaGuards : CrossSchemaGuardFixture
-{
-    protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["libs"] };
-    protected override IReadOnlyList<CrossSchemaEdge> Edges => MyCrossSchemaEdges.All;
-}
-
-[TestFixture]
-public sealed class MyTrainGuards : TrainGuardFixture
-{
-    protected override IReadOnlyList<Assembly> TrainAssemblies => [typeof(MyAssemblyMarker).Assembly];
-}
-```
-
-That is the whole test project. `dotnet test` discovers the inherited `[Test]` methods through your subclasses. Subclass only the fixtures for concerns you have; the optional type-list members (`DomainContexts`, `MigrationContexts`, `OwnerScopedModels`, `Edges`) default to empty, so a guard you do not configure passes vacuously. `TrainAssemblies` is abstract on `TrainGuardFixture`, as `Options` is on `DomainDataLayerGuardFixture`: a subclass must supply it, and an empty list fails rather than passing. The source-scanning guards are the exception: `CrossSchemaGuardFixture` fails when its scan roots hold no cross-schema `[ExtendObjectType]` resolver, or no `[Parent]` resolver, naming the roots it scanned, because a scan pointed at the wrong folder would otherwise pass on nothing. A repo that really has none overrides `ExpectsCrossSchemaResolvers` or `ExpectsParentResolvers` to return `false`. The `[TestFixture]` attribute on each subclass is required for the runner to discover the inherited tests.
+An optional type list left empty makes its guard pass vacuously. `TrainAssemblies` is abstract,
+and an empty list fails rather than passing. `CrossSchemaGuardFixture` fails when its scan roots
+hold no cross-schema `[ExtendObjectType]` resolver, or no `[Parent]` resolver, naming the roots it
+scanned, unless `ExpectsCrossSchemaResolvers` or `ExpectsParentResolvers` returns `false`.
 
 `ArchitectureGuardOptions` carries the per-repo configuration: scan roots, allowlists, and the expected versions. Allowlist entries are repo-relative paths; the source guards walk up from the test assembly to the nearest `*.slnx` to find the repo root.
 
@@ -76,37 +70,7 @@ An entity reaching its owner only through a navigation, such as an answer whose 
 
 A second entity type mapped to the same table or view as a per-user entity, such as a reporting view over the same rows, reads those rows too. The census treats it as per-user and requires its filter, whatever gate it carries.
 
-The census takes the model rather than a context type, because an owner-scoped context usually takes its principal accessor through its constructor. A context listed in `DomainContexts` as well is also built from its options alone, so it keeps an options-only constructor beside the one that takes the accessor (see [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts)). Building the model needs no database:
-
-```csharp
-[TestFixture]
-public sealed class MyDataLayerGuards : DomainDataLayerGuardFixture
-{
-    protected override ArchitectureGuardOptions Options => new() { SourceScanRoots = ["libs", "apps"] };
-
-    protected override IReadOnlyList<IReadOnlyModel> OwnerScopedModels
-    {
-        get
-        {
-            var options = new DbContextOptionsBuilder<ClientDbContext>()
-                .UseNpgsql("Host=localhost;Database=model_only")
-                .Options;
-            using var context = new ClientDbContext(options, new SystemPrincipal());
-            return [context.Model];
-        }
-    }
-
-    protected override OwnerScopeCensusOptions OwnerScope => new()
-    {
-        OwnerType = typeof(UserProfile),
-        PrincipalAccessorType = typeof(IPrincipalAccessor),
-        NavigationScoped = new Dictionary<Type, string>
-        {
-            [typeof(PollQuestionAnswer)] = "belongs to the PollAnswer that holds the UserId",
-        },
-    };
-}
-```
+The census takes the model rather than a context type, because an owner-scoped context usually takes its principal accessor through its constructor. A context listed in `DomainContexts` as well is also built from its options alone, so it keeps an options-only constructor beside the one that takes the accessor (see [Owner-scoped contexts](/docs/effect/effect-providers/domain-data-contexts#owner-scoped-contexts)). Building the model needs no database, only a provider.
 
 ### Filters switched off in query code
 
@@ -116,20 +80,7 @@ The model says a filter exists; it cannot say that a resolver or a train switche
 - an EF10 named-filter disable, `IgnoreQueryFilters(["Owner"])`, that names an owner-scope filter (a named filter reading your principal accessor), or whose names are not string literals the scan can read. Disabling only a soft-delete or visibility filter by name is fine;
 - either call on a set the scan cannot name, such as a query passed into a helper, or a generic repository's `Set<T>()` over a type parameter, because it may be a per-user one.
 
-The set is read from the receiver the call chain starts from: a `DbSet<T>` or `IQueryable<T>` property declared under the scan roots, or `Set<T>()` over a mapped entity. A call on a set of shared rows (a soft-deleted article archive, say) passes. A shared set mentioned elsewhere in the statement, inside a lambda for instance, does not make the receiver shared, and a per-user set mentioned anywhere in the statement is reported, because the call switches the filter off for its subqueries too. When a file switches the owner scope off on purpose, list it with the reason:
-
-```csharp
-protected override OwnerScopeCensusOptions OwnerScope => new()
-{
-    OwnerType = typeof(UserProfile),
-    PrincipalAccessorType = typeof(IPrincipalAccessor),
-    FilterBypassAllowlist = new Dictionary<string, string>
-    {
-        ["apps/Worker/Trains/EraseAccount/EraseAccountTrain.cs"] =
-            "erasing an account deletes that owner's rows from a system context",
-    },
-};
-```
+The set is read from the receiver the call chain starts from: a `DbSet<T>` or `IQueryable<T>` property declared under the scan roots, or `Set<T>()` over a mapped entity. A call on a set of shared rows (a soft-deleted article archive, say) passes. A shared set mentioned elsewhere in the statement, inside a lambda for instance, does not make the receiver shared, and a per-user set mentioned anywhere in the statement is reported, because the call switches the filter off for its subqueries too. A file that switches the owner scope off on purpose is listed in `FilterBypassAllowlist`, keyed by its repo-relative path, with the reason.
 
 An entry with a blank reason, or one whose file no longer switches an owner-scope filter off, is reported. Override `ScanForOwnerScopeFilterBypasses` to `false` only if your scan roots do not contain the code that queries those models.
 
@@ -139,7 +90,7 @@ The scan reads text, not compiled code. It does not follow a query built in one 
 
 The census proves a principal-reading filter exists, not that it compares the right column, and not what a bypass branch inside it allows: a filter reading `principal.IsAdmin || e.OwnerId == principal.Id` under an admin gate shows admins every owner's rows. Entities mapped with `ToSqlQuery` or to a function over per-user tables, and a per-user entity reached through a navigation from a type that is exposed, are outside both checks too.
 
-What catches those is a **cross-user behavioural test**: sign in as one user, create a row, sign in as a second user, and assert that every surface the row can be read through (each GraphQL query and model, each train that returns it) gives the second user nothing. Write one per per-user entity against the running API, not the model; it is the only check that exercises the filter as it actually runs.
+What catches those is a cross-user test against the running API, one per per-user entity; [Adopt the architecture guards](/docs/reference/adopt-the-architecture-guards#configure-the-owner-scope-census) describes it.
 
 ## Database invariants after a test
 
@@ -173,7 +124,7 @@ The database does not record which states invoke a train, so the two token-and-s
 
 `FindViolationsAsync(connectionString, invokingStates, timedStates, maxDraftLifetime, maxDraftsPerUser, keptStates)` and its open-connection twin also take each machine's timed states as `TimedState(Machine, State)` records, the longest a user's draft may live, the most drafts one user may hold, and the states the draft sweep keeps an instance in however old it is as `KeptState(Machine, State)` records (a committed state, an effect's target, an invoked train's outcome target, a gated event's target). With `maxDraftsPerUser` set they report each user holding more drafts than it, across machines and never counting system rows, once, as `DraftsAboveCap` (`drafts-above-cap`) with the user's key as its id. They also run the revision, owner and row-id checks (`RevisionBelowOne`, `UserDraftWithoutOwner`, `DuplicateRowId`), the timer checks for the machines whose timed states you pass (`DueAtOutsideTimedState`, `TimedStateWithoutDueAt`, `DueAtOfARemovedTimer`), and, with `maxDraftLifetime` set, the lifetime check (`DraftOlderThanMaxLifetime`): a user's draft created longer ago than the lifetime, counted from its last write when it has no creation time, whether or not it waits on an invoked run, unless it is in one of `keptStates`, as the sweep counts it.
 
-Call it from teardown, after the hosts are disposed. A test that leaves one of these states on purpose, such as a crash simulation or a cancelled effect whose claim must hold until its lease passes, carries `[LeavesStuckRuns("why")]` (`LeavesStuckRunsAttribute`, on the method or the fixture), and `TraxInvariants.IsExempt(fixtureType, methodName)` tells the teardown to skip it.
+The checks are meant to run after every host a test started has stopped. A test that leaves one of these states on purpose, such as a crash simulation or a cancelled effect whose claim must hold until its lease passes, carries `[LeavesStuckRuns("why")]` (`LeavesStuckRunsAttribute`, on the method or the fixture), and `TraxInvariants.IsExempt(fixtureType, methodName)` returns true for it.
 
 A claim names its effect's intent, not a run, so the claim check cannot ask whether the claim's run finished; it reports every claim left without a receipt.
 
