@@ -1,50 +1,66 @@
 ---
-title: Database Migrations
-description: The Postgres and SQLite migrations that change something visible, such as columns, indexes or row behaviour, and what each one means for an upgrade.
+title: Schema migrations
+description: "The Postgres and SQLite migrations that change something visible, such as columns, indexes or row behaviour, in number order with both providers paired."
 type: reference
 area: data
 nav_order: 2
+source:
+  - Trax.Effect/src/Trax.Effect.Data.Postgres/Migrations
+  - Trax.Effect/src/Trax.Effect.Data.Sqlite/Migrations
+redirect_from:
+  - /docs/migration-guides/database-migrations
 ---
 
-# Database Migrations
+# Schema migrations
 
-`UsePostgres` and `UseSqlite` apply every pending migration at startup, so most upgrades need
-nothing from you. The migrations on this page change something you can see: a column your code
-reads, an index worth knowing about on a large database, or how an existing row behaves after
-the upgrade. If your host calls [SkipMigrations](/docs/sdk-reference/configuration/skip-migrations),
-run them yourself before the new version serves traffic.
+`UsePostgres` and `UseSqlite` apply every pending migration at startup. This page lists the
+migrations that change something a host can see: a column its code reads, an index that matters
+on a large database, or how an existing row behaves after the upgrade. A host that calls
+[SkipMigrations](/docs/sdk-reference/configuration/skip-migrations) runs them itself before the
+new version serves traffic.
 
-Postgres and SQLite number their migrations independently, so where both have one, both names
-are given.
+Postgres and SQLite number their migrations independently. Sections are in Postgres number order;
+a heading names the Postgres script first and the SQLite one after the word SQLite, and a section
+for one provider only says so. The two SQLite-only sections sit where their numbers fall between
+the paired ones.
 
 On Postgres each script waits at most five seconds for a table lock, so a migration behind a long
 transaction on a running instance does not stall enqueue and dispatch on every host. A script that
 gives up is run again, up to ten times, and then startup fails with `55P03`
-([why](/docs/contributing/writing-migrations#every-postgres-script-can-run-again)).
+([why](/docs/contributing/writing-migrations#every-postgres-script-can-run-again)). Scripts run
+without a transaction, so a script that stops partway keeps the statements it ran and runs again
+from the top at the next start.
 
-**Upgrading a scheduler from Trax.Effect 1.57.2 or earlier:** stop every scheduler host before
-starting one on the new version. The leader-lock key changed in 1.57.3, so an old host and a new one
-would both run the ManifestManager
-([details](/docs/scheduler/concurrency)).
+Procedures that go with a migration:
 
-## ManifestGroup (014)
+- [Repair a partial migration 014](/docs/migration-guides/repair-partial-migration-014)
+- [Install pg_trgm before migration 063](/docs/migration-guides/install-pg-trgm)
+- [Turn off state-machine change notices](/docs/migration-guides/turn-off-snapshot-change-notices) (080)
+
+A scheduler upgraded from Trax.Effect 1.57.2 or earlier also needs every old host stopped first:
+see [Upgrade schedulers from Trax.Effect 1.57.2 or earlier](/docs/migration-guides/scheduler-leader-lock).
+
+## Manifest groups (014)
 
 `014_manifest_group.sql` promotes a manifest's group from a denormalized string (`group_id`) to
 its own table with per-group dispatch controls. It:
 
-1. creates `trax.manifest_group` with `name`, `max_active_jobs`, `priority`, `is_enabled` and
-   timestamp columns;
+1. creates `trax.manifest_group` with `name` (unique), `max_active_jobs`, `priority`, `is_enabled`
+   and timestamp columns;
 2. seeds a `manifest_group` row for each distinct `group_id` on existing manifests, and one per
    ungrouped manifest, named after its `external_id`;
-3. adds a NOT NULL `manifest_group_id` foreign key to `trax.manifest`;
-4. drops the old `group_id` column.
+3. sets each group's `priority` to the highest `priority` among its manifests, where that is above 0;
+4. adds a NOT NULL `manifest_group_id` foreign key to `trax.manifest`, with the index
+   `ix_manifest_manifest_group_id`;
+5. drops the old `group_id` column and its index.
 
 Existing manifests keep their groups. It is not idempotent: it predates the
 [rule that every script can run again](/docs/contributing/writing-migrations#every-postgres-script-can-run-again),
 and its `CREATE TABLE`, `ADD COLUMN` and `CREATE INDEX` carry no `IF NOT EXISTS`. The migrator
 journals it and never runs it twice, but if it stops partway (a killed process, a failed
 statement) the next start runs it again from the top and fails on the table it already created.
-Repair that by hand: finish or undo the partial change, then start again.
+[Repair a partial migration 014](/docs/migration-guides/repair-partial-migration-014) undoes or
+records the partial change.
 
 `Manifest.GroupId` (`string?`) is replaced by `Manifest.ManifestGroupId` (`long`, since `018_bigint_ids.sql`) and the
 `Manifest.ManifestGroup` navigation. Code that read `GroupId` directly has to move to one of
@@ -55,7 +71,7 @@ and `IsEnabled` are covered in
 The namespaces of the scheduler types involved are listed in the
 [Namespace Reference](/docs/scheduler/setup#namespace-reference).
 
-## Scaling Indexes (026)
+## Scaling indexes (026)
 
 `026_scaling_indexes.sql` adds partial and composite indexes that keep the hot queries off
 sequential scans at high row counts. Every index is `CREATE INDEX IF NOT EXISTS`, so it is safe
@@ -73,7 +89,7 @@ to re-run.
 They matter once `metadata` holds more than a few thousand rows. They change query performance,
 not results.
 
-## Foreign-key and Manifest Indexes (036)
+## Foreign-key and manifest indexes (036, SQLite 004)
 
 `036_fk_and_manifest_eval_indexes.sql` (Postgres) or `004_fk_and_manifest_eval_indexes.sql`
 (SQLite). Every index is `CREATE INDEX IF NOT EXISTS`, so it is safe to re-run.
@@ -91,7 +107,7 @@ scanned those tables, so the cleanup grew with the size of the database. The fou
 per-manifest failed-count subquery in `LoadManifestsJunction` to failed rows instead of the
 manifest's entire terminal history.
 
-## Queued Subject Index (046)
+## Queued subject index (046, SQLite 011)
 
 `046_work_queue_subject_queued_index.sql` (Postgres) or `011_work_queue_subject_queued_index.sql`
 (SQLite) adds one partial index. It is `CREATE INDEX IF NOT EXISTS` and safe to re-run. On Postgres
@@ -107,7 +123,7 @@ every queued row and filtered on the key. With 500,000 queued entries that took 
 detail view; through this index it takes about 1 ms. Entries without a subject key, which is most
 manifest work, are left out of the index, so it stays small.
 
-## State-machine Request Scope (048)
+## State-machine request scope (048, SQLite 013)
 
 `048_snapshot_draft_request_scope.sql` (Postgres) or `013_snapshot_draft_request_scope.sql`
 (SQLite) adds two nullable columns to `snapshot_draft`: `last_request_trigger` and
@@ -143,7 +159,7 @@ still has to be granted, so it waits for transactions already open on those tabl
 seconds per try (see the top of this page). Each change checks the column's type first, so an
 interrupted run resumes where it stopped.
 
-## External Id Index (050)
+## External id index (050)
 
 `050_metadata_external_id_index.sql` (Postgres only) adds `ix_metadata_external_id`, a plain btree index
 on `trax.metadata (external_id)`. It is not unique: a dispatch retry adds a run under the same id.
@@ -271,18 +287,18 @@ three characters has no trigram to look up, so it still reads the table.
 
 `pg_trgm` ships with Postgres's contrib modules in every mainstream distribution and managed service,
 and since Postgres 13 it is a trusted extension, so a role with `CREATE` on the database installs it
-without being a superuser. If the role Trax migrates with cannot, run `CREATE EXTENSION pg_trgm;` once
-as one that can, before upgrading; the migration then finds it. The extension is created in the first
-schema on the session's search path (normally `public`) and the operator class is looked up through
-the same path, so a `pg_trgm` already installed in a schema off that path needs the schema added to
-the connection string's `Search Path`.
+without being a superuser. The script runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, which fails when the role Trax migrates
+with may not create it. The extension is created in the first schema on the session's search path
+(normally `public`) and the operator class is looked up through the same path. See
+[Install pg_trgm before migration 063](/docs/migration-guides/install-pg-trgm).
 
 The indexes are built `CREATE INDEX CONCURRENTLY`, so log writes carry on while they build, but the
 build is the cost of this upgrade on a large log table: each reads the whole table, about 23 s for the
 message index and 11 s for the category index at three million short entries, longer with longer
 messages. Startup of the upgraded host waits for it. Together they take about 60% of the table's size
-on disk, and every log write after the upgrade updates both. To build them ahead of the upgrade, run
-the script's statements by hand; the migration skips indexes that already exist under those names.
+on disk, and every log write after the upgrade updates both. The migration skips an index that already
+exists under its name, so the indexes can be built ahead of the upgrade by running the script's
+statements by hand.
 
 SQLite has no trigram index, so on SQLite a text filter still reads the table.
 
@@ -307,6 +323,29 @@ On Postgres the migration proves the column has no NULLs with a check constraint
 and then validated, which reads the table without blocking log writes, so `SET NOT NULL` takes its
 exclusive lock only briefly; the check is dropped afterwards. SQLite cannot change a column in place,
 so `029` rebuilds the `log` table with the same columns, ids and index.
+
+## Failure search (066)
+
+`066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL
+[`executions`](/docs/sdk-reference/graphql-api/queries#executions) filters `failureReasonContains`
+and `failureJunction`. `ix_metadata_failure_reason_trgm` is a GIN trigram index over
+`lower(failure_reason)`, the same kind as `063`'s log indexes, and serves a search for text inside a
+run's failure reason. `ix_metadata_failure_junction` is a partial B-tree on
+`(failure_junction, id)` that holds only runs with a failure junction, and serves an exact match on
+the junction in id order. Without them a term or junction few runs carry, and the count of any
+match, read the whole run table.
+
+`pg_trgm` is installed by `063`, so this migration needs nothing more from the role Trax migrates
+with; its own `CREATE EXTENSION IF NOT EXISTS` is a no-op after `063`.
+
+Both are built `CREATE INDEX CONCURRENTLY`, so runs keep being written while they build, but each
+reads the whole run table. At three million runs, two in nine of them failed with a reason of about
+fifty characters, the trigram index took about 7 s and 50 MB, and the junction index under a second
+and 30 MB. The trigram index grows with how many runs failed and how long their reasons are. Startup
+of the upgraded host waits for the build; to build them ahead of the upgrade, run the script's
+statements by hand, and the migration skips indexes that already exist under those names.
+
+SQLite has no trigram index and gets no migration here, so on SQLite both filters read the table.
 
 ## Parallel branch path (068, SQLite 031)
 
@@ -515,36 +554,30 @@ instances first.
 
 `080_snapshot_draft_change_notify_switch.sql` (Postgres only) recreates the trigger `snapshot_draft_changed_notify`
 with a condition, `WHEN (lower(current_setting('trax.snapshot_notify', true)) IS DISTINCT FROM 'off')`; the function
-`078` added is unchanged. `off` in any case turns the notices off. Write `on` or `off`: with the setting unset, or set
-to anything else, every write notifies as before, so a database nobody configures behaves as it did under `078`. The
-script replaces the trigger only while it has no condition, so it runs again over its own result.
+`078` added is unchanged. `off` in any case turns the notices off. With the setting unset, `on`, or anything else,
+every write notifies as before, so a database nobody configures behaves as it did under `078`. The script replaces
+the trigger only while it has no condition, so it runs again over its own result.
 
 The switch exists because every transaction that sends a Postgres `NOTIFY` takes one lock shared by the whole cluster
 and holds it through its commit. With `078`'s trigger every write to `trax.snapshot_draft` is such a transaction, so
 concurrent instance writes commit one at a time, together with the work queue's (`069`) and invoked runs' (`073`)
-notices. A snapshot write in the same transaction as one of those notices still takes the lock for it. To take the
-snapshot notice off the writes, turn it off for the whole database:
+notices. A snapshot write in the same transaction as one of those notices still takes the lock for it.
 
-```sql
-ALTER DATABASE <name> SET trax.snapshot_notify = 'off';   -- new sessions only
-```
+The trigger reads the setting in the session that writes. A listening host can check only the database's own value
+(`ALTER DATABASE <name> SET trax.snapshot_notify`, read from `pg_db_role_setting`), so that is the only supported
+switch: a role setting (`ALTER ROLE ... SET`), a connection string's `Options=-c trax.snapshot_notify=off` or a
+`SET LOCAL` turns the notices off for some writers only, and a host on `Notify` never hears their writes. A writer
+whose session sets `session_replication_role = replica` fires no ordinary trigger and sends no notice either.
 
-That is the only supported switch. The trigger reads the setting in the session that writes, and a host that listens
-can check only the database's own value, so a role setting (`ALTER ROLE ... SET`), a connection string's
-`Options=-c trax.snapshot_notify=off` or a `SET LOCAL` turns the notices off for some writers only, and a host still
-on `Notify` never hears their writes. Do not use them while any host listens.
-
-Hosts then hear changes by polling:
-[`StateMachineOptions.ChangeFeed = StateMachineChangeFeed.Poll`](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options)
-reads the watched rows' revisions once a second while something watches. Roll it out in that order: set `ChangeFeed
-= Poll` on every host first, then turn the notices off for the database. A host left on `Notify` refuses to start
-when the database's own setting turns the notices off (read from `pg_db_role_setting`, not from its session), when a
-role's setting or its own session's does, or when the trigger is not enabled for ordinary sessions (`tgenabled` other
-than `O` or `A`, as after `ALTER TABLE ... ENABLE REPLICA TRIGGER`). A `Poll` host whose database still notifies starts
-and logs a warning, and either kind warns when its own session reads the setting otherwise than the database, or when
-the value is neither `on` nor `off`. The check is made at startup, so turning the notices off while a `Notify` host
-runs leaves its watchers silent until it restarts. A writer whose session sets `session_replication_role = replica`
-fires no ordinary trigger and sends no notice either.
+At startup, a host whose
+[`StateMachineOptions.ChangeFeed`](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options) is `Notify`
+refuses to start when the database's own setting turns the notices off, when a role's setting or its own session's
+does, or when the trigger is missing or not enabled for ordinary sessions (`tgenabled` other than `O` or `A`, as after
+`ALTER TABLE ... ENABLE REPLICA TRIGGER`). A `Poll` host whose database still notifies starts and logs a warning.
+Either kind warns when its own session reads the setting otherwise than the database, or when the value is neither
+`on` nor `off`. The check runs only at startup, so turning the notices off while a `Notify` host runs leaves its
+watchers silent until it restarts. The order to turn the notices off in is in
+[Turn off state-machine change notices](/docs/migration-guides/turn-off-snapshot-change-notices).
 
 ## State-machine pending effect and server record (081, SQLite 041)
 
@@ -570,26 +603,3 @@ whose row is still in the effect's state is recorded by that row's next send, wh
 flight within its lease keeps the row's events refused as `effect-in-progress`. A host on the previous version writes
 without the columns, so during a rolling deploy it neither honours a mark a new host set nor sets one: finish the
 deploy before an instance's effect is sent, or drain sends first.
-
-## Failure search (066)
-
-`066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL
-[`executions`](/docs/sdk-reference/graphql-api/queries#executions) filters `failureReasonContains`
-and `failureJunction`. `ix_metadata_failure_reason_trgm` is a GIN trigram index over
-`lower(failure_reason)`, the same kind as `063`'s log indexes, and serves a search for text inside a
-run's failure reason. `ix_metadata_failure_junction` is a partial B-tree on
-`(failure_junction, id)` that holds only runs with a failure junction, and serves an exact match on
-the junction in id order. Without them a term or junction few runs carry, and the count of any
-match, read the whole run table.
-
-`pg_trgm` is installed by `063`, so this migration needs nothing more from the role Trax migrates
-with; its own `CREATE EXTENSION IF NOT EXISTS` is a no-op after `063`.
-
-Both are built `CREATE INDEX CONCURRENTLY`, so runs keep being written while they build, but each
-reads the whole run table. At three million runs, two in nine of them failed with a reason of about
-fifty characters, the trigram index took about 7 s and 50 MB, and the junction index under a second
-and 30 MB. The trigram index grows with how many runs failed and how long their reasons are. Startup
-of the upgraded host waits for the build; to build them ahead of the upgrade, run the script's
-statements by hand, and the migration skips indexes that already exist under those names.
-
-SQLite has no trigram index and gets no migration here, so on SQLite both filters read the table.

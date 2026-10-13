@@ -1,7 +1,7 @@
 namespace Trax.Docs.Tests.Tests;
 
 /// <summary>
-/// Every migration Trax ships is named in the database migrations guide, or recorded here as
+/// Every migration Trax ships is named on the schema migrations reference page, or recorded here as
 /// deliberately left out of it.
 ///
 /// <para>The failure mode this exists for is an upgrade that surprises the person running it: a
@@ -10,7 +10,7 @@ namespace Trax.Docs.Tests.Tests;
 /// stops to ask, and the guide is the only place an upgrader learns what changed.</para>
 ///
 /// <para>A migration counts as named when a heading of
-/// <c>migration-guides/database-migrations.md</c> lists its number, Postgres numbers first and
+/// <c>reference/schema-migrations.md</c> lists its number, Postgres numbers first and
 /// SQLite ones after the word <c>SQLite</c> (<c>## Checkpoints (074, SQLite 036)</c>; a heading
 /// that begins with <c>SQLite</c> lists SQLite numbers only), or when the page names its script
 /// (<c>036_fk_and_manifest_eval_indexes</c>).</para>
@@ -21,7 +21,7 @@ namespace Trax.Docs.Tests.Tests;
 [TestFixture]
 public class MigrationsAreDocumentedTests
 {
-    private const string Guide = "migration-guides/database-migrations.md";
+    private const string Guide = "reference/schema-migrations.md";
 
     private const string BeforeTheGuard =
         "Written before this guard, and judged then to change nothing an upgrader sees.";

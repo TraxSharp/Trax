@@ -31,7 +31,7 @@ Published rule pages, all under [traxsharp.net/docs](https://traxsharp.net/docs)
 
 **A code change and its docs change land in the same pull request.** If you change a public API,
 the page under `Trax.Docs/sdk-reference/` changes with it, and a new migration gets its section in
-`Trax.Docs/migration-guides/database-migrations.md`. `PublicApiIsDocumentedTests` and
+`Trax.Docs/reference/schema-migrations.md`. `PublicApiIsDocumentedTests` and
 `MigrationsAreDocumentedTests` in `Trax.Docs` fail the build when either is missing. The site is
 published from releases, not from `main` (`Trax.Docs/adr/0043`).
 
