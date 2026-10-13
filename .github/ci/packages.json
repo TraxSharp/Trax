@@ -1,5 +1,5 @@
 {
-  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'release-pack' names the one project a release packs instead of the solution; 'state-machine' installs Trax.Api.StateMachine's npm packages first, for tests that run its generators under node); 'adr' configures the ADR guard over that folder's corpus.",
+  "_comment": "One entry per folder CI builds. 'upstream' names the folders whose change can break this one; the change detector runs a folder when it or anything upstream of it changes. 'dotnet' configures the .NET job (absent for a folder with no .NET build; 'release-pack' names the one project a release packs instead of the solution; 'state-machine' installs Trax.Api.StateMachine's npm packages first, for tests that run its generators under node; 'playwright' installs chromium, and the npm packages of Trax.Api.StateMachine and the Recovery page, which the browser tests build, Trax.Docs/adr/0049); 'adr' configures the ADR guard over that folder's corpus.",
   "packages": [
     {
       "folder": "Trax.Core",
@@ -10,7 +10,7 @@
     {
       "folder": "Trax.Effect",
       "upstream": ["Trax.Core", "Trax.Api.StateMachine"],
-      "dotnet": { "solution": "Trax.Effect.slnx", "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": true, "databases": [], "timeout": 15, "test-args": "" },
+      "dotnet": { "solution": "Trax.Effect.slnx", "state-machine": true, "pack": true, "coverage": true, "postgres": "trax_data_tests", "rabbitmq": true, "databases": [], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "migrations,providers,data-model,testing,platform,auth", "census-root": "tests/Trax.Effect.Tests.Meta" }
     },
     {
@@ -28,7 +28,7 @@
     {
       "folder": "Trax.Api",
       "upstream": ["Trax.Scheduler"],
-      "dotnet": { "solution": "Trax.Api.slnx", "pack": true, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["trax_api_operations", "trax_api_workqueue", "trax_api_logs", "trax_api_health"], "timeout": 20, "test-args": "--blame-hang-timeout 5m --blame-hang-dump-type none" },
+      "dotnet": { "solution": "Trax.Api.slnx", "pack": true, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["trax_api_operations", "trax_api_workqueue", "trax_api_logs", "trax_api_health", "trax_sm_machines_schema", "trax_sm_machine_events", "trax_sm_machine_rules", "trax_sm_machine_request_id", "trax_sm_machine_errors", "trax_sm_machine_client_result", "trax_sm_generic_opt_in", "trax_sm_machine_documents", "trax_sm_machine_document_nodes", "trax_sm_machine_changed", "trax_sm_machine_changed_versions", "trax_sm_operator_feed"], "timeout": 20, "test-args": "--blame-hang-timeout 5m --blame-hang-dump-type none" },
       "adr": { "adr-root": "docs/adr", "known-areas": "graphql,auth,platform,testing", "census-root": "tests/Trax.Api.Tests.Meta" }
     },
     {
@@ -46,7 +46,7 @@
     {
       "folder": "Trax.Samples",
       "upstream": ["Trax.Dashboard", "Trax.Cli"],
-      "dotnet": { "solution": "Trax.Samples.slnx", "release-pack": "templates/Trax.Samples.Templates.csproj", "pack": false, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["chat_e2e_tests", "energyhub_e2e_tests", "bookworm_e2e_tests", "auth_e2e_tests", "persisted_operations_e2e_tests", "recovery_e2e_tests", "recovery_restart_e2e_tests", "scheduling_e2e_tests", "contentshield_e2e_tests", "statemachine_e2e_tests"], "timeout": 15, "test-args": "" },
+      "dotnet": { "solution": "Trax.Samples.slnx", "release-pack": "templates/Trax.Samples.Templates.csproj", "playwright": true, "pack": false, "coverage": true, "postgres": "trax", "rabbitmq": true, "databases": ["chat_e2e_tests", "energyhub_e2e_tests", "bookworm_e2e_tests", "auth_e2e_tests", "persisted_operations_e2e_tests", "recovery_e2e_tests", "recovery_restart_e2e_tests", "recovery_browser_tests", "scheduling_e2e_tests", "contentshield_e2e_tests", "statemachine_e2e_tests"], "timeout": 15, "test-args": "" },
       "adr": { "adr-root": "docs/adr", "known-areas": "testing,ci,samples", "census-root": "tests/Trax.Samples.Tests.Meta" }
     },
     {

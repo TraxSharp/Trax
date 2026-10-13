@@ -81,6 +81,9 @@
     <PackageVersion Include="Microsoft.Testing.Platform.MSBuild" Version="2.5.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="Microsoft.OpenApi.Readers" Version="1.6.31" />
+    <!-- Browser tests (Trax.Docs/adr/0049). Test projects only, and the same version as the samples'
+         screenshot script (Trax.Samples/scripts/screenshots/package.json), so both use one browser build. -->
+    <PackageVersion Include="Microsoft.Playwright" Version="1.63.0" />
     <PackageVersion Include="Moq" Version="4.21.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />

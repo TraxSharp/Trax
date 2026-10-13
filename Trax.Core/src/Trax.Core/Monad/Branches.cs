@@ -102,7 +102,8 @@ internal static class ExperimentalIds
     public const string Parallel = "TRAXEXP001";
 
     // TRAXEXP002 (Invokes, Trax.Docs/adr/0046) and TRAXEXP003 (Checkpoint, Trax.Docs/adr/0047) were
-    // lifted once their rows of the interaction matrix were complete. Ids are never reused.
+    // lifted once their rows of the interaction matrix were complete. TRAXEXP004 was reserved for the machine
+    // API (Trax.Docs/adr/0048) and never applied. Ids are never reused.
 }
 
 /// <summary>One declared branch: its name and its chain.</summary>

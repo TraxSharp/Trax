@@ -47,7 +47,38 @@ public class InteractionMatrixTests
     /// machine, so the list is declared here: adding a machine feature means adding it to this list, and the
     /// test then fails until the feature has a row.
     /// </summary>
-    private static readonly string[] MachineFeatures = ["Invokes"];
+    private static readonly string[] MachineFeatures =
+    [
+        "Invokes",
+        "After",
+        "Per-event rules",
+        "Typed start",
+    ];
+
+    private const string Adr0048 =
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
+    /// <summary>
+    /// Every feature of a machine served as a typed API, each a row of the <i>Machine API features</i> table, whose
+    /// columns are <see cref="MachineApiColumns"/>. Adding one means adding it here.
+    /// </summary>
+    private static readonly string[] MachineApiFeatures =
+    [
+        "Typed surface",
+        "Per-event rules",
+        "Revision and feed",
+        "Timers",
+    ];
+
+    private static readonly string[] MachineApiColumns =
+    [
+        "Invokes",
+        "Parallel",
+        "Checkpoint",
+        "Decisions",
+        "System-owned",
+        "Generic opt-in",
+    ];
 
     private static readonly Regex TestCell = new(
         @"^`(?<class>[A-Za-z_][A-Za-z0-9_]*)\.(?<method>[A-Za-z_][A-Za-z0-9_]*)`$",
@@ -92,6 +123,36 @@ public class InteractionMatrixTests
                     + string.Join("\n  ", problems)
             );
     }
+
+    [Test]
+    public void TheMachineApiFeaturesTable_CoversEveryMachineApiFeature_WithTestsThatExist()
+    {
+        var problems = MachineApiFeatureProblems(
+            File.ReadAllText(RepoRoot.Combine(MatrixPath)),
+            MachineApiFeatures,
+            new TestIndex(MonorepoRoot.Path).Exists
+        );
+
+        problems
+            .Should()
+            .BeEmpty(
+                $"{MatrixPath} must give every machine API feature a row in its 'Machine API feature' table, with "
+                    + $"the columns {string.Join(", ", MachineApiColumns)}, each cell naming an existing test as "
+                    + $"`Class.Method` or saying `n/a: <why>`, as {Adr0048} records:\n  "
+                    + string.Join("\n  ", problems)
+            );
+    }
+
+    [Test]
+    public void AMachineApiFeatureWithoutARow_Fails() =>
+        MachineApiFeatureProblems(
+                "| Machine API feature | Invokes | Parallel | Checkpoint | Decisions | System-owned | Generic opt-in |\n"
+                    + "|---|---|---|---|---|---|---|\n",
+                ["Timers"],
+                (_, _) => true
+            )
+            .Should()
+            .ContainSingle(p => p.Contains("Timers") && p.Contains("no row"));
 
     [Test]
     public void TheBaseline_NamesOnlyStepKindsThatExist() =>
@@ -416,6 +477,49 @@ public class InteractionMatrixTests
                 .Where(f => !rows.Contains(f))
                 .Select(f =>
                     $"the machine feature {f} has no row: say how it behaves with each existing feature"
+                )
+        );
+
+        return problems;
+    }
+
+    private static List<string> MachineApiFeatureProblems(
+        string markdown,
+        IReadOnlyCollection<string> features,
+        Func<string, string, bool> testExists
+    )
+    {
+        var problems = new List<string>();
+        if (Table.Find(markdown, "Machine API feature") is not { } table)
+        {
+            problems.Add("the file has no table whose first column is 'Machine API feature'");
+            return problems;
+        }
+
+        if (!table.Header.Skip(1).SequenceEqual(MachineApiColumns))
+        {
+            problems.Add(
+                $"line {table.HeaderLine}: the machine API table's columns are "
+                    + $"'{string.Join(" | ", table.Header.Skip(1))}', not '{string.Join(" | ", MachineApiColumns)}'"
+            );
+            return problems;
+        }
+
+        var rows = CheckRows(
+            table,
+            testExists,
+            problems,
+            feature =>
+                features.Contains(feature)
+                    ? null
+                    : $"'{feature}' is not a declared machine API feature (MachineApiFeatures)"
+        );
+
+        problems.AddRange(
+            features
+                .Where(f => !rows.Contains(f))
+                .Select(f =>
+                    $"the machine API feature {f} has no row: say how it behaves with each column"
                 )
         );
 

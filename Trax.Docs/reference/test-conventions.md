@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Test Conventions
-description: "Trax test conventions: folder layout and what TestFolderLayoutTests checks, fixtures, naming, assertions, coverage, determinism and skipping."
+description: "Trax test conventions: folder layout, fixtures, naming, assertions, coverage, determinism, skipping, and red tests written before their code."
 parent: Reference
 nav_order: 12
 ---
@@ -124,6 +124,11 @@ hiding at declaration time. `NoIgnoreAttributeTests` rejects new `[Ignore]` attr
 One survives, on its exceptions list: a Trax.Samples E2E test waiting on an unreleased
 scheduler feature. Do not read it as precedent for a second.
 
+When CI provides what the test needs (a service in `.github/ci/packages.json`, node and the
+`Trax.Api.StateMachine` packages for `"state-machine": true`), the check fails instead of
+skipping when the `CI` environment variable is set, so a broken job cannot report a skipped
+suite as green. `PersistedOperationCrossNodeTests` and `TwinSequenceParityTests` do this.
+
 A suite meant to be run by hand carries `[Explicit]` on each concrete fixture, as the Trax.Api,
 Trax.Scheduler and Trax.Dashboard stress suites do: a normal `dotnet test` skips it and `--filter TestCategory=Stress` runs
 it. Put the attribute on the concrete class, because NUnit does not inherit `[Explicit]` or
@@ -139,3 +144,17 @@ carrying large inputs and outputs, and `TRAX_STRESS_METADATA`, `TRAX_STRESS_WORK
 ```bash
 TRAX_TEST_PG_PORT=5433 dotnet test tests/Trax.Dashboard.Tests.Stress --filter TestCategory=Stress
 ```
+
+## Tests written before their code
+
+A test written ahead of the code it tests is marked `[Red("what it waits for")]` on each test
+method (`using Trax.Testing.Red;`). It runs, and its verdict is inverted: a failure or error is
+reported as a pass, with the failure's first line in the message, and a pass is reported as a
+failure telling you to remove the attribute, so the marker cannot outlive the gap it records.
+It also adds the category `Red`, so `--filter TestCategory=Red` lists what is still pending.
+A red test is not a skip: it runs on every build, and `[Red]` never stands in for `[Ignore]`.
+
+The attribute is `tests/RedAttribute.cs` in each .NET folder, linked into every test project
+by `tests/Directory.Build.props`. The copies are identical, and `RedAttributeTests` in
+Trax.Core checks its behaviour. Remove the attribute, and its `using`, in the change that
+makes the test pass.
