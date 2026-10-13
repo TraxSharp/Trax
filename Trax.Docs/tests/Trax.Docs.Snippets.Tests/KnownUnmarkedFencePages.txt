@@ -48,11 +48,8 @@ migration-guides/qualified-principal-ids.md
 migration-guides/runinternal-and-activate.md
 persisted-operations.md
 reference/architecture-guards.md
-reference/builder-pattern.md
 reference/comparison.md
-reference/registration-order.md
 reference/templates.md
-reference/test-conventions.md
 samples.md
 samples/auth.md
 samples/bookworm.md

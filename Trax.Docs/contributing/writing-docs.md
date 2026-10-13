@@ -3,7 +3,7 @@ title: Writing docs
 description: "The conventions for Trax docs pages and the tests that check them: front matter, page types, code fence markers, SDK reference pages, links and redirects."
 type: reference
 area: contributing
-nav_order: 1
+nav_order: 6
 redirect_from:
   - /docs/reference/contributing-docs
 ---
