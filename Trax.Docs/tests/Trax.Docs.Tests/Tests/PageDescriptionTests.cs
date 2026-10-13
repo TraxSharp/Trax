@@ -49,7 +49,7 @@ public class PageDescriptionTests
                 "every page traxsharp.net publishes needs a `description:` line in its front matter, "
                     + $"one plain-text sentence of at most {MaxLength} characters saying what the page "
                     + "covers. The site uses it for the meta description and for llms.txt, and falls "
-                    + "back to the first paragraph without it. See reference/contributing-docs.md and "
+                    + "back to the first paragraph without it. See contributing/writing-docs.md and "
                     + Adr
                     + ". Offenders:\n  "
                     + string.Join("\n  ", offenders.OrderBy(o => o, StringComparer.Ordinal))

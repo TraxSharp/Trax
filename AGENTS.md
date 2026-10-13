@@ -25,7 +25,7 @@ Published rule pages, all under [traxsharp.net/docs](https://traxsharp.net/docs)
 | Writing a migration, provider dialects | `/docs/reference/writing-migrations` |
 | Registration order, and what fails when it is wrong | `/docs/reference/registration-order` |
 | The shipped architecture-guard packages | `/docs/reference/architecture-guards` |
-| Docs conventions, voice, link format | `/docs/reference/contributing-docs` |
+| Docs conventions, voice, link format | `/docs/contributing/writing-docs` |
 | Debugging across processes with `trax.log` | `/docs/effect/debugging-with-the-log-table` |
 
 **A code change and its docs change land in the same pull request.** If you change a public API,
