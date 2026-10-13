@@ -1,7 +1,8 @@
 ---
-layout: default
 title: ResponseStrictness
 description: Reference for ResponseStrictness, which decides how the client treats response fields that differ from the response type, and GraphQLResponseShapeException.
+type: reference
+area: api
 parent: GraphQL Client
 grand_parent: SDK Reference
 nav_order: 7

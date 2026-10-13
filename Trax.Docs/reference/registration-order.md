@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Registration Order
 description: Which Trax registration calls must come in a set order, the startup error each wrong order raises, and which orderings deliberately do not matter.
-parent: Reference
-nav_order: 8
+type: reference
+area: general
+nav_order: 5
 ---
 
 # Registration Order
@@ -21,7 +21,7 @@ naming the call to move. Nothing about registration is allowed to fail silently.
 | Trains registered before `AddTraxGraphQL()` | The host refuses to start, naming each `[TraxQuery]`, `[TraxMutation]` or `[TraxBroadcast]` train registered afterwards. `AddTraxGraphQL()` checks each train's authorization posture and name and builds the schema roots from the trains registered before it. |
 | Your own `IDecisionObserver` before `AddTrax()`, on a host that calls `AddDecisionRecording()` | The host refuses to start, naming the observer, and every run that would record its decisions refuses too. One registered after `AddTrax()` would replace the composite that tells decision recording. See [Other decision observers](/docs/effect/decisions#other-decision-observers). |
 
-```csharp
+```csharp fragment
 builder.Services.AddTrax(trax => trax.AddEffects(...).AddMediator(...));
 builder.Services.AddTraxJwtAuth(...);
 builder.Services.AddTraxGraphQL(graphql => graphql.AddDbContext<AppDbContext>());
@@ -70,30 +70,8 @@ Everything else, and deliberately so:
   caller is authenticated either way. Calling the two `Use` methods first is still the
   conventional order, and the one the templates use.
 
-## Contributing to Trax
-
-Reading the `IServiceCollection` inside a registration extension answers "is this registered
-*yet*", not "will this be registered". The extension runs partway through the host's startup
-code, so any behaviour derived from the answer changes with the caller's ordering.
-
-That has shipped as a bug twice: once leaving an interceptor unable to activate (a 500 on every
-request), and once leaving subscription auth unwired entirely, which accepted every connection
-anonymously while HTTP kept working.
-
-Inspecting the collection is not banned. Silence is. A site is acceptable only if it is:
-
-1. **An idempotency guard**, asking "have I already registered my own thing?" It cannot change
-   consumer-visible behaviour.
-2. **A precondition that throws**, where ordering matters and the consumer is told how to fix it.
-3. **A decision paired with a startup validator**: wire what you can, then assert from an
-   `IHostedService`, where the container is complete, that the result is coherent, and throw
-   naming the call to move.
-
-Prefer restructuring so the question disappears. Registering a factory that resolves on first
-use makes the ordering question moot rather than merely detected.
-
-`NoSilentRegistrationOrderDependenceTests` fails the build on any new introspection site.
-Making one safe and recording why is the way past it; raising its count is not.
+The rule that keeps it this way, for anyone writing a registration extension, is in
+[API conventions](/docs/contributing/api-conventions#reading-the-service-collection).
 
 ## SDK Reference
 

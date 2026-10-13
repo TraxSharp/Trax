@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Supply Chain Security
 description: "The controls protecting every Trax package from source to nuget.org: pinned dependencies, split release jobs, keyless publishing, provenance and gated releases."
-nav_order: 11
-section: Guides
+type: explanation
+area: general
+nav_order: 4
 ---
 
 # Supply Chain Security

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: IGraphQLClientRequest
 description: Reference for IGraphQLClientRequest, an outbound GraphQL request typed by its response, with IGraphQLClientExecutor and the GraphQLClient attribute.
+type: reference
+area: api
 parent: GraphQL Client
 grand_parent: SDK Reference
 nav_order: 5

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Persistence ports
 description: Reference for the state machine persistence ports ISnapshotPrincipal and ISnapshotStore, StoredSnapshot, request id matching and the EF Core stores.
+type: reference
+area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 8

@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Dashboard
 description: "Trax.Dashboard, the Blazor Server UI at /trax: setup, required web assets, the trains, data, effects and settings pages, manifest groups and options."
-nav_order: 8
-section: Packages
+type: reference
+area: dashboard
+nav_order: 1
 ---
 
 # Dashboard

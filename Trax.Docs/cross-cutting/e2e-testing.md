@@ -1,9 +1,9 @@
 ---
-layout: default
 title: E2E Testing
 description: "End-to-end testing a Trax host with WebApplicationFactory: test database, scheduler settings, cron retries, reading Trax tables, GraphQL and subscriptions."
-parent: Cross-Cutting
-nav_order: 4
+type: how-to
+area: testing
+nav_order: 2
 ---
 
 # E2E Testing

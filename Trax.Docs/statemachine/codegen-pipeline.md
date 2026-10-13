@@ -1,9 +1,9 @@
 ---
-layout: default
 title: The codegen pipeline
 description: The pipeline that generates a state machine's TypeScript twin from its C# definition through the IR, what proves they agree, and how to run it.
-parent: State Machines
-nav_order: 3
+type: explanation
+area: machines
+nav_order: 2
 ---
 
 # The codegen pipeline

@@ -1,8 +1,9 @@
 ---
-layout: default
 title: Persisted Operations
 description: "Persisted GraphQL operations in Trax: the id-to-document contract, hot-fixable changes, setup on one node or many, caching, rollout and managing operations."
-nav_order: 11
+type: explanation
+area: api
+nav_order: 2
 ---
 
 # Persisted Operations

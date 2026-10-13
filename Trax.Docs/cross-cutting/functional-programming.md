@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Functional Programming
 description: "The functional programming ideas in Trax.Core: Either for train results, Unit, effects, and the null assertion helpers."
-parent: Cross-Cutting
-nav_order: 5
+type: explanation
+area: trains
+nav_order: 3
 ---
 
 # Functional Programming

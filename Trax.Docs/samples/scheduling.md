@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Scheduling Sample
 description: "A complete scheduler host: interval, cron, one-off, dependent and dormant manifests, retries with backoff, a dead letter and its requeue over GraphQL."
-parent: Samples & Deployment
-nav_order: 1
+type: explanation
+area: samples
+nav_order: 3
 ---
 
 # Scheduling Sample

@@ -54,7 +54,7 @@ public class ExtensionMethodNamingTests
         offenders
             .Should()
             .BeEmpty(
-                "Trax.Docs/reference/extension-method-naming.md requires public Add*/Use* extensions "
+                "Trax.Docs/contributing/api-conventions.md > Extension method naming requires public Add*/Use* extensions "
                     + "on IServiceCollection / IApplicationBuilder / WebApplication / "
                     + "IEndpointRouteBuilder / WebApplicationBuilder declared in an Extensions/ "
                     + "folder under samples/, lib/ or templates/ to contain 'Trax' in the method "

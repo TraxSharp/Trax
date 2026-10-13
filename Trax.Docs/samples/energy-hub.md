@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Energy Hub
 description: "The EnergyHub sample: a hub that schedules and serves GraphQL but runs no jobs, standalone workers that do, and lifecycle events carried home over RabbitMQ."
-parent: Samples & Deployment
-nav_order: 9
+type: explanation
+area: samples
+nav_order: 10
 ---
 
 # Energy Hub

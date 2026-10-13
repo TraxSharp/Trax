@@ -1,9 +1,8 @@
 ---
-layout: default
 title: Data Persistence
 description: The data persistence effect that stores a Metadata row per run, on PostgreSQL, SQLite or InMemory, with automatic migrations and DataContext logging.
-parent: Effect Providers
-grand_parent: Effect
+type: reference
+area: data
 nav_order: 1
 ---
 

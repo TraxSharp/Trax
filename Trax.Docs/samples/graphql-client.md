@@ -1,9 +1,9 @@
 ---
-layout: default
 title: GraphQL Client
 description: "The GraphQLClient sample: Trax servers called through keyed Trax GraphQL clients, schema validation before any request, and the three query modes."
-parent: Samples & Deployment
-nav_order: 5
+type: explanation
+area: samples
+nav_order: 7
 ---
 
 # GraphQL Client

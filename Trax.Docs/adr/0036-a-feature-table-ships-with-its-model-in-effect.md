@@ -88,8 +88,8 @@ through `ExecuteUpdate` and `ExecuteDelete`, concurrent inserts, and `IsUniqueVi
 providers. Trax.Scheduler's `SharedNonceStoreTests` and `SqliteSharedNonceStoreTests` run the store
 that uses them.
 
-- [Writing Migrations](/docs/reference/writing-migrations) and
-  [Project Layout](/docs/reference/project-layout) are the rule this produces.
+- [Write a migration](/docs/contributing/writing-migrations) and
+  [Repository layout](/docs/contributing/repository-layout) are the rule this produces.
 
 Not covered: nothing stops a feature package from writing raw SQL against a table that is modelled.
 The guards prove every table has a model, not that every caller uses it. Scheduler's own raw SQL

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Scheduler API
 description: "Index of the Trax.Scheduler reference: startup scheduling on AddScheduler, the runtime ITraxScheduler API, management methods and scheduling helpers."
+type: landing
+area: scheduling
 parent: SDK Reference
-nav_order: 3
 has_children: true
+nav_order: 5
 ---
 
 # Scheduler API

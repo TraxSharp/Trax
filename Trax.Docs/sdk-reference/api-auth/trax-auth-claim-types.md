@@ -1,9 +1,11 @@
 ---
-layout: default
 title: TraxAuthClaimTypes
 description: Reference for TraxAuthClaimTypes, the claim URNs every Trax authentication scheme writes, including the scheme-qualified principal id.
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 13
 ---
 
 # TraxAuthClaimTypes

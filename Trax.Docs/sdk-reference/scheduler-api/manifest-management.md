@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Manifest Management
 description: "Reference for the ITraxScheduler methods that control scheduled jobs at runtime: DisableAsync, EnableAsync, TriggerAsync, ScheduleOnceAsync and CancelAsync."
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 6
+nav_order: 7
 ---
 
 # Manifest Management

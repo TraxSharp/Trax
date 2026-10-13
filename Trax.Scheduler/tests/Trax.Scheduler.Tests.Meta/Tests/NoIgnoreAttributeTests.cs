@@ -48,7 +48,7 @@ public class NoIgnoreAttributeTests
         offenders
             .Should()
             .BeEmpty(
-                "[Ignore] silently hides failing tests. Trax.Docs/reference/test-conventions.md > Skipping requires either "
+                "[Ignore] silently hides failing tests. Trax.Docs/contributing/test-conventions.md > Skipping requires either "
                     + "fixing the underlying code, fixing the test premise, or using Assert.Ignore(\"reason\") "
                     + "at runtime with an explicit reachability check. If a file legitimately needs to be "
                     + "opt-in via [Ignore] (e.g. stress tests gated on a TestCategory filter), add it to "

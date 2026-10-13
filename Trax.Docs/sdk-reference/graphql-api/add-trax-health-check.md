@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddTraxHealthCheck
 description: Reference for AddTraxHealthCheck, an ASP.NET Core health check reporting queued work, running executions, recent failures and dead letters.
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 10
 ---
 
 # AddTraxHealthCheck

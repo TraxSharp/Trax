@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddJson
 description: Reference for AddJson, the effect that logs a tracked model's JSON whenever it changes between saves, without storing anything in the database.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 4
+nav_order: 6
 ---
 
 # AddJson

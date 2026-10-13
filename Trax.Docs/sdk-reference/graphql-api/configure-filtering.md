@@ -1,10 +1,11 @@
 ---
-layout: default
 title: ConfigureFiltering
 description: Reference for ConfigureFiltering and TraxFilterBuilder, which add opt-in filter operators such as case-insensitive string matching on query models.
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
-nav_order: 7
+nav_order: 8
 ---
 
 # ConfigureFiltering

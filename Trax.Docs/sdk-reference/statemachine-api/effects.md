@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Effects
 description: Reference for ISnapshotEffect, the side effect a state machine transition runs exactly once, its receipt, and cancelling or starting over.
+type: reference
+area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 7

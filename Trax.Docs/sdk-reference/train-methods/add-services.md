@@ -1,7 +1,8 @@
 ---
-layout: default
 title: AddServices
 description: Reference for AddServices, which stores up to seven DI services in Memory under their interface types for later junctions, including Moq proxy handling.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 6

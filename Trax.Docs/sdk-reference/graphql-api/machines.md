@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Machines root
 description: "Reference for the machines GraphQL root: each exposed state machine served as its own typed start, events, discard and get."
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
-nav_order: 13
+nav_order: 12
 ---
 
 # Machines root

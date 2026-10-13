@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Schedule / ScheduleAsync
 description: Reference for Schedule and ScheduleAsync, which upsert one recurring manifest by external id, with ScheduleOptions, manifest-level and group-level settings.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 3
+nav_order: 4
 ---
 
 # Schedule / ScheduleAsync

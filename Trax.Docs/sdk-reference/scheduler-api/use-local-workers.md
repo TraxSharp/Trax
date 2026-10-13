@@ -1,10 +1,11 @@
 ---
-layout: default
 title: ConfigureLocalWorkers
 description: Reference for ConfigureLocalWorkers, which tunes the built-in Postgres local worker pool that UsePostgres enables by default, with LocalWorkerOptions.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 2
+nav_order: 3
 ---
 
 # ConfigureLocalWorkers

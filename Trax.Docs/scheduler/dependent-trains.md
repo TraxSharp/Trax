@@ -1,8 +1,8 @@
 ---
-layout: default
 title: Dependent Trains
 description: "Dependent manifests that run when a parent succeeds: ThenInclude, Include and IncludeMany, the runtime API, cycle detection and dormant dependents."
-parent: Scheduling
+type: explanation
+area: scheduling
 nav_order: 5
 ---
 

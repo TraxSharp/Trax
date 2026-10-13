@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Administrative Trains
 description: The internal trains and polling services the scheduler registers to run the job lifecycle, the work queue, and why they are excluded from MaxActiveJobs.
-parent: Scheduling
-nav_order: 6
-has_children: true
+type: explanation
+area: scheduling
+nav_order: 2
 ---
 
 # Administrative Trains

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Resolve
 description: Reference for Resolve, which ends every chain by taking the train's return value from Memory, and its priority of exception, short-circuit value, then Memory.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 7

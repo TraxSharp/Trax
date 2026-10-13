@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Samples & Deployment
 description: Every Trax sample, the feature each one proves and the test that proves it, the trains-library and data-layer patterns, and the deployment models.
-nav_order: 10
-has_children: true
-section: Guides
+type: landing
+area: samples
+nav_order: 1
 ---
 
 # Samples & Deployment Patterns

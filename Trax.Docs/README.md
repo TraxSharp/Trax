@@ -14,7 +14,7 @@ decision records for the rules that span more than one folder of the [Trax repos
 
 | Path | What it holds |
 |---|---|
-| `*.md` and the section directories (`core/`, `effect/`, `mediator/`, `scheduler/`, `statemachine/`, `sdk-reference/`, `reference/`, ...) | The pages published at traxsharp.net/docs. A file at `effect/metadata.md` is served at `/docs/effect/metadata`. |
+| `*.md` and the section directories (`core/`, `effect/`, `mediator/`, `scheduler/`, `statemachine/`, `sdk-reference/`, `reference/`, `contributing/`, ...) | The pages published at traxsharp.net/docs. A file at `effect/metadata.md` is served at `/docs/effect/metadata`. |
 | `adr/` | Architecture decision records that bind more than one folder, indexed in [`adr/README.md`](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/README.md). Not published to the site. |
 | `tools/Trax.Adr.Guard` | The checker for ADR frontmatter, index tables and guard census. CI builds it from this folder in the same checkout and runs it over each folder's ADR corpus through the local composite action `.github/actions/adr-guard` at the repository root, so a guard change and the corpus it checks land in one pull request ([ADR 0042](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0042-trax-is-one-repository-and-releases-at-one-version.md)). |
 | `tests/Trax.Docs.Tests` | Lint for the pages: internal links resolve, no em dashes, no Jekyll syntax, SDK reference blocks are well formed. |

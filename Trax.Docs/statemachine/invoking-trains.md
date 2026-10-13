@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Invoking a train
 description: "A state that runs a train with Invokes: where each outcome goes, retry by re-entry, idempotent junctions, and pointers not data."
-parent: State Machines
-nav_order: 4
+type: explanation
+area: machines
+nav_order: 3
 ---
 
 # Invoking a train

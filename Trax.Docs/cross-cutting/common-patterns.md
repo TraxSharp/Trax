@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Common Patterns
 description: Common patterns for train-level and junction-level error handling with OnFailed, and for passing ASP.NET request cancellation tokens into junctions.
-parent: Cross-Cutting
-nav_order: 2
+type: how-to
+area: trains
+nav_order: 1
 ---
 
 # Common Patterns

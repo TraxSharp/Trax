@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Testing
 description: How to unit test junctions and trains, run integration tests on the InMemory provider, test cancellation and Blazor components, and choose a test data provider.
-parent: Cross-Cutting
-nav_order: 3
+type: how-to
+area: testing
+nav_order: 1
 ---
 
 # Testing
@@ -11,7 +11,7 @@ nav_order: 3
 The examples use NUnit. The assertions are NUnit's constraint model (`Assert.That`), which needs
 no extra package; Trax's own tests assert with AwesomeAssertions instead, an Apache-2.0 fork of
 FluentAssertions 7 that is free for commercial use (see
-[Test Conventions](/docs/reference/test-conventions)), and either works. A test project needs
+[Test Conventions](/docs/contributing/test-conventions)), and either works. A test project needs
 `Microsoft.NET.Test.Sdk`, `NUnit` and `NUnit3TestAdapter`, plus
 `Microsoft.AspNetCore.Mvc.Testing` to start a host, and a `ProjectReference` to the application.
 Every [project template](/docs/reference/templates) ships one set up this way under `tests/`.

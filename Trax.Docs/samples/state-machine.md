@@ -1,9 +1,9 @@
 ---
-layout: default
 title: State Machine
 description: "The StateMachine sample: two fluent machines started and moved by their events, a forward migration, an exactly-once charge and a server-owned total."
-parent: Samples & Deployment
-nav_order: 8
+type: explanation
+area: samples
+nav_order: 9
 ---
 
 # State Machine

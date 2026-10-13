@@ -1,9 +1,11 @@
 ---
-layout: default
 title: Cognito Issuer
 description: Reference for Trax.Api.Auth.Jwt.Cognito.Issuer, which mints Cognito-shaped access and ID tokens for local Cognito stand-ins and integration tests.
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 7
 ---
 
 # Cognito Issuer

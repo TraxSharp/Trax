@@ -1,7 +1,8 @@
 ---
-layout: default
 title: AddTraxGraphQLClient
 description: Reference for AddTraxGraphQLClient, which registers a GraphQL client for one endpoint, the services it adds and its defaults.
+type: reference
+area: api
 parent: GraphQL Client
 grand_parent: SDK Reference
 nav_order: 1

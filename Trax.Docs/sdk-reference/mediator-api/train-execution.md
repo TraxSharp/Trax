@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TrainExecution
 description: Reference for ITrainExecutionService, which queues or runs a train by name from a JSON input, with PrepareAsync, TrainInputReader and concurrency limits.
+type: reference
+area: mediator
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 4

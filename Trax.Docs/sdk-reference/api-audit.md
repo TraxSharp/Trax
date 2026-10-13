@@ -1,10 +1,11 @@
 ---
-layout: default
 title: API Audit
 description: "Index of the Trax.Api.GraphQL.Audit reference: AddAudit, TraxAuditEntry, TraxAuditOptions, ITraxAuditSink and ITraxAuditRedactor."
+type: landing
+area: security
 parent: SDK Reference
-nav_order: 8
 has_children: true
+nav_order: 9
 ---
 
 # API Audit

@@ -1,9 +1,9 @@
 ---
-layout: default
 title: GraphQL Client
 description: "Trax.Api.GraphQL.Client, the outbound GraphQL client for .NET: hand-written queries in four modes, checked against the server's schema at startup, no codegen."
-nav_order: 8
-section: Packages
+type: reference
+area: api
+nav_order: 1
 ---
 
 # GraphQL Client

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: ITrustedExecutionScope
 description: Reference for ITrustedExecutionScope, which marks an async flow as trusted infrastructure and switches off per-train authorization until disposed.
+type: reference
+area: security
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 7

@@ -1,9 +1,11 @@
 ---
-layout: default
 title: TraxAuditOptions
 description: Reference for TraxAuditOptions, the tunables of the GraphQL audit pipeline such as ChannelCapacity, BatchSize and FlushInterval, with tuning guidance.
+type: reference
+area: security
 parent: API Audit
 grand_parent: SDK Reference
+nav_order: 5
 ---
 
 # TraxAuditOptions

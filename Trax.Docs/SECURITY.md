@@ -1,5 +1,9 @@
 ---
+title: Security policy
 description: How to report a Trax vulnerability privately, which versions receive security fixes, and a summary of the supply-chain controls behind every release.
+type: reference
+area: security
+nav_order: 2
 ---
 
 # Security Policy

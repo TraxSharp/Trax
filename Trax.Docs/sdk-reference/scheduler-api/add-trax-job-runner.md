@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddTraxJobRunner
 description: Reference for AddTraxJobRunner, UseTraxJobRunner and UseTraxRunEndpoint, which set up a remote process that executes trains a scheduler dispatches to it.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 10
+nav_order: 12
 ---
 
 # AddTraxJobRunner

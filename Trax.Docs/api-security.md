@@ -1,9 +1,9 @@
 ---
-layout: default
 title: API Security
 description: "Securing a Trax GraphQL host: API-key, JWT bearer and OIDC authentication, subscription auth, per-train authorization, audit logging and generic error messages."
-nav_order: 10
-section: Guides
+type: how-to
+area: security
+nav_order: 1
 ---
 
 # API Security

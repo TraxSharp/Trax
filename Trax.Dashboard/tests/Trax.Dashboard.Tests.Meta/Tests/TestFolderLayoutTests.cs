@@ -3,7 +3,7 @@ namespace Trax.Dashboard.Tests.Meta.Tests;
 /// <summary>
 /// Test projects keep to the canonical folder layout.
 ///
-/// <para>Not ADR-enforcing: it pins a folder convention that was adopted rather than chosen; the layout is documented at reference/test-conventions and no alternative was weighed.</para>
+/// <para>Not ADR-enforcing: it pins a folder convention that was adopted rather than chosen; the layout is documented at contributing/test-conventions and no alternative was weighed.</para>
 /// </summary>
 [TestFixture]
 public class TestFolderLayoutTests

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: DeclaredChain
 description: Reference for DeclaredChain, ChainRecorder and ChainVerification.Verify, which read and check a train's declared chain without running any junction.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 9

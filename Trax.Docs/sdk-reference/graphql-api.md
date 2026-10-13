@@ -1,10 +1,11 @@
 ---
-layout: default
 title: GraphQL API
 description: "Index of the Trax GraphQL API reference: the HotChocolate endpoint's queries, mutations and subscriptions, the Nitro IDE, and the package that ships them."
+type: landing
+area: api
 parent: SDK Reference
-nav_order: 8
 has_children: true
+nav_order: 10
 ---
 
 # GraphQL API

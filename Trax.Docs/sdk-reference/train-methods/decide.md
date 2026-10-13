@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Decide
 description: Reference for Decide, which asks a decider several typed questions about one value in Memory in a single call and stores each answer as a typed decision.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 10

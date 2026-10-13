@@ -1,8 +1,8 @@
 ---
-layout: default
 title: Setup
 description: "Setting up Trax.Scheduler: AddScheduler with a data provider, the default job submitter, local worker options and defining and scheduling your first train."
-parent: Scheduling
+type: how-to
+area: scheduling
 nav_order: 1
 ---
 

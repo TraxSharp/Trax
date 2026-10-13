@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TraxRemote
 description: Reference for TraxRemote, which sends a train's queued runs to a remote worker, and the order in which the scheduler picks a train's job submitter.
+type: reference
+area: scheduling
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 4

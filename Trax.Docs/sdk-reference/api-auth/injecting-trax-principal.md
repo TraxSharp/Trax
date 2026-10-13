@@ -1,9 +1,11 @@
 ---
-layout: default
 title: Injecting TraxPrincipal
 description: How to inject the current request's TraxPrincipal into junctions and services, handle resolver failures, and write junctions that also run from the scheduler.
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 8
 ---
 
 # Injecting TraxPrincipal

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: ISqlDialect
 description: Reference for ISqlDialect, which holds the SQL that differs between the Postgres and SQLite providers, including row-count estimates and transient errors.
+type: reference
+area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 16
+nav_order: 19
 ---
 
 # ISqlDialect

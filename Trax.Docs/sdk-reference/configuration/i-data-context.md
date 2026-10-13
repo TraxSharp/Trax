@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IDataContext
 description: "Reference for IDataContext, Trax's EF Core context over the trax tables: its tables and members, how to get one, and committing writes with an enqueue."
+type: reference
+area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 18
+nav_order: 21
 ---
 
 # IDataContext

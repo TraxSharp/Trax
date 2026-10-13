@@ -1,10 +1,10 @@
 ---
-layout: default
 title: DI Registration
 description: Overview of the Trax DI registration helpers that add Inject property injection on top of AddScoped, AddTransient and AddSingleton for trains and junctions.
-parent: Cross-Cutting
-nav_order: 6
-has_children: true
+type: landing
+area: trains
+section: Reference
+nav_order: 1
 ---
 
 # DI Registration

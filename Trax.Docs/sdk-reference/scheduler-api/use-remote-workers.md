@@ -1,10 +1,11 @@
 ---
-layout: default
 title: UseRemoteWorkers
 description: Reference for UseRemoteWorkers, which routes chosen trains' queued runs to a remote HTTP endpoint, with signing, retries, routing and precedence.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 9
+nav_order: 10
 ---
 
 # UseRemoteWorkers

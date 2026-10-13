@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Inject
 description: Reference for the Inject attribute, which fills a public property from the container when a train is resolved through a Trax registration helper.
+type: reference
+area: trains
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 5

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddJunctionEvents
 description: Reference for AddJunctionEvents, which publishes each step of a run live and records it in trax.junction_run, with IJunctionEventHandler and ForRun.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 24
+nav_order: 27
 ---
 
 # AddJunctionEvents

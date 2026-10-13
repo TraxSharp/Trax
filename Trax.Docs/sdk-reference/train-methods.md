@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Train Methods
 description: "Index of the methods on Train for composing junctions inside Junctions(): Chain, ShortCircuit, Extract, AddServices, Resolve, Run and DeclaredChain."
+type: landing
+area: trains
 parent: SDK Reference
-nav_order: 1
 has_children: true
+nav_order: 3
 ---
 
 # Train Methods

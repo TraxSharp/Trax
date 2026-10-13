@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Broadcaster Sinks
 description: The train event broadcaster's transports and sinks, data-change signals, pairing RabbitMQ with a sink, and SignalR vs GraphQL subscriptions.
-parent: Effect
-nav_order: 6
+type: explanation
+area: effects
+nav_order: 3
 ---
 
 # Broadcaster Sinks

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IOperationsService
 description: "Reference for IOperationsService, the operations the dashboard and the GraphQL operations namespace share: queueing, running, batch actions and read models."
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 14
+nav_order: 20
 ---
 
 # IOperationsService

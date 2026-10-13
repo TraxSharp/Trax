@@ -1,9 +1,11 @@
 ---
-layout: default
 title: Test Conventions
 description: "Trax test conventions: folder layout, fixtures, naming, assertions, coverage, determinism, skipping, and red tests written before their code."
-parent: Reference
-nav_order: 12
+type: reference
+area: contributing
+nav_order: 3
+redirect_from:
+  - /docs/reference/test-conventions
 ---
 
 # Test Conventions
@@ -59,7 +61,7 @@ A statement that has to hold for every input (ids are unique, the same graph ser
 same text) is tested over generated cases with [CsCheck](https://www.nuget.org/packages/CsCheck),
 not over a few hand-picked ones:
 
-```csharp
+```csharp fragment
 Keys.Sample(keys => Number(keys).Should().OnlyHaveUniqueItems());
 ```
 
@@ -88,7 +90,7 @@ A test that passes locally and fails sometimes in CI is a defect. Synchronise on
 condition that means the work finished, with a generous timeout as a ceiling, and assert the
 wait succeeded:
 
-```csharp
+```csharp fragment
 var ok = await WaitUntilAsync(() => result == expected, TimeSpan.FromSeconds(15));
 ok.Should().BeTrue("the service should produce the expected result");
 ```
@@ -103,7 +105,7 @@ can delay what the test is waiting for to something shorter than the test's own 
 a stall is reported as the error that caused it rather than as a cancellation with only the
 test helper in the stack:
 
-```csharp
+```csharp fragment
 jwt.UseAuthority(jwks.Issuer, Audience)
     .AllowHttpMetadata()
     // The receive below allows 10s; the JwtBearer backchannel default is 60s.

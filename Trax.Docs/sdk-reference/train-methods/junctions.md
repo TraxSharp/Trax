@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Junctions
 description: Reference for the Junctions() override that declares a train's route, with examples using Chain, ShortCircuit, Extract and AddServices.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 0

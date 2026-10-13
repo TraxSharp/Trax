@@ -1,7 +1,8 @@
 ---
-layout: default
 title: MonadTask
 description: Reference for MonadTask, the awaitable struct each chain step returns so Chain, IChain and ShortCircuit calls continue fluently across async junctions.
+type: reference
+area: trains
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 6

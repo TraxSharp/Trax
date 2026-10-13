@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Switch
 description: Reference for Switch, which sends the train down one of several declared tracks, one per enum member, chosen by a decision.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 11

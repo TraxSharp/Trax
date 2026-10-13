@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Scheduling Helpers
 description: Reference for the Every and Cron schedule factories, the Schedule record, the ScheduleType, MisfirePolicy and ExclusionType enums, and ManifestOptions.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 7
+nav_order: 8
 ---
 
 # Scheduling Helpers

@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Architecture
 description: "How Trax.Effect works inside: the ServiceTrain lifecycle, EffectRunner, canonical train naming, the effect provider interfaces and the DataContext data layer."
-parent: Effect
-nav_order: 3
+type: explanation
+area: effects
+nav_order: 2
 ---
 
 # Effect Architecture

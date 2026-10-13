@@ -1,9 +1,11 @@
 ---
-layout: default
 title: AddTraxJwtDispatcher
 description: Reference for AddTraxJwtDispatcher, which routes a Bearer token to the JWT scheme matching its iss claim so one endpoint accepts several identity providers.
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 3
 ---
 
 # AddTraxJwtDispatcher

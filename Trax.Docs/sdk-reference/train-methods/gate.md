@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Gate
 description: Reference for Gate, which routes on the probability that a yes/no answer is yes, to a Yes, No or Unsure track.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 12

@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Junction Registration
 description: The AddTraxJunction registration methods, aliases of the train registration methods with the same Inject property injection, and when a junction needs one.
-parent: DI Registration
-grand_parent: Cross-Cutting
-nav_order: 2
+type: reference
+area: trains
+nav_order: 7
 ---
 
 # Junction Registration

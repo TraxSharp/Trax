@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Runtime integrity
 description: "The runtime checks that catch drift between the C# state machine and its TypeScript twin: schema-hash handshake, divergence detection and startup self-check."
+type: reference
+area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 10

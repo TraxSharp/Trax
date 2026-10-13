@@ -1,10 +1,11 @@
 ---
-layout: default
 title: SaveTrainParameters
 description: Reference for SaveTrainParameters, which stores train inputs and outputs as JSON on Metadata, and the ParameterEffectConfiguration that bounds and masks them.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 5
+nav_order: 7
 ---
 
 # SaveTrainParameters
