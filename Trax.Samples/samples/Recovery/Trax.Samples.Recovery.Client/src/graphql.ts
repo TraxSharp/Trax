@@ -51,3 +51,20 @@ export const WORK_QUEUE_ENTRY = document("WorkQueueEntry");
 // rebuilds from each node's parentId and track: a query that followed nested tracks could go only
 // as deep as the server's field-cycle limit allows.
 export const RUN_GRAPH = document("RunGraph");
+
+// ── The food order ──────────────────────────────────────────────────────────
+// Arms what goes wrong with the next order placed (Trains/OrderDemo/OrderTroubleTrain.cs).
+export const ORDER_TROUBLE = document("OrderTrouble");
+
+// The order machine's own operations, machines { order { start addItem placeOrder discard } }: the server mints the
+// order's id on start, prices the cart, and applies every transition.
+export const ORDER_START = document("OrderStart");
+export const ORDER_ADD_ITEM = document("OrderAddItem");
+export const ORDER_PLACE = document("OrderPlace");
+export const ORDER_DISCARD = document("OrderDiscard");
+
+// The run the order's Ordered state queued: the first DeliverOrderTrain run since the order was placed.
+export const DELIVERY_RUNS = document("DeliveryRuns");
+
+// The calls the restaurant's tablet received: the inside of SendToRestaurant, where the tablet is tried again.
+export const TABLET_CALLS = document("TabletCalls");

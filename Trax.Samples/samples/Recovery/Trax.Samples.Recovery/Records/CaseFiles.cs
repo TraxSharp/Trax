@@ -3,14 +3,13 @@ using System.Collections.Concurrent;
 namespace Trax.Samples.Recovery.Records;
 
 /// <summary>
-/// The data a run reads besides its input: the refund's order and the research brief's audience.
+/// The data a refund run reads besides its input: the order.
 /// Stands in for a database. The "change the data during the backoff" control edits it, so the retry
 /// reads a different state from the one the first attempt's decisions were made about.
 /// </summary>
 public sealed class CaseFiles
 {
     private readonly ConcurrentDictionary<string, Order> _orders = new();
-    private readonly ConcurrentDictionary<string, string> _audiences = new();
 
     /// <summary>The orders a refund run can be started for.</summary>
     public static readonly IReadOnlyDictionary<string, Order> Catalog = new Dictionary<
@@ -31,22 +30,14 @@ public sealed class CaseFiles
         _orders[runId] = order;
     }
 
-    /// <summary>Opens the case file of a new research run.</summary>
-    public void OpenResearch(string runId) => _audiences[runId] = "engineers";
-
     public Order OrderFor(string runId) =>
         _orders.TryGetValue(runId, out var order)
             ? order
             : throw new InvalidOperationException($"Run {runId} has no order on file.");
 
-    public string AudienceFor(string runId) =>
-        _audiences.TryGetValue(runId, out var audience)
-            ? audience
-            : throw new InvalidOperationException($"Run {runId} has no audience on file.");
-
     /// <summary>
-    /// Changes what the run will read next: the customer files another refund, or the research is
-    /// now for executives. Returns a sentence saying what changed.
+    /// Changes what the run will read next: the customer files another refund. Returns a sentence
+    /// saying what changed.
     /// </summary>
     public string Change(string runId)
     {
@@ -54,12 +45,6 @@ public sealed class CaseFiles
         {
             _orders[runId] = order with { PriorRefunds = order.PriorRefunds + 1 };
             return $"Order {order.OrderId} now shows {order.PriorRefunds + 1} earlier refund(s).";
-        }
-
-        if (_audiences.ContainsKey(runId))
-        {
-            _audiences[runId] = "executives";
-            return "The research is now for executives.";
         }
 
         throw new InvalidOperationException($"Run {runId} has no case file.");

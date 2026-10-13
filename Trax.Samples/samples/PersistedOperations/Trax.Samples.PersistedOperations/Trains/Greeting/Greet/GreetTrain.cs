@@ -7,7 +7,7 @@ namespace Trax.Samples.PersistedOperations.Trains.Greeting.Greet;
 
 /// <summary>
 /// Trivial query train that produces a greeting for a name. Exposed as
-/// <c>discover { greeting { greet(input: { name: ... }) { ... } } }</c>.
+/// <c>discover { greeting { greet(input: { name: ..., style: ... }) { greeting } } }</c>.
 /// The persisted-operation manifest binds an id (e.g. <c>greet_v1</c>) to
 /// a GraphQL document that calls this train.
 /// </summary>

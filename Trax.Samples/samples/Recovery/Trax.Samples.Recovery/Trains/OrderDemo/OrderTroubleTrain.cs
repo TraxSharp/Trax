@@ -10,7 +10,7 @@ namespace Trax.Samples.Recovery.Trains.OrderDemo;
 public interface IOrderTroubleTrain : IServiceTrain<OrderTroubleInput, OrderTroubleOutput>;
 
 /// <summary>
-/// The demo's control for the <c>order</c> machine, as "crash once" is the research run's: what goes wrong with the
+/// The demo's control for the <c>order</c> machine, as "crash" is the refund run's: what goes wrong with the
 /// next order placed. The order's run id is built by the machine when the order is placed, so the trouble is armed
 /// for the next order rather than for a run, and that order's first step claims it.
 /// </summary>

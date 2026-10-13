@@ -5,14 +5,15 @@
 //
 // Each run is driven the way the sample's page drives it, over the same GraphQL operations, and everything the
 // page would receive is written down with the time it arrived: the manifest's attempts, every junction event,
-// each attempt's stored steps and its decision journal. One file per run lands in out/recovery/<key>.json. --copy-to also
+// each attempt's stored steps and its decision journal, with each question as asked and each answer as given. One file per run lands in out/recovery/<key>.json. --copy-to also
 // writes every run in out/recovery/ as one compact file, <dir>/recovery-recordings.json, with the two trains' source, which
 // is how the website's copy is refreshed (--copy-to ../../../Trax.Website/src/data). --copy-only skips recording.
 //
 // node recovery.mjs <part-of-a-key> records only the runs whose key contains it.
 //
-// A run that forks (the user asks afresh or changes the data during the backoff, or asks afresh once the run is
-// over) is recorded once per fork. Each recording marks where it forked, so the player can switch from one to
+// Each order is recorded clean, crashing while it pays (before the checkpoint), and crashing while it emails (after
+// it). A run that forks (the user asks afresh or changes the data during the backoff, or asks afresh once the run is
+// over) is recorded once per fork; a crash while emailing retries from the checkpoint, so it has no backoff fork. Each recording marks where it forked, so the player can switch from one to
 // another at that point.
 
 import { createClient } from "graphql-ws";
@@ -40,7 +41,8 @@ const ops = {
   execution: `query ($id: Long!) { operations { execution(id: $id) { ${ROW} } } }`,
   junctionRuns: `query ($metadataId: Long!) { operations { junctionRuns(metadataId: $metadataId) { ${STEP} } } }`,
   journal: `query ($metadataId: Long!) { discover { decisionJournal(input: { metadataId: $metadataId }) {
-    replayDecisionsOf replayAbandoned decisions { questionKey occurrence replayed replayRefused model stateHash } } } }`,
+    replayDecisionsOf replayAbandoned decisions { questionKey occurrence replayed replayRefused model decider stateHash
+      question answer } } } }`,
   triggerAskAfresh: `mutation ($externalId: String!) { operations { triggerManifest(externalId: $externalId, askAfresh: true) {
     success message } } }`,
   requeue: `mutation ($id: Long!) { operations { requeueExecution(id: $id, askAfresh: true) { success message id } } }`,
@@ -48,21 +50,18 @@ const ops = {
   onJunctionEvent: `subscription ($metadataId: Long!) { onJunctionEvent(metadataId: $metadataId) { junction { ${STEP} } } }`,
 };
 
-const TOPICS = { papers: "What the papers say about cold-weather battery wear", wiki: "History of the telegraph" };
 const ORDERS = ["A-1001", "A-1002", "A-1003"];
 const FORKS = ["none", "askAfresh", "changeData"];
 
-/** Every run the player can show: each subject, clean or crashing, and each fork a crashing run can take. */
+/** Every run the player can show: each order clean, crashing while paying with each fork, and crashing while emailing. */
 function plans() {
   const all = [];
-  const subjects = [
-    ...Object.entries(TOPICS).map(([key, topic]) => ({ key: `research-${key}`, input: { scenario: "RESEARCH", topic } })),
-    ...ORDERS.map((orderId) => ({ key: `refund-${orderId}`, input: { scenario: "REFUND", orderId } })),
-  ];
-  for (const s of subjects) {
-    all.push({ key: `${s.key}-clean`, input: { ...s.input, crashOnce: false }, fork: "none" });
+  for (const orderId of ORDERS) {
+    const input = { scenario: "REFUND", orderId };
+    all.push({ key: `refund-${orderId}-clean`, input: { ...input, crashOnce: false }, fork: "none" });
     for (const fork of FORKS)
-      all.push({ key: `${s.key}-crash-${fork}`, input: { ...s.input, crashOnce: true }, fork });
+      all.push({ key: `refund-${orderId}-pay-${fork}`, input: { ...input, crashOnce: true, crashWhile: "PAYING" }, fork });
+    all.push({ key: `refund-${orderId}-email`, input: { ...input, crashOnce: true, crashWhile: "EMAILING" }, fork: "none" });
   }
   return all;
 }
@@ -202,7 +201,6 @@ async function record(plan, ws) {
 }
 
 const SOURCES = {
-  RESEARCH: "Trains/Research/ResearchTopicTrain.cs",
   REFUND: "Trains/Refund/ApproveRefundTrain.cs",
 };
 
@@ -259,7 +257,17 @@ function compact(recording) {
             replayDecisionsOf: id(e.journal.replayDecisionsOf),
             replayAbandoned: e.journal.replayAbandoned,
             decisions: e.journal.decisions.map((d) =>
-              prune({ questionKey: d.questionKey, replayed: d.replayed, replayRefused: d.replayRefused, model: d.model, stateHash: d.stateHash }),
+              prune({
+                questionKey: d.questionKey,
+                replayed: d.replayed,
+                replayRefused: d.replayRefused,
+                model: d.model,
+                decider: d.decider,
+                stateHash: d.stateHash,
+                // The question as Trax asked it and the answer the run acted on, as the page's model panel shows them.
+                question: d.question ? JSON.parse(d.question) : null,
+                answer: d.answer ? JSON.parse(d.answer) : null,
+              }),
             ),
           }),
         };
@@ -269,8 +277,8 @@ function compact(recording) {
         return { t, type, ...e };
     }
   });
-  const { scenario, topic, orderId, crashOnce } = recording.input;
-  return prune({ key: recording.key, scenario, topic, orderId, crashOnce, fork: recording.fork, events });
+  const { scenario, orderId, crashOnce, crashWhile } = recording.input;
+  return prune({ key: recording.key, scenario, orderId, crashOnce, crashWhile, fork: recording.fork, events });
 }
 
 function writeWebsiteCopy(dir) {

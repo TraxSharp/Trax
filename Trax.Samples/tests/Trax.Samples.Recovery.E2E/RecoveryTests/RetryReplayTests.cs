@@ -4,18 +4,18 @@ using Trax.Samples.Shared.Testing;
 namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 
 /// <summary>
-/// A run whose last step crashes once recovers on the manifest's automatic retry without asking the
-/// model again. The research run declares a checkpoint after its Scale step, so its retry resumes
-/// there and writes only the report; the refund run declares none, so its retry runs the chain again
-/// and replays the first attempt's decision.
+/// A refund run that crashes once recovers on the manifest's automatic retry without asking the model
+/// again. Crashed while it pays, before its checkpoint, the retry runs the chain again and replays both
+/// of the first attempt's answers. Crashed while it emails, after the checkpoint, the retry starts from
+/// the stored outcome and runs only the email.
 /// </summary>
 [TestFixture]
 public class RetryReplayTests : RecoveryTestFixture
 {
     [Test]
-    public async Task ResearchRun_CrashedOnce_CompletesOnAttempt2_WithoutAskingTheModelAgain()
+    public async Task RefundRun_CrashedWhileEmailing_RetryStartsFromTheCheckpoint()
     {
-        await Run.StartAsync("RESEARCH", crashOnce: true);
+        await Run.StartAsync("REFUND", crashOnce: true, orderId: "A-1001", crashWhile: "EMAILING");
 
         var first = await Run.FollowAttemptAsync(1);
         (await Run.WaitForEndAsync(first)).Should().Be("FAILED");
@@ -23,38 +23,27 @@ public class RetryReplayTests : RecoveryTestFixture
         (await Run.WaitForEndAsync(second)).Should().Be("COMPLETED");
 
         // The model was asked each question once, across both attempts.
-        Decider.Asked(Run.RunId, "Source").Should().Be(1);
-        Decider.Asked(Run.RunId, "Depth").Should().Be(1);
+        Decider.Asked(Run.RunId, "Problem").Should().Be(1);
+        Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
 
         var attempt1 = await Run.TimelineAsync(first);
         var attempt2 = await Run.TimelineAsync(second);
-
         attempt1.Should().OnlyContain(s => Attempt(s) == 1);
         attempt2.Should().OnlyContain(s => Attempt(s) == 2);
 
-        // Attempt 1 asked both questions, checkpointed its checked findings and failed writing the
-        // report.
+        // Attempt 1 asked both questions, paid, checkpointed the outcome and failed emailing.
         Questions(attempt1).Should().HaveCount(2);
-        Questions(attempt1).Should().OnlyContain(q => !q.GetProperty("replayed").GetBoolean());
-        Names(attempt1).Should().Contain("FetchFullTexts");
-        attempt1.Last().GetProperty("name").GetString().Should().Be("Summarize");
-        attempt1
-            .Last()
-            .GetProperty("state")
-            .GetString()
-            .Should()
-            .Be("FAILED", "the armed crash fires in the report step");
+        Names(attempt1).Should().Contain("IssuePayment");
+        attempt1.Last().GetProperty("name").GetString().Should().Be("NotifyCustomer");
+        attempt1.Last().GetProperty("state").GetString().Should().Be("FAILED");
 
-        // Attempt 2 resumed after the checkpoint: both questions and every search and fetch came
-        // before it, so it ran only the report step, from the stored findings.
+        // Attempt 2 started from the checkpoint: it paid nothing again and asked nothing.
         Names(attempt2)
             .Should()
             .Equal(
-                ["Summarize"],
+                ["NotifyCustomer"],
                 "a manifest's retry resumes after the failed run's latest checkpoint"
             );
-        Names(Run.LiveSteps(second)).Should().OnlyContain(n => n == "Summarize");
-
         var journal = await Run.JournalAsync(second);
         journal
             .GetProperty("decisions")
@@ -74,6 +63,7 @@ public class RetryReplayTests : RecoveryTestFixture
         var second = await Run.FollowAttemptAsync(2);
         (await Run.WaitForEndAsync(second)).Should().Be("COMPLETED");
 
+        Decider.Asked(Run.RunId, "Problem").Should().Be(1);
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
 
         var attempt1 = await Run.TimelineAsync(first);
@@ -83,15 +73,15 @@ public class RetryReplayTests : RecoveryTestFixture
         var attempt2 = await Run.TimelineAsync(second);
         Questions(attempt2)
             .Should()
-            .ContainSingle()
-            .Which.GetProperty("replayed")
-            .GetBoolean()
-            .Should()
-            .BeTrue();
+            .HaveCount(2)
+            .And.OnlyContain(q => q.GetProperty("replayed").GetBoolean());
         Names(attempt2)
             .Should()
             .Equal(
                 "LoadRefundCase",
+                "Problem",
+                "Problem",
+                "RequestPhotos",
                 "ApproveRefund",
                 "ApproveRefund",
                 "IssuePayment",
@@ -108,10 +98,11 @@ public class RetryReplayTests : RecoveryTestFixture
             .StartWith("k1:");
     }
 
-    [TestCase("A-1002", "QueueForReview", "QueuedForReview")]
-    [TestCase("A-1003", "DeclineRefund", "Declined")]
-    public async Task RefundRun_OnAnotherTrack_CrashesOnce_AndTheRetryReplaysTheDecision(
+    [TestCase("A-1002", "TraceParcel", "QueueForReview", "QueuedForReview")]
+    [TestCase("A-1003", "CheckReturnWindow", "DeclineRefund", "Declined")]
+    public async Task RefundRun_OnOtherTracks_CrashesOnce_AndTheRetryReplaysTheDecisions(
         string orderId,
+        string check,
         string track,
         string status
     )
@@ -123,6 +114,7 @@ public class RetryReplayTests : RecoveryTestFixture
         var second = await Run.FollowAttemptAsync(2);
         (await Run.WaitForEndAsync(second)).Should().Be("COMPLETED");
 
+        Decider.Asked(Run.RunId, "Problem").Should().Be(1);
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
 
         var attempt1 = await Run.TimelineAsync(first);
@@ -132,14 +124,20 @@ public class RetryReplayTests : RecoveryTestFixture
         var attempt2 = await Run.TimelineAsync(second);
         Questions(attempt2)
             .Should()
-            .ContainSingle()
-            .Which.GetProperty("replayed")
-            .GetBoolean()
-            .Should()
-            .BeTrue();
+            .HaveCount(2)
+            .And.OnlyContain(q => q.GetProperty("replayed").GetBoolean());
         Names(attempt2)
             .Should()
-            .Equal("LoadRefundCase", "ApproveRefund", "ApproveRefund", track, "NotifyCustomer");
+            .Equal(
+                "LoadRefundCase",
+                "Problem",
+                "Problem",
+                check,
+                "ApproveRefund",
+                "ApproveRefund",
+                track,
+                "NotifyCustomer"
+            );
 
         var detail = await GraphQL.SendAsync(
             $$"""{ operations { executionDetail(id: {{second}}) { output } } }""",
@@ -177,6 +175,7 @@ public class RetryReplayTests : RecoveryTestFixture
         disabled.Should().BeTrue("a once manifest disables itself after its run succeeds");
         (await Run.ExecutionIdsAsync()).Should().Equal(first);
 
+        Decider.Asked(Run.RunId, "Problem").Should().Be(1);
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(1);
         var timeline = await Run.TimelineAsync(first);
         timeline.Should().OnlyContain(s => Attempt(s) == 1);

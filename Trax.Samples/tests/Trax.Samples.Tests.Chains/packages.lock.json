@@ -1003,8 +1003,6 @@
       "trax.samples.persistedoperations": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Trax.Effect": "[1.99.99, )",
           "Trax.Effect.Data": "[1.99.99, )",
           "Trax.Effect.Data.Postgres": "[1.99.99, )",

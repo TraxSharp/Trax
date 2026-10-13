@@ -2,8 +2,8 @@
 // Trax Recovery: watch a train recover from a crash without asking the model again
 //
 // One process: GraphQL API + scheduler + local workers + dashboard, on Postgres.
-// Three scenario trains ask a decider (a stand-in model by default) and then crash on a later step;
-// the topic map runs three signals side by side and crashes one of the branches.
+// The refund train asks a decider (a stand-in model by default) twice and can crash before or after its
+// checkpoint; the topic map runs three signals side by side and crashes one of the branches.
 // The manifest's automatic retry replays the recorded decisions instead of asking again, and every
 // junction, question and track is published live as a junction event.
 //

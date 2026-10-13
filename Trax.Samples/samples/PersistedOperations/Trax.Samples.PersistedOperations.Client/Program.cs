@@ -1,22 +1,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Trax Persisted Operations sample — Client
 //
-// 1. Reads the manifest of (id, document) pairs.
-// 2. Uploads each through the uploadPersistedOperation GraphQL mutation.
-// 3. Sends GraphQL requests by id only — the server resolves to the stored
-//    document and dispatches the call to the underlying train.
-// 4. Demonstrates the hot-fix flow by re-uploading a shape-preserving
-//    edit; the next request runs the new document without redeploying the
-//    client.
-// 5. Shows the shape-diff guardrail refusing an edit that would change the
-//    response shipped clients read.
+// Three stories, in order:
 //
-// Notes:
-// - The client no longer touches the database. All admin actions go through
-//   the GraphQL mutations exposed by the server's persisted-operations
-//   subsystem. The same mutations are what the Trax dashboard calls.
-// - Run after starting Trax.Samples.PersistedOperations.Api with `dotnet run`, which
-//   starts it in Development on http://localhost:5240.
+//   1. A shipped app calls the API by id. It sends greet_v1 and a name, never
+//      a query, and an inline query is refused.
+//   2. Fix it without shipping a new app. The operator re-uploads greet_v1
+//      with style FORMAL; the same call now answers "Good day, Alice."
+//   3. A fix that would break shipped apps is refused. An upload that renames
+//      the field the app reads fails the shape-diff guardrail, and greet_v1
+//      keeps its answer.
+//
+// Run after starting Trax.Samples.PersistedOperations.Api with `dotnet run`,
+// which starts it in Development on http://localhost:5240.
 // ─────────────────────────────────────────────────────────────────────────────
 
 using System.Net.Http.Json;
@@ -24,71 +20,57 @@ using System.Text.Json;
 
 const string ApiUrl = "http://localhost:5240/trax/graphql/";
 
-using var http = new HttpClient { BaseAddress = new Uri(ApiUrl) };
+const string FormalFix =
+    "query Greet($name: String!) { discover { greeting { greet(input: { name: $name, style: FORMAL }) { greeting } } } }";
 
-// The upload mutation requires the Operator role. This demo key is registered by the API only in
-// Development; against any other environment the upload is refused.
-http.DefaultRequestHeaders.Add("X-Api-Key", "operator-key-do-not-use-in-production");
+const string RenamedField =
+    "query Greet($name: String!) { discover { greeting { greet(input: { name: $name, style: FORMAL }) { message: greeting } } } }";
+
+// The app sends no credential. The operator's uploads carry the demo key, which the API registers
+// only in Development; against any other environment the uploads are refused.
+using var app = new HttpClient { BaseAddress = new Uri(ApiUrl) };
+using var operatorHttp = new HttpClient { BaseAddress = new Uri(ApiUrl) };
+operatorHttp.DefaultRequestHeaders.Add("X-Api-Key", "operator-key-do-not-use-in-production");
 
 try
 {
-    // 1. Upload the manifest via the mutation.
+    // Upload the manifest. On a re-run this puts greet_v1 back to CASUAL: the response shape is
+    // the same, so the guardrail accepts it like any other fix.
     foreach (var op in LoadManifest())
     {
-        await UploadAsync(http, op.Id, op.Document);
+        await UploadAsync(operatorHttp, op.Id, op.Document);
         Console.WriteLine($"Uploaded {op.Id}");
     }
 
-    // 2. Call greet_v1 by id.
-    Console.WriteLine("\n--- greet_v1 (Alice) ---");
-    Console.WriteLine(
-        await PostByIdAsync(http, "greet_v1", new { input = new { name = "Alice" } })
-    );
+    // 1. The app calls by id.
+    Console.WriteLine("\n1. The app calls greet_v1 for Alice");
+    Expect(await GreetAsync(app), "Hey Alice!");
 
-    // 3. Call lookupUser_v1 by id.
-    Console.WriteLine("\n--- lookupUser_v1 (user-42) ---");
-    Console.WriteLine(
-        await PostByIdAsync(http, "lookupUser_v1", new { input = new { userId = "user-42" } })
+    var inline = await app.PostAsJsonAsync(
+        string.Empty,
+        new
+        {
+            query = "query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }",
+        }
     );
+    var inlineBody = await inline.Content.ReadAsStringAsync();
+    if (!inlineBody.Contains("PERSISTED_OPERATION_REQUIRED", StringComparison.Ordinal))
+        throw new InvalidOperationException($"The server ran an inline query: {inlineBody}");
+    Console.WriteLine($"   An inline query is refused: {inlineBody}");
 
-    // 4. Hot-fix demo: rewrite greet_v1 without touching the client. Swapping
-    //    the order of the two fields keeps the response shape (same fields, same
-    //    types), so the shape-diff guardrail accepts it with no bypass, and the
-    //    next request by the same id runs the new document: the keys come back in
-    //    the new order. Each run of this client leaves greet_v1 hot-fixed, and the
-    //    manifest upload in step 1 restores the original order on the next run.
-    await UploadAsync(
-        http,
-        "greet_v1",
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greetedAt greeting } } } }",
-        description: "demo hot-fix (fields reordered, same shape)"
-    );
-    Console.WriteLine("\nHot-fixed greet_v1 (no client redeploy needed).");
+    // 2. The operator fixes greet_v1; the app does not change.
+    await UploadAsync(operatorHttp, "greet_v1", FormalFix);
+    Console.WriteLine("\n2. The operator re-uploads greet_v1 with style FORMAL");
+    Expect(await GreetAsync(app), "Good day, Alice.");
 
-    Console.WriteLine("\n--- greet_v1 after hot-fix (Alice) ---");
-    var afterHotFix = await PostByIdAsync(http, "greet_v1", new { input = new { name = "Alice" } });
-    Console.WriteLine(afterHotFix);
-    if (!afterHotFix.Contains("{\"greetedAt\":", StringComparison.Ordinal))
-        throw new InvalidOperationException(
-            "Hot-fix did not take effect: greetedAt is not the first key. The server kept serving "
-                + "the previously compiled document for greet_v1."
-        );
-    Console.WriteLine("Hot-fix verified: the server ran the new document.");
-
-    // 5. The guardrail: an edit that changes the response shape (here, an extra
-    //    field) would break clients already shipped against greet_v1, so the
-    //    server refuses it unless the operator passes bypassShapeDiff.
-    var refusal = await TryUploadAsync(
-        http,
-        "greet_v1",
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt __typename } } } }"
-    );
-    Console.WriteLine($"\nShape-changing edit refused: {refusal}");
+    // 3. An upload that renames the field the app reads is refused.
+    var refusal = await TryUploadAsync(operatorHttp, "greet_v1", RenamedField);
     if (refusal is null)
         throw new InvalidOperationException(
-            "The server accepted a shape-changing edit to greet_v1: the shape-diff guardrail did "
-                + "not refuse it."
+            "The server accepted an upload that renames the field the app reads."
         );
+    Console.WriteLine($"\n3. Renaming greeting to message is refused: {refusal}");
+    Expect(await GreetAsync(app), "Good day, Alice.");
 }
 catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
 {
@@ -100,34 +82,43 @@ catch (Exception ex) when (ex is InvalidOperationException or HttpRequestExcepti
 
 return 0;
 
-static async Task<string> PostByIdAsync(HttpClient http, string id, object variables)
+// The call the shipped app makes: an id and its variables, nothing else.
+static async Task<string> GreetAsync(HttpClient app)
 {
-    var body = new { id, variables };
-    var resp = await http.PostAsJsonAsync(string.Empty, body);
-    return await resp.Content.ReadAsStringAsync();
+    var resp = await app.PostAsJsonAsync(
+        string.Empty,
+        new { id = "greet_v1", variables = new { name = "Alice" } }
+    );
+    var raw = await resp.Content.ReadAsStringAsync();
+    using var doc = JsonDocument.Parse(raw);
+    return
+        doc.RootElement.TryGetProperty("data", out var data)
+        && data.ValueKind == JsonValueKind.Object
+        ? data.GetProperty("discover")
+            .GetProperty("greeting")
+            .GetProperty("greet")
+            .GetProperty("greeting")
+            .GetString()
+            ?? raw
+        : raw;
 }
 
-static async Task UploadAsync(
-    HttpClient http,
-    string id,
-    string document,
-    string? description = null,
-    bool bypassShapeDiff = false
-)
+static void Expect(string actual, string expected)
 {
-    var error = await TryUploadAsync(http, id, document, description, bypassShapeDiff);
+    Console.WriteLine($"   greet_v1 answers: {actual}");
+    if (actual != expected)
+        throw new InvalidOperationException($"Expected \"{expected}\", got {actual}");
+}
+
+static async Task UploadAsync(HttpClient http, string id, string document)
+{
+    var error = await TryUploadAsync(http, id, document);
     if (error is not null)
         throw new InvalidOperationException($"uploadPersistedOperation failed for '{id}': {error}");
 }
 
 // Returns null when the upload succeeded, otherwise the first error the server reported.
-static async Task<string?> TryUploadAsync(
-    HttpClient http,
-    string id,
-    string document,
-    string? description = null,
-    bool bypassShapeDiff = false
-)
+static async Task<string?> TryUploadAsync(HttpClient http, string id, string document)
 {
     const string mutation = """
         mutation Upload($input: UploadPersistedOperationInput!) {
@@ -141,16 +132,7 @@ static async Task<string?> TryUploadAsync(
           }
         }
         """;
-    var input = new Dictionary<string, object?>
-    {
-        ["id"] = id,
-        ["document"] = document,
-        ["bypassShapeDiff"] = bypassShapeDiff,
-    };
-    if (description is not null)
-        input["description"] = description;
-
-    var body = new { query = mutation, variables = new { input } };
+    var body = new { query = mutation, variables = new { input = new { id, document } } };
     var resp = await http.PostAsJsonAsync(string.Empty, body);
     var raw = await resp.Content.ReadAsStringAsync();
 

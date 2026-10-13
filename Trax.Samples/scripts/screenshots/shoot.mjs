@@ -18,14 +18,17 @@ const samples = resolve(here, "../../samples");
 const VIEWPORT = { width: 1600, height: 900 };
 
 const scenes = {
-  // A refund run that crashes and recovers: the retry reuses the recorded answer instead of asking the model.
+  // A refund run that crashes while it pays and recovers: the retry reuses the recorded answers instead of asking
+  // the model. The page opens on the food order, so the Workflows view is picked first.
   recovery: {
     folder: "Recovery",
     url: "http://localhost:5173",
     async play(browser) {
       const page = await open(browser);
+      await page.getByRole("tab", { name: "Workflows" }).click();
+      await page.getByLabel("Crash").selectOption("paying");
       await page.getByRole("button", { name: "Run", exact: true }).click();
-      await page.locator(".status", { hasText: "Recovered" }).waitFor({ timeout: 60_000 });
+      await page.locator(".timeline-grid .status", { hasText: "Recovered" }).waitFor({ timeout: 60_000 });
       await page.waitForTimeout(500);
       return page;
     },

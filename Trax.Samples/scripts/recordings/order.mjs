@@ -41,6 +41,8 @@ const KEY = "recovery-operator-key-do-not-use-in-production";
 const OUT = join(here, "out", "order");
 const MACHINE_FILE = "Trax.Samples.Recovery/Machines/OrderMachine.cs";
 const MACHINE_SOURCE = resolve(here, "../../samples/Recovery", MACHINE_FILE);
+const TRAIN_FILE = "Trax.Samples.Recovery/Trains/Order/DeliverOrderTrain.cs";
+const TRAIN_SOURCE = resolve(here, "../../samples/Recovery", TRAIN_FILE);
 const REPO = resolve(here, "../../..");
 const PROJECT = resolve(here, "../../samples/Recovery/Trax.Samples.Recovery");
 const STEPS = ["SendToRestaurant", "ChargeCard", "Cook", "PickUp", "Deliver"];
@@ -393,7 +395,12 @@ function websiteCopy() {
     timerAfter: JSON.parse(readFileSync(join(OUT, "order.ir.json"), "utf8")).timers[0].after,
     source: { file: MACHINE_FILE, code },
     lines: linesOf(code),
-    train: { name: "DeliverOrderTrain", steps: STEPS },
+    train: {
+      name: "DeliverOrderTrain",
+      steps: STEPS,
+      // The train verbatim, which the page shows while the order's run is on its junctions.
+      source: { file: TRAIN_FILE, code: readFileSync(TRAIN_SOURCE, "utf8").replace(/\r/g, "") },
+    },
     scenarios,
   };
 }

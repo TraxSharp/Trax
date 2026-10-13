@@ -69,13 +69,32 @@ class PersistedSocketLink extends ApolloLink {
 
 // graphql-ws requires a subscribe message to carry a document, and the host refuses one alongside a persisted
 // id: the link sends an empty one, and the replacer leaves it out of the message.
-const wsLink = new PersistedSocketLink(
+export const persistedSocket = (): Client =>
   createClient({
     url: WS_URL,
     connectionParams: { apiKey: API_KEY },
+    lazy: true,
     jsonMessageReplacer: (key, value) => (key === "query" && value === "" ? undefined : value),
-  }),
-);
+  });
+
+/** Subscribes on `socket` to the persisted subscription `operationName`. Returns what stops it. */
+export function subscribePersisted<T>(
+  socket: Client,
+  operationName: string,
+  variables: Record<string, unknown>,
+  next: (data: T) => void,
+): () => void {
+  const payload = { query: "", id: persistedIdOf(operationName), operationName, variables } as unknown as SubscribePayload;
+  return socket.subscribe(payload, {
+    next: (value) => {
+      if (value.data) next(value.data as T);
+    },
+    error: () => undefined,
+    complete: () => undefined,
+  });
+}
+
+const wsLink = new PersistedSocketLink(persistedSocket());
 
 const link = split(
   ({ query }) => {

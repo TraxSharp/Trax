@@ -403,30 +403,16 @@ async function drivePersistedOperations() {
   ).operations;
   const upload = (input) => mutate("persisted", "UploadPersistedOperation", { input }, "drive");
   const greet = manifest.find((o) => o.id === "greet_v1");
-  const lookup = manifest.find((o) => o.id === "lookupUser_v1");
+  const formal = greet.document.replace("style: CASUAL", "style: FORMAL");
   await upload({ id: greet.id, document: greet.document, description: "Greets a visitor by name." });
-  await upload({ id: lookup.id, document: lookup.document, description: "A user's profile, by id." });
   await sleep(1500);
-  // The client's hot-fix: fields reordered, the same shape, so the store takes it and keeps the history.
-  await upload({
-    id: greet.id,
-    document:
-      "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greetedAt greeting } } } }",
-    description: "Greets a visitor by name. Fields reordered for the mobile client.",
-  });
-  // A shape change the guardrail refuses.
-  await upload({
-    id: greet.id,
-    document:
-      "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt __typename } } } }",
-  });
+  // The client's fix: a formal greeting, the same shape, so the store takes it and keeps the history.
+  await upload({ id: greet.id, document: formal, description: "Greets a visitor by name, formally." });
+  // An edit that renames the field the app reads, which the guardrail refuses.
+  await upload({ id: greet.id, document: formal.replace("{ greeting }", "{ message: greeting }") });
   // A tenant's own copy, and a retired v0 kept for its history.
   await upload({ id: greet.id, document: greet.document, tenantKey: "acme", description: "Acme's greeting." });
-  await upload({
-    id: "greet_v0",
-    document: "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting } } } }",
-    description: "The first greeting, before greetedAt.",
-  });
+  await upload({ id: "greet_v0", document: greet.document, description: "The first greeting." });
   await sleep(1000);
   await mutate(
     "persisted",
@@ -452,12 +438,12 @@ async function driveAll() {
     // Two at a time: a crashing run waits out its backoff, so they overlap the way people use the page.
     const pairs = [
       [
-        [{ scenario: "RESEARCH", topic: "What the papers say about cold-weather battery wear", crashOnce: true }, "none"],
+        [{ scenario: "REFUND", orderId: "A-1001", crashOnce: true, crashWhile: "EMAILING" }, "none"],
         [{ scenario: "REFUND", orderId: "A-1001", crashOnce: true }, "changeData"],
       ],
       [
         [{ scenario: "REFUND", orderId: "A-1002", crashOnce: true }, "askAfresh"],
-        [{ scenario: "RESEARCH", topic: "History of the telegraph", crashOnce: false }, "none"],
+        [{ scenario: "REFUND", orderId: "A-1003", crashOnce: false }, "none"],
       ],
     ];
     const finished = [];
@@ -534,7 +520,7 @@ const LOG_LEVELS = ["TRACE", "DEBUG", "INFORMATION", "WARNING", "ERROR", "CRITIC
 
 /** The words a person would type into a text filter, chosen from what the hosts hold. */
 const PRESETS = {
-  manifestName: ["Refresh", "Supplier", "Refund", "Research"],
+  manifestName: ["Refresh", "Supplier", "Refund"],
   groupName: ["refresh", "supplier", "recovery"],
   logCategory: ["Trax.Samples", "Junction"],
   logMessage: ["Imported", "503", "digest"],
@@ -806,8 +792,8 @@ async function recordMutations() {
     .persistedOperations.persistedOperation;
   await mutate(p, "UploadPersistedOperation", { input: { id: "greet_v1", document: stored.document } });
   await mutate(p, "UploadPersistedOperation", { input: { id: "greet_v1", document: "query { nope" } });
-  await mutate(p, "DeactivatePersistedOperation", { input: { id: "lookupUser_v1", reason: "Moving to v2." } });
-  await mutate(p, "RestorePersistedOperation", { input: { id: "lookupUser_v1" } });
+  await mutate(p, "RestorePersistedOperation", { input: { id: "greet_v0" } });
+  await mutate(p, "DeactivatePersistedOperation", { input: { id: "greet_v0", reason: "Every client sends greet_v1 now." } });
   await mutate(p, "RestorePersistedOperation", { input: { id: "missing_v9" } });
 }
 

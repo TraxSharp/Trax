@@ -4,7 +4,6 @@ using Trax.Samples.Recovery.Index;
 using Trax.Samples.Recovery.Model;
 using Trax.Samples.Recovery.Trains.Ingest;
 using Trax.Samples.Recovery.Trains.Refund;
-using Trax.Samples.Recovery.Trains.Research;
 using Trax.Samples.Recovery.Trains.Topics;
 
 namespace Trax.Samples.Recovery.E2E.Utilities;
@@ -22,9 +21,8 @@ public sealed class CountingDecider : IDecider
     {
         var runId = request.State switch
         {
-            ResearchBrief brief => brief.RunId,
-            Findings findings => findings.RunId,
             RefundCase refund => refund.RunId,
+            RefundEvidence evidence => evidence.RunId,
             CoCitationEvidence evidence => evidence.RunId,
             MatchEvidence evidence => IndexFixture.PartitionKey(evidence.Source, evidence.Month),
             _ => "unknown",

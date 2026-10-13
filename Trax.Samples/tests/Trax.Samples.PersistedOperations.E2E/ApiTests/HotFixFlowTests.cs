@@ -1,118 +1,93 @@
+using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
 
+/// <summary>
+/// The sample's three stories, driven the way its client drives them: the operator uploads with
+/// the demo key, the app calls by id with no credential.
+/// </summary>
 [TestFixture]
 [Category("E2E")]
 public class HotFixFlowTests : ApiTestBase
 {
-    private const string GreetDoc =
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting } } } }";
-
-    private const string LookupUserDoc =
-        "query LookupUser($input: LookupUserInput!) { discover { users { lookupUser(input: $input) { userId displayName email loginCount } } } }";
-
     [Test]
-    public async Task DistinctIds_DispatchToDistinctTrains()
+    public async Task ShippedApp_CallsById_AndAnInlineQueryIsRefused()
     {
-        await Store.UpsertAsync("greet_distinct_v1", GreetDoc, null, CancellationToken.None);
-        await Store.UpsertAsync(
-            "lookupUser_distinct_v1",
-            LookupUserDoc,
-            null,
-            CancellationToken.None
-        );
+        await UploadAsync("greet_v1", GreetDocuments.Casual);
 
-        using var greet = await PostJsonAsync(
-            new { id = "greet_distinct_v1", variables = new { input = new { name = "Alice" } } }
-        );
-        greet
-            .RootElement.GetProperty("data")
-            .GetProperty("discover")
-            .GetProperty("greeting")
-            .GetProperty("greet")
-            .GetProperty("greeting")
-            .GetString()
-            .Should()
-            .Be("Hello, Alice.");
+        using var byId = await AppCallsAsync("greet_v1", "Alice");
+        GreetDocuments.GreetingOf(byId).Should().Be("Hey Alice!");
 
-        using var lookup = await PostJsonAsync(
-            new
-            {
-                id = "lookupUser_distinct_v1",
-                variables = new { input = new { userId = "user-1" } },
-            }
+        using var app = SharedApiSetup.Factory.CreateClient();
+        var inline = await app.PostAsJsonAsync(
+            "/trax/graphql/",
+            new { query = GreetDocuments.Inline }
         );
-        lookup
-            .RootElement.GetProperty("data")
-            .GetProperty("discover")
-            .GetProperty("users")
-            .GetProperty("lookupUser")
-            .GetProperty("displayName")
-            .GetString()
-            .Should()
-            .Be("User user-1");
+        ((int)inline.StatusCode).Should().Be(400);
+        (await inline.Content.ReadAsStringAsync()).Should().Contain("PERSISTED_OPERATION_REQUIRED");
     }
 
     [Test]
-    public async Task PersistedOperation_WithMultipleVariableInputs_DispatchesEachCorrectly()
+    public async Task HotFix_ToFormal_ChangesTheAnswerWithoutChangingTheCall()
     {
-        await Store.UpsertAsync("greet_multi_v1", GreetDoc, null, CancellationToken.None);
+        await UploadAsync("greet_v1", GreetDocuments.Casual);
+        using (var before = await AppCallsAsync("greet_v1", "Alice"))
+            GreetDocuments.GreetingOf(before).Should().Be("Hey Alice!");
 
-        foreach (var name in new[] { "Alice", "Bob", "Charlie", "Dana" })
-        {
-            using var doc = await PostJsonAsync(
-                new { id = "greet_multi_v1", variables = new { input = new { name } } }
-            );
-            doc.RootElement.GetProperty("data")
-                .GetProperty("discover")
-                .GetProperty("greeting")
-                .GetProperty("greet")
-                .GetProperty("greeting")
-                .GetString()
-                .Should()
-                .Be($"Hello, {name}.");
-        }
+        // Same response shape, so the guardrail accepts it with no bypass.
+        await UploadAsync("greet_v1", GreetDocuments.Formal);
+
+        using var after = await AppCallsAsync("greet_v1", "Alice");
+        GreetDocuments.GreetingOf(after).Should().Be("Good day, Alice.");
     }
 
     [Test]
-    public async Task PersistedOperation_LookupUser_ReturnsTrainResolverOutput()
+    public async Task RenamingTheFieldTheAppReads_IsRefused_AndTheOldAnswerStands()
     {
-        await Store.UpsertAsync("lookup_v1", LookupUserDoc, null, CancellationToken.None);
+        await UploadAsync("greet_v1", GreetDocuments.Casual);
+        await UploadAsync("greet_v1", GreetDocuments.Formal);
 
-        using var doc = await PostJsonAsync(
-            new { id = "lookup_v1", variables = new { input = new { userId = "user-99" } } }
-        );
+        using var refused = await UploadRawAsync("greet_v1", GreetDocuments.RenamedField);
+        var payload = UploadPayload(refused);
+        payload.GetProperty("success").GetBoolean().Should().BeFalse(payload.GetRawText());
+        payload
+            .GetProperty("errors")[0]
+            .GetProperty("code")
+            .GetString()
+            .Should()
+            .Be("SHAPE_DIFF_VIOLATION");
 
-        var user = doc
-            .RootElement.GetProperty("data")
-            .GetProperty("discover")
-            .GetProperty("users")
-            .GetProperty("lookupUser");
+        (await Store.GetAsync("greet_v1", null, CancellationToken.None))!
+            .Document.Should()
+            .Be(GreetDocuments.Formal);
+        using var after = await AppCallsAsync("greet_v1", "Alice");
+        GreetDocuments.GreetingOf(after).Should().Be("Good day, Alice.");
+    }
 
-        user.GetProperty("userId").GetString().Should().Be("user-99");
-        user.GetProperty("displayName").GetString().Should().Be("User user-99");
-        user.GetProperty("email").GetString().Should().Be("user-99@example.test");
-        user.GetProperty("loginCount").GetInt32().Should().BeGreaterThanOrEqualTo(0);
+    [Test]
+    public async Task ReUploadingTheManifest_RestoresCasual()
+    {
+        // The client's first step on every run: back from FORMAL to CASUAL, same shape.
+        await UploadAsync("greet_v1", GreetDocuments.Formal);
+        await UploadAsync("greet_v1", GreetDocuments.Casual);
+
+        using var doc = await AppCallsAsync("greet_v1", "Alice");
+        GreetDocuments.GreetingOf(doc).Should().Be("Hey Alice!");
     }
 
     [Test]
     public async Task PersistedOperationHistory_AccumulatesEveryMutationInOrder()
     {
-        // Drive the storage through Upsert → Upsert (rewrite) → Deactivate →
-        // Restore, then assert the history table contains exactly four rows
-        // in the right ChangeType order. The previous version of this test
-        // queried ListAsync (live rows) and only confirmed the live row
-        // existed — it would have passed even if no history rows had been
-        // written.
+        // Drive the storage through Upsert → Upsert (rewrite) → Deactivate → Restore, then
+        // assert the history table holds exactly four rows in that ChangeType order.
         const string id = "history_check_v1";
-        await Store.UpsertAsync(id, GreetDoc, null, CancellationToken.None);
-        await Store.UpsertAsync(id, GreetDoc + " # rewrite", null, CancellationToken.None);
+        await Store.UpsertAsync(id, GreetDocuments.Casual, null, CancellationToken.None);
+        await Store.UpsertAsync(id, GreetDocuments.Formal, null, CancellationToken.None);
         await Store.DeactivateAsync(id, null, "test cleanup", CancellationToken.None);
         await Store.RestoreAsync(id, null, CancellationToken.None);
 
@@ -140,11 +115,16 @@ public class HotFixFlowTests : ApiTestBase
     [Test]
     public async Task DeactivateThenRestore_DispatchResumesAfterRestore()
     {
-        await Store.UpsertAsync("lifecycle_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "lifecycle_v1",
+            GreetDocuments.Casual,
+            null,
+            CancellationToken.None
+        );
         await Store.DeactivateAsync("lifecycle_v1", null, "test", CancellationToken.None);
 
         var resp = await PostAsync(
-            new { id = "lifecycle_v1", variables = new { input = new { name = "X" } } }
+            new { id = "lifecycle_v1", variables = GreetDocuments.Variables("X") }
         );
         var body = await resp.Content.ReadAsStringAsync();
         GraphQLErrors.FirstCode(body).Should().Be(GraphQLErrors.UnknownPersistedOperation, body);
@@ -152,15 +132,8 @@ public class HotFixFlowTests : ApiTestBase
         await Store.RestoreAsync("lifecycle_v1", null, CancellationToken.None);
 
         using var doc = await PostJsonAsync(
-            new { id = "lifecycle_v1", variables = new { input = new { name = "Y" } } }
+            new { id = "lifecycle_v1", variables = GreetDocuments.Variables("Y") }
         );
-        doc.RootElement.GetProperty("data")
-            .GetProperty("discover")
-            .GetProperty("greeting")
-            .GetProperty("greet")
-            .GetProperty("greeting")
-            .GetString()
-            .Should()
-            .Be("Hello, Y.");
+        GreetDocuments.GreetingOf(doc).Should().Be("Hey Y!");
     }
 }

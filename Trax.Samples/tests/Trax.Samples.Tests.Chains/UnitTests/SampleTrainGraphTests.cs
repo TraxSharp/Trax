@@ -121,20 +121,24 @@ public class SampleTrainGraphTests
     }
 
     [Test]
-    public void ResearchTopicTrain_DrawsItsSwitchAndScaleTracks()
+    public void ApproveRefundTrain_DrawsItsSwitchAndGateTracks_ThenItsCheckpoint()
     {
-        var research = Trains.Value.Single(t => t.Name == "ResearchTopicTrain");
-        var graph = GraphOf(research);
+        var refund = Trains.Value.Single(t => t.Name == "ApproveRefundTrain");
+        var graph = GraphOf(refund);
 
         var routing = graph.Nodes.Where(n => n.Tracks.Count > 0).ToList();
-        routing.Select(n => n.Id).Should().Equal("Switch<Source>#0", "Scale<Depth>#0");
-        routing[0].Tracks.Select(t => t.Name).Should().Equal("Web", "Papers", "Wiki");
+        routing.Select(n => n.Id).Should().Equal("Switch<Problem>#0", "Gate<ApproveRefund>#0");
+        routing[0].Tracks.Select(t => t.Name).Should().Equal("Damaged", "Lost", "Unwanted");
         routing[0]
             .Tracks[1]
             .Nodes.Select(n => n.Id)
             .Should()
-            .Equal("Switch<Source>#0/Papers/SearchPapers#0");
-        routing[1].Tracks.Select(t => t.Name).Should().Equal("Skim", "CrossCheck");
+            .Equal("Switch<Problem>#0/Lost/TraceParcel#0");
+        routing[1].Tracks.Select(t => t.Name).Should().Equal("Yes", "No", "Unsure");
+        graph
+            .Nodes.Select(n => n.Id)
+            .Should()
+            .ContainInConsecutiveOrder("Checkpoint<RefundOutcome>#0", "NotifyCustomer#0");
     }
 
     /// <summary>

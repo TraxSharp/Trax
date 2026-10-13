@@ -1,4 +1,4 @@
-export type Scenario = "RESEARCH" | "REFUND" | "TOPIC_MAP";
+export type Scenario = "REFUND" | "TOPIC_MAP";
 
 export type StepKind = "JUNCTION" | "CHOICE" | "SCORE" | "YES_NO" | "ROUTE";
 
@@ -100,7 +100,13 @@ export interface JournalEntry {
   replayed: boolean;
   replayRefused: string | null;
   model: string | null;
+  /** The decider's type name, or null when the answer was replayed. */
+  decider: string | null;
   stateHash: string | null;
+  /** The question as Trax put it to the decider, as JSON: its words and each option's description. */
+  question: string | null;
+  /** The answer the run acted on, as JSON. */
+  answer: string | null;
 }
 
 export interface Journal {
@@ -135,37 +141,13 @@ export interface RunInfo {
   scenario: Scenario;
 }
 
-export type Tone = "info" | "model" | "replay" | "error" | "success" | "system";
-
-export interface ConsoleLine {
-  key: string;
-  /** Milliseconds since Run was pressed. */
-  t: number;
-  tone: Tone;
-  text: string;
-}
-
 export type Phase = "idle" | "starting" | "running" | "backoff" | "retrying" | "done" | "requeue" | "dead";
 
-/** The node the page resumes a research run at: the step after its checkpoint, as operations.runGraph names it. */
-export const RESUME_AT = "Summarize#0";
-
-/** How many nodes a resumed run skipped and restored from its checkpoint, at any depth of its graph. */
-export const restoredIn = (graph: RunGraph | null | undefined): number => {
-  const count = (nodes: GraphNode[] | undefined): number =>
-    (nodes ?? []).reduce(
-      (n, node) => n + (node.state === "RESTORED" ? 1 : 0) + node.tracks.reduce((t, track) => t + count(track.nodes), 0),
-      0,
-    );
-  return count(graph?.nodes);
-};
+/** The node the page resumes a refund run at: the step after its checkpoint, as operations.runGraph names it. */
+export const RESUME_AT = "NotifyCustomer#0";
 
 /** What the reader did during the backoff, if anything. */
 export type Fork = "none" | "askAfresh" | "changeData";
-
-/** An answer as the page shows it: a probability or score to two places, a choice as it is. */
-export const shownAnswer = (answer: string | null) =>
-  answer != null && /^-?\d+\.\d{3,}$/.test(answer) ? Number(answer).toFixed(2) : answer;
 
 /** The branch a step ran in, from its node id (Parallel#0/cocitation/...), or null outside a branch. */
 export const branchOf = (nodeId: string | null | undefined) => nodeId?.match(/^Parallel#\d+\/([^/]+)\//)?.[1] ?? null;

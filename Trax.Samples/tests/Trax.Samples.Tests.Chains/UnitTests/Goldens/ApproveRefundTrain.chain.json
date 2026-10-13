@@ -13,10 +13,77 @@
       "tracks": []
     },
     {
-      "id": "Decide<YesNoDecision<ApproveRefund>>#0",
+      "id": "Decide<ChoiceDecision<Problem>>#0",
       "kind": "Decide",
       "junction": "IDecider",
       "in": "RefundCase",
+      "out": "ChoiceDecision<Problem>",
+      "opaque": false,
+      "tracks": []
+    },
+    {
+      "id": "Switch<Problem>#0",
+      "kind": "Switch",
+      "junction": null,
+      "in": "ChoiceDecision<Problem>",
+      "out": "TrackTaken<Problem>",
+      "opaque": false,
+      "tracks": [
+        {
+          "name": "Damaged",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Switch<Problem>#0/Damaged/RequestPhotos#0",
+              "kind": "Chain",
+              "junction": "RequestPhotos",
+              "in": "RefundCase",
+              "out": "RefundEvidence",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "Lost",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Switch<Problem>#0/Lost/TraceParcel#0",
+              "kind": "Chain",
+              "junction": "TraceParcel",
+              "in": "RefundCase",
+              "out": "RefundEvidence",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        },
+        {
+          "name": "Unwanted",
+          "description": null,
+          "isFallback": false,
+          "nodes": [
+            {
+              "id": "Switch<Problem>#0/Unwanted/CheckReturnWindow#0",
+              "kind": "Chain",
+              "junction": "CheckReturnWindow",
+              "in": "RefundCase",
+              "out": "RefundEvidence",
+              "opaque": false,
+              "tracks": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Decide<YesNoDecision<ApproveRefund>>#0",
+      "kind": "Decide",
+      "junction": "IDecider",
+      "in": "RefundEvidence",
       "out": "YesNoDecision<ApproveRefund>",
       "opaque": false,
       "tracks": []
@@ -78,6 +145,15 @@
           ]
         }
       ]
+    },
+    {
+      "id": "Checkpoint<RefundOutcome>#0",
+      "kind": "Checkpoint",
+      "junction": null,
+      "in": "RefundOutcome",
+      "out": null,
+      "opaque": false,
+      "tracks": []
     },
     {
       "id": "NotifyCustomer#0",

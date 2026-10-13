@@ -1,36 +1,80 @@
 ---
 layout: default
 title: Persisted Operations
-description: "The PersistedOperations sample: a GraphQL API that runs only stored documents, gated management mutations, a hot-fix by id and the shape-diff guardrail."
+description: "The PersistedOperations sample: an app calls by id, an operator changes the answer without a new app, and a breaking fix is refused."
 parent: Samples & Deployment
 nav_order: 6
 ---
 
 # Persisted Operations
 
-`samples/PersistedOperations` is a GraphQL API that accepts only persisted operations: a client sends
-an operation id and its variables, and the server runs the document it stores for that id. A
-console client uploads a manifest, calls by id, hot-fixes a stored document without shipping a new
-client, and shows the guardrail refusing an edit that would break shipped clients.
+`samples/PersistedOperations` is a GraphQL API that accepts only persisted operations: an app sends
+an operation id and its variables, and the server runs the document it stores for that id. A console
+client plays the app and the operator through three stories:
+
+1. **A shipped app calls the API by id.** The app sends `greet_v1` and a name, never a query. An
+   inline query is refused.
+2. **Fix it without shipping a new app.** The stored `greet_v1` asks for `style: CASUAL` and answers
+   `Hey Alice!`. The operator re-uploads it with `style: FORMAL`; the same call now answers
+   `Good day, Alice.`.
+3. **A fix that would break shipped apps is refused.** An upload that renames the field the app
+   reads fails the shape-diff guardrail, and `greet_v1` keeps answering as before.
 
 ## What it proves
 
 | Feature | Where |
 |---|---|
-| `RequirePersisted(true)`: every inline document refused with `PERSISTED_OPERATION_REQUIRED` | `Program.cs`, `EnforcementTests` |
+| `RequirePersisted(true)`: every inline document refused with `PERSISTED_OPERATION_REQUIRED` | `Program.cs`, `EnforcementTests`, `HotFixFlowTests` |
 | `SingleNode()`: the declaration persisted operations refuse to start without | `Program.cs` |
 | The management mutations under `operations.persistedOperations`, gated to one role with `GateOperations` | `ProductionPostureTests`, `MutationFlowTests` |
-| A shape-preserving edit served on the next request by the same id; a shape-changing edit refused | the Client, `HotFixFlowTests` |
-| Upload validation against a schema that carries `@authorize` | `AuthorizedSchemaUpsertTests` |
-| The dev allowlist, the demo key and the dashboard only in Development | `Program.cs`, `ProductionPostureTests` |
+| An upload that keeps the response shape served on the next call by the same id; one that changes it refused | the Client, `HotFixFlowTests` |
+| The demo key, the dashboard and the page only in Development | `Program.cs`, `ProductionPostureTests` |
 
 ## Layout
 
 ```
 samples/PersistedOperations/
-├── Trax.Samples.PersistedOperations/          GreetTrain, LookupUserTrain, the gated UserNote model
-├── Trax.Samples.PersistedOperations.Api/      the host (Program.cs)
-└── Trax.Samples.PersistedOperations.Client/   console client: manifest upload, call by id, hot-fix
+├── Trax.Samples.PersistedOperations/          GreetTrain: a name and a style in, a greeting out
+├── Trax.Samples.PersistedOperations.Api/      the host (Program.cs) and the page in wwwroot/
+└── Trax.Samples.PersistedOperations.Client/   console client and manifest.json: the three stories
+```
+
+The train behind every document:
+
+```csharp
+public enum GreetingStyle { Casual, Formal }    // CASUAL, FORMAL in GraphQL
+
+public record GreetInput : IManifestProperties
+{
+    public required string Name { get; init; }
+    public GreetingStyle Style { get; init; }
+}
+
+public record GreetOutput
+{
+    public required string Greeting { get; init; }
+}
+
+// ComposeGreetingJunction
+Greeting = input.Style switch
+{
+    GreetingStyle.Formal => $"Good day, {input.Name}.",
+    _ => $"Hey {input.Name}!",
+};
+```
+
+`Client/manifest.json` ships one operation. The style is fixed in the stored document, not sent by
+the app, so changing it is the operator's job:
+
+```json
+{
+  "operations": [
+    {
+      "id": "greet_v1",
+      "document": "query Greet($name: String!) { discover { greeting { greet(input: { name: $name, style: CASUAL }) { greeting } } } }"
+    }
+  ]
+}
 ```
 
 ## Run
@@ -49,27 +93,37 @@ The client prints:
 
 ```text
 Uploaded greet_v1
-Uploaded lookupUser_v1
 
---- greet_v1 (Alice) ---
-{"data":{"discover":{"greeting":{"greet":{"greeting":"Hello, Alice.","greetedAt":"2026-10-03T16:28:08.55Z"}}}}}
+1. The app calls greet_v1 for Alice
+   greet_v1 answers: Hey Alice!
+   An inline query is refused: {"errors":[{"message":"Only persisted operations are accepted on this server.","extensions":{"code":"PERSISTED_OPERATION_REQUIRED"}}]}
 
---- lookupUser_v1 (user-42) ---
-{"data":{"discover":{"users":{"lookupUser":{"userId":"user-42","displayName":"User user-42","email":"user-42@example.test","loginCount":500}}}}}
+2. The operator re-uploads greet_v1 with style FORMAL
+   greet_v1 answers: Good day, Alice.
 
-Hot-fixed greet_v1 (no client redeploy needed).
-
---- greet_v1 after hot-fix (Alice) ---
-{"data":{"discover":{"greeting":{"greet":{"greetedAt":"2026-10-03T16:28:08.55Z","greeting":"Hello, Alice."}}}}}
-Hot-fix verified: the server ran the new document.
-
-Shape-changing edit refused: {"code":"SHAPE_DIFF_VIOLATION","message":"Persisted operation 'greet_v1' edit rejected: response shape changed (old fingerprint 86be9cea…, new 2fc9b38b…). ..."}
+3. Renaming greeting to message is refused: {"code":"SHAPE_DIFF_VIOLATION","message":"Persisted operation 'greet_v1' edit rejected: response shape changed (old fingerprint …, new …). Upload it again with bypassShapeDiff: true if the change is shape-safe."}
+   greet_v1 answers: Good day, Alice.
 ```
 
-The hot-fix swaps the order of the two fields: the same fields of the same types, so the shape
-fingerprint does not change and the edit needs no bypass, yet the response visibly comes from the
-new document. The client can run any number of times: its first step re-uploads the manifest,
-which restores the original order under the same fingerprint.
+Each step, as the client sends it:
+
+- **The app's call** is `{ "id": "greet_v1", "variables": { "name": "Alice" } }` with no credential.
+- **The fix** re-uploads `greet_v1` as the operator (`X-Api-Key: operator-key-do-not-use-in-production`)
+  with `style: FORMAL` in place of `style: CASUAL`. The response still has one `greeting` string at
+  the same path, so the shape fingerprint does not change and the upload needs no bypass.
+- **The refused edit** is the same document with `{ message: greeting }`: the app reads
+  `greeting`, which would no longer be in the response, so the fingerprint changes and the upload is
+  refused. The stored document stays the FORMAL one. `bypassShapeDiff: true` would force it through;
+  the client does not.
+
+The client exits non-zero if any answer differs from the one expected, or if the refused edit is
+accepted. Its first step re-uploads the manifest, which puts `greet_v1` back to `CASUAL` under the
+same fingerprint, so it can run any number of times.
+
+The API also serves a page at http://localhost:5240 that plays the same three stories: pick one and
+press Play. It shows each request with its answer and how long it took, the greeting the app shows,
+and what the server stores for `greet_v1`. Its operator uploads send the demo key, so the page is
+served only in Development, like the key.
 
 ## Try it
 
@@ -78,13 +132,13 @@ G=http://localhost:5240/trax/graphql/
 
 # An inline document is refused
 curl -s $G -H 'Content-Type: application/json' \
-  -d '{"query":"{ discover { greeting { greet(input: {name: \"Eve\"}) { greeting } } } }"}'
+  -d '{"query":"query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }"}'
 # {"errors":[{"message":"Only persisted operations are accepted on this server.","extensions":{"code":"PERSISTED_OPERATION_REQUIRED"}}]}
 
 # The same operation by id (after the client has uploaded the manifest)
 curl -s $G -H 'Content-Type: application/json' \
-  -d '{"id":"greet_v1","variables":{"input":{"name":"Eve"}}}'
-# {"data":{"discover":{"greeting":{"greet":{"greetedAt":"...","greeting":"Hello, Eve."}}}}}
+  -d '{"id":"greet_v1","variables":{"name":"Eve"}}'
+# {"data":{"discover":{"greeting":{"greet":{"greeting":"Hey Eve!"}}}}}
 
 # An upload without the operator key is refused
 curl -s $G -H 'Content-Type: application/json' \
@@ -124,19 +178,20 @@ builder.Services.AddTrax(trax =>
 
 builder.Services.AddTraxGraphQL(graphql => graphql
     .UsePersistedOperations(opts =>
-    {
         opts.RequirePersisted(true)
             .LogNonPersistedRequests(true)
-            .SingleNode();
-        if (isDevelopment)
-            opts.AllowOperationsMatching(id => id.StartsWith("dev_"));
-    })
+            .SingleNode())
     .GateOperations(roles: "Operator"));
 
 if (isDevelopment)
     builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 var app = builder.Build();
+if (isDevelopment)
+{
+    app.UseDefaultFiles();   // the page at / (wwwroot)
+    app.UseStaticFiles();
+}
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -164,12 +219,12 @@ What each piece is for:
   sample mapped it in a `UseWhen` branch, which is no longer needed.
 - **`GateOperations(roles: "Operator")`.** The management mutations live under `operations`, and a
   host that exposes that namespace with no posture refuses to start. The gate covers the namespace
-  only, so the persisted trains on the rest of the endpoint stay reachable. The management
+  only, so `greet` stays reachable to the app, which carries no credential. The management
   mutations always bypass enforcement (they cannot be persisted by id), and the gate is what
   protects them.
-- **The dev allowlist.** `AllowOperationsMatching(id => id.StartsWith("dev_"))` admits any inline
-  document whose operation name starts with `dev_`. The name is chosen by the caller, so outside
-  Development it would let anyone run anything: it is registered only in Development.
+- **The demo key.** It is published in this repository, so `AddTraxApiKeyAuth` registers it only in
+  Development. Anywhere else no credential exists until you register a real scheme, so every upload
+  is refused.
 - **The dashboard.** It refuses to start without a posture. The sample serves it only in
   Development, opened with `AllowAnonymousDashboard()`; anywhere else, register it with
   `RequirePolicy(...)` or `RequireRoles(...)`.
@@ -180,7 +235,7 @@ inline document smuggled into a batch beside a persisted id runs nothing.
 ## Tests
 
 ```bash
-dotnet test tests/Trax.Samples.PersistedOperations.E2E     # 33 tests against Postgres
+dotnet test tests/Trax.Samples.PersistedOperations.E2E     # 30 tests against Postgres
 ```
 
 The suite runs against the `persisted_operations_e2e_tests` database on port 5432
@@ -189,10 +244,10 @@ rather than skips, when the database is missing.
 
 | Class | Proves |
 |---|---|
-| `EnforcementTests` | inline documents refused, ids served, the `dev_` carve-out |
-| `MutationFlowTests`, `HotFixFlowTests` | upload, deactivate, restore and hot-fix through the GraphQL mutations, with history |
-| `AuthorizedSchemaUpsertTests` | uploads validate against a schema carrying `@authorize`, and a gated field stays gated when run by id |
-| `ProductionPostureTests` | in Production the `dev_` carve-out and the dashboard are gone; an anonymous upload is refused in every environment; Development serves the dashboard |
+| `HotFixFlowTests` | the three stories: the call by id and the inline refusal, the FORMAL fix with no bypass, the refused rename with the old answer standing, and the manifest restoring CASUAL; with history, deactivate and restore |
+| `EnforcementTests` | inline documents refused, ids served, an unknown id reported |
+| `MutationFlowTests` | upload, schema-mismatch refusal, shape-diff refusal and bypass, deactivate, all through the GraphQL mutations |
+| `ProductionPostureTests` | in Production an inline document is refused and the dashboard and the page are gone; an anonymous upload is refused in every environment; Development serves the dashboard and the page, which shadows neither the dashboard nor the endpoint |
 | `AdditionalCoverageTests` | variables, content types, batches, tenant scoping, the shape-diff guardrail |
 
 ## SDK Reference

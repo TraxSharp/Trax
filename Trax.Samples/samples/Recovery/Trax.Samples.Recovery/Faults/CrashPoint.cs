@@ -7,16 +7,16 @@ public enum CrashPoint
     None,
 
     /// <summary>
-    /// The research run's last step, writing the report. It comes after both model calls and every
-    /// track reaches it, so a crash armed here fires whatever the model answered.
-    /// </summary>
-    Report,
-
-    /// <summary>
     /// The step the refund's approval decision routes to: paying, declining or queueing for review.
     /// Every order reaches one of the three, so a crash armed here fires whatever the model answers.
     /// </summary>
     RefundTrack,
+
+    /// <summary>
+    /// The refund's last step, emailing the customer. It comes after the checkpoint, so the retry starts
+    /// from the stored outcome: nothing before it runs again, and the payment is not made twice.
+    /// </summary>
+    RefundEmail,
 
     /// <summary>
     /// The step on the track the topic map's co-citation decision routes to, inside the

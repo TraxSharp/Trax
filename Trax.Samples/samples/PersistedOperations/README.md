@@ -1,19 +1,25 @@
 # Trax Persisted Operations Sample
 
-A GraphQL API that accepts only persisted operations: a client sends an operation id and its
-variables, and the server runs the document it stores for that id. An operator can rewrite the
-stored document without shipping a new client, and the shape-diff guardrail refuses any edit that
-would change the response shipped clients read.
+A GraphQL API that accepts only persisted operations: an app sends an operation id and its
+variables, and the server runs the document it stores for that id. The sample tells three stories:
+
+1. **A shipped app calls the API by id.** The app sends `{ "id": "greet_v1", "variables": { "name": "Alice" } }`
+   and gets `Hey Alice!`. An inline query is refused.
+2. **Fix it without shipping a new app.** The stored `greet_v1` asks for `style: CASUAL`. The
+   operator re-uploads it with `style: FORMAL`, and the same unchanged call now answers
+   `Good day, Alice.`. The response shape is the same, so the upload needs no bypass.
+3. **A fix that would break shipped apps is refused.** An upload that renames the field the app
+   reads (`message: greeting`) fails the shape-diff guardrail, and `greet_v1` keeps its answer.
 
 ## What it proves
 
 - `UsePersistedOperations(...).RequirePersisted(true).SingleNode()` rejects every inline document
-  with `PERSISTED_OPERATION_REQUIRED`, on every transport.
+  with `PERSISTED_OPERATION_REQUIRED`.
 - The management mutations under `operations.persistedOperations` are gated to the `Operator` role
-  with `GateOperations(roles: "Operator")`; an anonymous upload is refused.
-- A shape-preserving edit takes effect on the next request by the same id; a shape-changing edit is
-  refused with `SHAPE_DIFF_VIOLATION`.
-- The demo key, the `dev_` allowlist and the dashboard exist only in Development.
+  with `GateOperations(roles: "Operator")`; an anonymous upload is refused with `TRAX_AUTHORIZATION`.
+- An upload that keeps the response shape takes effect on the next call by the same id; one that
+  changes it is refused with `SHAPE_DIFF_VIOLATION`.
+- The demo operator key and the dashboard exist only in Development.
 
 ## Run
 
@@ -24,21 +30,28 @@ docker compose up -d
 # The API, in Development, on http://localhost:5240
 dotnet run --project samples/PersistedOperations/Trax.Samples.PersistedOperations.Api
 
-# In a second terminal: upload the manifest, call by id, hot-fix, hit the guardrail
+# In a second terminal: the three stories
 dotnet run --project samples/PersistedOperations/Trax.Samples.PersistedOperations.Client
 ```
+
+The client uploads `Client/manifest.json` first, which puts `greet_v1` back to `CASUAL`, so it can
+run any number of times.
+
+Or open http://localhost:5240 and play the same stories in a page: each request it sends, the answer
+the app shows, and what the server stores for `greet_v1`. The page is served only in Development,
+because the operator's uploads send the demo key.
 
 ## Try it
 
 ```bash
-# Inline documents are refused
+# An inline document is refused
 curl -s http://localhost:5240/trax/graphql/ -H 'Content-Type: application/json' \
-  -d '{"query":"{ discover { greeting { greet(input: {name: \"Eve\"}) { greeting } } } }"}'
+  -d '{"query":"query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }"}'
 # {"errors":[{"message":"Only persisted operations are accepted on this server.","extensions":{"code":"PERSISTED_OPERATION_REQUIRED"}}]}
 
-# After the client has run, the same call by id works
+# After the client has uploaded the manifest, the call by id works
 curl -s http://localhost:5240/trax/graphql/ -H 'Content-Type: application/json' \
-  -d '{"id":"greet_v1","variables":{"input":{"name":"Eve"}}}'
+  -d '{"id":"greet_v1","variables":{"name":"Eve"}}'
 ```
 
 The dashboard's **Data > Persisted Operations** page is at http://localhost:5240/trax.

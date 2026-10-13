@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AwesomeAssertions;
 using Trax.Samples.PersistedOperations.E2E.Fixtures;
 
@@ -7,34 +6,21 @@ namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
 /// <summary>
 /// Drives the persisted-operations admin surface end-to-end through the
 /// GraphQL mutations exposed by the server. Mirrors what the dashboard and
-/// the (now mutation-only) sample client do.
+/// the sample client do.
 /// </summary>
 [TestFixture]
 public class MutationFlowTests : ApiTestBase
 {
-    private const string GreetQuery =
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting } } } }";
-
-    private const string GreetWithGreetedAt =
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt } } } }";
-
     [Test]
     public async Task Upload_ValidDocument_RegistersOperation_AndExecutableById()
     {
-        await UploadAsync("mut_greet_v1", GreetQuery);
+        await UploadAsync("mut_greet_v1", GreetDocuments.Casual);
 
         var resp = await PostJsonAsync(
-            new { id = "mut_greet_v1", variables = new { input = new { name = "Alice" } } }
+            new { id = "mut_greet_v1", variables = GreetDocuments.Variables("Alice") }
         );
 
-        resp.RootElement.GetProperty("data")
-            .GetProperty("discover")
-            .GetProperty("greeting")
-            .GetProperty("greet")
-            .GetProperty("greeting")
-            .GetString()
-            .Should()
-            .Contain("Alice");
+        GreetDocuments.GreetingOf(resp).Should().Be("Hey Alice!");
     }
 
     [Test]
@@ -42,11 +28,7 @@ public class MutationFlowTests : ApiTestBase
     {
         var json = await UploadRawAsync("mut_bad_v1", "query Bad { nonexistentField }");
 
-        var payload = json
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("persistedOperations")
-            .GetProperty("uploadPersistedOperation");
+        var payload = UploadPayload(json);
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
         var errors = payload.GetProperty("errors");
         errors.GetArrayLength().Should().BeGreaterThan(0);
@@ -58,14 +40,10 @@ public class MutationFlowTests : ApiTestBase
     [Test]
     public async Task Upload_ShapeChange_WithoutBypass_ReturnsError_AndOriginalStillResolves()
     {
-        await UploadAsync("mut_shape_v1", GreetQuery);
+        await UploadAsync("mut_shape_v1", GreetDocuments.Casual);
 
-        var json = await UploadRawAsync("mut_shape_v1", GreetWithGreetedAt);
-        var payload = json
-            .RootElement.GetProperty("data")
-            .GetProperty("operations")
-            .GetProperty("persistedOperations")
-            .GetProperty("uploadPersistedOperation");
+        var json = await UploadRawAsync("mut_shape_v1", GreetDocuments.RenamedField);
+        var payload = UploadPayload(json);
         payload.GetProperty("success").GetBoolean().Should().BeFalse();
         payload
             .GetProperty("errors")[0]
@@ -75,23 +53,23 @@ public class MutationFlowTests : ApiTestBase
             .Be("SHAPE_DIFF_VIOLATION");
 
         var row = await Store.GetAsync("mut_shape_v1", null, CancellationToken.None);
-        row!.Document.Should().Be(GreetQuery);
+        row!.Document.Should().Be(GreetDocuments.Casual);
     }
 
     [Test]
     public async Task Upload_ShapeChange_WithBypass_OverridesDocument()
     {
-        await UploadAsync("mut_bypass_v1", GreetQuery);
-        await UploadAsync("mut_bypass_v1", GreetWithGreetedAt, bypassShapeDiff: true);
+        await UploadAsync("mut_bypass_v1", GreetDocuments.Casual);
+        await UploadAsync("mut_bypass_v1", GreetDocuments.RenamedField, bypassShapeDiff: true);
 
         var row = await Store.GetAsync("mut_bypass_v1", null, CancellationToken.None);
-        row!.Document.Should().Be(GreetWithGreetedAt);
+        row!.Document.Should().Be(GreetDocuments.RenamedField);
     }
 
     [Test]
     public async Task Deactivate_BlocksFutureExecutionsByThatId()
     {
-        await UploadAsync("mut_deact_v1", GreetQuery);
+        await UploadAsync("mut_deact_v1", GreetDocuments.Casual);
 
         var deact = await PostJsonAsync(
             new
@@ -119,57 +97,9 @@ public class MutationFlowTests : ApiTestBase
             .BeTrue();
 
         var resp = await PostJsonAsync(
-            new { id = "mut_deact_v1", variables = new { input = new { name = "Alice" } } }
+            new { id = "mut_deact_v1", variables = GreetDocuments.Variables("Alice") }
         );
         // Deactivated id no longer resolves; HC returns a top-level error.
         GraphQLErrors.FirstCode(resp).Should().Be(GraphQLErrors.UnknownPersistedOperation);
     }
-
-    private async Task UploadAsync(string id, string document, bool bypassShapeDiff = false)
-    {
-        var json = await UploadRawAsync(id, document, bypassShapeDiff);
-        if (
-            !json.RootElement.TryGetProperty("data", out var data)
-            || data.ValueKind == JsonValueKind.Null
-        )
-            throw new InvalidOperationException(
-                "Unexpected GraphQL response: " + json.RootElement.GetRawText()
-            );
-        var payload = data.GetProperty("operations")
-            .GetProperty("persistedOperations")
-            .GetProperty("uploadPersistedOperation");
-        payload.GetProperty("success").GetBoolean().Should().BeTrue(payload.GetRawText());
-    }
-
-    private Task<JsonDocument> UploadRawAsync(
-        string id,
-        string document,
-        bool bypassShapeDiff = false
-    ) =>
-        PostJsonAsync(
-            new
-            {
-                query = """
-                mutation Upload($input: UploadPersistedOperationInput!) {
-                  operations {
-                    persistedOperations {
-                      uploadPersistedOperation(input: $input) {
-                        success
-                        errors { code message oldFingerprint newFingerprint }
-                      }
-                    }
-                  }
-                }
-                """,
-                variables = new
-                {
-                    input = new
-                    {
-                        id,
-                        document,
-                        bypassShapeDiff,
-                    },
-                },
-            }
-        );
 }

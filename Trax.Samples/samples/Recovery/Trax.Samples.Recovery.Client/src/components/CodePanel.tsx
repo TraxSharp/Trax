@@ -1,26 +1,19 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
-import { lineOf } from "../sources";
-import type { Step } from "../types";
+import { useMemo, useRef } from "react";
+import { alignChains, commonIndent, hangingIndent, shownRange } from "../code";
+import type { Source } from "../sources";
+import { useFitCode } from "../useFitCode";
 
-interface Props {
-  source: { file: string; code: string };
-  current: Step | null;
-}
-
-// The range the code's font size may take.
-const MIN_PX = 10;
-const MAX_PX = 12;
-
-// The words that declare a decision and its tracks, picked out in the code.
+// The words picked out in the code: what declares a step, a decision and its tracks, a machine's states, events,
+// timer and the train it runs; attributes; strings; comments; and a few keywords.
 const TOKEN =
-  /(\.(?:Switch|Scale|Gate|When|AtLeast|Yes|No|Unsure)\b)|(\[Trax[A-Za-z]*)|("[^"]*")|(\b(?:public|class|protected|override)\b)/g;
+  /(\.(?:Switch|Scale|Gate|When|AtLeast|Yes|No|Unsure|In|On|Invokes|After|GoTo|To|OnDone|OnFailed|OnCancelled|Chain|Checkpoint|Parallel|Branch|Resolve)\b|\bChain(?=<))|(\[Trax[A-Za-z]*)|("[^"]*")|(\/\/.*$)|(\b(?:public|class|protected|override)\b)/g;
 
 function highlight(line: string) {
   const parts: React.ReactNode[] = [];
   let last = 0;
   for (const m of line.matchAll(TOKEN)) {
     if (m.index > last) parts.push(line.slice(last, m.index));
-    const tone = m[1] ? "tk-track" : m[2] ? "tk-attr" : m[3] ? "tk-string" : "tk-keyword";
+    const tone = m[1] ? "tk-track" : m[2] ? "tk-attr" : m[3] ? "tk-string" : "tk-muted";
     parts.push(
       <span key={m.index} className={tone}>
         {m[0]}
@@ -32,56 +25,82 @@ function highlight(line: string) {
   return parts;
 }
 
-export function CodePanel({ source, current }: Props) {
-  const code = useMemo(() => source.code.replace(/\r/g, ""), [source.code]);
-  const lines = useMemo(() => code.split("\n"), [code]);
-  // Only the chain, from Junctions() to Resolve(), so it stays on screen while the highlight moves. The line
-  // numbers stay the file's.
-  const [first, last, indent] = useMemo(() => {
-    const at = lines.findIndex((l) => l.includes("Junctions()"));
-    const end = lines.findIndex((l, i) => i > at && l.includes(".Resolve()"));
-    const [from, to] = at < 0 || end < 0 ? [0, lines.length] : [at, end + 1];
-    const indent = Math.min(...lines.slice(from, to).filter((l) => l.trim()).map((l) => l.search(/\S/)));
-    return [from, to, indent];
-  }, [lines]);
-  const highlighted = current ? lineOf(code, current) : -1;
-  const tone = current?.state === "FAILED" ? "failed" : current?.state === "IN_PROGRESS" ? "running" : "ran";
+/** A machine's states: from its first m.In(...) to the last chained statement after it, `.OnCancelled(...);` here. */
+function machineRange(lines: string[]): [number, number] {
+  const at = lines.findIndex((l) => l.trim().startsWith("m.In("));
+  let end = -1;
+  lines.forEach((l, i) => {
+    if (at >= 0 && i > at && /^\s*\.\w+\(.*\);\s*$/.test(l)) end = i;
+  });
+  return at < 0 || end < 0 ? [0, lines.length] : [at, end + 1];
+}
 
-  // Keep each line whole, the way an editor shows it: size the font so the longest line fits the panel's width.
-  // Below the smallest size the panel scrolls sideways instead of wrapping.
+export interface CodeTab {
+  key: string;
+  source: Source;
+  /** Which part of the file to show: a train's chain, from Junctions() to Resolve(), or a machine's states. */
+  part: "chain" | "machine";
+}
+
+interface Props {
+  tabs: CodeTab[];
+  shown: string;
+  /** Set to let the reader flip the file tabs by hand. */
+  onPick?: (key: string) => void;
+  /** The line to light, 0-based in the file, and its colour. */
+  lit: { line: number; color: string } | null;
+  /** Words at the right of the title bar. */
+  aside?: React.ReactNode;
+}
+
+/**
+ * A file's code, the part that acts, with the acting line lit. The chains are re-indented so the step names line up,
+ * the font fits the longest line between 12 and 11 pixels, and a line still too long wraps under itself; the panel
+ * never scrolls sideways. The line numbers stay the file's.
+ */
+export function CodePanel({ tabs, shown, onPick, lit, aside }: Props) {
+  const tab = tabs.find((t) => t.key === shown) ?? tabs[0];
+  const lines = useMemo(() => alignChains(tab.source.code.split("\n")), [tab.source.code]);
+  const [first, last, indent] = useMemo(() => {
+    const [from, to] =
+      tab.part === "chain"
+        ? shownRange(lines, (l) => l.includes("Junctions()"), (l) => l.includes(".Resolve()"))
+        : machineRange(lines);
+    return [from, to, commonIndent(lines.slice(from, to))];
+  }, [lines, tab.part]);
   const pane = useRef<HTMLPreElement>(null);
-  useLayoutEffect(() => {
-    const el = pane.current;
-    if (!el) return;
-    const fit = () => {
-      let size = MAX_PX;
-      // Two passes: the padding and the line-number gutter do not all scale with the font.
-      for (let pass = 0; pass < 2; pass++) {
-        el.style.fontSize = `${size}px`;
-        const ratio = el.clientWidth / el.scrollWidth;
-        if (ratio >= 1) break;
-        size = Math.max(MIN_PX, Math.floor(size * ratio * 10) / 10);
-      }
-      el.style.fontSize = `${size}px`;
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [source.file]);
+  useFitCode(pane, tab.source.file, 12, 11);
 
   return (
     <div className="panel code-panel">
       <div className="panel-title">
-        Code <span className="file">{source.file}</span>
+        Code
+        {tabs.length === 1 ? (
+          <span className="file">{tab.source.file}</span>
+        ) : (
+          tabs.map((t) => (
+            <button key={t.key} className={`file-tab ${t.key === tab.key ? "active" : ""}`} onClick={() => onPick?.(t.key)}>
+              {t.source.file.split("/").pop()}
+            </button>
+          ))
+        )}
+        {aside && <span className="panel-aside">{aside}</span>}
       </div>
       <pre ref={pane} className="code">
         {lines.slice(first, last).map((line, offset) => {
           const i = first + offset;
+          const body = line.slice(indent);
+          const on = lit != null && i === lit.line;
           return (
-            <div key={i} className={i === highlighted ? `line highlight ${tone}` : "line"}>
+            <div
+              key={i}
+              className={`line ${on ? "lit" : ""}`}
+              style={on ? { borderLeftColor: lit.color, background: `color-mix(in srgb, ${lit.color} 15%, transparent)` } : undefined}
+            >
               <span className="gutter">{i + 1}</span>
-              <span className="text">{highlight(line.slice(indent))}</span>
+              <span className="text" style={hangingIndent(body)}>
+                {highlight(body)}
+              </span>
             </div>
           );
         })}

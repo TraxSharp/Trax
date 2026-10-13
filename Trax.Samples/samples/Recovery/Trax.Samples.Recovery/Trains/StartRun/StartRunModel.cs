@@ -4,10 +4,7 @@ namespace Trax.Samples.Recovery.Trains.StartRun;
 
 public enum Scenario
 {
-    /// <summary>The research brief: a switch and a scale, a report step that crashes.</summary>
-    Research,
-
-    /// <summary>The refund approval: a gate, a payment that times out.</summary>
+    /// <summary>The refund: a switch, a gate and a checkpoint; a payment or an email that times out.</summary>
     Refund,
 
     /// <summary>The topic map: three signals in parallel branches, a branch that crashes.</summary>
@@ -18,10 +15,7 @@ public record StartRunInput
 {
     public required Scenario Scenario { get; init; }
 
-    /// <summary>The research topic; "What the papers say about cold-weather battery wear" when left out. Ignored for a refund.</summary>
-    public string? Topic { get; init; }
-
-    /// <summary>The order to refund, from <c>CaseFiles.Catalog</c>; A-1001 when left out. Ignored for research.</summary>
+    /// <summary>The order to refund, from <c>CaseFiles.Catalog</c>; A-1001 when left out. Refund only.</summary>
     public string? OrderId { get; init; }
 
     /// <summary>The fields to map; every field in the corpus when left out. Topic map only.</summary>
@@ -35,6 +29,19 @@ public record StartRunInput
 
     /// <summary>Crash the scenario's crash point once, on the first attempt.</summary>
     public bool CrashOnce { get; init; }
+
+    /// <summary>Where a refund crashes when <see cref="CrashOnce"/> is set; while paying when left out.</summary>
+    public RefundCrash? CrashWhile { get; init; }
+}
+
+/// <summary>Where a refund's crash fires: before its checkpoint or after it.</summary>
+public enum RefundCrash
+{
+    /// <summary>In the step the approval routes to (paying, declining or queueing), before the checkpoint.</summary>
+    Paying,
+
+    /// <summary>In <c>NotifyCustomer</c>, after the checkpoint.</summary>
+    Emailing,
 }
 
 public record StartRunOutput

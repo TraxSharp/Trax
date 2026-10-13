@@ -324,7 +324,7 @@ public class TopicMapBrowserTests
         var shown = await page.DraftId.TextContentAsync();
 
         await page.Page.ReloadAsync();
-        await page.Page.GetByRole(AriaRole.Tab, new() { Name = "Topic map" }).ClickAsync();
+        await RecoveryPage.ShowTheTopicMapAsync(page.Page);
 
         await Expect(page.WizardState)
             .ToHaveTextAsync(ChoosingRange, new() { Timeout = BrowserTimeouts.Render.Ms() });
@@ -349,7 +349,7 @@ public class TopicMapBrowserTests
         // A second tab of the same browser holds the same draft.
         var second = await first.Context.NewPageAsync();
         await second.GotoAsync(RecoveryPage.PageOrigin + "/");
-        await second.GetByRole(AriaRole.Tab, new() { Name = "Topic map" }).ClickAsync();
+        await RecoveryPage.ShowTheTopicMapAsync(second);
         var secondState = second.Locator(".wizard-state");
         await Expect(secondState)
             .ToHaveTextAsync(ChoosingFields, new() { Timeout = BrowserTimeouts.Render.Ms() });
@@ -400,7 +400,7 @@ public class TopicMapBrowserTests
         // The new draft is the one the page keeps: a reload opens it rather than starting another.
         var starts = page.RequestsNaming("trax_machine_topic-map_start_").Count;
         await page.Page.ReloadAsync();
-        await page.Page.GetByRole(AriaRole.Tab, new() { Name = "Topic map" }).ClickAsync();
+        await RecoveryPage.ShowTheTopicMapAsync(page.Page);
         await Expect(page.DraftId)
             .ToHaveTextAsync(
                 $"draft {started.Id.ToString()[..8]}",
@@ -492,7 +492,7 @@ public class TopicMapBrowserTests
         );
         var page = open.Recovery;
         await page.Page.GotoAsync(RecoveryPage.PageOrigin + "/");
-        await page.Page.GetByRole(AriaRole.Tab, new() { Name = "Topic map" }).ClickAsync();
+        await RecoveryPage.ShowTheTopicMapAsync(page.Page);
 
         await Expect(page.Page.GetByText("client-outdated"))
             .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });

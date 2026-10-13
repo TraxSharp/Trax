@@ -5,8 +5,9 @@ namespace Trax.Samples.Recovery.E2E.RecoveryTests;
 /// <summary>
 /// When replaying is not what the operator wants, the retry asks the model again: on purpose with
 /// <c>askAfresh</c>, or by itself when the data the decision was about changed during the backoff.
-/// These run the refund, which declares no checkpoint: the research run's retry resumes after both
-/// of its questions, so it has nothing left to ask afresh (see <c>ResearchResumeTests</c>).
+/// These crash the refund while it pays, before its checkpoint, so the retry runs both questions again.
+/// A crash while it emails comes after the checkpoint and both questions, so its retry has nothing left
+/// to ask afresh (see <c>RefundResumeTests</c>).
 /// </summary>
 [TestFixture]
 public class AskAfreshTests : RecoveryTestFixture
@@ -35,16 +36,14 @@ public class AskAfreshTests : RecoveryTestFixture
         var second = await Run.FollowAttemptAsync(2);
         (await Run.WaitForEndAsync(second)).Should().Be("COMPLETED");
 
+        Decider.Asked(Run.RunId, "Problem").Should().Be(2);
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(2);
 
         var attempt2 = await Run.TimelineAsync(second);
         Questions(attempt2)
             .Should()
-            .ContainSingle()
-            .Which.GetProperty("replayed")
-            .GetBoolean()
-            .Should()
-            .BeFalse();
+            .HaveCount(2)
+            .And.OnlyContain(q => !q.GetProperty("replayed").GetBoolean());
 
         var journal = await Run.JournalAsync(second);
         journal
@@ -101,17 +100,16 @@ public class AskAfreshTests : RecoveryTestFixture
         var second = await Run.FollowAttemptAsync(2);
         (await Run.WaitForEndAsync(second)).Should().Be("COMPLETED");
 
+        // The case holds the earlier refunds, so both questions are about a state that changed.
+        Decider.Asked(Run.RunId, "Problem").Should().Be(2);
         Decider.Asked(Run.RunId, "ApproveRefund").Should().Be(2);
 
         var attempt1 = await Run.TimelineAsync(first);
         var attempt2 = await Run.TimelineAsync(second);
         Questions(attempt2)
             .Should()
-            .ContainSingle()
-            .Which.GetProperty("replayed")
-            .GetBoolean()
-            .Should()
-            .BeFalse();
+            .HaveCount(2)
+            .And.OnlyContain(q => !q.GetProperty("replayed").GetBoolean());
         Names(attempt1).Should().Contain("IssuePayment");
         Names(attempt2).Should().Contain("QueueForReview").And.NotContain("IssuePayment");
 
@@ -121,9 +119,11 @@ public class AskAfreshTests : RecoveryTestFixture
         var journal = await Run.JournalAsync(second);
         journal.GetProperty("replayDecisionsOf").GetInt64().Should().Be(first);
         journal.GetProperty("replayAbandoned").GetBoolean().Should().BeFalse();
-        var decision = journal.GetProperty("decisions")[0];
-        decision.GetProperty("replayed").GetBoolean().Should().BeFalse();
-        decision.GetProperty("replayRefused").GetString().Should().Contain("different state");
+        foreach (var decision in journal.GetProperty("decisions").EnumerateArray())
+        {
+            decision.GetProperty("replayed").GetBoolean().Should().BeFalse();
+            decision.GetProperty("replayRefused").GetString().Should().Contain("different state");
+        }
     }
 
     private async Task<long> RequeueAsync(long metadataId, bool askAfresh)

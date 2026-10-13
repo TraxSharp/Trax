@@ -1,7 +1,6 @@
 using Trax.Core.Decisions;
 using Trax.Samples.Recovery.Trains.Ingest;
 using Trax.Samples.Recovery.Trains.Refund;
-using Trax.Samples.Recovery.Trains.Research;
 using Trax.Samples.Recovery.Trains.Topics;
 
 namespace Trax.Samples.Recovery.Model;
@@ -35,9 +34,8 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         foreach (var question in request.Questions)
             answers[question.Key] = (request.State, question) switch
             {
-                (ResearchBrief brief, ChoiceQuestion) => ChooseSource(brief),
-                (Findings findings, ScoreQuestion) => ScoreDepth(findings),
-                (RefundCase refund, YesNoQuestion) => ApproveRefund(refund),
+                (RefundCase refund, ChoiceQuestion) => NameProblem(refund),
+                (RefundEvidence evidence, YesNoQuestion) => ApproveRefund(evidence),
                 (CoCitationEvidence evidence, YesNoQuestion) => SameTopic(evidence),
                 (MatchEvidence evidence, YesNoQuestion) => SameWork(evidence),
                 _ => throw new InvalidOperationException(
@@ -47,26 +45,27 @@ public sealed class DemoDecider(DemoPace pace) : IDecider
         return new DecisionResult(answers);
     }
 
-    private static ChoiceAnswer ChooseSource(ResearchBrief brief)
+    private static ChoiceAnswer NameProblem(RefundCase refund) =>
+        refund.Reason.ToLowerInvariant() switch
+        {
+            var r when r.Contains("broken") || r.Contains("damaged") => new ChoiceAnswer(
+                nameof(Problem.Damaged),
+                0.91
+            )
+            {
+                Model = ModelName,
+            },
+            var r when r.Contains("never arrived") => new ChoiceAnswer(nameof(Problem.Lost), 0.88)
+            {
+                Model = ModelName,
+            },
+            _ => new ChoiceAnswer(nameof(Problem.Unwanted), 0.79) { Model = ModelName },
+        };
+
+    private static YesNoAnswer ApproveRefund(RefundEvidence evidence)
     {
-        if (brief.Audience == "executives")
-            return new ChoiceAnswer(nameof(Source.Web), 0.81) { Model = ModelName };
-
-        var topic = brief.Topic.ToLowerInvariant();
-        return topic.Contains("study") || topic.Contains("paper") || topic.Contains("research")
-            ? new ChoiceAnswer(nameof(Source.Papers), 0.88) { Model = ModelName }
-            : new ChoiceAnswer(nameof(Source.Wiki), 0.74) { Model = ModelName };
-    }
-
-    private static ScoreAnswer ScoreDepth(Findings findings) =>
-        findings.Source == nameof(Source.Web)
-            ? new ScoreAnswer(0.2, 0.77) { Model = ModelName }
-            : new ScoreAnswer(0.9, 0.83) { Model = ModelName };
-
-    private static YesNoAnswer ApproveRefund(RefundCase refund)
-    {
-        var probability = refund.Amount <= 250m ? 0.93 : 0.62;
-        probability -= 0.35 * refund.PriorRefunds;
+        var probability = evidence.Amount <= 250m ? 0.93 : 0.62;
+        probability -= 0.35 * evidence.PriorRefunds;
         return new YesNoAnswer(Math.Round(Math.Clamp(probability, 0.02, 0.98), 2))
         {
             Model = ModelName,

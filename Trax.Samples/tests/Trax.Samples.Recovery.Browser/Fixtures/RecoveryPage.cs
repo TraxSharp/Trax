@@ -106,8 +106,7 @@ public sealed class RecoveryPage
         await Page.GotoAsync(PageOrigin + "/");
         try
         {
-            await Page.GetByRole(AriaRole.Tab, new() { Name = "Topic map" })
-                .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
+            await ShowTheTopicMapAsync(Page);
             await Assertions
                 .Expect(WizardState)
                 .ToBeVisibleAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
@@ -122,6 +121,18 @@ public sealed class RecoveryPage
                 ex
             );
         }
+    }
+
+    /// <summary>
+    /// Shows the topic map on a loaded page: the page opens on the food order, so the Workflows view is picked
+    /// first, then its Topic map scenario.
+    /// </summary>
+    public static async Task ShowTheTopicMapAsync(IPage page)
+    {
+        await page.GetByRole(AriaRole.Tab, new() { Name = "Workflows" })
+            .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
+        await page.GetByRole(AriaRole.Tab, new() { Name = "Topic map" })
+            .ClickAsync(new() { Timeout = BrowserTimeouts.Render.Ms() });
     }
 
     /// <summary>What the page logged and which of its requests failed, for a harness failure's message.</summary>

@@ -13,7 +13,7 @@ namespace Trax.Samples.Recovery.Trains.Order;
 /// <remarks>
 /// <para>
 /// The <c>order</c> machine's <c>Ordered</c> state invokes it for whoever places the order, so it asks only for a
-/// signed-in caller, as <c>PlaceOrder</c> does: the host compares the two at startup. Unlike the research train it is
+/// signed-in caller, as <c>PlaceOrder</c> does: the host compares the two at startup. Unlike the refund train it is
 /// not <c>[TraxBroadcast]</c>, because a user's own machine may not invoke a train whose every run is broadcast to
 /// every subscriber; its steps reach a client through the operations view of <c>onJunctionEvent</c>, as the topic
 /// map's do. Every step is an <c>EffectJunction</c>, so leaving the state could cancel the run on any host.

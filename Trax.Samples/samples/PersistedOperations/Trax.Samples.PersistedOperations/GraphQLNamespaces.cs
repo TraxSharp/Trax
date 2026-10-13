@@ -8,6 +8,4 @@ namespace Trax.Samples.PersistedOperations;
 public static class GraphQLNamespaces
 {
     public const string Greeting = "greeting";
-    public const string Users = "users";
-    public const string Notes = "notes";
 }

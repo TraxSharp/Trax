@@ -10,19 +10,21 @@ namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
 [Category("E2E")]
 public class AdditionalCoverageTests : ApiTestBase
 {
-    private const string GreetDoc =
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting } } } }";
-
     // ----- Deactivated-id error shape -----
 
     [Test]
     public async Task DeactivatedId_ReturnsErrorsArrayWithCode()
     {
-        await Store.UpsertAsync("deactivated_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "deactivated_v1",
+            GreetDocuments.Casual,
+            null,
+            CancellationToken.None
+        );
         await Store.DeactivateAsync("deactivated_v1", null, "test", CancellationToken.None);
 
         using var doc = await PostJsonAsync(
-            new { id = "deactivated_v1", variables = new { input = new { name = "x" } } }
+            new { id = "deactivated_v1", variables = GreetDocuments.Variables("x") }
         );
 
         doc.RootElement.TryGetProperty("errors", out var errors)
@@ -45,13 +47,13 @@ public class AdditionalCoverageTests : ApiTestBase
     {
         await Store.UpsertAsync(
             "tenant_scope_v1",
-            GreetDoc,
+            GreetDocuments.Casual,
             new UpsertOptions { TenantKey = "tenant-a" },
             CancellationToken.None
         );
         await Store.UpsertAsync(
             "tenant_scope_v1",
-            GreetDoc + " # tenant-b variant",
+            GreetDocuments.Casual + " # tenant-b variant",
             new UpsertOptions { TenantKey = "tenant-b" },
             CancellationToken.None
         );
@@ -66,47 +68,14 @@ public class AdditionalCoverageTests : ApiTestBase
         none.Should().BeNull("the null-tenant row was never written for this id");
     }
 
-    // ----- Auth ordering: storage isn't read pre-auth -----
-
-    [Test]
-    public async Task PersistedRequest_DispatchesToTrain_ReturningExpectedData()
-    {
-        // The sample has no authentication wired (the production wiring is
-        // documented in the package README), so the strongest claim this
-        // test can make about auth ordering is: the persisted-op middleware
-        // and storage ARE consulted, and the request reaches the train. If
-        // the middleware were broken or the storage path bypassed, the
-        // response would not match the train's deterministic output.
-        await Store.UpsertAsync("auth_smoke_v1", GreetDoc, null, CancellationToken.None);
-
-        using var doc = await PostJsonAsync(
-            new { id = "auth_smoke_v1", variables = new { input = new { name = "anon" } } }
-        );
-
-        // Strong assertion: the response must contain the train's output,
-        // not just be "any GraphQL envelope". A broken pipeline would leave
-        // either an errors array OR a missing data field.
-        doc.RootElement.TryGetProperty("errors", out _)
-            .Should()
-            .BeFalse(doc.RootElement.GetRawText());
-        doc.RootElement.GetProperty("data")
-            .GetProperty("discover")
-            .GetProperty("greeting")
-            .GetProperty("greet")
-            .GetProperty("greeting")
-            .GetString()
-            .Should()
-            .Be("Hello, anon.");
-    }
-
     // ----- Content-type variants -----
 
     [Test]
     public async Task ContentTypeWithCharset_AcceptedAndProducesCorrectTrainOutput()
     {
-        await Store.UpsertAsync("content_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync("content_v1", GreetDocuments.Casual, null, CancellationToken.None);
 
-        var json = "{\"id\":\"content_v1\",\"variables\":{\"input\":{\"name\":\"Charset\"}}}";
+        var json = "{\"id\":\"content_v1\",\"variables\":{\"name\":\"Charset\"}}";
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         content.Headers.ContentType!.CharSet = "utf-8";
         var resp = await Http.PostAsync("/trax/graphql/", content);
@@ -115,7 +84,7 @@ public class AdditionalCoverageTests : ApiTestBase
         var body = await resp.Content.ReadAsStringAsync();
         body.Should()
             .Contain(
-                "\"greeting\":\"Hello, Charset.\"",
+                "\"greeting\":\"Hey Charset!\"",
                 "the request must reach the train and the train output must round-trip"
             );
     }
@@ -139,19 +108,19 @@ public class AdditionalCoverageTests : ApiTestBase
         // The Trax endpoint does not execute JSON-array batches: HotChocolate answers HC0009
         // "Invalid GraphQL Request" before enforcement runs. Enforcement lives inside the
         // execution pipeline now, so no batch reaches it, and none executes.
-        await Store.UpsertAsync("batch_a_v1", GreetDoc, null, CancellationToken.None);
-        await Store.UpsertAsync("batch_b_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync("batch_a_v1", GreetDocuments.Casual, null, CancellationToken.None);
+        await Store.UpsertAsync("batch_b_v1", GreetDocuments.Casual, null, CancellationToken.None);
 
         var json =
-            "[{\"id\":\"batch_a_v1\",\"variables\":{\"input\":{\"name\":\"Anna\"}}},"
-            + "{\"id\":\"batch_b_v1\",\"variables\":{\"input\":{\"name\":\"Bob\"}}}]";
+            "[{\"id\":\"batch_a_v1\",\"variables\":{\"name\":\"Anna\"}},"
+            + "{\"id\":\"batch_b_v1\",\"variables\":{\"name\":\"Bob\"}}]";
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var resp = await Http.PostAsync("/trax/graphql/", content);
         var body = await resp.Content.ReadAsStringAsync();
 
         ((int)resp.StatusCode).Should().Be(400);
         body.Should().Contain("HC0009");
-        body.Should().NotContain("Hello, Anna.", "a refused batch runs none of its entries");
+        body.Should().NotContain("Hey Anna!", "a refused batch runs none of its entries");
     }
 
     [Test]
@@ -159,18 +128,23 @@ public class AdditionalCoverageTests : ApiTestBase
     {
         // The point of enforcement: an inline document smuggled into a batch beside a persisted
         // id must not execute. Whichever layer refuses it, nothing in the batch runs.
-        await Store.UpsertAsync("batch_persisted_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "batch_persisted_v1",
+            GreetDocuments.Casual,
+            null,
+            CancellationToken.None
+        );
 
         var json =
-            "[{\"id\":\"batch_persisted_v1\",\"variables\":{\"input\":{\"name\":\"x\"}}},"
-            + "{\"query\":\"{ discover { greeting { greet(input: { name: \\\"y\\\" }) { greeting } } } }\"}]";
+            "[{\"id\":\"batch_persisted_v1\",\"variables\":{\"name\":\"x\"}},"
+            + "{\"query\":\"{ discover { greeting { greet(input: { name: \\\"y\\\", style: CASUAL }) { greeting } } } }\"}]";
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var resp = await Http.PostAsync("/trax/graphql/", content);
         var body = await resp.Content.ReadAsStringAsync();
 
         ((int)resp.StatusCode).Should().Be(400);
-        body.Should().NotContain("Hello, y.", "the inline document in the batch must not run");
-        body.Should().NotContain("Hello, x.", "the batch is refused as a whole");
+        body.Should().NotContain("Hey y!", "the inline document in the batch must not run");
+        body.Should().NotContain("Hey x!", "the batch is refused as a whole");
     }
 
     // ----- Multiple inputs proves correct execution -----
@@ -178,21 +152,14 @@ public class AdditionalCoverageTests : ApiTestBase
     [Test]
     public async Task SamePersistedOperation_DifferentVariables_DispatchesEachToTrain()
     {
-        await Store.UpsertAsync("multivar_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync("multivar_v1", GreetDocuments.Casual, null, CancellationToken.None);
 
         foreach (var name in new[] { "Anna", "Beth", "Carl", "Diane" })
         {
             using var doc = await PostJsonAsync(
-                new { id = "multivar_v1", variables = new { input = new { name } } }
+                new { id = "multivar_v1", variables = GreetDocuments.Variables(name) }
             );
-            doc.RootElement.GetProperty("data")
-                .GetProperty("discover")
-                .GetProperty("greeting")
-                .GetProperty("greet")
-                .GetProperty("greeting")
-                .GetString()
-                .Should()
-                .Be($"Hello, {name}.");
+            GreetDocuments.GreetingOf(doc).Should().Be($"Hey {name}!");
         }
     }
 
@@ -201,14 +168,21 @@ public class AdditionalCoverageTests : ApiTestBase
     [Test]
     public async Task ShapeChangingEdit_IsRejectedAtTheStorageLayer()
     {
-        await Store.UpsertAsync("shape_e2e_v1", GreetDoc, null, CancellationToken.None);
+        await Store.UpsertAsync(
+            "shape_e2e_v1",
+            GreetDocuments.Casual,
+            null,
+            CancellationToken.None
+        );
 
-        // Add greetedAt → response shape changes.
-        var changedShape =
-            "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt } } } }";
-
+        // Aliasing greeting to message changes the response key the app reads.
         Func<Task> act = () =>
-            Store.UpsertAsync("shape_e2e_v1", changedShape, null, CancellationToken.None);
+            Store.UpsertAsync(
+                "shape_e2e_v1",
+                GreetDocuments.RenamedField,
+                null,
+                CancellationToken.None
+            );
 
         await act.Should().ThrowAsync<ShapeDiffViolationException>();
     }

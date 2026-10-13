@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -6,10 +7,10 @@ using Trax.Samples.PersistedOperations.E2E.Fixtures;
 namespace Trax.Samples.PersistedOperations.E2E.ApiTests;
 
 /// <summary>
-/// What the sample serves outside Development. The <c>dev_</c> allowlist, the dashboard and the
-/// demo operator key exist only in Development, and the persisted-operations management
-/// mutations require the operator role in every environment, so a copy of this host started
-/// in Production enforces persistence on every request and serves no anonymous control plane.
+/// What the sample serves outside Development. The dashboard, the demo operator key and the page at
+/// <c>/</c> that sends it exist only in Development, and the management mutations require the operator role in
+/// every environment, so a copy of this host started in Production enforces persistence on every
+/// request and serves no anonymous control plane.
 /// </summary>
 [TestFixture]
 [Category("E2E")]
@@ -24,9 +25,6 @@ public class ProductionPostureTests
           }
         }
         """;
-
-    private const string GreetDoc =
-        "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting } } } }";
 
     private PersistedOperationsApiFactory _production = null!;
 
@@ -47,18 +45,13 @@ public class ProductionPostureTests
     }
 
     [Test]
-    public async Task A_dev_named_inline_document_is_refused_in_Production()
+    public async Task An_inline_document_is_refused_in_Production()
     {
         using var http = _production.CreateClient();
 
         var resp = await http.PostAsJsonAsync(
             "/trax/graphql/",
-            new
-            {
-                query = "query dev_explore($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting } } } }",
-                operationName = "dev_explore",
-                variables = new { input = new { name = "Dev" } },
-            }
+            new { query = GreetDocuments.Casual, variables = GreetDocuments.Variables("Eve") }
         );
 
         ((int)resp.StatusCode).Should().Be(400);
@@ -105,6 +98,50 @@ public class ProductionPostureTests
         ((int)resp.StatusCode).Should().Be(200);
     }
 
+    [Test]
+    public async Task Production_serves_no_demo_page()
+    {
+        // The page sends the demo operator key, so it is served only where that key exists.
+        using var http = _production.CreateClient();
+
+        var resp = await http.GetAsync("/");
+
+        ((int)resp.StatusCode).Should().Be(404);
+        (await http.GetAsync("/demo.js")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task Development_serves_the_demo_page()
+    {
+        using var http = SharedApiSetup.Factory.CreateClient();
+
+        var page = await http.GetAsync("/");
+        var script = await http.GetAsync("/demo.js");
+
+        ((int)page.StatusCode).Should().Be(200);
+        (await page.Content.ReadAsStringAsync()).Should().Contain("Stored query: greet_v1");
+        ((int)script.StatusCode).Should().Be(200);
+    }
+
+    [Test]
+    public async Task The_demo_page_does_not_shadow_the_endpoint_or_the_dashboard_in_Development()
+    {
+        using var http = SharedApiSetup.Factory.CreateClient();
+
+        var dashboard = await http.GetAsync("/trax");
+        var inline = await http.PostAsJsonAsync(
+            "/trax/graphql/",
+            new
+            {
+                query = "query { discover { greeting { greet(input: { name: \"Eve\", style: FORMAL }) { greeting } } } }",
+            }
+        );
+
+        ((int)dashboard.StatusCode).Should().Be(200);
+        (await dashboard.Content.ReadAsStringAsync()).Should().NotContain("Stored query: greet_v1");
+        (await inline.Content.ReadAsStringAsync()).Should().Contain("PERSISTED_OPERATION_REQUIRED");
+    }
+
     private static async Task<string> PostUploadAsync(HttpClient http, string id)
     {
         using (http)
@@ -119,7 +156,7 @@ public class ProductionPostureTests
                         input = new
                         {
                             id,
-                            document = GreetDoc,
+                            document = GreetDocuments.Casual,
                             bypassShapeDiff = false,
                         },
                     },

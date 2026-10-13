@@ -17,9 +17,16 @@ public sealed class DemoRun(GraphQLClient graphQL, JunctionEventStream stream, s
     public List<long> Attempts { get; } = [];
 
     /// <summary>Starts a run through the sample's <c>startRun</c> mutation.</summary>
-    public async Task StartAsync(string scenario, bool crashOnce, string? orderId = null)
+    public async Task StartAsync(
+        string scenario,
+        bool crashOnce,
+        string? orderId = null,
+        string? crashWhile = null
+    )
     {
         var order = orderId is null ? "" : $", orderId: \"{orderId}\"";
+        if (crashWhile is not null)
+            order += $", crashWhile: {crashWhile}";
         var response = await graphQL.SendAsync(
             $$"""
             mutation {

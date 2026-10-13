@@ -250,7 +250,7 @@ In `Trax.Api/tests`, on GraphQL and the dashboard alike:
 - `RunGraphViewTests.A_failed_runs_nodes_offer_Resume_from_here_only_where_the_check_allows`
 
 In `Trax.Samples/tests/Trax.Samples.Recovery.E2E`:
-- `ResearchResumeTests.A_crash_in_Summarize_resumes_from_CheckedFindings_without_fetching_again`, on GraphQL and the
+- `RefundResumeTests.A_crash_in_NotifyCustomer_resumes_from_RefundOutcome_without_paying_again`, on GraphQL and the
   dashboard, with `TraxInvariants` clean after it
 
 ## Exemplars

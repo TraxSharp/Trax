@@ -4,14 +4,18 @@
 //
 //   node persisted-operations.mjs [--copy-to <dir>]
 //
-// The script sends the sample's API the exact HTTP requests a visitor can choose on the page and writes down each
-// request, its status and its response: an inline document, an inline document named dev_*, a call by id to
-// greet_v1 and lookupUser_v1, an upload without a key, the manifest upload with the operator key, the hot-fix to
-// greet_v1 and a shape-changing edit. It does so in each state the store can be in (nothing uploaded, the manifest
-// uploaded, greet_v1 hot-fixed), so the page can take them in any order, and after every upload it reads back what
-// the store holds. The recording lands in out/persisted-operations/recording.json. --copy-to also writes it, with
-// the sample's C# and its manifest, to <dir>/persisted-operations-recordings.json, which is how the website's copy
-// is refreshed (--copy-to ../../../Trax.Website/src/data). --copy-only skips recording.
+// The page tells three stories, and the script plays each against the sample's API with the exact requests the
+// sample's client sends, writing down every request, its status, its response and how long it took:
+//
+//   calls    the shipped app calls greet_v1 by id; someone else sends a query of their own and is refused
+//   fix      the operator changes greet_v1 to a formal greeting; the same call from the app now answers formally
+//   refused  the operator tries an edit that renames the field the app reads; it is refused, and the app's answer stands
+//
+// Each story starts from the manifest as the app shipped with it (greet_v1 casual), uploaded first and not shown,
+// and after every upload the script reads back what the store holds for greet_v1. The recording lands in
+// out/persisted-operations/recording.json. --copy-to also writes it, with the sample's C# and its manifest, to
+// <dir>/persisted-operations-recordings.json, which is how the website's copy is refreshed
+// (--copy-to ../../../Trax.Website/src/data). --copy-only skips recording.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -26,39 +30,28 @@ const OPERATOR_KEY = "operator-key-do-not-use-in-production";
 const manifest = JSON.parse(
   readFileSync(join(sample, "Trax.Samples.PersistedOperations.Client/manifest.json"), "utf8"),
 ).operations;
-const original = Object.fromEntries(manifest.map((op) => [op.id, op.document]));
+const SHIPPED = manifest.find((op) => op.id === "greet_v1").document;
 
-// The client's hot-fix and its refused edit, as Trax.Samples.PersistedOperations.Client sends them.
-const HOT_FIX =
-  "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greetedAt greeting } } } }";
-const SHAPE_CHANGE =
-  "query Greet($input: GreetInput!) { discover { greeting { greet(input: $input) { greeting greetedAt __typename } } } }";
+// The client's fix and its refused edit, as Trax.Samples.PersistedOperations.Client sends them.
+const FIX = SHIPPED.replace("style: CASUAL", "style: FORMAL");
+const RENAME = FIX.replace("{ greeting }", "{ message: greeting }");
+const INLINE = 'query { discover { greeting { greet(input: { name: "Eve", style: FORMAL }) { greeting } } } }';
 
 const UPLOAD = `mutation Upload($input: UploadPersistedOperationInput!) {
-  operations {
-    persistedOperations {
-      uploadPersistedOperation(input: $input) {
-        success
-        errors { code message }
-      }
-    }
-  }
+  operations { persistedOperations { uploadPersistedOperation(input: $input) { success errors { code message } } } }
 }`;
 
 const READ = `query Stored($id: String!) {
-  operations { persistedOperations { persistedOperation(id: $id) {
-    id operationName document shapeFingerprint isActive description } } }
+  operations { persistedOperations { persistedOperation(id: $id) { document } } }
 }`;
 
 const SOURCES = [
   "Trax.Samples.PersistedOperations.Api/Program.cs",
   "Trax.Samples.PersistedOperations/Trains/Greeting/Greet/GreetTrain.cs",
   "Trax.Samples.PersistedOperations/Trains/Greeting/Greet/Junctions/ComposeGreetingJunction.cs",
-  "Trax.Samples.PersistedOperations/Trains/Users/LookupUser/LookupUserTrain.cs",
-  "Trax.Samples.PersistedOperations/Trains/Users/LookupUser/Junctions/FetchUserJunction.cs",
 ];
 
-/** Sends one request as the page shows it, and returns it with the status and the response. */
+/** Sends one request and returns it with the status, the response and how long it took. */
 async function send(body, { operator = false } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (operator) headers["X-Api-Key"] = OPERATOR_KEY;
@@ -66,92 +59,64 @@ async function send(body, { operator = false } = {}) {
   const response = await fetch(`http://${HOST}${PATH}`, { method: "POST", headers, body: JSON.stringify(body) });
   const text = await response.text();
   return {
-    request: { method: "POST", path: PATH, headers, body },
+    // The key is masked, as the page shows it.
+    request: { headers: operator ? { "X-Api-Key": "operator key" } : {}, body },
     status: response.status,
     response: JSON.parse(text),
-    durationMs: Math.round(performance.now() - started),
+    ms: Math.round(performance.now() - started),
   };
 }
 
-const upload = (id, document, operator, description) =>
-  send(
-    { query: UPLOAD, variables: { input: { id, document, bypassShapeDiff: false, ...(description ? { description } : {}) } } },
-    { operator },
-  );
+const upload = (document) =>
+  send({ query: UPLOAD, variables: { input: { id: "greet_v1", document, bypassShapeDiff: false } } }, { operator: true });
 
-/** What the store holds for each id in the manifest, read with the operator key. */
-async function readStore() {
-  const store = {};
-  for (const { id } of manifest) {
-    const { response } = await send({ query: READ, variables: { id } }, { operator: true });
-    if (response.errors) throw new Error(`reading ${id}: ${JSON.stringify(response.errors)}`);
-    store[id] = response.data.operations.persistedOperations.persistedOperation;
-  }
-  return store;
+async function stored() {
+  const { response } = await send({ query: READ, variables: { id: "greet_v1" } }, { operator: true });
+  if (response.errors) throw new Error(`reading greet_v1: ${JSON.stringify(response.errors)}`);
+  return response.data.operations.persistedOperations.persistedOperation?.document ?? null;
 }
 
-const failed = (exchange) =>
-  exchange.response.errors?.length > 0 ||
-  exchange.response.data?.operations?.persistedOperations?.uploadPersistedOperation?.success === false;
+const accepted = (exchange) =>
+  exchange.response.data?.operations?.persistedOperations?.uploadPersistedOperation?.success === true;
 
-/** Every action a visitor can take, keyed as the player keys it. Each sends one or more requests. */
-const actions = {
-  inline: () => [
-    send({ query: '{ discover { greeting { greet(input: { name: "Eve" }) { greeting } } } }' }),
-  ],
-  devInline: () => [
-    send({
-      query: 'query dev_greet { discover { greeting { greet(input: { name: "Eve" }) { greeting } } } }',
-      operationName: "dev_greet",
-    }),
-  ],
-  "callGreet:Alice": () => [send({ id: "greet_v1", variables: { input: { name: "Alice" } } })],
-  "callGreet:Eve": () => [send({ id: "greet_v1", variables: { input: { name: "Eve" } } })],
-  "callLookup:user-42": () => [send({ id: "lookupUser_v1", variables: { input: { userId: "user-42" } } })],
-  "callLookup:user-7": () => [send({ id: "lookupUser_v1", variables: { input: { userId: "user-7" } } })],
-  uploadAnonymous: () => [upload("greet_v1", original.greet_v1, false)],
-  upload: () => manifest.map((op) => upload(op.id, op.document, true)),
-  hotfix: () => [upload("greet_v1", HOT_FIX, true, "demo hot-fix (fields reordered, same shape)")],
-  shapeEdit: () => [upload("greet_v1", SHAPE_CHANGE, true)],
+// Who sends each request, and what it is.
+const steps = {
+  appCalls: async () => ({ actor: "app", kind: "call", ...(await send({ id: "greet_v1", variables: { name: "Alice" } })) }),
+  someoneElse: async () => ({ actor: "stranger", kind: "inline", ...(await send({ query: INLINE })) }),
+  fix: async () => ({ actor: "operator", kind: "upload", document: FIX, ...(await upload(FIX)) }),
+  rename: async () => ({ actor: "operator", kind: "upload", document: RENAME, ...(await upload(RENAME)) }),
 };
 
-/** The actions each state offers, and the state an upload leaves the store in. */
-const OFFERED = {
-  empty: ["inline", "devInline", "callGreet:Alice", "callGreet:Eve", "callLookup:user-42", "callLookup:user-7", "uploadAnonymous", "upload"],
-  uploaded: ["inline", "devInline", "callGreet:Alice", "callGreet:Eve", "callLookup:user-42", "callLookup:user-7", "uploadAnonymous", "shapeEdit", "upload", "hotfix"],
-  hotfixed: ["inline", "devInline", "callGreet:Alice", "callGreet:Eve", "callLookup:user-42", "callLookup:user-7", "uploadAnonymous", "shapeEdit", "hotfix", "upload"],
-};
-const LEADS_TO = { upload: "uploaded", hotfix: "hotfixed" };
+const STORIES = [
+  { key: "calls", title: "A shipped app calls the API", steps: ["appCalls", "someoneElse"] },
+  { key: "fix", title: "Fix it without shipping a new app", steps: ["appCalls", "fix", "appCalls"] },
+  { key: "refused", title: "A fix that would break the app is refused", steps: ["appCalls", "rename", "appCalls"] },
+];
 
 async function record() {
-  const before = await readStore();
-  if (Object.values(before).some(Boolean))
-    throw new Error("The store already holds the manifest's ids: start the API on a fresh database.");
-
-  const states = {};
-  // Visit the states in the order the page reaches them; the action that moves to the next state is taken last.
-  for (const [state, exit] of [["empty", "upload"], ["uploaded", "hotfix"], ["hotfixed", "upload"]]) {
-    const store = await readStore();
-    const recorded = {};
-    for (const key of [...OFFERED[state].filter((k) => k !== exit), exit]) {
-      const exchanges = [];
-      for (const request of actions[key]()) exchanges.push(await request);
-      const entry = { exchanges };
-      if (LEADS_TO[key] && !exchanges.some(failed)) entry.storeAfter = await readStore();
-      recorded[key] = entry;
-      console.log(`${state.padEnd(8)} ${key.padEnd(20)} ${exchanges.map((e) => e.status).join(",")}`);
+  if (await stored()) throw new Error("The store already holds greet_v1: start the API on a fresh database.");
+  const stories = [];
+  for (const story of STORIES) {
+    // Every story starts where the app shipped: greet_v1 as the manifest has it.
+    const reset = await upload(SHIPPED);
+    if (!accepted(reset)) throw new Error(`could not restore greet_v1: ${JSON.stringify(reset.response)}`);
+    const recorded = { key: story.key, title: story.title, storedBefore: await stored(), steps: [] };
+    for (const name of story.steps) {
+      const step = await steps[name]();
+      if (step.kind === "upload") step.storedAfter = await stored();
+      recorded.steps.push(step);
+      console.log(`${story.key.padEnd(8)} ${name.padEnd(12)} ${step.status} ${step.ms} ms`);
     }
-    states[state] = { store, actions: recorded };
+    stories.push(recorded);
   }
-  return { recordedAt: new Date().toISOString(), host: HOST, states, leadsTo: LEADS_TO };
+  return { recordedAt: new Date().toISOString(), host: HOST, stories };
 }
 
 function writeWebsiteCopy(dir, recording) {
   const sources = SOURCES.map((path) => ({ path, code: readFileSync(join(sample, path), "utf8").replace(/\r/g, "") }));
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "persisted-operations-recordings.json");
-  const { states, leadsTo } = recording;
-  writeFileSync(file, JSON.stringify({ sources, manifest, states, leadsTo }) + "\n");
+  writeFileSync(file, JSON.stringify({ sources, manifest, stories: recording.stories }) + "\n");
   console.log(`wrote ${file}`);
 }
 

@@ -14,15 +14,11 @@ import {
   TRIGGER_ASK_AFRESH,
   WORK_QUEUE_ENTRY,
 } from "./graphql";
-import { LatestReads, mergeSteps as merged, RANK } from "./runReads";
+import { LatestReads, mergeSteps as merged } from "./runReads";
 import {
-  branchOf,
-  restoredIn,
   RESUME_AT,
-  shownAnswer,
   treeOf,
   type Attempt,
-  type ConsoleLine,
   type FlatGraphNode,
   type Fork,
   type Journal,
@@ -31,8 +27,8 @@ import {
   type RunInfo,
   type Scenario,
   type Step,
-  type Tone,
 } from "./types";
+import { isQuestion, resumableAttempt } from "./workflowView";
 
 const POLL_MS = 500;
 
@@ -45,125 +41,79 @@ interface ExecutionRow {
   failureReason: string | null;
 }
 
+const ENDED = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
+
 /**
- * Follows one demo run: its manifest's attempts (found by polling operations.executions), each
- * attempt's steps (onJunctionEvent, merged with operations.junctionRuns by position), and the
- * decision journal once an attempt ends, and its run graph (operations.runGraph) while it runs. Narrates what it
- * sees into console lines.
+ * Follows one demo run: its manifest's attempts (found by polling operations.executions), each attempt's steps
+ * (onJunctionEvent, merged with operations.junctionRuns by position), its run graph (operations.runGraph) while it
+ * runs, and its decision journal, read as soon as a question's step arrives and once more when the attempt ends.
  */
 export function useRecoveryRun() {
   const client = useApolloClient();
   const [run, setRun] = useState<RunInfo | null>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
-  const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const [forkTaken, setForkTaken] = useState<Fork>("none");
 
-  // When Run was pressed: console times and the timeline count from here. Set by start.
-  const base = useRef(0);
-  const narrated = useRef(new Set<string>());
   const subscriptions = useRef(new Map<number, { unsubscribe(): void }>());
   const journaled = useRef(new Set<number>());
   // Attempts whose run graph was read after they ended: nothing on it changes any more.
   const graphed = useRef(new Set<number>());
-  // The attempts in the order they were found, kept outside React state so narration can label them at once.
+  // The attempts in the order they were found, kept outside React state so a new one is labelled at once.
   const order = useRef<{ id: number; origin: Attempt["origin"] }[]>([]);
-  const stepRank = useRef(new Map<string, number>());
-  const runRef = useRef<RunInfo | null>(null);
+  // The questions whose answers were read from the journal, by attempt and question.
+  const askedFor = useRef(new Set<string>());
   const forkRef = useRef<Fork>("none");
+  // Bumped by every reset, so an answer to a read the reset outdated is dropped.
+  const generation = useRef(0);
 
-  const say = useCallback((key: string, tone: Tone, text: string) => {
-    if (narrated.current.has(key)) return;
-    narrated.current.add(key);
-    setLines((all) => [...all, { key, t: Date.now() - base.current, tone, text }]);
-  }, []);
-
-  const labelOf = useCallback((attempt: Pick<Attempt, "id" | "origin">) => {
-    if (attempt.origin === "requeue") return "[requeue]";
-    if (attempt.origin === "resume") return "[resume]";
-    const index = order.current.filter((a) => a.origin === "manifest").findIndex((a) => a.id === attempt.id);
-    return `[attempt ${index + 1}]`;
-  }, []);
-
-  const narrate = useCallback(
-    (attemptId: number, step: Step) => {
-      const known = order.current.find((a) => a.id === attemptId);
-      if (!known) return;
-      const label = labelOf(known);
-      const key = `${attemptId}:${step.position}:${step.state}`;
-      const branch = branchOf(step.nodeId);
-      const name = (step.nameWithheld ? "(withheld)" : step.name) + (branch ? ` [${branch} branch]` : "");
-      if (step.kind === "JUNCTION") {
-        if (step.state === "IN_PROGRESS") say(key, "info", `${label} # JUNCTION ${name} is running...`);
-        else if (step.state === "COMPLETED")
-          say(key, "info", `${label} # JUNCTION ${name} completed in ${Math.round(step.durationMs ?? 0)} ms`);
-        else if (branch)
-          say(
-            key,
-            "error",
-            `${label} # JUNCTION ${name} failed with ${step.failureException ?? "an exception"}. The ${branch} branch has failed, so the run fails naming it before the join writes anything; the manifest will retry it.`,
-          );
-        else
-          say(
-            key,
-            "error",
-            `${label} # JUNCTION ${name} failed with ${step.failureException ?? "an exception"}. The run has crashed: Trax records the failure and the manifest will retry it.`,
-          );
-      } else if (step.kind === "ROUTE") {
-        say(key, "info", `${label} # ROUTE took the ${step.answer} track of ${step.questionKey ?? name}`);
-      } else if (step.replayed) {
-        say(
-          key,
-          "replay",
-          `${label} # MODEL not asked: ${step.questionKey} = ${shownAnswer(step.answer)} replayed from the failed attempt, because the state hashes the same.`,
-        );
-      } else {
-        const confidence = step.confidence != null ? ` (confidence ${step.confidence.toFixed(2)})` : "";
-        say(
-          key,
-          "model",
-          `${label} # MODEL asked: ${step.questionKey} = ${shownAnswer(step.answer)}${confidence}. Trax recorded the answer before acting on it.`,
-        );
-      }
+  const readJournal = useCallback(
+    async (attemptId: number) => {
+      const at = generation.current;
+      const { data } = await client.query({ query: DECISION_JOURNAL, variables: { metadataId: attemptId } });
+      if (at !== generation.current) return;
+      const journal = data.discover.decisionJournal as Journal;
+      setAttempts((all) => all.map((x) => (x.id === attemptId ? { ...x, journal } : x)));
     },
-    [labelOf, say],
+    [client],
   );
 
   const mergeSteps = useCallback(
     (attemptId: number, incoming: Step[]) => {
-      // Narrate each step state once, and never a state older than one already seen.
-      for (const step of [...incoming].sort((a, b) => a.position - b.position)) {
+      // A question's step arrives once the answer is recorded: read the journal for its words and the answer given.
+      for (const step of incoming.filter(isQuestion)) {
         const key = `${attemptId}:${step.position}`;
-        const known = stepRank.current.get(key);
-        if (known != null && known >= RANK[step.state]) continue;
-        stepRank.current.set(key, RANK[step.state]);
-        narrate(attemptId, step);
+        if (askedFor.current.has(key)) continue;
+        askedFor.current.add(key);
+        void readJournal(attemptId).catch(() => askedFor.current.delete(key));
       }
       setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, steps: merged(a.steps, incoming) } : a)));
     },
-    [narrate],
+    [readJournal],
   );
 
   const readStored = useCallback(
     async (attemptId: number) => {
+      const at = generation.current;
       const { data } = await client.query({ query: JUNCTION_RUNS, variables: { metadataId: attemptId } });
-      mergeSteps(attemptId, data.operations.junctionRuns as Step[]);
+      if (at === generation.current) mergeSteps(attemptId, data.operations.junctionRuns as Step[]);
     },
     [client, mergeSteps],
   );
 
-  // Each attempt's graph reads are numbered, so a read that answers after a later one started (a
-  // slow poll landing after the final read) is dropped rather than drawn over a newer graph.
+  // Each attempt's graph reads are numbered, so a read that answers after a later one started (a slow poll landing
+  // after the final read) is dropped rather than drawn over a newer graph.
   const graphReads = useRef(new LatestReads());
   const readGraph = useCallback(
-    async (attemptId: number): Promise<RunGraph | null | undefined> => {
+    async (attemptId: number): Promise<void> => {
       const read = graphReads.current.begin(attemptId);
+      const at = generation.current;
       const { data } = await client.query({ query: RUN_GRAPH, variables: { metadataId: attemptId } });
-      if (!graphReads.current.isLatest(attemptId, read)) return undefined;
+      if (!graphReads.current.isLatest(attemptId, read) || at !== generation.current) return;
       const flat = data.operations.runGraph as { hasGraph: boolean; allNodes: FlatGraphNode[] } | null;
       const graph: RunGraph | null = flat && { hasGraph: flat.hasGraph, nodes: treeOf(flat.allNodes) };
       setAttempts((all) => all.map((a) => (a.id === attemptId ? { ...a, graph } : a)));
-      return graph;
     },
     [client],
   );
@@ -184,65 +134,28 @@ export function useRecoveryRun() {
         all.some((a) => a.id === row.id) ? all : [...all, { ...row, origin, startedBy, steps: {}, journal: null, graph: null }],
       );
 
-      const label = labelOf({ id: row.id, origin });
-      const index = order.current.filter((a) => a.origin === "manifest").length - 1;
-      const text =
-        startedBy === "requeue"
-          ? `RUN execution ${row.id} started by the requeue`
-          : startedBy === "resume"
-            ? `RUN execution ${row.id} started by the resume: it restores the CheckedFindings checkpoint and runs from Summarize`
-            : startedBy === "askAfresh"
-            ? `RUN execution ${row.id} started by the trigger, without waiting out the backoff`
-            : index === 0
-              ? `RUN execution ${row.id} started`
-              : `RETRY ${index}/${runRef.current?.maxRetries ?? 2}: the manifest's retry started as execution ${row.id}`;
-      say(`${row.id}:start`, "system", `${label} # ${text}`);
-
-      const sub = client
-        .subscribe({ query: ON_JUNCTION_EVENT, variables: { metadataId: row.id } })
-        .subscribe({
-          next: ({ data }) => {
-            if (data?.onJunctionEvent) mergeSteps(row.id, [data.onJunctionEvent.junction as Step]);
-          },
-        });
+      const sub = client.subscribe({ query: ON_JUNCTION_EVENT, variables: { metadataId: row.id } }).subscribe({
+        next: ({ data }) => {
+          if (data?.onJunctionEvent) mergeSteps(row.id, [data.onJunctionEvent.junction as Step]);
+        },
+      });
       subscriptions.current.set(row.id, sub);
       // Subscribe first, then read what was stored before the subscription started.
-      void readStored(row.id);
+      void readStored(row.id).catch(() => undefined);
     },
-    [client, labelOf, mergeSteps, readStored, say],
+    [client, mergeSteps, readStored],
   );
 
-  const updateRow = useCallback(
-    (row: ExecutionRow) => {
-      const known = order.current.find((a) => a.id === row.id);
-      if (known?.origin === "manifest" && row.trainState === "FAILED") {
-        const index = order.current.filter((a) => a.origin === "manifest").findIndex((a) => a.id === row.id);
-        const max = runRef.current?.maxRetries ?? 2;
-        // The research train checkpoints its checked findings, so its retry resumes there instead
-        // of running the chain again; the other scenarios declare no checkpoint.
-        const retry =
-          runRef.current?.scenario === "RESEARCH"
-            ? `resuming execution ${row.id} after its CheckedFindings checkpoint: only the report is written again.`
-            : `naming execution ${row.id} as the run to replay.`;
-        say(
-          `${row.id}:end`,
-          "system",
-          index < max
-            ? `${labelOf(known)} # FAILED. The scheduler retries after its backoff (a few seconds here), ${retry}`
-            : `${labelOf(known)} # FAILED. Every retry is spent, so the manifest is dead-lettered.`,
-        );
-      }
-      setAttempts((all) => all.map((a) => (a.id === row.id ? { ...a, ...row } : a)));
-    },
-    [labelOf, say],
-  );
+  const updateRow = useCallback((row: ExecutionRow) => {
+    setAttempts((all) => all.map((a) => (a.id === row.id ? { ...a, ...row } : a)));
+  }, []);
 
   // Poll the manifest's executions for new attempts and each attempt's state.
   useEffect(() => {
     if (!run) return;
     let cancelled = false;
-    // One tick at a time, and one graph read per attempt at a time: a slow host makes the polls
-    // wait rather than pile up.
+    // One tick at a time, and one graph read per attempt at a time: a slow host makes the polls wait rather than
+    // pile up.
     let ticking = false;
     const graphing = new Set<number>();
     const pollGraph = (id: number) => {
@@ -285,45 +198,32 @@ export function useRecoveryRun() {
     };
   }, [client, run, follow, updateRow, readGraph]);
 
-  // Once an attempt ends: read its steps one last time and its decision journal.
+  // Once an attempt ends: read its steps, its graph and its decision journal one last time.
   useEffect(() => {
     for (const a of attempts) {
-      if (a.trainState !== "COMPLETED" && a.trainState !== "FAILED" && a.trainState !== "CANCELLED") continue;
-      if (journaled.current.has(a.id)) continue;
+      if (!ENDED.has(a.trainState) || journaled.current.has(a.id)) continue;
       journaled.current.add(a.id);
       void (async () => {
         await readStored(a.id);
         graphed.current.add(a.id);
-        const graph = await readGraph(a.id);
-        const { data } = await client.query({ query: DECISION_JOURNAL, variables: { metadataId: a.id } });
-        const journal = data.discover.decisionJournal as Journal;
-        setAttempts((all) => all.map((x) => (x.id === a.id ? { ...x, journal } : x)));
-        const restored = restoredIn(graph);
-        if (a.trainState === "COMPLETED")
-          say(
-            `${a.id}:end`,
-            "success",
-            restored > 0
-              ? `${labelOf(a)} # COMPLETED. Resumed after the checkpoint: ${restored} step(s) before it were restored from the stored findings, not run, and no question was put to the model.`
-              : `${labelOf(a)} # COMPLETED. ${describeJournal(journal)}`,
-          );
-      })();
+        await readGraph(a.id);
+        await readJournal(a.id);
+      })().catch(() => undefined);
     }
-  }, [attempts, client, labelOf, readStored, readGraph, say]);
+  }, [attempts, readStored, readGraph, readJournal]);
 
   const reset = useCallback(() => {
+    generation.current++;
     subscriptions.current.forEach((s) => s.unsubscribe());
     subscriptions.current.clear();
-    narrated.current.clear();
     journaled.current.clear();
     graphed.current.clear();
-    stepRank.current.clear();
+    askedFor.current.clear();
     order.current = [];
-    runRef.current = null;
     forkRef.current = "none";
     setAttempts([]);
-    setLines([]);
     setRun(null);
+    setProblem(null);
     setForkTaken("none");
   }, []);
 
@@ -335,33 +235,17 @@ export function useRecoveryRun() {
   const start = useCallback(
     async (scenario: Scenario, crashOnce: boolean, choice: Record<string, unknown>) => {
       reset();
-      base.current = Date.now();
       setStarting(true);
       try {
-        const { data } = await client.mutate({
-          mutation: START_RUN,
-          variables: { input: { scenario, crashOnce, ...choice } },
-        });
-        const output = data.dispatch.startRun.output;
-        const info: RunInfo = { ...output, scenario };
-        runRef.current = info;
-        setRun(info);
-        const crash =
-          output.armedCrash === "REPORT"
-            ? ", with a crash armed in the report step of the first attempt"
-            : output.armedCrash === "REFUND_TRACK"
-              ? ", with a crash armed in the step after the approval, on the first attempt"
-              : output.armedCrash === "CO_CITATION"
-                ? ", with a crash armed in the co-citation branch of the first attempt"
-                : "";
-        say("start", "system", `# Scheduled a one-off manifest (MaxRetries ${output.maxRetries})${crash}`);
+        const { data } = await client.mutate({ mutation: START_RUN, variables: { input: { scenario, crashOnce, ...choice } } });
+        setRun({ ...data.dispatch.startRun.output, scenario });
       } catch (error) {
-        say(`start-error-${Date.now()}`, "error", `# Could not start: ${(error as Error).message}`);
+        setProblem(`Could not start: ${(error as Error).message}`);
       } finally {
         setStarting(false);
       }
     },
-    [client, reset, say],
+    [client, reset],
   );
 
   const phase: Phase = useMemo(() => {
@@ -396,77 +280,48 @@ export function useRecoveryRun() {
 
   const askAfresh = useCallback(async () => {
     if (!run) return;
-    if (phase === "backoff") {
-      forkRef.current = "askAfresh";
-      setForkTaken("askAfresh");
-      const { data } = await client.mutate({ mutation: TRIGGER_ASK_AFRESH, variables: { externalId: run.manifestExternalId } });
-      say("action:askAfresh", "system", `# ASK AFRESH: triggerManifest(askAfresh: true) says "${data.operations.triggerManifest.message}"`);
-      return;
+    try {
+      if (phase === "backoff") {
+        forkRef.current = "askAfresh";
+        setForkTaken("askAfresh");
+        await client.mutate({ mutation: TRIGGER_ASK_AFRESH, variables: { externalId: run.manifestExternalId } });
+        return;
+      }
+      const last = attempts[attempts.length - 1];
+      if (!last) return;
+      const { data } = await client.mutate({ mutation: REQUEUE, variables: { id: last.id, askAfresh: true } });
+      const result = data.operations.requeueExecution;
+      if (!result.success) setProblem(result.message);
+      else if (result.id != null) await followEntry(result.id, "requeue");
+    } catch (error) {
+      setProblem((error as Error).message);
     }
-    const last = attempts[attempts.length - 1];
-    if (!last) return;
-    const { data } = await client.mutate({ mutation: REQUEUE, variables: { id: last.id, askAfresh: true } });
-    const result = data.operations.requeueExecution;
-    say(`action:requeue:${last.id}`, "system", `# ASK AFRESH: requeueExecution(${last.id}, askAfresh: true) says "${result.message}"`);
-    if (result.success && result.id != null) await followEntry(result.id, "requeue");
-  }, [attempts, client, followEntry, phase, run, say]);
+  }, [attempts, client, followEntry, phase, run]);
 
-  /** The failed or cancelled research attempt "Resume from Summarize" resumes: the latest one. */
-  const resumable = useMemo(
-    () =>
-      run?.scenario === "RESEARCH"
-        ? [...attempts].reverse().find((a) => a.trainState === "FAILED" || a.trainState === "CANCELLED") ?? null
-        : null,
-    [attempts, run],
-  );
+  const resumable = useMemo(() => resumableAttempt(attempts, phase), [attempts, phase]);
 
-  const resumeFromSummarize = useCallback(async () => {
+  const resumeFromNotify = useCallback(async () => {
     if (!resumable) return;
-    const { data } = await client.mutate({ mutation: RESUME, variables: { id: resumable.id, from: RESUME_AT } });
-    const result = data.operations.resumeExecution;
-    say(
-      `action:resume:${resumable.id}:${Date.now()}`,
-      result.success ? "system" : "error",
-      `# RESUME: resumeExecution(${resumable.id}, from: "${RESUME_AT}") says "${result.message}"`,
-    );
-    if (result.success && result.id != null) await followEntry(result.id, "resume");
-  }, [client, followEntry, resumable, say]);
+    try {
+      const { data } = await client.mutate({ mutation: RESUME, variables: { id: resumable.id, from: RESUME_AT } });
+      const result = data.operations.resumeExecution;
+      if (!result.success) setProblem(result.message);
+      else if (result.id != null) await followEntry(result.id, "resume");
+    } catch (error) {
+      setProblem((error as Error).message);
+    }
+  }, [client, followEntry, resumable]);
 
   const changeData = useCallback(async () => {
     if (!run) return;
     forkRef.current = "changeData";
     setForkTaken("changeData");
-    const { data } = await client.mutate({ mutation: CHANGE_CASE_DATA, variables: { runId: run.runId } });
-    say("action:changeData", "system", `# DATA CHANGED during the backoff: ${data.dispatch.changeCaseData.output.change}`);
-  }, [client, run, say]);
+    try {
+      await client.mutate({ mutation: CHANGE_CASE_DATA, variables: { runId: run.runId } });
+    } catch (error) {
+      setProblem((error as Error).message);
+    }
+  }, [client, run]);
 
-  /** Milliseconds since Run was pressed, for a timestamp the host sent. */
-  const sinceStart = useCallback((iso: string | null | undefined) => (iso ? Date.parse(iso) - base.current : undefined), []);
-
-  return {
-    run,
-    attempts,
-    lines,
-    phase,
-    forkTaken,
-    resumable,
-    start,
-    reset,
-    askAfresh,
-    resumeFromSummarize,
-    changeData,
-    labelOf,
-    sinceStart,
-  };
-}
-
-function describeJournal(journal: Journal): string {
-  const replayed = journal.decisions.filter((d) => d.replayed).length;
-  const refused = journal.decisions.filter((d) => d.replayRefused).length;
-  const asked = journal.decisions.length - replayed;
-  const parts = [`${journal.decisions.length} decision(s) recorded`];
-  if (replayed) parts.push(`${replayed} replayed without calling the model`);
-  if (asked) parts.push(`${asked} asked of the model`);
-  if (refused) parts.push(`${refused} replay(s) refused because the state changed`);
-  return parts.join(", ") + ".";
+  return { run, attempts, phase, forkTaken, resumable, problem, start, reset, askAfresh, resumeFromNotify, changeData };
 }

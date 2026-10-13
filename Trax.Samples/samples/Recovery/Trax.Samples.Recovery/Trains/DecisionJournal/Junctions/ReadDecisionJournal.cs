@@ -37,6 +37,9 @@ public class ReadDecisionJournal(IDataContextProviderFactory dataContexts)
                     Replayed = d.Replayed,
                     ReplayRefused = ReplayRefused(d.Answer),
                     Model = d.Model,
+                    Decider = d.Decider?[(d.Decider.LastIndexOf('.') + 1)..],
+                    Question = d.Question,
+                    Answer = d.Answer,
                     StateHash = d.StateHash is { Length: > 15 } hash ? hash[..15] : d.StateHash,
                     DecidedAt = d.DecidedAt,
                 })

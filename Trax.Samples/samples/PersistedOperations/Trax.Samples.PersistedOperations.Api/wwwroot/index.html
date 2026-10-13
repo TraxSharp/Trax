@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Persisted Operations</title>
+    <link rel="stylesheet" href="demo.css" />
+    <script src="demo.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Persisted Operations</h1>
+
+      <div class="demo">
+        <div class="panel controls">
+          <div class="group">
+            <span class="label">Scenario</span>
+            <select id="scenario"></select>
+          </div>
+          <div class="group">
+            <span class="label">Actions</span>
+            <button id="play" class="primary">Play</button>
+            <button id="reset" class="secondary" disabled>Reset</button>
+          </div>
+        </div>
+
+        <section class="panel requests">
+          <div class="panel-title">Requests</div>
+          <div id="cards" class="cards"></div>
+        </section>
+
+        <div class="phone-wrap">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="screen">
+              <p class="label">Your app</p>
+              <p class="version">Version 1.0, already in the store</p>
+              <div class="greeting-box">
+                <p id="greeting" class="greeting empty">…</p>
+              </div>
+              <p class="sends">sends greet_v1 { name: "Alice" }</p>
+            </div>
+          </div>
+        </div>
+
+        <section class="panel stored">
+          <div class="panel-title">Stored query: greet_v1</div>
+          <div id="documents" class="documents"></div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
