@@ -1,6 +1,6 @@
 ---
 title: Test a host end to end
-description: "Start a Trax host in a test with WebApplicationFactory against its own Postgres database, drive the scheduler, read Trax tables and call GraphQL and subscriptions."
+description: "Start a Trax host in a test with WebApplicationFactory on its own Postgres database, drive the scheduler, read Trax tables and call GraphQL."
 type: how-to
 area: testing
 nav_order: 3
