@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Error Codes
 description: "Every TRAX_* and PERSISTED_OPERATION_* code the Trax GraphQL endpoint returns in extensions.code, and what raises it."
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 11
 ---
 
 # Error Codes

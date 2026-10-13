@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Host Tracking
 description: "Reference for the host identity methods on TraxBuilder: SetHostEnvironment, SetHostInstanceId, AddHostLabel and AddHostLabels, and the TraxHostInfo they build."
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 11
+nav_order: 14
 ---
 
 # Host Tracking

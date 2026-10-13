@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Scale
 description: Reference for Scale, which routes on where the state falls on the ordered levels of an enum.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 13

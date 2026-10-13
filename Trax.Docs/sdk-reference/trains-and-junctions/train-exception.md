@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TrainException
 description: Reference for TrainException and TrainExceptionData, the structured record of a junction failure attached to exceptions, stored on metadata and sent as JSON.
+type: reference
+area: trains
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 7

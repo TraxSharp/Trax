@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Enqueue and Outcome Changes
 description: "Upgrade notes for the release that changed enqueueing and outcome recording: QueueAsync, mediator-routed enqueues, WorkQueue.Create and rolling deploys."
-parent: Reference
-nav_order: 18
+type: how-to
+area: upgrading
+nav_order: 4
 ---
 
 # Enqueue and Outcome Changes

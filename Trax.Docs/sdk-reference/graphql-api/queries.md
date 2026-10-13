@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Queries
 description: "Reference for the Trax GraphQL queries: generated discover fields for TraxQuery trains and the opt-in operations queries for health, trains, manifests and more."
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 2

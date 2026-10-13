@@ -1,8 +1,8 @@
 ---
-layout: default
 title: Packages
 description: "Every Trax NuGet package, grouped by layer: what it is for, the namespace to import, the methods it adds and which packages it needs beside it."
-parent: Reference
+type: reference
+area: general
 nav_order: 3
 ---
 

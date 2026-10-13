@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Benchmarks
 description: BenchmarkDotNet measurements of Trax.Core train overhead against plain code, how it scales with junction count and memory, and how to run them yourself.
-parent: Reference
-nav_order: 2
+type: reference
+area: general
+nav_order: 7
 ---
 
 # Benchmarks

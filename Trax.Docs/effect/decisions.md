@@ -1,8 +1,8 @@
 ---
-layout: default
 title: Decision Recording and Models
 description: How Trax.Effect records each decision against its run, replays them when a run is re-queued or retried, and answers questions with Nimble or another model.
-parent: Effect
+type: reference
+area: effects
 nav_order: 8
 ---
 

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: UseTraxDashboard
 description: Reference for UseTraxDashboard, which maps the dashboard at /trax behind the chosen authorization posture and refuses to start without one.
+type: reference
+area: dashboard
 parent: Dashboard API
 grand_parent: SDK Reference
 nav_order: 2

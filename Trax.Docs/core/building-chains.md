@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Building Chains
 description: How to declare a train's route in Junctions() with Chain, Resolve, ShortCircuit, Extract and AddServices, and how each one behaves on the railway.
-parent: Core
-nav_order: 2
+type: reference
+area: trains
+nav_order: 3
 ---
 
 # Building Chains

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: ServiceTrain
 description: "Reference for ServiceTrain, the train base class applications derive from: metadata per run, effects, lifecycle hooks, registration and disposal."
+type: reference
+area: effects
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 2

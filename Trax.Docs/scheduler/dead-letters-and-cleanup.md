@@ -1,8 +1,8 @@
 ---
-layout: default
 title: Dead Letters & Cleanup
 description: How a manifest dead-letters after MaxRetries within its failure window, and how to requeue or acknowledge dead letters, configure backoff and clean up metadata.
-parent: Scheduling
+type: how-to
+area: scheduling
 nav_order: 3
 ---
 

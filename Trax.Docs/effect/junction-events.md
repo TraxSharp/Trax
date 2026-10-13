@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Junction Events
 description: "AddJunctionEvents: each step of a run published live and stored in trax.junction_run, what a step carries, SignalR, RabbitMQ, GraphQL and the dashboard."
-parent: Effect
-nav_order: 9
+type: reference
+area: effects
+nav_order: 7
 ---
 
 # Junction Events

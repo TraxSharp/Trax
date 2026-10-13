@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Decisions
 description: How a chain declares several tracks and lets a decider, from a typed decision model to a rule table, choose one per run, with every track verified at startup.
-parent: Core
-nav_order: 6
+type: reference
+area: trains
+nav_order: 4
 ---
 
 # Decisions

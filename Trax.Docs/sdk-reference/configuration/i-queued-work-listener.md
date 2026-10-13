@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IQueuedWorkListener
 description: Reference for IQueuedWorkListener, the data provider's notice that work queue entries became dispatchable, which wakes the job dispatcher before its next poll.
+type: reference
+area: scheduling
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 26
+nav_order: 29
 ---
 
 # IQueuedWorkListener

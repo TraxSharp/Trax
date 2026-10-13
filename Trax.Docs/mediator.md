@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Mediator
 description: Trax.Mediator and the TrainBus, which dispatches a train by its input type instead of direct injection, with setup, nested trains and scope isolation.
-nav_order: 5
-has_children: true
-section: Packages
+type: explanation
+area: mediator
+nav_order: 1
 ---
 
 # Trax.Mediator

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: UseLambdaRun
 description: Reference for UseLambdaRun, which sends synchronous run requests to an AWS Lambda function by direct SDK invocation, with options, IAM and limitations.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 10.2
+nav_order: 15
 ---
 
 # UseLambdaRun

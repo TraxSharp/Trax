@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Chain
 description: Reference for Chain, which runs a junction with its input from Memory and stores its output back, its overloads, railway behaviour and MonadTask chaining.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 2

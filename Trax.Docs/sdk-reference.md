@@ -1,10 +1,11 @@
 ---
-layout: default
 title: SDK Reference
 description: "Index of the Trax SDK reference by category: trains and junctions, attributes, train methods, configuration, mediator, scheduler, GraphQL, auth and testing."
-nav_order: 13
-has_children: true
+type: landing
+area: general
 section: SDK Reference
+has_children: true
+nav_order: 1
 ---
 
 # SDK Reference

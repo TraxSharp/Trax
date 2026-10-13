@@ -1,9 +1,11 @@
 ---
-layout: default
 title: ITraxAuditRedactor
 description: Reference for ITraxAuditRedactor, which decides which GraphQL variables an audit entry records; the default records none.
+type: reference
+area: security
 parent: API Audit
 grand_parent: SDK Reference
+nav_order: 2
 ---
 
 # ITraxAuditRedactor

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: ITraxScheduler
 description: Reference for ITraxScheduler, the runtime API to create, change, trigger and cancel manifests, trigger groups and resolve dead letters, with its result types.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 0.5
+nav_order: 1
 ---
 
 # ITraxScheduler

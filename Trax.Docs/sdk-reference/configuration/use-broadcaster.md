@@ -1,10 +1,11 @@
 ---
-layout: default
 title: UseBroadcaster
 description: Reference for UseBroadcaster, which carries train lifecycle events between processes over a transport such as RabbitMQ, so subscriptions see remote runs.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 15
 ---
 
 # UseBroadcaster

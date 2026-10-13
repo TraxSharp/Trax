@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IFailureClassifier
 description: Reference for IFailureClassifier, which maps an exception to a FailureClass (Transient, Conflict or Permanent) recorded on each failed run, and registering it.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 15
+nav_order: 18
 ---
 
 # IFailureClassifier

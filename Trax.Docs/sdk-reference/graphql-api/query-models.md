@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Query Models
 description: Reference for TraxQueryModel, which exposes EF Core entities as GraphQL queries with paging, filtering, sorting and projection, plus binding and authorization.
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 6

@@ -1,9 +1,11 @@
 ---
-layout: default
 title: AddAudit
 description: "Reference for AddAudit, which wires the GraphQL audit pipeline on TraxGraphQLBuilder: channel, background writer, diagnostic listener, sink and redactor."
+type: reference
+area: security
 parent: API Audit
 grand_parent: SDK Reference
+nav_order: 1
 ---
 
 # AddAudit

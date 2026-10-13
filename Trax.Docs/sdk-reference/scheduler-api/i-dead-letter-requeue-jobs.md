@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IDeadLetterRequeueJobs
 description: "Reference for IDeadLetterRequeueJobs, which requeues every dead letter awaiting intervention as a background job on this node and reads the job back by id."
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 17
+nav_order: 23
 ---
 
 # IDeadLetterRequeueJobs

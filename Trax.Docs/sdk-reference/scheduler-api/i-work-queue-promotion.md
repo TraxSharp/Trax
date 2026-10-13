@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IWorkQueuePromotion
 description: Reference for IWorkQueuePromotion, which confirms work queue entries staged by a two-phase enqueue and resolves ones a crash left unconfirmed.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 13
+nav_order: 19
 ---
 
 # IWorkQueuePromotion

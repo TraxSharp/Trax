@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Generic State-Machine Mutations
 description: The generic stateMachine mutations are now opt-in. What stops working on upgrade, how to move to each machine's typed API, and what opting back in requires.
-parent: Reference
-nav_order: 21
+type: how-to
+area: upgrading
+nav_order: 1
 ---
 
 # Generic State-Machine Mutations

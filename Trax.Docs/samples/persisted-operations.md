@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Persisted Operations
 description: "The PersistedOperations sample: an app calls by id, an operator changes the answer without a new app, and a breaking fix is refused."
-parent: Samples & Deployment
-nav_order: 6
+type: explanation
+area: samples
+nav_order: 8
 ---
 
 # Persisted Operations

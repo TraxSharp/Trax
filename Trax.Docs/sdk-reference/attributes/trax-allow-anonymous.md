@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TraxAllowAnonymous
 description: Reference for TraxAllowAnonymous, which declares a GraphQL-exposed train or query model deliberately public, its effect by placement and startup checks.
+type: reference
+area: security
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 2

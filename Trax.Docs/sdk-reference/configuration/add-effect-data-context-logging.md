@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddDataContextLogging
 description: Reference for AddDataContextLogging, which stores the host's ILogger messages in the trax.log table, with its level and category filters.
+type: reference
+area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 3
+nav_order: 5
 ---
 
 # AddDataContextLogging

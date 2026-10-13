@@ -1,10 +1,11 @@
 ---
-layout: default
 title: LikePattern
 description: Reference for LikePattern, which turns a caller's search term into an escaped, lowered LIKE pattern that the Postgres trigram indexes serve.
+type: reference
+area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 25
+nav_order: 28
 ---
 
 # LikePattern

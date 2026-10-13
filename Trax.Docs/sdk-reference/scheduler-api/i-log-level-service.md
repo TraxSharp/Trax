@@ -1,10 +1,11 @@
 ---
-layout: default
 title: ILogLevelService
 description: "Reference for ILogLevelService, which reads and sets the log level of each category configured under Logging:LogLevel at runtime, in this process."
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 16
+nav_order: 22
 ---
 
 # ILogLevelService

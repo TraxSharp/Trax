@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Parameter Effect
 description: SaveTrainParameters, the effect that stores train inputs and outputs as JSON on Metadata, with size bounds, field masking and runtime configuration.
-parent: Effect Providers
-grand_parent: Effect
-nav_order: 3
+type: reference
+area: effects
+nav_order: 4
 ---
 
 # Parameter Effect

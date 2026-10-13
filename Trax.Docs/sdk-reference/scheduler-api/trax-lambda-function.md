@@ -1,10 +1,11 @@
 ---
-layout: default
 title: TraxLambdaFunction
 description: Reference for TraxLambdaFunction, the base class for AWS Lambda functions that run Trax trains from a LambdaEnvelope, with local development and testing.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 11
+nav_order: 17
 ---
 
 # TraxLambdaFunction

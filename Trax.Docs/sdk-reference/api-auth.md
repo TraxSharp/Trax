@@ -1,10 +1,11 @@
 ---
-layout: default
 title: API Auth
 description: "Index of the Trax.Api.Auth reference: the principal abstraction, API-key, JWT, Cognito and OIDC schemes, and the JWT test fixtures."
+type: landing
+area: security
 parent: SDK Reference
-nav_order: 7
 has_children: true
+nav_order: 8
 ---
 
 # API Auth

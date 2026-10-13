@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Checkpoint
 description: Reference for Checkpoint, which stores a state the chain declares so a later run of the same input resumes after it instead of running every step again.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 16

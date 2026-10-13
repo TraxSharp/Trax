@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddNimbleDecider
 description: Reference for AddNimbleDecider, which answers train decisions with Nimble, Bespoke Labs' open-weights decision model, on a Nimble server you run.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 22
+nav_order: 25
 ---
 
 # AddNimbleDecider

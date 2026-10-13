@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Scheduling Options
 description: "Scheduling options in depth: ScheduleMany, manifest groups and their dispatch controls, pruning, disabling jobs, manifest options and schedule types."
-parent: Scheduling
-nav_order: 2
+type: reference
+area: scheduling
+nav_order: 1
 ---
 
 # Scheduling Options

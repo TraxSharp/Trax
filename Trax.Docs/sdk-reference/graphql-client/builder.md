@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TraxGraphQLClientBuilder
 description: "Reference for TraxGraphQLClientBuilder: schema sources, response strictness, JSON and HttpClient configuration, and startup validation."
+type: reference
+area: api
 parent: GraphQL Client
 grand_parent: SDK Reference
 nav_order: 3

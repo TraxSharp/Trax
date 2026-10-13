@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Result codes
 description: Every result code a state machine advance, rehydrate or snapshot mutation can return, what each means and how a client should react.
+type: reference
+area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 9

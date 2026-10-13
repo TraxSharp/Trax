@@ -1,10 +1,11 @@
 ---
-layout: default
 title: SetEffectLogLevel
 description: Reference for SetEffectLogLevel, which sets the log level at which the junction logger and JSON effect write every entry.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 9
+nav_order: 12
 ---
 
 # SetEffectLogLevel

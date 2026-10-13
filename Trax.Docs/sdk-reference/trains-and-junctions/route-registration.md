@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Route and Junction Registration
 description: Reference for the AddScopedTraxRoute family of registration helpers, which register a train or junction under its interface with Inject and CanonicalName.
+type: reference
+area: trains
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 8

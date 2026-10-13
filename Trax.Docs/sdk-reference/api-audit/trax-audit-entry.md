@@ -1,9 +1,11 @@
 ---
-layout: default
 title: TraxAuditEntry
 description: Reference for TraxAuditEntry, the immutable record describing one audited GraphQL request, including refused ones, and each of its fields.
+type: reference
+area: security
 parent: API Audit
 grand_parent: SDK Reference
+nav_order: 4
 ---
 
 # TraxAuditEntry

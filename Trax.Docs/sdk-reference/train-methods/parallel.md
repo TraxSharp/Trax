@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Parallel
 description: Reference for Parallel, which runs a fixed set of named branches side by side in one run, each on its own copy of Memory, then joins them.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 15

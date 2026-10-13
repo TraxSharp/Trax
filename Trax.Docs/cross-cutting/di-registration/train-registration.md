@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Train Registration
 description: "The AddTraxRoute registration methods: signatures, generic and non-generic overloads, Inject property injection, CanonicalName assignment and when to use them."
-parent: DI Registration
-grand_parent: Cross-Cutting
-nav_order: 1
+type: reference
+area: trains
+nav_order: 6
 ---
 
 # Train Registration

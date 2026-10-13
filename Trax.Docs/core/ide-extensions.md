@@ -1,8 +1,8 @@
 ---
-layout: default
 title: IDE Extensions
 description: The VSCode and Rider/ReSharper extensions that show each Chain and ShortCircuit call's input and output types as inlay hints, with installation and internals.
-parent: Core
+type: reference
+area: tooling
 nav_order: 5
 ---
 

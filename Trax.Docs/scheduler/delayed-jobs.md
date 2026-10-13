@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Delayed / One-Off Jobs
 description: "Running work once, later: TriggerAsync with a delay on an existing manifest, or ScheduleOnceAsync for one-off manifests that disable themselves after running."
-parent: Scheduling
-nav_order: 3
+type: how-to
+area: scheduling
+nav_order: 2
 ---
 
 # Delayed / One-Off Jobs

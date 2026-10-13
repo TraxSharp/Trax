@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TraxAuthorize
 description: "Reference for TraxAuthorize, which declares who may run a train, read a query model or call a field: how attributes combine, where enforced, startup checks."
+type: reference
+area: security
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 1

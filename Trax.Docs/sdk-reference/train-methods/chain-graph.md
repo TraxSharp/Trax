@@ -1,7 +1,8 @@
 ---
-layout: default
 title: ChainGraph
 description: "Reference for ChainGraph: a train's declared chain as a graph with stable node ids, canonical JSON and a hash, and the id of the running step."
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 14

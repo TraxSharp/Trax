@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Concurrency Limiting
 description: How to cap concurrent direct train runs per train, per principal and globally, so remote backends like Lambda are not throttled, configured on the mediator.
+type: reference
+area: mediator
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 5

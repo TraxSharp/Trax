@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Junction Logger
 description: The AddJunctionLogger effect that records JunctionMetadata before and after each junction, the serializeJunctionData option and its EffectJunction requirement.
-parent: Effect Providers
-grand_parent: Effect
-nav_order: 4
+type: reference
+area: effects
+nav_order: 5
 ---
 
 # Junction Logger

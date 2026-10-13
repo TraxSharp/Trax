@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Recovery
 description: "The Recovery sample: a crashed run resumes without asking its model twice, a topic map runs signals in parallel, and state machines run trains."
-parent: Samples & Deployment
-nav_order: 3
+type: explanation
+area: samples
+nav_order: 4
 ---
 
 # Recovery

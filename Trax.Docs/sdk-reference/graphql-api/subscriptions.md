@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Subscriptions
 description: "Reference for Trax GraphQL subscriptions: train lifecycle events, a run's junction events, the onDataChanged signal, payloads, WebSocket and authentication."
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 5

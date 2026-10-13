@@ -1,7 +1,8 @@
 ---
-layout: default
 title: AddTraxGraphQL
 description: "Reference for AddTraxGraphQL and UseTraxGraphQL: builder methods, what they register, prerequisites, registration order and schema download rules."
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 1

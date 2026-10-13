@@ -1,9 +1,11 @@
 ---
-layout: default
 title: OidcDefaults
 description: Reference for OidcDefaults, the constants used by the Trax OpenID Connect scheme, its scheme, cookie and policy names, callback paths and principal type.
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 12
 ---
 
 # OidcDefaults

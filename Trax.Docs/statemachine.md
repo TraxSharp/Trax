@@ -1,10 +1,9 @@
 ---
-layout: default
 title: State Machines
 description: "Trax.Effect.StateMachine overview: the snapshot and definition documents, the three guarantees, matching C# and TypeScript runtimes, and exactly-once effects."
-nav_order: 8
-has_children: true
-section: Packages
+type: explanation
+area: machines
+nav_order: 1
 ---
 
 # State Machines

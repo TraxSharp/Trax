@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TraxSensitive
 description: Reference for TraxSensitive, which masks a member of a train's input or output in stored copies, and withholds a question type's answers from junction events.
+type: reference
+area: security
 parent: Attributes
 grand_parent: SDK Reference
 nav_order: 3

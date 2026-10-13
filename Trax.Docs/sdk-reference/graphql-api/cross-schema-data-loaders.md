@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Cross-Schema Data Loaders
 description: Reference for CrossSchemaLoader and CrossSchemaEdge, which batch GraphQL lookups of entities owned by another DbContext into one query instead of N+1.
+type: reference
+area: api
 parent: GraphQL API
 grand_parent: SDK Reference
-nav_order: 11
+nav_order: 9
 ---
 
 # Cross-Schema Data Loaders

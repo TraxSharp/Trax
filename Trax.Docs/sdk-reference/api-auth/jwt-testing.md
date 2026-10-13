@@ -1,9 +1,11 @@
 ---
-layout: default
 title: JWT Testing
 description: "Reference for Trax.Api.Auth.Jwt.Testing: TestJwksServer, TestTokenIssuer and TestTokenBuilder for integration-testing JWT auth, including key rotation."
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 10
 ---
 
 # JWT Testing

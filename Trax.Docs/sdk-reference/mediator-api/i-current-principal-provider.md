@@ -1,7 +1,8 @@
 ---
-layout: default
 title: ICurrentPrincipalProvider
 description: Reference for ICurrentPrincipalProvider, which gives the mediator the caller's stable id for per-principal concurrency limits, and how to write one.
+type: reference
+area: mediator
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 8

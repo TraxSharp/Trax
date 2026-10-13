@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Core
 description: "Trax.Core overview: trains, junctions, Memory and railway error propagation with no database or DI container, and when to use Core on its own."
-nav_order: 3
-has_children: true
-section: Packages
+type: explanation
+area: trains
+nav_order: 1
 ---
 
 # Trax.Core

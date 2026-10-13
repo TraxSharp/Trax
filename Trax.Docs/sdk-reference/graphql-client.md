@@ -1,10 +1,11 @@
 ---
-layout: default
 title: GraphQL Client
 description: "Index of the Trax.Api.GraphQL.Client reference: registration, the builder, request types, response strictness and startup validation of queries."
+type: landing
+area: api
 parent: SDK Reference
-nav_order: 10
 has_children: true
+nav_order: 12
 ---
 
 # GraphQL Client

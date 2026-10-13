@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Machine instances
 description: Reference for IMachineInstances, which creates and advances system-owned machine instances from code, and how their ids are derived from a key.
+type: reference
+area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 13

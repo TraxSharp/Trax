@@ -1,9 +1,11 @@
 ---
-layout: default
 title: PersistedOperationException
 description: Reference for PersistedOperationException and its parse, validation, shape-diff and input subclasses, each with a stable error code.
+type: reference
+area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
+nav_order: 6
 ---
 
 # PersistedOperationException

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IJunctionEffectProvider
 description: "Reference for IJunctionEffectProvider, code that runs before and after every EffectJunction: its lifecycle, failure behaviour and registration with a factory."
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 20
+nav_order: 23
 ---
 
 # IJunctionEffectProvider

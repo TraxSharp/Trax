@@ -1,9 +1,11 @@
 ---
-layout: default
 title: TraxCaller
 description: "Reference for TraxCaller, the caller context that never throws: IsAuthenticated, IsTrusted, Principal, its registration, and when to use it over TraxPrincipal."
+type: reference
+area: security
 parent: API Auth
 grand_parent: SDK Reference
+nav_order: 14
 ---
 
 # TraxCaller

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: GraphQLResourceRequest
 description: Reference for GraphQLResourceRequest, the base class for a request whose query lives in an embedded .graphql file, and how the resource is found.
+type: reference
+area: api
 parent: GraphQL Client
 grand_parent: SDK Reference
 nav_order: 6

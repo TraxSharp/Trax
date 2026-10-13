@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Junction
 description: "Reference for Junction, the base class of one unit of work in a chain: its type parameters, members, railway behaviour and an example."
+type: reference
+area: trains
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 3

@@ -1,7 +1,8 @@
 ---
-layout: default
 title: IEnqueueContextAccessor
 description: Reference for IEnqueueContextAccessor, which exposes the data context an enqueue commits on so an OnQueue hook can write in the same transaction.
+type: reference
+area: mediator
 parent: Mediator API
 grand_parent: SDK Reference
 nav_order: 6

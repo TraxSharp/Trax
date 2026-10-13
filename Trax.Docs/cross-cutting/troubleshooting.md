@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Troubleshooting
 description: The error messages Trax raises at registration, startup and dispatch, quoted verbatim, each with its causes and fix, plus problems that raise no error.
-parent: Cross-Cutting
-nav_order: 4
+type: reference
+area: general
+nav_order: 6
 ---
 
 # Troubleshooting

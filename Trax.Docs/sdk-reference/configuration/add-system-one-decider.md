@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddSystemOneDecider
 description: Reference for AddSystemOneDecider, which answers train decisions through a typed decision model that speaks the System One format, such as Jev.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 23
+nav_order: 26
 ---
 
 # AddSystemOneDecider

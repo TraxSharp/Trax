@@ -1,9 +1,11 @@
 ---
-layout: default
 title: PersistedOperationsBuilder
 description: "Reference for PersistedOperationsBuilder: single-node or RabbitMQ invalidation, cache options, the allowlist and the validation rules it applies at startup."
+type: reference
+area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
+nav_order: 7
 ---
 
 # PersistedOperationsBuilder

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddEffect / AddJunctionEffect
 description: Reference for AddEffect and AddJunctionEffect, which register custom train-level and junction-level effect provider factories, including configurable ones.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 8
+nav_order: 11
 ---
 
 # AddEffect / AddJunctionEffect

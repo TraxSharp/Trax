@@ -1,7 +1,8 @@
 ---
-layout: default
 title: TypeScript package
 description: "Reference for @trax/state-machine: the engine twin, the typed view, the React hooks, the server clients and the rule interpreter, entry point by entry point."
+type: reference
+area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 14

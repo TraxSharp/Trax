@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Job Submission
 description: "Job submitters, the scheduler's execution backends: built-in Postgres local workers, InMemory workers, remote execution, custom submitters and leaving Hangfire."
-parent: Scheduling
-nav_order: 2
+type: explanation
+area: scheduling
+nav_order: 3
 ---
 
 # Job Submission

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddTraxSchedulerLiveness
 description: Reference for AddTraxSchedulerLiveness, the health check that reports unhealthy when the JobDispatcher has not completed a polling cycle within a threshold.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 12
+nav_order: 18
 ---
 
 # AddTraxSchedulerLiveness

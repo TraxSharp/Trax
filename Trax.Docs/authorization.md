@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Authorization
 description: "How Trax gates its GraphQL API: endpoint policies, TraxAuthorize on trains and query models, TraxAllowAnonymous, combinator semantics and startup validation."
-nav_order: 9
-section: Guides
+type: reference
+area: security
+nav_order: 1
 ---
 
 > **Security notice.** NO WARRANTY. Trax auth is plumbing, not a security product. You are solely responsible for securing systems that use it. See [API Security](/docs/api-security).

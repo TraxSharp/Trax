@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddDecisionRecording
 description: Reference for AddDecisionRecording, which writes every decision a run makes to trax.decision and makes a re-queued or retried run replay them.
+type: reference
+area: effects
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 21
+nav_order: 24
 ---
 
 # AddDecisionRecording

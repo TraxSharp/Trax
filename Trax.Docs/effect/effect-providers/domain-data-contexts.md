@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Domain Data Contexts
 description: "DomainDataContext, the base for your application's own EF Core context: one schema per context, registration, PostgreSQL enum columns and cross-schema reads."
-parent: Effect Providers
-grand_parent: Effect
-nav_order: 2
+type: how-to
+area: data
+nav_order: 1
 ---
 
 # Domain Data Contexts

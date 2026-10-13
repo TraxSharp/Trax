@@ -1,10 +1,11 @@
 ---
-layout: default
 title: IEffectSettingsService
 description: "Reference for IEffectSettingsService, which lists this process's effects, turns them on and off, and edits a configurable effect's settings."
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 15
+nav_order: 21
 ---
 
 # IEffectSettingsService

@@ -1,9 +1,11 @@
 ---
-layout: default
 title: UsePersistedOperationsEnforcement
 description: Reference for UsePersistedOperationsEnforcement, kept only for compatibility, and where persisted-operation enforcement actually runs and in what order.
+type: reference
+area: api
 parent: Persisted Operations
 grand_parent: SDK Reference
+nav_order: 10
 ---
 
 # UsePersistedOperationsEnforcement

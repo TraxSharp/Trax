@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Extract
 description: Reference for Extract, which copies a property or field of type TOut from a TIn object in Memory into its own Memory slot.
+type: reference
+area: trains
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 5

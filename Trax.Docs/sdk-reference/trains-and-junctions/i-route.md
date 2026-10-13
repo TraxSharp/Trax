@@ -1,7 +1,8 @@
 ---
-layout: default
 title: IRoute
 description: Reference for IRoute, the one-method contract every train fulfils, where it appears, and why the registration helpers are named after it.
+type: reference
+area: trains
 parent: Trains and Junctions
 grand_parent: SDK Reference
 nav_order: 5

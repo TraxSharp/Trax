@@ -1,10 +1,9 @@
 ---
-layout: default
 title: JobRunner
 description: "The JobRunner train that runs a scheduled train on a worker: loading its Metadata, claiming the start, recording success and handling duplicate deliveries."
-parent: Administrative Trains
-grand_parent: Scheduling
-nav_order: 3
+type: reference
+area: scheduling
+nav_order: 5
 ---
 
 # JobRunnerTrain

@@ -1,9 +1,9 @@
 ---
-layout: default
 title: Cancellation Tokens
 description: How a CancellationToken flows from Run through every junction, EF Core queries, the TrainBus and background services, and what TrainState.Cancelled means.
-parent: Cross-Cutting
-nav_order: 1
+type: reference
+area: trains
+nav_order: 5
 ---
 
 # Cancellation Tokens

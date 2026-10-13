@@ -1,7 +1,8 @@
 ---
-layout: default
 title: Home
 description: "Trax .NET documentation home: what a train and its junctions are, the vocabulary, how the packages layer so you use only what you need, and where to go next."
+type: landing
+area: general
 nav_order: 1
 ---
 

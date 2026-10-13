@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Effect
 description: "Trax.Effect overview: ServiceTrain, recorded runs in PostgreSQL, SQLite or memory, junctions resolved from DI, pluggable effect providers and setup."
-nav_order: 4
-has_children: true
-section: Packages
+type: explanation
+area: effects
+nav_order: 1
 ---
 
 # Trax.Effect

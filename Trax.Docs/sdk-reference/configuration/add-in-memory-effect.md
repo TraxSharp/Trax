@@ -1,10 +1,11 @@
 ---
-layout: default
 title: UseInMemory
 description: Reference for UseInMemory, the in-memory data provider for tests and local development, which returns TraxEffectBuilderWithData.
+type: reference
+area: data
 parent: Configuration
 grand_parent: SDK Reference
-nav_order: 2
+nav_order: 3
 ---
 
 # UseInMemory

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Configuration
 description: "Reference for AddTrax and AddEffects: the step builder types that enforce registration order, builder properties, extension methods and services you register."
+type: landing
+area: effects
 parent: SDK Reference
-nav_order: 2
 has_children: true
+nav_order: 4
 ---
 
 # Configuration

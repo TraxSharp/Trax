@@ -1,10 +1,9 @@
 ---
-layout: default
 title: Junction Progress
 description: "AddJunctionProgress: the CancellationCheckProvider and JunctionProgressProvider pair that report the running junction and allow cancellation between junctions."
-parent: Effect Providers
-grand_parent: Effect
-nav_order: 5
+type: reference
+area: effects
+nav_order: 6
 ---
 
 # Junction Progress

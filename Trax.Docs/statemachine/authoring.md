@@ -1,8 +1,8 @@
 ---
-layout: default
 title: Authoring a machine
 description: How to author a state machine as a Machine subclass, wire it into a host, drive it over GraphQL, and keep the C# and TypeScript runtimes in parity.
-parent: State Machines
+type: how-to
+area: machines
 nav_order: 1
 ---
 

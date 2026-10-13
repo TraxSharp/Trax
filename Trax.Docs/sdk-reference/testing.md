@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Testing
 description: Index of the test-support packages Trax ships for your own test projects, with the types and members of each architecture-guard package.
+type: landing
+area: testing
 parent: SDK Reference
-nav_order: 12
 has_children: true
+nav_order: 14
 ---
 
 # Testing

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: AddTraxWorker
 description: Reference for AddTraxWorker, which runs a standalone worker process that polls the background_job table and executes trains, with LocalWorkerOptions.
+type: reference
+area: scheduling
 parent: Scheduler API
 grand_parent: SDK Reference
-nav_order: 11
+nav_order: 16
 ---
 
 # AddTraxWorker

@@ -1,10 +1,11 @@
 ---
-layout: default
 title: Mediator API
 description: "Index of the Trax.Mediator reference: ITrainBus dispatch by input type, registration, train discovery and execution, concurrency limits and trusted scopes."
+type: landing
+area: mediator
 parent: SDK Reference
-nav_order: 4
 has_children: true
+nav_order: 6
 ---
 
 # Mediator API
