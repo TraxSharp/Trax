@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
 import { SITE_URL } from "./site";
+import { asList, isDocType, type DocType, type SourceKinds } from "./doc-meta.ts";
 
 export interface DocPage {
   slug: string;
@@ -18,6 +19,20 @@ export interface DocPage {
   body: string;
   /** Front-matter `description`, else the first prose paragraph, else a generic line. */
   description: string;
+  /** Diátaxis type: the badge above the H1, the sidebar section, the "More on" group. */
+  type?: DocType;
+  /** The area the page belongs to: its sidebar group and its "More on" footer. */
+  area?: string;
+  /** Repository-root-relative files or directories the page describes, linked on GitHub. */
+  source?: string[];
+  /** Old URLs that redirect here (next.config.ts, from .docs-cache/redirects.json). */
+  redirectFrom?: string[];
+  /** SDK reference: the NuGet package the page documents. */
+  package?: string;
+  /** SDK reference: the namespace or namespaces of the documented API. */
+  namespace?: string | string[];
+  /** SDK reference: `graphql` or `typescript` when the page documents no .NET namespace. */
+  surface?: string;
 }
 
 const DOCS_DIR = path.join(process.cwd(), ".docs-cache");
@@ -132,6 +147,17 @@ export function getAllDocs(): DocPage[] {
       grandParent: data.grand_parent,
       hasChildren: data.has_children ?? false,
       section: data.section,
+      type: isDocType(data.type) ? data.type : undefined,
+      area: typeof data.area === "string" && data.area.trim() ? data.area.trim() : undefined,
+      source: asList(data.source),
+      redirectFrom: asList(data.redirect_from),
+      package: typeof data.package === "string" && data.package.trim() ? data.package.trim() : undefined,
+      namespace: Array.isArray(data.namespace)
+        ? asList(data.namespace)
+        : typeof data.namespace === "string" && data.namespace.trim()
+          ? data.namespace.trim()
+          : undefined,
+      surface: typeof data.surface === "string" && data.surface.trim() ? data.surface.trim() : undefined,
       filePath,
       sourcePath: path.relative(DOCS_DIR, filePath).split(path.sep).join("/"),
       body: content,
@@ -168,7 +194,35 @@ export function documentTitle(doc: DocPage): string {
   return shared && section ? `${doc.title} - ${section}` : doc.title;
 }
 
-/** The page's source file on GitHub, for readers who want to edit or cite it. */
+function readCacheJson<T>(name: string, fallback: T): T {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(DOCS_DIR, name), "utf-8")) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * The git ref links to repository files point at: `v<version>` when the sync
+ * stamped a release version, else `main` (scripts/sync-docs.sh writes it).
+ */
+export function siteRef(): string {
+  const { ref } = readCacheJson<{ ref?: unknown }>("site-ref.json", {});
+  return typeof ref === "string" && ref ? ref : "main";
+}
+
+let kindsCache: SourceKinds | undefined;
+
+/** Whether each `source` path is a file or a directory (scripts/docs-index.mjs). */
+export function sourceKinds(): SourceKinds {
+  kindsCache ??= readCacheJson<SourceKinds>("source-kinds.json", {});
+  return kindsCache;
+}
+
+/**
+ * The page's source file on GitHub, for readers who want to edit or cite it.
+ * It points at main, not the release ref, because an edit is made on main.
+ */
 export function sourceUrl(doc: DocPage): string {
   return `https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/${doc.sourcePath}`;
 }
