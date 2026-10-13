@@ -1,12 +1,12 @@
 ---
-title: Trax vs Alternatives
+title: Trax compared with Quartz.NET and Hangfire
 description: How Trax compares with Quartz.NET and Hangfire on scheduling, composition, persistence, distribution, retries, dashboards, and when to choose each.
 type: explanation
 area: general
 nav_order: 2
 ---
 
-# Trax vs Quartz.NET vs Hangfire
+# Trax compared with Quartz.NET and Hangfire
 
 All three run background work in .NET. They solve different problems.
 
@@ -31,7 +31,7 @@ All three run background work in .NET. They solve different problems.
 | Delayed one-off | `ScheduleOnceAsync(input, delay)` or `TriggerAsync(id, delay)` | Trigger with future start time | `BackgroundJob.Schedule(delay)` |
 | Misfire policies | Implicit (run if overdue) | 6+ explicit policies per trigger type | N/A (queue-based) |
 
-Trax now supports second-granularity cron via 6-field expressions (e.g., `*/15 * * * * *` for every 15 seconds), closing the gap with Quartz.NET for most sub-minute scheduling use cases. Trax also supports calendar exclusions (days of week, specific dates, date ranges, and daily time windows). Quartz.NET's 7-field cron (with year) and DST-aware triggers are not supported by Trax.
+Trax supports second-granularity cron via 6-field expressions (`*/15 * * * * *` for every 15 seconds), which covers most sub-minute scheduling. It also supports calendar exclusions (days of week, specific dates, date ranges, and daily time windows). Quartz.NET's 7-field cron (with year) and DST-aware triggers are not supported by Trax.
 
 ### Job Composition
 
@@ -55,7 +55,7 @@ The dependency system is unique to Trax. A manifest can declare that it depends 
 |---|---|---|---|
 | Database backends | PostgreSQL, SQLite (single server), InMemory | RAM, SQL Server, PostgreSQL, MySQL, Oracle, SQLite | SQL Server (core), Redis/PostgreSQL/MongoDB (community) |
 | Execution history | Built-in, every run records input, output, timing, exceptions | Via plugins (`LoggingJobHistoryPlugin`) | Built-in, full state transition history |
-| Dead-lettering | Built-in, `dead_letters` table with `AwaitingIntervention` status | No | No (failed jobs stay in `FailedState`) |
+| Dead-lettering | Built-in, `trax.dead_letter` table with `AwaitingIntervention` status | No | No (failed jobs stay in `FailedState`) |
 | Metadata per execution | Automatic: input JSON, output JSON, duration, stack trace | Manual: `JobDataMap` for custom data | Automatic: state data, exception details |
 
 Trax records more per execution than either alternative. Every train run automatically captures serialized input, output, execution time, and full exception details in a `Metadata` row. This comes from the effect system's `ServiceTrain` base class, not from the scheduler. Quartz requires opting in via history plugins, and while Hangfire tracks state transitions well, it doesn't serialize job inputs and outputs into queryable columns.
@@ -91,7 +91,7 @@ Trax and Hangfire both handle retries automatically; Quartz leaves it to the job
 |---|---|---|---|
 | Cancellation support | First-class: `CancellationToken` threaded through trains, junctions, and EF Core | `IInterruptableJob` interface | `IJobCancellationToken` parameter |
 | Cancel from UI | Yes, per-train and per-group cancel buttons | Pause/resume (not cancel) | Delete from dashboard |
-| Cancel from code | `CancelAsync(metadataId)`, `CancelGroupAsync(groupId)` | `scheduler.Interrupt(jobKey)` | `BackgroundJob.Delete(jobId)` |
+| Cancel from code | `CancelAsync(externalId)`, `CancelGroupAsync(groupId)` | `scheduler.Interrupt(jobKey)` | `BackgroundJob.Delete(jobId)` |
 | Same-server cancellation | Instant via `ICancellationRegistry` | Instant via thread interrupt | Instant via `CancellationToken` |
 | Cross-server cancellation | Between-junction via DB flag + `CancellationCheckProvider` | Not supported | Not supported natively |
 | Cancelled state | Dedicated `TrainState.Cancelled`, excluded from retries, dead letters, and success rate | No dedicated state | `DeletedState` |
@@ -102,11 +102,11 @@ Trax treats cancellation as a first-class state. A cancelled train transitions t
 
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
-| Lifecycle hooks | `OnQueue`, `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` | `IJobListener`, `ITriggerListener`, `ISchedulerListener` | `IElectStateFilter`, `IApplyStateFilter` |
+| Lifecycle hooks | `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled`, `OnStateChanged` | `IJobListener`, `ITriggerListener`, `ISchedulerListener` | `IElectStateFilter`, `IApplyStateFilter` |
 | Junction-level progress | Yes, real-time "currently running junction" via `AddJunctionProgress()` | No (single-unit jobs) | No (single-unit jobs) |
 | Real-time subscriptions | GraphQL subscriptions via `GraphQLSubscriptionHook` | No | SignalR via community packages |
 
-Quartz.NET has the most granular listener system, with separate interfaces for job, trigger, and scheduler events. Hangfire uses state filters that fire on state transitions. Trax's lifecycle hooks are simpler (four events) but integrate directly with the effect system and GraphQL subscriptions. Junction progress tracking is unique to Trax because trains are multi-junction, the dashboard can show which junction is currently executing in real time.
+Quartz.NET has the most granular listener system, with separate interfaces for job, trigger, and scheduler events. Hangfire uses state filters that fire on state transitions. Trax has one hook interface, `ITrainLifecycleHook`, with five methods, each optional, and it integrates directly with the effect system and GraphQL subscriptions. Junction progress tracking is unique to Trax: because trains are multi-junction, the dashboard can show which junction is executing in real time.
 
 ### Dashboard and Monitoring
 
@@ -126,7 +126,6 @@ Hangfire's dashboard is its flagship feature: battle-tested, rich, and purpose-b
 | Feature | Trax | Quartz.NET | Hangfire |
 |---|---|---|---|
 | Lines to schedule "hello world" | ~50 (train + junction + manifest) | ~30 (job class + scheduler config) | ~5 (`BackgroundJob.Enqueue(...)`) |
-
 | DI integration | Full: constructor injection in trains and junctions | Full: scoped services via `IJobFactory` | Full: scoped services via `JobActivator` |
 | Testing | In-memory data provider, junctions testable in isolation | In-memory store, manual trigger | Service replacement via DI |
 | Learning curve | Incremental, each layer adds concepts (Core: trains/junctions, Effect: metadata/DI, Scheduler: manifests) | Medium, standard scheduler concepts | Lowest: "call a method in the background" |
@@ -149,11 +148,11 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 ## When NOT to Choose Trax
 
-**You need a simple background job processor.** If the job is "send this email in 5 minutes" or "resize this image asynchronously," Hangfire does it in one line. Trax now supports delayed one-off jobs via `ScheduleOnceAsync`, but the train/junction/manifest model still adds ceremony compared to Hangfire's lambda-based approach for simple fire-and-forget work with no internal structure.
+**You need a simple background job processor.** If the job is "send this email in 5 minutes" or "resize this image asynchronously," Hangfire does it in one line. Trax supports delayed one-off jobs via `ScheduleOnceAsync`, but the train/junction/manifest model still adds ceremony compared to Hangfire's lambda-based approach for simple fire-and-forget work with no internal structure.
 
 **You need DST-aware scheduling or 7-field cron with year.** Trax supports second-granularity cron via 6-field expressions and calendar exclusions, but DST-aware interval handling and Quartz.NET's 7-field (year) format are not supported.
 
-**You're not on PostgreSQL.** Trax's distributed coordination relies on PostgreSQL advisory locks and `FOR UPDATE SKIP LOCKED`. There is no SQL Server, MySQL, or Redis backend. If your infrastructure is on a different database, Quartz.NET or Hangfire will work; Trax won't.
+**You're on SQL Server, MySQL or Redis.** Trax persists to PostgreSQL or SQLite only. SQLite runs a single server; coordinating several servers relies on PostgreSQL advisory locks and `FOR UPDATE SKIP LOCKED`. There is no SQL Server, MySQL or Redis backend, so on one of those Quartz.NET or Hangfire fits and Trax does not.
 
 **You want the lowest learning curve.** The Trax learning curve is incremental (trains and junctions at Core, metadata and DI at Effect, dispatch at Mediator, manifests at Scheduler), but reaching scheduled jobs means understanding the full stack. Hangfire requires understanding `BackgroundJob.Enqueue()`. For teams that need to onboard quickly or for projects where background work is a small part of the system, the layered abstraction cost isn't justified.
 
@@ -161,16 +160,15 @@ Hangfire wins on ceremony. You can go from zero to a running background job in f
 
 **You only need a scheduler.** Trax.Scheduler is one layer in a stack that builds on Core, Effect, and Mediator. Each layer is independently useful (you can use Core alone for typed pipelines, or Core + Effect for execution logging without ever touching the scheduler), but you can't add the scheduler without the layers below it. Quartz.NET and Hangfire are self-contained: add the NuGet package, configure storage, schedule jobs.
 
-## They're Not Mutually Exclusive
+## Using them together
 
-Trax uses PostgreSQL-backed local workers by default. The scheduler handles manifest management, dependency resolution, capacity control, and job execution using `FOR UPDATE SKIP LOCKED` for multi-server coordination.
+Trax does not need to own every background job in an application. Hangfire or Quartz.NET can keep
+the jobs they already run while trains take over the work that has internal structure. The two
+meet at the train bus: a Hangfire job or a Quartz `IJob` resolves `ITrainBus` from the container
+and calls `RunAsync` with the train's input, so the run is recorded in Trax's `Metadata` like any
+other, while the outer library keeps its own trigger, retry and dashboard. The cost is two
+schedulers, two job tables and two dashboards to operate, and retries configured in two places
+(a Hangfire retry re-runs the whole train).
 
-```csharp
-services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(assemblies)
-    .AddScheduler(scheduler => scheduler
-        .Schedule<ISyncTrain>("sync", new SyncInput(), Every.Hours(1))));
-```
+Moving a Hangfire job over one at a time is described in
+[Migrate from Hangfire](/docs/migration-guides).
