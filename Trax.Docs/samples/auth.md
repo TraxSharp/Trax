@@ -14,6 +14,8 @@ nav_order: 5
 to end. Copy its `Program.cs` as the starting point for your own: everything a secured host needs
 is in it, and nothing else.
 
+## What it proves
+
 | What it shows | Where |
 |---|---|
 | API keys and JWT bearer side by side, either one authenticating any request | `AddTraxApiKeyAuth`, `AddTraxJwtAuth` |
@@ -30,7 +32,7 @@ is in it, and nothing else.
 Every row is proven against the real host by `tests/Trax.Samples.Auth.E2E`, over both schemes and
 over WebSockets.
 
-## Run it
+## Run
 
 The sample uses PostgreSQL. From the `Trax.Samples` root:
 
@@ -45,7 +47,7 @@ credentials exist. The connection string is `ConnectionStrings:TraxDatabase` in 
 (`Host=localhost;Port=5432;Database=trax_auth;Username=trax;Password=trax123`); override it with the
 `ConnectionStrings__TraxDatabase` environment variable.
 
-## The demo users
+### The demo users
 
 Each user can sign in either way: with an API key in `X-Api-Key`, or with a JWT in
 `Authorization: Bearer`. `GET /dev/token/{user}` mints a one-hour token, in Development only.
@@ -111,17 +113,19 @@ curl -s $G -H "$J" -H 'X-Api-Key: oscar-key-do-not-use-in-production' \
 # {"principalId":"TraxApiKey:alice","success":false,"errorText":"TRAX_AUTHORIZATION at operations","document":"{\n  operations {..."}
 ```
 
-## How it is built
+## How it works
 
 ### Authentication: two schemes, Development and everything else
 
-```csharp
+```csharp from=Trax.Samples/samples/Auth/Trax.Samples.Auth/Program.cs
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Auth.Jwt;
-
+// ...
 if (builder.Environment.IsDevelopment())
 {
+    // Demo API keys. Each carries "do-not-use-in-production": Trax.Api refuses to start a host
+    // outside Development with such a key registered, so a copied demo key cannot go live.
     builder.Services.AddTraxApiKeyAuth(keys =>
         keys.Add(DemoCredentials.AliceKey, DemoCredentials.Alice.ToApiKeyPrincipal)
             .Add(DemoCredentials.ErinKey, DemoCredentials.Erin.ToApiKeyPrincipal)
@@ -129,16 +133,20 @@ if (builder.Environment.IsDevelopment())
             .Add(DemoCredentials.OscarKey, DemoCredentials.Oscar.ToApiKeyPrincipal)
     );
 
+    // Demo JWT scheme: HS256 with a key published in this repository, so it too exists only
+    // here. Tokens come from GET /dev/token/{user} below.
     builder.Services.AddTraxJwtAuth(jwt =>
         jwt.UseSymmetricKey(
             DemoCredentials.JwtIssuer,
             DemoCredentials.JwtAudience,
-            DemoCredentials.JwtSigningKey   // at least 32 bytes
+            DemoCredentials.JwtSigningKey
         )
     );
 }
 else
 {
+    // Real credentials come from configuration backed by a secret store. API keys arrive as a
+    // salt and SHA-256(salt || key), so the cleartext never enters this process.
     var apiKeys = builder.Configuration.GetSection("Auth:ApiKeys").Get<ConfiguredApiKey[]>() ?? [];
     if (apiKeys.Length > 0)
         builder.Services.AddTraxApiKeyAuth(keys =>
@@ -146,21 +154,26 @@ else
             foreach (var key in apiKeys)
                 keys.AddHashed(
                     Convert.FromBase64String(key.Salt),
-                    Convert.FromBase64String(key.Hash),   // SHA-256(salt || UTF-8 key)
+                    Convert.FromBase64String(key.Hash),
                     key.Id,
                     key.Roles
                 );
         });
 
+    // Tokens from your identity provider, validated against its published signing keys.
     var jwt = builder.Configuration.GetSection("Auth:Jwt");
     if (jwt["Authority"] is { Length: > 0 } authority)
-        builder.Services.AddTraxJwtAuth(authority, jwt["Audience"]!);
+        builder.Services.AddTraxJwtAuth(
+            authority,
+            jwt["Audience"] ?? throw new InvalidOperationException("Auth:Jwt:Audience is required.")
+        );
+// ...
 }
-
+// ...
 builder.Services.AddAuthentication();
 builder.Services.AddTraxPrincipalAccessor();
-
-// A production API key as configuration holds it: never the key itself.
+// ...
+/// <summary>A production API key as configuration holds it: never the key itself.</summary>
 internal sealed record ConfiguredApiKey(string Id, string Salt, string Hash, string[] Roles);
 ```
 
@@ -171,7 +184,8 @@ internal sealed record ConfiguredApiKey(string Id, string Salt, string Hash, str
   `do-not-use-in-production`, and Trax.Api refuses to start a host outside Development with such
   a key registered: `AddTraxApiKeyAuth() registered a key containing 'do-not-use-in-production',
   which marks a published demo key, and the environment is 'Production'. Such keys start only in
-  Development.` Every demo credential, the JWT signing key included, is registered inside that `if`.
+  Development.` Every demo credential, the JWT signing key (at least 32 bytes) included, is
+  registered inside that `if`.
 - **Production reads real credentials from configuration.** `AddHashed` takes the salt and
   `SHA-256(salt || UTF-8 key)`, so the key itself never enters the process. See
   [Pre-hashed keys](/docs/sdk-reference/api-auth/add-trax-api-key-auth#pre-hashed-keys) for how to
@@ -188,11 +202,18 @@ The factory overload of `Add` builds the whole principal. This one carries a cus
 the `VerifiedEmail` policy reads, and sets `PrincipalType` to `apikey`, which the plain
 `Add(key, id, roles)` overload sets for you:
 
-```csharp
+```csharp from=Trax.Samples/samples/Auth/Trax.Samples.Auth/Auth/DemoCredentials.cs
 public TraxPrincipal ToApiKeyPrincipal() =>
-    new(Id, DisplayName, Roles,
-        Claims: new Dictionary<string, string> { ["email_verified"] = EmailVerified ? "true" : "false" },
-        PrincipalType: "apikey");
+    new(
+        Id,
+        DisplayName,
+        Roles,
+        Claims: new Dictionary<string, string>
+        {
+            [AuthPolicies.EmailVerifiedClaim] = EmailVerified ? "true" : "false",
+        },
+        PrincipalType: "apikey"
+    );
 ```
 
 A JWT carries the same facts as claims: `sub`, `name`, `role` (one per role) and
@@ -201,14 +222,19 @@ A JWT carries the same facts as claims: `sub`, `name`, `role` (one per role) and
 
 ### Authorization: policies and roles
 
-```csharp
+```csharp from=Trax.Samples/samples/Auth/Trax.Samples.Auth/Program.cs
 builder.Services.AddAuthorization(options =>
-    options.AddPolicy("VerifiedEmail", policy => policy.RequireClaim("email_verified", "true"))
+    options.AddPolicy(
+        AuthPolicies.VerifiedEmail,
+        policy => policy.RequireClaim(AuthPolicies.EmailVerifiedClaim, "true")
+    )
 );
 ```
 
-Roles need no registration. A policy does: register every policy before a `[TraxAuthorize]`
-names it.
+`AuthPolicies.VerifiedEmail` is `"VerifiedEmail"` and `AuthPolicies.EmailVerifiedClaim` is
+`"email_verified"`, both in `Auth/AuthRoles.cs`. Roles need no registration. A policy does: a
+query model naming an unregistered policy stops the host at startup, and a train or
+`GateOperations` naming one fails every call at request time.
 
 | Surface | Declaration | Who gets in |
 |---|---|---|
@@ -223,27 +249,39 @@ names it.
 
 Separate attributes combine as ASP.NET Core's `[Authorize]` does: each is a requirement of its own,
 and the caller must meet every one, so policies AND and two role attributes require both roles.
-Within one attribute, a comma-separated role list is any of. Every exposed train and query model declares exactly one of
-`[TraxAuthorize]` and `[TraxAllowAnonymous]`; with neither, the host refuses to start, naming the
-type. So do `EditorNote`, which is not a query model but is reachable from one, and the
-`wordCount` field grafted onto the public `Article`.
+Within one attribute, a comma-separated role list is any of. Every exposed train and query model
+declares exactly one of `[TraxAuthorize]` and `[TraxAllowAnonymous]`; with neither, the host
+refuses to start, naming the type. So do `EditorNote`, which is not a query model but is reachable
+from one, and the `wordCount` field grafted onto the public `Article`.
 
 A refusal is always the same response: code `TRAX_AUTHORIZATION`, message `Not authorized.`. The
 train never runs, so a refused `publishArticle` writes no article.
 
 `PublishArticleTrain` exposes `Run` only. Its junction reads the caller by injecting
 `TraxPrincipal`, which needs the HTTP request; a queued run, executed later by the scheduler,
-has none.
+has none. The editor note, when the input carries one, is stored with the article, and only
+editors and auditors can read it back:
 
-```csharp
+```csharp from=Trax.Samples/samples/Auth/Trax.Samples.Auth/Trains/PublishArticleTrain.cs
 public class SaveArticleJunction(TraxPrincipal caller, INewsroomDbContext db)
     : Junction<PublishArticleInput, PublishArticleOutput>
 {
     public override async Task<PublishArticleOutput> Run(PublishArticleInput input)
     {
-        var article = new Article { Title = input.Title, Body = input.Body, AuthorId = caller.Id };
+        var article = new Article
+        {
+            Title = input.Title,
+            Body = input.Body,
+            AuthorId = caller.Id,
+            PublishedAt = DateTime.UtcNow,
+            EditorNote = input.EditorNote is null
+                ? null
+                : new EditorNote { Text = input.EditorNote },
+        };
+
         db.Articles.Add(article);
         await db.SaveChangesAsync();
+
         return new PublishArticleOutput(article.Id, article.AuthorId);
     }
 }
@@ -253,40 +291,43 @@ public class SaveArticleJunction(TraxPrincipal caller, INewsroomDbContext db)
 
 ### GraphQL: the operations gate and the audit trail
 
-```csharp
-using Trax.Api.GraphQL.Audit;
-using Trax.Api.GraphQL.Extensions;
-
+```csharp from=Trax.Samples/samples/Auth/Trax.Samples.Auth/Program.cs
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
         .AddMediator(typeof(Program).Assembly)
         .AddScheduler(scheduler => scheduler)
 );
 
+builder.Services.AddDomainDataContext<INewsroomDbContext, NewsroomDbContext>(options =>
+    options.UseNpgsql(connectionString)
+);
+// ...
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .AddDbContext<NewsroomDbContext>()
         .AddTypeExtension<ArticleExtensions>()
+        // ...
         .ExposeOperationQueries()
         .ExposeOperationMutations()
-        .GateOperations(roles: "Operator")
+        // ...
+        .GateOperations(roles: AuthRoles.Operator)
+        // ...
         .AddAudit<DatabaseAuditSink>(audit =>
         {
             audit.BatchSize = 20;
             audit.FlushInterval = TimeSpan.FromMilliseconds(250);
         })
 );
-
-var app = builder.Build();
+// ...
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();
 ```
 
-- **`GateOperations(roles: "Operator")`** puts the gate on the `operations` field of the query and
-  the mutation root. The rest of the endpoint stays open, which `RequireAuthorization()` cannot
-  do: it gates every operation, and also refuses to start beside a `[TraxAllowAnonymous]` surface.
-  Exposing the namespace with no gate at all refuses startup, and so does calling
+- **`GateOperations(roles: AuthRoles.Operator)`** puts the gate on the `operations` field of the
+  query and the mutation root. The rest of the endpoint stays open, which `RequireAuthorization()`
+  cannot do: it gates every operation, and also refuses to start beside a `[TraxAllowAnonymous]`
+  surface. Exposing the namespace with no gate at all refuses startup, and so does calling
   `GateOperations()` with neither a policy nor roles.
 - **`queueTrain` also applies the queued train's own `[TraxAuthorize]`.** Oscar is an operator but
   not an editor, so `operations { workQueue { queueTrain(input: { trainName:
@@ -302,21 +343,44 @@ app.UseTraxGraphQL();
   operator subscribed to `onTrainCompleted` receives every train, and Bob, who may see none of
   them (no train here is `[TraxBroadcast]`), is refused when he subscribes.
 
-The sink stores each entry in a table of the sample's own `newsroom` schema:
+The sink stores each entry in a table of the sample's own `newsroom` schema and logs one line per
+entry. The audit writer calls it from a background thread in batches, never on the request thread:
 
-```csharp
-public sealed class DatabaseAuditSink(IDbContextFactory<NewsroomDbContext> contexts) : ITraxAuditSink
+```csharp from=Trax.Samples/samples/Auth/Trax.Samples.Auth/Audit/DatabaseAuditSink.cs
+public sealed class DatabaseAuditSink(
+    IDbContextFactory<NewsroomDbContext> contexts,
+    ILogger<DatabaseAuditSink> logger
+) : ITraxAuditSink
 {
     public async Task WriteAsync(IReadOnlyList<TraxAuditEntry> batch, CancellationToken ct)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        db.AuditRecords.AddRange(batch.Select(e => new AuditRecord
+
+        foreach (var entry in batch)
         {
-            PrincipalId = e.PrincipalId, PrincipalType = e.PrincipalType,
-            OperationName = e.OperationName, Document = e.Document,
-            Success = e.Success, ErrorText = e.ErrorText,
-            DurationMs = e.DurationMs, Timestamp = e.Timestamp.UtcDateTime,
-        }));
+            db.AuditRecords.Add(
+                new AuditRecord
+                {
+                    PrincipalId = entry.PrincipalId,
+                    PrincipalType = entry.PrincipalType,
+                    OperationName = entry.OperationName,
+                    Document = entry.Document,
+                    Success = entry.Success,
+                    ErrorText = entry.ErrorText,
+                    DurationMs = entry.DurationMs,
+                    Timestamp = entry.Timestamp.UtcDateTime,
+                }
+            );
+
+            logger.LogInformation(
+                "[audit] principal={Principal} op={Operation} success={Success} duration={DurationMs}ms",
+                entry.PrincipalId,
+                entry.OperationName ?? "(anonymous operation)",
+                entry.Success,
+                entry.DurationMs
+            );
+        }
+
         await db.SaveChangesAsync(ct);
     }
 }
@@ -331,10 +395,10 @@ public sealed class DatabaseAuditSink(IDbContextFactory<NewsroomDbContext> conte
 | `operations { health }`, Bob's key | `TraxApiKey:bob` | `apikey` | false | `Not authorized.` |
 
 The document is stored with every string and number literal blanked (`title: ""`), and variables
-are not recorded. `OperationName` is the request's `operationName` field, or, when a client sends none, the name
-the document gives its operation (`query Feed { ... }` is recorded as `Feed`).
+are not recorded. `OperationName` is the request's `operationName` field, or, when a client sends
+none, the name the document gives its operation (`query Feed { ... }` is recorded as `Feed`).
 
-## What the tests prove
+## Tests
 
 `tests/Trax.Samples.Auth.E2E` runs the real host through `WebApplicationFactory`, against the
 `auth_e2e_tests` database. Locally, start Postgres and run
