@@ -24,6 +24,7 @@ namespace Trax.Api.GraphQL.Audit;
 /// <c>docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md</c>.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-audit/i-trax-audit-redactor">SDK reference</seealso>
 public interface ITraxAuditRedactor
 {
     /// <summary>

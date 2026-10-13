@@ -29,6 +29,7 @@ namespace Trax.Api.GraphQL.Audit;
 /// message can quote what the caller sent.
 /// </para>
 /// </remarks>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/api-audit/trax-audit-entry">SDK reference</seealso>
 public sealed record TraxAuditEntry(
     string PrincipalId,
     string? PrincipalType,
