@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import ChatServiceReplay from "./ChatServiceReplay";
+import OrderReplay from "./OrderReplay";
 import PersistedOperationsReplay from "./PersistedOperationsReplay";
 import RecoveryReplay from "./RecoveryReplay";
 import StateMachineReplay from "./StateMachineReplay";
@@ -21,6 +22,31 @@ interface Sample {
 }
 
 const samples: Sample[] = [
+  {
+    tab: "Food order",
+    title: "An order your phone follows",
+    body: "You place an order on your laptop, and the server runs the delivery as a train and pushes every change to your laptop and your phone at once; a double click still makes one order.",
+    shows: [
+      "A state machine that runs a train and moves on its outcome",
+      "Every change pushed to every screen, with no polling",
+      "A step that times out and is retried, and a timer that clears a forgotten cart",
+    ],
+    href: "/docs/samples/recovery",
+    source: {
+      folder: "Recovery",
+      files: [
+        { path: "Trax.Samples.Recovery/Machines/OrderMachine.cs", label: "the order: its states, events and timer" },
+        { path: "Trax.Samples.Recovery/Trains/Order/DeliverOrderTrain.cs", label: "the delivery the order runs" },
+        { path: "Trax.Samples.Recovery.Api/Program.cs", label: "the host: machines, junction events and pushes" },
+      ],
+      docs: "/docs/samples/recovery",
+      run: [
+        "docker compose up -d database",
+        "dotnet run --project samples/Recovery/Trax.Samples.Recovery.Api",
+        "cd samples/Recovery/Trax.Samples.Recovery.Client && npm ci && npm run dev",
+      ],
+    },
+  },
   {
     tab: "Recovery",
     title: "A run that recovers without asking the model again",
@@ -188,7 +214,9 @@ export default function SeeItRunning() {
           </div>
 
           <div className="mt-8">
-            {sample.tab === "Recovery" ? (
+            {sample.tab === "Food order" ? (
+              <OrderReplay />
+            ) : sample.tab === "Recovery" ? (
               <RecoveryReplay />
             ) : sample.tab === "State machine" ? (
               <StateMachineReplay />
