@@ -1,5 +1,5 @@
 ---
-title: Getting Started
+title: Build a greeter service
 description: "A tutorial building one Trax app from an empty folder: a train run in-process, recorded in Postgres, scheduled, shown in the dashboard and served over GraphQL."
 type: tutorial
 area: general
@@ -7,34 +7,19 @@ nav_order: 1
 snippet_context: none
 ---
 
-# Getting Started
+# Build a greeter service
 
-This page builds one application from an empty folder: a train that greets someone, run in-process
-first, then recorded in Postgres, scheduled, watched from the dashboard, and exposed over GraphQL.
-Each step lists every file it changes in full, so you can stop after any of them with something that
-runs.
+In this tutorial we build one application from an empty folder: a train that greets someone, run
+in-process first, then recorded in Postgres, scheduled, watched from the dashboard, and called over
+GraphQL. Each step shows every file it changes in full, and what you should see when you run it.
 
 Every C# block on this page is compiled in CI against the package versions in the project file below.
 
 ## Requirements
 
-Trax requires `net10.0`. Every project that references a Trax package must target it; there is no
-`net8.0` or `net9.0` build. Steps 4 to 6 also need Docker, for Postgres.
-
-Trax's packages depend on EF Core, Npgsql and `Microsoft.Extensions.*`, so NuGet resolves those
-for you. You only need to act if your project also pins one of them directly: the pin has to be
-at least the version the Trax package was built against, or the restore fails with `NU1605` (`NU1109`
-under Central Package Management) naming the package. The floors as of `Trax.Effect` 1.57 are:
-
-| Package | Minimum |
-|---|---|
-| `Microsoft.EntityFrameworkCore` (and `.Relational`, `.InMemory`, `.Sqlite`) | 10.0.12 |
-| `Npgsql` | 10.0.3 |
-| `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 |
-| `EFCore.NamingConventions` | 10.0.1 |
-| `Microsoft.Extensions.*` | 10.0.12 |
-
-A release can raise them; the dependency list on the package's nuget.org page is authoritative.
+- The .NET 10 SDK. Trax packages target `net10.0` only.
+- Docker, from step 4 on, for Postgres.
+- `curl`, to call the application.
 
 ## 1. Create the project
 
@@ -78,10 +63,9 @@ each one:
 </Project>
 ```
 
-The version is the release this site was published from, and every Trax package shares it. Pin
-exact versions as these do: a
-floating `Version="1.*"` restores whatever was published last, and a Trax minor release can change
-an API your code calls. Newer releases are listed on each package's nuget.org page.
+Every Trax package shares one version, the release this site was published from. If your project
+also pins EF Core, Npgsql or a `Microsoft.Extensions.*` package itself and the restore fails with
+`NU1605`, see [Packages](/docs/reference/packages).
 
 ## 2. Define a train
 
@@ -134,10 +118,7 @@ public class BuildGreetingJunction(ILogger<BuildGreetingJunction> logger)
 }
 ```
 
-Both derive `EffectJunction<TIn, TOut>` rather than the plain `Junction<TIn, TOut>` from Trax.Core. The plain
-base runs the same way, but only an `EffectJunction` is seen by the junction effect providers this page adds in
-step 4 (`AddJunctionLogger()`, and `AddJunctionProgress()` if you add it later): on a plain `Junction` they record
-nothing, without an error.
+Both derive `EffectJunction`, so the junction logger we add in step 4 sees them.
 
 `GreetTrain.cs`:
 
@@ -161,6 +142,15 @@ every junction's input is available, and refuses to start if one is not. The int
 rest of the application asks for the train; its full name (`Greeter.IGreetTrain`) is the name Trax
 records runs under. Junctions take constructor dependencies from the container, as
 `BuildGreetingJunction` does with its logger.
+
+Build it:
+
+```bash
+dotnet build
+```
+
+It restores the packages and reports that the build succeeded. The template's
+`Program.cs` still serves "Hello World!"; we replace it next.
 
 ## 3. Run it
 
@@ -202,32 +192,54 @@ app.Run();
 `IGreetTrain` can be injected anywhere. `UseInMemory()` keeps the record of each run in memory,
 which is enough to run without a database.
 
+Start it on port 5080, which every step on this page uses:
+
 ```bash
-dotnet run
-curl -X POST http://localhost:5000/greet -H 'Content-Type: application/json' -d '{"name":"Ada"}'
+dotnet run --urls http://localhost:5080
 ```
 
-Use the port `dotnet run` prints; the examples on this page use 5000. (On macOS the AirPlay receiver holds
-port 5000 and answers `403`; if you see that, set another port in `Properties/launchSettings.json`, such as 5080,
-and use it below.) The response is `{"message":"Hello, Ada!"}`; an empty name returns
-`400` with the junction's message: `Run` throws the exception that stopped the chain, as it was
-thrown. The run is recorded either way. See [Run / RunEither](/docs/sdk-reference/train-methods/run).
+The log ends with `Now listening on: http://localhost:5080` and `Hosting environment: Development`.
+In a second terminal, greet someone:
+
+```bash
+curl -X POST http://localhost:5080/greet -H 'Content-Type: application/json' -d '{"name":"Ada"}'
+```
+
+```json
+{"message":"Hello, Ada!"}
+```
+
+Now send an empty name:
+
+```bash
+curl -X POST http://localhost:5080/greet -H 'Content-Type: application/json' -d '{"name":""}'
+```
+
+```json
+"A greeting needs a name."
+```
+
+That is a `400`: `ValidateNameJunction` threw, the chain stopped, and `Run` rethrew the exception
+as it was thrown. Stop the application with Ctrl+C before the next step.
 
 ## 4. Record runs in Postgres
 
-Start a database:
+Start a database. It listens on host port 5433, so it does not collide with a Postgres you may
+already run on 5432:
 
 ```bash
-docker run -d --name greeter-db -p 5432:5432 \
+docker run -d --name greeter-db -p 5433:5432 \
   -e POSTGRES_USER=trax -e POSTGRES_PASSWORD=trax123 -e POSTGRES_DB=trax postgres:17
 ```
+
+`docker ps --filter name=greeter-db` lists it as `Up`.
 
 Add the connection string to `appsettings.json`:
 
 ```json
 {
   "ConnectionStrings": {
-    "TraxDatabase": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123"
+    "TraxDatabase": "Host=localhost;Port=5433;Database=trax;Username=trax;Password=trax123"
   }
 }
 ```
@@ -277,18 +289,27 @@ app.Run();
 
 `UsePostgres` creates and migrates the `trax` schema when the application starts.
 `SaveTrainParameters()` stores each run's input and output as JSON, and `AddJunctionLogger()` writes a
-log entry before and after every junction, at `Debug` unless you change it with
-[SetEffectLogLevel](/docs/sdk-reference/configuration/set-effect-log-level). Run the same `curl`
-again, then look at what was recorded:
+log entry before and after every junction.
+
+Start the application again with `dotnet run --urls http://localhost:5080`, send both `curl`
+requests from step 3, then look at what was recorded:
 
 ```bash
 docker exec greeter-db psql -U trax -d trax -c \
-  "select name, train_state, input, output from trax.metadata order by id desc limit 5"
+  "select name, train_state, input->>'name' as name_in, output->>'message' as message
+   from trax.metadata where name = 'Greeter.IGreetTrain' order by id desc limit 5"
 ```
 
-Each row is one run, named `Greeter.IGreetTrain`, with its state, input and output. A failed run
-also records the junction that failed and its exception. [Metadata](/docs/effect/metadata) lists the
-columns.
+```text
+        name         | train_state | name_in |   message
+---------------------+-------------+---------+-------------
+ Greeter.IGreetTrain | failed      |         |
+ Greeter.IGreetTrain | completed   | Ada     | Hello, Ada!
+(2 rows)
+```
+
+Each row is one run of `Greeter.IGreetTrain`. The failed one also records the junction that failed
+and its exception. Stop the application before the next step.
 
 ## 5. Schedule it, and open the dashboard
 
@@ -325,23 +346,15 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// The dashboard can queue, run and cancel trains, so it refuses to start until you say who may
-// use it. Open in Development; outside it, only callers who satisfy the TraxAdmin policy.
-builder.AddTraxDashboard(dashboard =>
-{
-    if (builder.Environment.IsDevelopment())
-        dashboard.AllowAnonymousDashboard();
-    else
-        dashboard.RequirePolicy("TraxAdmin");
-});
-builder.Services.AddAuthorization(options =>
-    options.AddPolicy("TraxAdmin", policy => policy.RequireRole("Admin"))
-);
+// The dashboard can queue, run and cancel trains. Here it is open to anyone, so it is only
+// added in Development.
+if (builder.Environment.IsDevelopment())
+    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 var app = builder.Build();
 
-app.UseAuthorization();
-app.UseTraxDashboard();
+if (app.Environment.IsDevelopment())
+    app.UseTraxDashboard();
 
 app.MapPost(
     "/greet",
@@ -363,14 +376,27 @@ app.Run();
 
 `AddScheduler` stores the schedule as a manifest named `greet-world` when the application starts,
 and runs the train every minute on worker threads in this process. The manifest lives in Postgres,
-so it survives a restart, and changes made to it from the dashboard are kept.
+so it survives a restart.
 
-`dotnet run` starts in Development (from `Properties/launchSettings.json`), so the dashboard at
-`http://localhost:5000/trax` is open to you. It shows the runs as they happen, the manifest and its
-next run time, and lets you run it now or disable it. Outside Development it asks for the
-`TraxAdmin` policy, an authenticated user with the `Admin` role, and this application cannot sign
-anyone in yet, so there `UseTraxDashboard()` refuses to start the host (no authentication scheme is registered
-to challenge the caller) until you register the authentication your application uses. See [Dashboard](/docs/dashboard) for the other ways to choose who may use it.
+Run the application. Among the startup lines is a warning that the dashboard has no authorization
+of its own:
+
+```text
+warn: Trax.Dashboard[0]
+      AllowAnonymousDashboard() is set: the Trax dashboard at /trax applies no authorization of its own, ...
+```
+
+Open `http://localhost:5080/trax` in a browser. The dashboard lists the `greet-world` manifest with
+its next run time, and within a minute or two its runs appear, each greeting `World`. The `psql`
+query from step 4 now lists them above the two earlier runs:
+
+```text
+        name         | train_state | name_in |    message
+---------------------+-------------+---------+---------------
+ Greeter.IGreetTrain | completed   | World   | Hello, World!
+```
+
+Stop the application before the next step.
 
 ## 6. Call it over GraphQL
 
@@ -431,24 +457,14 @@ builder.Services.AddTrax(trax =>
         )
 );
 
-// A demo key, for Development only: a key containing "do-not-use-in-production" stops the
-// application from starting in any other environment.
-if (builder.Environment.IsDevelopment())
-    builder.Services.AddTraxApiKeyAuth(keys =>
-        keys.Add("greeter-key-do-not-use-in-production", id: "demo", "User")
-    );
-builder.Services.AddAuthentication();
-builder.Services.AddAuthorization(options =>
-    options.AddPolicy("TraxAdmin", policy => policy.RequireRole("Admin"))
+// A demo key holding the User role. A key containing "do-not-use-in-production" stops the
+// application from starting outside Development.
+builder.Services.AddTraxApiKeyAuth(keys =>
+    keys.Add("greeter-key-do-not-use-in-production", id: "demo", "User")
 );
 
-builder.AddTraxDashboard(dashboard =>
-{
-    if (builder.Environment.IsDevelopment())
-        dashboard.AllowAnonymousDashboard();
-    else
-        dashboard.RequirePolicy("TraxAdmin");
-});
+if (builder.Environment.IsDevelopment())
+    builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
 
 builder.Services.AddTraxGraphQL();
 
@@ -456,50 +472,49 @@ var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseTraxDashboard();
+if (app.Environment.IsDevelopment())
+    app.UseTraxDashboard();
 app.UseTraxGraphQL();
 
 app.Run();
 ```
 
 The `/greet` endpoint is gone: GraphQL replaces it. `[TraxQuery]` exposes the train as a query that
-runs it and returns its output; a train that changes something takes `[TraxMutation]` instead, which
-can also queue it for the scheduler. The schema needs at least one query, so a host that exposes
-only mutations refuses to start. Every exposed train has to carry `[TraxAuthorize]` or
+runs it and returns its output. Every exposed train has to carry `[TraxAuthorize]` or
 `[TraxAllowAnonymous]`, or the application refuses to start, so an operation is never public by
 accident. This one needs the `User` role, which the demo key holds.
 
+Run the application and call the query with the key:
+
 ```bash
-curl -X POST http://localhost:5000/trax/graphql \
+curl -X POST http://localhost:5080/trax/graphql \
   -H 'Content-Type: application/json' \
   -H 'X-Api-Key: greeter-key-do-not-use-in-production' \
   -d '{"query":"{ discover { greet(input: { name: \"Ada\" }) { message } } }"}'
 ```
 
-In Development, `http://localhost:5000/trax/graphql` in a browser opens the Nitro GraphQL IDE, with
-the schema to explore. Outside Development the IDE, the schema download and introspection are off
-unless you turn them on with `AllowIntrospection`. There is no key there either, so every
-operation is refused until you register real credentials: see [API Security](/docs/api-security).
+```json
+{"data":{"discover":{"greet":{"message":"Hello, Ada!"}}}}
+```
 
-## Where to go next
+Send the same request without the `X-Api-Key` header and the response holds an `errors` entry
+instead of the greeting. `http://localhost:5080/trax/graphql` in a browser opens the Nitro GraphQL
+IDE, with the schema to explore.
 
-The `trax-hub` project template scaffolds this same shape (scheduler, dashboard and GraphQL in one
-process) with an in-memory provider, a README and an NUnit test project under `tests/`:
-`dotnet new install Trax.Samples.Templates`, then `dotnet new trax-hub -n MyApp`, `dotnet run` (on
-`http://localhost:5400`) and `dotnet test tests/MyApp.Tests`. See [Project Templates](/docs/reference/templates).
-For one complete, tested application per feature (scheduling, authentication, recovering trains, subscriptions and
-more), see [Samples & Deployment](/docs/samples).
+We now have one process that runs a train on request, records every run, runs it on a schedule,
+shows it in a dashboard and serves it over GraphQL.
 
-- [Core](/docs/core): junctions, Memory, and the chain methods
-- [Effect](/docs/effect): metadata, effect providers, and the `ServiceTrain` lifecycle
-- [Mediator](/docs/mediator): running trains by input type with `ITrainBus`
-- [Scheduling](/docs/scheduler): cron schedules, retries, dead letters, dependent jobs
-- [Dashboard](/docs/dashboard): what each page shows, and authorization
-- [API](/docs/api): queries, queued mutations, subscriptions
-- [Samples & Deployment](/docs/samples): splitting the API, scheduler and workers into separate processes
+## Next steps
 
-Without the effect system, `Trax.Core` alone runs a `Train` you construct with `new`: no database,
-no container. [Core](/docs/core) shows that form.
+- [Secure the dashboard](/docs/dashboard) before it runs outside Development.
+- [Secure a GraphQL host](/docs/api-security) with real credentials, and expose a train as a
+  mutation with [TraxMutation](/docs/sdk-reference/graphql-api/trax-graphql-attribute).
+- [Start from a project template](/docs/reference/templates): `trax-hub` scaffolds this same shape
+  with a test project.
+- [Run a train without the effect system](/docs/core): `Trax.Core` alone, no database, no container.
+- [Trains and junctions](/docs/core/trains-and-junctions): what we built in step 2, and why.
+- [Samples](/docs/samples): complete applications, including the API, scheduler and workers in
+  separate processes.
 
 ## SDK Reference
 
