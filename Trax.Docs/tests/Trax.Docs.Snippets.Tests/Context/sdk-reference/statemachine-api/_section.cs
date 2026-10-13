@@ -8,8 +8,8 @@ global using Trax.Effect.Extensions;
 global using Trax.Effect.Provider.Json.Extensions;
 global using Trax.Effect.StateMachine;
 global using Trax.Effect.StateMachine.Persistence;
-global using Trax.Mediator.Extensions;
 global using static Trax.Effect.StateMachine.Rules;
+global using Trax.Mediator.Extensions;
 
 public enum CheckoutState
 {

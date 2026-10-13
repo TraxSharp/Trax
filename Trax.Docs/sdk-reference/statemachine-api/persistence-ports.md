@@ -10,6 +10,7 @@ package: Trax.Effect.StateMachine.Persistence
 namespace: Trax.Effect.StateMachine.Persistence
 source:
   - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Ports.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/SnapshotDraftService.cs
   - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Actor.cs
   - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/CallerAuthorization.cs
   - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/EfSnapshotStore.cs

@@ -11,6 +11,7 @@ namespace: Trax.Effect.StateMachine
 source:
   - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
   - Trax.Effect/src/Trax.Effect.StateMachine/SnapshotMachine.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/MachineDefinition.cs
 ---
 
 # Migrations

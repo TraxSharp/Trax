@@ -15,7 +15,10 @@ public sealed class IngestMachine : Machine<IngestState, IngestTrigger>
 {
     protected override void Configure(IMachineBuilder<IngestState, IngestTrigger> m)
     {
-        m.Id("ingest").Version(1).StartsAt(IngestState.Waiting, () => new JsonObject()).SystemOwned();
+        m.Id("ingest")
+            .Version(1)
+            .StartsAt(IngestState.Waiting, () => new JsonObject())
+            .SystemOwned();
 
         m.In(IngestState.Failed).Context().On(IngestTrigger.Retry).To(IngestState.Waiting);
         m.In(IngestState.Waiting).Context();
