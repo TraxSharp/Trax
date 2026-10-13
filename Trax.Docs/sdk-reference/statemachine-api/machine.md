@@ -1,27 +1,66 @@
 ---
-title: Machine authoring
-description: "Reference for the state machine authoring builders: IMachineBuilder, IStateBuilder, ITransitionBuilder and IDifferentialBuilder, IR export and result codes."
+title: Machine
+description: "Reference for Machine<TState, TTrigger> and its builders: IMachineBuilder, IStateBuilder, IInvokeBuilder, ITransitionBuilder, IDifferentialBuilder, rules and IR export."
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 2
+package: Trax.Effect.StateMachine.Persistence
+namespace:
+  - Trax.Effect.StateMachine.Persistence
+  - Trax.Effect.StateMachine
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Machine.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/Fluent.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/Invokes.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/Timers.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/MachineTrigger.cs
+redirect_from:
+  - /docs/sdk-reference/statemachine-api/fluent-authoring
 ---
 
-# Machine authoring
+# Machine
 
-A machine is a subclass of `Machine<TState, TTrigger>` that declares itself in `Configure`. `TState` and
-`TTrigger` are your own enums. The fluent builder compiles to the same total engine the conformance
-fixtures drive, so a fluently-authored machine behaves identically to a hand-written definition.
+A machine is a subclass of `Machine<TState, TTrigger>` that declares itself in `Configure`. `TState` and `TTrigger`
+are the host's own enums. The builder compiles to the same total engine (`SnapshotMachine<TState, TTrigger>`) the
+conformance fixtures drive. `Machine<TState, TTrigger>` ships in `Trax.Effect.StateMachine.Persistence`; the builder
+interfaces ship in `Trax.Effect.StateMachine`.
 
-```csharp
-public abstract class Machine<TState, TTrigger>
+## Signature
+
+```csharp fragment
+namespace Trax.Effect.StateMachine.Persistence;
+
+public abstract class Machine<TState, TTrigger> : IMachine
     where TState : struct, Enum
     where TTrigger : struct, Enum
 {
     protected abstract void Configure(IMachineBuilder<TState, TTrigger> machine);
 }
 ```
+
+## Members
+
+`IMachine` is the machine-agnostic handle a host discovers and the registry keys on. `Machine<TState, TTrigger>`
+implements it.
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `Name` | `string` | The machine's id, from `Id(...)`. |
+| `HasEffect` | `bool` | Whether the machine binds an effect with `RunsOnce`. |
+| `SchemaHash` | `string?` | Lowercase-hex SHA-256 of `ExportIr()`; null for a machine whose IR export is refused. See [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity). |
+| `Triggers` | `IReadOnlyList<MachineTrigger>` | Every trigger, with its `TriggerKind` and input record. See [Triggers and states](#triggers-and-states). |
+| `States` | `IReadOnlyList<MachineState>` | Every state, with its context record. |
+| `StartInputType` | `Type?` | The record `Start<TStartInput>` declares, or null. |
+| `Corpus` | `string?` | The machine's committed differential corpus, or null. Virtual: a machine ships one by overriding it, for example from an embedded resource. |
+| `SelfCheck()` | `IReadOnlyList<string>` | Replays `Corpus` through the machine's engine; one diff per case it does not reproduce. |
+| `ExportIr()` | `string` | The machine's [IR](/docs/sdk-reference/statemachine-api/ir-format) as canonical single-line JSON. See [Exporting the IR](#exporting-the-ir). |
+| `CreateService(ISnapshotStore store, IEffectClaimStore? claims, TimeSpan? draftTtl = null)` | `ISnapshotDraftService` | Builds a draft service over a store. A service built here cannot start an instance and applies no per-user cap; the one `ISnapshotMachineRegistry.Service` returns can. `draftTtl` is not read: the draft sweep expires drafts. |
+| `CreateEffectRunner(ISnapshotDraftService service, IdempotentEffect idempotent, IServiceProvider services)` | `ISnapshotEffectRunner?` | Builds the effect runner, resolving the effect from `services`; null for a machine with no effect. Hidden from IntelliSense; the registry calls it. |
+
+`Triggers`, `States` and `StartInputType` have default implementations on `IMachine` that throw
+`NotSupportedException`; derive from `Machine<TState, TTrigger>` to get them.
 
 ## IMachineBuilder
 
@@ -126,6 +165,12 @@ train's outcome, the effect or an event gated by `Requires` or `RequiresPolicy` 
 | `ITransitionBuilder.RequiresPolicy(string policy)` | Only an authenticated caller who satisfies the authorization policy may fire this event. It combines with `Requires`. |
 | `ITransitionBuilder.AnyAuthenticated()` | Any authenticated caller may fire this event. |
 | `ITransitionBuilder.Anonymous()` | Any caller may fire this event. A host refuses it on a user-owned machine a client can reach. |
+| `IMachineBuilder.Start<TStartInput>(Action<IStartBuilder<TStartInput>> configure)` | Declares the machine's `start`: the record a client starts an instance with, never the context type. `IStartBuilder` takes a declarative `Reduce(Reduction)` from the start input to the initial context, and the same four rules as an event (`Requires`, `RequiresPolicy`, `AnyAuthenticated`, `Anonymous`). |
+| `IMachineBuilder.Get(Action<IReadRuleBuilder> rule)` | Declares who may read an instance through `get`. |
+| `IMachineBuilder.Watch(Action<IReadRuleBuilder> rule)` | Declares who may watch an instance through `machineChanged`. `IReadRuleBuilder` offers `OwnerOnly()`, `Requires(...)`, `RequiresPolicy(...)`, `AnyAuthenticated()` and `Anonymous()`. |
+| `IMachineBuilder.Discard(Action<IReadRuleBuilder> rule)` | Declares who may delete an instance through `discard`, owner-only being the floor as for `get`. Whatever the rule, a row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in a state that invokes a train, and one with an effect pending on it is not discarded: the answer is `discard-not-allowed`. |
+| `IStateBuilder.After(TimeSpan delay)` | Declares the state's timer: once the state has been held for `delay`, the server leaves it. Returns an `ITimerBuilder`, whose `GoTo(TState target)` names where it goes and returns the state builder. The timer starts on every entry (a self-transition included) and is cancelled on leaving; its trigger is `<State>.after`. |
+| `IStateBuilder.After<TContext>(Expression<Func<TContext, TimeSpan?>> duration, TimeSpan min, TimeSpan max)` | The same, with the duration read from a context field and bounded by `min` and `max`. The field holds an ISO-8601 duration (`"PT5M"`: days, hours, minutes and seconds, in ASCII digits) and is read once, when the state is entered; entering with a field that is missing, not such a duration, or outside the bounds is refused as `invalid-input`, never an error. The typed GraphQL surface writes and reads a `TimeSpan` as this duration. |
 
 An event has one rule, whichever state it is sent from: `Build` refuses a machine whose edges of one event declare
 different rules (or one declares a rule and another none), and one where a gated event (one that names a role or a
@@ -136,12 +181,6 @@ are the server's own and offer no rule. At startup the host compares every event
 the start into an invoking initial state, with the invoked train's `[TraxAuthorize]`, and refuses one whose rule
 does not prove the train's: an event's role set must sit inside each of the train's role sets, and it must name
 each of the train's policies, since a policy cannot be proven to grant a role.
-| `IMachineBuilder.Start<TStartInput>(Action<IStartBuilder<TStartInput>> configure)` | Declares the machine's `start`: the record a client starts an instance with, never the context type. `IStartBuilder` takes a declarative `Reduce(Reduction)` from the start input to the initial context, and the same four rules as an event (`Requires`, `RequiresPolicy`, `AnyAuthenticated`, `Anonymous`). |
-| `IMachineBuilder.Get(Action<IReadRuleBuilder> rule)` | Declares who may read an instance through `get`. |
-| `IMachineBuilder.Watch(Action<IReadRuleBuilder> rule)` | Declares who may watch an instance through `machineChanged`. `IReadRuleBuilder` offers `OwnerOnly()`, `Requires(...)`, `RequiresPolicy(...)`, `AnyAuthenticated()` and `Anonymous()`. |
-| `IMachineBuilder.Discard(Action<IReadRuleBuilder> rule)` | Declares who may delete an instance through `discard`, owner-only being the floor as for `get`. Whatever the rule, a row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in a state that invokes a train, and one with an effect pending on it is not discarded: the answer is `discard-not-allowed`. |
-| `IStateBuilder.After(TimeSpan delay)` | Declares the state's timer: once the state has been held for `delay`, the server leaves it. Returns an `ITimerBuilder`, whose `GoTo(TState target)` names where it goes and returns the state builder. The timer starts on every entry (a self-transition included) and is cancelled on leaving; its trigger is `<State>.after`. |
-| `IStateBuilder.After<TContext>(Expression<Func<TContext, TimeSpan?>> duration, TimeSpan min, TimeSpan max)` | The same, with the duration read from a context field and bounded by `min` and `max`. The field holds an ISO-8601 duration (`"PT5M"`: days, hours, minutes and seconds, in ASCII digits) and is read once, when the state is entered; entering with a field that is missing, not such a duration, or outside the bounds is refused as `invalid-input`, never an error. The typed GraphQL surface writes and reads a `TimeSpan` as this duration. |
 
 A state has at most one timer. `Build` refuses two timers on one state, a timer back into its own state, timers that
 form a cycle no event breaks, a timer into an effect's target or an invoked train's outcome target, a fixed duration
@@ -152,23 +191,6 @@ single field builds, but the IR export refuses the machine. A timer's target is 
 the context unchanged; the timed state itself is locked against the soft save, and the generic save
 refuses a machine with a timer. A host refuses to start a user-owned machine whose timer enters a state that invokes a
 train, since nobody is present to authorize the run.
-
-`IMachine.Triggers` lists a machine's triggers as `MachineTrigger(Name, Kind, InputType)` records, where `Kind` is
-a `TriggerKind`: `Client`, `EffectBound`, `Outcome` or `Timer`. `Machine<TState, TTrigger>` lists every member of
-its trigger enum (`EffectBound` when an edge on it binds the machine's effect, else `Client`, with the record its
-`WithInput<T>()` declares or null), then each invoking state's `<State>.done`, `.failed` and `.cancelled` as
-`Outcome`, the success outcome's input type being the train's output type, then each timed state's `<State>.after`
-as `Timer`, with no input. A typed API is built from this list, and offers no operation for an outcome or a timer,
-with two more: `IMachine.States` lists every member of the state enum as a `MachineState(Name, ContextType)`, where
-`ContextType` is the record the state's `Context<TContext>()` declares (null for `Context()` or none), and
-`IMachine.StartInputType` is the record `Start<TStartInput>` declares, or null when the machine declares no start.
-The [machines root](/docs/sdk-reference/graphql-api/machines) types each exposed machine's state, context and
-operations from the three.
-The engine (`SnapshotMachine`) fires a timer trigger through an entry point of its own, which only the server's reconciler calls, kept
-apart from `Advance`, which refuses one as `timer-bound`. It fires only the timer of the state the snapshot is in (any other
-is `no-transition`) and carries the context to the timer's target. The IR exports timers in a `timers` block of their
-own (state, trigger, target, `after` or `field` with `min` and `max` as ISO-8601 durations, and the union of the rules
-of everything that enters the state), never in `inputs` or `triggers`; a machine without timers exports no block.
 
 ## Trigger input
 
@@ -194,48 +216,93 @@ The TypeScript twin validates against the same exported schema and gives the sam
 - **Never an exception.** A duplicate key, a number outside the range of a double (`1e400`), a string with a
   lone surrogate, or a deeply nested object is refused as `invalid-input`.
 
-## Delegate vs declarative
-
-`Holds`, `When(Func...)`, and `Reduce(Func...)` take C# delegates. They run, but they are opaque: a machine
-authored with them cannot be exported to the IR that drives cross-language codegen. The declarative overloads
-(`Context<T>`, `When(Rule)`, `Reduce(Reduction)`, `WithInput<T>`) express the same validators, guards, and
-reducers as data. They compile to the identical engine delegates, so behaviour is unchanged, and they also
-record the `DeclarativeModel` that `IrExporter` turns into the machine's `.ir.json`.
-
-The two styles coexist on one builder, so you can build and run a machine while migrating it edge by edge,
-but the export cannot see a delegate, so it refuses one. Once a machine makes any declarative call,
-`ExportIr()` throws `InvalidOperationException` if any edge still has a delegate guard (`When(Func...)`) or
-delegate reducer (`Reduce(Func...)`), or any state a `Holds` validator; the message names each edge (source
-state, trigger, target) and state. Exporting it would give the edge no `guard` or `reduce`, which a generated
-twin reads as an unconditional edge that keeps the context, so the client would predict transitions the
-server refuses and contexts the server does not produce.
-
-> **To export a machine, make every guard, reducer and validator declarative.** For logic the vocabulary
-> cannot express, use `Rule.Custom(name)` (in `When` or `Requires`) or `Reduction.Custom(name)` with
-> `CustomGuard` / `CustomReducer`: the IR then names the rule, and each runtime binds its own handler.
-
-Author the data form with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules), and see
-[Declarative authoring](/docs/statemachine/declarative-authoring) for a machine built end to end.
-
 ## Exporting the IR
 
-`Machine<TState, TTrigger>` (and the `IMachine` a host discovers) exposes `ExportIr()`, the in-process entry
-point that turns a built machine into its canonical [IR](/docs/sdk-reference/statemachine-api/ir-format):
+`ExportIr()` turns a built machine into its canonical [IR](/docs/sdk-reference/statemachine-api/ir-format), the
+same JSON the [`trax machine` CLI](/docs/reference/cli#state-machines-trax-machine) writes to `<machine>.ir.json`;
+the CLI calls `ExportIr()`. It throws `InvalidOperationException` for a machine that made no declarative call, and
+for one that mixes the styles and still has a delegate guard (`When(Func...)`), delegate reducer (`Reduce(Func...)`)
+or `Holds` validator; the message names each edge (source state, trigger, target) and state.
 
-```csharp
-public sealed class CheckoutMachine : Machine<CheckoutState, CheckoutTrigger> { /* ... */ }
-
-string ir = new CheckoutMachine().ExportIr();   // canonical single-line JSON
+```csharp compile
+string ir = new CheckoutMachine().ExportIr();
 ```
 
-The result is the same canonical JSON the [`trax machine` CLI](/docs/reference/cli#state-machines-trax-machine)
-writes to `<machine>.ir.json`; the CLI calls `ExportIr()` directly. It requires a declaratively-authored
-machine (`Context`/`When(Rule)`/`Reduce(Reduction)`): it throws `InvalidOperationException` for a machine that
-made no declarative call at all, and for one that mixes the styles and still has a delegate guard, reducer or
-`Holds` validator (see [Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative)). In practice you rarely call `ExportIr()` by hand: `trax machine
-generate` exports the IR and regenerates every downstream artifact in one command.
+## Behavior
 
-## Result codes
+### Triggers and states
 
-Every advance and rehydrate returns a typed result, never an exception. See
-[Result codes](/docs/sdk-reference/statemachine-api/result-codes) for the full set and when each is returned.
+`IMachine.Triggers` lists a machine's triggers as `MachineTrigger(Name, Kind, InputType)` records, where `Kind` is
+a `TriggerKind`: `Client`, `EffectBound`, `Outcome` or `Timer`. `Machine<TState, TTrigger>` lists every member of
+its trigger enum (`EffectBound` when an edge on it binds the machine's effect, else `Client`, with the record its
+`WithInput<T>()` declares or null), then each invoking state's `<State>.done`, `.failed` and `.cancelled` as
+`Outcome`, the success outcome's input type being the train's output type, then each timed state's `<State>.after`
+as `Timer`, with no input. A typed API is built from this list, and offers no operation for an outcome or a timer,
+with two more: `IMachine.States` lists every member of the state enum as a `MachineState(Name, ContextType)`, where
+`ContextType` is the record the state's `Context<TContext>()` declares (null for `Context()` or none), and
+`IMachine.StartInputType` is the record `Start<TStartInput>` declares, or null when the machine declares no start.
+The [machines root](/docs/sdk-reference/graphql-api/machines) types each exposed machine's state, context and
+operations from the three.
+
+The engine (`SnapshotMachine`) fires a timer trigger through an entry point of its own, which only the server's reconciler calls, kept
+apart from `Advance`, which refuses one as `timer-bound`. It fires only the timer of the state the snapshot is in (any other
+is `no-transition`) and carries the context to the timer's target. The IR exports timers in a `timers` block of their
+own (state, trigger, target, `after` or `field` with `min` and `max` as ISO-8601 durations, and the union of the rules
+of everything that enters the state), never in `inputs` or `triggers`; a machine without timers exports no block.
+
+### Delegate vs declarative
+
+`Holds`, `When(Func...)` and `Reduce(Func...)` take delegates; `Context<T>`, `When(Rule)`, `Reduce(Reduction)` and
+`WithInput<T>` take data and also record the `DeclarativeModel` the IR is exported from. Both compile to the same
+engine delegates. See [Delegates and declarative rules](/docs/statemachine/delegates-and-declarative-rules).
+
+### Results
+
+Every advance and rehydrate returns a typed result, never an exception: see
+[Result codes](/docs/sdk-reference/statemachine-api/result-codes).
+
+## Example
+
+The turnstile from the State Machine sample:
+
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+[TraxMachine]
+public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
+{
+    protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
+    {
+        m.Id("turnstile")
+            .Version(1)
+            .StartsAt(TurnstileState.Locked, () => new JsonObject())
+            .Start<EmptyStart>(s => s.Reduce(Keep()).AnyAuthenticated())
+            .Get(r => r.OwnerOnly())
+            .Watch(r => r.OwnerOnly())
+            .Discard(r => r.OwnerOnly());
+
+        m.In(TurnstileState.Locked)
+            .Context()
+            .On(TurnstileTrigger.Coin)
+            .AnyAuthenticated()
+            .WithInput<CoinInput>()
+            .When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))
+            .Because("Only a quarter or a dollar is accepted.")
+            .Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput((CoinInput i) => i.Coin))
+            .To(TurnstileState.Unlocked);
+
+        m.In(TurnstileState.Unlocked)
+            .Context<UnlockedContext>()
+            .On(TurnstileTrigger.Push)
+            .AnyAuthenticated()
+            .Reduce(Clear())
+            .To(TurnstileState.Locked);
+    }
+}
+```
+
+## See also
+
+- [Authoring a machine](/docs/statemachine/authoring) and [Declarative authoring](/docs/statemachine/declarative-authoring).
+- [Delegates and declarative rules](/docs/statemachine/delegates-and-declarative-rules).
+- [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) and the [declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model).
+- [Invoking a train](/docs/statemachine/invoking-trains).
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines).
