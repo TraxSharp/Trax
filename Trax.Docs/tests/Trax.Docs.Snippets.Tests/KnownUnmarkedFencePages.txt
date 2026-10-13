@@ -77,7 +77,6 @@ scheduler/job-submission.md
 scheduler/orphan-manifest-cleanup.md
 scheduler/remote-execution.md
 scheduler/scheduling-options.md
-scheduler/setup.md
 sdk-reference/api-audit/add-audit.md
 sdk-reference/api-audit/i-trax-audit-redactor.md
 sdk-reference/api-audit/i-trax-audit-sink.md
