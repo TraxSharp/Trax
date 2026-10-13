@@ -24,6 +24,7 @@ Fluent configuration surface passed to [UsePersistedOperations](/docs/sdk-refere
 | `WithCacheMaxAge(TimeSpan maxAge)` | 5 minutes | The longest any cache on a node keeps a persisted operation, counted from when its document was read from the database. The backstop for a change that did not reach the node: it serves what it cached for at most this long, then reads the store again. Must be positive. |
 | `UseRabbitMqInvalidation(string connectionString)` | none | Broadcast every change over a RabbitMQ fanout so every node empties its caches. Required when more than one node serves the endpoint. Works with or without `WithInMemoryCache()`. A publish the broker does not confirm is reported as `CHANGE_NOT_BROADCAST`. |
 | `SingleNode()` | none | Declare that one process serves the endpoint and writes the store, so no broadcast is needed. |
+| `KeepOlderMachineDocumentsFor(TimeSpan grace)` | 7 days | How long an older version's [machine documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) stay active after a node registers a newer version's. A node still running the older version keeps serving them during a rolling deploy. Each node registers its own documents when it starts and again every hour while it runs, and a registration made once its own have been stored this long deactivates the older ones. Must be positive. |
 
 One of `SingleNode()` and `UseRabbitMqInvalidation(...)` is required, and not both. See [One node or many](/docs/persisted-operations#one-node-or-many).
 

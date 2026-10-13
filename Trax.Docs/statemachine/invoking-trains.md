@@ -78,9 +78,10 @@ edge from there back to the start if the flow returns to it.
 
 An invoked train does not count against the machine's one `RunsOnce` effect.
 
-An autosave of a draft in an invoking state is refused as `draft-invoking` unless it is identical to what is
-stored: a save could neither leave the state, which would strand the run, nor rewrite the context the run was
-started from. An `advanceSnapshot` with an outcome trigger is refused as `outcome-bound`.
+The generic save serves only machines with no server-side behaviour, so it refuses every save of a machine
+that invokes a train as `save-not-allowed`: such a machine moves through its declared events, and a save could
+neither leave an invoking state, which would strand the run, nor rewrite the context the run was started from. An
+`advanceSnapshot` with an outcome trigger is refused as `outcome-bound`.
 
 ## Entering and leaving the state
 

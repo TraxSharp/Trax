@@ -68,12 +68,12 @@ Reflected from a context record and carried in the IR.
 | Type | Fields | Meaning |
 | --- | --- | --- |
 | `ContextSchema` | `Fields` | the state's fields, sorted by key (ordinal) to match the canonical wire; `ContextSchema.Empty` is a state with no context |
-| `FieldSchema` | `Name`, `Type`, `Nullable`, `Constraints` | one field: its JSON key, JSON type, whether it may be null, and any `Rule` constraints (e.g. non-empty from `[MinLength(1)]`) |
+| `FieldSchema` | `Name`, `Type`, `Nullable`, `Constraints`, `Fields`, `Values`, `Keys`, `Minimum`, `Maximum`, `Enum`, `EnumExact`, `Format` | one field: its JSON key, JSON type, whether it may be null, and any `Rule` constraints (e.g. non-empty from `[MinLength(1)]`). `Fields` is the shape of a nested record (an object field, or each element of an array field) in an input or output schema, null otherwise. `Values` is the schema each value of a dictionary, or each element of a list of non-records, is checked against (a `FieldSchema` with an empty name and no constraints). `Keys` is the schema a dictionary's keys are checked against when its key type is not `string`: an integer key's digits within its range, or an enum's names, or a `Guid`'s, date's, time's or `char`'s format. A dictionary's key type must be a string, an integer, an enum without `[Flags]`, a `Guid`, a date, a time or a `char`; any other refuses to build. `Minimum` and `Maximum` are a number field's CLR range (an integral type's, a `decimal`'s, a `float`'s or a `Half`'s), null for any other field; an `Int128` or `UInt128` is bounded strictly inside ±10^21, and a `float`'s or `Half`'s bound is the shortest literal that reads back as its maximum. `Enum` is the names a field from a CLR enum may hold, as the server's JSON writes them, compared ignoring ASCII case except those in `EnumExact`, the names given with `[JsonStringEnumMemberName]`, which match only as written. A `[Flags]` enum refuses to build in a schema (use a list of an enum without `[Flags]`). `Format` is the shape a string from a `Guid`, date, time, `TimeSpan`, `Uri` or `char` must have (`uuid`, `date-time`, `date-time-offset`, `date`, `time`, `duration`, `uri`, `char`; see [the IR format](/docs/sdk-reference/statemachine-api/ir-format)): a `DateTimeOffset` with no offset is refused on the first and last day of the range. A computed get-only property is not an input field, so a client sending one is refused as an unknown field |
 
 ## Enums
 
 | Enum | Values |
 | --- | --- |
 | `RuleSource` | `Context`, `Input` |
-| `JsonFieldType` | `String`, `Number`, `Boolean`, `Array`, `Object` |
+| `JsonFieldType` | `String`, `Number`, `Boolean`, `Array`, `Object`, `Integer` (a number with no fractional part, decided by its value, so `2020.0` is one) |
 | `CompareOp` | `GreaterThan`, `GreaterOrEqual`, `LessThan`, `LessOrEqual`, `EqualTo` |

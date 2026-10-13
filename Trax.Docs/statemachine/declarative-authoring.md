@@ -19,7 +19,8 @@ generates the frontend twin instead of you hand-writing it.
 
 The state's context and the trigger's input are C# records. The schema, its field names, JSON types,
 nullability, and constraints, falls out of the type. `[MinLength(1)]` on a string or array becomes a
-non-empty constraint.
+non-empty constraint, and `[MaxLength(n)]` bounds a string's length or a collection's count at n, checked when the
+value is present (a `Length` or `Count` rule with `LessOrEqual`).
 
 Each field's JSON type is the one System.Text.Json writes for its CLR type, so a record always validates
 against its own camelCase JSON:
@@ -27,14 +28,25 @@ against its own camelCase JSON:
 | CLR type | JSON type |
 | --- | --- |
 | `string`, `char`, `Guid`, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Uri`, any enum | string (an enum under `JsonStringEnumConverter`) |
-| every integral and floating-point type, signed or unsigned, including `Int128`, `UInt128` and `Half` | number |
+| every integral type, signed or unsigned, including `Int128` and `UInt128` | integer (a number with no fractional part) |
+| `float`, `double`, `decimal`, `Half` | number |
 | `bool` | boolean |
 | `IDictionary<K, V>`, `IReadOnlyDictionary<K, V>`, `JsonObject`, a record or class | object |
 | any other `IEnumerable`, `JsonArray` | array, with an element-type constraint when the element is one of the scalars above |
 
-A property with no fixed JSON type (`object`, `JsonNode`, `JsonElement`, `BigInteger`, a delegate) makes
-`Context<T>()` and `WithInput<T>()` throw `InvalidOperationException` naming it, when the machine is
-configured. Validate such a state with `Holds(...)` instead.
+A property's name is its `[JsonPropertyName]` when it has one, else its name under
+`JsonNamingPolicy.CamelCase` (`PaidWith` is `paidWith`, `ID` is `id`, `URLValue` is `urlValue`), and a
+`[JsonIgnore]` property is left out, as System.Text.Json writes the record. An integer field is refused outside its
+CLR type's range (an `int` refuses `1e10`), and a dictionary's values and a list's elements are checked against their
+own type (a `Dictionary<string, int>` refuses `{"a": "one"}`); see
+[the IR format](/docs/sdk-reference/statemachine-api/ir-format). A property with no fixed JSON type (`object`, `JsonNode`, `JsonElement`,
+`BigInteger`, a delegate) makes `Context<T>()` and `WithInput<T>()` throw `InvalidOperationException` naming it,
+when the machine is configured. Validate such a state with `Holds(...)` instead. So does a context or input
+record that contains itself, which has no finite shape.
+
+A trigger's input record is described as strictly as its CLR type, nested records included, and both engines
+refuse an input that does not match it as `invalid-input` before any guard reads it. A trigger without
+`WithInput` takes no input. See [Trigger input](/docs/sdk-reference/statemachine-api/fluent-authoring#trigger-input).
 
 ```csharp
 using System.ComponentModel.DataAnnotations;

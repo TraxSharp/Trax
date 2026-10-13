@@ -131,7 +131,10 @@ public class BanPlayerTrain(ILogger<BanPlayerTrain> logger)
 
 `metadata.Output` is serialized JSON in `OnCompleted` hooks, whether or not [`SaveTrainParameters()`](/docs/sdk-reference/configuration/save-train-parameters) is configured. When the output was not stored, it is serialized in memory before hooks fire and is not persisted to the database.
 
-The copy follows the stored copy's rules. An output the parameter effect was told to skip (`ExcludeOutput`, `ShouldSaveOutputs`, `SaveOutputs = false`) is not serialized for the hooks, so `metadata.Output` is `null` for that train. Otherwise the copy is bounded by `MaxParameterBytes` (1 MiB unless you change it), or by 1 MiB when it is `null` or `SaveTrainParameters()` is not configured, and an output past the ceiling arrives as `{"_truncated": true, "_maxBytes": N}`. `metadata.GetOutput<T>()` still returns the object itself. The decision comes from the registered `ILifecycleHookOutputPolicy`; `SaveTrainParameters()` registers one that follows its configuration.
+The copy follows the stored copy's rules. An output the parameter effect was told to skip (`ExcludeOutput`, `ShouldSaveOutputs`, `SaveOutputs = false`) is not serialized for the hooks, so `metadata.Output` is `null` for that train. Otherwise the copy is bounded by `MaxParameterBytes` (1 MiB unless you change it), or by 1 MiB when it is `null` or `SaveTrainParameters()` is not configured, and an output past the ceiling arrives as `{"_truncated": true, "_maxBytes": N}`. `metadata.GetOutput<T>()` still returns the object itself. The decision comes from the registered `ILifecycleHookOutputPolicy`; `SaveTrainParameters()` registers one that follows its configuration. The state machine's internal trains
+(`ISaveSnapshot`, `IAdvanceSnapshot`, `ILoadSnapshot`, `ISendSnapshot`, `IStartSnapshot`, `IDiscardSnapshot`) give no
+hook their output, whatever the policy says: `metadata.Output` and `GetOutput<T>()` are `null` while the hooks run,
+because that output is an instance's snapshot.
 
 ## ITrainLifecycleHookFactory (Advanced)
 

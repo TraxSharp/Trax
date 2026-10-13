@@ -273,6 +273,21 @@ What the subscriber needs and what it should expect:
 
 A runnable C# version of this loop over `System.Net.WebSockets` is the `GraphQLWebSocketClient` in `tests/Trax.Samples.ChatService.E2E/Utilities` of [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples); see [Testing subscriptions](/docs/cross-cutting/e2e-testing#testing-subscriptions).
 
+## onMachineInstanceChanged
+
+`subscription { onMachineInstanceChanged(machine: "topic-map") { rowId machine ownerKind id state version revision hasLiveInvokedRun createdAt updatedAt deleted reload } }`
+is the operator's live view of state-machine instances: each instance whenever any path on any host writes it, of
+one machine or (without `machine`) of every machine, and once more with `deleted: true` when it is deleted or
+expires. Each event is a `MachineInstanceChange` (in `Trax.Api.DTOs`), the list item's fields with `revision` and
+`deleted`; it never carries an instance's context or the key of the user who owns it. An event with `reload: true`
+names no instance: writes may have been missed (the host's change listener started or reconnected after losing its
+session, or the subscriber fell behind), so the subscriber reads `operations.machineInstances` again. The first one
+comes once the listener is listening. It is registered with the
+operations queries and behind the operations gate, like `operations.machineInstances`; a subscriber the gate refuses
+gets an error at subscribe. It reads `IOperationsService.WatchMachineInstancesAsync`, the feed the dashboard's
+instance page follows, so both read one listener per host. A user follows their own instance through
+[`machineChanged`](/docs/sdk-reference/graphql-api/machines#machinechanged).
+
 ## Data Change Signals
 
 `onDataChanged` is a single subscription that fires when a scheduler/admin data domain changes. It carries only which domain changed, never the changed rows, so a client uses it as a nudge to refetch its own bounded, paged view. This is how the dashboard's list pages update live without a poll timer.

@@ -63,7 +63,7 @@ Guards and reducers are named code, never serialized. The snapshot carries struc
 
 One builder step. `AddStateMachines` discovers every machine and wires the store, the effect-claim ledger,
 the exactly-once runner, and the registry, over the data context of the provider you configured in
-`AddEffects`, and contributes the four generic mutation trains to the mediator scan (they
+`AddEffects`, and contributes the six generic mutation trains to the mediator scan (they
 ship in the persistence package, not your assembly, so Trax can route them by input type). Call it before
 `AddMediator`. The host binds only the two things a machine can't know: how to map its auth to a user key, and
 each effect implementation.
@@ -78,9 +78,8 @@ builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddScoped<ICharge, StripeCharge>();
 ```
 
-To expire abandoned drafts, use the `configure` overload with a `DraftTtl`. A load of a draft idle past the
-window discards it and the user starts fresh, so a forgotten form (or a finished one) never lingers. The
-default is off.
+Abandoned drafts expire: a background sweep deletes a user's draft idle past `DraftTtl` (30 days unless the
+`configure` overload sets another), so a forgotten form never lingers. A load never deletes.
 
 ```csharp
 trax.AddStateMachines(
@@ -100,15 +99,42 @@ public sealed class TraxCallerSnapshotPrincipal(TraxCaller caller) : ISnapshotPr
 
 ## Drive it over GraphQL
 
-The four generic mutations serve every registered machine under the `stateMachine` namespace. The machine
-is a runtime argument (the `machine` field), so there is no per-machine mutation to write.
+A machine is served to clients when its class is marked `[TraxMachine]` (from `Trax.Effect.Attributes`), as a train
+is with `[TraxMutation]`; a machine without it is not served, and there is no host-side switch that serves it. The
+attribute is read from every machine the host registers, by the `AddStateMachines` scan or as `IMachine` by hand.
+To serve a machine you do not own, derive a class from it, mark that, and register only the subclass: a subclass has
+its base's id, and a host that registers two machine types under one id refuses to start, naming both. So the base
+must not be registered (do not scan its assembly, and do not call a registration of the library's that adds it), and
+a sealed machine cannot be served this way. The same type registered twice is one machine. The attribute is not
+inherited: a subclass of a marked machine is served only if it is marked itself, and a host registering an unmarked
+one refuses to start. On anything else a scanned assembly holds that the scan cannot register (an abstract or open
+generic class, or a class that is no machine) it refuses startup too; a closed generic machine the host registers
+by its closed type, from an assembly it does not scan, is served. Each served machine is its own typed API under the [machines root](/docs/sdk-reference/graphql-api/machines): `start`,
+one mutation per event taking the event's own input type, `discard` and `get`, each answering with the stored state,
+its typed context and its revision, or a problem. The host must also call `UsePersistedOperations` in
+`AddTraxGraphQL`: each operation is served as a persisted document that carries the machine's version, and a host
+that serves a machine without them refuses to start.
+
+```graphql
+mutation { machines { checkout { addItem(id: "...", input: { item: "book" }, requestId: "r-1") {
+  revision state context { items total } problem { code message } } } } }
+```
+
+### The generic mutations
+
+A host that opts in with `ExposeGenericStateMachineMutations(o => o.Policy = "...")` also serves six generic mutations
+for every registered machine under the `stateMachine` namespace, each behind the policy it names. The machine is a
+runtime argument (the `machine` field), so there is no per-machine mutation to write. They were served by default
+before; upgrading a host that used them is covered in [Generic State-Machine Mutations](/docs/migration-guides/generic-state-machine-mutations).
 
 | Mutation | Trust level |
 | --- | --- |
+| `startSnapshot` | create: the server mints the id and builds the first snapshot from the machine's declared `start` |
 | `saveSnapshot` | soft path: the client sends a whole snapshot, the server validates and stores it |
 | `advanceSnapshot` | authoritative: the client sends a trigger, the server re-drives the stored draft |
-| `loadSnapshot` | resume: read the caller's stored draft (a missing draft is normal, not an error) |
+| `loadSnapshot` | resume: read the caller's stored draft, held to the machine's `get` rule (a missing draft is normal, not an error, and a draft the rule does not let the caller read answers the same) |
 | `sendSnapshot` | run the machine's one irreversible effect, exactly once and state-gated |
+| `discardSnapshot` | delete one of the caller's own instances, cancelling a run its state invoked first |
 
 ```graphql
 mutation {
@@ -118,17 +144,20 @@ mutation {
 }
 ```
 
-All four live under `dispatch { stateMachine { ... } }`, `loadSnapshot` included: it is a mutation, not a
+All six live under `dispatch { stateMachine { ... } }`, `loadSnapshot` included: it is a mutation, not a
 query. Each takes one `input` argument and returns `output { snapshot problem { code message } }`, where exactly one
-of `snapshot` and `problem` is set. The snapshot crosses the wire as a **string** of canonical JSON in both
-directions, so a client `JSON.stringify`s the snapshot it saves and parses the one it gets back.
+of `snapshot` and `problem` is set; `startSnapshot` adds the minted `id`, `created` and `revision`, and
+`discardSnapshot` returns `output { discarded problem { code message } }`. The snapshot crosses the wire as a
+**string** of canonical JSON in both directions, so a client `JSON.stringify`s the snapshot it saves and parses the one it gets back.
 
 | Mutation | Input type | Fields (`!` is required) |
 | --- | --- | --- |
+| `startSnapshot` | `StartSnapshotInput` | `machine: String!`, `requestId: String!`, `input: String` (the start input as a JSON object), `schemaHash: String` |
 | `saveSnapshot` | `SaveSnapshotInput` | `machine: String!`, `id: UUID!`, `snapshot: String!` (the whole snapshot as JSON), `schemaHash: String` |
 | `advanceSnapshot` | `AdvanceSnapshotInput` | `machine: String!`, `id: UUID!`, `trigger: String!` (a trigger name, `"Coin"`), `input: String` (the trigger input as JSON, `"{\"coin\":\"quarter\"}"`), `requestId: String`, `schemaHash: String`, `clientResult: String` |
 | `loadSnapshot` | `LoadSnapshotInput` | `machine: String!`, `id: UUID!`, `schemaHash: String` |
 | `sendSnapshot` | `SendSnapshotInput` | `machine: String!`, `id: UUID!`, `requestId: String`, `schemaHash: String` |
+| `discardSnapshot` | `DiscardSnapshotInput` | `machine: String!`, `id: UUID!`, `requestId: String!` |
 
 `sendSnapshot` takes no trigger: it fires the one transition the machine binds its effect to, and only from that
 transition's source state (from any other state it is `no-transition`). The receipt the effect returns reaches the
@@ -165,7 +194,7 @@ A `requestId` makes a retry safe: the same id with the same trigger returns the 
 firing again, and the same id with a different trigger is refused as `request-id-reused`. Advance and send
 share one id space; a send with no `requestId` uses `send:{id}`. The full rule is under
 [persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#how-a-request-id-is-matched).
-The four snapshot mutations carry `[TraxAuthorize]`, so an unauthenticated caller is refused before the mutation
+The six snapshot mutations carry `[TraxAuthorize]`, so an unauthenticated caller is refused before the mutation
 runs, with the `TRAX_AUTHORIZATION` GraphQL error ("Not authorized.") rather than a `problem`. A request that
 reaches a mutation with no user key (`ISnapshotPrincipal.CurrentUserKey` is null) is refused as
 `unauthenticated`.

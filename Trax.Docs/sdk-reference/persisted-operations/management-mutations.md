@@ -70,13 +70,28 @@ Look up a single row. Returns null when missing.
 
 Audit history for an operation, most-recent first. Same `take` / `skip` defaults as `persistedOperations`.
 
+### `machineDocuments`
+
+`operations { machineDocuments { id machine operation irHash document } }`: the manifest of the
+[machine documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) this node serves, one per
+operation of each exposed machine, with the IR hash of the machine it was generated for. A generated client reads
+it at build time and sends each operation by its id. It sits directly under `operations`, behind the gate the host
+declared for the namespace, and, like `persistedOperations`, it is admitted as an inline document when the host
+requires persisted operations, since a client cannot ask for its ids by an id it does not have yet.
+
+## Reserved ids
+
+Ids starting with `trax_machine_` belong to the machine documents the host generates and registers itself. Upload,
+deactivate and restore refuse them with the code `RESERVED_ID`, and `IPersistedOperationStore`'s `UpsertAsync`,
+`DeactivateAsync` and `RestoreAsync` throw `PersistedOperationInputException`.
+
 ## Error payload
 
 All mutations return errors via the payload `errors[]` array; mutations never throw to the client. Each entry has:
 
 | Field | Type | Notes |
 |---|---|---|
-| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation), `CHANGE_NOT_BROADCAST` (the change is saved, but the broker did not confirm its broadcast). |
+| `code` | `String!` | Stable code: `PARSE_FAILED`, `SCHEMA_VALIDATION_FAILED`, `SHAPE_DIFF_VIOLATION`, `NOT_FOUND`, `INVALID_INPUT` (an empty required field, or a document with other than one operation), `RESERVED_ID` (an id under `trax_machine_`, see [Reserved ids](#reserved-ids)), `CHANGE_NOT_BROADCAST` (the change is saved, but the broker did not confirm its broadcast). |
 | `message` | `String!` | Human-readable message. On `SHAPE_DIFF_VIOLATION` it says to upload again with `bypassShapeDiff: true` if the change is shape-safe. |
 | `locations` | `[Location!]` | 1-based line / column. Present on parse errors and most schema-validation errors. |
 | `path` | `[String!]` | Response path. Present on some schema-validation errors. |

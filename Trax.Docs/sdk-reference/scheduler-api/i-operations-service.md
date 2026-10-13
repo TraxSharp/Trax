@@ -419,6 +419,11 @@ public record MachineInstanceStateCount(string Machine, string State, SnapshotOw
 | `CountMachineInstancesAsync(query, ct)` | How many match, counted up to `OperationsService.MachineInstanceCountCap` (10,000): more give `Count = 10000, Capped = true`. |
 | `GetMachineInstanceAsync(key, ct)` | One instance, or `null`. The owner kind is part of every lookup, so a user's draft never answers for a system instance under the same id. A user's draft also needs `RowId`, because several users can hold a draft under one id: without it the method throws `ArgumentException`. |
 | `GetMachineInstanceStateCountsAsync(machine, ct)` | Exact counts by machine, state and owner kind, ordered by those three; `machine` narrows it to one machine. Kept for `MachineInstanceCountCacheDuration` (5 seconds) per host and per `machine`, with callers asking meanwhile sharing one read, so a count can be that old. |
+| `WatchMachineInstancesAsync(machine, ct)` | The live feed of instances: each instance once whenever any path on any host writes it, narrowed to one machine when `machine` is set, and once more with `Deleted` set when it is deleted or expires. A record with `Reload` set names no instance: writes may have been missed (the change listener started or reconnected, or the reader fell behind), so the reader reads what it shows again. A burst of writes to one instance may arrive as its latest revision only. It starts with what is written after it opens, ends when `ct` fires, when the host stops or when the reader falls too far behind, and ends at once on a host that registers no state machines. Every reader on a host shares the host's one change listener; the dashboard's instance page and the API's `onMachineInstanceChanged` read it here. A service constructed without an `IServiceProvider` throws `InvalidOperationException` on the first read. |
+
+`MachineInstanceRecord` also carries `Revision`, the instance's revision, as an init-only property: 1
+when the row was created and one more for every write since, bumped by the database; and `Deleted`, set
+only on the live feed, on the instance as it was last seen before it was deleted or expired.
 
 A record never carries the snapshot's context or the owning user's key. The context is an untyped
 JSON object, so nothing could mask its sensitive parts; an operator sees where an instance is and

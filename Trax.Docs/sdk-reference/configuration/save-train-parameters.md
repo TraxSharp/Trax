@@ -45,6 +45,12 @@ The generic type parameter `TBuilder` is inferred by the compiler, so callers ju
 
 The configuration is registered as a singleton and can also be modified at runtime via the dashboard's Effects page.
 
+The trains behind a state machine's operations (the typed `machines` operations and the generic `stateMachine`
+mutations) store no output, whatever this configuration says: their output is the instance's snapshot, context
+included. Their rows keep their input, masked as below, so the run is still recorded. The generic `saveSnapshot`'s
+input marks its `snapshot` `[TraxSensitive]`, so its stored input carries the snapshot masked and such a run cannot be
+requeued. The operator's execution detail and the dashboard's metadata page show no output for these runs.
+
 #### Per-train opt-out helpers
 
 For the common case (a known set of trains), use the `ExcludeInput` and `ExcludeOutput` helpers instead of a predicate. Each skips serialization for trains whose canonical name contains the given fragment, and returns the configuration for chaining.

@@ -63,6 +63,7 @@ See [PersistedOperationsBuilder](/docs/sdk-reference/persisted-operations/persis
 | `IPersistedOperationsCapability` | Singleton | Marker meaning this process serves the management GraphQL fields. The dashboard gates its pages on `IPersistedOperationsService` instead, so they also appear on a host that registers only `AddPersistedOperationStore`. |
 | `AllowlistMatcher` | Singleton | Used by the enforcement middleware. |
 | `PersistedOperationPolicy` | Singleton | The enforcement decision, asked once per operation by the request middleware `UsePersistedOperations` adds after HotChocolate's document parser. |
+| `MachineDocumentRegistration` | Hosted (lifecycle) | Generates every exposed machine's [persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) from the built schema and registers them in the store before the host serves anything, writing nothing for a document already stored as generated. A failure stops the host. |
 | `TimeProvider` | Singleton (TryAdd) | Default `TimeProvider.System`; override for tests. The caches' maximum age is measured on it. |
 | `IDocumentCache`, `IPreparedOperationCache` | Singleton (schema services) | Replacements for HotChocolate's caches, sized from the host's `ModifyOptions` (`OperationDocumentCacheSize`, `PreparedOperationCacheSize`). Each entry carries the generation it was written in and the time its document was read; it is served only while no change has been applied since and it is younger than `WithCacheMaxAge`. The executor refuses to build if anything else replaces them. |
 

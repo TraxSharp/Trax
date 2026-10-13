@@ -24,7 +24,7 @@ Every machine exposes a stable content hash of its behaviour:
 
 | Member | Where | Value |
 | --- | --- | --- |
-| `IMachine.SchemaHash` | C# server | lowercase-hex SHA-256 of `ExportIr()`; `null` for a raw-delegate machine (no exportable IR, so no twin and no handshake) |
+| `IMachine.SchemaHash` | C# server | lowercase-hex SHA-256 of `ExportIr()`; `null` for a machine whose IR export is refused by design, raw-delegate or declarative with a delegate guard, reducer or validator left in (no exportable IR, so no twin and no handshake) |
 | `TypedMachine.schemaHash` / the twin's `irHash` | TypeScript client | SHA-256 of the same committed IR, embedded in the generated twin |
 
 Both hash the committed IR, so they are equal by construction (the drift tests pin `ExportIr()` to the
@@ -33,7 +33,11 @@ committed `ir.json`, and the twin hashes that same file with its trailing newlin
 The client sends its `schemaHash` on each snapshot mutation (`saveSnapshot`, `advanceSnapshot`, `loadSnapshot`,
 `sendSnapshot`). When it differs from the server's registered machine, the request is refused with a
 [`schema-mismatch`](/docs/sdk-reference/statemachine-api/result-codes) problem, so a stale client reloads
-instead of writing under an outdated contract. A client that sends no hash is not checked.
+instead of writing under an outdated contract. A client that sends no hash is not checked. That optional
+handshake belongs to the generic mutations only. A machine served through its own typed operations takes no
+`schemaHash`: its [persisted documents](/docs/sdk-reference/graphql-api/machines#persisted-documents) carry the IR
+hash in their ids, and a node answers another version's id `client-outdated` or `server-outdated`, so the check
+cannot be skipped by leaving a field out.
 
 ```csharp
 // The registered machine's hash, for the handshake.

@@ -83,11 +83,28 @@ never through `ISnapshotStore`. `invoke_token` is unique where set.
 
 ### Draft expiry and live runs
 
-The draft TTL applies to user drafts only: a system instance never expires. Deleting a draft that holds a live
-`invoke_token` cancels its run first, and a cancel that throws keeps the draft. The cancel, which `AddStateMachines`
-registers, works the way the operations surface's does: a work queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set,
-which it reads at its next junction on whichever host runs it. The delete that follows is conditional on the token
-that was cancelled, so a draft that entered an invoking state again in between keeps its new run.
+The draft TTL applies to user drafts only: a system instance never expires. Expiry is the draft sweep's, never a
+read's: a host that registers machines sweeps every minute for users' drafts idle past `DraftTtl` or created longer
+ago than `MaxDraftLifetime`, and deletes each one only while it is still the row, revision and invoke token it read,
+so a draft written after the read is kept. The idle TTL leaves a draft that holds a live `invoke_token` (its state is
+waiting on a run, and the run's outcome moves it on) or a pending timer; the lifetime deletes such a draft too,
+cancelling its run first. Neither deletes a row the server put in its state (an effect's record, an invoked train's
+outcome, an event gated by a role or a policy, or a timer that moved such a row on): that is the record of what the
+server did. The row records it (`server_record`, `SnapshotDraft.ServerRecord`), so a state that a client and the
+server can both enter keeps only the rows the server moved there; a row that does not record it (written before it was
+recorded, or by host code through the store) is kept while its state is a committed state, an effect's target, an
+invoked train's outcome target or a gated event's target. The sweep passes over a row with an effect pending on it,
+and a row a claim from the earlier effect-claim ledger still holds; the delete removes the draft's ledger claims in its
+transaction.
+
+`Discard` deletes a draft that holds a live `invoke_token` by cancelling its run first, and a cancel that throws
+keeps the draft. The cancel, which `AddStateMachines` registers, works the way the operations surface's does: a work
+queue entry still queued is marked cancelled, and a dispatched run has its cancel flag set, which it reads at its
+next junction on whichever host runs it. A draft with an effect pending on it, or one a claim from the earlier ledger
+still holds, is refused as `discard-not-allowed`, as is a row the server put in its state. The delete is conditional
+on the row id, revision and invoke token that were checked, and on no effect being pending, so a draft written in
+between (moved into a committed state, say, or marked by a send) is kept, and is read and checked again. The draft's
+ledger claims go in the delete's transaction.
 
 ### Invoked-run ports
 
@@ -126,29 +143,163 @@ A stored draft as read back:
 | `UpdatedAt` | `DateTimeOffset` | when the row was last written (the window the draft-TTL expiry checks) |
 | `InvokeToken` | string? | the token of the train run the draft's current state invoked, or `null` when no run is live. Server-only: it is never in `Json`. A custom store that records none leaves it `null` |
 
+`StoredSnapshot` also carries `Revision` and `RowId`, init-only, so a store that builds it through the
+positional constructor keeps compiling and leaves them `null`. `Revision` is 1 when the row was created and one
+more for every write since: the database bumps it in a trigger, so a write from a custom store, raw SQL or an
+older host is numbered too, and on the EF InMemory provider, which has no triggers, the store bumps it. `RowId`
+is the row's surrogate key and names one incarnation: a draft deleted and created again under the same id has a
+new one and starts again at revision 1, so revisions order the writes of one `RowId` only. Both travel beside the
+snapshot, never inside `Json`, so `Serialize`, `clientResult` and the replay fingerprint never see them.
+
+`LoadResult.Loaded`, `AutosaveResult.Saved`, `AdvanceOutcome.Advanced` and the generic mutations' outputs carry
+the same `Revision` and `RowId`. A write guarded by the token it read (an advance, a send, a guarded save)
+reports the revision it read plus one, without reading the row back; a replay, or a save that wrote nothing,
+reports the revision the row is at.
+
+`StoredSnapshot` also carries `RecentRequests`, the row's last client requests, oldest first, as
+`RecordedRequest(RequestId, Fingerprint, Revision, ResultSnapshot)` records with the `Trigger` and `FromState`
+each fired, at most `RequestIdRing.Capacity` (16). The EF store fills it from the `recent_requests` column; a
+custom store that records none leaves it `null`, and the last-request fields apply instead. `DueAt` is when the
+current state's timer fires, from the `due_at` column, or `null` when the state has no timer; it travels beside the
+snapshot, never inside it. Every write that enters a timed state sets it from the database's clock in the same
+statement as the state, a write that leaves the state clears it, and one that stays (a host's update, a strand) keeps
+the time set at entry. The EF store does this on every path, `Upsert` and `Insert` included.
+
+The EF store also keeps, beside the snapshot and never inside it, the effect pending on the row
+(`SnapshotDraft.EffectToken`, `EffectKey`, `EffectTrigger`, `EffectRequestId` and `EffectLeaseUntil`; see
+[Effects](/docs/sdk-reference/statemachine-api/effects)) and whether the server put the row in its state
+(`SnapshotDraft.ServerRecord`). Every write the EF store makes matches only a row with no pending effect, apart from
+the writes of that effect itself, so nothing moves or changes a row while its effect runs.
+
+`LoadResult.Loaded`, `AutosaveResult.Saved`, `AdvanceOutcome.Advanced`, `StartOutcome.Started` and the generic
+mutations' outputs carry the row's `DueAt` beside the snapshot as well: what the read found, or what the write left,
+reported by the EF store from the token-guarded write itself rather than a second read another write could overtake.
+A replay of a request the row has moved past since answers its recorded revision with `DueAtKnown` false: the ring
+records the result and not its due time, so `DueAt` is `null` there and says nothing. Every other answer has
+`DueAtKnown` true, and a `null` `DueAt` in it means the state has no timer or the server cleared it. A custom store
+that does not report it answers `null` after a write.
+
 The `Token` / `expectedToken` pair is the optimistic-concurrency contract: read a draft, then `Update` against
 its `Token`; if another write landed in between, the token no longer matches and the update returns `false`
 instead of clobbering it.
 
 ### How a request id is matched
 
-The draft records the last advance that carried a request id: the id, the trigger it fired, and the state it
-fired from. An advance with a request id is then one of three things:
+The draft keeps a ring of the last 16 client requests that carried a request id (`RequestIdRing.Capacity`):
+each one's id, a fingerprint of its trigger and input, the state it fired from, the revision it produced and the
+snapshot it was answered with. The ring is also bounded in size: past `RequestIdRing.MaxBytes` (128 KiB of the
+column's JSON text, written with relaxed escaping, under which a character outside the Basic Multilingual Plane still
+costs 12 bytes: about six 20 KiB snapshots) the oldest entries are
+evicted first, so a machine with large snapshots remembers fewer than 16, and the newest request is always kept. Writes the server makes (an invoked run's outcome, a timer) never take a place in
+it. An advance with a request id is then one of these:
 
-| The stored request | The draft now | Outcome |
+| The ring | The draft now | Outcome |
 | --- | --- | --- |
-| a different id, or none | any | fires the trigger and records this request |
-| the same id and trigger | anywhere but the from-state, or on an edge that loops back to it | a retry: the current snapshot is returned and nothing fires |
-| the same id and trigger | back in the from-state, on an edge that leaves it | the request's outcome was undone (a reset or a move back), so it fires again |
-| the same id, another trigger or none recorded | any | refused as `request-id-reused`; nothing is written |
+| no entry with the id | any | fires the trigger and records this request as the newest, evicting the oldest past 16 |
+| the same id, another trigger or input | any | refused as `request-id-reused`; nothing is written |
+| the same id, trigger and input | any | a retry: the result recorded for the request is returned, never the current snapshot, and nothing fires |
+
+A retry replays even when the draft is back in the state the request fired from. A timer, an invoked run's outcome
+or any other write can bring it there, and the client still sent one request, so it is applied once. A send is
+matched the same way before its effect runs: a retried send answers with its recorded result wherever the draft is
+now, before the state checks, and never runs the effect again. A replay, of an advance or a send, carries the row's
+`DueAt` only while the row is still at the recorded revision; past it, it says `DueAtKnown` false. A client that
+means a new action sends a new id.
+
+An id that has left the ring cannot be told from a new one, so it fires again under every rule, and from a state the
+machine has since left it is a `no-transition`. A `clientResult` sent with a retry is compared with the result
+recorded for the request. A request id that is empty, whitespace or longer than `RequestIdRing.MaxRequestIdLength`
+(200), or that holds a control character (C0, DEL or C1) or an unpaired surrogate, is refused as `invalid-request-id`
+on every path (advance, send, start and discard), before anything is read or an effect claimed. The id is stored on
+the row, and Postgres cannot store a NUL or an unpaired surrogate in text; the other control characters are refused
+with them so that both providers accept the same ids. An advance with no request id at all is not recorded in the
+ring.
 
 Advance and send share one id space. A send with no `requestId` uses `send:{id}`, so a client that keys its
-advances by the draft id does not collide with it.
+advances by the draft id does not collide with it. A send's fingerprint is its trigger alone: the receipt the effect
+returns is the server's input, not the client's.
+
+The ring is the `recent_requests` column (`SnapshotDraft.RecentRequests`), added by migration `077_snapshot_draft_start_and_request_ring.sql`
+(Postgres) and `039_snapshot_draft_start_and_request_ring.sql` (SQLite). A row no client request has advanced since
+has none, and its last request, from the columns below, is matched as before: the same id and trigger replay the
+current snapshot.
 
 The recorded trigger and from-state are the `last_request_trigger` and `last_request_from_state` columns,
 added by migration `048_snapshot_draft_request_scope.sql` (Postgres) and `013_snapshot_draft_request_scope.sql`
 (SQLite). A row written before that migration has neither, so a retry of its last request is refused once as
 `request-id-reused` instead of being replayed.
+
+## Actors, start and discard
+
+`ISnapshotDraftService` declares the operations of the typed machine surface, implemented by the draft service a
+host gets from `ISnapshotMachineRegistry`.
+
+| Member | Description |
+| --- | --- |
+| `Advance(Actor actor, Guid id, string trigger, ...)` | An advance on behalf of an actor, with the same parameters as the `userKey` overloads (with and without `clientResult`). A client's event is checked against the event's declared rule; a client the rule does not admit is refused as `forbidden`. |
+| `Send(Actor actor, Guid id, string requestId, ...)` | The effect runner's send on behalf of an actor, after checking a client against the effect-bound event's rule, though a send names no trigger. A service taken from `ISnapshotMachineRegistry` sends; one built on its own throws. |
+| `Start(Actor actor, JsonObject? input, string requestId, ...)` | Starts an instance from the machine's declared start input (see below), minting its id, at revision 1. Returns a `StartOutcome`: `Started(Id, Snapshot, Revision, Created)`, where `Created` is false for a retry of the same `requestId` and input, or `Rejected(Code, Message)`. |
+| `Load(Actor actor, Guid id, ...)` | Reads the actor's draft, as `Load(userKey, ...)` does, when the actor is a client the machine's `Get` rule admits beyond its owner-only floor. A rule that refuses the caller, a client with no user key and any other actor are answered `NotFound`, exactly as an unknown id is. A service that does not override it answers `NotFound` to every actor. The machines root's `get` reads through it. |
+| `Discard(Actor actor, Guid id, string requestId, ...)` | Deletes the actor's draft, when the machine's `Discard` rule admits the client (`forbidden` otherwise; on a machine that declares rules but no `Discard` rule, nobody is admitted) and the draft is not a row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in a state that invokes a train, and one with an effect pending on it (`discard-not-allowed` otherwise). A live invoked run is cancelled first. Idempotent: a draft already gone, or someone else's id, answers `Discarded` exactly as a missing one does. Returns a `DiscardOutcome`: `Discarded` or `Rejected(Code, Message)`. |
+
+`Start` refuses, writing nothing, with one of these codes, in this order (the first that applies is the answer):
+
+| Code | When |
+| --- | --- |
+| `system-owned` | the machine is system-owned: only host code creates its instances |
+| `unauthenticated` | the actor is not a client, or its user key is empty or whitespace |
+| `no-start` | the machine declares no `Start<TStartInput>(...)` |
+| `forbidden` | the caller does not meet the start's rule (a start that declares none admits nobody) |
+| `invalid-request-id` | the request id is empty, whitespace, longer than 200 characters, or holds a control character or an unpaired surrogate |
+| `too-large` | the input is over 64 KiB as JSON, checked before it is read |
+| `invalid-input` | the input does not match the start's record: an unknown field, a wrongly typed or missing one |
+| `invalid-context` | the reduction could not build the initial context |
+| `malformed` | the context the reduction produced holds a value no store can keep (a number outside the range of a double, a NUL character) |
+| `too-large` | the started snapshot is over 64 KiB |
+| `invalid-context` | the started snapshot fails the initial state's rule when read back |
+| `invalid-input` | the initial state is timed, and its duration field is missing or outside the timer's bounds |
+| `request-id-reused` | the user's start with this request id on this machine was started with a different input |
+| `too-many-drafts` | the user already holds `MaxDraftsPerUser` drafts |
+| `invoke-limit-reached`, `invoke-forbidden`, `internal-error` | the initial state invokes a train, and the user is at the live-run limit, the train refuses them, or the state's input mapping threw |
+| `conflict` | the start raced another write it could not be ordered with; retry it |
+
+The input is validated against the start's record, never the context type, and the declared reduction is applied to
+the machine's initial context. A start into an invoking initial state queues the run in the transaction that inserts
+the row. The request id is kept on the row as `start_request_id` (`SnapshotDraft.StartRequestId`), unique per owner
+kind, user and machine, with a fingerprint of the input (`start_fingerprint`, `SnapshotDraft.StartFingerprint`), so
+a retry returns the instance it created (and marks it active), however many retries race. `Discard` refuses
+`system-owned`, `unauthenticated` and `invalid-request-id` the same way, then `forbidden` and `discard-not-allowed`.
+
+An `Actor` has one kind. `Actor.Client(UserKey, IsInRole, SatisfiesPolicy)` is a caller acting through a client
+surface: the user it acts for, a role check and an asynchronous policy check. `new Actor.Client(userKey, roles)`
+builds one that holds exactly those roles and satisfies no policy. Code outside Trax cannot declare another kind: a
+record deriving from `Actor` does not compile. There is no trusted actor for a user's instance: host code acting on
+one is a client, holding the roles it passes (none, through the `userKey` overloads), and is held to every rule.
+Host code drives a system-owned instance through
+[`IMachineInstances`](/docs/sdk-reference/statemachine-api/machine-instances), which takes no actor and checks no
+event rule.
+
+**Rules are checked below the resolver.** The draft service checks a client's event against its rule, with the
+roles and policies the client holds when the event is sent, never remembered on the draft. The refusal is
+`forbidden`, and it comes after only a timer trigger (`timer-bound`), a request id the row cannot record
+(`invalid-request-id`) or an oversized input (`too-large`), an id the caller holds no instance under (`not-found`, so
+another user's id answers like a missing one) and an effect- or outcome-bound trigger. An unknown trigger passes the
+rule check and is refused by the engine as `no-transition`, after the request-id ring. A forbidden caller learns
+nothing about its input, a retry of an earlier request is checked against the rule as it
+is now (so a caller who lost the role is refused, not replayed), and nothing is written or launched. A client with
+no user key is refused as `forbidden` too. On a machine that declares no rule at all, an authenticated
+client may fire every event, as before rules existed; once a machine declares any rule, an event without one is
+refused. The `userKey` overloads act as a client holding no role, and so does `ISnapshotEffectRunner.Run`.
+
+The generic `advanceSnapshot` and `sendSnapshot` mutations build their client from the request's
+`ISnapshotPrincipal` and the registered `ICallerAuthorization`, which reports the caller's roles
+(`IsInRole(role)`, exact and case-sensitive), policies (`SatisfiesPolicy(policy, cancellationToken)`) and which
+policies exist (`IsPolicyRegistered(policy)`). Trax.Api registers one over the request's `ClaimsPrincipal`, as
+`[TraxAuthorize]` is evaluated. Without one, a caller holds no role and satisfies no policy.
+
+**The generic save serves only machines with no server-side behaviour.** `Autosave` refuses a machine with a gated
+event or a gated `start` (a rule that names a role or a policy), a timer, an invoked train or an effect as
+`save-not-allowed`, and writes nothing; such a machine moves through its declared events.
 
 ## What each path may write
 
@@ -165,19 +316,25 @@ effect-bound transition lands in, because only send knows the effect ran:
 | autosave | creating a draft in, or moving one into, a committed state, an effect's target, an invoking state or an invoked train's outcome target | `state-reserved` |
 | autosave | any change to a draft already in a committed state or an effect's target, except a reset to the initial state that the machine declares from that state | `draft-committed` |
 | autosave | overwriting a stored draft that fails rehydration with anything but the initial state | `draft-unreadable` |
-| send | recording the receipt on a draft that was written while the effect ran | `conflict` |
-| send | replaying a receipt onto a draft whose content is not what the effect ran on | `draft-changed` |
+| advance, autosave, send | any write to a draft with an effect pending on it | `effect-in-progress` |
+| send | (over a store a host substituted) recording the receipt on a draft that was written while the effect ran | `conflict` |
+| send | (over a store a host substituted) replaying a receipt onto a draft whose content is not what the effect ran on | `draft-changed` |
 
 The receipt a draft in a committed state holds is the one the effect produced for that draft's content, so its
 content is as fixed as its state. A save identical to the stored draft, the snapshot a send returned for instance,
 is answered as saved without a write. A reset is allowed only where the machine itself has a transition from that
 state back to the initial state; a machine with none has no soft reset out of it.
 
-A reset releases the draft's effect claims once their outcome is settled on the draft, so the next draft runs its
-effect afresh. A claim whose effect is still running inside its lease is kept, and so is a completed claim whose
-receipt the draft never recorded (its send reported a conflict): the next send replays that receipt rather than
-running the effect a second time, provided the draft again holds the content the effect ran on, and is refused as
-`draft-changed` otherwise. To seed a draft in a committed state in a test, write it through the store.
+Over the EF store a send marks the draft's row before it runs the effect, and records the receipt, the move to the
+effect's target and the end of the mark in one write: every other write to the draft, a reset included, is refused as
+`effect-in-progress` until then, so the receipt is always recorded on the content the effect ran on. The next send of
+the event, after a reset, runs the effect afresh under a new key. To seed a draft in a committed state in a test, write
+it through the store.
+
+A host that substitutes its own `ISnapshotStore` cannot hold the mark, and keeps the effect-claim ledger beside the
+draft instead: a reset releases a claim once its outcome is settled on the draft (a claim running inside its lease is
+kept, and so is a completed claim whose receipt, under `receipt`, the draft never recorded), and the next send
+replays that receipt only onto the content the effect ran on, `draft-changed` otherwise.
 
 ## EfSnapshotStore and EfEffectClaimStore
 
@@ -192,9 +349,16 @@ The dialect is how a lost race (a concurrent create of one draft, a claim on a k
 apart from a real failure, on Postgres and SQLite alike. Without one, such a race throws instead of returning
 `false` or `Lost`. Both stores stop tracking what they write, so they can share a request's data context.
 
+Over the EF snapshot store, a machine's effects do not use the claim ledger: the effect is pending on the draft's
+row. The ledger serves `IdempotentEffect` outside machines, a host whose snapshot store is its own, and claims recorded
+before the upgrade, which a send records or drops (see migration
+[`081`](/docs/migration-guides/database-migrations#state-machine-pending-effect-and-server-record-081-sqlite-041)).
+
 `IEffectClaimStore.ReleaseForReset(effectKey, receiptRecorded, ct)` is the release a reset uses: it keeps an
 in-flight claim whose lease has not passed, and deletes a completed claim only when `receiptRecorded` accepts its
-receipt. `Release` deletes whatever is there, and is what deleting an expired draft uses. A custom claim store
+receipt. `Release` deletes whatever is there. A discard and the draft sweep claim the draft's free keys before the
+delete and, inside the delete's transaction, free those and release the settled claims through `ReleaseForReset`, so
+a claim still in flight or still on its way to the draft is never released with it. A custom claim store
 that does not override `ReleaseForReset` gets a default that releases only a completed claim whose receipt was
 recorded, and keeps every in-flight claim until the lease lets the next send reclaim it.
 

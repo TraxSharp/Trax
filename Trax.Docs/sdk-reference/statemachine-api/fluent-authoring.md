@@ -85,7 +85,7 @@ against the one `RunsOnce` effect.
 |--------|-------------|
 | `When(Func<JsonObject, JsonNode?, bool> guard)` | Admits the transition only when the guard passes. The first matching edge wins. |
 | `When(Rule guard)` | The declarative, exportable guard: admits the edge only when the `Rule` holds. Build rules with the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
-| `WithInput<TInput>()` | Declares this trigger's input shape from a record, so the IR carries a typed input schema for it. |
+| `WithInput<TInput>()` | Declares this trigger's input as a record. Both engines check every input sent with the trigger against the record's schema before any guard reads it, as strictly as the CLR type, and refuse a mismatch as `invalid-input` (see [Trigger input](#trigger-input)). The IR carries the schema. |
 | `Because(string message)` | The detail surfaced when the guard rejects the trigger. |
 | `Reduce(Func<JsonObject, JsonNode?, JsonObject> reducer)` | Computes the next context. Return a fresh JSON object; never mutate the input. |
 | `Reduce(Reduction reduce)` | The declarative, exportable reducer: `Set(...).FromInput(...)`, `Clear()`, `Reset()`, `Keep()`. See the [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules). |
@@ -109,6 +109,89 @@ raw `JsonObject` overloads give exact control.
 | `Seed<TContext>(TState state, TContext context)` / `Seed(TState state, JsonObject context)` | A seed context used as a BFS start point, reaching states the initial snapshot can't. |
 | `Probe<TContext>(TContext context)` / `Probe(JsonObject context)` | A dense probe context crossed with every state, exercising guards and validators on unreachable-but-sendable snapshots. |
 | `OutcomeSample<TOutput>(TState invokingState, TOutput output)` | A representative output of the train the state invokes, fired as its `<State>.done` outcome trigger. Every outcome trigger is also fired with no input. `Build` refuses a sample for a state that invokes nothing. |
+
+## Rules, start, reads and timers
+
+These declarations describe how a machine is served to clients. Each event, the machine's `start` and its reads
+declare who may reach them, and the server checks every event and every `start` against its rule (see
+[persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#actors-start-and-discard)). The draft
+service's `Start` validates the start input against its record and applies the reduction to the initial context, and
+a host refuses to start while the start of a machine a client can reach copies its input into a field an invoked
+train's outcome, the effect or an event gated by `Requires` or `RequiresPolicy` writes.
+
+| Method | Description |
+|--------|-------------|
+| `ITransitionBuilder.Requires(params string[] roles)` | Only an authenticated caller holding one of `roles`, compared exactly and case-sensitively, may fire this event. Chained `Requires` calls each add a set the caller must also meet. |
+| `ITransitionBuilder.RequiresPolicy(string policy)` | Only an authenticated caller who satisfies the authorization policy may fire this event. It combines with `Requires`. |
+| `ITransitionBuilder.AnyAuthenticated()` | Any authenticated caller may fire this event. |
+| `ITransitionBuilder.Anonymous()` | Any caller may fire this event. A host refuses it on a user-owned machine a client can reach. |
+
+An event has one rule, whichever state it is sent from: `Build` refuses a machine whose edges of one event declare
+different rules (or one declares a rule and another none), and one where a gated event (one that names a role or a
+policy) enters the start state from another state, since anyone allowed to start an instance can put one there (unless the start
+state invokes a train, where the startup comparison below is the gate). `AnyAuthenticated()`
+and `Anonymous()` stand alone; combining either with another rule on one edge throws. Outcome and timer triggers
+are the server's own and offer no rule. At startup the host compares every event entering an invoking state, and
+the start into an invoking initial state, with the invoked train's `[TraxAuthorize]`, and refuses one whose rule
+does not prove the train's: an event's role set must sit inside each of the train's role sets, and it must name
+each of the train's policies, since a policy cannot be proven to grant a role.
+| `IMachineBuilder.Start<TStartInput>(Action<IStartBuilder<TStartInput>> configure)` | Declares the machine's `start`: the record a client starts an instance with, never the context type. `IStartBuilder` takes a declarative `Reduce(Reduction)` from the start input to the initial context, and the same four rules as an event (`Requires`, `RequiresPolicy`, `AnyAuthenticated`, `Anonymous`). |
+| `IMachineBuilder.Get(Action<IReadRuleBuilder> rule)` | Declares who may read an instance through `get`. |
+| `IMachineBuilder.Watch(Action<IReadRuleBuilder> rule)` | Declares who may watch an instance through `machineChanged`. `IReadRuleBuilder` offers `OwnerOnly()`, `Requires(...)`, `RequiresPolicy(...)`, `AnyAuthenticated()` and `Anonymous()`. |
+| `IMachineBuilder.Discard(Action<IReadRuleBuilder> rule)` | Declares who may delete an instance through `discard`, owner-only being the floor as for `get`. Whatever the rule, a row the server put in its state (an effect's record, an invoked train's outcome, an event gated by `Requires` or `RequiresPolicy`, carried on by a timer), an instance in a state that invokes a train, and one with an effect pending on it is not discarded: the answer is `discard-not-allowed`. |
+| `IStateBuilder.After(TimeSpan delay)` | Declares the state's timer: once the state has been held for `delay`, the server leaves it. Returns an `ITimerBuilder`, whose `GoTo(TState target)` names where it goes and returns the state builder. The timer starts on every entry (a self-transition included) and is cancelled on leaving; its trigger is `<State>.after`. |
+| `IStateBuilder.After<TContext>(Expression<Func<TContext, TimeSpan?>> duration, TimeSpan min, TimeSpan max)` | The same, with the duration read from a context field and bounded by `min` and `max`. The field holds an ISO-8601 duration (`"PT5M"`: days, hours, minutes and seconds, in ASCII digits) and is read once, when the state is entered; entering with a field that is missing, not such a duration, or outside the bounds is refused as `invalid-input`, never an error. The typed GraphQL surface writes and reads a `TimeSpan` as this duration. |
+
+A state has at most one timer. `Build` refuses two timers on one state, a timer back into its own state, timers that
+form a cycle no event breaks, a timer into an effect's target or an invoked train's outcome target, a fixed duration
+that is not positive or is above `MachineTimers.MaxDuration` (366 days), bounds whose minimum is not positive or is
+above the maximum or whose maximum is above the cap, and a duration field the state's declared context does not have,
+does not type as `TimeSpan?`, or marks `[TraxSensitive]` (a deadline is exported and shown). A selector that is not a
+single field builds, but the IR export refuses the machine. A timer's target is not reserved, because a timer carries
+the context unchanged; the timed state itself is locked against the soft save, and the generic save
+refuses a machine with a timer. A host refuses to start a user-owned machine whose timer enters a state that invokes a
+train, since nobody is present to authorize the run.
+
+`IMachine.Triggers` lists a machine's triggers as `MachineTrigger(Name, Kind, InputType)` records, where `Kind` is
+a `TriggerKind`: `Client`, `EffectBound`, `Outcome` or `Timer`. `Machine<TState, TTrigger>` lists every member of
+its trigger enum (`EffectBound` when an edge on it binds the machine's effect, else `Client`, with the record its
+`WithInput<T>()` declares or null), then each invoking state's `<State>.done`, `.failed` and `.cancelled` as
+`Outcome`, the success outcome's input type being the train's output type, then each timed state's `<State>.after`
+as `Timer`, with no input. A typed API is built from this list, and offers no operation for an outcome or a timer,
+with two more: `IMachine.States` lists every member of the state enum as a `MachineState(Name, ContextType)`, where
+`ContextType` is the record the state's `Context<TContext>()` declares (null for `Context()` or none), and
+`IMachine.StartInputType` is the record `Start<TStartInput>` declares, or null when the machine declares no start.
+The [machines root](/docs/sdk-reference/graphql-api/machines) types each exposed machine's state, context and
+operations from the three.
+The engine (`SnapshotMachine`) fires a timer trigger through an entry point of its own, which only the server's reconciler calls, kept
+apart from `Advance`, which refuses one as `timer-bound`. It fires only the timer of the state the snapshot is in (any other
+is `no-transition`) and carries the context to the timer's target. The IR exports timers in a `timers` block of their
+own (state, trigger, target, `after` or `field` with `min` and `max` as ISO-8601 durations, and the union of the rules
+of everything that enters the state), never in `inputs` or `triggers`; a machine without timers exports no block.
+
+## Trigger input
+
+A trigger's input is validated in the engine, so every path that fires a trigger checks it: the draft service,
+the generic advance, and a host's `IMachineInstances.Advance`, which is trusted for rules but never for input.
+The TypeScript twin validates against the same exported schema and gives the same verdict
+([ADR 0048](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)).
+
+- **A declared record is checked as strictly as its CLR type.** A missing non-nullable field, a field of another
+  JSON type, a fraction in an integral field (`2020.0` is an integer, `1.5` is not), a field the record does
+  not declare (a PascalCase key is an unknown field, not an alias), and anything other than an object are
+  refused. No input reads as `{}`. A nested record, and each element of a list of records, is checked the same
+  way. Constraints such as `[MinLength(1)]` are checked against the input, never the context.
+- **Names follow System.Text.Json.** A `[JsonPropertyName]` is the field's name, and a `[JsonIgnore]` member is
+  not part of the input.
+- **A declarative trigger without `WithInput` takes no input**: only none or `{}` is accepted. An effect-bound
+  one takes the `receipt` its effect runner hands it. A trigger whose guard or reducer is a delegate reads the
+  input in code nothing can describe, so its input is left to that code unless it declares `WithInput`.
+- **Some machines refuse to build.** A record that contains itself has no finite schema, so `WithInput<T>()`
+  throws naming it. One trigger has one input schema: `Build()` refuses a trigger whose edges declare different
+  records, or a record on one edge and none on another. An invoked train's output type needs a schema too,
+  since its output is checked against it before an `OnDone` guard reads it.
+- **Never an exception.** A duplicate key, a number outside the range of a double (`1e400`), a string with a
+  lone surrogate, or a deeply nested object is refused as `invalid-input`.
 
 ## Delegate vs declarative
 

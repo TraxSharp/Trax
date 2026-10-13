@@ -52,7 +52,7 @@ transaction that inserts the row, and the row's invoke token names it; a `Start`
 instance queues nothing.
 
 A machine that declares `SystemOwned()` belongs to the system only: no user's draft operation reaches it, and the
-four `stateMachine` mutations answer `unknown-machine` for it.
+six generic `stateMachine` mutations answer `unknown-machine` for it.
 
 Calling `Start` twice with one key, from one host or from several at once, creates one row: the losing insert is a
 lost race, and the call returns the winner's instance with `Created` false. The context of a call that finds an
@@ -77,7 +77,7 @@ var outcome = await instances.Advance<IngestMachine>(MachineKey.Of("orders-db", 
 
 It is checked exactly as a user's advance is: the edge's guard, the target state's context rule and the 64 KiB
 cap. An invoked train's outcome trigger (`Ingesting.done`) is refused as `outcome-bound` and a trigger bound to the
-machine's effect as `effect-bound`, so the system cannot forge what a run or an effect produced. Leaving an
+machine's effect as `effect-bound`, so only a run or the effect records what it produced. Leaving an
 invoking state cancels its run and entering one queues a new run, in the transaction that writes the snapshot,
 and that run is authorized in the trusted scope like every run of a system-owned machine.
 

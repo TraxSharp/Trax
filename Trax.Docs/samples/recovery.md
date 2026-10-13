@@ -30,7 +30,7 @@ It proves six features working together, against Postgres, in one process:
 | Checkpoints and resume | The research brief checkpoints its checked findings; the manifest's retry resumes after it, and an operator resumes the failed run at `Summarize` with `resumeExecution` or the dashboard's **Resume** | [Resuming from a checkpoint](#resuming-from-a-checkpoint) |
 | Junction events | `onJunctionEvent` and `operations.junctionRuns` drive the page | [Junction Events](/docs/effect/junction-events) |
 | Parallel branches | The topic map's three signals run side by side; a failed branch fails the run by name, and only the step after the join writes | [The topic map](#the-topic-map) |
-| State machines that invoke trains | System-owned instances started from a train, an unsure output routed by a guarded `OnDone`, a failed ingest retried by entering its state again, a user's wizard whose result no client can forge, and a draft rebuilt after its host is killed mid-run | [The state machines](#the-state-machines) |
+| State machines that invoke trains | System-owned instances started from a train, an unsure output routed by a guarded `OnDone`, a failed ingest retried by entering its state again, a user's wizard whose result no client can write, and a draft rebuilt after its host is killed mid-run | [The state machines](#the-state-machines) |
 
 The code is in `Trax.Samples/samples/Recovery`; its tests are in
 `Trax.Samples/tests/Trax.Samples.Recovery.E2E`.
@@ -235,11 +235,11 @@ builder.Services.AddTraxGraphQL(graphql =>
 ```
 
 The research and refund trains carry `[TraxBroadcast]` and `[TraxAuthorize(Roles = "Operator,Viewer")]`,
-so the viewer key follows their steps through the broadcast view. The topic map's train carries a bare
-`[TraxAuthorize]`, which admits any authenticated caller and names no role, and no `[TraxBroadcast]`:
-the `topic-map` machine invokes it, and a user's own machine may not invoke a train stricter than its
-own mutations, nor one that broadcasts every run to every subscriber. Every caller this host
-authenticates holds `Operator` or `Viewer`, and the page follows its steps through the operations view.
+so the viewer key follows their steps through the broadcast view. The topic map's train carries
+`[TraxAuthorize(Roles = "Operator")]` and no `[TraxBroadcast]`: the `topic-map` machine invokes it, and a
+user's own machine may not invoke one that broadcasts every run to every subscriber. Each event that
+enters the invoking state requires `Operator` too, which the host checks at startup, and the page
+follows the run's steps through the operations view.
 
 Once a token scheme is registered, a subscription socket without a credential is refused at
 `connection_init`, so a "public" watcher still needs a key. The alternative to an operator key is
@@ -566,31 +566,62 @@ Operators see the instances on the dashboard's State machines page and through
 #### Build my topic map
 
 The `topic-map` machine is a wizard each user drives from the page: choose the fields, choose the years,
-build. It is user-owned, so each demo key has drafts of its own, stored in `trax.snapshot_draft`.
+build. It is user-owned, so each demo key has drafts of its own, stored in `trax.snapshot_draft`. A draft is
+created by the machine's declared start, `Start<TopicMapStart>(s => s.Reduce(Keep()).AnyAuthenticated())`: the
+start input is its own record, never the context type, the server mints the draft's id, and the declared
+reduction builds the first step from the initial context. No client writes a snapshot.
 
 ```
 ChoosingFields --ChooseFields--> ChoosingRange --Build--> Building --done-------> Built
       ▲            ◀──Back──          ▲  ◀──CancelBuild──    │     --failed-----> BuildFailed
       │                               └───────Edit─────────── Built, BuildFailed, BuildCancelled
       │                                                      └──── --cancelled--> BuildCancelled
-                          Building ◀──Rebuild── Built, BuildFailed, BuildCancelled
+                          Building ◀──Rebuild── Built, BuildFailed, BuildCancelled, Expired
+              Built --after 7 days--> Expired --Edit--> ChoosingRange
+ChoosingFields ◀──StartOver── Building, Built, BuildFailed, BuildCancelled, Expired
 ```
+
+**A built map waits seven days for review.** `Built` declares `.After(ReviewWindow).GoTo(Expired)`, a timer the
+server runs: entering `Built` sets the draft's due time from the database clock, and the host's reconciler moves a
+draft whose time has come to `Expired`, whether or not anyone has the page open. No client can send the timer's
+trigger, and the page shows the move when the server pushes it. Until then it shows the review deadline, the
+`dueAt` the server sends beside the `Built` snapshot. The reconciler wakes when the next due timer
+falls due, so a timer fires on time. Beyond that it sweeps once a minute while it hears Postgres' notifications, which
+matters only for a due time rewritten behind its back; `Recovery:MachineSweepInterval` sets a shorter sweep (the
+browser tests use one second, because they make a timer due by rewriting the row, which the reconciler is not told
+of).
 
 `Building` invokes `IBuildTopicMapTrain`. The run's input is built on the server from the draft's choices,
 with a run id of its own, which the pairs the join writes are keyed by; `OnDone` keeps that id as `mapId`,
-with the number of papers and pairs and the co-citation track. A user's machine may not invoke a train
-stricter than its own mutations, which need an authenticated caller and no role, so `BuildTopicMapTrain`
-asks for exactly that; every caller this host authenticates is an operator or a viewer.
+with the number of papers and pairs and the co-citation track.
+
+**Every event declares who may send it.** `Build` and `Rebuild` enter `Building`, so both declare
+`.Requires(RecoveryRoles.Operator)`, the role `BuildTopicMapTrain` asks for; the other events declare
+`.AnyAuthenticated()`, and only a draft's owner reads it. At startup the host compares every event that
+enters an invoking state with the train's `[TraxAuthorize]`, and refuses to start when one would let a
+caller run a train they could not run directly. The rule is checked on the server for every event, so a
+viewer's `Build` is refused as `forbidden` before anything is written.
 
 **Old maps are swept.** A rebuild writes a new map and moves `mapId` to it, which leaves the old one
 behind, and a demo run's map is pointed at by nothing once its run ends. `TopicMapSweeper` deletes the
 pairs of every map no stored `topic-map` draft points at, every five minutes
 (`Recovery:TopicMapSweepInterval`). It decides from the drafts the server holds and never from what a
-client sent, so a client can keep a map alive with a forged `mapId` but can never get one deleted; the
-build does not delete the map it replaces for the same reason, since the draft's context is the
-client's to write in the states it may autosave. A build writes its pairs a moment before its outcome
-points the draft at them, so a map is deleted only once two sweeps an interval apart both found it
-unreferenced. A draft left with **Start over** stays stored, and so does its map.
+client sent. The build does not delete the map it replaces: another draft of the same user may still point at
+it. A build writes its pairs a moment before its outcome points the draft at them, so a map is deleted only
+once two sweeps an interval apart both found it unreferenced. **Start a new map** leaves no draft behind. A draft
+in `Building`, or one a build's outcome put in `Built`, `BuildFailed` or `BuildCancelled`, is the record of that
+build, so the server refuses to discard it (`discard-not-allowed`). From those states, and from `Expired`, the page
+sends `StartOver` (any signed-in user), which resets the same draft to the first step with nothing chosen: from
+`Building` it cancels the run, and leaving `Built` cancels the review timer. Before a build, the page discards the
+draft and starts a new one. If the server refuses either, the page shows why and stays on the draft rather than
+starting another. A map no draft points at any more goes with the next two sweeps.
+
+**The demo stays under the draft cap.** Every visitor signs in with the same operator key, so every draft
+the page starts belongs to one user, and the server caps the drafts one user holds (50 by default). Besides
+leaving no draft behind when it starts a new map, the host sets `DraftTtl` to one day, so a draft a closed browser
+abandons stops counting toward the cap after a day rather than the default 30, and a demo database that lives for
+weeks does not fill it. One abandoned before a build is deleted then; one a build moved is kept as the record of
+that build (one in `Built` until its review timer moves it to `Expired`). The cap itself stays on.
 
 The page drives the wizard with a TypeScript twin generated from the machine by the `trax machine` CLI:
 
@@ -600,19 +631,45 @@ dotnet run --project Trax.Cli/src/Trax.Cli -- machine generate \
   --machine Trax.Samples.Recovery.Machines.TopicMapMachine \
   --ir-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
   --twin-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
+  --corpus-out Trax.Samples/samples/Recovery/Trax.Samples.Recovery.Client/src/topicMap \
   --engine-src Trax.Api.StateMachine/src --import-style specifier
 ```
 
-The twin tells the page which step it may take; the page sends the step with `advanceSnapshot` and the
-twin's own result, and the server refuses a result that differs from its own. The draft id is kept in the
-browser, so closing the tab and coming back loads the same draft at the same step. While the draft is in
-`Building` the page loads it a second after its last load answered, because only the run's outcome moves
-it on. Every load and step is numbered when it is sent, and an answer older than one already applied is
-dropped, so a slow load never puts back a draft a step the user just took has replaced.
+The topic map is marked `[TraxMachine]`, so it is served as its own typed operations
+under the [machines root](/docs/sdk-reference/graphql-api/machines),
+`mutation { machines { topicMap { start chooseFields back build cancelBuild rebuild edit startOver discard } } }` and
+`query { machines { topicMap { get } } }`, and the generic `stateMachine` mutations are not served at all. The host also runs only persisted documents: it registers the topic map's own when it starts,
+and the page sends each by the id `topic-map.documents.json` lists, exported from the host's manifest for the IR the
+twin was generated from (`TRAX_UPDATE_MACHINE_DOCUMENTS=1 dotnet test --filter TopicMapDocumentsTests` in
+`Trax.Samples.Recovery.E2E` writes it again).
 
-**A client cannot forge the result.** Every state an outcome reaches is reserved: an autosave cannot put a
-draft in `Built` (`state-reserved`), cannot move one out of `Building` (`draft-invoking`), and
-`advanceSnapshot` refuses `Building.done` (`outcome-bound`). `CancelBuild` leaves `Building`, which cancels
+The page drives its draft with `useServerMachine` from `@trax/state-machine/react`, over
+`createMachineServer` from `@trax/state-machine/client`
+([Driving an instance from React](/docs/sdk-reference/graphql-api/machines#driving-an-instance-from-react)). The
+server owns the draft; the twin only predicts:
+
+- It starts the draft with `machines { topicMap { start } }`, which answers with the id the server minted, and moves
+  it only with the machine's declared events, each its own mutation (`chooseFields(id, input: { fields },
+  requestId)`, `build(id, input: { fromYear toYear }, requestId)`, ...), sent one at a time, each under its own
+  request id.
+- The twin tells the page which step it may take and what the step will show. The page shows that at once and
+  sends it as `clientResult`; the server applies the event itself, refuses a result that differs from its own, and
+  answers what it stored, which replaces the prediction. A refused step is rolled back and its code shown.
+- Whatever else moves the draft (the build's outcome, the review timer, a recovery after a crash, a step from another
+  tab) reaches the page on `machineChanged`, subscribed by its persisted id over the socket. The page never polls:
+  while the draft is `Building` it sends nothing until the outcome is pushed. Every answer and push carries the
+  draft's revision, and anything at or below the revision shown is dropped, so a slow answer never puts back a draft
+  a push has moved on.
+- The draft id is kept in the browser, so closing the tab and coming back opens the same draft at the same step. The
+  start's request id is kept too until the start answers, so a reload in the middle retries it and gets the same
+  draft rather than a second one. A draft the server no longer holds (discarded elsewhere, or expired) ends the
+  stream with `gone`, and the page forgets it and starts a new one.
+- After a deploy that changes the machine, the host answers the page's documents `client-outdated`: the page hides
+  the wizard, shows the code and sends nothing more until it is reloaded.
+
+**A client cannot write a build's result.** The host serves no save, so no client writes a topic map whatever state it
+names, and the run's outcome (`Building.done`) has no client field: only the run's outcome moves a draft out of
+`Building`. `CancelBuild` leaves `Building`, which cancels
 the run: a run still queued is marked cancelled, and one already running stops at its next junction.
 
 **What "recovers" means after a restart.** A run a machine invoked has no manifest, so the scheduler does
@@ -699,9 +756,11 @@ the other, on the `recovery_restart_e2e_tests` database, so it can kill the firs
 | `ACrashedIngest_Fails_AndARetry_RunsItAgainUnderANewToken` | A crashed ingest reaches `Failed` and is not retried by the scheduler; `Retry` queues a new run under a new token and the instance reaches `Ingested`, and a late delivery of either run's outcome moves nothing |
 | `OnlyAnOperator_MayActOnAPartition` | The viewer key's `partitionAction` is refused with `TRAX_AUTHORIZATION`, and the instance neither moves nor queues a run |
 | `AnOperator_CannotCancelTheBuild_ThroughTheRunOrItsEntry_OneByOneOrInBulk` | `cancelWorkQueueEntry`, `cancelExecution` and `cancelExecutions` refuse or skip the run a user's draft started, with one message, and the build still reaches `Built` |
-| `Operators_SeeThePartitions_ReadOnly_AndNoUserReachesThem` | `operations.machineInstances` lists the system instances and has no context field; a user's `loadSnapshot` of one answers `unknown-machine` |
+| `Operators_SeeThePartitions_ReadOnly_AndNoUserReachesThem` | `operations.machineInstances` lists the system instances and has no context field; the system-owned machine has no field under `machines`, and no generic read is served |
 | `TheWizard_BuildsTheMap_AndTheDraftKeepsAPointerToIt` | Fields, years, build: the run's outcome moves the draft to `Built` with the map's id and summary, the pairs are under that id, and a reload returns the same snapshot |
-| `AnAutosaveIntoBuilt_IsRefused`, `WhileBuilding_AHandFiredOutcome_AndAnAutosave_AreRefused` | `state-reserved`, `outcome-bound` and `draft-invoking`; the real outcome still lands |
+| `TheServerMintsTheDraftId_AndADiscardedDraftIsGone` | `start` mints the id and builds the first step; a discarded draft reads as no draft |
+| `StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNothingThatCountsTowardTheCap` | From `Built`, `StartOver` resets the draft to the first step, clears its due time, and leaves a draft that discards |
+| `AnAutosaveIntoBuilt_IsRefused`, `WhileBuilding_AHandFiredOutcome_AndAnAutosave_AreRefused` | neither a save nor the outcome is served to a client; the real outcome still lands |
 | `CancellingTheBuild_GoesBackToTheRange_AndCancelsItsRun`, `AFailedBuild_IsRebuiltByEnteringBuildingAgain_WithANewRun` | Leaving `Building` cancels its run; a rebuild is a new run |
 | `ARebuiltMap_LeavesTheOldMapToTheSweep_AndKeepsTheOneTheDraftPointsAt`, `TheSweep_NeverDeletesAMapAStoredDraftPointsAt_NorOneItSawOnlyOnce` | After a rebuild, two sweeps delete the replaced map's pairs and keep the new one's; a map is deleted only on the second sweep that finds it unreferenced |
 
@@ -709,6 +768,38 @@ the other, on the `recovery_restart_e2e_tests` database, so it can kill the firs
 
 ```bash
 TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.Recovery.E2E
+```
+
+### The browser tests
+
+`Trax.Samples.Recovery.Browser` drives the built page in chromium with Playwright for .NET
+([ADR 0049](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0049-browser-tests-use-playwright-for-dotnet-in-test-projects-only.md)),
+against the host started as a process on the `recovery_browser_tests` database. It builds the page with vite, serves
+it at the origin the host's CORS policy admits, and forwards the page's requests and its socket to the host, so the
+page's code runs unchanged and every request it makes is seen. Each test waits on a locator, a request or the
+database, never a delay, and `TraxInvariants` is checked after every one:
+
+| Test | Proves |
+|---|---|
+| `TheWizard_RunsEndToEnd_WithAdHocDocumentsRefusedAndGenericMutationsOff` | Fields, years, build to `Built` through the typed operations only; an ad-hoc document is refused, and no `stateMachine` field exists |
+| `TheBuildOutcome_ArrivesByPush_WithNoPollingRequest` | The page makes no request between the `build` answer and rendering `Built` |
+| `TheReviewTimer_ExpiresByPush` | A due review timer moves the draft to `Expired` on the server, and the page shows it with no request of its own |
+| `AViewerRolesOperatorOnlyEvent_IsRefusedOnTheServer` | The viewer key's `build` is `forbidden`, and the draft's revision does not move |
+| `TheDashboardAndGraphQL_ShowTheSameStateRevisionAndRuns` | `get`, the stored row and the dashboard's instance page agree on the state and revision, and on no live run |
+| `ReloadingTheTab_ResumesTheServerMintedInstance` | A reload opens the kept draft at its step with one `start` in all and no save |
+| `TwoTabs_SeeEachOthersTransitionsInRevisionOrder` | A step in one tab reaches the other by push, in order |
+| `ADraftTheServerNoLongerHolds_IsForgotten_AndANewOneStarted` | A draft discarded elsewhere is pushed as `gone`; the page starts a new one, and a reload keeps that one |
+| `StartingANewMap_DiscardsTheOldDraft` | **Start a new map** before a build discards the old draft before starting the next |
+| `StartingANewMapFromBuilt_ResetsTheDraft_AndLeavesNoneBehind` | **Start a new map** from `Built` resets the same draft with `StartOver`, with one start request in all and the review timer gone |
+| `ADeployWithANewIR_ShowsClientOutdated` | A page built for another IR shows `client-outdated`, hides the wizard and makes no further request |
+| `KillingTheHostMidBuild_RecoversThroughTheStuckRunPath_AndThePageFollows` | The next host fails the dead build and the page follows to `BuildFailed` by push, with no request of its own |
+
+They need the page's npm packages (`npm ci` in `Trax.Samples.Recovery.Client` and in `Trax.Api.StateMachine`) and
+chromium (`pwsh tests/Trax.Samples.Recovery.Browser/bin/Debug/net10.0/playwright.ps1 install chromium` after a
+build):
+
+```bash
+TRAX_TEST_PG_PORT=5432 dotnet test tests/Trax.Samples.Recovery.Browser
 ```
 
 ## SDK Reference

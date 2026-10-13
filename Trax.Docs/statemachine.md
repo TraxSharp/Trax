@@ -119,7 +119,9 @@ carries an app-managed optimistic-concurrency token, so concurrent writers get a
 lost update or a thrown exception. Two write paths have different trust levels. Autosave is the soft path: the
 client sends a whole snapshot, the server validates it and stores it. Advance is the authoritative path: the
 client sends only a trigger, and the server re-drives the transition from the stored snapshot, never
-trusting a client-computed state.
+trusting a client-computed state. The soft path serves only machines with no server-side behaviour: a machine
+with a gated event or start (one whose rule names a role or a policy), a timer, an invoked train or an effect
+refuses every save as `save-not-allowed`, and moves only through its declared events.
 
 Autosave stores the context the client wrote, so any value an effect will act on must be held to its
 true value by the state's `Holds`, not just to its type. A checkout whose context carries a `total`
@@ -128,24 +130,32 @@ browser save two items at one cent and have the charge take one cent. The
 [State Machine sample](/docs/samples/state-machine) shows the check and its test.
 
 Some transitions carry an irreversible side effect: charge a card, send a letter, provision a resource.
-Those must run exactly once per intent, even under retries, two devices, or a crash mid-flight. The core
-provides a generic exactly-once runner keyed on an intent that names the action, not its content. It claims
-the intent before running the effect, so two concurrent sends deliver once and a crash-retry replays the
-recorded result. A lease with a fence token keeps it live: if a runner wins the claim and then dies, the
-lease expires and the next caller reclaims the key, and a revived stuck runner is fenced out of completing
-the new claimant's work. Reclaim happens on demand, on the next attempt at that intent, so nothing runs in
-the background: an abandoned claim stays in `effect_claim` until someone tries again. `EffectClaimSweeper`
-releases every claim whose lease has expired, but Trax neither registers nor schedules it. If you want that
-backstop, run it yourself, for example from a scheduled train:
+Those must run exactly once per intent, even under retries, two devices, or a crash mid-flight. A send marks
+the draft's row before it runs the effect, so two concurrent sends deliver once and nothing else writes the draft
+while the effect runs; the receipt, the move and the end of the mark are one write, and a retry replays the
+recorded result. A lease with a fence token keeps it live: if a runner marks the draft and then dies, the lease
+expires and the next send, or the outcome reconciler on any host that registers the effect, takes the mark over and
+runs the effect again under the same key, which the effect passes to the system it calls; a revived stuck runner is
+fenced out of recording over the new claimant's work. See [Effects](/docs/sdk-reference/statemachine-api/effects).
+
+Outside a machine, the same guarantee is `IdempotentEffect`, over the `effect_claim` ledger. There, reclaim happens
+on demand, on the next attempt at that intent: an abandoned claim stays in `effect_claim` until someone tries again.
+`EffectClaimSweeper` releases every claim whose lease has expired, but Trax neither registers nor schedules it. If you
+want that backstop, run it yourself, for example from a scheduled train:
 `await new EffectClaimSweeper(claimStore).Sweep(DateTimeOffset.UtcNow)`, with the scoped `IEffectClaimStore`
 that `AddStateMachines` registers.
 
 A draft has no natural end. A user can abandon a half-filled form, and a completed one lingers as a committed
-snapshot. An optional TTL bounds that: set `DraftTtl` on `AddStateMachines`, and the next load of a draft
-idle past the window discards it. The row is deleted and the load reports no draft, so the user starts fresh.
-Deleting rather than ignoring also clears a committed draft, so a returning user is never wedged behind a
-finished one. The check is lazy, on load, so there is no scheduled job, and it never touches an active
-session: an advance or autosave mid-flow is left alone. The default is off, which never expires a draft.
+snapshot. `DraftTtl` on `AddStateMachines` bounds that: it defaults to 30 days, and a background sweep
+(`DraftSweeper`, on every host that registers machines) deletes a user's draft idle past it, so a returning user
+starts fresh and is never wedged behind a finished one. The window slides with every write, so an active session is
+left alone. A load never deletes: it reads the draft as stored. The sweep keeps a draft whose state waits on an
+invoked run, whose timer is still pending (up to `MaxDraftLifetime`) or that an effect is running on, and never
+touches a system-owned instance. It also keeps, however idle or old, an instance in a state only the server puts it
+in (a committed state, an effect's target, an invoked train's outcome target, a gated event's target): that is the
+record of what the server did, and how long it stays is yours to decide. `MaxDraftLifetime` (90 days by default)
+bounds every other draft from its creation, whatever its timers or activity. Setting `DraftTtl` to `null` turns idle
+expiry off; set `MaxDraftLifetime` to `null` as well for drafts to live until they are discarded.
 
 ## The frontend surface
 

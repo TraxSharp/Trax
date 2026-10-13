@@ -144,8 +144,9 @@ target that itself invokes a train may be entered by an ordinary edge, because e
 forges no result, and that edge is how a chained stage is retried.
 
 **The train is authorized against the user who entered the state, at entry.** At startup a user-owned machine is
-refused a train whose `[TraxAuthorize]` is stricter than the machine's own mutations (entering the state would be a
-way around it), and any `[TraxBroadcast]` train, whose subscribers see every run's output. A system-owned machine's
+refused a train whose `[TraxAuthorize]` is stricter than any event that enters the invoking state (entering the state
+would be a way around it; each entering event is compared, as [0048](./0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)
+records), and any `[TraxBroadcast]` train, whose subscribers see every run's output. A system-owned machine's
 train runs under Trax's trusted execution scope, as a scheduled manifest run does, and may invoke only a train a
 scheduled manifest could run: no user-only requirements, checked at startup. Only a system-owned machine chains runs
 through outcomes: a run an outcome queues has no user present to authorize it, so a user-owned machine whose
@@ -290,6 +291,18 @@ follow the first.
 
 ## Changelog
 
+- **2026-10-12**: The 2026-10-09 entry named two kinds of actor. `Client` is the only one (0048's Changelog,
+  2026-10-12): host code on a user's instance is a client, and `IMachineInstances` is the trusted host API for
+  system-owned instances.
+- **2026-10-09**: Amended by [0048](./0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md).
+  The startup comparison is per entering event: an event now declares its own rule, and the strictest requirement of
+  the invoked train is compared with every event (and a typed `start`) that enters the invoking state, rather than
+  with the machine's mutations as a whole, which were open to any authenticated caller. An `Operator` event may
+  invoke an `Operator` train; a policy rule against a role requirement cannot be proven and is refused. Rules are
+  checked against an explicit actor, `Client`, the only kind; `IMachineInstances` stays the trusted host API. A timer
+  is a second server-only trigger kind beside outcomes: on a user-owned machine a timer into an invoking state is
+  refused at startup for the reason an outcome into one is, and a timer leaving an invoking state cancels the run
+  through the same leaving path as an event.
 - **2026-10-08**: The IR's outcome entries no longer name the train. The twin never used the name, and the IR is
   shipped to the browser in the generated twin, so it disclosed the server's train interfaces for nothing.
 - **2026-10-08**: The `[TraxBroadcast]` and `[TraxSensitive]` refusals hold at runtime too, with the startup check's

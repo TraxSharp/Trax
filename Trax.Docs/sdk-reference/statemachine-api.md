@@ -29,3 +29,4 @@ walkthroughs, see [Authoring a machine](/docs/statemachine/authoring) and
 | [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | `ISnapshotStore` and `ISnapshotPrincipal` |
 | [Result codes](/docs/sdk-reference/statemachine-api/result-codes) | The typed outcomes of advance and rehydrate |
 | [AddTraxStateMachineSelfCheck](/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check) | The startup self-check registered as an ASP.NET Core health check |
+| [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package) | `@trax/state-machine`: the engine twin, the stores and hooks, and the server clients |
