@@ -1,6 +1,6 @@
 ---
 title: Architecture Guards
-description: "The Trax architecture-guard packages, their base fixtures and options, and the conventions they check: schemas, cross-schema reads, train interfaces, test hygiene."
+description: "The Trax architecture-guard packages, their base fixtures and options, and what they check: schemas, cross-schema reads, train interfaces, test hygiene."
 type: reference
 area: tooling
 nav_order: 3

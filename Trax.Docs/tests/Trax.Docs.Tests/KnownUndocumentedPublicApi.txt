@@ -36,7 +36,6 @@ trax T:ApiOperation
 trax T:ApiSchema
 trax T:ApiType
 trax T:CodeRenderer
-trax T:GenerateCommand
 trax T:GraphQLSchemaParser
 trax T:ISchemaParser
 trax T:OpenApiSchemaParser
@@ -241,7 +240,6 @@ Trax.Effect.Data.Postgres M:DatabaseMigrator.CreateEngineWithEmbeddedScripts
 Trax.Effect.Data.Postgres M:ModelBuilderExtensions.BuildDataSource
 Trax.Effect.Data.Postgres T:ModelBuilderExtensions
 Trax.Effect.Data.Sqlite M:DatabaseMigrator.CreateEngineWithEmbeddedScripts
-Trax.Effect.Data.Testing M:DomainDataLayerGuardFixture.BaseTypeName
 Trax.Effect.Data.Testing M:DomainDataLayerGuardFixture.Domain_contexts_derive_the_shared_base
 Trax.Effect.Data.Testing M:DomainDataLayerGuardFixture.Domain_contexts_have_companion_interfaces
 Trax.Effect.Data.Testing M:DomainDataLayerGuardFixture.Each_domain_context_owns_a_distinct_schema
