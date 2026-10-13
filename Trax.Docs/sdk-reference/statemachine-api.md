@@ -11,23 +11,32 @@ nav_order: 13
 
 # State Machine API
 
-Reference for authoring and hosting portable snapshot state machines. For the concepts (the two-document
-model, the guarantees, exactly-once effects), see [State Machines](/docs/statemachine). For task-oriented
-walkthroughs, see [Authoring a machine](/docs/statemachine/authoring) and
+Reference for authoring and hosting portable snapshot state machines. The concepts are on
+[State machines](/docs/statemachine); the walkthroughs are [Authoring a machine](/docs/statemachine/authoring) and
 [Declarative authoring](/docs/statemachine/declarative-authoring).
 
-## Pages
+## Trax.Effect.StateMachine
 
-| Page | Covers |
-| --- | --- |
-| [AddStateMachines](/docs/sdk-reference/statemachine-api/add-trax-state-machines) | Discovering machines and wiring the subsystem in one call |
-| [Machine authoring](/docs/sdk-reference/statemachine-api/fluent-authoring) | The `Machine<TState, TTrigger>` base class and the fluent builder |
-| [Rules vocabulary](/docs/sdk-reference/statemachine-api/rules) | The string-free `Rules` surface for declarative guards and reducers |
-| [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model) | The `Rule` / `Reduction` / `ContextSchema` types the IR carries |
-| [IR format](/docs/sdk-reference/statemachine-api/ir-format) | The exported `machine.ir.json`: structure, schema, and behaviour as data |
-| [Migrations](/docs/sdk-reference/statemachine-api/migrations) | `MigrateFrom` and forward-migrating stored drafts across versions |
-| [Effects](/docs/sdk-reference/statemachine-api/effects) | `ISnapshotEffect`, the exactly-once side effect and its receipt |
-| [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports) | `ISnapshotStore` and `ISnapshotPrincipal` |
-| [Result codes](/docs/sdk-reference/statemachine-api/result-codes) | The typed outcomes of advance and rehydrate |
-| [AddTraxStateMachineSelfCheck](/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check) | The startup self-check registered as an ASP.NET Core health check |
-| [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package) | `@trax/state-machine`: the engine twin, the stores and hooks, and the server clients |
+- [Rules](/docs/sdk-reference/statemachine-api/rules): the string-free vocabulary for declarative guards and reducers.
+- [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model): `Rule`, `Reduction`, `ContextSchema`, `DeclarativeModel` and the engine definition.
+- [IR format](/docs/sdk-reference/statemachine-api/ir-format): the exported `machine.ir.json`.
+- [Migrations](/docs/sdk-reference/statemachine-api/migrations): `MigrateFrom` and forward-migrating stored drafts.
+- [Result codes](/docs/sdk-reference/statemachine-api/result-codes): the typed outcomes of advance, rehydrate and the draft operations.
+
+## Trax.Effect.StateMachine.Persistence
+
+- [AddStateMachines](/docs/sdk-reference/statemachine-api/add-state-machines): discovering machines and wiring the subsystem in one call.
+- [Machine](/docs/sdk-reference/statemachine-api/machine): `Machine<TState, TTrigger>` and its builders.
+- [ISnapshotEffect](/docs/sdk-reference/statemachine-api/i-snapshot-effect): the side effect a transition runs once, and its receipt.
+- [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports): `ISnapshotPrincipal`, `ISnapshotStore`, `ISnapshotDraftService` and the stores.
+- [IMachineInstances](/docs/sdk-reference/statemachine-api/machine-instances): system-owned instances, created and advanced from code.
+- [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity): the schema-hash handshake, divergence detection and the self-check.
+- [AddTraxStateMachineSelfCheck](/docs/sdk-reference/statemachine-api/add-trax-state-machine-self-check): the self-check as an ASP.NET Core health check.
+
+## Trax.Effect.StateMachine.Testing
+
+- [MachineConformance](/docs/sdk-reference/statemachine-api/machine-conformance): checking a machine against its committed IR and corpus in a test.
+
+## @trax/state-machine (npm)
+
+- [TypeScript package](/docs/sdk-reference/statemachine-api/typescript-package): the engine twin, the stores and hooks, and the server clients.
