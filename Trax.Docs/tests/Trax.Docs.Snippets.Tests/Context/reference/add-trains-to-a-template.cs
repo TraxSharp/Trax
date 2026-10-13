@@ -1,7 +1,7 @@
 // What the compiled examples on reference/add-trains-to-a-template.md take as given: the scheduled
 // train's two junctions, and the scheduler builder the Program.cs line is written inside.
-global using static TemplateScheduler;
 global using MyCompany.Scheduler.Trains.SyncCustomers;
+global using static TemplateScheduler;
 global using Trax.Scheduler.Services.Scheduling;
 using Trax.Core.Functional;
 using Trax.Effect.Services.EffectJunction;
