@@ -1,20 +1,26 @@
 ---
 title: GraphQLResourceRequest
-description: Reference for GraphQLResourceRequest, the base class for a request whose query lives in an embedded .graphql file, and how the resource is found.
+description: "Reference for GraphQLResourceRequest, the base class for a request whose query lives in an embedded .graphql file, and how the resource is found."
 type: reference
 area: api
 parent: GraphQL Client
 grand_parent: SDK Reference
-nav_order: 6
+nav_order: 8
+package: Trax.Api.GraphQL.Client
+namespace: Trax.Api.GraphQL.Client
+source:
+  - Trax.Api/src/Trax.Api.GraphQL.Client/Resources/GraphQLResourceRequest.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client/Resources/GraphQLQueryResourceAttribute.cs
+  - Trax.Api/src/Trax.Api.GraphQL.Client/Resources/ResourceQueryCache.cs
 ---
 
 # GraphQLResourceRequest
 
-Base class for a request whose query lives in a `.graphql` file compiled into the assembly as an embedded resource. The C# class shrinks to the response type, the variables and an attribute, and the query gets GraphQL syntax highlighting in any editor.
+Base class for a request whose query lives in a `.graphql` file compiled into the assembly as an embedded resource. The class declares the response type, the variables and the resource name.
 
-## Definition
+## Signature
 
-```csharp
+```csharp fragment
 public abstract class GraphQLResourceRequest<TResponse> : IGraphQLClientRequest<TResponse>
 {
     public virtual string Query { get; }       // loaded from the embedded resource
@@ -28,6 +34,8 @@ public sealed class GraphQLQueryResourceAttribute(string resourceName) : Attribu
 }
 ```
 
+## Members
+
 | Member | Description |
 |--------|-------------|
 | `Query` | The text of the resource named by `[GraphQLQueryResource]`. Loaded on first access and cached per request type, never in the constructor, so assembly validation can read it from an uninitialized instance |
@@ -38,7 +46,7 @@ Everything else (`UnwrapDataElement`, `Extract`) comes from [IGraphQLClientReque
 
 ## Example
 
-```csharp
+```csharp compile
 [GraphQLQueryResource("GetPlayer.graphql")]
 public sealed class GetPlayerRequest : GraphQLResourceRequest<PlayerProfile>
 {
@@ -63,7 +71,9 @@ The consuming project embeds the files:
 </ItemGroup>
 ```
 
-## How the resource is found
+## Behavior
+
+### How the resource is found
 
 For a request type in namespace `Game.Clients` in assembly `Game.Api`, with `[GraphQLQueryResource("Queries/GetPlayer.graphql")]` (`/` and `\` read as `.`), these names are tried in order:
 
@@ -74,19 +84,18 @@ For a request type in namespace `Game.Clients` in assembly `Game.Api`, with `[Gr
 
 The SDK names an embedded resource after the project's root namespace and the file's folder, so the first two match when the namespace follows the folder layout, and the last catches the rest. Only the request type's own assembly is searched.
 
-## Exceptions
+### Exceptions
 
 `Query` throws `InvalidOperationException` when:
 
 - the request type has no `[GraphQLQueryResource]`
 - no resource matches. The message lists the names tried and every resource the assembly holds, which is usually enough to spot a missing `EmbeddedResource` item or a renamed folder.
 
-Validation reads `Query`, so with [startup validation](/docs/sdk-reference/graphql-client/builder#usestartupvalidation) either one stops the host from starting rather than failing the first call.
+Validation reads `Query`, so under [UseStartupValidation](/docs/sdk-reference/graphql-client/use-startup-validation) either one stops the host from starting.
 
 **`GraphQLQueryResourceAttribute`** throws `ArgumentException` when `resourceName` is null, empty or whitespace.
 
-## Package
+## See also
 
-```
-dotnet add package Trax.Api.GraphQL.Client
-```
+- [IGraphQLClientRequest](/docs/sdk-reference/graphql-client/i-graphql-client-request)
+- [ValidateGraphQLClientAssembliesAsync](/docs/sdk-reference/graphql-client/validate-graphql-client-assemblies)

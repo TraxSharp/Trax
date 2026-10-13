@@ -77,13 +77,6 @@ sdk-reference/graphql-api/query-models.md
 sdk-reference/graphql-api/subscriptions.md
 sdk-reference/graphql-api/trax-broadcast-attribute.md
 sdk-reference/graphql-api/trax-graphql-attribute.md
-sdk-reference/graphql-client/add-keyed-trax-graphql-client.md
-sdk-reference/graphql-client/add-trax-graphql-client.md
-sdk-reference/graphql-client/builder.md
-sdk-reference/graphql-client/graphql-resource-request.md
-sdk-reference/graphql-client/i-graphql-client-request.md
-sdk-reference/graphql-client/response-strictness.md
-sdk-reference/graphql-client/validate-assemblies.md
 sdk-reference/mediator-api/add-mediator.md
 sdk-reference/mediator-api/add-service-train-bus.md
 sdk-reference/mediator-api/concurrency-limiting.md

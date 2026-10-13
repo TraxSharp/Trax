@@ -97,13 +97,6 @@ Trax.Api.GraphQL T:WorkQueueMutations
 Trax.Api.GraphQL T:WorkQueueQueries
 Trax.Api.GraphQL.Audit M:TraxAuditChannel.DroppedCounterName
 Trax.Api.GraphQL.Audit T:TraxGraphQLBuilderAuditExtensions
-Trax.Api.GraphQL.Client M:IGraphQLClientConfiguration.GraphQLHttpClient
-Trax.Api.GraphQL.Client T:GraphQLClientValidatorExtensions
-Trax.Api.GraphQL.Client.Trax M:OutboundQueryDiscovery.Entry.QueryName
-Trax.Api.GraphQL.Client.Trax M:OutboundQueryDiscovery.Entry.RequestType
-Trax.Api.GraphQL.Client.Trax T:OutboundQueryDiscovery
-Trax.Api.GraphQL.Client.Trax T:TraxBuilderExtensions
-Trax.Api.GraphQL.Client.Trax T:TraxOutboundQueryAttribute
 Trax.Api.GraphQL.PersistedOperations M:IPersistedOperationCache.TryGet
 Trax.Api.GraphQL.PersistedOperations M:PersistedOperationInputException.CodeValue
 Trax.Api.GraphQL.PersistedOperations M:PersistedOperationNotBroadcastException.CodeValue
