@@ -15,6 +15,7 @@ namespace Trax.Api.GraphQL.Client;
 /// local POCO model and reprinted as SDL so the validator can build a graphql-dotnet
 /// <see cref="ISchema"/> from it.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-schema-provider">SDK reference</seealso>
 public class IntrospectingSchemaProvider : ISchemaProvider
 {
     /// <summary>

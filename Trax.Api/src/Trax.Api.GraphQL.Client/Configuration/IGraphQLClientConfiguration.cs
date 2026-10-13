@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.Client;
 /// plumbing, and how strictly responses are checked. Built once from the options set on
 /// <see cref="TraxGraphQLClientBuilder"/> and registered as a singleton (keyed, for a keyed client).
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-configuration">SDK reference</seealso>
 public interface IGraphQLClientConfiguration
 {
     /// <summary>The GraphQL endpoint every request is sent to.</summary>

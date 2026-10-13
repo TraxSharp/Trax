@@ -5,6 +5,7 @@ namespace Trax.Api.GraphQL.Client;
 /// reads the result. Registered as a singleton by <c>AddTraxGraphQLClient</c> (keyed, by
 /// <c>AddKeyedTraxGraphQLClient</c>) and safe to use concurrently.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-graphql-client-executor">SDK reference</seealso>
 public interface IGraphQLClientExecutor
 {
     /// <summary>

@@ -9,6 +9,7 @@ namespace Trax.Api.GraphQL.Client.Trax;
 /// say which keyed client validates the request; <see cref="GraphQLClientAttribute"/> does that.
 /// <see cref="OutboundQueryDiscovery"/> reads it; the dashboard does not display it today.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/trax-outbound-query-attribute">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class TraxOutboundQueryAttribute : Attribute
 {

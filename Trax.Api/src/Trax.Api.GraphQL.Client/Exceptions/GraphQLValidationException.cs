@@ -6,6 +6,7 @@ namespace Trax.Api.GraphQL.Client;
 /// Thrown when a request's query fails validation against the server's schema, or has no
 /// operation definition. Raised before anything is sent.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-exceptions">SDK reference</seealso>
 public class GraphQLValidationException : Exception
 {
     /// <summary>The query text that failed.</summary>

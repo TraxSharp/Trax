@@ -21,6 +21,7 @@ namespace Trax.Api.GraphQL.Client;
 /// alert on drift separately. That makes "validation passes" and "schema is current" two
 /// signals you can monitor independently.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-schema-provider">SDK reference</seealso>
 public class FileSchemaProvider : ISchemaProvider
 {
     private readonly string _path;

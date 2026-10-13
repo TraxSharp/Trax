@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Client.Typed;
 /// <see cref="OperationType"/> to say whether it is a query or a mutation, since that cannot be
 /// inferred from the C# type.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/typed-request">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class GraphQLOperationAttribute : Attribute
 {

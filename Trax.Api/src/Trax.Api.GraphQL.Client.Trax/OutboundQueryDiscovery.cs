@@ -7,6 +7,7 @@ namespace Trax.Api.GraphQL.Client.Trax;
 /// returns a flat mapping of (request type -> endpoint name), for tooling that reports which
 /// external endpoints an app calls. Nothing in Trax calls it today.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/trax-outbound-query-attribute">SDK reference</seealso>
 public static class OutboundQueryDiscovery
 {
     /// <summary>One request type marked with <see cref="TraxOutboundQueryAttribute"/>.</summary>

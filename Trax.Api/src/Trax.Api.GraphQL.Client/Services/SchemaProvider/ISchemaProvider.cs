@@ -8,6 +8,7 @@ namespace Trax.Api.GraphQL.Client;
 /// in <c>Trax.Api.GraphQL.Client.Trax</c>, an in-process provider built from the server's own
 /// schema configuration.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/i-schema-provider">SDK reference</seealso>
 public interface ISchemaProvider
 {
     /// <summary>

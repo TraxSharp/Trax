@@ -23,6 +23,7 @@ namespace Trax.Api.GraphQL.Client;
 /// &lt;/ItemGroup&gt;
 /// </code>
 /// </example>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-resource-request">SDK reference</seealso>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class GraphQLQueryResourceAttribute : Attribute
 {

@@ -7,6 +7,7 @@ namespace Trax.Api.GraphQL.Client;
 /// errors, when the response carried no data, or when the data could not be extracted into the
 /// response type.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/graphql-client-exceptions">SDK reference</seealso>
 public class GraphQLExecutionException : Exception
 {
     /// <summary>The errors the server returned. Empty when the failure was a missing or unreadable response.</summary>

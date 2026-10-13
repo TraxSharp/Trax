@@ -15,6 +15,7 @@ namespace Trax.Api.GraphQL.Client.Trax;
 /// <see cref="TraxGraphQLClientBuilder"/>. The hosted service runs once on
 /// <see cref="StartAsync"/>.
 /// </summary>
+/// <seealso href="https://traxsharp.net/docs/sdk-reference/graphql-client/use-startup-validation">SDK reference</seealso>
 internal sealed class GraphQLClientStartupValidator : IHostedService
 {
     private readonly IGraphQLClientValidator _validator;
