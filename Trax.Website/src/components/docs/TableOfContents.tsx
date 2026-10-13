@@ -16,8 +16,11 @@ export default function TableOfContents() {
     const article = document.querySelector("[data-docs-content]");
     if (!article) return;
 
-    const elements = article.querySelectorAll("h2, h3");
-    const items: TocItem[] = Array.from(elements).map((el) => ({
+    // Headings of the page chrome ("More on <area>") are not part of the page.
+    const elements = Array.from(article.querySelectorAll("h2, h3")).filter(
+      (el) => !el.closest("[data-toc-exclude]")
+    );
+    const items: TocItem[] = elements.map((el) => ({
       id: el.id,
       text: el.textContent || "",
       level: parseInt(el.tagName[1]),
