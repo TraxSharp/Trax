@@ -26,18 +26,7 @@ SQLite files, so it needs no Docker.
 | Per-subscriber authorization: `[TraxAuthorize]` on the field plus a participant check when subscribing | `ChatSubscriptions.SubscribeToChatEventAsync` |
 | Caller identity: every train is `[TraxAuthorize]`, reads the caller from `TraxPrincipal`, and no input names the caller | `Trains/*/Junctions` |
 | Invites: only a room's member can add someone, and the server, not the client, names who was added | `Trains/InviteToChatRoom`, `People/ChatDirectory.cs` |
-| Room-scoped events only: no chat train is `[TraxBroadcast]`, so Trax's lifecycle subscriptions refuse a chat user | `InviteToChatRoomTests` | a member adds someone and the room appears in their own list; someone outside the room can neither add anyone nor list who could be added; an invite for someone the chat does not know is refused |
-| `LifecycleSubscriptionTests` |
-
-## Layout
-
-```
-samples/ChatService/
-├── Trax.Samples.ChatService.Data/     EF Core entities, ChatDbContext, migrations
-├── Trax.Samples.ChatService/          trains, the lifecycle hook, the subscription type, auth constants
-├── Trax.Samples.ChatService.Api/      the host (Program.cs)
-└── Trax.Samples.ChatService.Client/   React + Apollo Client, graphql-ws for subscriptions
-```
+| Room-scoped events only: no chat train is `[TraxBroadcast]`, so Trax's lifecycle subscriptions refuse a chat user | `LifecycleSubscriptionTests` |
 
 ## Run
 
@@ -136,9 +125,21 @@ before it can subscribe.
 
 ## How it works
 
+### Layout
+
+```
+samples/ChatService/
+├── Trax.Samples.ChatService.Data/     EF Core entities, ChatDbContext, migrations
+├── Trax.Samples.ChatService/          trains, the lifecycle hook, the subscription type, auth constants
+├── Trax.Samples.ChatService.Api/      the host (Program.cs)
+└── Trax.Samples.ChatService.Client/   React + Apollo Client, graphql-ws for subscriptions
+```
+
 ### The host
 
-```csharp
+`Program.cs`, less its banner comment and the `partial class Program` the tests need:
+
+```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService.Api/Program.cs
 using Microsoft.EntityFrameworkCore;
 using Trax.Api.Auth;
 using Trax.Api.Auth.ApiKey;
@@ -149,44 +150,117 @@ using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
+using Trax.Samples.ChatService.Auth;
+using Trax.Samples.ChatService.Data;
+using Trax.Samples.ChatService.Hooks;
+using Trax.Samples.ChatService.People;
+using Trax.Samples.ChatService.Subscriptions;
+using SampleKeys = Trax.Samples.ChatService.Auth.ApiKeyDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<ChatDbContext>(o => o.UseSqlite("Data Source=chat.db"));
+var traxConnectionString =
+    builder.Configuration.GetConnectionString("TraxDatabase") ?? "Data Source=trax.db";
 
-// Demo keys, Development only. The factory overload sets a display name.
+var chatConnectionString =
+    builder.Configuration.GetConnectionString("ChatDatabase") ?? "Data Source=chat.db";
+
+builder.Services.AddLogging(logging => logging.AddConsole());
+
+// ── Chat data layer ─────────────────────────────────────────────────────────
+builder.Services.AddDbContext<ChatDbContext>(options => options.UseSqlite(chatConnectionString));
+
+// ── Authentication, fake API key for demonstration (NO WARRANTY, see SECURITY-DISCLAIMER.md) ──
+// The demo keys are published in this repository, so they are registered only in Development
+// (Properties/launchSettings.json sets it for `dotnet run`). Anywhere else no credential exists
+// until you register real ones, and every [TraxAuthorize] operation is refused.
+// The callers, and the people a member can invite, are the same three: the directory is built from
+// them, and is empty wherever no credential is registered.
+var alice = ("alice", "Alice");
+var bob = ("bob", "Bob");
+var charlie = ("charlie", "Charlie");
+(string Id, string Name)[] demoPeople = builder.Environment.IsDevelopment()
+    ? [alice, bob, charlie]
+    : [];
+
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys =>
-        keys.Add("alice-key-do-not-use-in-production", () => new TraxPrincipal("alice", "Alice", ["User"]))
-            .Add("bob-key-do-not-use-in-production", () => new TraxPrincipal("bob", "Bob", ["User"])));
+        keys.Add(SampleKeys.AliceKey, () => ChatUser(alice))
+            .Add(SampleKeys.BobKey, () => ChatUser(bob))
+            .Add(SampleKeys.CharlieKey, () => ChatUser(charlie))
+    );
+
+// Trax qualifies a principal's id with the scheme that authenticated it, and the directory holds the
+// qualified form, the one a junction reads from TraxPrincipal.Id.
+builder.Services.AddSingleton(
+    new ChatDirectory(
+        demoPeople.Select(p => new ChatPerson(
+            TraxPrincipalId.Qualify(Trax.Api.Auth.ApiKey.ApiKeyDefaults.SchemeName, p.Id),
+            p.Name
+        ))
+    )
+);
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
+// ── Register Trax Effect + Mediator + ChatLifecycleHook ─────────────────────
 builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects
-            .UseSqlite("Data Source=trax.db")
-            .AddJson()
-            .SaveTrainParameters()
-            .AddLifecycleHook<ChatLifecycleHookFactory>())
-        .AddMediator(typeof(ChatLifecycleHookFactory).Assembly));
+    trax.AddEffects(effects =>
+            effects
+                .UseSqlite(traxConnectionString)
+                .AddJson()
+                .SaveTrainParameters()
+                .AddLifecycleHook<ChatLifecycleHookFactory>()
+        )
+        .AddMediator(typeof(ChatLifecycleHookFactory).Assembly)
+);
 
+// ── Register GraphQL API + chat subscriptions ───────────────────────────────
 builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscriptions>());
 
-// The CORS default policy's origins are also the origins a browser socket is accepted from.
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
-    .WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+builder.Services.AddHealthChecks().AddTraxHealthCheck();
+
+// ── CORS: allow the React dev server ────────────────────────────────────
+// The default policy's origins are also the origins a browser WebSocket upgrade is accepted
+// from, so the React client's subscriptions connect without AllowSocketOrigins(...).
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(policy =>
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials()
+    )
+);
 
 var app = builder.Build();
+
+// ── Auto-migrate chat schema ────────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+    await db.Database.MigrateAsync();
+}
+
+// ── Map endpoints ───────────────────────────────────────────────────────────
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseTraxGraphQL();
+app.MapHealthChecks("/trax/health");
+
 app.Run();
+
+// The display name is what other participants see beside a message.
+static TraxPrincipal ChatUser((string Id, string Name) person) =>
+    new(person.Id, person.Name, [nameof(ChatRole.User)]);
 ```
 
 Packages: `Trax.Api`, `Trax.Api.GraphQL`, `Trax.Api.Auth.ApiKey`, `Trax.Effect.Data.Sqlite`,
 `Trax.Effect.Provider.Json`, `Trax.Effect.Provider.Parameter`, `Trax.Mediator`, and
-`HotChocolate.AspNetCore` in the library that defines the subscription type.
+`HotChocolate.AspNetCore` in the library that defines the subscription type. Both connection strings
+fall back to SQLite files in the working directory: `trax.db` for Trax's metadata, `chat.db` for the
+chat data, which the host migrates at startup.
 
 ### The trains act as the caller
 
@@ -195,21 +269,30 @@ Every train is `[TraxAuthorize(Roles = "User")]`, and a junction that needs the 
 anonymous request before the junction is built, so the injection cannot fail at run time. The inputs
 carry no user field, which is what makes it impossible to act for somebody else:
 
-```csharp
+```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService/Trains/SendMessage/SendMessageInput.cs
 public record SendMessageInput
 {
     public Guid ChatRoomId { get; init; }
     public required string Content { get; init; }
 }
+```
 
+```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService/Trains/SendMessage/Junctions/ValidateSenderJunction.cs
 public class ValidateSenderJunction(ChatDbContext db, TraxPrincipal caller)
     : Junction<SendMessageInput, SendMessageInput>
 {
     public override async Task<SendMessageInput> Run(SendMessageInput input)
     {
-        if (!await db.ChatParticipants.AnyAsync(p =>
-                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id))
+        if (string.IsNullOrWhiteSpace(input.Content))
+            throw new TrainException("Message content cannot be empty.");
+
+        if (
+            !await db.ChatParticipants.AnyAsync(p =>
+                p.ChatRoomId == input.ChatRoomId && p.UserId == caller.Id
+            )
+        )
             throw new TrainException($"You are not a participant in room {input.ChatRoomId}.");
+
         return input;
     }
 }
@@ -226,18 +309,7 @@ junction admits the invite only from a member of the room, only for someone the 
 `ChatDirectory` knows, and only for someone not in the room already; its second adds them under the
 name the directory holds, so the inviter cannot choose what the room calls them. The host builds the
 directory from the same people it registers credentials for, with each id qualified the way Trax
-qualifies the caller's:
-
-```csharp
-builder.Services.AddSingleton(
-    new ChatDirectory(
-        demoPeople.Select(p => new ChatPerson(
-            TraxPrincipalId.Qualify(Trax.Api.Auth.ApiKey.ApiKeyDefaults.SchemeName, p.Id),
-            p.Name
-        ))
-    )
-);
-```
+qualifies the caller's (the `ChatDirectory` registration in the host above).
 
 `getChatRoomPeople(input: { chatRoomId })` lists everyone else in the directory, each marked as in the
 room or not, to a member of the room. `ChatLifecycleHook` publishes a completed invite as
@@ -247,25 +319,55 @@ list is a query the client polls, so the room appears there on its next refresh.
 ### Publishing a room's events
 
 The hook runs after every train. It ignores all but the four chat mutations (an invite publishes as
-`UserJoined`, like a join), reads the room id out of the serialized output, and sends to that room's
+`UserJoined`, like a join), reads the room id out of the serialized output (an output it cannot
+parse, or one with no room id, is skipped rather than failing the run), and sends to that room's
 topic:
 
-```csharp
+```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService/Hooks/ChatLifecycleHook.cs
 public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
 {
+    private static readonly Dictionary<string, string> TrainEventTypes = new()
+    {
+        [typeof(ISendMessageTrain).FullName!] = "MessageSent",
+        [typeof(ICreateChatRoomTrain).FullName!] = "RoomCreated",
+        [typeof(IJoinChatRoomTrain).FullName!] = "UserJoined",
+        [typeof(IInviteToChatRoomTrain).FullName!] = "UserJoined",
+    };
+
     public async Task OnCompleted(Metadata metadata, CancellationToken ct)
     {
-        if (!TrainEventTypes.TryGetValue(metadata.Name, out var eventType) || metadata.Output is null)
+        if (
+            !TrainEventTypes.TryGetValue(metadata.Name, out var eventType)
+            || metadata.Output is null
+        )
             return;
 
-        using var doc = JsonDocument.Parse(metadata.Output);
-        if (!doc.RootElement.TryGetProperty("chatRoomId", out var roomId))
+        Guid chatRoomId;
+        try
+        {
+            using var doc = JsonDocument.Parse(metadata.Output);
+            if (
+                !doc.RootElement.TryGetProperty("chatRoomId", out var roomIdElement)
+                && !doc.RootElement.TryGetProperty("ChatRoomId", out roomIdElement)
+            )
+                return;
+
+            chatRoomId = roomIdElement.GetGuid();
+        }
+        catch (JsonException)
+        {
             return;
+        }
 
         var chatEvent = new ChatSubscriptionEvent(
-            roomId.GetGuid(), eventType, metadata.Output,
-            metadata.EndTime ?? DateTime.UtcNow, metadata.ExternalId);
-        await eventSender.SendAsync(ChatSubscriptions.Topic(roomId.GetGuid()), chatEvent, ct);
+            ChatRoomId: chatRoomId,
+            EventType: eventType,
+            Payload: metadata.Output,
+            Timestamp: metadata.EndTime ?? DateTime.UtcNow,
+            TrainExternalId: metadata.ExternalId
+        );
+
+        await eventSender.SendAsync(ChatSubscriptions.Topic(chatRoomId), chatEvent, ct);
     }
 }
 ```
@@ -282,29 +384,50 @@ read every room's messages. Trax's lifecycle subscriptions therefore refuse a ch
 
 ### The subscription field
 
-```csharp
+```csharp from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService/Subscriptions/ChatSubscriptions.cs
 [ExtendObjectType("LifecycleSubscriptions")]
 public class ChatSubscriptions
 {
+// ...
     public static string Topic(Guid chatRoomId) => $"ChatRoom:{chatRoomId}";
 
-    [TraxAuthorize(Roles = "User")]
+    [TraxAuthorize(Roles = nameof(ChatRole.User))]
     [Subscribe(With = nameof(SubscribeToChatEventAsync))]
-    public ChatSubscriptionEvent OnChatEvent(Guid chatRoomId, [EventMessage] ChatSubscriptionEvent message)
-        => message;
+    public ChatSubscriptionEvent OnChatEvent(
+        Guid chatRoomId,
+        [EventMessage] ChatSubscriptionEvent message
+    ) => message;
 
+// ...
     public async ValueTask<ISourceStream<ChatSubscriptionEvent>> SubscribeToChatEventAsync(
-        Guid chatRoomId, TraxCaller caller, ChatDbContext db,
-        ITopicEventReceiver receiver, CancellationToken cancellationToken)
+        Guid chatRoomId,
+        TraxCaller caller,
+        ChatDbContext db,
+        ITopicEventReceiver receiver,
+        CancellationToken cancellationToken
+    )
     {
         var userId = caller.Principal?.Id;
-        var isParticipant = userId is not null && await db.ChatParticipants.AnyAsync(
-            p => p.ChatRoomId == chatRoomId && p.UserId == userId, cancellationToken);
-        if (!isParticipant)
-            throw new GraphQLException(ErrorBuilder.New()
-                .SetMessage("Not authorized.").SetCode("TRAX_AUTHORIZATION").Build());
+        var isParticipant =
+            userId is not null
+            && await db.ChatParticipants.AnyAsync(
+                p => p.ChatRoomId == chatRoomId && p.UserId == userId,
+                cancellationToken
+            );
 
-        return await receiver.SubscribeAsync<ChatSubscriptionEvent>(Topic(chatRoomId), cancellationToken);
+        if (!isParticipant)
+            throw new GraphQLException(
+                ErrorBuilder
+                    .New()
+                    .SetMessage("Not authorized.")
+                    .SetCode("TRAX_AUTHORIZATION")
+                    .Build()
+            );
+
+        return await receiver.SubscribeAsync<ChatSubscriptionEvent>(
+            Topic(chatRoomId),
+            cancellationToken
+        );
     }
 }
 ```
@@ -334,17 +457,30 @@ upgrade, so the key must be in the payload, under `apiKey` or `authToken`. A key
 name (the client once sent `"X-Api-Key"`) leaves the socket without a credential, and it is closed
 with `4403`.
 
+```ts from=Trax.Samples/samples/ChatService/Trax.Samples.ChatService.Client/src/apollo.ts
+const wsLink = new GraphQLWsLink(
+  createClient({
+    url: WS_URL,
+    webSocketImpl: loggingWebSocket(displayName),
+    // Browsers cannot set headers on a WebSocket upgrade, so the key travels in the
+    // connection_init payload. Trax reads it from "apiKey" (or "authToken").
+    connectionParams: { apiKey },
+  }),
+);
+```
+
 ## Tests
 
 ```bash
-dotnet test tests/Trax.Samples.ChatService.Tests   # junctions and the hook, in memory (40 tests)
-dotnet test tests/Trax.Samples.ChatService.E2E     # the real host over HTTP and WebSocket, SQLite (53 tests)
+dotnet test tests/Trax.Samples.ChatService.Tests   # junctions and the hook, in memory
+dotnet test tests/Trax.Samples.ChatService.E2E     # the real host over HTTP and WebSocket, SQLite
 ```
 
 | Class | Proves |
 |---|---|
 | `ChatEventSubscriptionTests` | `onChatEvent` is in the served schema, reaches the sender and another participant with the sender's identity, carries nothing from another room, refuses a non-participant and closes an anonymous socket with `4403`; a non-participant receives none of a room's messages on any lifecycle field |
 | `ChatCallerIdentityTests` | no anonymous operation, no reading or posting in a room you have not joined, a message is stored as its sender, rooms list only your own |
+| `InviteToChatRoomTests` | a member adds someone and the room appears in their own list; someone outside the room can neither add anyone nor list who could be added; an invite for someone the chat does not know is refused |
 | `LifecycleSubscriptionTests` | Trax's own lifecycle fields (`onTrainStarted`, `onTrainCompleted`, `onTrainFailed`, `onTrainCancelled`, `onTrainStateChanged`) refuse a chat user, because no chat train is `[TraxBroadcast]` |
 
 The subscription tests never wait on a fixed delay: they keep sending until the first event arrives,
