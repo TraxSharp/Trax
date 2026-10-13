@@ -1,0 +1,7 @@
+# SDK reference pages whose `source:` C# files do not link back to the page, recorded when
+# SourceLinksBackTests was added (2026-10-13). One page path per line, relative to Trax.Docs, in
+# ordinal order.
+#
+# Do NOT add to this list: put `/// <seealso href="https://traxsharp.net/docs/<page path>">SDK
+# reference</seealso>` on the type the page documents. Delete a page's line once its source links
+# back, or when the page moves or is deleted; a stale line fails the test.

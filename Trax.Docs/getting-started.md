@@ -4,6 +4,7 @@ description: "A tutorial building one Trax app from an empty folder: a train run
 type: tutorial
 area: general
 nav_order: 1
+snippet_context: none
 ---
 
 # Getting Started

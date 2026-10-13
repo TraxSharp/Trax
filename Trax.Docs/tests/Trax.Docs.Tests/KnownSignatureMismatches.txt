@@ -1,0 +1,7 @@
+# SDK reference pages whose `## Signature` fences declare a name that is not in the public API
+# baseline of the page's `package:`, recorded when SdkReferenceFrontMatterTests was added
+# (2026-10-13). Only a page whose package has a baseline is checked. One page path per line,
+# relative to Trax.Docs, in ordinal order.
+#
+# Do NOT add to this list: make the signature match the code. Delete a page's line once it
+# matches, or when the page moves or is deleted; a stale line fails the test.

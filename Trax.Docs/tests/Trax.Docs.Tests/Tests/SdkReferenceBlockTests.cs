@@ -75,7 +75,7 @@ public class SdkReferenceBlockTests
         "contributing/repository-layout.md",
         "contributing/test-conventions.md",
         "contributing/writing-migrations.md",
-        "reference/contributing-docs.md",
+        "contributing/writing-docs.md",
         // Tech debt: tracked for follow-up. These ARE concept pages with SDK code but the
         // SDK reference block was missed when authored. Fix by adding the block.
         "core/ide-extensions.md",

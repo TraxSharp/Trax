@@ -13,7 +13,7 @@ public class SnippetCompilerTests
     private static List<SnippetUnit> Units(string markdown) =>
         Fences
             .In("page.md", markdown)
-            .Where(f => f.IsMarked)
+            .Where(f => f.IsCompiled)
             .SelectMany(f => f.Groups.Select(g => (Fence: f, Group: g)))
             .GroupBy(x => x.Group)
             .Select(g => new SnippetUnit("page.md", g.Key, g.Select(x => x.Fence).ToList()))
@@ -107,4 +107,60 @@ public class SnippetCompilerTests
 
         SnippetCompiler.Diagnose(unit).Should().Contain(d => d.Contains("CS0246"));
     }
+
+    [Test]
+    public void SharedContext_GivesEverySnippetTheHost()
+    {
+        var unit = Only(
+            "```csharp compile\nservices.AddLogging();\n"
+                + "Console.WriteLine(connectionString + rabbitMqConnectionString);\n"
+                + "Console.WriteLine(configuration[\"x\"] ?? assemblies[0].FullName);\n"
+                + "await Task.Delay(1, ct);\nawait Task.Delay(1, cancellationToken);\n"
+                + "app.Run();\n```\n"
+        );
+
+        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+    }
+
+    [Test]
+    public void ProgramCs_DeclaringItsOwnHost_HidesTheShared()
+    {
+        // The shape of every Program.cs a page shows: a top-level `var builder` and `var app`
+        // hide the shared members without a warning, as a local hides a member.
+        var unit = Only(
+            "```csharp compile\nvar builder = WebApplication.CreateBuilder(args);\n"
+                + "var services = builder.Services;\nservices.AddLogging();\n"
+                + "var app = builder.Build();\napp.Run();\n```\n"
+        );
+
+        SnippetCompiler.Diagnose(unit).Should().BeEmpty();
+    }
+
+    [Test]
+    public void ContextFiles_LayerFromSharedToPage()
+    {
+        SnippetCompiler
+            .ContextFilesFor("sdk-reference/scheduler-api/schedule.md")
+            .Select(f => Path.GetRelativePath(SnippetCompiler.ContextRoot, f).Replace('\\', '/'))
+            .Should()
+            .StartWith(SnippetCompiler.SharedFile)
+            .And.EndWith("sdk-reference/scheduler-api/schedule.cs");
+    }
+
+    [Test]
+    public void SnippetContextNone_KeepsOnlyThePagesOwnFile()
+    {
+        SnippetCompiler
+            .ContextFilesFor("getting-started.md")
+            .Should()
+            .NotContain(f => Path.GetFileName(f) == SnippetCompiler.SharedFile);
+    }
+
+    [TestCase("---\ntitle: X\nsnippet_context: none\n---\n# X\n", true)]
+    [TestCase("---\nsnippet_context:   none  \n---\n", true)]
+    [TestCase("---\ntitle: X\n---\nsnippet_context: none\n---\n", false)]
+    [TestCase("---\nsnippet_context: shared\n---\n", false)]
+    [TestCase("# No front matter\n", false)]
+    public void SnippetContextNone_IsReadFromTheFrontMatterOnly(string markdown, bool optsOut) =>
+        SnippetCompiler.OptsOutOfSharedContextIn(markdown).Should().Be(optsOut);
 }
