@@ -74,6 +74,11 @@ echo "Linking repository files at $site_ref"
 # exact file on GitHub. ADRs themselves are not published as pages.
 node "$SCRIPT_DIR/adr-index.mjs" "$REPO_ROOT" > "$CACHE_DIR/adr-index.json"
 
+# Redirects from each page's redirect_from (read by next.config.ts), and whether each
+# source: path is a file or a directory. Fails on a redirect that hides a live page or
+# that two pages claim.
+node "$SCRIPT_DIR/docs-index.mjs" "$CACHE_DIR" "$REPO_ROOT"
+
 count=$(find "$CACHE_DIR" -name "*.md" | wc -l | tr -d ' ')
 if [ "$count" -eq 0 ] || [ ! -f "$CACHE_DIR/index.md" ]; then
   echo "error: no docs were copied from $SOURCE_DIR (expected index.md and the page tree)" >&2
