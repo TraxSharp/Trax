@@ -1,6 +1,8 @@
 ---
 title: Scheduling
 description: "Trax.Scheduler overview: manifests, execution metadata, dead letters, delayed and dependent jobs, manifest groups and how the scheduler is put together."
+source:
+  - Trax.Scheduler/src/Trax.Scheduler
 type: explanation
 area: scheduling
 nav_order: 1
@@ -20,27 +22,27 @@ A hosted service with a timer works fine for simple recurring tasks. The Schedul
 
 ### Manifest = Job Definition
 
-A `Manifest` is the scheduling equivalent of a shipping manifest. It describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. The `ITraxScheduler` handles the boilerplate, so you don't need to worry about assembly-qualified names or JSON serialization:
+A `Manifest` is the scheduling equivalent of a shipping manifest. It describes what train to run, when to dispatch it, how to handle failures, and what cargo (input) to load. `ITraxScheduler` writes it for you, resolving the type names and serializing the input:
 
-```csharp
-using Trax.Core.Functional;
-using Trax.Scheduler.Services.Scheduling;
-using Trax.Scheduler.Services.TraxScheduler;
-
+```csharp compile
 await scheduler.ScheduleAsync<ISyncCustomersTrain, SyncCustomersInput, Unit>(
     "sync-customers-us-east",
     new SyncCustomersInput { Region = "us-east", BatchSize = 500 },
     Every.Hours(6),
-    opts => opts.MaxRetries(3));
+    opts => opts.MaxRetries(3)
+);
 
 // For bulk scheduling from a collection, use ScheduleManyAsync:
+string[] tables = ["customers", "orders"];
+
 await scheduler.ScheduleManyAsync<ISyncTableTrain, SyncTableInput, Unit, string>(
     tables,
     table => ($"sync-{table}", new SyncTableInput { TableName = table }),
-    Every.Minutes(5));
+    Every.Minutes(5)
+);
 ```
 
-The scheduler creates the manifest, resolves the correct type names, and serializes the input automatically. Every call is an upsert, safe to run on every startup without duplicating jobs.
+Every call is an upsert by external id, so it is safe to run on every startup without duplicating jobs.
 
 ### Metadata = Execution Record
 
@@ -68,109 +70,55 @@ Like a lost shipment in a postal system, when a job fails more times than `MaxRe
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Operators can retry (which creates a new execution) or acknowledge (mark as handled without retry).
+Operators can requeue (which creates a new execution) or acknowledge (mark as handled without retry). See [Resolve a dead letter](/docs/scheduler/dead-letters-and-cleanup), and [How retries work](/docs/scheduler/how-retries-work) for what happens before a job gets there.
 
 ### Delayed / One-Off Jobs
 
-Not all work is recurring. `TriggerAsync(externalId, delay)` queues a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new manifest with `ScheduleType.Once` that fires after a delay and auto-disables on success. See [Delayed / One-Off Jobs](/docs/scheduler/delayed-jobs).
+Not all work is recurring. `TriggerAsync(externalId, delay)` queues a delayed execution of an existing manifest. `ScheduleOnceAsync` creates a new manifest with `ScheduleType.Once` that fires after a delay and disables itself on success. See [Run a job once, later](/docs/scheduler/delayed-jobs).
 
-```csharp
+```csharp compile
 // Delayed trigger of an existing manifest
 await scheduler.TriggerAsync("sync-customers", TimeSpan.FromMinutes(30));
 
-// One-off job: runs once after 24 hours, then auto-disables
+// One-off job: runs once after 24 hours, then disables itself
 await scheduler.ScheduleOnceAsync<ISendReminderTrain, SendReminderInput, Unit>(
-    new SendReminderInput { UserId = userId },
-    TimeSpan.FromHours(24));
+    new SendReminderInput { UserId = "user-42" },
+    TimeSpan.FromHours(24)
+);
 ```
 
 ### Dependent Manifests
 
-A manifest can depend on another manifest: one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent's `LastSuccessfulRun` advances past the dependent's own. This is how you build ETL chains, post-processing junctions, or any train that should only run after another succeeds. See [Dependent Trains](/docs/scheduler/dependent-trains).
-
-```csharp
-scheduler
-    .Schedule<IExtractTrain>(
-        "extract", new ExtractInput(), Every.Hours(1))
-    .Include<ILoadTrain>(
-        "load", new LoadInput());
-```
+A manifest can depend on another manifest: one train's arrival triggers another's departure. Instead of running on a timer, it fires when its parent succeeds after the dependent's own latest run started. This is how you build ETL chains, post-processing steps, or any train that should only run after another succeeds. See [Dependent Trains](/docs/scheduler/dependent-trains).
 
 ### Manifest Groups
 
-Every manifest belongs to a `ManifestGroup`. Groups provide per-group dispatch controls (`MaxActiveJobs`, `Priority`, and `IsEnabled`), configurable from the dashboard. When a group hits its concurrency cap, the dispatcher skips it and continues processing other groups, preventing starvation.
+Every manifest belongs to a `ManifestGroup`. Groups provide per-group dispatch controls (`MaxActiveJobs`, `Priority`, and `IsEnabled`), configurable from code and from the dashboard. When a group hits its concurrency cap, the dispatcher skips it and continues with other groups, so one busy group does not starve the rest.
 
-```csharp
-scheduler
-    .Schedule<ISyncTrain>(
-        "sync-data", new SyncInput(), Every.Hours(1),
-        opts => opts.Group("data-sync"))
-    .Include<ILoadTrain>(
-        "load-data", new LoadInput(),
-        opts => opts.Group("data-sync"));
+```csharp compile
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler
+                .Schedule<IExtractTrain>(
+                    "extract-data",
+                    new ExtractInput(),
+                    Every.Hours(1),
+                    opts => opts.Group("data-sync")
+                )
+                .Include<ILoadTrain>("load-data", new LoadInput(), opts => opts.Group("data-sync"))
+        )
+);
 ```
 
-When no group is set, it defaults to the manifest's `externalId`. See [Scheduling Options](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
+When no group is set, it defaults to the manifest's `externalId`. See [Per-Group Dispatch Controls](/docs/scheduler/scheduling-options#per-group-dispatch-controls).
 
-## Architecture
+## How it fits together
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│            SchedulerStartupService (IHostedService)              │
-│     RecoverStuckJobs + SeedPendingManifests (runs once)          │
-└─────────────────────────────────────────────────────────────────┘
+A scheduler host runs a handful of hosted services. On startup one seeds the manifests declared in code and recovers runs a crash left behind. After that, two loops run on their own intervals: the ManifestManager decides which manifests are due and writes each to the work queue, and the JobDispatcher reads the queue, applies the capacity limits and hands each run to a job submitter, which runs it on a worker through the JobRunner. Everything that starts a run (a schedule, a trigger, a dead-letter requeue, a dashboard re-run) goes through the work queue, so capacity is enforced in one place.
 
-┌──────────────────────────────┐  ┌──────────────────────────────┐
-│ ManifestManagerPollingService│  │ JobDispatcherPollingService   │
-│ (BackgroundService)          │  │ (BackgroundService)           │
-│ Polls on its own interval    │  │ Polls on its own interval     │
-└──────────────┬───────────────┘  └──────────────┬────────────────┘
-               ▼                                  ▼
-┌──────────────────────────────┐  ┌──────────────────────────────┐
-│   ManifestManagerTrain    │  │    JobDispatcherTrain      │
-│                              │  │                               │
-│  LoadManifests               │  │  LoadQueuedJobs               │
-│  → ReapFailedJobs            │  │  → DispatchJobs               │
-│  → DetermineJobsToQueue      │  │    (enforces global and       │
-│  → CreateWorkQueueEntries    │  │     per-group MaxActiveJobs)  │
-└──────────────┬───────────────┘  └──────────────┬────────────────┘
-               │                                  │
-               │ writes to                        │ reads from
-               ▼                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        WORK_QUEUE                                │
-│            Decouples scheduling from dispatch                    │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │ dispatched to
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  JobRunnerTrain                                │
-│            (runs on LocalWorkerService workers)                   │
-│                                                                  │
-│  LoadMetadata → ValidateState → ExecuteTrain →                │
-│                                      UpdateManifest              │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Your Train                                 │
-│              (Resolved via TrainBus)                           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-The **SchedulerStartupService** is an `IHostedService` that runs once on startup. It seeds any manifests configured via `.Schedule()`, `.ScheduleMany()`, `.ScheduleOnce()`, `.ThenInclude()`, `.ThenIncludeMany()`, `.Include()`, or `.IncludeMany()`, recovers stuck jobs, and cleans up orphaned manifest groups. It completes before the polling services start.
-
-The **ManifestManagerPollingService** and **JobDispatcherPollingService** are independent `BackgroundService` instances, each with their own configurable polling interval (defaults: 5 seconds for the ManifestManager, 2 seconds for the JobDispatcher). They communicate via the work queue: ManifestManager writes entries, JobDispatcher reads them. Both services are safe to run across multiple server instances. See [Multi-Server Concurrency](/docs/scheduler/concurrency).
-
-The JobDispatcher does not have to wait for its next poll to see new work. On PostgreSQL, a trigger on `work_queue` sends a notification in the transaction that queues an entry (or confirms a staged one), so every dispatcher, on any host, wakes when that transaction commits and hears nothing if it rolls back. A run queued on an API host therefore starts within moments even when the scheduler polls every 30 seconds. On SQLite the wake comes from a save in the same process. The poll remains the fallback, and the only clock for an entry whose `ScheduledAt` comes due, a dispatch retried after a backoff, or a manifest that is enabled again. A connection pooler in transaction mode, such as PgBouncer, does not carry `LISTEN`; behind one the dispatcher simply polls.
-
-The **ManifestManagerTrain** loads enabled manifests, dead-letters any that have exceeded their retry limit, determines which are due for execution (including [dependent manifests](/docs/scheduler/dependent-trains) whose parent succeeded after the dependent's latest run started), and writes them to the work queue. It doesn't enqueue anything directly; it just records intent. In multi-server deployments, a PostgreSQL advisory lock guarantees only one server runs the ManifestManager per cycle.
-
-The **JobDispatcherTrain** reads from the work queue, enforces both global and per-group `MaxActiveJobs` limits, creates `Metadata` records, and enqueues to the job submitter. This is the single gateway to execution. Everything goes through the work queue first (manifest schedules, `TriggerAsync` calls, dashboard re-runs), so capacity enforcement happens in one place. Each entry is dispatched within its own transaction using `FOR UPDATE SKIP LOCKED`, allowing multiple servers to dispatch concurrently without duplicate execution.
-
-The **JobRunnerTrain** runs on the local worker threads for each enqueued job. It loads the Metadata and Manifest, validates the job is still pending, executes the target train via `ITrainBus`, and updates `LastSuccessfulRun` on success. See [Job Submission](/docs/scheduler/job-submission) for details on the built-in PostgreSQL implementation.
-
-See [Administrative Trains](/docs/scheduler/admin-trains) for detailed documentation on each internal train.
+[Administrative Trains](/docs/scheduler/admin-trains) describes each service and train, [How jobs reach workers](/docs/scheduler/job-submission) the job submitters, and [Multi-Server Concurrency](/docs/scheduler/concurrency) how it stays safe across hosts.
 
 ## SDK Reference
 

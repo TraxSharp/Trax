@@ -62,7 +62,6 @@ samples/recovery.md
 samples/scheduling.md
 samples/signalr-broadcaster.md
 samples/state-machine.md
-scheduler.md
 scheduler/admin-trains/job-dispatcher.md
 scheduler/admin-trains/job-runner.md
 scheduler/admin-trains/metadata-cleanup.md
