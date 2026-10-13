@@ -4,6 +4,8 @@ description: The error messages Trax raises at registration, startup and dispatc
 type: reference
 area: general
 nav_order: 6
+redirect_from:
+  - /docs/cross-cutting
 ---
 
 # Troubleshooting
@@ -26,7 +28,7 @@ Could not find train with input type (MyApp.Orders.OrderInput): no IServiceTrain
 - Your train class is `abstract`
 
 **Fix:** add the train's assembly to the scan.
-```csharp
+```csharp compile
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
@@ -57,7 +59,13 @@ called first. Call services.AddTrax(trax => ...) before services.AddTraxDashboar
 **Cause:** `AddTrax()` was not called, or it was called after `AddTraxDashboard()`.
 
 **Fix:** Call `AddTrax()` first:
-```csharp
+```csharp compile
+using Trax.Dashboard.Extensions;
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+
 builder.Services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))
     .AddMediator(typeof(Program).Assembly)
@@ -93,7 +101,12 @@ The step builder pattern enforces configuration ordering at compile time. `AddMe
 | `Call UsePostgres(...), UseSqlite(...) or UseInMemory(...) before AddDataContextLogging(...).` | `AddDataContextLogging()` called before a data provider |
 
 **Fix:** Follow the required order: `AddEffects()` -> `AddStateMachines()` if you use it -> `AddMediator()` -> `AddScheduler()`:
-```csharp
+```csharp compile
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString))  // Step 1
     .AddMediator(typeof(Program).Assembly)                         // Step 2
@@ -107,7 +120,12 @@ The scheduler's background services keep manifests, Metadata and work queue entr
 database, so `AddScheduler()` refuses a host whose `AddEffects(...)` names no data provider.
 
 **Fix:** add one, from its own package (`Trax.Effect.Data.Postgres`, `.Sqlite` or `.InMemory`):
-```csharp
+```csharp compile
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+
 services.AddTrax(trax => trax
     .AddEffects(effects => effects.UsePostgres(connectionString)) // or UseSqlite(...) / UseInMemory()
     .AddMediator(typeof(Program).Assembly)
@@ -194,7 +212,7 @@ not register one either. The startup check reports the same problem as
 - Type mismatch between junction output and next junction's input
 
 **Fix:** Check the chain flow. Each junction's input type must exist in Memory (seeded automatically from the train input, or from a previous junction's output):
-```csharp
+```csharp fragment
 // Memory starts with: { CreateUserRequest, Unit }
 Chain<ValidateJunction>()              // Takes CreateUserRequest, returns Unit
     .Chain<CreateUserJunction>()       // Takes CreateUserRequest, returns User
@@ -213,11 +231,11 @@ startup" warning, or a host where the check does not run (the Lambda runner, a b
 `ServiceProvider`, `SkipChainVerification()`).
 
 **Fix:** register the missing type before building the host:
-```csharp
+```csharp compile
 services.AddScoped<IUserRepository, UserRepository>();
 ```
 
-## "Manifest group 'X' is given two different MaxActiveJobs values"
+## "Manifest group 'X' is given two different Y values"
 
 Two schedules that share a group each state the same group setting (`MaxActiveJobs`, `Priority` or `Enabled`) with different values. Every start writes a stated group setting, so the value in force would depend on which manifest was seeded last, and `AddScheduler` refuses it. The message names both schedules.
 
@@ -259,7 +277,7 @@ The compiler's CS0246. `IManifestProperties` lives in the `Trax.Effect` package,
 `Trax.Scheduler`, in the namespace `Trax.Effect.Models.Manifest`.
 
 **Fix:**
-```csharp
+```csharp compile
 using Trax.Effect.Models.Manifest;
 ```
 
@@ -273,7 +291,9 @@ If you catch the exception outside Trax, you'll see the original exception type 
 
 ## Junctions execute out of order or skip unexpectedly
 
-If you're using `ShortCircuit`, remember that throwing an exception means "continue" not "stop." See [ShortCircuit](/docs/core/building-chains#shortcircuit) for details or [SDK Reference: ShortCircuit](/docs/sdk-reference/train-methods/short-circuit) for all overloads.
+A junction reached with `ShortCircuit` that throws is ignored and the train continues. One that
+returns a value sets what `Resolve()` returns, and the `Chain` steps after it still run. See
+[ShortCircuit](/docs/sdk-reference/train-methods/short-circuit).
 
 ## Scheduled jobs don't execute (no errors)
 
@@ -281,8 +301,6 @@ Possible causes:
 - The manifest's `IsEnabled` is `false`. Check via `ITraxScheduler` or the database. A disabled manifest's already-queued scheduled entries also wait, `Queued`, until it is re-enabled; only a trigger or a dead-letter requeue runs it while disabled. A restart does not re-enable a manifest or group that was disabled at runtime unless the code states `.Enabled(true)` (see [What a Restart Rewrites](/docs/scheduler/scheduling-options#what-a-restart-rewrites))
 - A new cron schedule has not reached its first occurrence yet. It first runs at its first occurrence after it was scheduled, not on the next poll, and cron times are UTC: `Cron.Daily(hour: 3)` is 03:00 UTC. The manifest's `NextScheduledRun` shows when that is
 - `ManifestManagerPollingInterval` or `JobDispatcherPollingInterval` is set too high and the job hasn't been picked up yet
-- The train's input type doesn't implement `IManifestProperties`
-- Your train assembly isn't registered with `AddMediator()`. Make sure to pass the assembly containing your trains
 
 ## SDK Reference
 
