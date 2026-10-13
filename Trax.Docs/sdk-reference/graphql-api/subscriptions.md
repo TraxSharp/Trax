@@ -1,18 +1,22 @@
 ---
 title: Subscriptions
-description: "Reference for Trax GraphQL subscriptions: train lifecycle events, a run's junction events, the onDataChanged signal, payloads, WebSocket and authentication."
+description: "Reference for Trax GraphQL subscriptions: train lifecycle events, a run's junction events, machine instance changes, onDataChanged, WebSocket and authentication."
 type: reference
 area: api
+surface: graphql
+package: Trax.Api.GraphQL
 parent: GraphQL API
 grand_parent: SDK Reference
 nav_order: 5
+source:
+  - Trax.Api/src/Trax.Api.GraphQL/Subscriptions/LifecycleSubscriptions.cs
+  - Trax.Api/src/Trax.Api.GraphQL/Subscriptions/TraxCompositeSocketInterceptor.cs
+  - Trax.Api/src/Trax.Api.GraphQL/Types/TrainLifecycleEventType.cs
 ---
 
 # Subscriptions
 
-Trax provides real-time GraphQL subscriptions over WebSocket. There are three kinds: per-train lifecycle events (started, completed, failed, cancelled), the steps of one run ([`onJunctionEvent`](#onjunctionevent)), and a coalesced `onDataChanged` signal that tells an admin UI which data domain changed so it can refetch without polling.
-
-Subscriptions are powered by HotChocolate's built-in subscription infrastructure with an in-memory pub/sub transport. They are automatically enabled when you call `AddTraxGraphQL()`.
+Trax serves GraphQL subscriptions over WebSocket on its subscription root, `LifecycleSubscriptions`. There are four kinds: per-train lifecycle events (started, completed, failed, cancelled), the steps of one run ([`onJunctionEvent`](#onjunctionevent)), changes to state machine instances ([`onMachineInstanceChanged`](#onmachineinstancechanged)), and a coalesced `onDataChanged` signal that tells an admin UI which data domain changed so it can refetch without polling. `AddTraxGraphQL()` enables them, on HotChocolate's in-memory pub/sub transport.
 
 **Which trains emit lifecycle events depends on what the host exposes:**
 
@@ -168,7 +172,7 @@ cancelled keeps its number, so a later step is never sent under the same one.
 The feed carries every run's steps on one topic, filtered by run as each subscriber reads it, so a
 skip in `sequence` reports a loss whichever run it came from, this one or another. Only the
 operations view can recover a gap: to follow a run already under way, subscribe first, then read
-[`operations.junctionRuns`](/docs/sdk-reference/graphql-api/queries#junctionruns) for the steps it
+[`operations.junctionRuns`](/docs/sdk-reference/graphql-api/queries/executions#junctionruns) for the steps it
 took before or lost, and keep for each position whichever is further along. That query sits behind
 the operations gate, so a broadcast subscriber cannot read it and sees only the steps that reach it
 after it subscribed.
@@ -223,56 +227,7 @@ subscription { onTrainCancelled { metadataId trainName trainState } }
 
 ### Watching a queued run
 
-A [`[TraxMutation]`](/docs/sdk-reference/graphql-api/trax-graphql-attribute) mutation called with `mode: QUEUE` returns an `externalId` and a `workQueueId`, but no `metadataId`: the run does not exist yet. The run the scheduler later dispatches carries the same `externalId` (see [Following a queued run](/docs/sdk-reference/graphql-api/mutations#following-a-queued-run)), so a client watches it like this:
-
-1. Open the socket and subscribe to `onTrainStateChanged` **before** sending the mutation. There is no replay, and a short train can finish before a subscription opened afterwards is registered.
-2. Send the mutation over HTTP and keep its `externalId`. Buffer any events that arrive before the response does.
-3. Keep only events whose `externalId` matches. The subscription was opened before the `externalId` existed, so it cannot carry the filter, and the client filters.
-4. Stop at the first terminal state: `COMPLETED` (read `output`), `FAILED` (read `failureReason`) or `CANCELLED`.
-
-```graphql
-subscription {
-  onTrainStateChanged {
-    externalId
-    metadataId
-    trainState
-    sequence
-    output
-    failureReason
-  }
-}
-```
-
-```text
-mutation  -> { "externalId": "66b533589bf747f1aac661a5deeea356", "workQueueId": 2 }
-event     -> { "externalId": "66b5...a356", "metadataId": 55, "trainState": "IN_PROGRESS", "sequence": 1 }
-event     -> { "externalId": "66b5...a356", "metadataId": 55, "trainState": "COMPLETED", "sequence": 2, "output": { ... } }
-```
-
-When the client cannot open the subscription first, it can subscribe after the mutation returns with the `externalId` as the filter, and receive only that run's events:
-
-```graphql
-subscription Follow($externalId: String) {
-  onTrainStateChanged(externalId: $externalId) {
-    metadataId
-    trainState
-    sequence
-    output
-    failureReason
-  }
-}
-```
-
-A run that starts before that subscription is registered sends its earlier events to nobody, and a short run can finish in that window. Give the wait a timeout, and read the outcome another way when it expires: `operations.executions(externalId:)` for an operator, the app's own data otherwise.
-
-What the subscriber needs and what it should expect:
-
-- The train carries `[TraxBroadcast]` and a posture that admits the caller (for example the same `[TraxAuthorize(Roles = ...)]` that lets it call the mutation), unless the caller satisfies the operations authorization. Without it the subscription is refused with `TRAX_AUTHORIZATION`, as [Who receives what](#who-receives-what) says, even on a host that exposes operations.
-- A failed delivery that the dispatcher requeues (`MaxDispatchAttempts`) creates a new execution row with the same `externalId` and emits no event; the client sees events only from the attempt a runner started. A run that fails at dispatch for good, its deliveries exhausted or its stored input unreadable, emits `onTrainFailed` and a `FAILED` `onTrainStateChanged` with its `externalId` and no `IN_PROGRESS` before it, as a train's own failure does. Its `failureException` is `DispatchFailed` and its `failureReason` a fixed sentence pointing at the run's record, so a broadcast subscriber sees the masked reason; the cause is on the execution row, which the operations queries return. Still give the wait a timeout: a lost event, or a host that stops mid-dispatch, leaves the run to the stale-pending reaper, whose failure (`failureException` `StalePendingTimeout`) is emitted the same way but only after its timeout.
-- A `sequence` that skips a number means events were lost. An operator can look the run up in `operations.executions`; a client without that access should read the outcome from the app's own data (a [query model](/docs/sdk-reference/graphql-api/query-models) over what the train wrote).
-- A queued run that fails is not retried.
-
-A runnable C# version of this loop over `System.Net.WebSockets` is the `GraphQLWebSocketClient` in `tests/Trax.Samples.ChatService.E2E/Utilities` of [Trax.Samples](https://github.com/TraxSharp/Trax/tree/main/Trax.Samples); see [Testing subscriptions](/docs/cross-cutting/e2e-testing#testing-subscriptions).
+[Watch a queued run](/docs/api/watch-a-queued-run) follows one `mode: QUEUE` mutation's run to its outcome through `onTrainStateChanged`.
 
 ## onMachineInstanceChanged
 
@@ -349,107 +304,7 @@ public class MyService(ITraxChangeSignal changeSignal)
 
 ## Your own subscription fields
 
-The lifecycle fields stream train events. A domain feed of your own, such as a chat room's
-messages, is a field you add to the same root and feed from a lifecycle hook. The
-[Chat Service sample](/docs/samples/chat-service) is a complete one.
-
-### Add the field
-
-Trax's subscription root is named `LifecycleSubscriptions`, so a type extension targets that name:
-
-```csharp
-using HotChocolate;
-using HotChocolate.Execution;
-using HotChocolate.Subscriptions;
-using HotChocolate.Types;
-using Microsoft.EntityFrameworkCore;
-using Trax.Api.Auth;
-using Trax.Effect.Attributes;
-
-[ExtendObjectType("LifecycleSubscriptions")]
-public class ChatSubscriptions
-{
-    [TraxAuthorize(Roles = "User")]
-    [Subscribe(With = nameof(SubscribeToChatEventAsync))]
-    public ChatEvent OnChatEvent(Guid chatRoomId, [EventMessage] ChatEvent message) => message;
-
-    public async ValueTask<ISourceStream<ChatEvent>> SubscribeToChatEventAsync(
-        Guid chatRoomId,
-        TraxCaller caller,
-        ChatDbContext db,
-        ITopicEventReceiver receiver,
-        CancellationToken cancellationToken)
-    {
-        var userId = caller.Principal?.Id;
-        if (userId is null || !await db.Participants.AnyAsync(
-                p => p.RoomId == chatRoomId && p.UserId == userId, cancellationToken))
-            throw new GraphQLException(ErrorBuilder.New()
-                .SetMessage("Not authorized.").SetCode("TRAX_AUTHORIZATION").Build());
-
-        return await receiver.SubscribeAsync<ChatEvent>($"ChatRoom:{chatRoomId}", cancellationToken);
-    }
-}
-
-// Program.cs
-builder.Services.AddTraxGraphQL(graphql => graphql.AddTypeExtension<ChatSubscriptions>());
-```
-
-- **Target `"LifecycleSubscriptions"`, not `OperationTypeNames.Subscription`.** The schema has no
-  type named `Subscription`, so the host refuses to start, naming the extension class and
-  `LifecycleSubscriptions` as the root it meant. HotChocolate on its own would drop the extension
-  without an error; Trax refuses any class-declared extension whose target type is not in the
-  schema.
-- **Declare a posture on the field.** A field on a root type inherits no gate, so the host refuses
-  to start when the field carries neither `[TraxAuthorize]` nor `[TraxAllowAnonymous]` (see
-  [Fields Added by a Type Extension](/docs/authorization#fields-added-by-a-type-extension)).
-- **Check the record in the subscribe resolver.** `[TraxAuthorize]` decides who may use the field;
-  which topic a caller may listen to (their own room, their own orders) is the resolver's job. It
-  runs once, when the client subscribes, and a refusal reaches the client as an `error` message for
-  that subscription. The method named by `Subscribe(With = ...)` is not exposed as a field. A
-  resolver parameter of a service type, such as `TraxCaller` or a `DbContext`, is resolved from the
-  container.
-
-### Publish to it
-
-Send to the topic from an [`ITrainLifecycleHook`](/docs/sdk-reference/configuration/add-lifecycle-hook)
-when the train whose result the feed carries completes:
-
-```csharp
-public class ChatLifecycleHook(ITopicEventSender eventSender) : ITrainLifecycleHook
-{
-    public async Task OnCompleted(Metadata metadata, CancellationToken ct)
-    {
-        if (metadata.Name != typeof(ISendMessageTrain).FullName || metadata.Output is null)
-            return;
-
-        using var doc = JsonDocument.Parse(metadata.Output);
-        var roomId = doc.RootElement.GetProperty("chatRoomId").GetGuid();
-        await eventSender.SendAsync($"ChatRoom:{roomId}", new ChatEvent(roomId, metadata.Output), ct);
-    }
-}
-
-public class ChatLifecycleHookFactory(IServiceProvider services) : ITrainLifecycleHookFactory
-{
-    public ITrainLifecycleHook Create() => ActivatorUtilities.CreateInstance<ChatLifecycleHook>(services);
-}
-
-// Program.cs
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UseSqlite(connectionString).AddJson().AddLifecycleHook<ChatLifecycleHookFactory>())
-    .AddMediator(typeof(ChatLifecycleHook).Assembly));
-```
-
-`metadata.Name` is the train's canonical name, its service interface's `FullName`.
-`metadata.Output` is the output serialized as camelCase JSON, and it begins with a `"$id"`
-property; read the fields you need rather than forwarding it as your schema. A hook fires for every
-train, so it filters by name itself; `[TraxBroadcast]` on the train is not needed for your own hook,
-only for the lifecycle fields. Events your code sends through `ITopicEventSender` carry no
-`sequence` and never cause a skip in the lifecycle fields' numbering.
-
-The in-memory transport reaches subscribers on the process that sent the event. A hook that runs on
-a worker process reaches no API node's subscribers; bridge it the way the lifecycle fields are
-bridged, with [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster), or keep the
-train on the API node.
+A field added to `LifecycleSubscriptions` with a type extension is part of the same root and the same socket. [Add a subscription field](/docs/api/add-a-subscription-field) shows one, with its authorization and publisher.
 
 ## WebSocket Connection
 
@@ -502,10 +357,7 @@ The endpoint's own host is compared without its scheme, so an https page served 
 
 ### Reconnection
 
-The server does not persist per-subscriber state, and there is no replay: events emitted while a client's socket is down are not redelivered. A resilient client should therefore do two things, both of which the Trax dashboard does:
-
-- **Reconnect indefinitely on transient failures.** `graphql-ws` gives up after 5 attempts by default; set `retryAttempts: Infinity` so the socket survives server restarts and network drops. Active subscriptions are re-established automatically on each reconnect, and because the credential rides in `connection_init`, each reconnect re-authenticates. Do *not* retry on auth-rejection close codes (4400/4401/4403/4429): a retry can't fix a bad credential, so re-auth by terminating and reopening the socket instead.
-- **Refetch on recovery.** Because missed events are gone, refetch the visible data once when the socket transitions back to connected. Pairing this with the coalesced `onDataChanged` signal keeps grids correct: the signal drives incremental refetches while connected, and the reconnect refetch fills the gap for anything that changed while it wasn't.
+The server keeps no state per subscriber and replays nothing: an event emitted while a client's socket is down is not delivered when it reconnects. [How subscriptions work](/docs/api/how-subscriptions-work#no-replay-so-clients-refetch) describes how the dashboard's client handles that.
 
 ## Authentication
 
@@ -591,44 +443,12 @@ When the GraphQL builder calls `RequireAuthorization(policy)`, the policy applie
 
 ### Registration order
 
-Subscription auth does not depend on it. Earlier versions chose the interceptor from what was registered when `AddTraxGraphQL()` ran, so an auth call placed after it left subscriptions accepting every connection while HTTP stayed gated, and a later version refused to start instead. The composite reads the registered schemes once the container is complete, so either order authenticates.
+The composite reads the registered schemes once the container is complete, so an `AddTrax*Auth` call before or after `AddTraxGraphQL()` authenticates the same. If a token scheme is registered and HotChocolate's `DefaultSocketSessionInterceptor` is the active interceptor, which happens only when a host registers it itself, the host refuses to start.
 
-If a token scheme is registered and HotChocolate's own accept-everything interceptor is the active one, the host refuses to start. Only registering `DefaultSocketSessionInterceptor` yourself produces that.
+## See also
 
-## Architecture
-
-Subscriptions are powered by the [lifecycle hooks](/docs/sdk-reference/configuration/add-lifecycle-hook) system. The `GraphQLSubscriptionHook` is automatically registered by `AddTraxGraphQL()` and publishes lifecycle events to HotChocolate's in-memory subscription transport.
-
-At startup, the hook builds a set of canonical train names (using `ServiceType.FullName`, the interface name) from registrations that have `[TraxBroadcast]`. On each lifecycle event it publishes when the train is opted in. **If the operations surface is exposed, it publishes for every train** (`TrainLifecycleStreamOptions.StreamAllTrains`, set automatically by `AddTraxGraphQL()` when `ExposeOperationQueries()`/`ExposeOperationMutations()` is called).
-
-```
-ServiceTrain.Run()
-  → LifecycleHookRunner.OnCompleted()
-    → GraphQLSubscriptionHook.OnCompleted()
-      → Publish if: operations surface exposed (all trains), OR
-                    metadata.Name matches a [TraxBroadcast] train's ServiceType.FullName
-        → Yes → ITopicEventSender.SendAsync("OnTrainCompleted", event)
-          → WebSocket clients receive the event
-        → No → skip (no event published)
-```
-
-## Cross-Process Subscriptions
-
-By default, subscriptions only fire for trains that execute in the same process as the GraphQL API. In distributed deployments where trains are queued and executed by separate worker processes, use [`UseBroadcaster()`](/docs/sdk-reference/configuration/use-broadcaster) to bridge the gap:
-
-```csharp
-// Both hub and worker:
-effects.UseBroadcaster(b => b.UseRabbitMq("amqp://guest:guest@localhost:5672"))
-```
-
-When a broadcaster is configured, `AddTraxGraphQL()` automatically registers a `GraphQLTrainEventHandler` that receives remote lifecycle events from the message bus and forwards them to HotChocolate's subscription transport. It applies the same rule as the local `GraphQLSubscriptionHook`: forward every train when the operations surface is exposed, otherwise only `[TraxBroadcast]` trains (matched by canonical `ServiceType.FullName`), regardless of which process executes them. Events from the local process are de-duplicated automatically.
-
-Data-change signals ride the same bridge. In a single-process deployment (the API collocated with the scheduler), `onDataChanged` works with no broadcaster: signals flow in-process to the subscription topic. When the scheduler runs in a separate process, `UseBroadcaster()` forwards its `Notify` calls over the message bus (a `BroadcastChangeSink`), and the API's `GraphQLDataChangeHandler` re-publishes them to local subscribers. The originating host ignores its own broadcast via the same instance-id de-duplication used for lifecycle events, so replicas of one app still receive each other's signals.
-
-See [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster) for full details.
-
-## Package
-
-```
-dotnet add package Trax.Api.GraphQL
-```
+- [How subscriptions work](/docs/api/how-subscriptions-work)
+- [Watch a queued run](/docs/api/watch-a-queued-run)
+- [Add a subscription field](/docs/api/add-a-subscription-field)
+- [TraxBroadcast](/docs/sdk-reference/graphql-api/trax-broadcast-attribute)
+- [UseBroadcaster](/docs/sdk-reference/configuration/use-broadcaster)

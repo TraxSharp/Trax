@@ -10,7 +10,7 @@ nav_order: 10
 
 # AddTraxHealthCheck
 
-Adds an ASP.NET Core health check that reports on the Trax store: queued work, running executions, failures in the last hour, and dead letters awaiting intervention. It reports the same numbers as the GraphQL [`health`](/docs/sdk-reference/graphql-api/queries#health) query, through one shared service.
+Adds an ASP.NET Core health check that reports on the Trax store: queued work, running executions, failures in the last hour, and dead letters awaiting intervention. It reports the same numbers as the GraphQL [`health`](/docs/sdk-reference/graphql-api/queries/operations#health) query, through one shared service.
 
 ## Signature
 
