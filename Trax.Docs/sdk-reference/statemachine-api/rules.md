@@ -1,42 +1,53 @@
 ---
-title: Rules vocabulary
+title: Rules
 description: "Reference for the Rules vocabulary: field selectors, guard predicates, combinators and reductions that author declarative state machine logic as data."
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 3
+package: Trax.Effect.StateMachine
+namespace: Trax.Effect.StateMachine
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/Rules.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine/Rules/MemberPath.cs
 ---
 
-# Rules vocabulary
+# Rules
 
-`Rules` is the string-free authoring surface over the declarative `Rule` and `Reduction` data. Import it and
-reference fields by member expression, so a guard reads as one English-shaped line and still compiles to
-inspectable data the machine can export to its IR.
+`Rules` is the string-free authoring surface over the declarative [`Rule` and `Reduction`
+data](/docs/sdk-reference/statemachine-api/declarative-data-model). A field is selected with `Input(...)` (the trigger
+input) or `Field(...)` (the snapshot context) by member expression, and a terminal method on the `FieldMatcher`
+produces the `Rule`; the reduction factories produce a `Reduction`.
 
-```csharp
-using static Trax.Effect.StateMachine.Rules;
+## Signature
+
+```csharp fragment
+namespace Trax.Effect.StateMachine;
+
+public static class Rules
+{
+    public static FieldMatcher Input<TInput, TField>(Expression<Func<TInput, TField>> selector);
+    public static FieldMatcher Field<TContext, TField>(Expression<Func<TContext, TField>> selector);
+    public static Rule All(params Rule[] rules);
+    public static Rule Any(params Rule[] rules);
+    public static Reduction Keep();
+    public static Reduction Clear();
+    public static Reduction Reset();
+    public static SetBuilder Set<TContext, TField>(Expression<Func<TContext, TField>> field);
+}
 ```
 
-A field is selected with `Input(...)` (the trigger input) or `Field(...)` (the snapshot context), then a
-terminal method produces the `Rule` or `Reduction`:
+## Members
 
-```csharp
-.When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))
-.Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput((CoinInput i) => i.Coin))
-```
-
-The selector (`i => i.Coin`) is an expression tree, resolved to its JSON key (camelCase). There are no
-field-name strings, so a rename refactors the rule with the record.
-
-## Field selectors
+### Field selectors
 
 | Method | Returns | Selects |
 | --- | --- | --- |
 | `Input<TInput, TField>(Expression<Func<TInput, TField>> selector)` | `FieldMatcher` | a field on the trigger input |
 | `Field<TContext, TField>(Expression<Func<TContext, TField>> selector)` | `FieldMatcher` | a field on the snapshot context |
 
-## Guard predicates
+### Guard predicates
 
 Terminal methods on `FieldMatcher`, each returning a `Rule`:
 
@@ -56,23 +67,14 @@ Terminal methods on `FieldMatcher`, each returning a `Rule`:
 | `IsTrue()` / `IsFalse()` | a boolean field equal to `true` / `false` |
 | `ArrayOf(JsonFieldType type)` | an array whose every element is of `type` |
 
-Every predicate is total: a missing or wrong-typed field is `false`, never an exception. That is what lets
-guards run against an in-progress draft without throwing.
-
-## Combinators
+### Combinators
 
 | Method | Returns | Holds when |
 | --- | --- | --- |
 | `All(params Rule[] rules)` | `Rule` | every sub-rule holds (an empty set is vacuously true) |
 | `Any(params Rule[] rules)` | `Rule` | at least one sub-rule holds (an empty set is false) |
 
-```csharp
-.When(All(
-    Field((CartContext c) => c.Items).CountAtLeast(1),
-    Field((CartContext c) => c.Total).GreaterThan(0)))
-```
-
-## Reductions
+### Reductions
 
 A reducer computes the destination context. Build one with these factories:
 
@@ -90,13 +92,35 @@ A reducer computes the destination context. Build one with these factories:
 | `.FromInput<TInput, TField>(Expression<Func<TInput, TField>> selector)` | a field copied from the trigger input |
 | `.ToValue(JsonNode? value)` | a literal JSON value |
 
-## Beyond the vocabulary
+## Behavior
 
-The vocabulary covers the common guards and reducers on purpose: a small, fixed set keeps the exported IR a
-declarative contract rather than a serialized-logic DSL. Logic that does not fit (a formula reducer, a
-multi-field invariant) has two homes. `Rule.Custom(name)` and `Reduction.Custom(name)` keep it in the IR by name,
-with a handler bound per runtime (`CustomGuard` / `CustomReducer` in C#). The delegate overloads,
-`When(Func...)` and `Reduce(Func...)`, run the same in C# but the IR cannot carry them, so export refuses a
-declarative machine that still uses one rather than emit an unconditional edge a generated twin would disagree
-with the server on. Use the delegates only on a machine with no twin. See
-[Delegate vs declarative](/docs/sdk-reference/statemachine-api/fluent-authoring#delegate-vs-declarative).
+- A selector (`i => i.Coin`) is an expression tree, resolved to the member's JSON key: its `[JsonPropertyName]` when it has
+  one, else its name in camelCase. A rename of the record's member renames the rule with it.
+- Every predicate is total: a missing or wrong-typed field is `false`, never an exception.
+- The vocabulary is fixed. Logic outside it is `Rule.Custom(name)` or `Reduction.Custom(name)` with a handler bound by
+  `CustomGuard` or `CustomReducer`; see [Delegates and declarative rules](/docs/statemachine/delegates-and-declarative-rules).
+
+## Examples
+
+```csharp compile
+var guard = All(
+    Field((CheckoutContext c) => c.Items).CountAtLeast(1),
+    Field((CheckoutContext c) => c.Receipt).Absent());
+
+var reduce = Set((PaidContext p) => p.Receipt).FromInput((PayInput i) => i.Receipt);
+```
+
+On a transition, from the State Machine sample:
+
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+.When(Input((CoinInput i) => i.Coin).IsOneOf("quarter", "dollar"))
+.Because("Only a quarter or a dollar is accepted.")
+.Reduce(Set((UnlockedContext u) => u.PaidWith).FromInput((CoinInput i) => i.Coin))
+```
+
+## See also
+
+- [Declarative data model](/docs/sdk-reference/statemachine-api/declarative-data-model), the types these build.
+- [Machine](/docs/sdk-reference/statemachine-api/machine#itransitionbuilder), where a rule and a reduction go.
+- [Delegates and declarative rules](/docs/statemachine/delegates-and-declarative-rules).
+- [Declarative authoring](/docs/statemachine/declarative-authoring).
