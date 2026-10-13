@@ -27,15 +27,6 @@ workers as the load needs.
 | A worker that runs `[TraxAuthorize]` trains without an API of its own (`AllowMissingAuthorizationService`) | `Worker/Program.cs` |
 | Interval, cron, dependent and batch manifests declared on the hub | `ManifestConfigurationTests` |
 
-## Layout
-
-```
-samples/DistributedWorkers/
-├── Trax.Samples.EnergyHub/          trains, manifest names, roles
-├── Trax.Samples.EnergyHub.Hub/      GraphQL API + scheduler + dashboard (port 5202)
-└── Trax.Samples.EnergyHub.Worker/   AddTraxWorker (port 5203, serves nothing)
-```
-
 ## Run
 
 From the `Trax.Samples` root:
@@ -95,33 +86,51 @@ from there and runs them, so the header cannot drift from the schema.
 
 ## How it works
 
+### Layout
+
+```
+samples/DistributedWorkers/
+├── Trax.Samples.EnergyHub/          trains, manifest names, roles
+├── Trax.Samples.EnergyHub.Hub/      GraphQL API + scheduler + dashboard (port 5202)
+└── Trax.Samples.EnergyHub.Worker/   AddTraxWorker (port 5203, serves nothing)
+```
+
 ### The hub schedules and queues, and runs nothing it queues
 
-```csharp
-using Trax.Scheduler.Extensions;
-using Trax.Scheduler.Services.JobSubmitter;
-
+```csharp from=Trax.Samples/samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub/Program.cs
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
+                .AddDataContextLogging()
                 .AddJson()
+                .SaveTrainParameters()
+                .AddJunctionProgress()
                 .UseBroadcaster(b =>
-                    b.UseRabbitMq(rabbitMqConnectionString, o => o.ExchangeName = LifecycleEvents.ExchangeName)
+                    b.UseRabbitMq(
+                        rabbitMqConnectionString,
+                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                    )
                 )
         )
         .AddMediator(typeof(ManifestNames).Assembly)
         .AddScheduler(scheduler =>
             scheduler
+                // ── Schedule here, execute on the workers ─────────────────────
+                // Without this line a scheduler on Postgres registers PostgresJobSubmitter
+                // AND starts LocalWorkerService, so the hub would run jobs itself. Naming
+                // the submitter registers it alone: jobs are written to background_job and
+                // wait there until a Worker process claims them.
                 .OverrideSubmitter(services =>
                     services.AddScoped<IJobSubmitter, PostgresJobSubmitter>()
                 )
+                // ...
                 .Schedule<IMonitorSolarProductionTrain>(
                     ManifestNames.MonitorSolarProduction,
                     new MonitorSolarProductionInput { ArrayId = "SPA-001", Region = "somerset" },
                     Every.Minutes(5).WithVariance(TimeSpan.FromMinutes(1))
                 )
-                // ... more manifests
+                // ...
         )
 );
 ```
@@ -137,23 +146,54 @@ query, a live sensor read, is the only train the hub executes.
 
 ### The worker
 
-```csharp
+`Program.cs`, less its banner comment and the `partial class Program` the tests need:
+
+```csharp from=Trax.Samples/samples/DistributedWorkers/Trax.Samples.EnergyHub.Worker/Program.cs
 using Trax.Effect.Broadcaster.RabbitMQ.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
+using Trax.Effect.Provider.Json.Extensions;
+using Trax.Effect.Provider.Parameter.Extensions;
 using Trax.Mediator.Extensions;
 using Trax.Samples.EnergyHub;
 using Trax.Scheduler.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString =
+    builder.Configuration.GetConnectionString("TraxDatabase")
+    ?? throw new InvalidOperationException("Connection string 'TraxDatabase' not found.");
+
+var rabbitMqConnectionString =
+    builder.Configuration.GetConnectionString("RabbitMQ")
+    ?? throw new InvalidOperationException("Connection string 'RabbitMQ' not found.");
+
+builder.Services.AddLogging(logging => logging.AddConsole());
+
+// ── Register Trax Effect + Mediator (trains, bus, discovery, execution) ──
+// The worker must reference the same train assemblies as the scheduler so it
+// can resolve and execute any train type that gets dispatched.
+// UseBroadcaster() publishes lifecycle events to RabbitMQ so the hub's
+// GraphQL subscriptions are notified when queued trains complete.
+//
+// The mutations carry [TraxAuthorize], and the mediator refuses to start a host
+// with such trains and no ITrainAuthorizationService. The hub checks the caller
+// when the job is queued; the worker only runs work that already passed that
+// check and accepts no submissions of its own, which is the case
+// AllowMissingAuthorizationService() exists for.
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects =>
             effects
                 .UsePostgres(connectionString)
                 .AddJson()
+                .SaveTrainParameters()
+                .AddJunctionProgress()
                 .UseBroadcaster(b =>
-                    b.UseRabbitMq(rabbitMqConnectionString, o => o.ExchangeName = LifecycleEvents.ExchangeName)
+                    b.UseRabbitMq(
+                        rabbitMqConnectionString,
+                        o => o.ExchangeName = LifecycleEvents.ExchangeName
+                    )
                 )
         )
         .AddMediator(mediator =>
@@ -163,6 +203,9 @@ builder.Services.AddTrax(trax =>
         )
 );
 
+// ── Register standalone worker ───────────────────────────────────────────
+// AddTraxWorker registers the job execution pipeline (JobRunnerTrain) and
+// LocalWorkerService as a hosted service that polls background_job.
 builder.Services.AddTraxWorker(opts =>
 {
     opts.WorkerCount = 4;
@@ -170,6 +213,7 @@ builder.Services.AddTraxWorker(opts =>
 });
 
 var app = builder.Build();
+
 app.Run();
 ```
 
@@ -203,27 +247,26 @@ wrong password silently turns cross-process subscriptions off. The sample, its t
 
 ### Who may operate the hub
 
-```csharp
-using Trax.Api.Auth.ApiKey;
-
+```csharp from=Trax.Samples/samples/DistributedWorkers/Trax.Samples.EnergyHub.Hub/Program.cs
 if (builder.Environment.IsDevelopment())
     builder.Services.AddTraxApiKeyAuth(keys =>
         keys.Add(DemoKeys.OperatorKey, id: "operator", EnergyHubRoles.Operator)
     );
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
-
+// ...
 if (builder.Environment.IsDevelopment())
     builder.AddTraxDashboard(dashboard => dashboard.AllowAnonymousDashboard());
-
+// ...
 builder.Services.AddTraxGraphQL(graphql =>
     graphql
         .MaxExecutionDepth(6)
+        // ...
         .ExposeOperationQueries()
         .ExposeOperationMutations()
         .GateOperations(roles: EnergyHubRoles.Operator)
 );
-
+// ...
 var app = builder.Build();
 
 app.UseAuthentication();
