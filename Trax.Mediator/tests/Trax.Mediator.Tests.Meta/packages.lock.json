@@ -311,6 +311,13 @@
           "Trax.Effect.StateMachine.Persistence": "[1.99.99, )"
         }
       },
+      "trax.mediator.testing": {
+        "type": "Project",
+        "dependencies": {
+          "NUnit": "[5.0.0, )",
+          "Trax.Core.Testing": "[1.99.99, )"
+        }
+      },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "CentralTransitive",
         "requested": "[5.9.0-1.26328.17, )",

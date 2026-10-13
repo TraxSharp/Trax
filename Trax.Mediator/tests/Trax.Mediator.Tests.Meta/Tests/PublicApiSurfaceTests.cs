@@ -30,6 +30,56 @@ public class PublicApiSurfaceTests
         yield return new TestCaseData(
             typeof(Trax.Mediator.Configuration.MediatorConfiguration).Assembly
         ).SetName("Trax.Mediator");
+        yield return new TestCaseData(typeof(Trax.Mediator.Testing.TrainGuards).Assembly).SetName(
+            "Trax.Mediator.Testing"
+        );
+    }
+
+    /// <summary>
+    /// Every package this repo publishes has a baseline, so a new one cannot ship unguarded.
+    /// </summary>
+    /// <remarks>
+    /// The list above is hand-written, which is how Trax.Effect.Provider.Parameter went five
+    /// releases without one: the assembly was referenced by this project and simply never added.
+    /// Reading the projects off disk is the only version of this check that notices a package
+    /// nobody remembered.
+    /// </remarks>
+    [Test]
+    public void EveryPublishedProject_HasABaseline()
+    {
+        var srcDir = RepoRoot.Combine("src");
+        Directory.Exists(srcDir).Should().BeTrue("missing 'src'.");
+
+        var missing = new List<string>();
+
+        foreach (var projectDir in Directory.EnumerateDirectories(srcDir))
+        {
+            var name = Path.GetFileName(projectDir);
+            var csproj = Path.Combine(projectDir, $"{name}.csproj");
+            if (!File.Exists(csproj))
+                continue;
+
+            // A project that opts out of packing publishes nothing, so it has no surface to pin.
+            if (
+                File.ReadAllText(csproj)
+                    .Contains("<IsPackable>false</IsPackable>", StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+
+            if (!File.Exists(Path.Combine(BaselineSourceDir, $"{name}.received.txt")))
+                missing.Add(name);
+        }
+
+        missing
+            .Should()
+            .BeEmpty(
+                "every project under src/ that packs must have a committed public API baseline, "
+                    + "and be listed in Assemblies() above so PublicApi_Matches_CheckedInBaseline "
+                    + "compares it. Trax.Docs/adr/0010-the-public-api-surface-is-a-committed-baseline.md "
+                    + "is the rule. Without one, a breaking change to that package reaches NuGet "
+                    + "without appearing in any diff. Missing:\n  "
+                    + string.Join("\n  ", missing)
+            );
     }
 
     [TestCaseSource(nameof(Assemblies))]

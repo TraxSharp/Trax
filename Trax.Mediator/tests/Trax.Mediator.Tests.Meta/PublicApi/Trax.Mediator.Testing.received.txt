@@ -1,0 +1,15 @@
+namespace Trax.Mediator.Testing
+{
+    [NUnit.Framework.TestFixture]
+    public abstract class TrainGuardFixture
+    {
+        protected TrainGuardFixture() { }
+        protected abstract System.Collections.Generic.IReadOnlyList<System.Reflection.Assembly> TrainAssemblies { get; }
+        [NUnit.Framework.Test]
+        public void Every_train_has_a_companion_interface() { }
+    }
+    public static class TrainGuards
+    {
+        public static Trax.Core.Testing.GuardResult EveryTrainHasInterface(System.Collections.Generic.IEnumerable<System.Reflection.Assembly> assemblies) { }
+    }
+}

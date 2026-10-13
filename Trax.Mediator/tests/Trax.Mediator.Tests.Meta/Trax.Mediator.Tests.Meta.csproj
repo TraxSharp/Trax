@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../src/Trax.Mediator.Testing/Trax.Mediator.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
