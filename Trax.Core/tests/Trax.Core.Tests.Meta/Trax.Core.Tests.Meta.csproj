@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Trax.Core/Trax.Core.csproj" />
     <ProjectReference Include="../../src/Trax.Core.Analyzers/Trax.Core.Analyzers.csproj" />
+    <ProjectReference Include="../../src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,98 @@
+namespace Trax.Core.Testing
+{
+    public sealed class ArchitectureGuardOptions : System.IEquatable<Trax.Core.Testing.ArchitectureGuardOptions>
+    {
+        public ArchitectureGuardOptions() { }
+        public System.Collections.Generic.IReadOnlySet<string> CrossRepoPackageKnownExceptions { get; init; }
+        public string ExpectedDirectoryBuildPropsVersion { get; init; }
+        public System.Collections.Generic.IReadOnlySet<string> FixedDelayKnownExceptions { get; init; }
+        public System.Collections.Generic.IReadOnlySet<string> NoIgnoreKnownExceptions { get; init; }
+        public string? RepoRootOverride { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> SourceScanRoots { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> TestScanRoots { get; init; }
+        public string TraxPackagePrefix { get; init; }
+    }
+    public sealed class GuardResult : System.IEquatable<Trax.Core.Testing.GuardResult>
+    {
+        public GuardResult(System.Collections.Generic.IReadOnlyList<string> Offenders, int Inspected, string FailureMessage) { }
+        public string FailureMessage { get; init; }
+        public int Inspected { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Offenders { get; init; }
+        public bool Passed { get; }
+    }
+}
+namespace Trax.Core.Testing.Fixtures
+{
+    [NUnit.Framework.TestFixture]
+    public abstract class HygieneGuardFixture
+    {
+        protected HygieneGuardFixture() { }
+        protected virtual Trax.Core.Testing.ArchitectureGuardOptions Options { get; }
+        [NUnit.Framework.Test]
+        public void Tests_do_not_use_fixed_delays() { }
+        [NUnit.Framework.Test]
+        public void Tests_do_not_use_legacy_asserts() { }
+        [NUnit.Framework.Test]
+        public void Tests_do_not_use_the_Ignore_attribute() { }
+    }
+    [NUnit.Framework.TestFixture]
+    public abstract class RepoConventionGuardFixture
+    {
+        protected RepoConventionGuardFixture() { }
+        protected virtual Trax.Core.Testing.ArchitectureGuardOptions Options { get; }
+        [NUnit.Framework.Test]
+        public void Cross_repo_package_references_are_centrally_managed() { }
+        [NUnit.Framework.Test]
+        public void Directory_build_props_pins_the_expected_version() { }
+    }
+}
+namespace Trax.Core.Testing.Guards
+{
+    public sealed class ForeignVocabulary : System.IEquatable<Trax.Core.Testing.Guards.ForeignVocabulary>
+    {
+        public ForeignVocabulary(string Library, System.Collections.Generic.IReadOnlyList<string> Attributes, string Replacement) { }
+        public System.Collections.Generic.IReadOnlyList<string> Attributes { get; init; }
+        public string Library { get; init; }
+        public string Replacement { get; init; }
+    }
+    public static class HygieneGuards
+    {
+        public static Trax.Core.Testing.GuardResult NoFixedDelays(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+        public static Trax.Core.Testing.GuardResult NoIgnoreAttribute(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+        public static Trax.Core.Testing.GuardResult NoLegacyAsserts(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+    }
+    public static class RepoConventionGuards
+    {
+        public static Trax.Core.Testing.GuardResult CrossRepoPackageVersions(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+        public static Trax.Core.Testing.GuardResult DirectoryBuildPropsVersion(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+    }
+    public static class VocabularyGuards
+    {
+        public static Trax.Core.Testing.GuardResult TraxVocabularyIsUsed(System.Collections.Generic.IReadOnlyList<Trax.Core.Testing.Guards.ForeignVocabulary> banned, Trax.Core.Testing.ArchitectureGuardOptions? options = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? allowed = null) { }
+    }
+}
+namespace Trax.Core.Testing.Infrastructure
+{
+    public static class RepoRoot
+    {
+        public static string Path { get; }
+        public static string Combine(params string[] segments) { }
+        public static string Relative(string absolute) { }
+    }
+    public static class SourceFiles
+    {
+        public static System.Collections.Generic.IEnumerable<string> CSharp(params string[] subdirs) { }
+        public static System.Collections.Generic.IEnumerable<string> CSharpUnder(string root, params string[] subdirs) { }
+        public static System.Collections.Generic.IEnumerable<string> Markdown(params string[] subdirs) { }
+        public static System.Collections.Generic.IEnumerable<string> Projects(params string[] subdirs) { }
+        public static System.Collections.Generic.IEnumerable<string> ProjectsUnder(string root, params string[] subdirs) { }
+    }
+    public static class SourceText
+    {
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "LineNumber",
+                "Line"})]
+        public static System.Collections.Generic.IReadOnlyList<System.ValueTuple<int, string>> MatchingLines(string source, System.Text.RegularExpressions.Regex pattern) { }
+        public static string StripCommentsAndStrings(string source) { }
+    }
+}
