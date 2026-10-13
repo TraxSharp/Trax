@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: BenchmarkDotNet measurements of Trax.Core train overhead against plain code, how it scales with junction count and memory, and how to run them yourself.
+description: "BenchmarkDotNet measurements of train overhead against plain code, how it scales with junction count and memory, and how to run the suite."
 type: reference
 area: general
 nav_order: 7
@@ -8,9 +8,10 @@ nav_order: 7
 
 # Benchmarks
 
-Trax.Core adds overhead to every train invocation. This page presents honest numbers so you can make informed decisions about where it's appropriate to use.
-
-All benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) and are located in `tests/Trax.Core.Tests.Benchmarks/`.
+Measurements of what a train costs over plain code, taken with
+[BenchmarkDotNet](https://benchmarkdotnet.org/). The suite is
+`Trax.Effect/tests/Trax.Effect.Tests.Benchmarks/`. What the numbers mean for choosing where to use a
+train is in [Train overhead](/docs/reference/train-overhead).
 
 ## Test Environment
 
@@ -23,7 +24,9 @@ AMD Ryzen 7 7840U w/ Radeon 780M Graphics, 1 CPU, 16 logical and 8 physical core
 
 ## What's Being Measured
 
-Three execution modes are compared for identical workloads:
+Three execution modes are compared for identical workloads. The suite also has a fourth,
+`EffectTrain_InMemory_*` (a `ServiceTrain` with the in-memory data provider), which the tables
+below do not report.
 
 | Mode | Description |
 |------|-------------|
@@ -32,8 +35,6 @@ Three execution modes are compared for identical workloads:
 | **ServiceTrain (no effects)** | `ServiceTrain<TIn, TOut>`, full DI-resolved train with effect runner lifecycle, but no effect providers registered |
 
 ## Train Overhead
-
-How much does Trax.Core cost for different kinds of work?
 
 | Method | Mean | Allocated |
 |--------|-----:|----------:|
@@ -53,22 +54,7 @@ How much does Trax.Core cost for different kinds of work?
 | BaseTrain - Simulated I/O | 3,747 ns | 4,992 B |
 | ServiceTrain - Simulated I/O | 9,516 ns | 8,479 B |
 
-### Reading the Numbers
-
-For trivial arithmetic, the framework overhead looks enormous in relative terms. A `BaseTrain` is ~6,900× slower than `input + 1`. But that comparison is misleading because `input + 1` completes in a fraction of a nanosecond.
-
-In absolute terms:
-
-- **BaseTrain** adds roughly **1.5 μs** of fixed overhead per invocation.
-- **ServiceTrain** (no effects) adds roughly **7 μs** per invocation, covering DI scope creation and effect runner lifecycle.
-
-Once the junctions do real work, the overhead shrinks dramatically. With simulated I/O (`Task.Yield`), the BaseTrain is only **3.6×** the serial cost instead of 6,900×.
-
-For a train junction that makes a database call (~1–10 ms) or an HTTP request (~50–500 ms), the 1.5–7 μs framework overhead is **less than 0.01%** of total execution time.
-
 ## Scaling with Junction Count
-
-How does overhead grow as you chain more junctions?
 
 | Junctions | Serial | BaseTrain | ServiceTrain | Base Overhead/Junction | Effect Overhead/Junction |
 |------:|-------:|-------------:|---------------:|-------------------:|---------------------:|
@@ -77,7 +63,7 @@ How does overhead grow as you chain more junctions?
 | 5 | 5.1 ns | 2,468 ns | 8,079 ns | ~210 ns | ~223 ns |
 | 10 | 10.7 ns | 3,440 ns | 9,016 ns | ~201 ns | ~203 ns |
 
-Each additional junction adds roughly **200 ns** of overhead in both train modes. This covers junction instantiation, type mapping, and `Either` propagation through the chain.
+Each additional junction adds roughly 200 ns in both train modes: junction instantiation, type mapping, and `Either` propagation through the chain.
 
 ### Memory Scaling
 
@@ -88,7 +74,7 @@ Each additional junction adds roughly **200 ns** of overhead in both train modes
 | 5 | 5,384 B | 8,872 B |
 | 10 | 7,720 B | 11,352 B |
 
-Each additional junction allocates roughly **~424 B** (BaseTrain) or **~464 B** (ServiceTrain).
+Each additional junction allocates roughly 424 B (BaseTrain) or 464 B (ServiceTrain).
 
 ## Where the Overhead Comes From
 
@@ -99,24 +85,12 @@ Each additional junction allocates roughly **~424 B** (BaseTrain) or **~464 B** 
 | DI scope creation (`CreateScope`) | ~1 μs |
 | Effect runner lifecycle (initialize + save, no providers) | ~4.5 μs |
 
-## Guidance
-
-**Trax.Core is not designed for hot-path, sub-microsecond operations.** It's designed for business train orchestration where each junction does meaningful work: database queries, API calls, file I/O, domain logic.
-
-Use Trax.Core when:
-- Junctions perform I/O or non-trivial computation (the ~7 μs overhead is noise)
-- You value error propagation, observability, and composability over raw throughput
-- You're building trains that run at request-level granularity (tens to hundreds per second), not tight inner loops
-
-Don't use Trax.Core for:
-- Per-element processing in large collections (use LINQ or loops)
-- Anything that needs to run millions of times per second
-- Pure computation where every nanosecond matters
-
 ## Running the Benchmarks Yourself
 
+From the repository root:
+
 ```bash
-cd tests/Trax.Core.Tests.Benchmarks/
+cd Trax.Effect/tests/Trax.Effect.Tests.Benchmarks
 
 # Run all benchmarks
 dotnet run -c Release -- --filter '*'
@@ -129,4 +103,4 @@ dotnet run -c Release -- --filter '*Scaling*'
 dotnet run -c Release -- --list flat
 ```
 
-Results will vary by hardware. The relative ratios between serial, base, and effect trains are more meaningful than the absolute numbers.
+Results vary by hardware; the ratios between the serial, base and service train modes vary less than the absolute numbers.
