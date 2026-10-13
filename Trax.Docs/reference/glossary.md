@@ -1,6 +1,6 @@
 ---
 title: Glossary
-description: Definitions of the names Trax uses for trains and junctions, effects and recording, the mediator and scheduling, each with the package that holds it.
+description: "Definitions of the names Trax uses for trains, effects, the mediator, scheduling, the API and state machines, each with the namespace that holds it."
 type: reference
 area: general
 nav_order: 4
@@ -23,6 +23,8 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 | **Chain verification** | The check `AddMediator` registers: at host startup it replays every registered train's chain and refuses to start when one cannot run, naming the train, the step and the missing type. See [Troubleshooting](/docs/cross-cutting/troubleshooting). |
 | **Memory** | The values a running train holds, keyed by type. It starts with the train's input, and each junction's output is added to it. A junction's input, and each constructor argument Memory can supply, is taken from it by type. See [Memory](/docs/core/memory). |
 | **Right track / left track** | A chain's two outcomes, as Trax.Core's `Either<Exception, T>`. Right carries the value on to the next junction; left carries the exception past every remaining junction to the train's result. |
+| **Checkpoint** | `Checkpoint<TState>()` in a chain: stores a state the chain declares, so a later run of the same input resumes after it instead of running every step before it again. See [Checkpoint](/docs/sdk-reference/train-methods/checkpoint). |
+| **Decider** | `IDecider` in `Trax.Core.Decisions`: what answers a train's typed questions (`Decide`) about a value in Memory, such as a model. With decision recording on, each answer is stored, and a requeued run replays it rather than asking again. See [Decisions](/docs/core/decisions). |
 | **ShortCircuit** | A chain step that ends the train early with its output when it succeeds, and lets the chain continue when it throws. See [ShortCircuit](/docs/sdk-reference/train-methods/short-circuit). |
 
 ## Effects and recording
@@ -34,7 +36,7 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 | **Data provider** | The effect that stores runs: `UsePostgres(...)`, `UseSqlite(...)` or `UseInMemory()`, one package each. The scheduler, junction progress and state machines refuse to start without one. |
 | **Metadata** | `Metadata` in `Trax.Effect.Models.Metadata`, a row of `trax.metadata`. One per ServiceTrain run: the train's name, its `TrainState` (`Pending`, `InProgress`, `Completed`, `Failed`, `Cancelled`), start and end times, input and output when `SaveTrainParameters()` stores them, and on failure the junction, exception, reason and stack trace. `ParentId` links a run to the run that started it. See [Metadata](/docs/effect/metadata). |
 | **ExternalId** | A string id meant for use outside the database. On a **Manifest** it is the stable name the scheduling APIs key on: scheduling the same ExternalId again updates that manifest instead of adding one. On a **Metadata** row it is typically a GUID by which other systems refer to the run. |
-| **Lifecycle hook** | An `ITrainLifecycleHook`, registered with `AddLifecycleHook`. Trax calls its `OnStarted`, `OnCompleted` and `OnFailed` as a run changes state; an exception it throws is logged and never fails the train. See [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook). |
+| **Lifecycle hook** | An `ITrainLifecycleHook`, registered with `AddLifecycleHook`. Trax calls its `OnStarted`, `OnCompleted`, `OnFailed`, `OnCancelled` and `OnStateChanged` as a run changes state, each optional; an exception it throws is logged and never fails the train. See [AddLifecycleHook](/docs/sdk-reference/configuration/add-lifecycle-hook). |
 | **Broadcaster** | `UseBroadcaster(...)`: publishes train lifecycle events to other processes through a transport such as RabbitMQ, or to browsers through SignalR. See [Broadcaster Sinks](/docs/effect/broadcaster-sinks). |
 | **Log** | A row of `trax.log`: one `ILogger` message captured by `AddDataContextLogging`. See [Debugging with the Log Table](/docs/effect/debugging-with-the-log-table). |
 
@@ -59,4 +61,13 @@ The names Trax uses, in the code and in these pages. Each entry says where the t
 | **Job dispatcher** | The scheduler's own train that takes queued work queue entries, applies the global and per-group limits, and hands each one to a job submitter. See [Job Dispatcher](/docs/scheduler/admin-trains/job-dispatcher). |
 | **Job runner** | The scheduler's own train that runs one dispatched job: it loads the job's Metadata and manifest, then runs the train through the TrainBus. See [Job Runner](/docs/scheduler/admin-trains/job-runner). |
 | **Local worker / remote worker** | Where a dispatched job runs. Local workers are threads in the scheduler's own process, the default with Postgres or SQLite. Remote workers are other processes reached over HTTP, SQS or AWS Lambda. See [Remote Execution](/docs/scheduler/remote-execution). |
+| **Job submitter** | `IJobSubmitter` in `Trax.Scheduler.Services.JobSubmitter`: what the job dispatcher hands a run to. `PostgresJobSubmitter` writes it to `trax.background_job` for local workers or `AddTraxWorker` processes; the remote submitters post it over HTTP, SQS or AWS Lambda. |
 | **Dependent train** | A manifest with `ScheduleType.Dependent`: rather than running on a timer, it runs after its parent manifest's latest success. See [Dependent Trains](/docs/scheduler/dependent-trains). |
+
+## API and state machines
+
+| Term | What it means |
+|---|---|
+| **Query model** | An EF entity marked `[TraxQueryModel]` (in `Trax.Effect.Attributes`), which `AddTraxGraphQL` serves as a filterable, paged query under `discover`. See [Query models](/docs/sdk-reference/graphql-api/query-models). |
+| **TraxPrincipal** | `TraxPrincipal` in `Trax.Api.Auth`: the authenticated caller as Trax sees it, with a scheme-qualified id such as `TraxApiKey:alice`, its roles and its claims. See [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal). |
+| **State machine** | A machine deriving `Machine<TState, TTrigger>` in `Trax.Effect.StateMachine.Persistence`: states, triggers and a context record, stored as a language-neutral snapshot that the C# engine and its TypeScript twin both read. See [State Machines](/docs/statemachine). |
