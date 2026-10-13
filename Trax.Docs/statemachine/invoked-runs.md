@@ -1,6 +1,6 @@
 ---
 title: "Invoked runs: outcomes and refusals"
-description: "Reference for trains invoked from a state machine state: outcome triggers, reserved states, delivery, outcomes, OnFailed reasons, host refusals and operator actions."
+description: "Reference for trains a state machine state invokes: outcome triggers, reserved states, delivery, outcomes, OnFailed reasons, host refusals and operator actions."
 type: reference
 area: machines
 nav_order: 23
