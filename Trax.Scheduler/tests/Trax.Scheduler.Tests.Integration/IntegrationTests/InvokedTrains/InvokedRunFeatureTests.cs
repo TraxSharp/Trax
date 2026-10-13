@@ -266,18 +266,16 @@ public class InvokedRunFeatureTests(ClusterStore store)
 
     private async Task Enter(string user, Guid id, FeatureTrigger trigger, JsonObject context)
     {
+        await StepMachine.Seed(
+            _api.Services,
+            user,
+            id,
+            InvokedFeatureMachine.MachineId,
+            "Idle",
+            context
+        );
         using var scope = _api.Services.CreateScope();
-        var drafts = Drafts(scope);
-        (
-            await drafts.Autosave(
-                user,
-                id,
-                StepMachine.Json(InvokedFeatureMachine.MachineId, "Idle", context)
-            )
-        )
-            .Should()
-            .BeOfType<AutosaveResult.Saved>();
-        (await drafts.Advance(user, id, trigger.ToString()))
+        (await Drafts(scope).Advance(user, id, trigger.ToString()))
             .Should()
             .BeOfType<AdvanceOutcome.Advanced>();
     }

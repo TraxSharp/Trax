@@ -270,16 +270,9 @@ public sealed class ClusterHost(ServiceProvider services, HeldJobs held, Cluster
     /// <summary>Saves <paramref name="user"/>'s draft in <c>Idle</c> with <paramref name="context"/> and advances it into <c>Running</c>.</summary>
     public async Task<AdvanceOutcome> EnterRunning(string user, Guid id, JsonObject context)
     {
+        await StepMachine.Seed(services, user, id, UserStepMachine.MachineId, "Idle", context);
         using var scope = services.CreateScope();
-        var drafts = Drafts(scope);
-        var saved = await drafts.Autosave(
-            user,
-            id,
-            StepMachine.Json(UserStepMachine.MachineId, "Idle", context)
-        );
-        if (saved is not AutosaveResult.Saved)
-            throw new InvalidOperationException($"The draft could not be saved: {saved}");
-        return await drafts.Advance(user, id, nameof(StepTrigger.Go));
+        return await Drafts(scope).Advance(user, id, nameof(StepTrigger.Go));
     }
 
     public async Task<AdvanceOutcome> Advance(string user, Guid id, StepTrigger trigger)

@@ -647,6 +647,32 @@ public interface IOperationsService
     ) => throw NotImplementedBy(nameof(GetMachineInstanceRunsAsync));
 
     /// <summary>
+    /// The live feed of state-machine instances as an operator reads them: each instance once
+    /// whenever it is written, by any path on any host, with its state, revision and whether it
+    /// waits on a run it invoked, and once more with <see cref="MachineInstanceRecord.Deleted"/>
+    /// set when it is deleted or expires; never its context or its owner's key. A burst of writes
+    /// to one instance may arrive as its latest revision only. The dashboard's State machines
+    /// page and the API's <c>onMachineInstanceChanged</c> subscription both read it here, and
+    /// every reader on a host shares the host's one change listener.
+    /// </summary>
+    /// <remarks>
+    /// The feed starts with what is written after it opens; read
+    /// <see cref="GetMachineInstancesAsync"/> for what is there already. A record with
+    /// <see cref="MachineInstanceRecord.Reload"/> set names no instance: writes may have been
+    /// missed (the host's change listener started or reconnected, or the feed fell behind), so the
+    /// reader reads what it shows again. The first one comes once the listener is listening. It ends when
+    /// <paramref name="ct"/> fires, when the host stops, or when the reader falls so far behind
+    /// that the host would otherwise buffer without bound. On a host that registers no state
+    /// machines it ends at once.
+    /// </remarks>
+    /// <param name="machine">Only this machine's instances; null watches every machine.</param>
+    /// <param name="ct">Ends the feed.</param>
+    IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(
+        string? machine,
+        CancellationToken ct
+    ) => throw NotImplementedBy(nameof(WatchMachineInstancesAsync));
+
+    /// <summary>
     /// An operator's cancel of a system-owned state-machine instance: cancels the train run its
     /// state waits on, and the instance then moves through that state's <c>OnCancelled</c> edge.
     /// A run still only queued is marked Cancelled and never starts, and the outcome is applied

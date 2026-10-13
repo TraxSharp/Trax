@@ -4,6 +4,7 @@ using Trax.Core.Monad;
 using Trax.Effect.Data.Services.DataContext;
 using Trax.Effect.Services.EffectJunction;
 using Trax.Effect.Services.ServiceTrain;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Mediator.Services.TrainExecution;
@@ -107,13 +108,26 @@ internal sealed class InvokedTrainLauncher(
         }
         else
         {
-            if (registration.RequiredPolicies.Count > 0 || registration.RequiredRoleSets.Count > 0)
+            // Whoever enters the state runs the train as themselves, so every way in must already demand what the
+            // train does: each event entering the state, and the start into an invoking initial state.
+            var unproven = declaration
+                .EnteringEvents.Select(e => (Event: e, Why: Unproven(e.Rule, registration)))
+                .Where(e => e.Why is not null)
+                .ToList();
+            if (unproven.Count > 0)
                 problems.Add(
                     $"{at}, whose [TraxAuthorize] names "
                         + Requirements(registration)
-                        + ", stricter than the machine's own mutations, which need only an authenticated "
-                        + "user. Entering the state would be a way around it; invoke it from a system-owned "
-                        + "machine or relax it."
+                        + ", but "
+                        + string.Join(
+                            "; ",
+                            unproven.Select(e =>
+                                $"{e.Event.Name} ({Describe(e.Event.Rule)}) {e.Why}"
+                            )
+                        )
+                        + ". Entering the state runs the train for whoever sent the event, so each way in must "
+                        + "require at least what the train does: declare it on the event, invoke the train from a "
+                        + "system-owned machine, or relax the train."
                 );
             if (registration.IsBroadcastEnabled)
                 problems.Add(InvokeRefusals.Broadcast(at));
@@ -130,7 +144,51 @@ internal sealed class InvokedTrainLauncher(
             parts.Add("policy " + string.Join(", ", registration.RequiredPolicies));
         if (registration.RequiredRoles.Count > 0)
             parts.Add("roles " + string.Join(", ", registration.RequiredRoles));
-        return string.Join(" and ", parts);
+        return parts.Count > 0 ? string.Join(" and ", parts) : "an authenticated user";
+    }
+
+    // An event no rule is declared for admits the draft's authenticated owner, as it did before rules.
+    private static string Describe(CallerRule? rule) =>
+        rule?.ToString() ?? "undeclared, so any authenticated user";
+
+    // Why a caller the event's rule admits might not meet the train's [TraxAuthorize], or null when every one does.
+    // A rule is proven only by what it names: a role set of the event inside a role set of the train, a policy of
+    // the train named by the event. A policy cannot be proven to grant a role, nor a role to satisfy a policy.
+    private static string? Unproven(CallerRule? rule, TrainRegistration registration)
+    {
+        var roleSets = registration.RequiredRoleSets;
+        var policies = registration.RequiredPolicies;
+        if (!registration.HasAuthorizeAttribute && roleSets.Count == 0 && policies.Count == 0)
+            return null;
+
+        var kind = rule?.Kind ?? CallerRuleKind.AnyAuthenticated;
+        if (kind == CallerRuleKind.Anonymous)
+            return "admits an anonymous caller";
+        if (kind == CallerRuleKind.AnyAuthenticated)
+            return roleSets.Count == 0 && policies.Count == 0
+                ? null
+                : "admits any authenticated user";
+
+        var eventRoleSets = rule!.RoleSets;
+        foreach (var policy in policies)
+            if (!rule.Policies.Contains(policy, StringComparer.Ordinal))
+                return $"admits a caller without the policy {policy}";
+        foreach (var trainSet in roleSets)
+        {
+            if (
+                eventRoleSets.Any(set =>
+                    set.All(role => trainSet.Contains(role, StringComparer.Ordinal))
+                )
+            )
+                continue;
+            if (eventRoleSets.Count == 0)
+                return $"names no role, and a policy cannot be proven to grant {string.Join(" or ", trainSet)}";
+            var outside = eventRoleSets
+                .SelectMany(set => set)
+                .First(role => !trainSet.Contains(role, StringComparer.Ordinal));
+            return $"admits a caller holding {outside} without {string.Join(" or ", trainSet)}";
+        }
+        return null;
     }
 
     // Reads the train's declared chain and refuses every step a cross-host cancel cannot stop.

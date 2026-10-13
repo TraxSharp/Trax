@@ -146,17 +146,7 @@ public class InvokesAuthorizationTests(StoreProvider provider)
         var ids = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToList();
         TestPrincipal.Become(user);
         foreach (var id in ids)
-            using (var scope = _host.Scope())
-                await _host
-                    .Service(scope, CappedMachine.MachineId)
-                    .Autosave(
-                        user,
-                        id,
-                        StageMachine<IGoodTrain, GoodInput, JobOutput>.Json(
-                            CappedMachine.MachineId,
-                            "Idle"
-                        )
-                    );
+            await _host.SeedIdle(user, id, CappedMachine.MachineId);
 
         var outcomes = await Task.WhenAll(
             ids.Select(id =>

@@ -22,6 +22,9 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     private const string Adr =
         "Trax.Docs/adr/0046-a-machine-state-invokes-a-train-and-only-that-entry-receives-its-outcome.md";
 
+    private const string Adr48 =
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
     private InvokeHost _host = null!;
 
     [SetUp]
@@ -151,15 +154,20 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
     }
 
     [Test]
+    [Property("adr", Adr48)]
     public void A_user_owned_machine_invoking_a_stricter_authorized_train_is_refused() =>
         _host
             .Problems<AdminMachine>()
             .Should()
-            .ContainSingle()
+            .ContainSingle(
+                "Go and Retry enter Running and declare no rule, so any authenticated owner sends them and "
+                    + $"runs the admin train. See {Adr48}"
+            )
             .Which.Should()
             .Contain("IAdminTrain")
             .And.Contain("roles admin")
-            .And.Contain("stricter than the machine's own mutations");
+            .And.Contain("Go (undeclared")
+            .And.Contain("Retry (undeclared");
 
     [Test]
     public void A_user_owned_machine_invoking_a_broadcast_train_is_refused() =>
@@ -240,6 +248,121 @@ public class InvokesStartupRefusalTests(StoreProvider provider)
             .BeTrue(
                 $"a subclass that overrode it could run the junction without the cancel-flag check. See {Adr}"
             );
+    }
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void An_Operator_event_entering_an_invoking_state_may_invoke_an_Operator_train() =>
+        _host
+            .Problems<OperatorInvokesOperatorMachine>()
+            .Should()
+            .BeEmpty(
+                "every event entering the state requires Operator, so whoever enters it may run the "
+                    + $"Operator train. See {Adr48}"
+            );
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void An_Operator_event_entering_an_invoking_state_refuses_an_Admin_train() =>
+        _host
+            .Problems<OperatorInvokesAdminMachine>()
+            .Should()
+            .ContainSingle(
+                $"an Operator may send Build and is not an admin, so Build would run the train around its rule. See {Adr48}"
+            )
+            .Which.Should()
+            .Contain($"'{OperatorInvokesAdminMachine.MachineId}'")
+            .And.Contain("IAdminTrain")
+            .And.Contain("Build")
+            .And.Contain("Operator")
+            .And.Contain("admin");
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void Every_event_entering_the_invoking_state_is_compared() =>
+        _host
+            .Problems<EveryEnteringEventMachine>()
+            .Should()
+            .ContainSingle(
+                "Rebuild lets any authenticated caller into the state, whatever Build requires. "
+                    + $"See {Adr48}"
+            )
+            .Which.Should()
+            .Contain($"'{EveryEnteringEventMachine.MachineId}'")
+            .And.Contain("IOperatorTrain")
+            .And.Contain("Rebuild");
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void An_any_of_role_event_admits_a_role_the_train_lacks_and_is_refused() =>
+        _host
+            .Problems<AnyOfRoleMachine>()
+            .Should()
+            .ContainSingle(
+                $"a Viewer may send Build and does not hold Operator, which the train needs. See {Adr48}"
+            )
+            .Which.Should()
+            .Contain($"'{AnyOfRoleMachine.MachineId}'")
+            .And.Contain("Build")
+            .And.Contain("Viewer");
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void A_policy_rule_against_a_role_train_cannot_be_proven_and_is_refused() =>
+        _host
+            .Problems<PolicyRuleMachine>()
+            .Should()
+            .ContainSingle(
+                "nothing at startup proves that a caller satisfying a policy holds the train's role. "
+                    + $"See {Adr48}"
+            )
+            .Which.Should()
+            .Contain($"'{PolicyRuleMachine.MachineId}'")
+            .And.Contain("Build")
+            .And.Contain(PolicyRuleMachine.Policy)
+            .And.Contain("Operator");
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void A_train_with_two_role_sets_needs_an_event_satisfying_both()
+    {
+        _host
+            .Problems<OneRoleSetMachine>()
+            .Should()
+            .ContainSingle(
+                $"an Operator who is not an Auditor may send Build, and the train needs both. See {Adr48}"
+            )
+            .Which.Should()
+            .Contain($"'{OneRoleSetMachine.MachineId}'")
+            .And.Contain("Build")
+            .And.Contain("Auditor");
+        _host
+            .Problems<BothRoleSetsMachine>()
+            .Should()
+            .BeEmpty($"whoever may send Build holds Operator and Auditor. See {Adr48}");
+    }
+
+    [Test]
+    [Property("adr", Adr48)]
+    public void Start_entering_an_invoking_initial_state_is_compared_too()
+    {
+        _host
+            .Problems<OperatorStartMachine>()
+            .Should()
+            .BeEmpty(
+                $"only an Operator may start an instance, and starting it runs the Operator train. See {Adr48}"
+            );
+        _host
+            .Problems<AnyoneStartMachine>()
+            .Should()
+            .ContainSingle(
+                "any authenticated caller may start an instance, and the start enters the state invoking "
+                    + $"the Operator train. See {Adr48}"
+            )
+            .Which.Should()
+            .Contain($"'{AnyoneStartMachine.MachineId}'")
+            .And.Contain("Start")
+            .And.Contain("AnyAuthenticated");
     }
 
     [Test]

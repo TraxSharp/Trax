@@ -612,6 +612,7 @@ namespace Trax.Scheduler.Services.Operations
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestAsync(long id, Trax.Scheduler.Services.Operations.ManifestUpdate update, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct);
         System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct);
+        System.Collections.Generic.IAsyncEnumerable<Trax.Scheduler.Services.Operations.MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, System.Threading.CancellationToken ct);
     }
     public class LogCount : System.IEquatable<Trax.Scheduler.Services.Operations.LogCount>
     {
@@ -703,10 +704,13 @@ namespace Trax.Scheduler.Services.Operations
     {
         public MachineInstanceRecord(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun) { }
         public System.DateTimeOffset? CreatedAt { get; init; }
+        public bool Deleted { get; init; }
         public bool HasLiveInvokedRun { get; init; }
         public System.Guid Id { get; init; }
         public string Machine { get; init; }
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public bool Reload { get; init; }
+        public long? Revision { get; init; }
         public long RowId { get; init; }
         public string State { get; init; }
         public System.DateTimeOffset UpdatedAt { get; init; }
@@ -856,6 +860,7 @@ namespace Trax.Scheduler.Services.Operations
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestAsync(long id, Trax.Scheduler.Services.Operations.ManifestUpdate update, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateManifestGroupAsync(long id, Trax.Scheduler.Services.Operations.UpdateManifestGroupInput input, System.Threading.CancellationToken ct) { }
         public System.Threading.Tasks.Task<Trax.Scheduler.Services.Operations.OperationResult> UpdateSchedulerConfigAsync(Trax.Scheduler.Services.Operations.UpdateSchedulerConfigInput input, System.Threading.CancellationToken ct) { }
+        public System.Collections.Generic.IAsyncEnumerable<Trax.Scheduler.Services.Operations.MachineInstanceRecord> WatchMachineInstancesAsync(string? machine, System.Threading.CancellationToken ct) { }
         public static string CancelRequestedMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key, string state) { }
         public static string InstanceNotFoundMessage(Trax.Scheduler.Services.Operations.MachineInstanceKey key) { }
         public static string InvokedRunRequeueRefusal(long metadataId, string machine) { }

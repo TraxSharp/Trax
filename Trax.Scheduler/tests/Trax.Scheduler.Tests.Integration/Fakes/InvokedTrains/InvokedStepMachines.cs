@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using static Trax.Effect.StateMachine.Rules;
@@ -108,6 +109,32 @@ public abstract class StepMachine : Machine<StepState, StepTrigger>
             ["artifact"] = "",
             ["pad"] = new string('p', padBytes),
         };
+
+    /// <summary>
+    /// Writes <paramref name="user"/>'s draft of <paramref name="machine"/> straight through the store, as host code
+    /// would: the soft save does not serve a machine that invokes a train.
+    /// </summary>
+    public static async Task Seed(
+        IServiceProvider services,
+        string user,
+        Guid id,
+        string machine,
+        string state,
+        JsonObject context
+    )
+    {
+        using var scope = services.CreateScope();
+        var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+        var snapshot = new Snapshot
+        {
+            Machine = machine,
+            Version = 1,
+            State = state,
+            Context = (JsonObject)context.DeepClone(),
+        };
+        if (!await store.Upsert(user, id, snapshot))
+            throw new InvalidOperationException($"Could not seed draft {id} for {user}.");
+    }
 
     /// <summary>A snapshot of the user-owned machine in <paramref name="state"/> as a client sends it.</summary>
     public static string Json(string machine, string state, JsonObject context) =>

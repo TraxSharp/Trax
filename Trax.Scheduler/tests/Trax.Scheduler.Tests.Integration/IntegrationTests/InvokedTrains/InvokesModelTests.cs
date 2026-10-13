@@ -449,18 +449,29 @@ public class InvokesModelTests(ClusterStore store)
                     )
             );
 
-            // A draft in an invoking state holds its run: autosave neither leaves it nor rewrites its context.
-            if (user.State is "Running" or "Chained")
-            {
-                saved
-                    .Should()
-                    .BeOfType<AutosaveResult.Rejected>(
-                        "autosave never leaves an invoking state, which would strand its run"
-                    );
-                return;
-            }
+            // The soft save does not serve a machine that invokes a train, whatever state its draft is in.
+            saved
+                .Should()
+                .BeOfType<AutosaveResult.Rejected>()
+                .Which.Code.Should()
+                .Be(
+                    DraftRefusalCodes.SaveNotAllowed,
+                    "the generic save serves only machines with no server-side behaviour"
+                );
 
-            saved.Should().BeOfType<AutosaveResult.Saved>();
+            // A draft in an invoking state holds its run, so nothing rewrites it from outside. Elsewhere host code
+            // writes the draft back to Idle through the store, as a reset would.
+            if (user.State is "Running" or "Chained")
+                return;
+
+            await StepMachine.Seed(
+                Api.Services,
+                user.UserKey,
+                user.Id,
+                UserStepMachine.MachineId,
+                "Idle",
+                StepMachine.Context(mode, note)
+            );
             user.State = "Idle";
             user.Mode = mode;
             user.Note = note;
@@ -1003,8 +1014,31 @@ public class InvokesModelTests(ClusterStore store)
                     .ExecuteUpdateAsync(s => s.SetProperty(x => x.UpdatedAt, aged));
             }
 
+            // Expiry is the draft sweep's: it deletes an idle draft, leaves one whose state waits on a run for the
+            // run's outcome, and keeps one in a state only the server puts it in.
+            await test._expiring.Services.GetRequiredService<DraftSweeper>().SweepOnce();
             var loaded = await Drafts(test._expiring, d => d.Load(user.UserKey, user.Id));
 
+            if (user.Token is not null)
+            {
+                loaded
+                    .Should()
+                    .BeOfType<LoadResult.Loaded>("a draft waiting on its run is not swept");
+                return;
+            }
+            // An outcome target is the record of what the server did, which the sweep keeps however idle.
+            var kept = test
+                ._expiring.Services.GetServices<IMachine>()
+                .OfType<IMachineInternals>()
+                .Single(m => ((IMachine)m).Name == user.Machine)
+                .KeptFromSweep;
+            if (user.State is { } state && kept.Contains(state))
+            {
+                loaded
+                    .Should()
+                    .BeOfType<LoadResult.Loaded>($"an instance in {state} is kept however idle");
+                return;
+            }
             loaded.Should().BeOfType<LoadResult.NotFound>("the draft expired");
             if (user.State is null)
                 return;

@@ -12,6 +12,7 @@ using Trax.Effect.Models.Metadata;
 using Trax.Effect.Models.Metadata.DTOs;
 using Trax.Effect.Models.WorkQueue;
 using Trax.Effect.Models.WorkQueue.DTOs;
+using Trax.Effect.StateMachine;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
 using Trax.Mediator.Services.TrainAuthorization;
@@ -187,16 +188,31 @@ public sealed class InvokeHost : IDisposable
     public async Task<AdvanceOutcome> EnterRunning(string user, Guid id, string machine)
     {
         TestPrincipal.Become(user);
+        await SeedIdle(user, id, machine);
         using var scope = Scope();
-        var service = Service(scope, machine);
-        var saved = await service.Autosave(
-            user,
-            id,
-            StageMachine<IGoodTrain, GoodInput, JobOutput>.Json(machine, "Idle")
-        );
-        if (saved is not AutosaveResult.Saved)
-            throw new InvalidOperationException($"The draft could not be saved: {saved}");
-        return await service.Advance(user, id, "Go");
+        return await Service(scope, machine).Advance(user, id, "Go");
+    }
+
+    /// <summary>
+    /// Writes <paramref name="user"/>'s draft of <paramref name="machine"/> in <c>Idle</c> straight through the store:
+    /// the soft save does not serve a machine that invokes a train.
+    /// </summary>
+    public async Task SeedIdle(string user, Guid id, string machine)
+    {
+        using var scope = Scope();
+        var snapshot = new Snapshot
+        {
+            Machine = machine,
+            Version = 1,
+            State = "Idle",
+            Context = new System.Text.Json.Nodes.JsonObject { ["source"] = "repo" },
+        };
+        if (
+            !await scope
+                .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                .Upsert(user, id, snapshot)
+        )
+            throw new InvalidOperationException($"Could not seed draft {id} for {user}.");
     }
 
     public void Dispose()

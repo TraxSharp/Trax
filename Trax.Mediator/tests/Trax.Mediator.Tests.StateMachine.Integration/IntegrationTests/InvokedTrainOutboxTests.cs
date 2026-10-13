@@ -116,17 +116,7 @@ public class InvokedTrainOutboxTests(StoreProvider provider)
         {
             var id = Guid.NewGuid();
             TestPrincipal.Become(User);
-            using (var scope = _host.Scope())
-                await _host
-                    .Service(scope, GoodMachine.MachineId)
-                    .Autosave(
-                        User,
-                        id,
-                        StageMachine<IGoodTrain, GoodInput, JobOutput>.Json(
-                            GoodMachine.MachineId,
-                            "Idle"
-                        )
-                    );
+            await _host.SeedIdle(User, id, GoodMachine.MachineId);
 
             // Observed from another connection while the outbox's transaction is open: the advance train's own
             // run record has been saved (and committed) through its effect runner, and nothing the outbox wrote is

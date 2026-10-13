@@ -446,6 +446,98 @@ public partial class OperationsService
             .ToList();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Read from the host's change hub (Trax.Effect's <c>SnapshotWatchHub</c>), which re-reads each
+    /// written row once per burst however many feeds and subscriptions watch it; the hub's change
+    /// carries the context and the owner's key, and this drops both before anything leaves.
+    /// </remarks>
+    public IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstancesAsync(
+        string? machine,
+        CancellationToken ct
+    ) => WatchMachineInstances(machine, ct);
+
+    private async IAsyncEnumerable<MachineInstanceRecord> WatchMachineInstances(
+        string? machine,
+        [EnumeratorCancellation] CancellationToken ct
+    )
+    {
+        var services =
+            _services
+            ?? throw new InvalidOperationException(
+                "This OperationsService was constructed without an IServiceProvider, so it cannot "
+                    + "reach the host's change feed. Resolve IOperationsService from dependency injection, "
+                    + "or use the constructor that takes one."
+            );
+        if (services.GetService<SnapshotWatchHub>() is not { } hub)
+            yield break;
+
+        var only = string.IsNullOrWhiteSpace(machine) ? null : machine;
+        var watch = hub.WatchAll(only);
+        await using (watch.ConfigureAwait(false))
+        {
+            await foreach (
+                var change in watch
+                    .Changes.ReadAllAsync(ct)
+                    .WithCancellation(ct)
+                    .ConfigureAwait(false)
+            )
+                if (OperatorView(change, only) is { } record)
+                    yield return record;
+        }
+    }
+
+    // What an operator sees of a change: the instance's identity, state, revision and whether it
+    // waits on a run; never its context or its owner's key. A delete of a row the hub never read
+    // names no instance, so it is not shown. A reload names none either, but it says writes may
+    // have been missed (the listener started or reconnected, or the feed fell behind), so it is
+    // sent as a record marked Reload, and the reader reads what it shows again.
+    internal static MachineInstanceRecord? OperatorView(SnapshotRowChange change, string? machine)
+    {
+        if (change.Kind is SnapshotRowChangeKind.Reload)
+            return new MachineInstanceRecord(
+                0,
+                machine ?? "",
+                default,
+                Guid.Empty,
+                "",
+                0,
+                null,
+                DateTimeOffset.UtcNow,
+                false
+            )
+            {
+                Reload = true,
+            };
+        if (
+            change.Machine is null
+            || change.Id is not { } id
+            || change.OwnerKind is not { } ownerKind
+            || change.State is null
+            || (
+                machine is not null
+                && !string.Equals(change.Machine, machine, StringComparison.Ordinal)
+            )
+        )
+            return null;
+
+        return new MachineInstanceRecord(
+            change.RowId,
+            change.Machine,
+            ownerKind,
+            id,
+            change.State,
+            change.Version,
+            change.CreatedAt,
+            change.UpdatedAt ?? DateTimeOffset.UtcNow,
+            change.Kind is not SnapshotRowChangeKind.Gone && change.HasInvokeToken
+        )
+        {
+            Revision = change.Revision,
+            Deleted = change.Kind is SnapshotRowChangeKind.Gone,
+        };
+    }
+
     /// <summary>
     /// The query <see cref="GetMachineInstancesAsync"/> runs for one page, with
     /// <paramref name="skip"/> and <paramref name="take"/> already bounded. Internal so a test
@@ -498,5 +590,8 @@ public partial class OperationsService
         x.CreatedAt,
         x.UpdatedAt,
         x.InvokeToken != null
-    );
+    )
+    {
+        Revision = x.Revision,
+    };
 }

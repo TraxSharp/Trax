@@ -87,7 +87,25 @@ public record MachineInstanceRecord(
     DateTimeOffset? CreatedAt,
     DateTimeOffset UpdatedAt,
     bool HasLiveInvokedRun
-);
+)
+{
+    /// <summary>The instance's revision: 1 when the row was created, one more for every write since.</summary>
+    public long? Revision { get; init; }
+
+    /// <summary>
+    /// True on the live feed (<see cref="IOperationsService.WatchMachineInstancesAsync"/>) when the instance was
+    /// deleted or expired: the record is the instance as it was last seen, and nothing follows it for this row. Always
+    /// false on a read.
+    /// </summary>
+    public bool Deleted { get; init; }
+
+    /// <summary>
+    /// True on the live feed (<see cref="IOperationsService.WatchMachineInstancesAsync"/>) when writes may have been
+    /// missed (the host's change listener started, reconnected, or the reader fell behind): the record names no
+    /// instance, and the reader reads what it shows again. Always false on a read.
+    /// </summary>
+    public bool Reload { get; init; }
+}
 
 /// <summary>A page of state-machine instances, newest first by when each was last written.</summary>
 /// <param name="Items">The instances on this page.</param>

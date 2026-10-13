@@ -87,6 +87,26 @@ public class TrainDiscoveryService : ITrainDiscoveryService
 
         RefuseSharedClassServiceTypes(classes);
 
+        // A subsystem that registers a train's route without exposing it adds an exposure only when the host opts
+        // in; it is read here as the class's own attribute would be.
+        var exposures = _serviceCollection
+            .Where(d => d.ServiceType == typeof(TrainMutationExposure))
+            .Select(d => d.ImplementationInstance)
+            .OfType<TrainMutationExposure>()
+            .GroupBy(e => e.Implementation)
+            .ToDictionary(g => g.Key, g => g.Last());
+        TrainRegistration Build(
+            Type serviceType,
+            Type implementationType,
+            ServiceLifetime lifetime
+        ) =>
+            TrainDiscoveryService.Build(
+                serviceType,
+                implementationType,
+                lifetime,
+                exposures.GetValueOrDefault(implementationType)
+            );
+
         var registrations = new List<(int Index, TrainRegistration Registration)>();
         var pairedInterfaces = new HashSet<Type>();
 
@@ -238,7 +258,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
     private static TrainRegistration Build(
         Type serviceType,
         Type implementationType,
-        ServiceLifetime lifetime
+        ServiceLifetime lifetime,
+        TrainMutationExposure? exposure
     )
     {
         var genericArgs = TrainServiceType
@@ -250,7 +271,15 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         var (hasAuthorize, policies, roles, roleSets) = GetAuthorizationRequirements(
             implementationType
         );
-        var graphql = GetGraphQLMetadata(implementationType);
+        var graphql = GetGraphQLMetadata(implementationType, exposure?.Mutation);
+
+        // An exposure's policy gates the mutation as a [TraxAuthorize(Policy = ...)] on the class would.
+        if (exposure?.Policy is { } exposurePolicy && !string.IsNullOrWhiteSpace(exposurePolicy))
+        {
+            hasAuthorize = true;
+            if (!policies.Contains(exposurePolicy))
+                policies = policies.Append(exposurePolicy).ToList().AsReadOnly();
+        }
 
         return new TrainRegistration
         {
@@ -368,7 +397,7 @@ public class TrainDiscoveryService : ITrainDiscoveryService
         string? DeprecationReason,
         GraphQLOperation Operations,
         string? Namespace
-    ) GetGraphQLMetadata(Type implementationType)
+    ) GetGraphQLMetadata(Type implementationType, TraxMutationAttribute? exposed)
     {
         var queryAttr = implementationType.GetCustomAttribute<TraxQueryAttribute>();
         if (queryAttr is not null)
@@ -384,7 +413,8 @@ public class TrainDiscoveryService : ITrainDiscoveryService
             );
         }
 
-        var mutationAttr = implementationType.GetCustomAttribute<TraxMutationAttribute>();
+        var mutationAttr =
+            implementationType.GetCustomAttribute<TraxMutationAttribute>() ?? exposed;
         if (mutationAttr is not null)
         {
             return (
