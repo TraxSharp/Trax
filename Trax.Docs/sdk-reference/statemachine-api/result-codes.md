@@ -1,19 +1,25 @@
 ---
 title: Result codes
-description: Every result code a state machine advance, rehydrate or snapshot mutation can return, what each means and how a client should react.
+description: Every result code a state machine advance, rehydrate or snapshot mutation can return, the constant that declares it, and the order refusals are checked in.
 type: reference
 area: machines
 parent: State Machine API
 grand_parent: SDK Reference
 nav_order: 9
+package: Trax.Effect.StateMachine
+namespace: Trax.Effect.StateMachine
+source:
+  - Trax.Effect/src/Trax.Effect.StateMachine/Results.cs
+  - Trax.Effect/src/Trax.Effect.StateMachine.Persistence/DraftRefusalCodes.cs
 ---
 
 # Result codes
 
-Every advance and rehydrate returns a result, never an exception. On the unhappy path the result carries a
-code. Only the code is contract; the detail text is free to differ across runtimes and is for humans, not
-branching. The table lists every code the engine and the snapshot mutations return. A client should still
-treat a code it does not recognise as a refusal, so that a code added later does not break it.
+Every advance and rehydrate returns a result, never an exception. On the unhappy path the result carries a code.
+Only the code is contract; the detail text may differ across runtimes and is for people, not for branching on. A
+client treats a code it does not recognise as a refusal, so a code added later does not break it.
+
+## Members
 
 | Code | Returned by | Meaning |
 | --- | --- | --- |
@@ -56,17 +62,18 @@ treat a code it does not recognise as a refusal, so that a code added later does
 | `effect-in-progress` | advance, send, save, start, discard | an effect is pending on this draft: a send is running it and holds its lease, so every other write waits until it is recorded or fails; nothing was written, retry once it finishes (a send with the same request id). `DraftRefusalCodes.EffectInProgress`; a discard answers `discard-not-allowed` instead |
 | `delivery-failed` | send | the effect threw, or returned no receipt; the draft was not advanced, so the send can be retried. The message is fixed and carries a reference; the exception is logged on the server under that reference. A cancelled request is not a failed delivery: it propagates as a cancellation. An `OperationCanceledException` from the effect itself, such as an outbound call's timeout, is a `delivery-failed`, and its claim stays in flight until the lease passes |
 
+## Behavior
+
 The engine's codes are constants on `RejectionReasons`: `NoTransition`, `GuardFailed`, `InvalidContext`,
 `InternalError`, `InvalidInput`, `OutcomeBound`, `TimerBound` (`timer-bound`: a state's timer trigger, which only
 the server fires, sent through an advance by anyone, trusted host code included), `TooLarge`, `EffectInProgress` and
-`DiscardNotAllowed`
-(`discard-not-allowed`, which only the draft service answers, to a `discard`). An advance's
+`DiscardNotAllowed` (`discard-not-allowed`, which only the draft service answers, to a `discard`). An advance's
 refusals are checked in this order, and the first that applies is the answer: an unknown state or trigger
 (`no-transition`), an outcome trigger (`outcome-bound`), a timer trigger (`timer-bound`), no edge from the current
 state (`no-transition`), `invalid-input`, `guard-failed`, a duration the target state's timer cannot read from the
 successor context (`invalid-input`), `invalid-context` ([ADR 0048](https://github.com/TraxSharp/Trax/blob/main/Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md)).
 `DraftRefusalCodes` declares the codes for refusals caused by the caller or the request: `Forbidden`
-(`forbidden`), `RequestIdReused` (`request-id-reused`), `EffectBound` (`effect-bound`), `SaveNotAllowed` (`save-not-allowed`), `DiscardNotAllowed`
+(`forbidden`), `RequestIdReused` (`request-id-reused`), `EffectBound` (`effect-bound`), `EffectInProgress` (`effect-in-progress`), `SaveNotAllowed` (`save-not-allowed`), `DiscardNotAllowed`
 (`discard-not-allowed`), `ClientOutdated`
 (`client-outdated`), `ServerOutdated` (`server-outdated`), `TooManyDrafts` (`too-many-drafts`, a start or a save
 creating a draft past `MaxDraftsPerUser`), `InvalidRequestId` (`invalid-request-id`), `Unauthenticated`
@@ -74,14 +81,26 @@ creating a draft past `MaxDraftsPerUser`), `InvalidRequestId` (`invalid-request-
 `NotFound` (`not-found`, a [`machineChanged`](/docs/sdk-reference/graphql-api/machines#machinechanged) subscription
 to no instance the caller may watch) and `TooManySubscriptions` (`too-many-subscriptions`, past the subscription
 caps).
+
 `client-outdated` and `server-outdated` answer a [persisted machine document](/docs/sdk-reference/graphql-api/machines#persisted-documents)
 of another version than the node runs, as a GraphQL error whose `extensions.code` is the code. The generic save returns `save-not-allowed`, the actor
 advance, send, `start` and `discard` return `forbidden`, `discard` returns `discard-not-allowed`, and `start` and
 `discard` return the others (see
 [Actors, start and discard](/docs/sdk-reference/statemachine-api/persistence-ports#actors-start-and-discard)).
 
+`RehydrationErrorCodes` declares the codes a rehydrate answers: `Malformed` (`malformed`), `UnknownState`
+(`unknown-state`), `VersionMismatch` (`version-mismatch`), `UnknownMachine` (`unknown-machine`) and
+`InvalidContext` (`invalid-context`).
+
 Over GraphQL these surface on the mutation's `problem` field, so a client reads the code and reacts (re-enable
 a control on `guard-failed`, start fresh on `version-mismatch`) without ever seeing a stack trace. When the
 refusal came from an exception, a guard, reducer or migration that threw or an effect that failed, the
 message is a fixed sentence ending in `Reference: {id}`, and the server logs the exception under that id at
 error level: the exception's own text never reaches the client.
+
+
+## See also
+
+- [Persistence ports](/docs/sdk-reference/statemachine-api/persistence-ports#actors-start-and-discard), the order the draft service checks its refusals in.
+- [Runtime integrity](/docs/sdk-reference/statemachine-api/runtime-integrity), `schema-mismatch` and `client-divergence`.
+- [The machines root](/docs/sdk-reference/graphql-api/machines), where a typed operation answers these codes.
