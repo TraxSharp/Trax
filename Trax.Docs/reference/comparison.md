@@ -171,4 +171,4 @@ schedulers, two job tables and two dashboards to operate, and retries configured
 (a Hangfire retry re-runs the whole train).
 
 Moving a Hangfire job over one at a time is described in
-[Migrate from Hangfire](/docs/migration-guides).
+[Migrate from Hangfire](/docs/migration-guides/migrate-from-hangfire).
