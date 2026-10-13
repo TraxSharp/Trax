@@ -1,8 +1,15 @@
 ---
 title: AddServices
-description: Reference for AddServices, which stores up to seven DI services in Memory under their interface types for later junctions, including Moq proxy handling.
+description: "Reference for AddServices, which stores up to seven services in Memory under the interfaces they are passed as, for the junctions after it."
 type: reference
 area: trains
+package: Trax.Core
+namespace:
+  - Trax.Core.Train
+  - Trax.Core.Monad
+source:
+  - Trax.Core/src/Trax.Core/Train/Train.cs
+  - Trax.Core/src/Trax.Core/Monad/Monad.AddServices.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 6
@@ -10,70 +17,71 @@ nav_order: 6
 
 # AddServices
 
-Stores DI services into Memory so that subsequent junctions can access them. Services are stored by their **interface type** (the generic type parameter), not their concrete type.
-
-Has overloads for 1 through 7 services.
+Stores services in Memory so the junctions after it can take them through their constructors. Each service is stored under the interface it is passed as (the type argument in its position), not under its concrete type. It has overloads for one to seven services.
 
 ## Signatures
 
-```csharp
-protected Monad<TInput, TReturn> AddServices<T1>(T1 service)
-protected Monad<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2)
-protected Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3)
-protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4)
-protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5)
-protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6)
-protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6, T7 s7)
+```csharp fragment
+// Train<TInput, TReturn>
+protected Monad<TInput, TReturn> AddServices<T1>(T1 service);
+protected Monad<TInput, TReturn> AddServices<T1, T2>(T1 s1, T2 s2);
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3>(T1 s1, T2 s2, T3 s3);
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4>(T1 s1, T2 s2, T3 s3, T4 s4);
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5);
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6);
+protected Monad<TInput, TReturn> AddServices<T1, T2, T3, T4, T5, T6, T7>(T1 s1, T2 s2, T3 s3, T4 s4, T5 s5, T6 s6, T7 s7);
+
+// MonadTask<TInput, TReturn>, later in a chain: the same overloads, returning MonadTask<TInput, TReturn>
+public MonadTask<TInput, TReturn> AddServices<T1>(T1 service);
 ```
-
-These are the train's own methods, which start a chain in `Junctions()`. Later in a chain, after a `Chain` or `ShortCircuit`, the call is `MonadTask<TInput, TReturn>`'s method of the same name, which takes the same arguments and returns `MonadTask<TInput, TReturn>`.
-
-## Type Parameters
-
-Each `T1` through `T7` should be an **interface type**. The service is stored in Memory under this interface type, enabling junctions to resolve it by interface.
 
 ## Parameters
 
-Each `service` / `s1..s7` is a service instance that implements the corresponding type parameter interface.
-
-All services are **required** (non-null), and each has to exist when `Junctions()` runs. Passing `null` throws an `Exception` naming the service's type. While the startup check reads the chain, a `null` is recorded as a refusal instead, and the host will not start: a service field assigned later, in `OnStarted` for example, is not supported.
+| Parameter | Description |
+|-----------|-------------|
+| `T1` ... `T7` | The interface each service is stored under |
+| `service`, `s1` ... `s7` | A class instance that implements the interface in its position. Not `null`, and available when `Junctions()` runs. |
 
 ## Returns
 
-The chain, for fluent chaining: `Monad<TInput, TReturn>` from the train's method, `MonadTask<TInput, TReturn>` from a later link.
-
-## Example
-
-```csharp
-public class ProcessOrderTrain(
-    IPaymentGateway paymentGateway,
-    IInventoryService inventoryService,
-    INotificationService notificationService
-) : ServiceTrain<OrderInput, OrderResult>
-{
-    protected override Task<Either<Exception, OrderResult>> Junctions() =>
-        AddServices<IPaymentGateway, IInventoryService, INotificationService>(
-                paymentGateway, inventoryService, notificationService)
-            .Chain<ValidateInventory>()    // Can access IInventoryService from Memory
-            .Chain<ChargePayment>()        // Can access IPaymentGateway from Memory
-            .Chain<SendReceipt>().Resolve();         // Can access INotificationService from Memory
-}
-```
+The chain: `Monad<TInput, TReturn>` from the train's method, `MonadTask<TInput, TReturn>` from a later link.
 
 ## Behavior
 
-1. Stores each service under the type parameter in its own position: `AddServices<IReader, IWriter>(store, store)` fills both the `IReader` and the `IWriter` slot with `store`, whatever else `store` implements.
-2. The chain check records the same slots, so what it verifies is what the run fills.
-3. If a service is `null`, sets the train exception to a `TrainException` naming the type argument and, when several services are passed, its position (`AddServices<IWriter> received null for the service at position 2 of 2. A service cannot be null.`). None of that call's services is stored, and the train fails like any other invalid argument rather than throwing out of `Junctions()`. While a chain is being read, records a refusal instead.
-4. If a service's concrete type is not a class, sets the train exception. A struct passed as an interface is also refused while the chain is read.
-5. If a service does not implement the interface it was passed as, sets the train exception.
+1. Every service is checked before any is stored, so a refused call stores nothing.
+2. Each service is stored under the type argument in its own position: `AddServices<IReader, IWriter>(store, store)` fills both the `IReader` and the `IWriter` slot with `store`, whatever else `store` implements.
+3. A [Moq](https://github.com/moq/moq4) mock (`new Mock<IMyService>().Object`) is stored under the type it mocks.
+4. The startup chain check records the same slots, as seeds, so what it verifies is what the run fills.
 
-### Moq Proxy Handling
+A refused call sets a `TrainException` on the train, which fails like any other step, rather than throwing out of `Junctions()`:
 
-`AddServices` has special handling for [Moq](https://github.com/moq/moq4) mock objects. If a service is detected as a Moq proxy (e.g., `Mock<IMyService>().Object`), it's stored under the **mocked interface type** rather than the proxy's concrete type. This enables seamless testing with mocked dependencies.
+| Condition | Message | While the chain is read |
+|-----------|---------|-------------------------|
+| A service is `null` | `AddServices<IWriter> received null for the service at position 2 of 2. A service cannot be null.` (no position when one service is passed) | Refused: a field assigned later, in `OnStarted` say, is not supported |
+| A service is a struct | `Params (<type>) to AddServices must be Classes.` | Refused |
+| A type argument is a class, or the service does not implement it | `Class (<type>) passed to AddServices as (<slot>) must be passed as an interface it implements.` | A class type argument is refused |
 
-## Remarks
+More than seven services take more than one call.
 
-- Use interface types as the generic parameters (`AddServices<IMyService>(myService)`, not `AddServices<MyService>(myService)`).
-- Junctions resolve services from Memory by their interface type during construction. See [Junctions](/docs/core/trains-and-junctions) for how constructor injection works.
-- For more than 7 services, split across multiple `AddServices` calls.
+## Example
+
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class NotifyingOrderTrain(IPaymentGateway payments, INotificationService notifications)
+    : ServiceTrain<OrderInput, OrderResult>
+{
+    protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        AddServices<IPaymentGateway, INotificationService>(payments, notifications)
+            .Chain<ValidateOrder>()
+            .Chain<ProcessPayment>()      // takes IPaymentGateway from Memory
+            .Chain<SendConfirmation>()    // takes INotificationService from Memory
+            .Resolve();
+}
+```
+
+## See also
+
+- [Extract](/docs/sdk-reference/train-methods/extract)
+- [Dependency Injection in Junctions](/docs/core/trains-and-junctions#dependency-injection-in-junctions)

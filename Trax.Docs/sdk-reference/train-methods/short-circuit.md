@@ -1,8 +1,15 @@
 ---
 title: ShortCircuit
-description: Reference for ShortCircuit, which runs a junction whose successful result becomes the train's return value at Resolve, while its failures are ignored.
+description: "Reference for ShortCircuit, which runs a junction whose successful result becomes the train's return value at Resolve, while its failure is ignored."
 type: reference
 area: trains
+package: Trax.Core
+namespace:
+  - Trax.Core.Train
+  - Trax.Core.Monad
+source:
+  - Trax.Core/src/Trax.Core/Train/Train.cs
+  - Trax.Core/src/Trax.Core/Monad/Monad.ShortCircuit.cs
 parent: Train Methods
 grand_parent: SDK Reference
 nav_order: 4
@@ -10,56 +17,61 @@ nav_order: 4
 
 # ShortCircuit
 
-Executes a junction that can **return early** from the train. If the junction succeeds and returns a value of type `TReturn`, that value is captured as the short-circuit result. When [Resolve](/docs/sdk-reference/train-methods/resolve) is called, it returns this value instead of looking in Memory.
+Runs a junction whose output is the train's return type. When the junction succeeds, its value is kept as the short-circuit result, and [Resolve](/docs/sdk-reference/train-methods/resolve) returns it instead of looking in Memory. When it fails, the failure is ignored and the train carries on.
 
-If the junction **fails** (returns Left), the failure is **ignored**. No exception is set and the train continues normally.
+## Signatures
 
-> **Important:** Subsequent `Chain` calls after a successful `ShortCircuit` still execute. The short-circuit value only affects `Resolve()`: it returns the captured value instead of doing a Memory lookup. Nothing in a chain skips the remaining junctions and still returns the short-circuit value. `Junctions()` cannot branch on its input, because a chain is declared once and checked at startup (`Trax.Docs/adr/0016`), and a later junction that fails puts the train on the left track, where `Resolve()` returns that failure rather than the captured value. A junction after a `ShortCircuit` that should not repeat work has to decide that itself, from what it is given.
+```csharp fragment
+// Train<TInput, TReturn>; MonadTask<TInput, TReturn> and Monad<TInput, TReturn> have the same, public
+protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>()
+    where TJunction : class;
 
-## ShortCircuit\<TJunction\>()
-
-Creates and executes a junction with short-circuit behavior.
-
-```csharp
-protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>() where TJunction : class
+protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction instance)
+    where TJunction : class;
 ```
 
-| Type Parameter | Constraint | Description |
-|---------------|------------|-------------|
-| `TJunction` | `class` | The junction type. Must implement `IJunction<TIn, TOut>` for some `TIn`/`TOut`. |
+## Parameters
 
-## ShortCircuit\<TJunction\>(TJunction junctionInstance)
+| Parameter | Description |
+|-----------|-------------|
+| `TJunction` | The junction type. It implements `IJunction<TIn, TReturn>` for some `TIn`. |
+| `instance` | A junction already built, which the step runs as it is |
 
-Executes a pre-created junction with short-circuit behavior.
+## Returns
 
-```csharp
-protected MonadTask<TInput, TReturn> ShortCircuit<TJunction>(TJunction junctionInstance) where TJunction : class
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `junctionInstance` | `TJunction` | A pre-created junction instance |
-
-## Example
-
-```csharp
-protected override Task<Either<Exception, OrderResult>> Junctions() =>
-        ShortCircuit<CheckCache>()            // If cache has result, capture it for resolution
-        .Chain<ValidateOrder>()           // Still executes even on cache hit
-        .Chain<ProcessPayment>().Resolve();          // Returns cached result OR processed result
-```
+`MonadTask<TInput, TReturn>`, the next link of the chain.
 
 ## Behavior
 
-1. Creates the junction instance and extracts input from Memory.
-2. Executes the junction.
-3. If the junction **succeeds** and returns a value of type `TReturn`:
-   - The value is stored as `ShortCircuitValue`.
-   - `Resolve()` will return this value, bypassing Memory lookup.
-4. If the junction **fails** (returns Left): the failure is **ignored**. No exception is set and the train continues normally.
+1. Skipped, like every step, when an earlier step has failed.
+2. Builds the junction as [Chain](/docs/sdk-reference/train-methods/chain) does and takes its input from Memory. A missing input or constructor argument fails the train.
+3. Runs the junction.
+4. On success, stores the output in Memory under its type and keeps it as the short-circuit value. On failure, keeps nothing and sets no exception.
 
-## Remarks
+The steps after a `ShortCircuit` still run, whether or not it succeeded: the short-circuit value changes only what `Resolve()` returns. A later step that fails puts the train on the failure track, and `Resolve()` then returns that failure rather than the short-circuit value.
 
-- The key difference from `Chain`: failures do not stop the train. A failing short-circuit junction is silently ignored.
-- If the junction output type matches the train's `TReturn`, the value becomes the short-circuit result for `Resolve()`.
-- This is useful for cache checks, optional enrichment junctions, and conditional early returns.
+| Condition | Result |
+|-----------|--------|
+| The junction's output cannot be `TReturn` | Refused by the startup chain check |
+| Used inside a `Parallel` branch | Refused by the startup chain check |
+
+## Example
+
+```csharp compile
+using Trax.Core.Functional;
+using Trax.Effect.Services.ServiceTrain;
+
+public class CachedOrderTrain : ServiceTrain<OrderInput, OrderResult>
+{
+    protected override Task<Either<Exception, OrderResult>> Junctions() =>
+        ShortCircuit<CheckCache>()          // a cached result, when there is one
+            .Chain<ValidateOrder>()         // still runs on a cache hit
+            .Chain<ProcessPayment>()
+            .Resolve();                     // the cached result, or ProcessPayment's
+}
+```
+
+## See also
+
+- [Chain](/docs/sdk-reference/train-methods/chain)
+- [Resolve](/docs/sdk-reference/train-methods/resolve), and the order it resolves in
