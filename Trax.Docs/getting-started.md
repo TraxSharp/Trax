@@ -3,6 +3,7 @@ layout: default
 title: Getting Started
 description: "A tutorial building one Trax app from an empty folder: a train run in-process, recorded in Postgres, scheduled, shown in the dashboard and served over GraphQL."
 nav_order: 2
+snippet_context: none
 ---
 
 # Getting Started

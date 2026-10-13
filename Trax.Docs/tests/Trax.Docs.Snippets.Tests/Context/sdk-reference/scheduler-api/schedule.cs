@@ -1,6 +1,5 @@
-// What the examples on sdk-reference/scheduler-api/schedule.md take as given: the usings, a
-// service collection, a connection string, and the train they schedule.
-global using static SnippetContext;
+// What the examples on sdk-reference/scheduler-api/schedule.md take as given: the usings and
+// the train they schedule. The service collection and connection string come from _shared.cs.
 global using Trax.Core.Functional;
 global using Trax.Effect.Data.Postgres.Extensions;
 global using Trax.Effect.Extensions;
@@ -17,10 +16,3 @@ public record SyncInput : IManifestProperties
 }
 
 public interface ISyncTrain : IServiceTrain<SyncInput, Unit>;
-
-public static class SnippetContext
-{
-    public static IServiceCollection services { get; } = new ServiceCollection();
-
-    public static string connectionString => "Host=localhost;Database=trax";
-}

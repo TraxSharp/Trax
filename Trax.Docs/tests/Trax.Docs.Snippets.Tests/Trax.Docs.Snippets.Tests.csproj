@@ -22,22 +22,50 @@
 
   <!--
     The projects a compiled snippet is checked against: the code in this same commit, so a page
-    and the API it shows change together in one pull request.
+    and the API it shows change together in one pull request. Every packable library a page can
+    document is here, so any page can mark its fences `compile`; the CLI (a tool, documented by
+    its commands) and the analyzer (loaded by the compiler, not referenced) are not.
   -->
   <ItemGroup Label="Trax">
-    <ProjectReference Include="../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.Jwt.Cognito.Issuer/Trax.Api.Auth.Jwt.Cognito.Issuer.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.Jwt.Cognito/Trax.Api.Auth.Jwt.Cognito.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth.Oidc/Trax.Api.Auth.Oidc.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.Client.Trax/Trax.Api.GraphQL.Client.Trax.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.Client.Typed/Trax.Api.GraphQL.Client.Typed.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.Client/Trax.Api.GraphQL.Client.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL.Testing/Trax.Api.GraphQL.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Api/src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <ProjectReference Include="../../../Trax.Api/src/Trax.Api/Trax.Api.csproj" />
+    <ProjectReference Include="../../../Trax.Core/src/Trax.Core.Testing/Trax.Core.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Core/src/Trax.Core/Trax.Core.csproj" />
     <ProjectReference Include="../../../Trax.Dashboard/src/Trax.Dashboard/Trax.Dashboard.csproj" />
-    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Broadcaster.RabbitMQ/Trax.Effect.Broadcaster.RabbitMQ.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Broadcaster.SignalR/Trax.Effect.Broadcaster.SignalR.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.InMemory/Trax.Effect.Data.InMemory.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Sqlite/Trax.Effect.Data.Sqlite.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Testing/Trax.Effect.Data.Testing.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data/Trax.Effect.Data.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Decisions.SystemOne/Trax.Effect.Decisions.SystemOne.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Logging/Trax.Effect.JunctionProvider.Logging.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Testing/Trax.Effect.StateMachine.Testing.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
+    <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator.Testing/Trax.Mediator.Testing.csproj" />
     <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
+    <ProjectReference Include="../../../Trax.Scheduler/src/Trax.Runner.Lambda/Trax.Runner.Lambda.csproj" />
+    <ProjectReference Include="../../../Trax.Scheduler/src/Trax.Scheduler.Lambda/Trax.Scheduler.Lambda.csproj" />
+    <ProjectReference Include="../../../Trax.Scheduler/src/Trax.Scheduler.Sqs/Trax.Scheduler.Sqs.csproj" />
     <ProjectReference Include="../../../Trax.Scheduler/src/Trax.Scheduler/Trax.Scheduler.csproj" />
   </ItemGroup>
 
