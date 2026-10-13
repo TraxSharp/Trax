@@ -1,0 +1,25 @@
+namespace Trax.Api.GraphQL.Testing
+{
+    [NUnit.Framework.TestFixture]
+    public abstract class CrossSchemaGuardFixture
+    {
+        protected CrossSchemaGuardFixture() { }
+        protected virtual System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.DataLoaders.CrossSchema.CrossSchemaEdge> Edges { get; }
+        protected virtual bool ExpectsCrossSchemaResolvers { get; }
+        protected virtual bool ExpectsParentResolvers { get; }
+        protected virtual Trax.Core.Testing.ArchitectureGuardOptions Options { get; }
+        [NUnit.Framework.Test]
+        public void Cross_schema_edge_manifest_is_valid() { }
+        [NUnit.Framework.Test]
+        public void Cross_schema_edge_resolvers_use_the_batched_loader() { }
+        [NUnit.Framework.Test]
+        public void Extension_resolvers_declare_what_they_read_off_their_parent() { }
+        protected static void AssertInspected(Trax.Core.Testing.GuardResult result, bool expected, string what, string optOut, Trax.Core.Testing.ArchitectureGuardOptions options) { }
+    }
+    public static class CrossSchemaGuards
+    {
+        public static Trax.Core.Testing.GuardResult EdgeManifestIsValid(System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.DataLoaders.CrossSchema.CrossSchemaEdge> edges) { }
+        public static Trax.Core.Testing.GuardResult EdgeResolversUseLoader(Trax.Core.Testing.ArchitectureGuardOptions options, string crossSchemaProjectSuffix = ".CrossSchema") { }
+        public static Trax.Core.Testing.GuardResult ExtensionResolversDeclareParentRequirements(Trax.Core.Testing.ArchitectureGuardOptions options) { }
+    }
+}

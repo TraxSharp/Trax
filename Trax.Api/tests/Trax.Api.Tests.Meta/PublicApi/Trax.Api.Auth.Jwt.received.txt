@@ -1,0 +1,74 @@
+namespace Trax.Api.Auth.Jwt
+{
+    public sealed class DefaultJwtPrincipalResolver : Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>
+    {
+        public DefaultJwtPrincipalResolver() { }
+        public System.Threading.Tasks.ValueTask<Trax.Api.Auth.TraxPrincipal?> ResolveAsync(Trax.Api.Auth.Jwt.JwtTokenInput input, System.Threading.CancellationToken ct) { }
+    }
+    public static class JwtAuthServiceCollectionExtensions
+    {
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.Jwt.JwtBuilder> configure) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string authority, string audience) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string schemeName, System.Action<Trax.Api.Auth.Jwt.JwtBuilder> configure) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.Jwt.JwtBuilder> configure)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string authority, string audience)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string schemeName, System.Action<Trax.Api.Auth.Jwt.JwtBuilder> configure)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxJwtDispatcher(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.Jwt.JwtDispatcherBuilder> configure) { }
+    }
+    public sealed class JwtBuilder
+    {
+        public JwtBuilder() { }
+        public Trax.Api.Auth.Jwt.JwtBuilder AllowHttpMetadata() { }
+        public Trax.Api.Auth.Jwt.JwtBuilder CustomizeBearerOptions(System.Action<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions> configure) { }
+        public Trax.Api.Auth.Jwt.JwtBuilder CustomizeTokenValidation(System.Action<Microsoft.IdentityModel.Tokens.TokenValidationParameters> configure) { }
+        public Trax.Api.Auth.Jwt.JwtBuilder UseAuthority(string authority, string audience) { }
+        public Trax.Api.Auth.Jwt.JwtBuilder UseSigningKey(string issuer, string audience, Microsoft.IdentityModel.Tokens.SecurityKey key) { }
+        public Trax.Api.Auth.Jwt.JwtBuilder UseSymmetricKey(string issuer, string audience, byte[] key) { }
+        public Trax.Api.Auth.Jwt.JwtBuilder WithClockSkew(System.TimeSpan skew) { }
+    }
+    public static class JwtDefaults
+    {
+        public const string DispatcherSchemeName = "TraxJwtDispatcher";
+        public const string PolicyName = "JwtPolicy";
+        public const string PrincipalType = "jwt";
+        public const string RejectSchemeName = "TraxJwtReject";
+        public const string SchemeName = "TraxJwt";
+    }
+    public sealed class JwtDispatcherBuilder
+    {
+        public JwtDispatcherBuilder() { }
+        public Trax.Api.Auth.Jwt.JwtDispatcherBuilder FallbackToScheme(string schemeName) { }
+        public Trax.Api.Auth.Jwt.JwtDispatcherBuilder MapIssuer(string issuer, string schemeName) { }
+        public Trax.Api.Auth.Jwt.JwtDispatcherBuilder WithSchemeName(string schemeName) { }
+    }
+    public sealed class JwtDispatcherRuntime
+    {
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> IssuerToScheme { get; }
+        public Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>? ResolvePrincipalResolver(string schemeName, System.IServiceProvider services) { }
+        public string? ResolveSchemeForToken(string token) { }
+    }
+    public static class JwtProviderExtensions
+    {
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxAuth0JwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string domain, string audience) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxAuth0JwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string domain, string audience)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxCognitoJwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string region, string userPoolId, string audience) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxCognitoJwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string region, string userPoolId, string audience)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxEntraJwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string tenantId, string audience) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxEntraJwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string tenantId, string audience)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxGoogleJwtAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string clientId) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxGoogleJwtAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string clientId)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput> { }
+    }
+    public sealed class JwtTokenInput : System.IEquatable<Trax.Api.Auth.Jwt.JwtTokenInput>
+    {
+        public JwtTokenInput(System.Security.Claims.ClaimsPrincipal Principal, Microsoft.IdentityModel.Tokens.SecurityToken SecurityToken) { }
+        public System.Security.Claims.ClaimsPrincipal Principal { get; init; }
+        public Microsoft.IdentityModel.Tokens.SecurityToken SecurityToken { get; init; }
+    }
+}

@@ -1,0 +1,42 @@
+namespace Trax.Api.Auth.ApiKey
+{
+    public static class ApiKeyAuthServiceCollectionExtensions
+    {
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxApiKeyAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.ApiKey.ApiKeyBuilder> configure, System.Action<Trax.Api.Auth.ApiKey.ApiKeyAuthenticationOptions>? configureOptions = null) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxApiKeyAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.ApiKey.ApiKeyAuthenticationOptions>? configureOptions = null)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<string> { }
+    }
+    public sealed class ApiKeyAuthenticationOptions : Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions
+    {
+        public ApiKeyAuthenticationOptions() { }
+        public string HeaderName { get; set; }
+    }
+    public sealed class ApiKeyBuilder
+    {
+        public const string DemoKeyMarker = "do-not-use-in-production";
+        public ApiKeyBuilder() { }
+        public Trax.Api.Auth.ApiKey.ApiKeyBuilder Add(string key, System.Func<Trax.Api.Auth.TraxPrincipal> principalFactory) { }
+        public Trax.Api.Auth.ApiKey.ApiKeyBuilder Add(string key, string id, params string[] roles) { }
+        public Trax.Api.Auth.ApiKey.ApiKeyBuilder AddHashed(byte[] salt, byte[] sha256, System.Func<Trax.Api.Auth.TraxPrincipal> principalFactory) { }
+        public Trax.Api.Auth.ApiKey.ApiKeyBuilder AddHashed(byte[] salt, byte[] sha256, string id, params string[] roles) { }
+    }
+    public static class ApiKeyDefaults
+    {
+        public const string HeaderName = "X-Api-Key";
+        public const string PolicyName = "ApiKeyPolicy";
+        public const string SchemeName = "TraxApiKey";
+    }
+    public sealed class HashedApiKeyResolver : Trax.Api.Auth.ITraxPrincipalResolver<string>
+    {
+        public HashedApiKeyResolver(System.Collections.Generic.IEnumerable<Trax.Api.Auth.ApiKey.HashedApiKeyResolver.Entry> entries) { }
+        public System.Threading.Tasks.ValueTask<Trax.Api.Auth.TraxPrincipal?> ResolveAsync(string input, System.Threading.CancellationToken ct) { }
+        public sealed class Entry : System.IEquatable<Trax.Api.Auth.ApiKey.HashedApiKeyResolver.Entry>
+        {
+            public Entry(byte[] Salt, byte[] Sha256Hash, System.Func<Trax.Api.Auth.TraxPrincipal> PrincipalFactory) { }
+            public System.Func<Trax.Api.Auth.TraxPrincipal> PrincipalFactory { get; init; }
+            public byte[] Salt { get; init; }
+            public byte[] Sha256Hash { get; init; }
+            public static Trax.Api.Auth.ApiKey.HashedApiKeyResolver.Entry FromPlainKey(string cleartextKey, System.Func<Trax.Api.Auth.TraxPrincipal> principalFactory, int saltBytes = 16) { }
+        }
+    }
+}

@@ -800,10 +800,42 @@
           "Trax.Mediator": "[1.99.99, )"
         }
       },
+      "trax.api.auth.apikey": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth": "[1.99.99, )"
+        }
+      },
       "trax.api.auth.jwt": {
         "type": "Project",
         "dependencies": {
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.9, )",
+          "Trax.Api.Auth": "[1.99.99, )"
+        }
+      },
+      "trax.api.auth.jwt.cognito": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
+      "trax.api.auth.jwt.cognito.issuer": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt.Cognito": "[1.99.99, )",
+          "Trax.Api.Auth.Jwt.Testing": "[1.99.99, )"
+        }
+      },
+      "trax.api.auth.jwt.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
+      "trax.api.auth.oidc": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.9, )",
           "Trax.Api.Auth": "[1.99.99, )"
         }
       },
@@ -839,6 +871,23 @@
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )"
         }
       },
+      "trax.api.graphql.client.trax": {
+        "type": "Project",
+        "dependencies": {
+          "HotChocolate": "[16.6.7, )",
+          "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
+          "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
+          "Trax.Api.GraphQL.Client": "[1.99.99, )",
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Mediator": "[1.99.99, )"
+        }
+      },
+      "trax.api.graphql.client.typed": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.GraphQL.Client": "[1.99.99, )"
+        }
+      },
       "trax.api.graphql.persistedoperations": {
         "type": "Project",
         "dependencies": {
@@ -847,11 +896,27 @@
           "Trax.Api.GraphQL": "[1.99.99, )"
         }
       },
+      "trax.api.graphql.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
+          "NUnit": "[5.0.0, )",
+          "Trax.Api.GraphQL": "[1.99.99, )",
+          "Trax.Core.Testing": "[1.99.99, )"
+        }
+      },
       "trax.core": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )"
+        }
+      },
+      "trax.core.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
+          "NUnit": "[5.0.0, )"
         }
       },
       "trax.effect": {
@@ -1048,6 +1113,15 @@
         "requested": "[10.0.9, )",
         "resolved": "10.0.9",
         "contentHash": "Hs5NDsGm8YicDDNx5RoBIT+H2AB9R27MvZ2gHoupTiHr+nnH3VxzY7DcmlbJ3b5DvvOhK35lWt/9Odtrq9sjtA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.0.1"
+        }
+      },
+      "Microsoft.AspNetCore.Authentication.OpenIdConnect": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "Xvmxf86pKWHk9aSdqIQP7ao4qTLsYoiYgtbe75YP2aSCdGY4EHjaWOD0IWVR4/wcukrdj6DfqJRtVniUXSr5Nw==",
         "dependencies": {
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.0.1"
         }

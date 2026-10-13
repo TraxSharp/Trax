@@ -1,0 +1,31 @@
+namespace Trax.Api.GraphQL.Client.Trax
+{
+    public sealed class AssemblySchemaProvider : Trax.Api.GraphQL.Client.ISchemaProvider
+    {
+        public AssemblySchemaProvider(System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder> configure) { }
+        public AssemblySchemaProvider(System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder> configure, bool removeSubscriptionsFromSchema) { }
+        public System.Threading.Tasks.Task<GraphQL.Types.ISchema> GetSchemaAsync(System.Threading.CancellationToken cancellationToken = default) { }
+    }
+    public static class OutboundQueryDiscovery
+    {
+        public static System.Collections.Generic.IReadOnlyList<Trax.Api.GraphQL.Client.Trax.OutboundQueryDiscovery.Entry> Discover(params System.Reflection.Assembly[] assemblies) { }
+        public sealed class Entry : System.IEquatable<Trax.Api.GraphQL.Client.Trax.OutboundQueryDiscovery.Entry>
+        {
+            public Entry(System.Type RequestType, string Endpoint, string? QueryName) { }
+            public string Endpoint { get; init; }
+            public string? QueryName { get; init; }
+            public System.Type RequestType { get; init; }
+        }
+    }
+    public static class TraxBuilderExtensions
+    {
+        public static Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder UseAssemblySchema(this Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder builder, System.Action<HotChocolate.Execution.Configuration.IRequestExecutorBuilder> configureSchema) { }
+        public static Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder UseStartupValidation(this Trax.Api.GraphQL.Client.TraxGraphQLClientBuilder builder, params System.Reflection.Assembly[] assemblies) { }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class TraxOutboundQueryAttribute : System.Attribute
+    {
+        public TraxOutboundQueryAttribute(string endpoint) { }
+        public string Endpoint { get; }
+    }
+}

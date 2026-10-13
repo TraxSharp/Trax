@@ -1,0 +1,47 @@
+namespace Trax.Api.Auth.Jwt.Testing
+{
+    public sealed class TestJwksServer : System.IAsyncDisposable
+    {
+        public string Issuer { get; }
+        public string JwksUri { get; }
+        public Microsoft.IdentityModel.Tokens.SigningCredentials SigningCredentials { get; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, Microsoft.IdentityModel.Tokens.SigningCredentials> SigningCredentialsByKid { get; }
+        public Microsoft.IdentityModel.Tokens.RsaSecurityKey SigningKey { get; }
+        public System.Collections.Generic.IReadOnlyList<string> SigningKeyIds { get; }
+        public string AddSigningKey(System.Security.Cryptography.RSA? rsa = null) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenIssuer CreateIssuer(string audience) { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        public bool RemoveSigningKey(string kid) { }
+        public static System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Testing.TestJwksServer> StartAsync(System.Threading.CancellationToken ct = default) { }
+        public static System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Testing.TestJwksServer> StartAsync(Trax.Api.Auth.Jwt.Testing.TestJwksServerOptions? options, System.Threading.CancellationToken ct = default) { }
+    }
+    public sealed class TestJwksServerOptions : System.IEquatable<Trax.Api.Auth.Jwt.Testing.TestJwksServerOptions>
+    {
+        public TestJwksServerOptions() { }
+        public string? IssuerOverride { get; init; }
+        public string ListenUrl { get; init; }
+        public string PathPrefix { get; init; }
+    }
+    public sealed class TestTokenBuilder
+    {
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithAudience(string audience) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithClaim(string type, string value) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithExpires(System.DateTime expires) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithIssuer(string issuer) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithLifetime(System.TimeSpan lifetime) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithNotBefore(System.DateTime notBefore) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithRole(string role) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenBuilder WithSubject(string sub) { }
+    }
+    public sealed class TestTokenIssuer
+    {
+        public TestTokenIssuer(string issuer, string defaultAudience, Microsoft.IdentityModel.Tokens.SigningCredentials credentials) { }
+        public TestTokenIssuer(string issuer, string defaultAudience, Microsoft.IdentityModel.Tokens.SigningCredentials credentials, System.Collections.Generic.IReadOnlyDictionary<string, Microsoft.IdentityModel.Tokens.SigningCredentials>? keyset) { }
+        public Microsoft.IdentityModel.Tokens.SigningCredentials Credentials { get; }
+        public string DefaultAudience { get; }
+        public string Issuer { get; }
+        public string Mint(System.Action<Trax.Api.Auth.Jwt.Testing.TestTokenBuilder>? configure = null) { }
+        public Trax.Api.Auth.Jwt.Testing.TestTokenIssuer WithSigningKey(string kid) { }
+        public static Trax.Api.Auth.Jwt.Testing.TestTokenIssuer Symmetric(string issuer, string audience, byte[] key) { }
+    }
+}

@@ -1,0 +1,84 @@
+namespace Trax.Api.Auth.Jwt.Cognito.Issuer
+{
+    public sealed class CognitoAccessTokenRequest : System.IEquatable<Trax.Api.Auth.Jwt.Cognito.Issuer.CognitoAccessTokenRequest>
+    {
+        public CognitoAccessTokenRequest() { }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string>? AdditionalClaims { get; init; }
+        public System.DateTimeOffset? AuthTime { get; init; }
+        public required string ClientId { get; init; }
+        public string? Email { get; init; }
+        public bool? EmailVerified { get; init; }
+        public string? FamilyName { get; init; }
+        public string? GivenName { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Groups { get; init; }
+        public required System.TimeSpan Lifetime { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Scopes { get; init; }
+        public required System.Guid Sub { get; init; }
+        public string Username { get; init; }
+    }
+    public sealed class CognitoIdTokenRequest : System.IEquatable<Trax.Api.Auth.Jwt.Cognito.Issuer.CognitoIdTokenRequest>
+    {
+        public CognitoIdTokenRequest() { }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string>? AdditionalClaims { get; init; }
+        public System.DateTimeOffset? AuthTime { get; init; }
+        public required string ClientId { get; init; }
+        public required string Email { get; init; }
+        public required bool EmailVerified { get; init; }
+        public string? FamilyName { get; init; }
+        public string? GivenName { get; init; }
+        public System.Collections.Generic.IReadOnlyList<string> Groups { get; init; }
+        public System.Collections.Generic.IReadOnlyList<Trax.Api.Auth.Jwt.Cognito.Issuer.FederatedIdentity> Identities { get; init; }
+        public required System.TimeSpan Lifetime { get; init; }
+        public required System.Guid Sub { get; init; }
+        public string Username { get; init; }
+    }
+    public sealed class CognitoTokenIssuer
+    {
+        public CognitoTokenIssuer(string issuer, Microsoft.IdentityModel.Tokens.RsaSecurityKey signingKey, System.TimeProvider? clock = null) { }
+        public string MintAccessToken(Trax.Api.Auth.Jwt.Cognito.Issuer.CognitoAccessTokenRequest request) { }
+        public string MintIdToken(Trax.Api.Auth.Jwt.Cognito.Issuer.CognitoIdTokenRequest request) { }
+    }
+    public sealed class FederatedIdentity : System.IEquatable<Trax.Api.Auth.Jwt.Cognito.Issuer.FederatedIdentity>
+    {
+        public FederatedIdentity(string UserId, string ProviderName, string ProviderType, bool Primary, System.DateTimeOffset DateCreated) { }
+        public System.DateTimeOffset DateCreated { get; init; }
+        public bool Primary { get; init; }
+        public string ProviderName { get; init; }
+        public string ProviderType { get; init; }
+        public string UserId { get; init; }
+    }
+    public interface IRefreshTokenStore
+    {
+        System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenHandle> IssueAsync(System.Guid sub, string clientId, System.TimeSpan lifetime, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task RevokeAllAsync(System.Guid sub, string clientId, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task RevokeAsync(string token, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenHandle?> RotateAsync(string oldToken, System.Threading.CancellationToken ct);
+        System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenClaims?> ValidateAsync(string token, System.Threading.CancellationToken ct);
+    }
+    public sealed class InMemoryRefreshTokenStore : Trax.Api.Auth.Jwt.Cognito.Issuer.IRefreshTokenStore
+    {
+        public InMemoryRefreshTokenStore(System.TimeProvider? clock = null) { }
+        public System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenHandle> IssueAsync(System.Guid sub, string clientId, System.TimeSpan lifetime, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task RevokeAllAsync(System.Guid sub, string clientId, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task RevokeAsync(string token, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenHandle?> RotateAsync(string oldToken, System.Threading.CancellationToken ct) { }
+        public System.Threading.Tasks.Task<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenClaims?> ValidateAsync(string token, System.Threading.CancellationToken ct) { }
+    }
+    public sealed class RefreshTokenClaims : System.IEquatable<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenClaims>
+    {
+        public RefreshTokenClaims(System.Guid Sub, string ClientId, System.DateTimeOffset ExpiresAt) { }
+        public string ClientId { get; init; }
+        public System.DateTimeOffset ExpiresAt { get; init; }
+        public System.Guid Sub { get; init; }
+    }
+    public sealed class RefreshTokenHandle : System.IEquatable<Trax.Api.Auth.Jwt.Cognito.Issuer.RefreshTokenHandle>
+    {
+        public RefreshTokenHandle(string Token, System.DateTimeOffset ExpiresAt) { }
+        public System.DateTimeOffset ExpiresAt { get; init; }
+        public string Token { get; init; }
+    }
+    public static class TestJwksServerCognitoExtensions
+    {
+        public static Trax.Api.Auth.Jwt.Cognito.Issuer.CognitoTokenIssuer CreateCognitoIssuer(this Trax.Api.Auth.Jwt.Testing.TestJwksServer server, System.TimeProvider? clock = null) { }
+    }
+}

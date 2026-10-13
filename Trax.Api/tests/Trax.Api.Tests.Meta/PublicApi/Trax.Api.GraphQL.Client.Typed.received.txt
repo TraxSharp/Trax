@@ -1,0 +1,43 @@
+namespace Trax.Api.GraphQL.Client.Typed
+{
+    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple=false, Inherited=false)]
+    public sealed class GraphQLArgumentAttribute : System.Attribute
+    {
+        public GraphQLArgumentAttribute(string graphQLType) { }
+        public string GraphQLType { get; }
+        public string? VariableName { get; init; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple=false, Inherited=false)]
+    public sealed class GraphQLFieldAttribute : System.Attribute
+    {
+        public GraphQLFieldAttribute(string fieldName) { }
+        public string FieldName { get; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=false)]
+    public sealed class GraphQLOperationAttribute : System.Attribute
+    {
+        public GraphQLOperationAttribute(Trax.Api.GraphQL.Client.Typed.OperationType operationType) { }
+        public string? Name { get; init; }
+        public Trax.Api.GraphQL.Client.Typed.OperationType OperationType { get; }
+        public string? Path { get; init; }
+        public string? RootField { get; init; }
+    }
+    [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple=false, Inherited=true)]
+    public sealed class GraphQLTypeAttribute : System.Attribute
+    {
+        public GraphQLTypeAttribute(string typeName) { }
+        public string TypeName { get; }
+    }
+    public enum OperationType
+    {
+        Query = 0,
+        Mutation = 1,
+    }
+    public abstract class TypedRequest<TResponse> : Trax.Api.GraphQL.Client.IGenericGraphQLClientRequest, Trax.Api.GraphQL.Client.IGraphQLClientRequest<TResponse>
+    {
+        protected TypedRequest() { }
+        public virtual string Query { get; }
+        public virtual object? Variables { get; }
+        public virtual System.Text.Json.JsonElement UnwrapDataElement(System.Text.Json.JsonElement data) { }
+    }
+}

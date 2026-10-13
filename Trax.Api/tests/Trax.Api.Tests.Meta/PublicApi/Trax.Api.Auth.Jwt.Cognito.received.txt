@@ -1,0 +1,32 @@
+namespace Trax.Api.Auth.Jwt.Cognito
+{
+    public static class CognitoDefaults
+    {
+        public const string ClientId = "client_id";
+        public const string CognitoGroups = "cognito:groups";
+        public const string CognitoUsername = "cognito:username";
+        public const string Email = "email";
+        public const string EmailVerified = "email_verified";
+        public const string Identities = "identities";
+        public const string IdentityProvider = "identity_provider";
+        public const string PrincipalType = "cognito";
+        public const string TokenUse = "token_use";
+        public const string TokenUseAccess = "access";
+        public const string TokenUseId = "id";
+    }
+    public static class CognitoJwtBuilderExtensions
+    {
+        public static Trax.Api.Auth.Jwt.JwtBuilder UseCognito(this Trax.Api.Auth.Jwt.JwtBuilder builder, string region, string userPoolId, string clientId, Trax.Api.Auth.Jwt.Cognito.CognitoTokenUse tokenUse = 2) { }
+    }
+    public sealed class CognitoJwtPrincipalResolver : Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Jwt.JwtTokenInput>
+    {
+        public CognitoJwtPrincipalResolver() { }
+        public System.Threading.Tasks.ValueTask<Trax.Api.Auth.TraxPrincipal?> ResolveAsync(Trax.Api.Auth.Jwt.JwtTokenInput input, System.Threading.CancellationToken ct) { }
+    }
+    public enum CognitoTokenUse
+    {
+        Id = 0,
+        Access = 1,
+        IdAndAccess = 2,
+    }
+}

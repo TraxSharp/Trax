@@ -1,0 +1,46 @@
+namespace Trax.Api.Auth.Oidc
+{
+    public sealed class DefaultOidcPrincipalResolver : Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Oidc.OidcTokenInput>
+    {
+        public DefaultOidcPrincipalResolver() { }
+        public System.Threading.Tasks.ValueTask<Trax.Api.Auth.TraxPrincipal?> ResolveAsync(Trax.Api.Auth.Oidc.OidcTokenInput input, System.Threading.CancellationToken ct) { }
+    }
+    public static class OidcAuthServiceCollectionExtensions
+    {
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxOidcAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.Oidc.OidcBuilder> configure) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxOidcAuth(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string authority, string clientId) { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxOidcAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, System.Action<Trax.Api.Auth.Oidc.OidcBuilder> configure)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Oidc.OidcTokenInput> { }
+        public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddTraxOidcAuth<TResolver>(this Microsoft.Extensions.DependencyInjection.IServiceCollection services, string authority, string clientId)
+            where TResolver :  class, Trax.Api.Auth.ITraxPrincipalResolver<Trax.Api.Auth.Oidc.OidcTokenInput> { }
+    }
+    public sealed class OidcBuilder
+    {
+        public OidcBuilder() { }
+        public Trax.Api.Auth.Oidc.OidcBuilder AddScope(string scope) { }
+        public Trax.Api.Auth.Oidc.OidcBuilder AllowHttpMetadata() { }
+        public Trax.Api.Auth.Oidc.OidcBuilder CustomizeCookieOptions(System.Action<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions> configure) { }
+        public Trax.Api.Auth.Oidc.OidcBuilder CustomizeOidcOptions(System.Action<Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectOptions> configure) { }
+        public Trax.Api.Auth.Oidc.OidcBuilder DoNotSaveTokens() { }
+        public Trax.Api.Auth.Oidc.OidcBuilder UseAuthority(string authority, string clientId) { }
+        public Trax.Api.Auth.Oidc.OidcBuilder WithCallbackPath(string callbackPath) { }
+        public Trax.Api.Auth.Oidc.OidcBuilder WithClientSecret(string clientSecret) { }
+        public Trax.Api.Auth.Oidc.OidcBuilder WithSignedOutCallbackPath(string path) { }
+    }
+    public static class OidcDefaults
+    {
+        public const string CallbackPath = "/signin-oidc";
+        public const string CookieSchemeName = "TraxOidc.Cookie";
+        public const string PolicyName = "OidcPolicy";
+        public const string PrincipalType = "oidc";
+        public const string SchemeName = "TraxOidc";
+        public const string SignedOutCallbackPath = "/signout-callback-oidc";
+    }
+    public sealed class OidcTokenInput : System.IEquatable<Trax.Api.Auth.Oidc.OidcTokenInput>
+    {
+        public OidcTokenInput(System.Security.Claims.ClaimsPrincipal Principal, string? IdToken, string? AccessToken) { }
+        public string? AccessToken { get; init; }
+        public string? IdToken { get; init; }
+        public System.Security.Claims.ClaimsPrincipal Principal { get; init; }
+    }
+}
