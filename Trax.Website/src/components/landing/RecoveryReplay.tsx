@@ -23,6 +23,7 @@ import {
   type Scenario,
   type Step,
 } from "@/lib/recovery-replay";
+import { replayNow } from "@/lib/replay-pace";
 
 // Recorded from the Recovery sample by Trax.Samples' scripts/recordings, which writes this file with its
 // --copy-to option. Re-record when the sample's trains or its page change.
@@ -51,7 +52,7 @@ export default function RecoveryReplay() {
   const [crash, setCrash] = useState(true);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  // Playback time is performance.now() minus this.
+  // Playback time is replayNow() minus this.
   const base = useRef(0);
 
   const phase = phaseOf(playback);
@@ -61,7 +62,7 @@ export default function RecoveryReplay() {
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(() => {
-      const now = performance.now() - base.current;
+      const now = replayNow() - base.current;
       setElapsed(now);
       setPlayback((p) => (p ? advance(p, now) : p));
     }, 50);
@@ -72,7 +73,7 @@ export default function RecoveryReplay() {
     (s: Scenario = scenario, subject: string = s === "RESEARCH" ? topic : order, withCrash: boolean = crash) => {
       const recording = recordings.find((r) => r.key === keyOf(s, subject, withCrash));
       if (!recording) return;
-      base.current = performance.now();
+      base.current = replayNow();
       setElapsed(0);
       setPlayback(begin(recording));
     },
@@ -98,7 +99,7 @@ export default function RecoveryReplay() {
     }
     const asked = requeue(playback);
     if (!asked) return;
-    base.current = performance.now() - asked.at;
+    base.current = replayNow() - asked.at;
     setElapsed(asked.at);
     setPlayback(asked.playback);
   };

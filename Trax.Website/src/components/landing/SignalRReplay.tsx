@@ -19,6 +19,7 @@ import {
   type SourceKey,
   type Traffic,
 } from "@/lib/signalr-replay";
+import { replayNow } from "@/lib/replay-pace";
 
 // Recorded from the SignalRBroadcaster sample by Trax.Samples' scripts/recordings/signalr-broadcaster.mjs, which
 // writes this file with its --copy-to option. Re-record when the sample's server or page changes.
@@ -65,7 +66,7 @@ export default function SignalRReplay() {
   // Each press schedules its recorded messages at their recorded offsets; this applies them as they fall due.
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = performance.now();
+      const now = replayNow();
       const due = queue.current.filter((p) => p.due <= now).sort((a, b) => a.due - b.due || a.seq - b.seq);
       if (due.length === 0) return;
       queue.current = queue.current.filter((p) => p.due > now);
@@ -77,7 +78,7 @@ export default function SignalRReplay() {
   }, []);
 
   const press = useCallback((scheduled: Scheduled[]) => {
-    const now = performance.now();
+    const now = replayNow();
     // Signing out reloads the page: whatever was still on its way to the old one never arrives.
     if (scheduled.some((s) => s.kind === "signedOut")) queue.current = [];
     for (const s of scheduled) queue.current.push({ due: now + s.at, s, seq: seq.current++ });

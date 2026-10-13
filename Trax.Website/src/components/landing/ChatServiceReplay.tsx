@@ -21,6 +21,7 @@ import {
   type Played,
   type ViewLine,
 } from "@/lib/chat-service-replay";
+import { replayNow } from "@/lib/replay-pace";
 
 // Recorded from the ChatService sample by Trax.Samples' scripts/recordings/chat-service.mjs, which writes this file
 // with its --copy-to option. Re-record when the sample's trains, hook, subscription or client documents change.
@@ -33,14 +34,14 @@ export default function ChatServiceReplay() {
 
   useEffect(() => {
     if (!playing) return;
-    const timer = setInterval(() => setPlayback((p) => (p ? advance(p, performance.now()) : p)), 60);
+    const timer = setInterval(() => setPlayback((p) => (p ? advance(p, replayNow()) : p)), 60);
     return () => clearInterval(timer);
   }, [playing]);
 
-  const start = useCallback(() => setPlayback(begin(recording, performance.now())), []);
-  const send = (key: string) => setPlayback((p) => (p ? (choose(recording, p, key, performance.now()) ?? p) : p));
-  const letCharlieTry = () => setPlayback((p) => (p ? (refuse(recording, p, performance.now()) ?? p) : p));
-  const letCharlieIn = () => setPlayback((p) => (p ? (addCharlie(recording, p, performance.now()) ?? p) : p));
+  const start = useCallback(() => setPlayback(begin(recording, replayNow())), []);
+  const send = (key: string) => setPlayback((p) => (p ? (choose(recording, p, key, replayNow()) ?? p) : p));
+  const letCharlieTry = () => setPlayback((p) => (p ? (refuse(recording, p, replayNow()) ?? p) : p));
+  const letCharlieIn = () => setPlayback((p) => (p ? (addCharlie(recording, p, replayNow()) ?? p) : p));
 
   // Open the room the first time the demo is on screen, unless the reader prefers less motion.
   const root = useRef<HTMLDivElement>(null);
