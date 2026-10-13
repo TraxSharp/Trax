@@ -1,12 +1,14 @@
 ---
-layout: default
-title: Writing Migrations
+title: Write a migration
 description: "How to write a migration for Trax's own tables: embedded SQL scripts that rerun safely, Postgres and SQLite dialects, feature packages and test databases."
-parent: Reference
-nav_order: 13
+type: how-to
+area: contributing
+nav_order: 4
+redirect_from:
+  - /docs/reference/writing-migrations
 ---
 
-# Writing Migrations
+# Write a migration
 
 Every table in the `trax` schema is created by a migration that applies automatically at
 startup. Do not hand-create one, and do not reach for `EnsureCreated` to produce it. The rule
@@ -44,7 +46,7 @@ A table that must work on both needs a file in both.
 
 ## Adding a table
 
-1. Add the model and its persistent mapping, per [Project Layout](/docs/reference/project-layout),
+1. Add the model and its persistent mapping, per [Repository layout](/docs/contributing/repository-layout),
    and its `DbSet` on both `DataContext` and `IDataContext`. A model keyed by something other than
    a `long` id does not implement `IModel`, so `DataContext.OnModelCreating` maps it by name, as it
    does `PersistentPersistedOperation` and `PersistentRunnerNonce`. A new member on `IDataContext`

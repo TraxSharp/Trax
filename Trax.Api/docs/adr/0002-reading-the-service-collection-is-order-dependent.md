@@ -70,7 +70,8 @@ Raising a count to silence the guard is itself the violation, and the guard says
 - `NoSilentRegistrationOrderDependenceTests` enumerates every introspection site in `src/`
   with the count it reads at, fails on a new file or a raised count, and separately fails
   when a reviewed entry names a file that no longer exists.
-- [Registration Order](/docs/reference/registration-order) carries the same rule for users.
+- [API conventions](/docs/contributing/api-conventions#reading-the-service-collection) is the rule
+  this produces; [Registration Order](/docs/reference/registration-order) is what users see of it.
 
 Not covered:
 

@@ -52,7 +52,7 @@ public class NoLegacyAssertTests
         offenders
             .Should()
             .BeEmpty(
-                "Trax.Docs/reference/test-conventions.md > Assertions requires AwesomeAssertions exclusively. "
+                "Trax.Docs/contributing/test-conventions.md > Assertions requires AwesomeAssertions exclusively. "
                     + "Replace classic NUnit asserts (Assert.That, Assert.AreEqual, Assert.IsTrue, ...) with "
                     + ".Should().Be(...), .Should().BeTrue(), etc. "
                     + "Assert.Pass / Assert.Fail / Assert.Ignore remain acceptable. Offenders:\n  "

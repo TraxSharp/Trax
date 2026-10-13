@@ -20,7 +20,7 @@ are given.
 On Postgres each script waits at most five seconds for a table lock, so a migration behind a long
 transaction on a running instance does not stall enqueue and dispatch on every host. A script that
 gives up is run again, up to ten times, and then startup fails with `55P03`
-([why](/docs/reference/writing-migrations#every-postgres-script-can-run-again)).
+([why](/docs/contributing/writing-migrations#every-postgres-script-can-run-again)).
 
 **Upgrading a scheduler from Trax.Effect 1.57.2 or earlier:** stop every scheduler host before
 starting one on the new version. The leader-lock key changed in 1.57.3, so an old host and a new one
@@ -40,7 +40,7 @@ its own table with per-group dispatch controls. It:
 4. drops the old `group_id` column.
 
 Existing manifests keep their groups. It is not idempotent: it predates the
-[rule that every script can run again](/docs/reference/writing-migrations#every-postgres-script-can-run-again),
+[rule that every script can run again](/docs/contributing/writing-migrations#every-postgres-script-can-run-again),
 and its `CREATE TABLE`, `ADD COLUMN` and `CREATE INDEX` carry no `IF NOT EXISTS`. The migrator
 journals it and never runs it twice, but if it stops partway (a killed process, a failed
 statement) the next start runs it again from the top and fails on the table it already created.

@@ -23,7 +23,7 @@ public class NoFixedTaskDelayTests
     /// Pre-existing offenders that pre-date the determinism convention. Each entry is a
     /// repo-relative path with its current offender count. New code MUST NOT add fixed-duration
     /// Task.Delay / Thread.Sleep to these files. To remove an entry: refactor the test to
-    /// synchronise on the completion signal (TaskCompletionSource, polling) as in Trax.Docs/reference/test-conventions.md >
+    /// synchronise on the completion signal (TaskCompletionSource, polling) as in Trax.Docs/contributing/test-conventions.md >
     /// Determinism, then delete the entry.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, int> BaselineOffenders = new Dictionary<
@@ -77,7 +77,7 @@ public class NoFixedTaskDelayTests
         newOffenders
             .Should()
             .BeEmpty(
-                "Trax.Docs/reference/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests. "
+                "Trax.Docs/contributing/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests. "
                     + "Synchronise on the completion signal (TaskCompletionSource, polling) with a "
                     + "generous timeout. If a fixed delay is legitimately required, add a justification "
                     + "comment containing 'determinism:', 'allowed-delay:', 'measuring-interval:', or "

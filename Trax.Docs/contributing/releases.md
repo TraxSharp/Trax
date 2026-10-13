@@ -1,12 +1,14 @@
 ---
-layout: default
-title: Semantic Release
+title: Cut a release
 description: "How Trax releases with semantic-release: commit types and the bump each cuts, running the release workflow by hand, the one shared version and unreleased work."
-parent: Reference
+type: how-to
+area: contributing
 nav_order: 5
+redirect_from:
+  - /docs/reference/semantic-release
 ---
 
-# Semantic Release
+# Cut a release
 
 Every Trax package (Trax.Core, Trax.Effect, Trax.Mediator, Trax.Scheduler, Trax.Api,
 Trax.Dashboard, Trax.Cli and Trax.Samples.Templates) is released from the one

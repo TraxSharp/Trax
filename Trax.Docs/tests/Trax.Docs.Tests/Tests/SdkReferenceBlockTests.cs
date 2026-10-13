@@ -66,14 +66,15 @@ public class SdkReferenceBlockTests
         "reference/benchmarks.md",
         "reference/cli.md",
         "reference/comparison.md",
-        "reference/semantic-release.md",
+        "contributing/releases.md",
         // Only code block is a `gh attestation verify` CLI command, no SDK calls.
         "supply-chain-security.md",
         // Convention pages whose code is directory trees, SQL, csproj fragments or test code
         // rather than SDK calls. There is no SDK method for a folder layout to link to.
         "reference/project-layout.md",
-        "reference/test-conventions.md",
-        "reference/writing-migrations.md",
+        "contributing/repository-layout.md",
+        "contributing/test-conventions.md",
+        "contributing/writing-migrations.md",
         "reference/contributing-docs.md",
         // Tech debt: tracked for follow-up. These ARE concept pages with SDK code but the
         // SDK reference block was missed when authored. Fix by adding the block.

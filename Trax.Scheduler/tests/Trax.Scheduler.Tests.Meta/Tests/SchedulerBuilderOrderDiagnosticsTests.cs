@@ -10,7 +10,7 @@ namespace Trax.Scheduler.Tests.Meta.Tests;
 /// which call comes first, and the right order compiles clean. Each case compiles a small host in
 /// memory against the Trax.Scheduler this repo builds.
 ///
-/// <para>Not ADR-enforcing: it pins the text of the compile errors that reference/builder-pattern documents for a wrong call order, a wording contract rather than a choice between designs.</para>
+/// <para>Not ADR-enforcing: it pins the text of the compile errors that contributing/api-conventions documents for a wrong call order, a wording contract rather than a choice between designs.</para>
 /// </summary>
 [TestFixture]
 public class SchedulerBuilderOrderDiagnosticsTests

@@ -71,7 +71,7 @@ The migrator also pins its sessions' time zone to UTC (`effect/0015`).
   046 on again over a migrated database, rebuilds an index left invalid by a failed concurrent build,
   leaves alone an invalid index no script builds, and, behind a held table lock, gives up after its
   tries or runs the scripts again once the lock is released.
-- [Writing Migrations](/docs/reference/writing-migrations) is the rule this produces.
+- [Writing Migrations](/docs/contributing/writing-migrations) is the rule this produces.
 
 Not covered: the guard reads the SQL as text, so it sees that a `DO` block checks something, not that it
 checks the right thing, and it accepts any `UPDATE` or `DELETE`, whose `WHERE` decides whether a second

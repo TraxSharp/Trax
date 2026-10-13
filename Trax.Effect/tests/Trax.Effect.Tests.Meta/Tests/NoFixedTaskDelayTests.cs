@@ -26,7 +26,7 @@ public class NoFixedTaskDelayTests
     ///
     /// To remove a file from this list: refactor the test to synchronise on the actual
     /// completion signal (TaskCompletionSource, polling loop, etc.) as described in
-    /// Trax.Docs/reference/test-conventions.md > Determinism, then delete the entry. The test will fail if any offenders
+    /// Trax.Docs/contributing/test-conventions.md > Determinism, then delete the entry. The test will fail if any offenders
     /// remain in a delisted file.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, int> BaselineOffenders = new Dictionary<
@@ -82,7 +82,7 @@ public class NoFixedTaskDelayTests
         newOffenders
             .Should()
             .BeEmpty(
-                "Trax.Docs/reference/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests. "
+                "Trax.Docs/contributing/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests. "
                     + "Synchronise on the completion signal (TaskCompletionSource, polling) with a "
                     + "generous timeout. If a fixed delay is legitimately required, add a justification "
                     + "comment containing 'determinism:', 'allowed-delay:', 'measuring-interval:', or "

@@ -19,7 +19,7 @@ namespace Trax.Api.Tests.Meta.Tests;
 /// fine, because they cannot silently change behaviour. The rule is that nothing may be
 /// <i>silently</i> different because of order: either defer the decision to a point where the
 /// container is complete, or assert the ordering at startup and throw. See
-/// <c>Trax.Docs/reference/registration-order.md</c>.
+/// <c>Trax.Docs/contributing/api-conventions.md</c>.
 /// </para>
 /// <para>Enforces <c>docs/adr/0002-reading-the-service-collection-is-order-dependent.md</c>.</para>
 /// </remarks>
@@ -98,7 +98,7 @@ public class NoSilentRegistrationOrderDependenceTests
                     + "where the caller is in their startup code. Either defer the decision until "
                     + "the container is complete, or add a startup validator that throws when the "
                     + "ordering was wrong, then add the site to ReviewedSites with a reason. See "
-                    + "Trax.Docs/reference/registration-order.md and "
+                    + "Trax.Docs/contributing/api-conventions.md and "
                     + "docs/adr/0002-reading-the-service-collection-is-order-dependent.md.\n  "
                     + string.Join("\n  ", offenders)
             );

@@ -61,7 +61,7 @@ and all carry defaults measured in tens of seconds.
 
 ## Exemplars
 
-- [Test Conventions](/docs/reference/test-conventions) is the rule this produces.
+- [Test Conventions](/docs/contributing/test-conventions) is the rule this produces.
 
 **Unenforced:** the timeouts a wait sits behind are not visible where the wait is written.
 They come from whichever services the host was composed with and from framework defaults the

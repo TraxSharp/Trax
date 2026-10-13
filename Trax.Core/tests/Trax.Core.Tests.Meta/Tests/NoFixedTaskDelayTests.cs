@@ -53,7 +53,7 @@ public class NoFixedTaskDelayTests
         offenders
             .Should()
             .BeEmpty(
-                "Trax.Docs/reference/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests "
+                "Trax.Docs/contributing/test-conventions.md > Determinism forbids fixed-duration Task.Delay / Thread.Sleep in tests "
                     + "because they race CI scheduling. Synchronise on the actual completion signal "
                     + "(poll a flag, TaskCompletionSource, etc.) with a generous timeout ceiling. "
                     + "If a fixed delay is legitimately required (measuring an interval, verifying a "

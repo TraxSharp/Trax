@@ -42,7 +42,7 @@ public class NoIgnoreAttributeTests
         offenders
             .Should()
             .BeEmpty(
-                "[Ignore] silently hides failing tests. Trax.Docs/reference/test-conventions.md > Skipping requires either "
+                "[Ignore] silently hides failing tests. Trax.Docs/contributing/test-conventions.md > Skipping requires either "
                     + "fixing the underlying code, fixing the test premise, or using Assert.Ignore(\"reason\") "
                     + "at runtime with an explicit reachability check. Offenders:\n  "
                     + string.Join("\n  ", offenders)

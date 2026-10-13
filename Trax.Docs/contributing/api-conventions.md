@@ -1,12 +1,21 @@
 ---
-layout: default
-title: Builder Pattern
-description: "The conventions shared by TraxEffectBuilder, TraxMediatorBuilder, SchedulerConfigurationBuilder and TraxGraphQLBuilder: entry point, Build(), state markers."
-parent: Reference
-nav_order: 9
+title: API conventions
+description: "Conventions for Trax's public API: the builder pattern and state markers, Add and Use extension naming, and reading the service collection safely."
+type: reference
+area: contributing
+nav_order: 2
+redirect_from:
+  - /docs/reference/builder-pattern
+  - /docs/reference/extension-method-naming
 ---
 
-# Builder Pattern
+# API conventions
+
+The shape a new public API in Trax takes: how a builder is structured, what an extension method
+is called, and what a registration extension may and may not ask of the service collection.
+Users see the result of these rules in [Registration Order](/docs/reference/registration-order).
+
+## Builder pattern
 
 Four builders configure the subsystems: `TraxEffectBuilder`, `TraxMediatorBuilder`,
 `SchedulerConfigurationBuilder` and `TraxGraphQLBuilder`. They agree on the class structure and
@@ -15,12 +24,12 @@ what it is the caller's job to register. Match the closest one when you add a bu
 match `TraxMediatorBuilder` when you add a whole builder, because it is the one that does every
 part of this the intended way.
 
-## Entry point
+### Entry point
 
 The extension method takes `Func<TBuilder, TBuilder>`, not `Action<TBuilder>`. It creates the
 builder, invokes the function, calls `Build()`, and returns the next state marker in the chain.
 
-```csharp
+```csharp fragment
 public static TraxBuilderWithEffects AddEffects(
     this TraxBuilder trax,
     Func<TraxEffectBuilder, TraxEffectBuilder> configure
@@ -37,7 +46,7 @@ That is caught, not silent: `Build()` throws unless another subsystem contribute
 first, in which case those are merged and scanned. A new builder should still prefer the
 identity overload, so the mistake is unrepresentable rather than merely diagnosed.
 
-## Class structure
+### Class structure
 
 Every builder is a `partial class` in its own directory, split one file per feature area:
 
@@ -50,7 +59,7 @@ Every builder is a `partial class` in its own directory, split one file per feat
 Methods return `this` for chaining. `TraxMediatorBuilder` and `TraxGraphQLBuilder` are the
 reference implementations.
 
-## Build()
+### Build()
 
 `Build()` is `internal`, so the fluent chain is the only way to reach it. It holds the
 build-time validation, which throws `InvalidOperationException` with a message that names the
@@ -68,7 +77,7 @@ marker: the scheduler is the last link in the chain, so there is no next state t
 Do not copy the shape for a new subsystem. A `Build()` that returns the configuration keeps the
 registration in the extension method where a reader looks for it.
 
-## Configuration object
+### Configuration object
 
 Named `{Subsystem}Configuration` and registered as a singleton, though where and how varies:
 
@@ -91,7 +100,7 @@ IntelliSense.
 `GraphQLConfiguration` goes the other way and takes everything through its constructor, which is
 `internal`: only `TraxGraphQLBuilder.Build()` creates one.
 
-## State markers
+### State markers
 
 `TraxBuilder` to `TraxBuilderWithEffects` to `TraxBuilderWithMediator`. All three expose
 `ServiceCollection`, `HasDatabaseProvider` and `HasDataProvider`. `Root` is not part of that
@@ -110,7 +119,7 @@ Extension methods target a specific marker, which is what enforces ordering at c
 rather than at run time. `AddDataContextLogging()` is the same idea one level down: it is
 declared on `TraxEffectBuilderWithData`, which only a data provider call returns.
 
-### Wrong-order overloads
+#### Wrong-order overloads
 
 A call made on the wrong marker would otherwise fail with CS1929, which names the marker types
 and leaves the reader to work out the order from them. So a transition someone can get wrong also
@@ -147,6 +156,60 @@ that is the one that can name both types: `AddStateMachines` is Trax.Effect's, b
 never runs. `BuilderOrderDiagnosticsTests`, in Trax.Mediator and in Trax.Effect, compiles each wrong
 order in memory and asserts the one error it produces, and compiles each right order and asserts none.
 
+## Extension method naming
+
+`services.AddTrax(trax => trax.AddEffects(...).AddMediator(...).AddScheduler(...))` is the
+unified entry point. Everything else follows one of two prefixes.
+
+| Prefix | Means | Examples |
+|---|---|---|
+| `Add*` | Registers services on the `IServiceCollection` | `AddTraxDashboard`, `AddTraxGraphQL`, `AddTraxWorker`, `AddTraxJobRunner` |
+| `Use*` | Maps endpoints or components onto a built `WebApplication` | `UseTraxDashboard`, `UseTraxGraphQL` |
+
+Every public extension method in an `Extensions/` folder contains `Trax` in its name.
+`ExtensionMethodNamingTests`, which the `Tests.Meta` suite of each of the eight .NET package
+folders carries, holds part of that: it parses the `.cs` files under an `Extensions/` folder in
+that folder's source tree and flags a
+`public static` method only when the name starts with `Add` or `Use` **and** the `this`
+parameter is one of `IServiceCollection`, `IApplicationBuilder`, `IEndpointRouteBuilder`,
+`WebApplication` or `WebApplicationBuilder`. A method on a Trax builder type, or one whose name
+starts with anything else, is outside what it reads. Each folder's copy also carries its own
+`KnownExceptions` list, so a name can be exempted with a justification rather than fixed.
+Everything the check does not reach is held up by review.
+
+The distinction matters because the two run at different times. An `Add*` method sees a
+collection that is still being populated, so what it finds there answers "is this registered
+*yet*", not "will this be registered". Reading the collection is not itself wrong; deriving
+behaviour from the answer and saying nothing about it is.
+[Reading the service collection](#reading-the-service-collection) has the three shapes that
+are acceptable. A `Use*` method runs after the container is built and can resolve anything, which
+is usually the better place to put the question.
+
+## Reading the service collection
+
+Reading the `IServiceCollection` inside a registration extension answers "is this registered
+*yet*", not "will this be registered". The extension runs partway through the host's startup
+code, so any behaviour derived from the answer changes with the caller's ordering.
+
+That has shipped as a bug twice: once leaving an interceptor unable to activate (a 500 on every
+request), and once leaving subscription auth unwired entirely, which accepted every connection
+anonymously while HTTP kept working.
+
+Inspecting the collection is not banned. Silence is. A site is acceptable only if it is:
+
+1. **An idempotency guard**, asking "have I already registered my own thing?" It cannot change
+   consumer-visible behaviour.
+2. **A precondition that throws**, where ordering matters and the consumer is told how to fix it.
+3. **A decision paired with a startup validator**: wire what you can, then assert from an
+   `IHostedService`, where the container is complete, that the result is coherent, and throw
+   naming the call to move.
+
+Prefer restructuring so the question disappears. Registering a factory that resolves on first
+use makes the ordering question moot rather than merely detected.
+
+`NoSilentRegistrationOrderDependenceTests` fails the build on any new introspection site.
+Making one safe and recording why is the way past it; raising its count is not.
+
 ## SDK Reference
 
-> [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration)
+> [Configuration](/docs/sdk-reference/configuration) | [AddScheduler](/docs/sdk-reference/scheduler-api/add-scheduler) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [MediatorConfiguration](/docs/sdk-reference/mediator-api/mediator-configuration) | [AddTraxDashboard](/docs/sdk-reference/dashboard-api/add-trax-dashboard) | [UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard) | [AddTraxGraphQL](/docs/sdk-reference/graphql-api/add-trax-graphql) | [Architecture guards](/docs/reference/architecture-guards)
