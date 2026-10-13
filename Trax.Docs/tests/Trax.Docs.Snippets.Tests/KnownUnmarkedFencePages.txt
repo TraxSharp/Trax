@@ -18,7 +18,6 @@ core/memory.md
 core/trains-and-junctions.md
 cross-cutting/cancellation-tokens.md
 cross-cutting/common-patterns.md
-cross-cutting/e2e-testing.md
 cross-cutting/functional-programming.md
 cross-cutting/troubleshooting.md
 dashboard.md
