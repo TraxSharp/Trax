@@ -8,9 +8,33 @@ nav_order: 3
 
 # Packages
 
-Trax ships as 42 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
+Trax ships as 43 NuGet packages from one repository, [TraxSharp/Trax](https://github.com/TraxSharp/Trax). Most applications install four or five of them. This page lists every one: what it is for, the namespace you import to use it, the methods it adds, and what it needs beside it.
 
 Every package releases at the same version, so install them all at one version. The site is published from the latest release, and the nuget.org link shows that release and its dependencies.
+
+## Requirements
+
+Every library package targets `net10.0`, so every project that references one must target it too;
+there is no `net8.0` or `net9.0` build. `Trax.Core.Analyzers` targets `netstandard2.0`, as Roslyn
+analyzers do.
+
+The packages depend on EF Core, Npgsql, HotChocolate and `Microsoft.Extensions.*`, and NuGet
+resolves those. A project that also pins one of them directly has to pin at least the version Trax
+was built against, or the restore fails with `NU1605` (`NU1109` under Central Package Management)
+naming the package. The floors, from the repository's `Directory.Packages.props` at the release this
+site was published from:
+
+| Package | Minimum | Brought in by |
+|---|---|---|
+| `Microsoft.EntityFrameworkCore` (and `.Relational`, `.InMemory`, `.Sqlite`) | 10.0.12 | `Trax.Effect.Data` and the data providers |
+| `Npgsql` | 10.0.3 | `Trax.Effect.Data` |
+| `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.3 | `Trax.Effect.Data.Postgres` |
+| `EFCore.NamingConventions` | 10.0.1 | `Trax.Effect.Data.Postgres` |
+| `Microsoft.Extensions.*` | 10.0.12 | `Trax.Effect` and up |
+| `HotChocolate.*` | 16.6.7 | `Trax.Api.GraphQL` |
+| `Microsoft.AspNetCore.Authentication.JwtBearer`, `.OpenIdConnect` | 10.0.9 | `Trax.Api.Auth.Jwt`, `Trax.Api.Auth.Oidc` |
+
+A release can raise them; the dependency list on each package's nuget.org page is authoritative.
 
 ## Which packages you need
 
