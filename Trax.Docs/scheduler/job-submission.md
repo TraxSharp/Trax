@@ -1,312 +1,182 @@
 ---
-title: Job Submission
-description: "Job submitters, the scheduler's execution backends: built-in Postgres local workers, InMemory workers, remote execution, custom submitters and leaving Hangfire."
+title: How jobs reach workers
+description: "How the JobDispatcher hands a run to a job submitter, which submitter a host gets, how the built-in local workers claim and recover jobs, and custom submitters."
 type: explanation
 area: scheduling
 nav_order: 3
+source:
+  - Trax.Scheduler/src/Trax.Scheduler/Services/JobSubmitter
+  - Trax.Scheduler/src/Trax.Scheduler/Services/LocalWorkerService/LocalWorkerService.cs
 ---
 
-# Job Submission
+# How jobs reach workers
 
-The job submitter is the execution backend for the scheduler. When the JobDispatcher creates a Metadata record and calls `IJobSubmitter.EnqueueAsync()`, the job submitter is responsible for picking up that job and running the train.
+The JobDispatcher decides that a queued entry runs now. It does not run it. It creates the run's
+metadata row, commits, and hands the run's id and input to a job submitter (`IJobSubmitter`). The
+submitter's only job is to get that run to something that executes the
+[JobRunner](/docs/scheduler/admin-trains/job-runner), which loads the row, runs your train and
+records the result.
 
-## Built-in Local Workers (PostgreSQL)
+Keeping that step behind one interface is what lets the same scheduler run its jobs on threads in
+its own process, on a separate worker fleet, or in AWS Lambda, without anything above the
+submitter changing.
 
-The recommended backend uses Trax.Core's own `trax.background_job` table for job queuing. No external dependencies, it shares the same PostgreSQL database already used by Trax.Core's data layer.
+## Which submitter a host gets
 
-The JobDispatcher commits the Metadata creation and WorkQueue status update in a `FOR UPDATE SKIP LOCKED` transaction before calling `EnqueueAsync`. The BackgroundJob insertion then happens as a separate operation. This ordering makes the Metadata record visible to the job submitter when it begins execution, necessary because the in-memory job submitter executes synchronously within the `EnqueueAsync` call.
+| The host has | Submitter | Where the job runs |
+|---|---|---|
+| `UsePostgres()` or `UseSqlite()` | `PostgresJobSubmitter`, which inserts a row into `trax.background_job` | On `LocalWorkerService` threads in this process, started automatically |
+| `UseInMemory()` | The in-memory submitter | Inline, inside the call that submits it. Meant for tests and prototypes |
+| `OverrideSubmitter(...)` | Yours | Wherever it sends it. Replaces both defaults, and no local workers are started |
+| `UseRemoteWorkers`, `UseSqsWorkers` or `UseLambdaWorkers` with routing | An HTTP, SQS or Lambda submitter, for the trains routed to it | On a runner elsewhere; every other train keeps the default. See [Choosing where trains run](/docs/scheduler/remote-execution) |
 
-### How It Works
+Only `PostgresJobSubmitter` is a public type. The others are selected by their builder methods.
+
+## Why the metadata row is committed first
+
+The dispatcher commits the run's metadata row and the entry's move to `Dispatched` in one
+transaction, and calls the submitter only after it commits. The worker that picks the job up has to
+read that row, and the in-memory submitter runs the train inside the call itself, so the row must
+already be visible when the call is made.
+
+The cost is a window where the row exists and the job may not: the submit can fail after the
+commit. The dispatcher handles that case, and the rule it follows is the subject of
+[Dispatch failures](/docs/scheduler/admin-trains/job-dispatcher#dispatch-failures).
+
+## The built-in local workers
+
+With Postgres (or SQLite) the default submitter writes one row per job into `trax.background_job`,
+in the same database the rest of Trax uses, and `LocalWorkerService` runs a pool of worker tasks
+that take jobs from it. There is no other queue to run or connect to.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     JobDispatcherTrain                        │
-│  Creates Metadata → Calls EnqueueAsync(metadataId)               │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     PostgresJobSubmitter                          │
-│  INSERT INTO trax.background_job (metadata_id, ...)       │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   background_job table                           │
-│  ┌────┬─────────────┬──────────┬───────┬────────────┬────────────┐│
-│  │ id │ metadata_id │ priority │ input │ created_at │ fetched_at ││
-│  ├────┼─────────────┼──────────┼───────┼────────────┼────────────┤│
-│  │ 1  │     42      │    20    │ null  │ 10:00:00   │   null     ││ ← available
-│  │ 2  │     43      │    5     │ {...} │ 10:00:01   │ 10:00:05   ││ ← claimed
-│  └────┴─────────────┴──────────┴───────┴────────────┴────────────┘│
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   LocalWorkerService                               │
-│  N concurrent workers polling the table                          │
-│                                                                  │
-│  Worker 0 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
-│  Worker 1 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
-│  Worker 2 ──► SELECT ... FOR UPDATE SKIP LOCKED ──► Execute     │
-│              (each worker gets a different job. No duplicates)  │
-└─────────────────────────────────────────────────────────────────┘
+JobDispatcher ──► PostgresJobSubmitter ──► trax.background_job ──► LocalWorkerService (N workers)
+                  INSERT (metadata_id,                                each: claim ► run ► delete
+                  input, priority)
 ```
 
-### Setup
-
-```csharp
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(Program).Assembly)
-    .AddScheduler(scheduler => scheduler
-        // Local workers enabled automatically with Postgres. No extra call needed
-        .Schedule<IMyTrain>(
-            "my-job", new MyInput(), Every.Minutes(5))
-    )
-);
-```
-
-No connection string parameter needed, local workers use the same `IDataContext` already registered by `UsePostgres()`.
-
-### Configuration
-
-```csharp
-.ConfigureLocalWorkers(options =>
-{
-    options.WorkerCount = 4;                                   // default: Environment.ProcessorCount
-    options.PollingInterval = TimeSpan.FromSeconds(2);         // default: 1 second
-    options.VisibilityTimeout = TimeSpan.FromMinutes(30);      // default: 30 minutes
-    options.ShutdownTimeout = TimeSpan.FromSeconds(30);        // default: 30 seconds
-    options.BatchSize = 5;                                     // default: 1
-})
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `WorkerCount` | `Environment.ProcessorCount` | Number of concurrent worker tasks polling for jobs |
-| `PollingInterval` | 1 second | How often idle workers poll for new jobs |
-| `VisibilityTimeout` | 30 minutes | How long a claimed job whose worker stopped refreshing its claim stays invisible before crash recovery reclaims it. A running job's claim is refreshed every third of this, so it does not bound how long a job may run |
-| `ShutdownTimeout` | 30 seconds | Grace period for in-flight jobs during application shutdown. When the host signals shutdown, in-flight trains receive the cancellation token after this delay. giving them time to finish cleanly. See [Cancellation Tokens](/docs/cross-cutting/cancellation-tokens#background-services-and-shutdown). |
-| `BatchSize` | 1 | Number of jobs each worker claims per poll. Higher values reduce database round-trips when there is a backlog. Claimed jobs are processed sequentially within the worker task. If the host starts shutting down mid-batch, the jobs not yet started are released (their `fetched_at` is cleared) so any worker can claim them at once. If a worker crashes mid-batch, uncompleted jobs wait for `VisibilityTimeout` before being reclaimed. |
+The pool's size, polling interval, batch size, visibility timeout and shutdown grace are
+`LocalWorkerOptions`, set with [ConfigureLocalWorkers](/docs/sdk-reference/scheduler-api/use-local-workers).
 
 ### Worker Lifecycle
 
-Each worker runs a three-phase loop:
+Each worker loops through three phases.
 
-**Phase 1. Claim** (atomic, within a transaction)
+**Claim**, in a transaction:
 
 ```sql
 SELECT * FROM trax.background_job
 WHERE fetched_at IS NULL
    OR fetched_at < NOW() - make_interval(secs => :visibility_timeout)
 ORDER BY priority DESC, created_at ASC
-LIMIT 1
+LIMIT :batch_size
 FOR UPDATE SKIP LOCKED
 ```
 
-The `FOR UPDATE SKIP LOCKED` clause guarantees:
-- Each job is claimed by exactly one worker (no duplicates)
-- Workers don't block each other (SKIP LOCKED, not WAIT)
-- Highest-priority jobs are processed first, with FIFO ordering within the same priority
+`FOR UPDATE SKIP LOCKED` gives each job to exactly one worker without workers waiting on each
+other: a row another worker has locked is skipped, not waited for. Higher priorities go first, and
+jobs of the same priority in the order they were queued. The worker sets `fetched_at` on what it
+claimed and commits.
 
-On claim, the worker sets `fetched_at = NOW()` and commits the transaction.
+**Run**, in a fresh DI scope: the worker resolves the JobRunner and runs it with the run's id and
+input. While a job runs, the worker refreshes `fetched_at` on it, and on the jobs waiting behind it
+in its batch, every third of the visibility timeout, so a job that runs longer than the timeout
+keeps its claim. Cancelling a run from the dashboard or `ITraxScheduler` reaches the running job
+however long it has been running.
 
-**Phase 2. Execute** (in a fresh DI scope)
+**Delete**, whether the job succeeded or failed: the worker deletes the `background_job` row. The
+delete does not take the host's stopping token, so a job that finishes inside the shutdown grace
+period is still removed rather than left to be claimed again. The table is only a transient
+queue; the run's history is in its metadata row.
 
-The worker resolves `IJobRunnerTrain` from a new DI scope and calls `Run(new RunJobRequest(metadataId, input))`. This is the same train that Hangfire previously invoked, it loads the Metadata, claims the run, executes the target train, and updates the Manifest's `LastSuccessfulRun` on success.
+When the host starts shutting down in the middle of a batch, the jobs not yet started are released
+(their `fetched_at` is cleared), so any worker can claim them at once.
 
-While the job runs, the worker refreshes its `fetched_at` every third of `VisibilityTimeout`, so a job that runs longer than `VisibilityTimeout` keeps its claim and is not picked up by another worker. The job's cancellation registration is the worker's own: a cancel from the dashboard or `ITraxScheduler` reaches the running job however long it runs.
+### Crash recovery
 
-**Phase 3. Cleanup** (always runs, success or failure)
-
-The worker deletes the `background_job` row. The delete does not take the host's stopping token, so a job that finishes inside the `ShutdownTimeout` grace period is still removed rather than left for re-claim. This matches the previous Hangfire behavior where jobs were auto-deleted on completion. Trax.Core's Metadata and DeadLetter tables handle the audit trail, the background_job table is purely a transient queue.
-
-### Crash Recovery
-
-If a worker crashes after claiming a job (Phase 1) but before deleting it (Phase 3), it stops refreshing `fetched_at` and the timestamp becomes stale. The dequeue query's `WHERE fetched_at < NOW() - :visibility_timeout` condition makes the job eligible for re-claim by another worker after the visibility timeout expires.
+A worker that dies after claiming a job stops refreshing `fetched_at`. Once the timestamp is older
+than the visibility timeout, the claim query matches the job again and another worker runs it:
 
 ```
 Worker A claims job #1 → fetched_at = 10:00:00
 Worker A crashes at 10:01:00
-                               ...
-At 10:30:00 (30m later):
-Worker B's dequeue query finds job #1 eligible (fetched_at < NOW() - 30m)
-Worker B claims and executes job #1
+At 10:30:00 (with the default 30-minute timeout):
+Worker B's claim query finds job #1 (fetched_at < NOW() - 30m)
+Worker B claims and runs job #1
 ```
 
-This is the same pattern Hangfire uses with its `InvisibilityTimeout`, a well-established approach for reliable background job processing.
+The second delivery does not run the train twice. The run's metadata row decides which delivery
+runs it, as [JobRunner: Duplicate deliveries](/docs/scheduler/admin-trains/job-runner#duplicate-deliveries)
+describes.
 
-### Comparison with Hangfire
+## InMemory
 
-| Feature | Hangfire | PostgresJobSubmitter |
-|---------|----------|-------------------|
-| **Dependencies** | 3 NuGet packages (Hangfire.Core, Hangfire.AspNetCore, Hangfire.PostgreSql) | None (uses existing EF Core) |
-| **Database tables** | 10+ tables in `hangfire` schema | 1 table in `trax` schema |
-| **Retries** | Disabled (Trax.Core manages retries) | N/A (Trax.Core manages retries) |
-| **Recurring jobs** | Not used | N/A (ManifestManager handles scheduling) |
-| **Concurrency** | Thread-based workers | Task-based workers |
-| **Job storage** | Separate connection/schema | Same `IDataContext` as all Trax.Core data |
-| **Dashboard** | Hangfire Dashboard (separate UI) | Trax.Core Dashboard |
-| **Migration** | Hangfire manages its own schema | DbUp migration alongside other Trax.Core tables |
-| **Crash recovery** | InvisibilityTimeout | VisibilityTimeout (same pattern) |
+With `UseInMemory()` the submitter runs the train inside the submit call, synchronously. There are
+no worker threads and no tables, so tests get the scheduling API without a database. There is no
+work queue reader either: the InMemory ManifestManager dispatches due manifests itself, inline.
+Retry delays, decision replay and the stale-run reapers do not run there, which is why retries and
+dead letters are best tested against a real Postgres (see
+[Administrative Trains: InMemory](/docs/scheduler/admin-trains#inmemory)).
 
-## Hangfire (Removed)
+## Elsewhere
 
-> **Removed**: Local workers are now the default with Postgres. The `UseHangfire()` method and `Trax.Scheduler.Hangfire` package have been removed. If migrating from an older version, see below.
+The same interface takes runs off the scheduler's process. Three of the models push each run to a
+runner: over HTTP, through an SQS queue, or by invoking a Lambda function directly. The fourth runs
+a standalone worker process that takes jobs from the same `background_job` table the local
+workers use. Every model shares the one database. [Choosing where trains
+run](/docs/scheduler/remote-execution) compares them.
 
-The Hangfire backend wraps Hangfire's `IBackgroundJobClient.Enqueue()` to dispatch jobs. It brings 3 NuGet packages and creates its own database tables, but Trax.Core only uses a tiny fraction of Hangfire's capabilities:
+## A custom job submitter
 
-- One API call (`Enqueue`)
-- Retries disabled
-- Auto-delete on completion
-- No recurring jobs, continuations, or batches
+A host that needs another transport implements `IJobSubmitter` and registers it with
+`OverrideSubmitter`. Two overloads are required; the priority and cancellation overloads have
+default implementations that fall back to them, so a submitter that ignores priority need not
+implement them:
 
-If you're using Hangfire and need to migrate, see [Migrating from Hangfire](#migrating-from-hangfire).
+```csharp compile=custom
+using Trax.Scheduler.Services.JobSubmitter;
 
-## InMemory Workers
+public class ExternalQueueJobSubmitter(IExternalJobQueue queue) : IJobSubmitter
+{
+    public Task<string> EnqueueAsync(long metadataId) =>
+        queue.SendAsync(metadataId, input: null, priority: 0, CancellationToken.None);
 
-When `UseInMemory()` is configured (no PostgreSQL), the scheduler automatically uses its built-in in-memory job submitter. This executes jobs immediately and synchronously. No background workers, no database tables. The `EnqueueAsync` call blocks until the train completes.
+    public Task<string> EnqueueAsync(long metadataId, object input) =>
+        queue.SendAsync(metadataId, input, priority: 0, CancellationToken.None);
 
-This is useful for testing and local development where you want the scheduler API without database infrastructure:
+    // Optional: carry the entry's priority to the backend.
+    public Task<string> EnqueueAsync(
+        long metadataId,
+        object input,
+        int priority,
+        CancellationToken cancellationToken
+    ) => queue.SendAsync(metadataId, input, priority, cancellationToken);
+}
+```
 
-```csharp
-// UseInMemory() → the in-memory job submitter is used automatically
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects.UseInMemory())
-    .AddMediator(typeof(Program).Assembly)
-    .AddScheduler(scheduler => scheduler
-        .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
-    )
+```csharp compile=custom
+using Trax.Effect.Data.Postgres.Extensions;
+using Trax.Effect.Extensions;
+using Trax.Mediator.Extensions;
+using Trax.Scheduler.Extensions;
+using Trax.Scheduler.Services.JobSubmitter;
+
+services.AddTrax(trax =>
+    trax.AddEffects(effects => effects.UsePostgres(connectionString))
+        .AddMediator(assembly)
+        .AddScheduler(scheduler =>
+            scheduler.OverrideSubmitter(s =>
+                s.AddScoped<IJobSubmitter, ExternalQueueJobSubmitter>()
+            )
+        )
 );
 ```
 
-## Remote Execution
+Whatever consumes the queue runs the JobRunner the way the local workers do: it resolves
+`IJobRunnerTrain` and runs it with `new RunJobRequest(metadataId, input)`, in a host where
+`AddTraxJobRunner` has registered it.
 
-The default setup runs everything on one process. For production deployments, you can separate scheduling from execution, offloading train execution to dedicated worker servers, AWS Lambda, or other compute.
-
-Trax supports two remote execution models:
-
-**Push-based (HTTP)**: the scheduler POSTs to a remote endpoint:
-
-```csharp
-// Scheduler side:
-.AddScheduler(scheduler => scheduler
-    .UseRemoteWorkers(
-        remote =>
-        {
-            remote.BaseUrl = "https://my-workers.example.com/trax/execute";
-            remote.SigningKey = runnerKey;
-        },
-        routing => routing.ForTrain<IMyTrain>())
-)
-
-// Remote side: the same key (see Authorization Posture in Remote Execution)
-builder.Services.AddTraxJobRunner(runner => runner.SigningKey = runnerKey);
-app.UseTraxJobRunner("/trax/execute");
-```
-
-Best for serverless compute (Cloud Run, Azure Functions) where the remote process only runs when invoked.
-
-**Queue-based (SQS + Lambda)**: the scheduler sends messages to an SQS queue, Lambda consumes them:
-
-```csharp
-using Trax.Scheduler.Sqs.Extensions;
-
-// Scheduler side:
-.AddScheduler(scheduler => scheduler
-    .UseSqsWorkers(
-        sqs => sqs.QueueUrl = "https://sqs.us-east-1.amazonaws.com/123456789/trax-jobs",
-        routing => routing.ForTrain<IMyTrain>())
-)
-
-// Lambda side: use SqsJobRunnerHandler (see Trax.Scheduler.Sqs)
-```
-
-Best for AWS Lambda with durable message delivery, automatic retries, and dead-letter queues. Requires the `Trax.Scheduler.Sqs` package.
-
-**Poll-based (standalone worker)**: a separate process polls the `background_job` table:
-
-```csharp
-builder.Services.AddTraxWorker(opts => opts.WorkerCount = 4);
-```
-
-Best for dedicated worker servers that run continuously and scale independently.
-
-Both models connect to the same Postgres database. See [Remote Execution](/docs/scheduler/remote-execution) for full architecture details, deployment diagrams, and guidance on which model to choose.
-
-## Custom Job Submitter
-
-Implement `IJobSubmitter` and register it via `OverrideSubmitter()`. The interface includes priority-aware overloads with default implementations that fall back to the non-priority versions, so custom implementations work without modification:
-
-```csharp
-public class MyJobSubmitter : IJobSubmitter
-{
-    public Task<string> EnqueueAsync(long metadataId) { /* ... */ }
-    public Task<string> EnqueueAsync(long metadataId, object input) { /* ... */ }
-
-    // Optional: override to support priority in your backend
-    // public Task<string> EnqueueAsync(long metadataId, int priority, CancellationToken ct) { /* ... */ }
-}
-
-// Registration
-.AddScheduler(scheduler => scheduler
-    .OverrideSubmitter(services =>
-    {
-        services.AddScoped<IJobSubmitter, MyJobSubmitter>();
-    })
-)
-```
-
-## Migrating from Hangfire
-
-### 1. Update Configuration
-
-```diff
-  builder.Services.AddTrax(trax => trax
-      .AddEffects(effects => effects
-          .UsePostgres(connectionString)
-      )
-      .AddScheduler(scheduler => scheduler
--         .UseHangfire(connectionString)
-+         // Local workers are now the default. No call needed
-          .Schedule<IMyTrain>("my-job", new MyInput(), Every.Minutes(5))
-      )
-  );
-
-- // Remove Hangfire dashboard
-- app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [] });
-```
-
-### 2. Update Package References
-
-```diff
-  <ItemGroup>
-      <PackageReference Include="Trax.Scheduler" />
--     <PackageReference Include="Trax.Scheduler.Hangfire" />
-  </ItemGroup>
-```
-
-### 3. Remove Hangfire Usings
-
-```diff
-- using Hangfire;
-- using Trax.Scheduler.Hangfire.Extensions;
-```
-
-### 4. Run the Application
-
-The `trax.background_job` table is created automatically by the migration system on startup. No manual SQL required.
-
-### 5. Clean Up Hangfire Tables (Optional)
-
-After confirming the migration works, you can drop the Hangfire schema:
-
-```sql
-DROP SCHEMA IF EXISTS hangfire CASCADE;
-```
+Moving a host off the removed Hangfire backend is covered in the migration guides.
 
 ## SDK Reference
 

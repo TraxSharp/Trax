@@ -71,7 +71,6 @@ scheduler/delayed-jobs.md
 scheduler/dependent-trains.md
 scheduler/exclusions.md
 scheduler/health-and-liveness.md
-scheduler/job-submission.md
 scheduler/orphan-manifest-cleanup.md
 scheduler/remote-execution.md
 scheduler/scheduling-options.md
