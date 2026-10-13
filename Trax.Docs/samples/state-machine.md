@@ -151,25 +151,44 @@ closed browser leaves behind expire long before a demo database fills it; discar
 
 ### Registration
 
-```csharp
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine.Api/Program.cs
+using Trax.Api.Auth.ApiKey;
+using Trax.Api.Extensions;
+using Trax.Api.GraphQL.Extensions;
+using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
-
+using Trax.Samples.StateMachine;
+using Trax.Samples.StateMachine.Api;
+// ...
 builder.Services.AddTrax(trax =>
     trax.AddEffects(effects => effects.UsePostgres(connectionString).AddJson())
-        .AddStateMachines(                                      // before AddMediator
-            o => o.DraftTtl = TimeSpan.FromDays(1),
+        .AddStateMachines(
+            o =>
+            {
+                // Alice and Bob are two users every visitor of the demo shares, and the server caps the drafts
+                // one user may hold (50 by default). A draft a walkthrough or a closed browser leaves behind
+                // expires after a day of no activity rather than the default 30, so a demo database that lives
+                // for weeks does not fill the cap. The cap itself stays on.
+                o.DraftTtl = TimeSpan.FromDays(1);
+            },
             typeof(TurnstileMachine).Assembly
         )
         .AddMediator(typeof(TurnstileMachine).Assembly)
 );
 
+// The two host-supplied bindings a machine can't know: map auth to a user key, and the charge impl.
 builder.Services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
 builder.Services.AddSingleton<SimulatedPaymentProvider>();
 builder.Services.AddScoped<ICharge, LoggingCharge>();
+
+// Exposed machines are served as persisted documents, one per operation, whose ids carry the machine's version; the
+// node orders a machine's versions across a deploy through them, so exposing a machine requires them. This demo keeps
+// the ad-hoc queries above working (logged, not refused) and serves no document-management operations; a production
+// host refuses ad-hoc documents with RequirePersisted(true).
 builder.Services.AddTraxGraphQL(graphql =>
     graphql.UsePersistedOperations(persisted =>
         persisted
@@ -202,39 +221,56 @@ The checkout is authored with the declarative surface, so everything it does is 
 each state's context record and rule, and each event's rule, input, guard and reduction. A client starts it with the
 declared start, and every event and read declares who may use it:
 
-```csharp
-m.Id("checkout").Version(2).StartsAt(CheckoutState.Cart, Fresh)
-    .Start<EmptyStart>(s => s.Reduce(Keep()).AnyAuthenticated())
-    .Get(r => r.OwnerOnly())
-    .Watch(r => r.OwnerOnly())
-    .Discard(r => r.OwnerOnly())
-    .CustomGuard(TotalMatchesItems, (ctx, _) => TotalIsThePriceOfTheItems(ctx))
-    .CustomReducer(AddItemToCart, AddToCart);
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+        m.Id("checkout")
+            .Version(2)
+            .StartsAt(CheckoutState.Cart, Fresh)
+            // ...
+            // A checkout starts as an empty cart, and only its owner reads it.
+            .Start<EmptyStart>(s => s.Reduce(Keep()).AnyAuthenticated())
+            .Get(r => r.OwnerOnly())
+            .Watch(r => r.OwnerOnly())
+            .Discard(r => r.OwnerOnly())
+            .CustomGuard(TotalMatchesItems, (ctx, _) => TotalIsThePriceOfTheItems(ctx))
+            .CustomReducer(AddItemToCart, AddToCart);
 
-m.In(CheckoutState.Cart)
-    .Context<CheckoutContext>()
-    .Requires(All(Field((CheckoutContext c) => c.Receipt).Absent(), PricedByTheServer))
-    .On(CheckoutTrigger.AddItem).AnyAuthenticated()
-    .WithInput<ItemInput>()
-    .When(Input((ItemInput i) => i.Item).NonEmpty()).Because("Name the item to add.")
-    .Reduce(new Reduction.Custom(AddItemToCart))
-    .To(CheckoutState.Cart)
-    .On(CheckoutTrigger.Next).AnyAuthenticated()
-    .When(HasItems).Because("Add an item before reviewing.")
-    .To(CheckoutState.Review);
+        // Any signed-in user may send every event of their own checkout.
+        m.In(CheckoutState.Cart)
+            .Context<CheckoutContext>()
+            .Requires(All(Field((CheckoutContext c) => c.Receipt).Absent(), PricedByTheServer))
+            .On(CheckoutTrigger.AddItem)
+            .AnyAuthenticated()
+            .WithInput<ItemInput>()
+            .When(Input((ItemInput i) => i.Item).NonEmpty())
+            .Because("Name the item to add.")
+            .Reduce(new Reduction.Custom(AddItemToCart))
+            .To(CheckoutState.Cart)
+            .On(CheckoutTrigger.Next)
+            .AnyAuthenticated()
+            .When(HasItems)
+            .Because("Add an item before reviewing.")
+            .To(CheckoutState.Review);
 
-m.In(CheckoutState.Review)
-    .Context<CheckoutContext>()
-    .Requires(All(HasItems, Field((CheckoutContext c) => c.Receipt).Absent(), PricedByTheServer))
-    .On(CheckoutTrigger.Pay).AnyAuthenticated()
-    .WithInput<PayInput>()
-    .When(All(HasItems, Input((PayInput i) => i.Receipt).NonEmpty()))
-    .RunsOnce<ICharge>("checkout:charge")
-    .Reduce(Set((PaidContext c) => c.Receipt).FromInput((PayInput i) => i.Receipt))
-    .To(CheckoutState.Paid);
+        m.In(CheckoutState.Review)
+            .Context<CheckoutContext>()
+            .Requires(
+                All(HasItems, Field((CheckoutContext c) => c.Receipt).Absent(), PricedByTheServer)
+            )
+            .On(CheckoutTrigger.Back)
+            .AnyAuthenticated()
+            .To(CheckoutState.Cart)
+            .On(CheckoutTrigger.Pay)
+            .AnyAuthenticated()
+            .WithInput<PayInput>()
+            .When(All(HasItems, Input((PayInput i) => i.Receipt).NonEmpty()))
+            .Because("Checkout needs items and a receipt to be paid.")
+            .RunsOnce<ICharge>("checkout:charge")
+            .Reduce(Set((PaidContext c) => c.Receipt).FromInput((PayInput i) => i.Receipt))
+            .To(CheckoutState.Paid);
 ```
 
-`Pay` is effect-bound, so it is served as `pay(id, requestId)` with no input: the server runs the charge and then fires it with the
+`Back` returns a reviewed cart to `Cart`, and `Pay`'s guard refuses with its `Because` message when the
+receipt is missing. `Pay` is effect-bound, so it is served as `pay(id, requestId)` with no input: the server runs the charge and then fires it with the
 receipt the charge returned.
 
 ### The server owns the total
@@ -245,22 +281,24 @@ the server. Every state also requires the total to be the item price, so a store
 its items cannot be read. The rule vocabulary has no arithmetic, so both are custom, a named reduction and a named
 rule, each with one C# handler, which the IR carries by name:
 
-```csharp
-private static bool TotalIsThePriceOfTheItems(JsonObject ctx) =>
-    ctx["total"] is JsonValue total
-    && total.GetValueKind() == JsonValueKind.Number
-    && total.ToJsonString()
-        == ((long)ItemsCount(ctx) * UnitPriceCents).ToString(CultureInfo.InvariantCulture);
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+    // The total must be the server's price for the items, not whatever was stored.
+    private static bool TotalIsThePriceOfTheItems(JsonObject ctx) =>
+        ctx["total"] is JsonValue total
+        && total.GetValueKind() == JsonValueKind.Number
+        && total.ToJsonString()
+            == ((long)ItemsCount(ctx) * UnitPriceCents).ToString(CultureInfo.InvariantCulture);
 
-private static JsonObject AddToCart(JsonObject ctx, JsonNode? input)
-{
-    var next = (JsonObject)ctx.DeepClone();
-    var items = next["items"] as JsonArray ?? [];
-    items.Add(input!["item"]!.GetValue<string>());
-    next["items"] = items;
-    next["total"] = (long)items.Count * UnitPriceCents;
-    return next;
-}
+    // AddItem's guard has already checked the input names an item.
+    private static JsonObject AddToCart(JsonObject ctx, JsonNode? input)
+    {
+        var next = (JsonObject)ctx.DeepClone();
+        var items = next["items"] as JsonArray ?? [];
+        items.Add(input!["item"]!.GetValue<string>());
+        next["items"] = items;
+        next["total"] = (long)items.Count * UnitPriceCents;
+        return next;
+    }
 ```
 
 The charge then reads the amount from the snapshot it is handed, which is the server's stored copy,
@@ -272,14 +310,20 @@ Version 2 added `total`. A draft an older host stored at version 1 has none, so 
 invariants; `MigrateFrom(1, ...)` backfills it from the item count whenever the server reads a version 1
 snapshot: a stored draft that `get` reads or an event moves:
 
-```csharp
-m.Id("checkout").Version(2).StartsAt(CheckoutState.Cart, Fresh)
-    .MigrateFrom(1, (state, ctx) =>
-    {
-        var next = (JsonObject)ctx.DeepClone();
-        next["total"] = ItemsCount(ctx) * UnitPriceCents;
-        return new MigrationResult(state, next);
-    });
+```csharp from=Trax.Samples/samples/StateMachine/Trax.Samples.StateMachine/Machines.cs
+        m.Id("checkout")
+            .Version(2)
+            .StartsAt(CheckoutState.Cart, Fresh)
+            // v1 -> v2: backfill total from the item count so a pre-total draft stays valid under v2.
+            .MigrateFrom(
+                1,
+                (state, ctx) =>
+                {
+                    var next = (JsonObject)ctx.DeepClone();
+                    next["total"] = ItemsCount(ctx) * UnitPriceCents;
+                    return new MigrationResult(state, next);
+                }
+            )
 ```
 
 A snapshot newer than the server's version is refused as `version-mismatch`. See
@@ -307,17 +351,17 @@ state machine host:
   the amount the same way, `CheckoutMachine.AmountCents(snapshot)`, so a test can count charges and check the
   amount:
 
-  ```csharp
+  ```csharp from=Trax.Samples/tests/Trax.Samples.StateMachine.E2E/Factories/StateMachineApiFactory.cs
   using Microsoft.AspNetCore.Hosting;
   using Microsoft.AspNetCore.TestHost;
   using Microsoft.Extensions.DependencyInjection;
-
-  protected override void ConfigureWebHost(IWebHostBuilder builder)
-  {
-      builder.UseSetting("ConnectionStrings:TraxDatabase", connectionString);
-      builder.UseEnvironment("Development");   // the demo keys exist only here
-      builder.ConfigureTestServices(services => services.AddSingleton<ICharge>(charges));
-  }
+  // ...
+      protected override void ConfigureWebHost(IWebHostBuilder builder)
+      {
+          base.ConfigureWebHost(builder);
+          builder.UseEnvironment(Environment);
+          builder.ConfigureTestServices(services => services.AddSingleton<ICharge>(Charges));
+      }
   ```
 
 - **Seed what an older host stored through the store.** `ISnapshotStore` does not validate, so writing a version
@@ -325,16 +369,25 @@ state machine host:
   keyed by `ISnapshotPrincipal.CurrentUserKey`, which for the sample's `TraxCallerSnapshotPrincipal` is the
   scheme-qualified principal id, `TraxApiKey:alice` for the demo key:
 
-  ```csharp
-  using var scope = factory.Services.CreateScope();
-  var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
-  await store.Insert("TraxApiKey:alice", id, new Snapshot
-  {
-      Machine = "checkout",
-      Version = 1,
-      State = "Review",
-      Context = new JsonObject { ["items"] = new JsonArray("book"), ["receipt"] = null },
-  });
+  ```csharp from=Trax.Samples/tests/Trax.Samples.StateMachine.E2E/Tests/ForwardMigrationTests.cs
+      using var scope = SharedStateMachineSetup.Factory.Services.CreateScope();
+      var store = scope.ServiceProvider.GetRequiredService<ISnapshotStore>();
+
+      var inserted = await store.Insert(
+          AliceUserKey,
+          id,
+          new Snapshot
+          {
+              Machine = Checkout,
+              Version = 1,
+              State = state,
+              Context = new JsonObject
+              {
+                  ["items"] = new JsonArray(items.Select(i => (JsonNode?)i).ToArray()),
+                  ["receipt"] = null,
+              },
+          }
+      );
   ```
 
 - **Isolate tests by id and data, not by database.** Every test uses a fresh draft id and puts an item no other
