@@ -1,12 +1,15 @@
 ---
-title: Qualified Principal Ids
-description: Why the trax:principal-id claim is now qualified by authentication scheme, what reads it, and how to migrate ids already stored with the bare form.
+title: Migrate to qualified principal ids
+description: "Why the trax:principal-id claim is now qualified by authentication scheme, what reads it, and how to migrate ids already stored in the bare form."
 type: how-to
 area: upgrading
-nav_order: 2
+parent: Upgrading
+nav_order: 3
 ---
 
-# Qualified Principal Ids
+# Migrate to qualified principal ids
+
+Applies from: Trax.Api 1.44.0.
 
 The `trax:principal-id` claim now carries the id a resolver returned **qualified by the
 authentication scheme that authenticated it**: `{scheme}:{id}`.
@@ -57,7 +60,9 @@ to where its id came from, and treat a row you cannot attribute as unowned rathe
 In code, `TraxPrincipalId.Qualify(scheme, id)` returns the id a principal will carry, for seeds
 and fixtures:
 
-```csharp
+```csharp compile
+using Trax.Api.Auth;
+
 var ownerId = TraxPrincipalId.Qualify("Customer", "abc"); // "Customer:abc"
 ```
 
@@ -77,3 +82,9 @@ remember.
   output once.
 - **Rate limits and audit sinks** keyed on `trax:principal-id` see new keys; counters and
   dashboards bucketed on the old ids start fresh.
+
+## Related
+
+- [TraxPrincipal](/docs/sdk-reference/api-auth/trax-principal): the principal and its `Id`.
+- [TraxAuthClaimTypes](/docs/sdk-reference/api-auth/trax-auth-claim-types): the claims Trax writes.
+- [Trax.Api ADR 0023](https://github.com/TraxSharp/Trax/blob/main/Trax.Api/docs/adr/0023-a-principal-id-is-qualified-by-its-scheme.md): why the id carries its scheme.
