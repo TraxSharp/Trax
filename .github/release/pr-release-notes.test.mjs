@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { collectPullRequestNotes, composeNotes, extractReleaseNotes } from './pr-release-notes.mjs';
+import {
+  collectPullRequestNotes,
+  colorScopes,
+  composeNotes,
+  extractReleaseNotes,
+  layerSquares,
+} from './pr-release-notes.mjs';
 
 describe('extractReleaseNotes', () => {
   it('takes the section up to the next heading of the same level', () => {
@@ -59,6 +65,38 @@ describe('composeNotes', () => {
 
   it('leaves the commit notes alone when no pull request has release notes', () => {
     assert.equal(composeNotes(commitNotes, []), commitNotes);
+  });
+
+  it('puts the squares of the layers a title names before its heading', () => {
+    const notes = composeNotes(commitNotes, [
+      { number: 40, title: 'fix(machines,data): keep drafts', url: 'https://pr/40', notes: 'Kept.' },
+    ]);
+
+    assert.match(notes, /^## 🟨🟪 Keep drafts \(\[#40\]/m);
+  });
+});
+
+describe('layerSquares', () => {
+  it('prints layers inner to outer whatever order the scope names them in', () => {
+    assert.equal(layerSquares('surface,dispatch,security'), '🟧🟦🟥');
+    assert.equal(layerSquares('Trains'), '🟩');
+  });
+
+  it('is empty without a scope, or when any part of it is not a layer', () => {
+    assert.equal(layerSquares(undefined), '');
+    assert.equal(layerSquares('deps'), '');
+    assert.equal(layerSquares('trains,deps'), '');
+  });
+});
+
+describe('colorScopes', () => {
+  it('turns a layer scope in the commit list into its squares and leaves other scopes alone', () => {
+    const notes = '### Bug Fixes\n\n* **data,machines:** keep drafts (#40)\n* **deps:** bump x (#41)\n* plain (#42)\n';
+
+    assert.equal(
+      colorScopes(notes),
+      '### Bug Fixes\n\n* 🟨🟪 keep drafts (#40)\n* **deps:** bump x (#41)\n* plain (#42)\n',
+    );
   });
 });
 

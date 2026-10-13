@@ -73,6 +73,30 @@ repository; in the repository a `Directory.Build.targets` swaps them for project
 Third-party versions are pinned once, in the root `Directory.Packages.props`, under Central
 Package Management with transitive pinning; a `PackageReference` carries no `Version`.
 
+## Layers
+
+Trax's layers are concepts, not folders: `Trax.Effect` alone holds data, plumbing, `ServiceTrain`
+and the state machines. Anything written about a change (a PR description, a plan, a work item,
+a release note) marks the layers it touches with these squares, inner to outer, several when it
+crosses layers. The square always sits next to words or an id; colour never carries the meaning
+alone.
+
+| | Layer (scope) | What's in it |
+|---|---|---|
+| 🟨 | Data (`data`) | `Trax.Effect.Data.*` (Postgres, Sqlite, InMemory), migrations, SQL, the run-record tables |
+| 🟫 | Plumbing (`plumbing`) | Effect providers, junction providers, broadcasters (RabbitMQ, SignalR), lifecycle hooks |
+| 🟩 | Trains (`trains`) | `Train` (Core), `ServiceTrain` (Effect), junctions, chains, Memory, decisions, `Parallel` |
+| 🟪 | Machines (`machines`) | `Trax.Effect.StateMachine*` and `@trax/state-machine`, its TypeScript twin |
+| 🟧 | Dispatch (`dispatch`) | Mediator (train bus, authorization), Scheduler (jobs, manifests, recovery), remote runners, Lambda |
+| 🟦 | Surface (`surface`) | Api (GraphQL, auth, persisted operations, generated clients) and Dashboard, which mirrors it action for action |
+| ⬛ | Tooling (`tooling`) | CLI, analyzers, architecture and ADR guards, CI, release, docs |
+| 🟥 | Security (`security`) | Not a layer: a flag on anything that changes authentication, authorization or exposure |
+
+Trains are the layer everything outside them speaks: Dispatch runs them, Surface exposes them,
+Machines invoke them, Data records their runs. A scheduling fix is 🟧, not 🟩; a change to what a
+train does is 🟩. Machines are purple rather than red because red and green are the pair most
+often confused, and machines and trains appear together constantly.
+
 ## Building and testing
 
 From a folder:
@@ -139,7 +163,8 @@ will notice, with `###` sub-headings if it needs them. The release copies it, un
 request's title, above the commit list (`.github/release/pr-release-notes.mjs`). Write one for
 every `feat:` pull request of any size; a small fix needs none. It is published as written, so it
 names no work-item ids and describes a security fix, never the attack. Only an author with write
-access has their section copied.
+access has their section copied. A title whose scope names layers gets their squares, in its
+heading and in the commit list.
 
 **Never write `BREAKING CHANGE:` in a commit body or footer** unless explicitly told to: it cuts a
 major, which is permanent on nuget.org. Describe breaking changes in the PR description instead.
@@ -149,6 +174,8 @@ to the version just released, so package validation compares against it.
 
 ## Pull requests
 
-Title: a conventional-commit subject (`fix: refuse …`, `feat: add …`). Body: what changed and
-why, how it was tested, and anything it must merge after. Commit messages and PR descriptions
-read as though a developer wrote them for other developers: direct, specific, no hedging.
+Title: a conventional-commit subject whose scope names the layers it touches (`fix(dispatch):
+refuse …`, `feat(machines,data): add …`; see Layers). A scope that is not a layer, such as
+`chore(deps):`, is left as written. Body: what changed and why, how it was tested, and anything it
+must merge after. Commit messages and PR descriptions read as though a developer wrote them for
+other developers: direct, specific, no hedging.

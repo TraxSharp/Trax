@@ -11,6 +11,9 @@
 // published without review once the release is approved, so an outside contributor's description
 // is never published as Trax's own words.
 //
+// A title whose scope names layers (`fix(machines,data): …`, AGENTS.md "Layers") is marked with
+// those layers' squares, in its heading and in the commit list.
+//
 // .releaserc.json names this file in place of @semantic-release/release-notes-generator, and the
 // options it is given pass through to that generator.
 import { generateNotes as generateCommitNotes } from '@semantic-release/release-notes-generator';
@@ -28,7 +31,40 @@ export async function generateNotes(pluginConfig, context) {
     request: gitHubRequest(context.env),
     logger: context.logger,
   });
-  return composeNotes(commitNotes, sections);
+  return composeNotes(colorScopes(commitNotes), sections);
+}
+
+// Each layer a conventional-commit scope can name, inner to outer, as AGENTS.md "Layers" lists
+// them. Several scopes print in this order whatever order the title wrote them in.
+export const LAYERS = [
+  ['data', '🟨'],
+  ['plumbing', '🟫'],
+  ['trains', '🟩'],
+  ['machines', '🟪'],
+  ['dispatch', '🟧'],
+  ['surface', '🟦'],
+  ['tooling', '⬛'],
+  ['security', '🟥'],
+];
+
+// The squares for a scope such as "machines,data". Empty when there is no scope or any part of
+// it is not a layer (`chore(deps)`), so a scope is never half-translated.
+export function layerSquares(scope) {
+  const names = (scope ?? '').split(/[\s,/]+/).filter(Boolean);
+  const known = new Map(LAYERS);
+  if (names.length === 0 || !names.every((n) => known.has(n.toLowerCase()))) return '';
+  const wanted = new Set(names.map((n) => n.toLowerCase()));
+  return LAYERS.filter(([name]) => wanted.has(name))
+    .map(([, square]) => square)
+    .join('');
+}
+
+// The commit list writes a scope as "* **scope:** subject"; a layer scope becomes its squares.
+export function colorScopes(notes) {
+  return notes.replace(/^(\s*[*-] )\*\*([^*\n]+):\*\* /gm, (line, bullet, scope) => {
+    const squares = layerSquares(scope);
+    return squares ? `${bullet}${squares} ` : line;
+  });
 }
 
 // The text under a "Release notes" heading, up to the next heading of the same or a higher level,
@@ -130,10 +166,14 @@ export function composeNotes(commitNotes, sections) {
   return [heading, ...highlights, `## All changes\n\n${rest.join('\n').trim()}`].join('\n\n') + '\n';
 }
 
-// A pull request title without its conventional-commit type, starting with a capital.
+// A pull request title without its conventional-commit type, starting with a capital, after the
+// squares of the layers its scope names.
 function headingFor(title) {
-  const subject = title.replace(/^\w+(\([^)]*\))?!?:\s*/, '');
-  return subject.charAt(0).toUpperCase() + subject.slice(1);
+  const type = /^\w+(?:\(([^)]*)\))?!?:\s*/.exec(title);
+  const subject = title.slice(type?.[0].length ?? 0);
+  const squares = layerSquares(type?.[1]);
+  const capitalised = subject.charAt(0).toUpperCase() + subject.slice(1);
+  return squares ? `${squares} ${capitalised}` : capitalised;
 }
 
 function repositoryOf(context) {
