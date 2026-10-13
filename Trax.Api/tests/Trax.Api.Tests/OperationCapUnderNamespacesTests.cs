@@ -1,14 +1,19 @@
 using AwesomeAssertions;
+using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Tests.Fakes;
+using Trax.Api.Tests.Fakes.Machines;
 using Trax.Core.Functional;
 using Trax.Effect.Attributes;
 using Trax.Effect.Configuration.TraxBuilder;
+using Trax.Effect.Data.InMemory.Extensions;
+using Trax.Effect.Extensions;
 using Trax.Effect.Services.EffectRegistry;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.TraxScheduler;
 
@@ -189,6 +194,80 @@ public class OperationCapUnderNamespacesTests
         ErrorCodes(overCap)
             .Should()
             .Contain(TooMany, "the cap counts the operations under each namespace, per " + Adr);
+    }
+
+    private const string MachinesAdr =
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
+    [Test]
+    [Property("adr", MachinesAdr)]
+    public async Task FiftyOneAliasedGetsUnderMachines_AreRefusedAtTheDefaultCap()
+    {
+        var executor = await BuildMachinesExecutorAsync();
+
+        var result = await executor.ExecuteAsync($"{{ machines {{ shop {{ {Gets(51)} }} }} }}");
+
+        ErrorCodes(result)
+            .Should()
+            .Contain(
+                TooMany,
+                "machines are their own kind of namespace, and the cap counts the operations under it, per "
+                    + Adr
+                    + " and "
+                    + MachinesAdr
+            );
+    }
+
+    [Test]
+    [Property("adr", MachinesAdr)]
+    public async Task MachinesAndMachineFields_AreNamespaceFields_NotCounted()
+    {
+        var executor = await BuildMachinesExecutorAsync();
+
+        var result = await executor.ExecuteAsync($"{{ machines {{ shop {{ {Gets(50)} }} }} }}");
+
+        var operation = result.ExpectOperationResult();
+        operation
+            .Data.Should()
+            .NotBeNull(
+                "the document is valid: machines and machines.shop exist, per " + MachinesAdr
+            );
+        operation.ToJson().Should().Contain("\"machines\":");
+        ErrorCodes(result)
+            .Should()
+            .NotContain(
+                TooMany,
+                "machines and its machine fields only group the gets, so only the gets count, per "
+                    + Adr
+            );
+    }
+
+    private static string Gets(int count) =>
+        string.Join(
+            " ",
+            Enumerable
+                .Range(0, count)
+                .Select(i => $"g{i}: get(id: \"{Guid.NewGuid()}\") {{ __typename }}")
+        );
+
+    private async Task<IRequestExecutor> BuildMachinesExecutorAsync()
+    {
+        var services = new ServiceCollection().AddDevelopmentEnvironment();
+        services.AddLogging();
+        services.AddTrax(trax => trax.AddEffects(e => e.UseInMemory()).AddStateMachines());
+        services.AddSingleton<IMachine, ShopMachine>();
+        services.AddScoped<ISnapshotPrincipal>(_ => Substitute.For<ISnapshotPrincipal>());
+        services.AddSingleton<ITrainDiscoveryService>(
+            new StubDiscovery([Train<ILookupTrain>(isQuery: true, ns: null)])
+        );
+        services.AddScoped(_ => Substitute.For<ITraxScheduler>());
+        services.AddScoped(_ => Substitute.For<ITraxHealthService>());
+        services.AddTraxGraphQL();
+
+        _provider = services.BuildServiceProvider();
+        return await _provider
+            .GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
     }
 
     private static string Call(string alias, string field) =>

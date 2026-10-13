@@ -143,6 +143,14 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
         // inside ConfigureSchema so the invalidator can evict the right executor.
         services.AddSingleton<HotChocolateOperationCacheInvalidator>();
 
+        // Every exposed machine's documents, generated from the built schema and registered before the host
+        // serves. See Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
+        services.TryAddSingleton<Services.MachineDocumentRegistry>();
+        services.TryAddSingleton<Trax.Api.GraphQL.TypeModules.IMachineIrOrder>(sp =>
+            sp.GetRequiredService<Services.MachineDocumentRegistry>()
+        );
+        services.AddHostedService<PersistedOperations.Startup.MachineDocumentRegistration>();
+
         // Storage: implements both IPersistedOperationStore and the HC hot-path.
         services.AddSingleton<DbPersistedOperationStorage>();
         services.AddSingleton<IPersistedOperationStore>(sp =>
@@ -242,6 +250,15 @@ public static class TraxGraphQLBuilderPersistedOperationsExtensions
             schema.UseRequest(
                 PersistedOperationIdBindingMiddleware.Create,
                 key: PersistedOperationIdBindingMiddleware.Key,
+                before: WellKnownRequestMiddleware.DocumentCacheMiddleware
+            );
+            // A machine document id this node does not serve is answered client-outdated or server-outdated
+            // before anything is looked up or cached. See
+            // Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md.
+            schema.AddApplicationService<Services.MachineDocumentRegistry>();
+            schema.UseRequest(
+                MachineDocumentMiddleware.Create,
+                key: MachineDocumentMiddleware.Key,
                 before: WellKnownRequestMiddleware.DocumentCacheMiddleware
             );
             // Enforcement runs here, after the document is parsed and before it is validated, so

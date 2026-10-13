@@ -74,6 +74,13 @@ internal sealed class LifecycleSubscriptionAccess(
             ? await SatisfiesOperationsAsync(user).ConfigureAwait(false)
             : IsAuthenticated(user);
 
+    /// <summary>
+    /// True when <paramref name="user"/> may follow the operator's feeds that exist only in the
+    /// operations view, such as <c>onMachineInstanceChanged</c>: the operations surface is exposed
+    /// and the subscriber satisfies its gate. Never true for a broadcast subscriber.
+    /// </summary>
+    public ValueTask<bool> OperationsFor(ClaimsPrincipal? user) => SatisfiesOperationsAsync(user);
+
     private async ValueTask<bool> SatisfiesOperationsAsync(ClaimsPrincipal? user)
     {
         if (!OperationsExposed)

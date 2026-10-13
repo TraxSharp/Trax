@@ -40,5 +40,7 @@
     <ProjectReference Include="../../src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
+    <!-- The per-event cost of a machine event counts its audit entry. -->
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.Audit/Trax.Api.GraphQL.Audit.csproj" />
   </ItemGroup>
 </Project>

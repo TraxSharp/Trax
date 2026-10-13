@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Radzen;
+using Trax.Dashboard.Services.Authorization;
 using Trax.Dashboard.Utilities;
 using Trax.Effect.Enums;
 using Trax.Scheduler.Services.Operations;
@@ -10,10 +12,17 @@ namespace Trax.Dashboard.Components.Pages.Data;
 /// <summary>
 /// The page for one state-machine instance, at
 /// <c>/trax/data/state-machines/{machine}/{system|user}/{id}</c>, with <c>?row={rowId}</c> for a
-/// user's draft. It shows the instance's state, version, timestamps, owner kind and whether it
-/// waits on a train run it invoked; never its context, and never the user who owns it.
+/// user's draft. It shows the instance's state, revision, version, timestamps, owner kind and
+/// whether it waits on a train run it invoked; never its context, and never the user who owns it.
 /// Part of the dashboard UI, routed by the package; not intended to be used directly.
 /// </summary>
+/// <remarks>
+/// It is live: once loaded it follows <see cref="IOperationsService.WatchMachineInstancesAsync"/>,
+/// the feed the API's <c>onMachineInstanceChanged</c> reads, so a write shows as it happens rather
+/// than at the next poll. Leaving the page ends its feed, and so does the circuit's operator losing
+/// the dashboard's posture, which the circuit re-checks when the user changes and on its
+/// revalidation interval.
+/// </remarks>
 public partial class StateMachineInstancePage
 {
     [Inject]
@@ -27,6 +36,9 @@ public partial class StateMachineInstancePage
 
     [Inject]
     private ILogger<StateMachineInstancePage> Logger { get; set; } = default!;
+
+    [Inject]
+    private IServiceProvider Services { get; set; } = default!;
 
     /// <summary>The machine's id, from the route.</summary>
     [Parameter]
@@ -60,6 +72,16 @@ public partial class StateMachineInstancePage
     private bool _confirmingCancel;
     private bool _cancelling;
 
+    // The live feed this page follows, ended when the page goes, the route changes, or the circuit
+    // is refused.
+    private CancellationTokenSource? _feed;
+
+    // The circuit's re-check of the dashboard's posture, when the host registers one.
+    private DashboardCircuitAuthorization? _authorization;
+
+    // Whether the feed reported the instance deleted or expired.
+    private bool _deleted;
+
     // The cancel's refusal, in the service's words, which the API returns too.
     private string? _actionError;
 
@@ -76,6 +98,8 @@ public partial class StateMachineInstancePage
         _refusal = null;
         _confirmingCancel = false;
         _actionError = null;
+        _deleted = false;
+        StopFeed();
     }
 
     /// <summary>
@@ -107,7 +131,7 @@ public partial class StateMachineInstancePage
         }
 
         var instance = await OperationsService.GetMachineInstanceAsync(key, cancellationToken);
-        _runs = instance is null
+        var runs = instance is null
             ? null
             : await OperationsService.GetMachineInstanceRunsAsync(
                 key with
@@ -116,7 +140,181 @@ public partial class StateMachineInstancePage
                 },
                 cancellationToken
             );
+
+        // The feed may have shown a newer revision than this read found; the page never goes back.
+        if (
+            instance is not null
+            && _instance is { Revision: { } shown }
+            && _instance.RowId == instance.RowId
+            && instance.Revision is { } read
+            && read < shown
+        )
+            return;
+
+        _runs = runs;
         _instance = instance;
+        if (instance is not null)
+            _deleted = false;
+        FollowFeed(key);
+    }
+
+    /// <summary>
+    /// Starts following the live feed for this page's instance, once: from the operations service,
+    /// for the page's machine, until the page goes or the circuit is refused.
+    /// </summary>
+    private void FollowFeed(MachineInstanceKey key)
+    {
+        if (_feed is not null)
+            return;
+
+        _authorization ??= Services.GetService<DashboardCircuitAuthorization>();
+        if (_authorization is not null)
+        {
+            _authorization.Attach();
+            if (_authorization.IsRefused)
+                return;
+            _authorization.Refused -= StopFeed;
+            _authorization.Refused += StopFeed;
+        }
+
+        var feed = new CancellationTokenSource();
+        _feed = feed;
+        _ = ReadFeedAsync(key, feed);
+    }
+
+    private async Task ReadFeedAsync(MachineInstanceKey key, CancellationTokenSource feed)
+    {
+        var ct = feed.Token;
+        try
+        {
+            await foreach (
+                var record in OperationsService
+                    .WatchMachineInstancesAsync(key.Machine, ct)
+                    .WithCancellation(ct)
+            )
+            {
+                // Writes may have been missed (the host's listener started or reconnected): read
+                // the instance again rather than wait for the next poll.
+                if (record.Reload)
+                {
+                    if (ct.IsCancellationRequested || _authorization is { IsRefused: true })
+                        return;
+                    await InvokeAsync(async () =>
+                    {
+                        await LoadDataAsync(ct);
+                        StateHasChanged();
+                    });
+                    continue;
+                }
+                if (
+                    record.OwnerKind != key.OwnerKind
+                    || record.Id != key.Id
+                    || (key.RowId is { } row && record.RowId != row)
+                )
+                    continue;
+                if (ct.IsCancellationRequested || _authorization is { IsRefused: true })
+                    return;
+
+                await InvokeAsync(async () => await ShowAsync(key, record, ct));
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The page left, the route changed, or the circuit was refused.
+        }
+        catch (Exception ex)
+        {
+            // The page still has its poll; the feed is a faster way to the same rows.
+            Logger.LogWarning(
+                ex,
+                "The live feed for instance {Id} of state machine {Machine} ended; the page falls back to polling.",
+                key.Id,
+                key.Machine
+            );
+        }
+        finally
+        {
+            if (ReferenceEquals(_feed, feed))
+                _feed = null;
+        }
+    }
+
+    // Shows one record the feed sent for this instance, reading its runs again when its state
+    // moved; a revision at or below the one shown is dropped.
+    private async Task ShowAsync(
+        MachineInstanceKey key,
+        MachineInstanceRecord record,
+        CancellationToken ct
+    )
+    {
+        if (ct.IsCancellationRequested)
+            return;
+
+        if (record.Deleted)
+        {
+            if (_instance is not null && _instance.RowId != record.RowId)
+                return;
+            _instance = null;
+            _runs = null;
+            _deleted = true;
+            _confirmingCancel = false;
+            StateHasChanged();
+            return;
+        }
+
+        if (
+            _instance is { } shown
+            && shown.RowId == record.RowId
+            && shown.Revision is { } held
+            && record.Revision is { } next
+            && next <= held
+        )
+            return;
+
+        var moved = _instance is null || _instance.State != record.State;
+        _instance = record;
+        _deleted = false;
+        StateHasChanged();
+
+        if (!moved)
+            return;
+        try
+        {
+            _runs = await OperationsService.GetMachineInstanceRunsAsync(
+                key with
+                {
+                    RowId = record.RowId,
+                },
+                ct
+            );
+            StateHasChanged();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(
+                ex,
+                "Could not read the runs of instance {Id} of state machine {Machine}; the next poll will.",
+                key.Id,
+                key.Machine
+            );
+        }
+    }
+
+    private void StopFeed()
+    {
+        var feed = _feed;
+        _feed = null;
+        feed?.Cancel();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Ends the live feed as well.</remarks>
+    public override ValueTask DisposeAsync()
+    {
+        if (_authorization is not null)
+            _authorization.Refused -= StopFeed;
+        StopFeed();
+        return base.DisposeAsync();
     }
 
     /// <summary>

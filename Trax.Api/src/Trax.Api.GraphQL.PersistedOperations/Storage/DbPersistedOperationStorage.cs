@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Trax.Api.GraphQL.PersistedOperations.Broadcasting;
 using Trax.Api.GraphQL.PersistedOperations.Configuration;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.ShapeDiff;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Exceptions;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
@@ -42,6 +43,7 @@ internal sealed class DbPersistedOperationStorage
     private readonly StampedCache<string> _misses;
     private readonly TimeProvider _clock;
     private readonly ILogger<DbPersistedOperationStorage> _logger;
+    private readonly MachineDocumentRegistry _machineDocuments;
 
     /// <summary>
     /// How many unknown ids each generation of the miss cache holds; the cache keeps at most
@@ -58,7 +60,8 @@ internal sealed class DbPersistedOperationStorage
         HotChocolateOperationCacheInvalidator hcInvalidator,
         PersistedOperationCacheGeneration generation,
         TimeProvider clock,
-        ILogger<DbPersistedOperationStorage> logger
+        ILogger<DbPersistedOperationStorage> logger,
+        MachineDocumentRegistry? machineDocuments = null
     )
     {
         ArgumentNullException.ThrowIfNull(factory);
@@ -85,6 +88,7 @@ internal sealed class DbPersistedOperationStorage
         );
         _clock = clock;
         _logger = logger;
+        _machineDocuments = machineDocuments ?? new MachineDocumentRegistry();
     }
 
     // ----- IOperationDocumentStorage (HC hot path) -----
@@ -141,7 +145,16 @@ internal sealed class DbPersistedOperationStorage
             return new OperationDocumentSourceText(cached);
         }
 
-        if (_misses.TryGet(id, out _))
+        // An id under the reserved prefix is a machine document: only this node's own are read, never one it did
+        // not generate, and a miss is not remembered, so the ids a client invents cannot fill the miss cache.
+        MachineDocument? own = null;
+        if (MachineDocuments.IsReserved(id))
+        {
+            if (!_machineDocuments.TryGetOwn(id, out var generated))
+                return null;
+            own = generated;
+        }
+        else if (_misses.TryGet(id, out _))
             return null;
 
         var sentinel = Normalize(tenantKey);
@@ -157,7 +170,22 @@ internal sealed class DbPersistedOperationStorage
 
             if (document is null)
             {
-                _misses.Add(id, id, generation, readAt);
+                if (own is null)
+                    _misses.Add(id, id, generation, readAt);
+                return null;
+            }
+
+            if (own is not null && !Matches(own, document))
+            {
+                MachineDocumentInstruments.Mismatches.Add(
+                    1,
+                    new KeyValuePair<string, object?>("machine", own.Machine)
+                );
+                _logger.LogError(
+                    "The stored body of machine document '{Id}' does not match its id, so it is refused. A restart "
+                        + "of this node writes the generated body back; until then, find who changed the row.",
+                    id
+                );
                 return null;
             }
 
@@ -254,6 +282,7 @@ internal sealed class DbPersistedOperationStorage
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         ArgumentException.ThrowIfNullOrEmpty(document);
+        RefuseReserved(id);
 
         // Validate against the live schema before any DB work; the validator
         // throws structured exceptions that callers project into form errors
@@ -370,6 +399,7 @@ internal sealed class DbPersistedOperationStorage
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         ArgumentException.ThrowIfNullOrEmpty(reason);
+        RefuseReserved(id);
         var sentinel = Normalize(tenantKey);
         var now = _clock.GetUtcNow().UtcDateTime;
 
@@ -422,6 +452,7 @@ internal sealed class DbPersistedOperationStorage
     public async Task RestoreAsync(string id, string? tenantKey, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
+        RefuseReserved(id);
         var sentinel = Normalize(tenantKey);
         var now = _clock.GetUtcNow().UtcDateTime;
 
@@ -469,6 +500,337 @@ internal sealed class DbPersistedOperationStorage
         {
             await DisposeContextAsync(ctx).ConfigureAwait(false);
         }
+    }
+
+    // ----- machine documents -----
+
+    /// <summary>
+    /// Registers this node's machine documents. Under one lock shared by every node, each document missing from the
+    /// store is written with a history row; each whose stored body differs from the generated one is written back
+    /// and counted; and a set of documents this node registers for the first time is numbered one past every set of
+    /// its machine stored before it. Documents already stored as generated are left alone: no write, no history row,
+    /// no broadcast. An older version's documents are deactivated only once this node's have been stored for
+    /// <paramref name="grace"/>; a newer version's never are.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A document of this node's that was collected is made active again only when <paramref name="startup"/> is
+    /// set (a node rolled back to it) or no newer version of its machine is stored: a node still running an older
+    /// version after the grace period never brings back what a newer one collected.
+    /// </para>
+    /// <para>
+    /// An active document of a machine this node does not serve is marked unexposed (its deprecation reason, with
+    /// the time in its <c>updated_at</c>), once; a node that serves it clears the mark when it registers. A document
+    /// still marked after <paramref name="grace"/> is collected: no node registering since has served its machine, so
+    /// its clients reload instead of retrying.
+    /// </para>
+    /// </remarks>
+    /// <returns>This node's version of each machine, and every stored machine document's version and state.</returns>
+    internal async Task<(
+        IReadOnlyDictionary<string, int> OwnVersions,
+        IReadOnlyDictionary<string, StoredMachineDocument> Stored
+    )> RegisterMachineDocumentsAsync(
+        IReadOnlyList<MachineDocument> documents,
+        TimeSpan grace,
+        CancellationToken ct,
+        bool startup = true
+    )
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var changed = new List<(string Id, string ChangeType)>();
+        var marked = false;
+        var ownVersions = new Dictionary<string, int>(StringComparer.Ordinal);
+        Dictionary<string, StoredMachineDocument> stored;
+
+        var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await using var tx = await LockAsync(
+                    ctx,
+                    NoTenantSentinel,
+                    MachineDocuments.ReservedIdPrefix,
+                    ct
+                )
+                .ConfigureAwait(false);
+
+            var rows = await ctx
+                .PersistedOperations.Where(p =>
+                    p.TenantKey == NoTenantSentinel
+                    && p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                )
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+            var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
+
+            foreach (var machine in documents.GroupBy(d => d.Machine, StringComparer.Ordinal))
+            {
+                var mine = machine.ToList();
+                var ownIds = mine.Select(d => d.Id).ToHashSet(StringComparer.Ordinal);
+                var ofMachine = rows.Where(r =>
+                        MachineDocuments.MachineOf(r.Id, [machine.Key]) is not null
+                    )
+                    .ToList();
+                // A set already stored keeps the number it registered under; a new one goes after every other.
+                var version = mine.All(d => byId.ContainsKey(d.Id))
+                    ? mine.Max(d => byId[d.Id].Version)
+                    : ofMachine.Select(r => r.Version).DefaultIfEmpty(0).Max() + 1;
+                ownVersions[machine.Key] = version;
+                var mayRestore = startup || !ofMachine.Any(r => r.Version > version);
+
+                foreach (var document in mine)
+                    marked |= Register(
+                        ctx,
+                        document,
+                        version,
+                        mayRestore,
+                        byId,
+                        rows,
+                        changed,
+                        now
+                    );
+
+                // A node still running an older version needs its documents, so they stay until this version has
+                // been stored for the grace period.
+                var registeredAt = mine.Max(d => byId[d.Id].CreatedAt);
+                if (now - registeredAt < grace)
+                    continue;
+                foreach (
+                    var old in ofMachine.Where(r =>
+                        r.IsActive && r.Version < version && !ownIds.Contains(r.Id)
+                    )
+                )
+                {
+                    var reason =
+                        $"collected: superseded by version {version} of the machine '{machine.Key}' for longer than {grace}";
+                    old.IsActive = false;
+                    old.DeprecationReason = reason;
+                    old.UpdatedAt = now;
+                    History(ctx, old, PersistedOperationChangeType.Deactivate, now, reason);
+                    changed.Add((old.Id, PersistedOperationChangeType.Deactivate));
+                }
+            }
+
+            var served = ownVersions.Keys.ToList();
+            foreach (
+                var row in rows.Where(r =>
+                    r.IsActive && MachineDocuments.MachineOf(r.Id, served) is null
+                )
+            )
+            {
+                if (!IsUnexposedMark(row.DeprecationReason))
+                {
+                    row.DeprecationReason =
+                        $"{UnexposedMark} not served by a node that registered its machine documents at {now:O}";
+                    row.UpdatedAt = now;
+                    marked = true;
+                }
+                else if (now - row.UpdatedAt >= grace)
+                {
+                    var reason =
+                        $"collected: no node registering its machine documents has served its machine for longer than {grace}";
+                    row.IsActive = false;
+                    row.DeprecationReason = reason;
+                    row.UpdatedAt = now;
+                    History(ctx, row, PersistedOperationChangeType.Deactivate, now, reason);
+                    changed.Add((row.Id, PersistedOperationChangeType.Deactivate));
+                }
+            }
+
+            if (changed.Count > 0 || marked)
+                await ctx.SaveChanges(ct).ConfigureAwait(false);
+            if (tx is not null)
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+
+            stored = rows.ToDictionary(
+                r => r.Id,
+                r => new StoredMachineDocument(r.Version, r.IsActive),
+                StringComparer.Ordinal
+            );
+        }
+        finally
+        {
+            await DisposeContextAsync(ctx).ConfigureAwait(false);
+        }
+
+        foreach (var (id, changeType) in changed)
+        {
+            try
+            {
+                await ApplyChangeAsync(null, id, changeType, null).ConfigureAwait(false);
+            }
+            catch (PersistedOperationNotBroadcastException)
+            {
+                // Logged where it was raised. Another node serves only its own machine documents, so it is told of
+                // these only to drop what it cached, which its maximum age bounds.
+            }
+        }
+
+        return (ownVersions, stored);
+    }
+
+    // The deprecation reason an active machine document carries while no node registering serves its machine.
+    private const string UnexposedMark = "unexposed:";
+
+    private static bool IsUnexposedMark(string? reason) =>
+        reason is not null && reason.StartsWith(UnexposedMark, StringComparison.Ordinal);
+
+    // Writes one generated document: a new row, a row written back over a body that does not match its id, a row
+    // collected earlier that this node serves again (when it may restore it), or a row whose unexposed mark this node
+    // clears. Returns whether it changed a row without a history entry (the mark).
+    private bool Register(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        MachineDocument document,
+        int version,
+        bool mayRestore,
+        Dictionary<string, PersistedOperation> byId,
+        List<PersistedOperation> rows,
+        List<(string Id, string ChangeType)> changed,
+        DateTime now
+    )
+    {
+        if (!byId.TryGetValue(document.Id, out var row))
+        {
+            row = new PersistedOperation
+            {
+                TenantKey = NoTenantSentinel,
+                Id = document.Id,
+                OperationName = ExtractOperationName(document.Text),
+                Version = version,
+                Document = document.Text,
+                ShapeFingerprint = ShapeFingerprintComputer.Compute(document.Text),
+                IsActive = true,
+                Description =
+                    $"Generated for the machine '{document.Machine}' ({document.Operation}), IR {document.IrHash}.",
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            ctx.PersistedOperations.Add(row);
+            rows.Add(row);
+            byId[row.Id] = row;
+            History(ctx, row, PersistedOperationChangeType.Upsert, now, "registered");
+            changed.Add((row.Id, PersistedOperationChangeType.Upsert));
+        }
+        else if (!string.Equals(row.Document, document.Text, StringComparison.Ordinal))
+        {
+            row.Document = document.Text;
+            row.ShapeFingerprint = ShapeFingerprintComputer.Compute(document.Text);
+            row.OperationName = ExtractOperationName(document.Text);
+            if (row.IsActive || mayRestore)
+            {
+                row.IsActive = true;
+                row.DeprecationReason = null;
+            }
+            row.UpdatedAt = now;
+            History(
+                ctx,
+                row,
+                PersistedOperationChangeType.Upsert,
+                now,
+                "repaired: the stored body did not match its id"
+            );
+            changed.Add((row.Id, PersistedOperationChangeType.Upsert));
+            MachineDocumentInstruments.Repairs.Add(
+                1,
+                new KeyValuePair<string, object?>("machine", document.Machine)
+            );
+            _logger.LogError(
+                "The stored body of machine document '{Id}' did not match its id, so it was written back. Find who "
+                    + "changed the row.",
+                row.Id
+            );
+        }
+        else if (!row.IsActive)
+        {
+            if (!mayRestore)
+                return false;
+            row.IsActive = true;
+            row.DeprecationReason = null;
+            row.UpdatedAt = now;
+            History(ctx, row, PersistedOperationChangeType.Restore, now, null);
+            changed.Add((row.Id, PersistedOperationChangeType.Restore));
+        }
+        else if (IsUnexposedMark(row.DeprecationReason))
+        {
+            row.DeprecationReason = null;
+            row.UpdatedAt = now;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>The version and state of every stored machine document, active or not, by id.</summary>
+    internal async Task<
+        IReadOnlyDictionary<string, StoredMachineDocument>
+    > ReadMachineDocumentVersionsAsync(CancellationToken ct)
+    {
+        var ctx = await _factory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await ctx
+                .PersistedOperations.AsNoTracking()
+                .Where(p =>
+                    p.TenantKey == NoTenantSentinel
+                    && p.Id.StartsWith(MachineDocuments.ReservedIdPrefix)
+                )
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Version,
+                    p.IsActive,
+                })
+                .ToDictionaryAsync(
+                    p => p.Id,
+                    p => new StoredMachineDocument(p.Version, p.IsActive),
+                    StringComparer.Ordinal,
+                    ct
+                )
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await DisposeContextAsync(ctx).ConfigureAwait(false);
+        }
+    }
+
+    // A stored body matches its id when it hashes, with the machine's IR hash, to the id it is stored under.
+    private static bool Matches(MachineDocument own, string stored) =>
+        string.Equals(
+            MachineDocuments.IdOf(own.Machine, own.Operation, own.IrHash, stored),
+            own.Id,
+            StringComparison.Ordinal
+        );
+
+    private static void History(
+        Trax.Effect.Data.Services.DataContext.IDataContext ctx,
+        PersistedOperation row,
+        string changeType,
+        DateTime at,
+        string? reason
+    ) =>
+        ctx.PersistedOperationHistories.Add(
+            new PersistedOperationHistory
+            {
+                TenantKey = row.TenantKey,
+                Id = row.Id,
+                Document = row.Document,
+                ShapeFingerprint = row.ShapeFingerprint,
+                ChangeType = changeType,
+                ChangedAt = at,
+                ChangedReason = reason,
+            }
+        );
+
+    /// <summary>
+    /// Refuses a write to an id under the reserved prefix: those are the machine documents the host generates and
+    /// registers itself, when it starts.
+    /// </summary>
+    private static void RefuseReserved(string id)
+    {
+        if (MachineDocuments.IsReserved(id))
+            throw new PersistedOperationInputException(
+                $"The id '{id}' is under '{MachineDocuments.ReservedIdPrefix}', which is reserved for the machine "
+                    + "documents the host generates and registers itself. Choose another id."
+            );
     }
 
     // ----- helpers -----

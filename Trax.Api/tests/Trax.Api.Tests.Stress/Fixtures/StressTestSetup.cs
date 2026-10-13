@@ -45,6 +45,9 @@ public abstract class StressTestSetup
 {
     private ServiceProvider _serviceProvider = null!;
 
+    /// <summary>The provider the suite built, for a test that times its own loop.</summary>
+    protected IServiceProvider ServiceProvider => _serviceProvider;
+
     protected static readonly StressProfile Profile = StressProfile.FromEnvironment();
 
     /// <summary>Budget for a single paginated list read (keyset, first page, or indexed filter).</summary>

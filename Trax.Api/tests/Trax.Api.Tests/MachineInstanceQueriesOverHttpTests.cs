@@ -376,6 +376,40 @@ public class MachineInstanceQueriesOverHttpTests
             );
     }
 
+    [Test]
+    [Property(
+        "adr",
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+    )]
+    public async Task No_operator_feed_type_has_a_context_or_owner_key()
+    {
+        var executor = await _host
+            .Services.GetRequiredService<IRequestExecutorProvider>()
+            .GetExecutorAsync("trax");
+        var subscriptions = executor.Schema.SubscriptionType;
+        subscriptions.Should().NotBeNull();
+
+        var feed = subscriptions!.Fields.FirstOrDefault(f => f.Name == "onMachineInstanceChanged");
+        feed.Should()
+            .NotBeNull(
+                "operators watch instances live through the feed, per "
+                    + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md"
+            );
+        var type = (ObjectType)feed!.Type.NamedType();
+        type.Fields.Select(f => f.Name)
+            .Should()
+            .Contain(["state", "revision", "hasLiveInvokedRun"])
+            .And.NotContain(
+                name =>
+                    name.Contains("context", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("snapshot", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("userKey", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("invokeToken", StringComparison.OrdinalIgnoreCase),
+                "the live feed shows what the operator list shows and no more: never a context, and never "
+                    + "the user behind a draft"
+            );
+    }
+
     private static bool NoOperationsData(JsonDocument doc) =>
         !doc.RootElement.TryGetProperty("data", out var data)
         || data.ValueKind == JsonValueKind.Null

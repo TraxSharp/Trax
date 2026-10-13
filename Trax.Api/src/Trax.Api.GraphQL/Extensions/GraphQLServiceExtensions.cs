@@ -39,6 +39,7 @@ using Trax.Effect.Configuration.TraxBuilder;
 using Trax.Effect.Services.ChangeSignal;
 using Trax.Effect.Services.TrainEventBroadcaster;
 using Trax.Effect.Services.TrainLifecycleHookFactory;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.TrainDiscovery;
 using Trax.Scheduler.Services.DeadLetterRequeue;
 using Trax.Scheduler.Services.Effects;
@@ -143,7 +144,24 @@ public static class GraphQLServiceExtensions
         // Every field Trax places on its root and namespace types, and every type it generates,
         // claimed by exactly one surface: two that claim the same name refuse the host here,
         // naming both, rather than HotChocolate merging them into one.
-        var nameCensus = SchemaNameCensus.Take(config, trainRegistrations, trainNames);
+        // The machines a host serves through the machines root: AddStateMachines registered its
+        // options before this call, as AddTrax must come first.
+        var stateMachineOptions =
+            services
+                .LastOrDefault(sd => sd.ServiceType == typeof(StateMachineOptions))
+                ?.ImplementationInstance as StateMachineOptions;
+        // The marked machines registered so far, by their type or as an instance, as the trains
+        // above are read from the collection. One registered later or through a factory is found
+        // when the container is built: served if the root is there, refused below if it is not.
+        var machinesExposed =
+            stateMachineOptions is not null && StateMachineOptions.ServedIn(services).Count > 0;
+
+        var nameCensus = SchemaNameCensus.Take(
+            config,
+            trainRegistrations,
+            trainNames,
+            machinesExposed
+        );
 
         // A train registered after this call skipped the checks above. Refuse the host, naming it,
         // rather than leave its field silently missing.
@@ -152,6 +170,13 @@ public static class GraphQLServiceExtensions
             seenTrains,
             sp.GetRequiredService<ITrainDiscoveryService>()
         ));
+
+        // A marked machine AddTraxGraphQL could not see, when it saw none, would be left without
+        // the machines root. Refuse the host, naming it.
+        if (stateMachineOptions is not null && !machinesExposed)
+            services.AddHostedService(sp => new MachineRegistrationOrderValidator(
+                sp.GetServices<IMachine>()
+            ));
 
         // A train mutation that can queue, on a host whose store is in memory, is refused per
         // request; this names them once at startup (docs/adr/0038).
@@ -225,8 +250,10 @@ public static class GraphQLServiceExtensions
         var hasQueryRoot =
             config.OperationQueriesExposed
             || hasTrainQueries
-            || config.ModelRegistrations.Count > 0;
-        var hasMutationRoot = config.OperationMutationsExposed || hasTrainMutations;
+            || config.ModelRegistrations.Count > 0
+            || machinesExposed;
+        var hasMutationRoot =
+            config.OperationMutationsExposed || hasTrainMutations || machinesExposed;
 
         if (!hasQueryRoot)
             throw new InvalidOperationException(
@@ -258,6 +285,34 @@ public static class GraphQLServiceExtensions
             ))
             .AddInMemorySubscriptions();
 
+        // The machines root: each machine the host exposes, served through its own typed operations.
+        if (machinesExposed)
+        {
+            services.AddSingleton<MachineTypeModule>();
+            services.AddHostedService(sp => new MachineSurfacePersistedOperationsValidator(
+                sp.GetRequiredService<IServiceProviderIsService>(),
+                MachineSurface
+                    .Exposed(sp.GetServices<IMachine>(), sp.GetService<StateMachineOptions>())
+                    .Select(m => m.Name)
+                    .ToList()
+            ));
+            services.TryAddScoped<MachineReadGate>();
+            services.TryAddSingleton<MachineWatchLimits>();
+            graphqlBuilder.AddTypeModule<MachineTypeModule>();
+            graphqlBuilder.ConfigureSchema(
+                (sp, schema) =>
+                {
+                    var root = sp.GetRootServiceProvider();
+                    schema.TryAddTypeInterceptor(
+                        new MachineJsonNamingInterceptor(
+                            root.GetServices<IMachine>(),
+                            root.GetService<StateMachineOptions>()
+                        )
+                    );
+                }
+            );
+        }
+
         if (config.OperationQueriesExposed)
         {
             graphqlBuilder.AddType(new ObjectType<OperationsQueries>());
@@ -269,6 +324,8 @@ public static class GraphQLServiceExtensions
             graphqlBuilder.AddType(new ObjectType<ConfigQueries>());
             graphqlBuilder.AddType<ChainGraphType>();
             graphqlBuilder.AddType<RunGraphType>();
+            // The operator's live feed of state-machine instances, behind the operations gate.
+            graphqlBuilder.AddTypeExtension(MachineInstanceFeed.Extension());
             graphqlBuilder.AddTypeExtension(
                 new ObjectTypeExtension(d =>
                 {
@@ -786,6 +843,10 @@ public static class GraphQLServiceExtensions
         // added to the schema services is never picked up by the document validator.)
         var maxOperations = config.MaxOperationsPerRequest;
         graphqlBuilder.AddValidationRule((_, _) => new OperationCountValidatorRule(maxOperations));
+
+        // At most one machine write per operation: the fields under a namespace resolve in
+        // parallel, so two events in one operation would race on the instance.
+        graphqlBuilder.AddValidationRule((_, _) => new MachineEventCountValidatorRule());
     }
 
     /// <summary>

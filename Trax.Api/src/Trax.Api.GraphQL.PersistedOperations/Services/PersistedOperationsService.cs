@@ -155,6 +155,8 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
             return UploadPersistedOperationPayload.Fail(InvalidInput("id is required."));
         if (string.IsNullOrWhiteSpace(input.Document))
             return UploadPersistedOperationPayload.Fail(InvalidInput("document is required."));
+        if (MachineDocuments.IsReserved(input.Id))
+            return UploadPersistedOperationPayload.Fail(Reserved(input.Id));
 
         try
         {
@@ -220,6 +222,8 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
                 null,
                 [InvalidInput("reason is required.")]
             );
+        if (MachineDocuments.IsReserved(input.Id))
+            return new DeactivatePersistedOperationPayload(null, [Reserved(input.Id)]);
 
         // Any row, active or not: deactivating an inactive operation is not an error, and doing it
         // again sends the change to every node again.
@@ -254,6 +258,8 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
         ArgumentNullException.ThrowIfNull(input);
         if (string.IsNullOrWhiteSpace(input.Id))
             return new RestorePersistedOperationPayload(null, [InvalidInput("id is required.")]);
+        if (MachineDocuments.IsReserved(input.Id))
+            return new RestorePersistedOperationPayload(null, [Reserved(input.Id)]);
 
         // Restore applies to a deactivated row, which the store's GetAsync does not return.
         var raw = await FindAnyAsync(input.Id, input.TenantKey, ct).ConfigureAwait(false);
@@ -310,4 +316,19 @@ internal sealed class PersistedOperationsService : IPersistedOperationsService
 
     private static PersistedOperationError InvalidInput(string message) =>
         new(PersistedOperationInputException.CodeValue, message, null, null, null, null);
+
+    /// <summary>The code an upload, deactivation or restore of a machine document's id is refused with.</summary>
+    internal const string ReservedIdCode = "RESERVED_ID";
+
+    // Ids under the reserved prefix are the machine documents the host generates and registers itself.
+    private static PersistedOperationError Reserved(string id) =>
+        new(
+            ReservedIdCode,
+            $"The id '{id}' is under '{MachineDocuments.ReservedIdPrefix}', which is reserved for the machine "
+                + "documents the host generates and registers itself when it starts. Choose another id.",
+            null,
+            null,
+            null,
+            null
+        );
 }

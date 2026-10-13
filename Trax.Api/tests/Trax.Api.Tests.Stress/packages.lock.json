@@ -730,6 +730,13 @@
           "Trax.Api.Auth.Jwt": "[1.99.99, )"
         }
       },
+      "trax.api.graphql.audit": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth": "[1.99.99, )",
+          "Trax.Api.GraphQL": "[1.99.99, )"
+        }
+      },
       "trax.api.graphql.persistedoperations": {
         "type": "Project",
         "dependencies": {

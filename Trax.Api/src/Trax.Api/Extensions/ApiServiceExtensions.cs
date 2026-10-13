@@ -4,6 +4,7 @@ using Trax.Api.Services.Authorization;
 using Trax.Api.Services.HealthCheck;
 using Trax.Api.Services.Metrics;
 using Trax.Api.Services.Principal;
+using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Services.Principal;
 using Trax.Mediator.Services.TrainAuthorization;
 
@@ -32,6 +33,8 @@ public static class ApiServiceExtensions
         services.AddHttpContextAccessor();
         services.AddScoped<ITraxHealthService, TraxHealthService>();
         services.AddScoped<ITrainAuthorizationService, TrainAuthorizationService>();
+        // A state-machine event's Requires and RequiresPolicy rules are checked against the request's user.
+        services.TryAddScoped<ICallerAuthorization, HttpCallerAuthorization>();
 
         // Singleton so the CPU sampler's previous-sample delta survives across requests.
         services.TryAddSingleton<ProcessCpuSampler>();

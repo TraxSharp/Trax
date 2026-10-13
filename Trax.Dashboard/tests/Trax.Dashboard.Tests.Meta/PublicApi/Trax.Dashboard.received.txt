@@ -208,6 +208,7 @@ namespace Trax.Dashboard.Components.Pages.Data
         [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name="row")]
         public long? RowId { get; set; }
         protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder @__builder) { }
+        public override System.Threading.Tasks.ValueTask DisposeAsync() { }
     }
     [Microsoft.AspNetCore.Components.Route("/trax/data/state-machines")]
     public class StateMachinesPage : Trax.Dashboard.Components.Shared.PollingComponentBase

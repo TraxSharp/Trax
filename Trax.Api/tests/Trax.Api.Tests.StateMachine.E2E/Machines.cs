@@ -33,6 +33,9 @@ public enum OrderTrigger
 }
 
 /// <summary>The turnstile, authored fluently and discovered by <c>AddTraxStateMachines</c> — no effect, no committed state.</summary>
+/// <summary>What a turnstile or an order starts with: nothing.</summary>
+public sealed record EmptyStart;
+
 public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 {
     private static readonly HashSet<string> Accepted = new(StringComparer.Ordinal)
@@ -48,11 +51,18 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
 
     protected override void Configure(IMachineBuilder<TurnstileState, TurnstileTrigger> m)
     {
-        m.Id("turnstile").Version(1).StartsAt(TurnstileState.Locked, () => new JsonObject());
+        m.Id("turnstile")
+            .Version(1)
+            .StartsAt(TurnstileState.Locked, () => new JsonObject())
+            .Start<EmptyStart>(s => s.Reduce(Rules.Keep()).AnyAuthenticated())
+            .Get(r => r.OwnerOnly())
+            .Watch(r => r.OwnerOnly())
+            .Discard(r => r.OwnerOnly());
 
         m.In(TurnstileState.Locked)
             .Holds(ctx => ctx.Count == 0 ? null : "Locked carries no context.")
             .On(TurnstileTrigger.Coin)
+            .AnyAuthenticated()
             .When((_, input) => Accepted.Contains(Coin(input) ?? string.Empty))
             .Because("Only a quarter or a dollar is accepted.")
             .Reduce((_, input) => new JsonObject { ["paidWith"] = Coin(input) })
@@ -66,6 +76,7 @@ public sealed class TurnstileMachine : Machine<TurnstileState, TurnstileTrigger>
                     : "Unlocked requires a non-empty paidWith."
             )
             .On(TurnstileTrigger.Push)
+            .AnyAuthenticated()
             .Reduce((_, _) => new JsonObject())
             .To(TurnstileState.Locked);
     }
@@ -127,13 +138,20 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
 
     protected override void Configure(IMachineBuilder<OrderState, OrderTrigger> m)
     {
-        m.Id("order").Version(1).StartsAt(OrderState.Draft, Fresh);
+        m.Id("order")
+            .Version(1)
+            .StartsAt(OrderState.Draft, Fresh)
+            .Start<EmptyStart>(s => s.Reduce(Rules.Keep()).AnyAuthenticated())
+            .Get(r => r.OwnerOnly())
+            .Watch(r => r.OwnerOnly())
+            .Discard(r => r.OwnerOnly());
 
         m.In(OrderState.Draft)
             .Holds(ctx =>
                 ItemsIsArray(ctx) && ReceiptEmpty(ctx) ? null : "Draft: items[] and no receipt."
             )
             .On(OrderTrigger.Next)
+            .AnyAuthenticated()
             .To(OrderState.Review);
 
         m.In(OrderState.Review)
@@ -143,8 +161,10 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
                     : "Review: non-empty items and no receipt."
             )
             .On(OrderTrigger.Back)
+            .AnyAuthenticated()
             .To(OrderState.Draft)
             .On(OrderTrigger.Place)
+            .AnyAuthenticated()
             .When((ctx, input) => ItemsCount(ctx) > 0 && Receipt(input) is not null)
             .Because("An order needs items and a receipt to be placed.")
             .RunsOnce<IOrderCharge>("order:place")
@@ -166,7 +186,8 @@ public sealed class OrderMachine : Machine<OrderState, OrderTrigger>
                     : "Placed: non-empty items and a receipt."
             )
             .On(OrderTrigger.Reset)
-            .Reduce((_, _) => Fresh())
+            .AnyAuthenticated()
+            .Reduce(Rules.Reset())
             .To(OrderState.Draft);
     }
 

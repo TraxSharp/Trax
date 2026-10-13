@@ -31,8 +31,27 @@ internal sealed class LifecycleStreamRule
             .ToHashSet(StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// The trains every machine operation runs through. Their runs are a machine's own bookkeeping, one per event,
+    /// read, start and discard, so they are never published, whatever the stream options say: a machine's instances
+    /// have their own feed, and an operator watching every train would otherwise see each user's every click. See
+    /// <c>Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md</c>.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> MachineTrains = new HashSet<string>(
+        StringComparer.Ordinal
+    )
+    {
+        typeof(Trax.Effect.StateMachine.Persistence.Mutations.ISaveSnapshot).FullName!,
+        typeof(Trax.Effect.StateMachine.Persistence.Mutations.IAdvanceSnapshot).FullName!,
+        typeof(Trax.Effect.StateMachine.Persistence.Mutations.ILoadSnapshot).FullName!,
+        typeof(Trax.Effect.StateMachine.Persistence.Mutations.ISendSnapshot).FullName!,
+        typeof(Trax.Effect.StateMachine.Persistence.Mutations.IStartSnapshot).FullName!,
+        typeof(Trax.Effect.StateMachine.Persistence.Mutations.IDiscardSnapshot).FullName!,
+    };
+
     /// <summary>Whether events of the train named <paramref name="trainName"/> are published.</summary>
     /// <param name="trainName">The train's canonical name (its interface's full name).</param>
     public bool Publishes(string trainName) =>
-        _streamAllTrains || _broadcastTrains.Contains(trainName);
+        !MachineTrains.Contains(trainName)
+        && (_streamAllTrains || _broadcastTrains.Contains(trainName));
 }

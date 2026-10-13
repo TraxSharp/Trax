@@ -46,10 +46,18 @@ internal sealed class SchemaNameCensus
     public static SchemaNameCensus Take(
         GraphQLConfiguration configuration,
         IReadOnlyList<TrainRegistration> trains,
-        IReadOnlyDictionary<TrainRegistration, string> trainNames
+        IReadOnlyDictionary<TrainRegistration, string> trainNames,
+        bool machinesExposed = false
     )
     {
         var census = new SchemaNameCensus();
+
+        // The machines root, on both roots, when the host exposes a machine.
+        if (machinesExposed)
+        {
+            census.Field("RootQuery", MachineSurface.RootField, Trax(MachineSurface.RootField));
+            census.Field("RootMutation", MachineSurface.RootField, Trax(MachineSurface.RootField));
+        }
 
         // The entry fields Trax hangs off the roots.
         if (configuration.ModelRegistrations.Count > 0 || trains.Any(t => t.IsQuery))

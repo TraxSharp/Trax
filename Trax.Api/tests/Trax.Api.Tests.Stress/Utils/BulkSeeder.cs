@@ -447,7 +447,10 @@ public static class BulkSeeder
             return;
 
         log($"Seeding {profile.SnapshotDrafts:N0} snapshot_draft...");
-        await Exec(conn, "TRUNCATE trax.snapshot_draft RESTART IDENTITY", ct);
+        // The row_id sequence is never restarted: a row_id names one incarnation of an instance, and a reused one
+        // would look to a client still watching the old row like the row it holds. TRUNCATE sends no change notices,
+        // so this runs before any host watches the table.
+        await Exec(conn, "TRUNCATE trax.snapshot_draft", ct);
         await SeedTable(
             conn,
             profile.SnapshotDrafts,

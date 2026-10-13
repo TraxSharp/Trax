@@ -1,11 +1,14 @@
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Trax.Effect.StateMachine;
+using Trax.Effect.StateMachine.Persistence;
 
 namespace Trax.Api.StateMachine.E2E;
 
 /// <summary>
-/// The four generic <c>stateMachine</c> mutations, driven over real HTTP through the full Trax GraphQL
+/// The generic <c>stateMachine</c> save, advance, load and send mutations, driven over real HTTP through the full Trax GraphQL
 /// stack against a real Postgres. This is the acceptance proof for the mutation layer: the trains register
 /// in a live schema, auth is enforced at the edge (anonymous fails at HTTP 200, not a crash), a save →
 /// advance → load flow persists server-side, the irreversible effect fires exactly once, and rejections
@@ -24,7 +27,7 @@ public class StateMachineGraphQLE2ETests
     {
         await E2EHost.RecreateDatabaseAsync(Database);
         _charge = new CountingCharge();
-        _host = await E2EHost.StartAsync(Database, _charge);
+        _host = await E2EHost.StartAsync(Database, _charge, E2EHostOptions.GenericOptIn());
     }
 
     [OneTimeTearDown]
@@ -146,20 +149,35 @@ public class StateMachineGraphQLE2ETests
     {
         var id = Guid.NewGuid().ToString();
 
-        using var save = await _host.PostAsync(
-            SaveMutation,
-            new
-            {
-                input = new
-                {
-                    machine = "order",
-                    id,
-                    snapshot = OrderMachine.ReviewSnapshot(1, 2),
-                },
-            },
-            E2EHost.AdminApiKey
-        );
-        NoErrors(save);
+        // The generic save serves only machines with no server-side behaviour, and the order has an effect, so its
+        // draft is written by the host. The API key scheme qualifies the principal id with its name.
+        using (var scope = _host.Services.CreateScope())
+        {
+            var review = System.Text.Json.Nodes.JsonNode.Parse(OrderMachine.ReviewSnapshot(1, 2))!;
+            (
+                await scope
+                    .ServiceProvider.GetRequiredService<ISnapshotStore>()
+                    .Upsert(
+                        "TraxApiKey:admin",
+                        Guid.Parse(id),
+                        new Snapshot
+                        {
+                            Machine = "order",
+                            Version = 1,
+                            State = review["state"]!.GetValue<string>(),
+                            Context = review["context"]!.AsObject().DeepClone().AsObject(),
+                        }
+                    )
+            ).Should().BeTrue();
+        }
+        using (
+            var load = await _host.PostAsync(
+                LoadMutation,
+                new { input = new { machine = "order", id } },
+                E2EHost.AdminApiKey
+            )
+        )
+            Snapshot(Output(load, "loadSnapshot")).Should().Contain("\"state\":\"Review\"");
 
         var before = _charge.Calls;
 

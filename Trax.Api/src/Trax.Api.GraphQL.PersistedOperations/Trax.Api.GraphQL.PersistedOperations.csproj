@@ -13,6 +13,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Api.Tests" />
     <InternalsVisibleTo Include="Trax.Api.Tests.Stress" />
+    <InternalsVisibleTo Include="Trax.Api.Tests.StateMachine.E2E" />
   </ItemGroup>
 
   <ItemGroup>

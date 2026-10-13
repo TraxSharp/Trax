@@ -33,4 +33,8 @@ public sealed partial class PersistedOperationsBuilder
 
     // ----- schema exposure -----
     private bool _exposeOperationsNamespace = true;
+
+    // ----- machine documents -----
+    private TimeSpan _machineDocumentGracePeriod =
+        PersistedOperationsOptions.DefaultMachineDocumentGracePeriod;
 }

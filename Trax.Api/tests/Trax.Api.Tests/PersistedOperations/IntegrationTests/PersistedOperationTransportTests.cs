@@ -126,6 +126,37 @@ public class PersistedOperationTransportTests
         Classify(result.ExpectOperationResult().ToJson()).Should().Be("data");
     }
 
+    // Green today for any inline document, and kept as the guard: a machine's operations written by hand are refused
+    // on every transport exactly as any other inline document, so a client reaches a machine only through the
+    // documents the host registered (Trax.Docs/adr/0048).
+    [Test]
+    public async Task An_ad_hoc_machine_document_is_refused_on_every_transport()
+    {
+        const string MachineMutation =
+            "mutation { machines { wizard { start(input: { title: \"Atlas\" }, requestId: \"r1\") { id } } } }";
+        const string MachineSubscription =
+            "subscription { machineChanged(machine: \"wizard\", id: \"6f9619ff-8b86-d011-b42d-00c04fc964ff\") { revision } }";
+        const string Because =
+            "a hand-written machine document is refused like any inline document, per "
+            + Adr
+            + " and Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
+        (await PostJsonAsync(_app, new { query = MachineMutation })).Should().Be(Required, Because);
+        (await GetAsync(_app, "query=" + Uri.EscapeDataString(MachineMutation)))
+            .Should()
+            .Be(Required, Because);
+        (await PostMultipartAsync(_app, new { query = MachineMutation, variables = new { } }))
+            .Should()
+            .Be(Required, Because);
+        (await SubscribeAsync(_app, new { query = MachineSubscription }))
+            .Should()
+            .Be(Required, Because);
+        var executor = await ExecutorAsync(_app);
+        Classify((await executor.ExecuteAsync(MachineMutation)).ExpectOperationResult().ToJson())
+            .Should()
+            .Be(Required, Because);
+    }
+
     #endregion
 
     #region The carve-outs hold on every transport

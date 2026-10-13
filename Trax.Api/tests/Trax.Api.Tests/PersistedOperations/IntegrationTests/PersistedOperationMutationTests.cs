@@ -520,6 +520,89 @@ public class PersistedOperationMutationTests
             .Be("INVALID_INPUT");
     }
 
+    [Test]
+    public async Task Upload_deactivate_and_restore_refuse_the_reserved_prefix()
+    {
+        const string Because =
+            "ids under the reserved prefix belong to the host's generated machine documents, per "
+            + "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+        var uploaded =
+            $"{Trax.Api.GraphQL.PersistedOperations.Services.MachineDocuments.ReservedIdPrefix}wizard_get_upload";
+        var stored =
+            $"{Trax.Api.GraphQL.PersistedOperations.Services.MachineDocuments.ReservedIdPrefix}wizard_get_stored";
+
+        var upload = (await ExecuteMutationAsync(uploaded, GraphQLFixture.ValidDocument))
+            .RootElement.GetProperty("data")
+            .GetProperty("operations")
+            .GetProperty("persistedOperations")
+            .GetProperty("uploadPersistedOperation");
+        upload.GetProperty("success").GetBoolean().Should().BeFalse(Because);
+        (await _store.GetAsync(uploaded, null, CancellationToken.None)).Should().BeNull();
+
+        // A generated document, as the host stores it, written past the management surface.
+        await SqlAsync(
+            "INSERT INTO trax.persisted_operation "
+                + "(tenant_key, id, operation_name, version, document, shape_fingerprint, is_active) "
+                + "VALUES ('', @id, 'Greet', 1, @document, 'generated', true)",
+            stored
+        );
+
+        var deactivate = (
+            await Execute(
+                """
+                mutation Deactivate($input: DeactivatePersistedOperationInput!) {
+                  operations { persistedOperations { deactivatePersistedOperation(input: $input) { success } } }
+                }
+                """,
+                new Dictionary<string, object?>
+                {
+                    ["input"] = new Dictionary<string, object?>
+                    {
+                        ["id"] = stored,
+                        ["reason"] = "rotating",
+                    },
+                }
+            )
+        ).RootElement.GetProperty("data").GetProperty("operations").GetProperty("persistedOperations").GetProperty("deactivatePersistedOperation");
+        deactivate.GetProperty("success").GetBoolean().Should().BeFalse(Because);
+        (await _store.GetAsync(stored, null, CancellationToken.None))
+            .Should()
+            .NotBeNull("the generated document stays active");
+
+        await SqlAsync(
+            "UPDATE trax.persisted_operation SET is_active = false WHERE id = @id",
+            stored
+        );
+        var restore = (
+            await Execute(
+                """
+                mutation Restore($input: RestorePersistedOperationInput!) {
+                  operations { persistedOperations { restorePersistedOperation(input: $input) { success } } }
+                }
+                """,
+                new Dictionary<string, object?>
+                {
+                    ["input"] = new Dictionary<string, object?> { ["id"] = stored },
+                }
+            )
+        ).RootElement.GetProperty("data").GetProperty("operations").GetProperty("persistedOperations").GetProperty("restorePersistedOperation");
+        restore.GetProperty("success").GetBoolean().Should().BeFalse(Because);
+        (await _store.GetAsync(stored, null, CancellationToken.None))
+            .Should()
+            .BeNull("a deactivated generated document is the host's to bring back");
+    }
+
+    private static async Task SqlAsync(string sql, string id)
+    {
+        await using var connection = new Npgsql.NpgsqlConnection(PostgresFixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new Npgsql.NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", id);
+        if (sql.Contains("@document", StringComparison.Ordinal))
+            command.Parameters.AddWithValue("document", GraphQLFixture.ValidDocument);
+        await command.ExecuteNonQueryAsync();
+    }
+
     private Task<JsonDocument> ExecuteMutationAsync(
         string id,
         string document,

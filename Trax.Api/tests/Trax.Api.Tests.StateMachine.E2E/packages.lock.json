@@ -14,6 +14,12 @@
         "resolved": "10.1.0",
         "contentHash": "SlYCIHnBYxINSUpR75SiM5JEmnx11pqT+Ac/C/fUqTTA0dLPl9eYzmFXKKuxmQhL3ZdTQl4PBD3YdAxAauaKLQ=="
       },
+      "CsCheck": {
+        "type": "Direct",
+        "requested": "[4.9.1, )",
+        "resolved": "4.9.1",
+        "contentHash": "rEmuFiG19sF8U4Ef/S79cu9HW4pUGraoCTkmYs0z7SvsGqGAVO3wCjxQPS0KQvPa1g2/w1wBbnAP6cDZKBFEcA=="
+      },
       "DotNet.ReproducibleBuilds": {
         "type": "Direct",
         "requested": "[2.0.5, )",
@@ -639,6 +645,12 @@
           "Trax.Api.Auth": "[1.99.99, )"
         }
       },
+      "trax.api.auth.jwt.testing": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
       "trax.api.graphql": {
         "type": "Project",
         "dependencies": {
@@ -651,6 +663,14 @@
           "Trax.Api": "[1.99.99, )",
           "Trax.Api.Auth": "[1.99.99, )",
           "Trax.Api.Auth.Jwt": "[1.99.99, )"
+        }
+      },
+      "trax.api.graphql.persistedoperations": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore": "[10.0.12, )",
+          "RabbitMQ.Client": "[7.2.2, )",
+          "Trax.Api.GraphQL": "[1.99.99, )"
         }
       },
       "trax.core": {
@@ -682,7 +702,20 @@
           "dbup-postgresql": "[7.0.1, )"
         }
       },
+      "trax.effect.junctionprovider.progress": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )",
+          "Trax.Effect.Data": "[1.99.99, )"
+        }
+      },
       "trax.effect.provider.json": {
+        "type": "Project",
+        "dependencies": {
+          "Trax.Effect": "[1.99.99, )"
+        }
+      },
+      "trax.effect.provider.parameter": {
         "type": "Project",
         "dependencies": {
           "Trax.Effect": "[1.99.99, )"
@@ -881,6 +914,12 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
           "Npgsql": "10.0.3"
         }
+      },
+      "RabbitMQ.Client": {
+        "type": "CentralTransitive",
+        "requested": "[7.2.2, )",
+        "resolved": "7.2.2",
+        "contentHash": "k4b6RnTXpLbsF96V93ooNYxgPMnoA2tEm24B6AXNJr1mG8wwNYdA1XJtgU66L5xqeGyveS7SJriRzlX3cbqQNA=="
       }
     }
   }

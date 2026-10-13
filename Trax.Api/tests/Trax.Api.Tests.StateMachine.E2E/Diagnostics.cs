@@ -5,7 +5,7 @@ using Trax.Effect.Services.ServiceTrain;
 
 namespace Trax.Api.StateMachine.E2E;
 
-// A trivial anonymous query train. HotChocolate requires a non-empty root Query type, and the four
+// A trivial anonymous query train. HotChocolate requires a non-empty root Query type, and the six
 // stateMachine trains are all mutations, so a host that exposes only them needs at least one query. A real
 // host has its own queries (or calls ExposeOperationQueries() with a scheduler); the E2E supplies this one
 // so the schema builds without dragging in the scheduler.

@@ -93,6 +93,11 @@
         </RadzenAlert>
         return;
     }
+    @if (_deleted)
+    {
+        <RadzenText TextStyle="TextStyle.Body1" class="cs-machine-deleted">The @Owner instance @InstanceId of @Machine was deleted or expired.</RadzenText>
+        return;
+    }
     <RadzenText TextStyle="TextStyle.Body1">No @Owner instance of @Machine has id @InstanceId.</RadzenText>
     return;
 }
@@ -114,6 +119,7 @@
                 <FieldDisplay Label="State">
                     <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="@_instance.State" />
                 </FieldDisplay>
+                <FieldDisplay Label="Revision" Value="@(_instance.Revision?.ToString() ?? "Not recorded")" />
                 <FieldDisplay Label="Machine Version" Value="@_instance.Version.ToString()" />
                 <FieldDisplay Label="Waiting On A Run"
                               Value="@(_instance.HasLiveInvokedRun ? "Yes: its state invoked a train run and waits for its outcome" : "No")" />

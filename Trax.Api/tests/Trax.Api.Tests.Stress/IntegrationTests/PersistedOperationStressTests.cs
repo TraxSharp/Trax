@@ -8,6 +8,7 @@ using Trax.Api.GraphQL.Configuration.TraxGraphQLBuilder;
 using Trax.Api.GraphQL.PersistedOperations.Extensions;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL;
 using Trax.Api.GraphQL.PersistedOperations.GraphQL.Models;
+using Trax.Api.GraphQL.PersistedOperations.Services;
 using Trax.Api.GraphQL.PersistedOperations.Storage;
 using Trax.Api.GraphQL.PersistedOperations.Storage.Validation;
 using Trax.Api.Tests.Stress.Fixtures;
@@ -98,6 +99,117 @@ public class PersistedOperationStressTests : StressTestSetup
                 document.Should().BeNull();
             }
         );
+    }
+
+    #endregion
+
+    #region Machine document ids
+
+    /// <summary>
+    /// What one request costs per id kind under the reserved machine-document prefix, against the same catalog: a
+    /// node's own document (read from the store and verified against its id), an id of a machine this node does not
+    /// serve, and an unseen id of one it does (both answered without waiting on the store), beside an ordinary id.
+    /// Prints the mean, median and 99th percentile of each.
+    /// </summary>
+    [Test]
+    public async Task MachineDocumentIds_PerIdCost_Measured()
+    {
+        const int Rounds = 2_000;
+        var sp = ServiceProvider;
+        var storage = sp.GetRequiredService<DbPersistedOperationStorage>();
+        var registry = sp.GetRequiredService<MachineDocumentRegistry>();
+        var irHash = new string('a', MachineDocuments.IrHashLength);
+        const string Text = "query StressMachineGet { __typename }";
+        var own = new MachineDocument(
+            MachineDocuments.IdOf("stress-machine", "get", irHash, Text),
+            "stress-machine",
+            "get",
+            Text,
+            irHash
+        );
+        var (versions, stored) = await storage.RegisterMachineDocumentsAsync(
+            [own],
+            TimeSpan.FromDays(7),
+            CancellationToken.None
+        );
+        registry.Publish([own], versions, stored);
+        var hot = (IOperationDocumentStorage)storage;
+        Func<CancellationToken, Task<IReadOnlyDictionary<string, StoredMachineDocument>>> read =
+            storage.ReadMachineDocumentVersionsAsync;
+
+        var kinds = new (string Label, Func<int, Task> Run)[]
+        {
+            (
+                "ordinary id (stored)",
+                async _ =>
+                    (await hot.TryReadAsync(new OperationDocumentId(SeededId), default))
+                        .Should()
+                        .NotBeNull()
+            ),
+            (
+                "own machine document (read and verified)",
+                async _ =>
+                {
+                    (await registry.ClassifyAsync(own.Id, read, default))
+                        .Should()
+                        .Be(MachineDocumentVerdict.Own);
+                    (await hot.TryReadAsync(new OperationDocumentId(own.Id), default))
+                        .Should()
+                        .NotBeNull();
+                }
+            ),
+            (
+                "machine this node does not serve",
+                async i =>
+                    (
+                        await registry.ClassifyAsync(
+                            MachineDocuments.IdOf("unserved", "get", irHash, i.ToString()),
+                            read,
+                            default
+                        )
+                    )
+                        .Should()
+                        .NotBe(MachineDocumentVerdict.Own)
+            ),
+            (
+                "unseen id of a served machine",
+                async i =>
+                    await registry.ClassifyAsync(
+                        MachineDocuments.IdOf(
+                            "stress-machine",
+                            "get",
+                            $"{i:x8}".PadLeft(MachineDocuments.IrHashLength, 'b'),
+                            Text
+                        ),
+                        read,
+                        default
+                    )
+            ),
+        };
+
+        foreach (var (label, run) in kinds)
+        {
+            await run(-1);
+            var samples = new double[Rounds];
+            for (var i = 0; i < Rounds; i++)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await run(i);
+                samples[i] = sw.Elapsed.TotalMilliseconds;
+            }
+            Array.Sort(samples);
+            TestContext.Out.WriteLine(
+                $"{label}: mean {samples.Average():F3}ms, p50 {samples[Rounds / 2]:F3}ms, "
+                    + $"p99 {samples[(int)(Rounds * 0.99)]:F3}ms over {Rounds:N0} requests "
+                    + $"({Profile.PersistedOperations:N0} stored operations)"
+            );
+            samples[(int)(Rounds * 0.99)]
+                .Should()
+                .BeLessThan(
+                    HotPathBudget.TotalMilliseconds,
+                    $"{label} is on every persisted request"
+                );
+        }
     }
 
     #endregion

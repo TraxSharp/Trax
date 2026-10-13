@@ -84,6 +84,25 @@ public sealed class PersistedOperationsOptions
     internal static readonly TimeSpan DefaultCacheMaxAge = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// How long an older version's machine documents stay active after this node registered a newer version's, set
+    /// by <c>KeepOlderMachineDocumentsFor</c>. Defaults to seven days.
+    /// </summary>
+    internal TimeSpan MachineDocumentGracePeriod { get; set; } = DefaultMachineDocumentGracePeriod;
+
+    internal static readonly TimeSpan DefaultMachineDocumentGracePeriod = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// How often a running node registers its machine documents again, which collects an older version's once the
+    /// grace period has passed. Defaults to an hour.
+    /// </summary>
+    internal TimeSpan MachineDocumentCollectionInterval { get; set; } =
+        DefaultMachineDocumentCollectionInterval;
+
+    internal static readonly TimeSpan DefaultMachineDocumentCollectionInterval = TimeSpan.FromHours(
+        1
+    );
+
+    /// <summary>
     /// RabbitMQ connection string for cross-node invalidation, set by
     /// <c>UseRabbitMqInvalidation</c>. Every node empties its persisted-operation caches when a
     /// change is broadcast on it. Null only when the host declared <see cref="SingleNode"/>.

@@ -9,9 +9,11 @@ using Microsoft.Extensions.Hosting;
 using Trax.Api.Auth.ApiKey;
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
+using Trax.Api.StateMachine.E2E.Fakes;
 using Trax.Effect.Data.Postgres.Extensions;
 using Trax.Effect.Data.Services.IDataContextFactory;
 using Trax.Effect.Extensions;
+using Trax.Effect.JunctionProvider.Progress.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Effect.StateMachine.Persistence;
 using Trax.Mediator.Extensions;
@@ -237,14 +239,20 @@ public class OperatorMachineInstancesE2ETests
                             keys.Add(OperatorKey, id: "operator", "Operator")
                                 .Add(ShopperKey, id: "shopper", "Shopper")
                         );
-                        services.AddAuthorization();
+                        E2EHostOptions.AddGenericPolicy(services);
                         services.AddTrax(trax =>
+                            // The wizard machine in this assembly invokes a train, so the host checks a
+                            // run's cancel flag between junctions.
                             trax.AddEffects(effects =>
-                                    effects.UsePostgres(connectionString).AddJson()
+                                    effects
+                                        .UsePostgres(connectionString)
+                                        .AddJson()
+                                        .AddJunctionProgress()
                                 )
-                                .AddStateMachines(typeof(E2EHost).Assembly)
+                                .AddStateMachines(E2EHostOptions.OptInToGeneric)
                                 .AddMediator(typeof(E2EHost).Assembly)
                         );
+                        E2EMachines.Register(services, []);
                         services.AddScoped<ISnapshotPrincipal, TraxCallerSnapshotPrincipal>();
                         services.AddSingleton<IOrderCharge>(new CountingCharge());
 

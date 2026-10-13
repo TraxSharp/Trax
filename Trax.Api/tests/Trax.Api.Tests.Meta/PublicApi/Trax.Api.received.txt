@@ -374,6 +374,7 @@ namespace Trax.Api.DTOs
         public System.Guid Id { get; init; }
         public string Machine { get; init; }
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public long? Revision { get; init; }
         public long RowId { get; init; }
         public string State { get; init; }
         public System.DateTimeOffset UpdatedAt { get; init; }
@@ -386,6 +387,22 @@ namespace Trax.Api.DTOs
         public Trax.Scheduler.Services.Operations.MachineInstanceCancelOutcome Outcome { get; init; }
         public string? State { get; init; }
         public bool Success { get; init; }
+    }
+    public class MachineInstanceChange : System.IEquatable<Trax.Api.DTOs.MachineInstanceChange>
+    {
+        public MachineInstanceChange(long RowId, string Machine, Trax.Effect.Enums.SnapshotOwnerKind OwnerKind, System.Guid Id, string State, int Version, System.DateTimeOffset? CreatedAt, System.DateTimeOffset UpdatedAt, bool HasLiveInvokedRun, long? Revision, bool Deleted) { }
+        public System.DateTimeOffset? CreatedAt { get; init; }
+        public bool Deleted { get; init; }
+        public bool HasLiveInvokedRun { get; init; }
+        public System.Guid Id { get; init; }
+        public string Machine { get; init; }
+        public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
+        public bool Reload { get; init; }
+        public long? Revision { get; init; }
+        public long RowId { get; init; }
+        public string State { get; init; }
+        public System.DateTimeOffset UpdatedAt { get; init; }
+        public int Version { get; init; }
     }
     public class MachineInstanceCount : System.IEquatable<Trax.Api.DTOs.MachineInstanceCount>
     {
@@ -406,6 +423,7 @@ namespace Trax.Api.DTOs
         public string Machine { get; init; }
         public Trax.Effect.Enums.SnapshotOwnerKind OwnerKind { get; init; }
         public long? QueuedInvokedRunEntryId { get; init; }
+        public long? Revision { get; init; }
         public long RowId { get; init; }
         public string State { get; init; }
         public System.DateTimeOffset UpdatedAt { get; init; }

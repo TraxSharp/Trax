@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     GraphQL-over-HTTP E2E for the state-machine mutations. Lives in Trax.Api because it exercises
-    Trax.Api.GraphQL exposing/executing the four generic `stateMachine` mutations over the wire. Every
+    Trax.Api.GraphQL exposing/executing the six generic `stateMachine` mutations and the typed `machines` root over the wire. Every
     reference points the right way in the chain: Trax.Api.* from this folder, Trax.Effect.* and
     Trax.Mediator from the folders upstream of it.
   -->
@@ -23,14 +23,20 @@
     <ProjectReference Include="../../src/Trax.Api/Trax.Api.csproj" />
     <ProjectReference Include="../../src/Trax.Api.Auth/Trax.Api.Auth.csproj" />
     <ProjectReference Include="../../src/Trax.Api.Auth.ApiKey/Trax.Api.Auth.ApiKey.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth.Jwt/Trax.Api.Auth.Jwt.csproj" />
+    <ProjectReference Include="../../src/Trax.Api.Auth.Jwt.Testing/Trax.Api.Auth.Jwt.Testing.csproj" />
     <ProjectReference Include="../../src/Trax.Api.GraphQL/Trax.Api.GraphQL.csproj" />
+    <!-- The machine documents are persisted operations; the generator is internal to this package. -->
+    <ProjectReference Include="../../src/Trax.Api.GraphQL.PersistedOperations/Trax.Api.GraphQL.PersistedOperations.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Upstream Trax projects. -->
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect/Trax.Effect.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Data.Postgres/Trax.Effect.Data.Postgres.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.JunctionProvider.Progress/Trax.Effect.JunctionProvider.Progress.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Json/Trax.Effect.Provider.Json.csproj" />
+    <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.Provider.Parameter/Trax.Effect.Provider.Parameter.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine/Trax.Effect.StateMachine.csproj" />
     <ProjectReference Include="../../../Trax.Effect/src/Trax.Effect.StateMachine.Persistence/Trax.Effect.StateMachine.Persistence.csproj" />
     <ProjectReference Include="../../../Trax.Mediator/src/Trax.Mediator/Trax.Mediator.csproj" />
@@ -46,6 +52,8 @@
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" />
     <PackageReference Include="NUnit.Analyzers" />
     <PackageReference Include="AwesomeAssertions" />
+    <!-- Property tests in a test project only (central ADR 0044). -->
+    <PackageReference Include="CsCheck" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
 

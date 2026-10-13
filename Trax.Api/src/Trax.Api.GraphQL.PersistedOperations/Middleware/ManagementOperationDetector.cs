@@ -24,10 +24,15 @@ internal static class ManagementOperationDetector
     private const string OperationsField = "operations";
     private const string PersistedOperationsField = "persistedOperations";
 
+    // The machine documents manifest: the ids a client is built with, which it cannot read by an id it does not have
+    // yet. Behind the operations gate like the rest.
+    private const string MachineDocumentsField = "machineDocuments";
+
     /// <summary>
     /// Whether every operation in the document selects <c>operations</c> at the root and nothing
-    /// but <c>persistedOperations</c> beneath it. A null document — which is what a document that
-    /// did not parse becomes — is not a management operation, so the rejection path runs.
+    /// but <c>persistedOperations</c> or <c>machineDocuments</c> beneath it. A null document — which
+    /// is what a document that did not parse becomes — is not a management operation, so the
+    /// rejection path runs.
     /// </summary>
     public static bool IsManagementOperation(DocumentNode? document)
     {
@@ -45,7 +50,10 @@ internal static class ManagementOperationDetector
 
     private static bool SelectsOnlyPersistedOperations(FieldNode operationsField) =>
         operationsField.SelectionSet is not null
-        && SelectsOnly(operationsField.SelectionSet, PersistedOperationsField, _ => true);
+        && (
+            SelectsOnly(operationsField.SelectionSet, PersistedOperationsField, _ => true)
+            || SelectsOnly(operationsField.SelectionSet, MachineDocumentsField, _ => true)
+        );
 
     /// <summary>
     /// Whether every selection in the set is the named field and satisfies <paramref name="inner"/>.

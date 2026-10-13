@@ -63,6 +63,7 @@ public sealed partial class PersistedOperationsBuilder
             RabbitMqConnectionString = _rabbitMqConnectionString,
             SingleNode = _singleNode,
             ExposeOperationsNamespace = _exposeOperationsNamespace,
+            MachineDocumentGracePeriod = _machineDocumentGracePeriod,
         };
     }
 }

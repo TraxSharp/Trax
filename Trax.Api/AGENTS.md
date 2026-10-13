@@ -28,6 +28,7 @@ if your work contradicts one, say so rather than silently overriding it.
 | the principal id, or anything keyed on it | [0023](./docs/adr/0023-a-principal-id-is-qualified-by-its-scheme.md): it is `{scheme}:{id}`, built only by `ToClaimsPrincipal` |
 | the audit pipeline (`Trax.Api.GraphQL.Audit`) | [0027](./docs/adr/0027-an-audit-entry-records-no-value-the-caller-sent-unless-the-host-opts-in.md): no value the caller sent is recorded unless the host opts in, and [0035](./docs/adr/0035-a-refused-request-is-always-audited.md): the skip options drop only requests that succeeded |
 | `requeueAllDeadLetters`, or an operations mutation that can outlast a request | [0036](./docs/adr/0036-requeue-all-runs-in-the-background-and-returns-a-handle.md): it runs as a background job and returns a handle; the fold never shares the request's lifetime |
+| the `machines` root (`MachineTypeModule`, `MachineResolvers`, `MachineEventCountValidatorRule`) | central `docs/0048`: each machine a host exposes is its own typed API; every write dispatches the internal state-machine train through the mediator, one machine write per operation |
 | `queueTrain` or `requeueExecution` | central `docs/0017`, they enqueue through the mediator so per-train authorization applies; manifest triggers and dead-letter requeues are governed by the operations gate |
 | what `requeueExecution` replays | central `docs/0041`, the requeued run replays the decisions the execution recorded |
 | `failureClass` on executions, or the `executions(failureClass:)` filter | central `docs/0020`, a failure is classified where it happens |
@@ -72,7 +73,7 @@ no site in this folder to build a work queue row (`docs/0017`);
 `NoSilentRegistrationOrderDependenceTests` is unique to this folder and is the census behind
 [0002](./docs/adr/0002-reading-the-service-collection-is-order-dependent.md).
 
-Nine runtime validators fail the host at startup rather than at request time: eight under
+Ten runtime validators fail the host at startup rather than at request time: nine under
 `src/Trax.Api.GraphQL/Startup/` and `TraxGraphQLAuthPolicyValidator` alongside the
 authorization code. They derive from `StartupGate` and check in `StartingAsync`, after the
 container is complete and before Kestrel or any worker starts (Api ADR 0001).
