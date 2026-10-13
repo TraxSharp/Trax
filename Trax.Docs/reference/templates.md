@@ -1,6 +1,6 @@
 ---
 title: Project Templates
-description: "The trax-api, trax-scheduler and trax-hub dotnet new templates: what each generates, running it, its tests, adding trains, and what to change before deploying."
+description: "The trax-api, trax-scheduler and trax-hub dotnet new templates: the files each generates, what its Program.cs registers, its URLs and its tests."
 type: reference
 area: tooling
 nav_order: 2
@@ -18,8 +18,7 @@ until you choose one. Each also ships a README, a `.gitignore` and an NUnit test
 | Trax Scheduler with Dashboard | `trax-scheduler` | A scheduler running one train every 20 seconds, with the Trax Dashboard | `http://localhost:5401` |
 | Trax Hub | `trax-hub` | The API, the scheduler and the dashboard in one process | `http://localhost:5400` |
 
-`trax-hub` is the one to start from when you are building a Trax server and are not sure which
-you need, and the one [`trax generate`](/docs/reference/cli) scaffolds.
+`trax generate` scaffolds `trax-hub` (see [CLI](/docs/reference/cli)).
 
 ## Installation
 
@@ -109,7 +108,7 @@ error its removal causes:
 
 `AllowAnonymousDashboard()` sits inside the `IsDevelopment()` check, and so do `AddTraxDashboard`
 and `UseTraxDashboard`: the dashboard is not served anywhere else until you choose who may use it
-(see [Before deploying](#before-deploying)).
+(see [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment)).
 
 The two trains both carry `[TraxAuthorize(Roles = "User")]`:
 
@@ -120,12 +119,12 @@ The two trains both carry `[TraxAuthorize(Roles = "User")]`:
 `mode: QUEUE` argument, which writes the run to the scheduler's work queue. Only a database-backed
 scheduler reads that queue: on the in-memory provider nothing would ever run the entry, so a
 `mode: QUEUE` request is refused with `TRAX_QUEUE_UNAVAILABLE` and the host logs a warning at
-startup. Switch to Postgres (below) before enabling `Queue`.
+startup. [Switch to Postgres](/docs/reference/switch-a-template-to-postgres) before enabling `Queue`.
 
 The junctions derive `EffectJunction<TIn, TOut>`, because `AddJunctionProgress()` only sees
 junctions of that type. See [Junction Progress](/docs/effect/effect-providers/junction-progress).
 
-**Packages:** `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
+**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Dashboard`,
 `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`.
 
@@ -140,7 +139,7 @@ The API runs every train itself, when it is called. Running trains on a timer, o
 for another process, needs a scheduler with the same trains registered and a database both
 processes share; `trax-hub` is the one-process version.
 
-**Packages:** `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
+**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
 `Trax.Mediator`, `Trax.Api`, `Trax.Api.Auth.ApiKey`, `Trax.Api.GraphQL`.
 
 ### trax-scheduler
@@ -174,7 +173,7 @@ MyCompany.Scheduler/
 `AddMediator`, `AddScheduler` with the `hello-world` manifest every 20 seconds, and the dashboard
 with `AllowAnonymousDashboard()` in Development only. It has no GraphQL and no authentication.
 
-**Packages:** `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
+**Packages:** `Trax.Core`, `Trax.Effect`, `Trax.Effect.Data.InMemory`, `Trax.Effect.Provider.Parameter`,
 `Trax.Effect.JunctionProvider.Progress`, `Trax.Mediator`, `Trax.Scheduler`, `Trax.Dashboard`.
 
 ## Running
@@ -231,140 +230,11 @@ Each test project references the application and uses NUnit with
 `Program` class is public in .NET 10, so `WebApplicationFactory<Program>` needs nothing added. See
 [Testing](/docs/cross-cutting/testing) for more patterns.
 
-## Adding Your Own Trains
+## Next steps
 
-Put each train in its own folder under `Trains/`, with its interface, input, output and a
-`Junctions/` folder, as `HelloWorld/` is laid out. `AddMediator(typeof(Program).Assembly)` finds
-it; nothing else is registered.
-
-### Query train (read-only, runs on the API)
-
-```csharp
-using Trax.Core.Functional;
-using Trax.Effect.Attributes;
-using Trax.Effect.Services.ServiceTrain;
-
-namespace MyCompany.Hub.Trains.GetCustomer;
-
-public interface IGetCustomerTrain : IServiceTrain<GetCustomerInput, CustomerOutput>;
-
-[TraxAuthorize(Roles = "User")]
-[TraxQuery(Description = "Fetches a customer by ID")]
-public class GetCustomerTrain
-    : ServiceTrain<GetCustomerInput, CustomerOutput>, IGetCustomerTrain
-{
-    protected override Task<Either<Exception, CustomerOutput>> Junctions() =>
-        Chain<FetchCustomerJunction>().Resolve();
-}
-```
-
-The field is `getCustomer` under `query { discover { ... } }`: the interface name without the `I`
-and the `Train`, in camelCase. The host refuses to start if an exposed train has neither `[TraxAuthorize]` nor
-`[TraxAllowAnonymous]`, and if a junction needs an input that nothing before it produces.
-
-### Scheduled train (runs on the scheduler)
-
-```csharp
-using Trax.Core.Functional;
-using Trax.Effect.Models.Manifest;
-using Trax.Effect.Services.ServiceTrain;
-
-namespace MyCompany.Scheduler.Trains.SyncCustomers;
-
-public record SyncCustomersInput : IManifestProperties
-{
-    public string Region { get; init; } = "us-east";
-}
-
-public interface ISyncCustomersTrain : IServiceTrain<SyncCustomersInput, Unit>;
-
-public class SyncCustomersTrain : ServiceTrain<SyncCustomersInput, Unit>, ISyncCustomersTrain
-{
-    protected override Task<Either<Exception, Unit>> Junctions() =>
-        Chain<FetchCustomersJunction>()
-            .Chain<UpsertCustomersJunction>()
-            .Resolve();
-}
-```
-
-A scheduled train's input implements `IManifestProperties`, so the scheduler can store it. Add the
-schedule after the `hello-world` one in `Program.cs`:
-
-```csharp
-scheduler
-    .Schedule<ISyncCustomersTrain>(
-        "sync-customers",
-        new SyncCustomersInput { Region = "us-east" },
-        Every.Hours(1)
-    );
-```
-
-The first argument is the manifest's id: `Schedule` updates the manifest with that id, so renaming
-it creates a new one. See [Scheduling](/docs/scheduler) for cron schedules, dependent trains, bulk
-scheduling and dead letters.
-
-## Switching to Postgres
-
-```bash
-docker run -d --name trax-db -p 127.0.0.1:5432:5432 \
-  -e POSTGRES_USER=trax -e POSTGRES_PASSWORD=trax123 -e POSTGRES_DB=trax postgres:17
-dotnet add package Trax.Effect.Data.Postgres --version <the Trax.Effect version>
-```
-
-Put the connection string in `appsettings.Development.json`:
-
-```json
-{
-  "ConnectionStrings": {
-    "TraxDatabase": "Host=localhost;Port=5432;Database=trax;Username=trax;Password=trax123"
-  }
-}
-```
-
-In `Program.cs`, add `using Trax.Effect.Data.Postgres.Extensions;` and replace `UseInMemory()`:
-
-```csharp
-effects.UsePostgres(
-    builder.Configuration.GetConnectionString("TraxDatabase")
-        ?? throw new InvalidOperationException("Set ConnectionStrings:TraxDatabase.")
-)
-```
-
-Trax creates and migrates its `trax` schema at startup. The scheduler then queues work in the
-database and runs it on local workers, so `[TraxMutation]` with `mode: QUEUE` runs, and several
-processes on one database share the work. The application context (`AppDbContext`) is separate:
-switch its `UseInMemoryDatabase("app")` to `UseNpgsql(...)` (package
-`Npgsql.EntityFrameworkCore.PostgreSQL`) when you want it in Postgres too, under the schema in
-`Data/AppSchema.cs`. See [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect).
-
-## Before deploying
-
-The templates start in Development: `dotnet run` picks up `ASPNETCORE_ENVIRONMENT=Development`
-from `Properties/launchSettings.json`. Two things exist only there.
-
-| What | Where | Outside Development |
-|------|-------|---------------------|
-| The Trax Dashboard at `/trax` | `trax-scheduler`, `trax-hub` | Not mapped; `/trax` is a 404. |
-| The demo API key (`X-Api-Key: demo-key-do-not-use-in-production`) | `trax-api`, `trax-hub` | Not registered. Every template train and the `Note` query model carry `[TraxAuthorize]`, so every operation is refused. |
-
-The dashboard can queue, run and cancel trains and change scheduler settings, and
-`AllowAnonymousDashboard()` puts no authorization in front of it. To serve it anywhere else,
-register an authentication scheme, choose who may use it with `RequirePolicy("<policy>")` or
-`RequireRoles("<role>")` in place of `AllowAnonymousDashboard()` (see
-[UseTraxDashboard](/docs/sdk-reference/dashboard-api/use-trax-dashboard)), and remove the
-`IsDevelopment()` checks around `AddTraxDashboard` and `UseTraxDashboard`. A policy or roles with
-no authentication scheme to challenge with refuses to start, naming `AddAuthentication`, because
-every request the dashboard refused would otherwise be a 500 rather than a 401 or 403.
-
-Replace the demo key with real credentials, such as `AddHashed` keys loaded from a secret store
-or [`AddTraxJwtAuth`](/docs/sdk-reference/api-auth/add-trax-jwt-auth), before removing the check
-around `AddTraxApiKeyAuth`. Moving the demo key out of the check does not work: a host refuses to
-start outside Development with a key containing `do-not-use-in-production` registered. Keep
-`[TraxAuthorize]` on the trains you add; mark one `[TraxAllowAnonymous]` only when anyone who can
-reach the host may call it. See [API Security](/docs/api-security).
-
-A published build started with `dotnet MyCompany.Hub.dll`, or in a container, runs in Production
-unless the environment variable says otherwise, so it gets neither.
+- [Add your own trains to a template](/docs/reference/add-trains-to-a-template): a query train and a scheduled train.
+- [Switch a template to Postgres](/docs/reference/switch-a-template-to-postgres): a database that survives a restart and lets `mode: QUEUE` run.
+- [Prepare a template for deployment](/docs/reference/prepare-a-template-for-deployment): the dashboard and the demo key exist only in Development.
 
 ## Uninstalling
 
