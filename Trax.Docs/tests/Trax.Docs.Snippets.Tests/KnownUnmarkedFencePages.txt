@@ -12,7 +12,6 @@ authorization.md
 core.md
 core/analyzer.md
 core/building-chains.md
-core/decisions.md
 core/ide-extensions.md
 core/memory.md
 core/trains-and-junctions.md

@@ -130,11 +130,6 @@ Trax.Api.GraphQL.Testing M:CrossSchemaGuardFixture.Cross_schema_edge_resolvers_u
 Trax.Core M:Either.IsBottom
 Trax.Core M:Either.ValueUnsafe
 Trax.Core M:EitherStatus.IsBottom
-Trax.Core M:QuestionKey.IsValid
-Trax.Core M:ScriptedDecider.LastToken
-Trax.Core M:TrackRouted.FallbackReason
-Trax.Core M:TrackTaken.FallbackReason
-Trax.Core M:TrackTaken.TookFallback
 Trax.Core T:EitherStatus
 Trax.Core T:FunctionalExtensions
 Trax.Core.Testing M:HygieneGuardFixture.Tests_do_not_use_fixed_delays
