@@ -33,7 +33,6 @@ effect/effect-providers/junction-progress.md
 effect/effect-providers/parameter-effect.md
 effect/host-tracking.md
 effect/junction-events.md
-mediator.md
 migration-guides/async-chain.md
 migration-guides/enqueue-and-outcome-changes.md
 migration-guides/generic-state-machine-mutations.md

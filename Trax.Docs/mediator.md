@@ -1,24 +1,26 @@
 ---
 title: Mediator
-description: Trax.Mediator and the TrainBus, which dispatches a train by its input type instead of direct injection, with setup, nested trains and scope isolation.
+description: "Trax.Mediator and the train bus: dispatching a train by its input type instead of injecting it, nested trains, and the scope each run gets."
 type: explanation
 area: mediator
 nav_order: 1
+source:
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainBus
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainRegistry/TrainRegistry.cs
 ---
 
-# Trax.Mediator
+# Mediator
 
-`Trax.Mediator` provides the `TrainBus`, a dispatch station that routes trains by their input type instead of requiring direct injection.
+`Trax.Mediator` provides `ITrainBus`, which runs a train chosen by the type of the input it is
+given, so a caller does not need a reference to the train it runs. [AddMediator](/docs/sdk-reference/configuration/add-mediator)
+registers it, scans the assemblies it is given for trains, and registers each train under its
+interface. How the scan and the lookup work in detail is in [Train discovery](/docs/mediator/train-discovery).
 
-```bash
-dotnet add package Trax.Mediator
-```
+## Why dispatch by input type
 
-## The Problem
+Without the bus, a caller injects each train it calls:
 
-Without the mediator, controllers inject each train directly:
-
-```csharp
+```csharp compile=injected
 using Microsoft.AspNetCore.Mvc;
 
 public class UsersController(ICreateUserTrain createUserTrain) : ControllerBase
@@ -32,13 +34,14 @@ public class UsersController(ICreateUserTrain createUserTrain) : ControllerBase
 }
 ```
 
-This works, but the controller needs to know about every train it calls.
+That works, and a caller that knows exactly which train it needs can keep doing it: `AddMediator`
+registers every train it finds by its interface. The cost is that the caller's constructor grows
+with every train it calls. With the bus, it takes one dependency:
 
-## With TrainBus
+```csharp compile=bus
+using Microsoft.AspNetCore.Mvc;
+using Trax.Mediator.Services.TrainBus;
 
-Replace direct dependencies with a single dispatch point:
-
-```csharp
 public class UsersController(ITrainBus trainBus) : ControllerBase
 {
     [HttpPost]
@@ -50,62 +53,53 @@ public class UsersController(ITrainBus trainBus) : ControllerBase
 }
 ```
 
-The `TrainBus` looks at the input type (`CreateUserRequest`), finds the train registered for that type, and dispatches it. The controller doesn't need to know which train class handles the request.
+`RunAsync` looks up the train registered for `CreateUserRequest` and runs it. The input type is
+the address, so one train can run another without referencing it, which is what nested trains
+do. The bus also runs a train by name (`RunByNameAsync`), which is how the scheduler's job runner
+and, for a train it runs in-process, `ITrainExecutionService` (behind the GraphQL API and the
+dashboard) start a train they know only by name.
 
-## Setup
+An input type reaches one train through the bus. When two trains take the same input type, both
+are registered and discovered, and `RunAsync` runs the one found first in the scan. Everything
+that names a train runs the one it names: `ITrainBus.RunByNameAsync`, `ITrainExecutionService`,
+and the GraphQL `run` operations. To run a specific train from code when its input type is
+shared, call `RunByNameAsync` or inject the train by its interface.
 
-Register trains during startup by pointing the bus at your assemblies:
+## Nested trains
 
-```csharp
-builder.Services.AddTrax(trax => trax
-    .AddEffects(effects => effects
-        .UsePostgres(connectionString)
-    )
-    .AddMediator(typeof(Program).Assembly)
-);
-```
+A junction can run another train through the bus. It injects `ITrainBus` and passes its own
+`CancellationToken`, so cancelling the parent reaches the child:
 
-`TrainBus.RunAsync` picks the train by input type, so for each input type it reaches one train: if two trains accept the same `TIn`, the first one scanned is the one it runs. Both trains are still registered and discovered, and everything that names a train runs the train it names: `ITrainExecutionService.RunAsync`, the GraphQL `run` operations, and `ITrainBus.RunByNameAsync`. To run a specific train from code when its input type is shared, call `RunByNameAsync` or inject the train by its interface.
-
-## Nested Trains
-
-A junction can dispatch another train through the `TrainBus`. Inject `ITrainBus` into the junction and pass the input, plus the junction's `CancellationToken` so cancelling the parent reaches the child:
-
-```csharp
+```csharp fragment
 var result = await trainBus.RunAsync<ChildResult>(
     new ChildRequest { Data = input.ChildData },
     CancellationToken
 );
 ```
 
-The child runs as a train of its own, with its own metadata record, and that record is **not linked to the parent**: nothing sets its `ParentId`. The optional `Metadata` argument to `RunAsync` is not a parent link. It is a pre-created `Pending` record for the train to run *as*, the way the scheduler uses it, and passing the running parent's `Metadata` throws a `TrainException`. To trace a child back to its parent today, correlate them yourself, for example by carrying the parent's `ExternalId` in the child's input.
+The child runs as a train of its own, with its own metadata record, and that record is **not
+linked to the parent**: nothing sets its `ParentId`. The optional `Metadata` argument to
+`RunAsync` is not a parent link. It is a pre-created `Pending` record for the train to run *as*,
+the way the scheduler uses it, and passing the running parent's `Metadata` throws a
+`TrainException`. To trace a child back to its parent, correlate them yourself, for example by
+carrying the parent's `ExternalId` in the child's input.
 
-## Scope Isolation
+## Each run gets its own scope
 
-Every `RunAsync` call creates its own DI scope. The train is resolved and executed within this scope, which is disposed when the call returns. This is especially important for Blazor Server where the circuit scope persists for the entire connection. Without per-call scoping, trains would share `DbContext` instances and other scoped resources across executions.
+Every `RunAsync` and `RunByNameAsync` call creates a DI scope, resolves the train in it, runs the
+train, and disposes the scope when the call returns. Two runs never share a `DbContext` or any
+other scoped service, even when the caller's own scope lives long: a Blazor Server circuit keeps
+one scope for the whole connection, and without a scope per run every train started from it would
+share that circuit's services. A nested train gets a scope of its own in the same way, so each
+train is a self-contained unit.
 
-Nested dispatch (a train calling `TrainBus.RunAsync` for a child train) also creates a separate scope. Each train is a self-contained black box.
+## When the bus is worth it
 
-## Direct Injection
-
-You don't have to use the bus. `AddMediator` also registers each train by its interface, so you can inject them directly when you know exactly which train you need:
-
-```csharp
-public class UpdateUserMutation(IUpdateUserTrain updateUserTrain)
-{
-    public async Task<User> UpdateUser(UpdateUserInput input)
-        => await updateUserTrain.Run(input);
-}
-```
-
-## When to Use Mediator
-
-- Larger apps where multiple callers trigger trains
-- When trains trigger other trains (nested dispatch)
-- When you want to decouple callers from train implementations
-
-When you need recurring background jobs, add [Trax.Scheduler](/docs/scheduler).
+The bus pays off in an application where many callers start trains, where trains start other
+trains, or where callers should not depend on the classes that implement them. A small
+application with one caller per train can inject the trains and skip it. Recurring and queued
+work is the [scheduler](/docs/scheduler)'s, which runs trains through the same lookup.
 
 ## SDK Reference
 
-> [AddTrax / AddEffects](/docs/sdk-reference/configuration) | [UsePostgres](/docs/sdk-reference/configuration/add-postgres-effect) | [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus)
+> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [ITrainBus](/docs/sdk-reference/mediator-api/train-bus) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)

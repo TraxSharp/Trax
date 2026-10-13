@@ -1,53 +1,81 @@
 ---
-title: Train Discovery
-description: "How TrainRegistry scans assemblies and TrainBus routes by input type: input type uniqueness, train name resolution and the train discovery rules."
+title: Train discovery
+description: "How the train registry scans assemblies and the train bus routes by input type or name: service type selection, shared input types and discovery rules."
 type: reference
 area: mediator
 nav_order: 1
+source:
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainRegistry
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainBus
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainDiscovery/TrainDiscoveryService.cs
+  - Trax.Mediator/src/Trax.Mediator/Services/TrainExecution/TrainExecutionService.cs
 ---
 
-# Train Discovery & Routing
+# Train discovery
 
-This page covers the internal implementation of train discovery and routing. For the user-facing explanation of how to use the `TrainBus`, see [Mediator overview](/docs/mediator).
+How `AddMediator` finds trains and how the train bus picks one. Why the bus routes by input type
+is in [Mediator](/docs/mediator).
 
-## TrainRegistry
+## The registry scan
 
-The `TrainRegistry` scans the specified assemblies at startup for all types implementing `IServiceTrain<TIn, TOut>`. For each discovered train, it extracts the `TIn` type and builds a `Dictionary<Type, Type>` mapping input types to train types. Duplicate input types are silently skipped via `TryAdd`, so the first registration wins.
+The train registry scans each assembly passed to `AddMediator`, in the order given (an assembly
+passed twice is scanned once), for non-abstract classes that implement `IServiceTrain<TIn, TOut>`.
+For each class it selects a service type:
 
-## TrainBus
+| The class implements | Service type |
+|---|---|
+| One non-generic interface deriving from `IServiceTrain<TIn, TOut>` (`IMyTrain`) | That interface |
+| Several such interfaces, one extending the others | The most derived one |
+| Several such interfaces, none extending the others | None: `TrainException`, "implements more than one train interface" |
+| No such interface | The closed `IServiceTrain<TIn, TOut>` |
 
-When `RunAsync<TOut>(input, metadata?)` is called, the `TrainBus`:
+The service type is the train's registration and its canonical name (its `FullName`). The
+registry then maps each service type's `TIn` to the service type. When two trains take the same
+input type, the first one found keeps the mapping: assemblies in the order given, then each
+assembly's own type order. Both trains are still registered and discovered.
 
-1. Looks up the train type from the registry by `input.GetType()`
-2. Resolves the train from the DI container in a new scope
-3. Injects framework-level properties (`EffectRunner`, `Metadata`, etc.)
-4. Invokes the train's `Run` method via reflection. With no `metadata` the train creates its own record; with one, which must be `Pending` (anything else throws `TrainException`), it runs as that pre-created record, the way the scheduler runs a dispatched job. The metadata is not a parent link, and nothing sets the run's `ParentId`
+## Running by input type
 
-## Key Constraints and Design Decisions
+`ITrainBus.RunAsync<TOut>(input, ...)`:
 
-### Input Type Uniqueness
+1. Looks up `input.GetType()` in the registry. The lookup uses the exact runtime type, so an
+   input of a derived type finds only a train registered for that derived type. No entry throws
+   `NoTrainForInputException`, whose message names the scanned assemblies (see
+   [Troubleshooting](/docs/cross-cutting/troubleshooting#could-not-find-train-with-input-type-x)).
+2. Creates a DI scope and resolves the service type in it.
+3. Fills the train's `[Inject]` properties.
+4. Calls the train's `Run`. With no `metadata` the train creates its own record. With one, which
+   must be `Pending` (any other state throws `TrainException`), it runs as that pre-created record,
+   the way the scheduler runs a dispatched job. The metadata is not a parent link, and nothing sets
+   the run's `ParentId`.
+5. Disposes the scope when the run returns.
 
-The bus's input-keyed `RunAsync` reaches one train per input type: when two trains share one, the first scanned is the one it runs. Discovery still lists both, and a run by name runs the train named. See [AddMediator](/docs/sdk-reference/configuration/add-mediator) for the full rules and code examples.
+## Running by name
 
-### Train Name Resolution
+`ITrainBus.RunByNameAsync(trainName, input, ...)` takes the canonical name only. A name no train
+is registered under throws `TrainException` "No train is registered under the name (X)", and an
+input that is not an instance of the train's input type throws `TrainException`. It then resolves
+and runs the train in a scope of its own, as `RunAsync` does.
 
-When looking up a train by name (e.g., via `ITrainExecutionService`), the system tries two matches in order:
+`ITrainExecutionService` finds a train by name in this order:
 
-1. **Canonical name**: `ServiceType.FullName` (the interface's fully-qualified name, e.g. `MyApp.Trains.IProcessOrderTrain`)
-2. **Friendly name**: `ServiceTypeName` (the display name from the registration). A name that matches more than one train's friendly name throws `AmbiguousTrainNameException`.
+1. **Canonical name**: the service type's `FullName`, such as `MyApp.Trains.IProcessOrderTrain`.
+2. **Friendly name**: the registration's `ServiceTypeName`. A name that matches more than one
+   train's friendly name throws `AmbiguousTrainNameException`.
 
-There is no short-name fallback.
+There is no short-name fallback. No match throws `TrainNotFoundException`, whose message is always
+"The requested train was not found.". The canonical name is what metadata and work queue entries
+store, and it does not change when the implementing class is renamed.
 
-The canonical name is the preferred identifier. It is stable across implementation class renames and matches what is stored in metadata and work queue entries.
+## Discovery rules
 
-### Train Discovery Rules
-
-1. **Must be concrete classes** (not abstract)
-2. **Must implement IServiceTrain<,>**
-3. **Must have a public constructor the container can satisfy.** The startup check refuses a train with no public constructor, or one whose constructor needs a type nothing registers.
-4. **Should implement its own interface**, a non-generic one deriving from `IServiceTrain<TIn, TOut>`. That interface is the train's service type and its canonical name. Other interfaces the class or its base classes implement are ignored.
-5. **One class per service type.** Two different classes registered under one class service type (`AddTransient<BaseTrain, A>()` and `AddTransient<BaseTrain, B>()`) make `DiscoverTrains` throw `TrainException`, so the host fails at startup: a train is found by the name of the type it is registered under, and the container runs only the last registration, so the name would not describe the train that runs. Register each train under its own interface or class.
+| Rule | When broken |
+|---|---|
+| The class is concrete | An abstract class is not scanned |
+| The class implements `IServiceTrain<,>` | The class is not scanned |
+| The class has a public constructor the container can satisfy | The startup chain check refuses the host, naming the missing type |
+| One class per class service type | Two classes registered under one class service type (`AddTransient<BaseTrain, A>()` and `AddTransient<BaseTrain, B>()`) make `DiscoverTrains` throw `TrainException`, so the host fails at startup |
 
 ## SDK Reference
 
-> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [RunAsync](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)
+> [AddMediator](/docs/sdk-reference/configuration/add-mediator) | [ITrainBus](/docs/sdk-reference/mediator-api/train-bus) | [ITrainDiscoveryService](/docs/sdk-reference/mediator-api/train-discovery) | [ITrainExecutionService](/docs/sdk-reference/mediator-api/train-execution)

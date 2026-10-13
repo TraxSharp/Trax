@@ -4,6 +4,8 @@ description: The error messages Trax raises at registration, startup and dispatc
 type: reference
 area: general
 nav_order: 6
+redirect_from:
+  - /docs/cross-cutting
 ---
 
 # Troubleshooting
