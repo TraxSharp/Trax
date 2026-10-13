@@ -1,6 +1,6 @@
 ---
 title: Home
-description: "Trax .NET documentation home: what a train and its junctions are, the vocabulary, how the packages layer so you use only what you need, and where to go next."
+description: "Trax .NET documentation home: what Trax is, and where to go to learn it, get a task done, understand how it works, or look something up."
 type: landing
 area: general
 nav_order: 1
@@ -8,44 +8,54 @@ nav_order: 1
 
 # Trax .NET
 
-Trax .NET is a framework for .NET business logic you can call, schedule, serve as an API, or move to workers, with every run recorded in your Postgres.
-
-You write a train: a typed pipeline of small steps called junctions, where a failing junction skips the rest and the train returns the exception. Call it from a controller, put it on a cron schedule, publish it as a GraphQL mutation, or send it to a worker on another machine or in AWS Lambda. It is the same class each time, and every run leaves a record: when it started, how it ended, which junction failed and the exception it threw. Trax is MIT licensed and targets .NET 10.
-
-New here? Start with the [Getting Started](/docs/getting-started) guide.
-
-## The vocabulary
-
-The type names in the API follow a train metaphor:
-
-| Term | What it means |
-|------|---------------|
-| **Train** | A pipeline that follows a route, always stays on the tracks, always reaches a destination |
-| **Route** | The path a train follows: a sequence of junctions (`IRoute<TIn, TOut>`) |
-| **Junction** | A point on the route where work happens (`Junction<TIn, TOut>`). The train either continues right (success) or switches left (failure) |
-| **Right track** | Success path. The train continues to the next junction |
-| **Left track** | Failure path. The train bypasses remaining junctions and arrives with the exception |
-| **Memory** | The cargo the train carries between junctions, wired automatically by type |
-| **ServiceTrain** | A Train with equipment bolted on: execution tracking, logging, lifecycle management |
-
-A train never leaves the rails. It always reaches a destination, either the intended output (right) or an exception (left). You'll see these terms throughout the docs and the API surface. The [Glossary](/docs/reference/glossary) defines the rest: Effect, Metadata, Manifest, the work queue, dead letters and the other names the docs use.
-
-## Use only what you need
-
-Each package adds one layer of capability. Stop at whatever layer solves your problem.
-
-| Layer | What it adds |
-|-------|-------------|
-| [**Core**](/docs/core) | Typed pipelines, error propagation, chains declared in `Junctions()` that can be checked before they run |
-| [**Effect**](/docs/effect) | Execution metadata, dependency injection, pluggable effect providers |
-| [**Mediator**](/docs/mediator) | Decoupled dispatch: route by input type instead of direct injection, and the startup check that refuses to start a host whose chains cannot run |
-| [**Scheduling**](/docs/scheduler) | Cron/interval scheduling, retries, dead-letter handling, job dependencies |
-| [**API**](/docs/api) | Auto-generated GraphQL via HotChocolate |
-| [**Dashboard**](/docs/dashboard) | Blazor monitoring UI that mounts into your existing app |
+Trax .NET is a framework for .NET business logic you can call, schedule, serve as an API, or move
+to workers, with every run recorded in your Postgres. You write a train: a typed pipeline of small
+steps called junctions, where a failing junction skips the rest and the train returns the
+exception. The same class runs from a controller, on a cron schedule, as a GraphQL mutation, or on
+a worker in another process or in AWS Lambda, and every run leaves a record of when it started, how
+it ended, and which junction failed with what. Trax is MIT licensed and targets .NET 10. The
+[Glossary](/docs/reference/glossary) defines the names the docs use.
 
 ## Where to go
 
-- [**Getting Started**](/docs/getting-started): hands-on code from Core-only to full stack
-- [**Packages**](/docs/reference/packages): every package, what it is for, and which ones to install
-- [**Samples & Deployment**](/docs/samples): project structure and deployment topologies
-- [**SDK Reference**](/docs/sdk-reference): method-level documentation for every public API
+[How these docs are organised](/docs/about-these-docs) explains the four kinds of page below.
+
+### Learn
+
+- [Getting Started](/docs/getting-started): build a server with one train, record its runs in
+  Postgres, schedule it, open the dashboard and call it over GraphQL.
+
+### Do
+
+- [Set up the scheduler](/docs/scheduler/setup): install it, configure it, and schedule a train.
+- [Run a job once, later](/docs/scheduler/delayed-jobs): delayed and one-off runs.
+- [Handle dead letters](/docs/scheduler/dead-letters-and-cleanup): retry or acknowledge runs that
+  ran out of retries.
+- [Secure a GraphQL host](/docs/api-security): authentication, authorization and hardening, end to
+  end.
+- [Add a domain data context](/docs/effect/effect-providers/domain-data-contexts): your own EF Core
+  tables next to Trax's.
+- [Debug with the log table](/docs/effect/debugging-with-the-log-table): follow a run across
+  processes through `trax.log`.
+- [Test your trains](/docs/cross-cutting/testing): unit and in-memory tests.
+- [Author a state machine](/docs/statemachine/authoring): define one and serve it.
+
+### Understand
+
+- [Core](/docs/core): trains, junctions, and how a chain runs.
+- [Effect](/docs/effect): what an effect is and how runs get recorded.
+- [Mediator](/docs/mediator): running a train by its input type, and nested trains.
+- [Scheduling](/docs/scheduler): manifests, the work queue, and how jobs are dispatched.
+- [State Machines](/docs/statemachine): snapshots and definitions, the guarantees, and the matching
+  C# and TypeScript runtimes.
+- [Authorization](/docs/authorization): where Trax checks who may run what.
+
+### Look up
+
+- [SDK Reference](/docs/sdk-reference): every public type and method.
+- [Packages](/docs/reference/packages): every package, what it is for, and which to install.
+- [Glossary](/docs/reference/glossary): the names Trax uses.
+- [CLI](/docs/reference/cli): the `trax` command, which scaffolds a project from a GraphQL schema or
+  OpenAPI spec.
+- [Troubleshooting](/docs/cross-cutting/troubleshooting): startup and runtime errors, verbatim, with
+  the fix.
