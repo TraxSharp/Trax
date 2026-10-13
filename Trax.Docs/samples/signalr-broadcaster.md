@@ -62,27 +62,36 @@ curl -i -X POST "http://localhost:5270/hubs/trax-events/negotiate?negotiateVersi
 
 ### The server
 
-```csharp
+```csharp from=Trax.Samples/samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster/Program.cs
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication;          // SignInAsync
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Trax.Effect.Broadcaster.SignalR.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Mediator.Extensions;
-
+// ...
 builder
     .Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(cookie =>
     {
         cookie.Cookie.SameSite = SameSiteMode.Strict;
+        cookie.Cookie.HttpOnly = true;
         cookie.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return Task.CompletedTask;
         };
+        cookie.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
     });
 builder.Services.AddAuthorization();
+// ...
+// SignalR itself: MapTraxTrainEventHub refuses to start without it.
 builder.Services.AddSignalR();
 
 builder.Services.AddTrax(trax =>
@@ -99,14 +108,16 @@ builder.Services.AddTrax(trax =>
         )
         .AddMediator(typeof(IPingTrain).Assembly)
 );
-
+// ...
 var app = builder.Build();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapTraxTrainEventHub(hub => hub.RequireRoles("Operator"));
+
+// The hub: operators only. A client without the role gets 401/403 from the negotiate request.
+app.MapTraxTrainEventHub(hub => hub.RequireRoles(OperatorRole));
 ```
 
 `UseSignalRHub` is a sink, not a transport: with no RabbitMQ it serves the trains this process runs.
@@ -121,25 +132,22 @@ negotiate request of anyone else gets `401` (not signed in) or `403` (signed in 
 
 ### The browser
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"
-        integrity="sha384-mU1xC5yC2LldSW74Rj1Ax8wPiLw/28V5eh51uKJMlBbRVsOtUYd4xyzNsgIAJARB"
-        crossorigin="anonymous"></script>
-<script>
-  const hub = new signalR.HubConnectionBuilder()
-    .withUrl("/hubs/trax-events")
-    .withAutomaticReconnect()
-    .build();
-
-  hub.on("TrainEvent", (evt) => {
-    // evt is the projection: { externalId, trainName, eventType, timestamp, failureReason }
-  });
-
-  await hub.start();
-</script>
+```html from=Trax.Samples/samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster/wwwroot/index.html
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"
+          integrity="sha384-mU1xC5yC2LldSW74Rj1Ax8wPiLw/28V5eh51uKJMlBbRVsOtUYd4xyzNsgIAJARB"
+          crossorigin="anonymous"></script>
+<!-- ... -->
+    // Same origin, so the browser sends the sign-in cookie on negotiate and on the WebSocket.
+    const hub = new signalR.HubConnectionBuilder().withUrl("/hubs/trax-events").withAutomaticReconnect().build();
+<!-- ... -->
+    // The payload is this sample's projection, LiveTrainEvent, in camelCase.
+    hub.on("TrainEvent", (evt) => {
+<!-- ... -->
+    await hub.start();
 ```
 
-The page is served by the same host, so the browser sends the sign-in cookie on the negotiate request
+Each `TrainEvent` is the sample's projection in camelCase: `externalId`, `trainName`, `eventType`,
+`timestamp` and `failureReason`. The page is served by the same host, so the browser sends the sign-in cookie on the negotiate request
 and on the WebSocket upgrade by itself; there is no token code. A page on another origin, or a
 bearer-token API, passes its credential with `accessTokenFactory` instead. `SameSite=Strict` keeps the
 cookie off requests another site starts, which is what makes the cookie-authenticated `POST /pings`
@@ -147,17 +155,23 @@ safe from cross-site forgery.
 
 The sign-in itself is a demo endpoint, mapped only in Development:
 
-```csharp
+```csharp from=Trax.Samples/samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster/Program.cs
 if (app.Environment.IsDevelopment())
-    app.MapPost("/demo/sign-in", async (HttpContext context) =>
-    {
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, "demo-operator"), new Claim(ClaimTypes.Role, "Operator")],
-            CookieAuthenticationDefaults.AuthenticationScheme
-        );
-        await context.SignInAsync(new ClaimsPrincipal(identity));
-        return Results.Redirect("/");
-    });
+    app.MapPost(
+        "/demo/sign-in",
+        async (HttpContext context) =>
+        {
+            var identity = new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.Name, "demo-operator"),
+                    new Claim(ClaimTypes.Role, OperatorRole),
+                ],
+                CookieAuthenticationDefaults.AuthenticationScheme
+            );
+            await context.SignInAsync(new ClaimsPrincipal(identity));
+            return Results.Redirect("/");
+        }
+    );
 ```
 
 Anywhere else nobody can sign in, so the hub admits nobody until you add a real sign-in.
@@ -172,10 +186,10 @@ every client it admits, whoever started the run. So the sink sends none unless y
 This sample chooses the same rule GraphQL subscriptions use: show the message only when the run failed
 with a `TrainException`, the type a train author throws for a message meant to be read.
 
-```csharp
+```csharp from=Trax.Samples/samples/SignalRBroadcaster/Trax.Samples.SignalRBroadcaster/LiveTrainEvent.cs
 using Trax.Core.Exceptions;
 using Trax.Effect.Services.TrainEventBroadcaster;
-
+// ...
 public sealed record LiveTrainEvent(
     string ExternalId,
     string TrainName,
@@ -189,7 +203,7 @@ public sealed record LiveTrainEvent(
     public static LiveTrainEvent From(TrainLifecycleEventMessage message) =>
         new(
             message.ExternalId,
-            message.TrainName[(message.TrainName.LastIndexOf('.') + 1)..],
+            ShortName(message.TrainName),
             message.EventType,
             message.Timestamp,
             message.EventType == "Failed" ? ClientReason(message) : null
@@ -199,6 +213,9 @@ public sealed record LiveTrainEvent(
         message.FailureException == nameof(TrainException) && message.FailureReason is not null
             ? message.FailureReason
             : MaskedReason;
+
+    private static string ShortName(string trainName) =>
+        trainName[(trainName.LastIndexOf('.') + 1)..];
 }
 ```
 
@@ -206,11 +223,13 @@ public sealed record LiveTrainEvent(
 `InvalidOperationException`). A subclass of `TrainException` reports its own name, so list it too if
 you throw one. See [UseSignalRHub: Default projection](/docs/sdk-reference/configuration/use-signalr-hub#default-projection).
 
-### A temporary workaround in the sample
+### A workaround the sample no longer needs
 
-`Workarounds/SignalRSinkKeepAlive.cs` is not part of the pattern. The current Trax.Effect disposes the
-shared SignalR sink when the first train run ends, after which the hub delivers nothing; the file keeps
-the sink alive until that is fixed upstream. Do not copy it.
+`Workarounds/SignalRSinkKeepAlive.cs`, and the `KeepSignalRSinkAlive()` call in `Program.cs`, are not
+part of the pattern. They were written for Trax.Effect before 1.60.0, which disposed the shared
+SignalR sink when the first train run ended, after which the hub delivered nothing. From 1.60.0 the
+sink hands each run a hook that owns nothing, so the wrapper forwards to a hook that already
+survives the run and changes nothing. Do not copy it.
 
 ## Tests
 
@@ -222,20 +241,21 @@ A .NET SignalR client (`Microsoft.AspNetCore.SignalR.Client`) joins the hub thro
 `WebApplicationFactory`, using the test server's handler and long polling, and carrying the cookie the
 demo sign-in returned:
 
-```csharp
-var connection = new HubConnectionBuilder()
-    .WithUrl(
-        new Uri(factory.Server.BaseAddress, "/hubs/trax-events"),
-        options =>
-        {
-            options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
-            options.Transports = HttpTransportType.LongPolling;
-            options.Headers["Cookie"] = cookie;
-        }
-    )
-    .Build();
-connection.On<LiveTrainEvent>("TrainEvent", received.Enqueue);
-await connection.StartAsync();
+```csharp from=Trax.Samples/tests/Trax.Samples.SignalRBroadcaster.E2E/Fixtures/HubClient.cs
+        connection.On<LiveTrainEvent>("TrainEvent", _received.Enqueue);
+// ...
+        var connection = new HubConnectionBuilder()
+            .WithUrl(
+                new Uri(server.BaseAddress, "/hubs/trax-events"),
+                options =>
+                {
+                    options.HttpMessageHandlerFactory = _ => server.CreateHandler();
+                    options.Transports = HttpTransportType.LongPolling;
+                    if (cookie is not null)
+                        options.Headers["Cookie"] = cookie;
+                }
+            )
+            .Build();
 ```
 
 | Test class | Proves |
