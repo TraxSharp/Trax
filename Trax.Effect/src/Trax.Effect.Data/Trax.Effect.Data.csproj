@@ -32,4 +32,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence" />
   </ItemGroup>
+  <!-- The change feed's startup check is tested against a notice source that reports a given switch. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trax.Effect.StateMachine.Persistence.Integration" />
+  </ItemGroup>
 </Project>

@@ -23,8 +23,9 @@ namespace Trax.Effect.Models.SnapshotDraft;
 public class SnapshotDraft
 {
     /// <summary>
-    /// The row's surrogate primary key, assigned by the database. Not an identity anyone looks a draft up by:
-    /// that is the owner kind, the owner, the machine and <see cref="Id"/>.
+    /// The row's surrogate primary key, assigned by the database and never reused. Not an identity anyone looks a
+    /// draft up by: that is the owner kind, the owner, the machine and <see cref="Id"/>. It names one incarnation of
+    /// the instance: a draft deleted and created again under the same id is a new row with a new row id.
     /// </summary>
     [Column("row_id")]
     public long RowId { get; set; }
@@ -89,8 +90,8 @@ public class SnapshotDraft
     public string? LastRequestTrigger { get; set; }
 
     /// <summary>
-    /// The state the last applied advance fired from. A draft back in that state (reset, or moved back) no
-    /// longer shows the request's outcome, so the same request id and trigger fire again rather than replay.
+    /// The state the last applied advance fired from. A row with no ring reads its last request from this and the
+    /// columns beside it, and a retry of that request replays wherever the draft is now.
     /// </summary>
     [Column("last_request_from_state")]
     public string? LastRequestFromState { get; set; }
@@ -127,4 +128,99 @@ public class SnapshotDraft
     /// </summary>
     [Column("invoke_stranded_state")]
     public string? InvokeStrandedState { get; set; }
+
+    /// <summary>
+    /// The instance's revision: 1 when the row is inserted, and one more on every update of it. The database bumps
+    /// it in a <c>BEFORE UPDATE</c> trigger (an <c>AFTER UPDATE</c> one on SQLite), so a write that leaves it out,
+    /// from a custom store or raw SQL, is numbered too. A deleted and re-created instance is a new row, with a new
+    /// <see cref="RowId"/>, and starts again at 1: revisions are ordered within one <see cref="RowId"/> only.
+    /// Server-only: it travels beside the snapshot, never inside it.
+    /// </summary>
+    [Column("revision")]
+    public long Revision { get; set; } = 1;
+
+    /// <summary>
+    /// The hash of the IR of the machine definition that last wrote the row (<c>IMachine.SchemaHash</c>), or null
+    /// for a machine with no exportable IR and for a writer that does not record it. Server-only.
+    /// </summary>
+    [Column("ir_hash")]
+    public string? IrHash { get; set; }
+
+    /// <summary>
+    /// The client's request id of the <c>start</c> that created the row, or null for a row a save or host code
+    /// created. Unique per owner kind, user and machine (a partial index the migrations create), so a retried start
+    /// finds the instance it created. Server-only.
+    /// </summary>
+    [Column("start_request_id")]
+    public string? StartRequestId { get; set; }
+
+    /// <summary>
+    /// The fingerprint of the input of the start that created the row, so one request id with a different input is
+    /// told apart. Null when <see cref="StartRequestId"/> is. Server-only.
+    /// </summary>
+    [Column("start_fingerprint")]
+    public string? StartFingerprint { get; set; }
+
+    /// <summary>
+    /// The row's most recent client requests as a JSON array, oldest first: each one's request id, a fingerprint of
+    /// its trigger and input, the state it fired from, the revision it produced and the snapshot it was answered
+    /// with. A retry is answered from here. Writes the server makes (an outcome, a timer) never change it. Null on a
+    /// row no client request has advanced since it was added. Server-only.
+    /// </summary>
+    [Column("recent_requests", TypeName = "jsonb")]
+    public string? RecentRequests { get; set; }
+
+    /// <summary>
+    /// When the timer of the state the instance is in fires, in UTC, or null when that state has no timer. Every write
+    /// that enters a timed state sets it, in the same statement as the state, from the database's clock plus the
+    /// state's duration; a write that leaves the state clears it, and one that stays in it keeps the time set at entry.
+    /// The hosts that register the machine fire the rows whose time has passed. A partial index the migrations create
+    /// (<c>ix_snapshot_draft_due</c>) serves that sweep. Server-only: it travels beside the snapshot, never inside it.
+    /// </summary>
+    [Column("due_at")]
+    public DateTimeOffset? DueAt { get; set; }
+
+    /// <summary>
+    /// The claimant of the effect pending on the row, or null when none is. Sending an effect-bound event sets it by a
+    /// conditional write; every other write requires it to be null, so nothing moves or changes the row while the effect
+    /// runs, and the effect's receipt, the move to its target and clearing it are one write guarded by it.
+    /// Server-only.
+    /// </summary>
+    [Column("effect_token")]
+    public Guid? EffectToken { get; set; }
+
+    /// <summary>
+    /// The key the pending effect runs under, minted when the row is marked: a run again after its claimant stopped uses
+    /// it, and the next send of the event mints a new one. Null when no effect is pending. Server-only.
+    /// </summary>
+    [Column("effect_key")]
+    public string? EffectKey { get; set; }
+
+    /// <summary>The event whose effect is pending on the row, or null when none is. Server-only.</summary>
+    [Column("effect_trigger")]
+    public string? EffectTrigger { get; set; }
+
+    /// <summary>
+    /// The client request that sent the pending effect, or null when none is pending, so whoever finishes the effect
+    /// records it as that request's answer. Server-only.
+    /// </summary>
+    [Column("effect_request_id")]
+    public string? EffectRequestId { get; set; }
+
+    /// <summary>
+    /// When the pending effect's claimant's lease ends, on the database's clock, or null when none is pending. Past it,
+    /// the next send or the reconciler takes the mark over and runs the effect again under the same key. A partial
+    /// index the migrations create (<c>ix_snapshot_draft_effect_pending</c>) serves that read. Server-only.
+    /// </summary>
+    [Column("effect_lease_until")]
+    public DateTimeOffset? EffectLeaseUntil { get; set; }
+
+    /// <summary>
+    /// Whether the server put the row in its state: true after an effect, an invoked train's outcome or an event gated
+    /// by a role or a policy; false after a client's event, start or save; carried over by a timer. It decides what
+    /// discard refuses, what the draft sweep keeps and what the draft cap counts. Null on a row written before it was
+    /// recorded, or by host code through the store, which is judged by its state as before. Server-only.
+    /// </summary>
+    [Column("server_record")]
+    public bool? ServerRecord { get; set; }
 }

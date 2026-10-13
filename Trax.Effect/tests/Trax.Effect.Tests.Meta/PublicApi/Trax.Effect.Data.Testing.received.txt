@@ -39,6 +39,12 @@ namespace Trax.Effect.Data.Testing
         public string Machine { get; init; }
         public string State { get; init; }
     }
+    public sealed class KeptState : System.IEquatable<Trax.Effect.Data.Testing.KeptState>
+    {
+        public KeptState(string Machine, string State) { }
+        public string Machine { get; init; }
+        public string State { get; init; }
+    }
     [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Method, Inherited=true)]
     public sealed class LeavesStuckRunsAttribute : System.Attribute
     {
@@ -56,6 +62,12 @@ namespace Trax.Effect.Data.Testing
         public required System.Type OwnerType { get; init; }
         public required System.Type PrincipalAccessorType { get; init; }
     }
+    public sealed class TimedState : System.IEquatable<Trax.Effect.Data.Testing.TimedState>
+    {
+        public TimedState(string Machine, string State) { }
+        public string Machine { get; init; }
+        public string State { get; init; }
+    }
     public sealed class TraxInvariantViolation : System.IEquatable<Trax.Effect.Data.Testing.TraxInvariantViolation>
     {
         public TraxInvariantViolation(string Invariant, string Table, string Id, string Detail) { }
@@ -69,18 +81,28 @@ namespace Trax.Effect.Data.Testing
     {
         public const string CheckpointOfCompletedRun = "checkpoint-of-completed-run";
         public const string DispatchedWithoutRun = "dispatched-without-run";
+        public const string DraftOlderThanMaxLifetime = "draft-older-than-max-lifetime";
+        public const string DraftsAboveCap = "drafts-above-cap";
+        public const string DueAtOfARemovedTimer = "due-at-of-a-removed-timer";
+        public const string DueAtOutsideTimedState = "due-at-outside-timed-state";
+        public const string DuplicateRowId = "duplicate-row-id";
         public const string EffectClaimInFlight = "effect-claim-in-flight";
         public const string InvokeTokenOutsideInvokingState = "invoke-token-outside-invoking-state";
         public const string InvokeTokenWithoutRun = "invoke-token-without-run";
         public const string InvokingStateWithoutToken = "invoking-state-without-token";
         public const string ResumeFromMissingRun = "resume-from-missing-run";
+        public const string RevisionBelowOne = "revision-below-one";
         public const string RunInProgress = "run-in-progress";
+        public const string TimedStateWithoutDueAt = "timed-state-without-due-at";
+        public const string UserDraftWithoutOwner = "user-draft-without-owner";
         public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
         public static System.Threading.Tasks.Task AssertConsistentAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static string Describe(System.Collections.Generic.IReadOnlyCollection<Trax.Effect.Data.Testing.TraxInvariantViolation> violations) { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Threading.CancellationToken cancellationToken = default) { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(System.Data.Common.DbConnection connection, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(System.Data.Common.DbConnection connection, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.TimedState> timedStates, System.TimeSpan? maxDraftLifetime = default, int? maxDraftsPerUser = default, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.KeptState>? keptStates = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Trax.Effect.Data.Testing.TraxInvariantViolation>> FindViolationsAsync(string connectionString, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.InvokingState> invokingStates, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.TimedState> timedStates, System.TimeSpan? maxDraftLifetime = default, int? maxDraftsPerUser = default, System.Collections.Generic.IEnumerable<Trax.Effect.Data.Testing.KeptState>? keptStates = null, System.Threading.CancellationToken cancellationToken = default) { }
         public static bool IsExempt(System.Type fixture, string? methodName) { }
     }
 }

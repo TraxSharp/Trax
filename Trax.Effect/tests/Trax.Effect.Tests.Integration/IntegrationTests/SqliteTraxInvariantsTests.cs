@@ -194,6 +194,66 @@ public class SqliteTraxInvariantsTests
             ("$resume", resumeFrom)
         );
 
+    [Test]
+    public async Task TheLifetimeCheck_CountsAsTheSweepDoes()
+    {
+        // Built is kept however old; a row with no creation time counts from its last write; a draft waiting on
+        // its run is bounded too.
+        await SeedUserDraftAsync("Built", "datetime('now', '-3 days')", "datetime('now')");
+        var editable = await SeedUserDraftAsync(
+            "Editing",
+            "datetime('now', '-3 days')",
+            "datetime('now')"
+        );
+        var unborn = await SeedUserDraftAsync("Editing", "NULL", "datetime('now', '-3 days')");
+        await SeedUserDraftAsync("Editing", "NULL", "datetime('now')");
+        var waiting = Guid.NewGuid();
+        var running = await SeedUserDraftAsync(
+            "Building",
+            "datetime('now', '-3 days')",
+            "datetime('now')",
+            await SeedInvokedEntryAsync(waiting, runId: null)
+        );
+
+        var violations = (
+            await TraxInvariants.FindViolationsAsync(
+                _connection,
+                [],
+                [],
+                maxDraftLifetime: TimeSpan.FromDays(1),
+                keptStates: [new KeptState(Machine, "Built")]
+            )
+        )
+            .Where(v => v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime)
+            .Select(v => v.Id);
+
+        violations
+            .Should()
+            .BeEquivalentTo([editable.ToString(), unborn.ToString(), running.ToString()]);
+    }
+
+    // A user's draft in state, with created_at and updated_at as SQL expressions; returns its row id.
+    private async Task<long> SeedUserDraftAsync(
+        string state,
+        string createdAt,
+        string updatedAt,
+        string? token = null
+    ) =>
+        await ScalarAsync(
+            $"""
+            INSERT INTO snapshot_draft
+                (id, user_key, owner_kind, machine, version, state, concurrency_token, created_at, updated_at,
+                 invoke_token)
+            VALUES ($id, 'u1', 0, $machine, 1, $state, $concurrency, {createdAt}, {updatedAt}, $token)
+            RETURNING row_id
+            """,
+            ("$id", Guid.NewGuid().ToString()),
+            ("$machine", Machine),
+            ("$state", state),
+            ("$concurrency", Guid.NewGuid().ToString()),
+            ("$token", token)
+        );
+
     private async Task<string> SeedInvokedEntryAsync(Guid instance, long? runId)
     {
         var external = Guid.NewGuid().ToString("N");

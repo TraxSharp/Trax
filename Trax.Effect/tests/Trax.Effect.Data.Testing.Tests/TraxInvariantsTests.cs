@@ -304,6 +304,289 @@ public class TraxInvariantsTests
             );
     }
 
+    private const string MachineApiAdr =
+        "Trax.Docs/adr/0048-a-machine-is-served-as-a-typed-api-and-the-server-applies-every-transition.md";
+
+    private static readonly TimedState[] Timed = [new(Machine, "Review")];
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task ARevisionBelowOne_IsReportedWithItsRow()
+    {
+        var zero = await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
+        await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
+        // The trigger overwrites any revision an UPDATE sets, so the row is set below 1 with it switched off.
+        await SqlAsync(
+            $"""
+            BEGIN;
+            ALTER TABLE trax.snapshot_draft DISABLE TRIGGER snapshot_draft_revision;
+            UPDATE trax.snapshot_draft SET revision = 0 WHERE row_id = {zero};
+            ALTER TABLE trax.snapshot_draft ENABLE TRIGGER snapshot_draft_revision;
+            COMMIT;
+            """
+        );
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
+
+        violations
+            .Should()
+            .ContainSingle(
+                $"every write bumps the revision from 1, so none is below it. See {MachineApiAdr}"
+            )
+            .Which.Should()
+            .Match<TraxInvariantViolation>(v =>
+                v.Invariant == TraxInvariants.RevisionBelowOne
+                && v.Table == "trax.snapshot_draft"
+                && v.Id == zero.ToString()
+            );
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task AUserDraftWithAnEmptyOrBlankOwner_IsReportedWithItsRow()
+    {
+        var empty = await SeedUserDraftAsync("");
+        var blank = await SeedUserDraftAsync("   ");
+        await SeedUserDraftAsync("u1");
+        await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
+
+        violations
+            .Where(v => v.Invariant == TraxInvariants.UserDraftWithoutOwner)
+            .Select(v => v.Id)
+            .Should()
+            .Equal(
+                [empty.ToString(), blank.ToString()],
+                $"a user's draft names its owner; a system row names none and is fine. See {MachineApiAdr}"
+            );
+        violations.Should().OnlyContain(v => v.Invariant == TraxInvariants.UserDraftWithoutOwner);
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task TwoRowsWithOneRowId_AreReported()
+    {
+        // row_id is the primary key, so the duplicate can only be made with the key dropped. It is dropped inside a
+        // transaction the check reads through and that is rolled back, so the table keeps its key.
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        var first = await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
+        await ExecAsync(
+            connection,
+            "ALTER TABLE trax.snapshot_draft DROP CONSTRAINT pk_snapshot_draft"
+        );
+        await ExecAsync(
+            connection,
+            $"""
+            INSERT INTO trax.snapshot_draft
+                (row_id, id, user_key, owner_kind, machine, version, state, concurrency_token, updated_at)
+            VALUES ({first}, gen_random_uuid(), NULL, 'system', '{Machine}', 1, 'Built', gen_random_uuid(), now())
+            """
+        );
+
+        var violations = await TraxInvariants.FindViolationsAsync(connection, [], Timed);
+        await transaction.RollbackAsync();
+
+        violations
+            .Should()
+            .Contain(
+                v => v.Invariant == TraxInvariants.DuplicateRowId && v.Id == first.ToString(),
+                $"a row id names one incarnation of one instance. See {MachineApiAdr}"
+            );
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task ADueTimeInAStateWithNoTimer_IsReportedWithItsRow()
+    {
+        var idle = await SeedSnapshotAsync(Guid.NewGuid(), "Idle", token: null);
+        await SeedSnapshotAsync(Guid.NewGuid(), "Idle", token: null);
+        await SqlAsync($"UPDATE trax.snapshot_draft SET due_at = now() WHERE row_id = {idle}");
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
+
+        violations
+            .Should()
+            .ContainSingle($"only a timed state holds a due time. See {MachineApiAdr}")
+            .Which.Should()
+            .Match<TraxInvariantViolation>(v =>
+                v.Invariant == TraxInvariants.DueAtOutsideTimedState && v.Id == idle.ToString()
+            );
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task ATimedStateWithNoDueTime_IsReportedWithItsRow()
+    {
+        var review = await SeedSnapshotAsync(Guid.NewGuid(), "Review", token: null);
+        await SeedSnapshotAsync(Guid.NewGuid(), "Idle", token: null);
+        // The same state of a machine the caller did not describe is not checked.
+        await SeedSnapshotAsync(Guid.NewGuid(), "Review", token: null, machine: "Other");
+
+        (await TraxInvariants.FindViolationsAsync(ConnectionString))
+            .Should()
+            .BeEmpty("without the machine's timed states, nothing can be told");
+
+        var violations = await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed);
+
+        violations
+            .Should()
+            .ContainSingle(
+                $"every entry into a timed state writes its due time. See {MachineApiAdr}"
+            )
+            .Which.Should()
+            .Match<TraxInvariantViolation>(v =>
+                v.Invariant == TraxInvariants.TimedStateWithoutDueAt && v.Id == review.ToString()
+            );
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task ADueTimeOfAMachineWithNoTimerLeft_IsReportedOnceTheHostsStop()
+    {
+        // Read here as a machine described by its invoking states but by no timed state: every timer it had is
+        // gone, so a due time it still holds is one the sweep has not cleared yet.
+        var stale = await SeedSnapshotAsync(
+            Guid.NewGuid(),
+            "Building",
+            token: null,
+            machine: "Other"
+        );
+        await SqlAsync($"UPDATE trax.snapshot_draft SET due_at = now() WHERE row_id = {stale}");
+
+        var violations = await TraxInvariants.FindViolationsAsync(
+            ConnectionString,
+            [new InvokingState("Other", "Queued")],
+            Timed
+        );
+
+        violations
+            .Should()
+            .ContainSingle(
+                $"a stale due time is allowed only until the next sweep, so none is left once the hosts stop. See {MachineApiAdr}"
+            )
+            .Which.Should()
+            .Match<TraxInvariantViolation>(v =>
+                v.Invariant == TraxInvariants.DueAtOfARemovedTimer && v.Id == stale.ToString()
+            );
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task AUserDraftOlderThanTheMaximumLifetime_IsReportedWithItsRow()
+    {
+        var old = await SeedUserDraftAsync("u1", createdAt: DateTimeOffset.UtcNow.AddDays(-3));
+        await SeedUserDraftAsync("u2", createdAt: DateTimeOffset.UtcNow.AddHours(-1));
+        // A system instance lives as long as the system keeps it.
+        await SeedSnapshotAsync(Guid.NewGuid(), "Built", token: null);
+        await SqlAsync(
+            "UPDATE trax.snapshot_draft SET created_at = now() - interval '30 days' WHERE owner_kind = 'system'"
+        );
+
+        (await TraxInvariants.FindViolationsAsync(ConnectionString, [], Timed))
+            .Should()
+            .BeEmpty("with no maximum lifetime, no draft is too old");
+
+        var violations = await TraxInvariants.FindViolationsAsync(
+            ConnectionString,
+            [],
+            Timed,
+            maxDraftLifetime: TimeSpan.FromDays(1)
+        );
+
+        violations
+            .Should()
+            .ContainSingle(
+                $"a pending timer never keeps a draft past its maximum lifetime. See {MachineApiAdr}"
+            )
+            .Which.Should()
+            .Match<TraxInvariantViolation>(v =>
+                v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime && v.Id == old.ToString()
+            );
+    }
+
+    [Test]
+    [Property("adr", MachineApiAdr)]
+    public async Task TheLifetimeCheck_CountsAsTheSweepDoes()
+    {
+        var longAgo = DateTimeOffset.UtcNow.AddDays(-3);
+        // Built is kept by the sweep however old: the record of what the server did.
+        await SeedUserDraftAsync("u1", createdAt: longAgo, state: "Built");
+        var editable = await SeedUserDraftAsync("u1", createdAt: longAgo, state: "Editing");
+        // No creation time recorded: the age counts from the last write.
+        var unborn = await SeedUserDraftAsync(
+            "u2",
+            state: "Editing",
+            noCreatedAt: true,
+            updatedAt: longAgo
+        );
+        await SeedUserDraftAsync("u2", state: "Editing", noCreatedAt: true);
+        // A draft waiting on its run is bounded too: the sweep cancels the run and deletes it.
+        var waiting = Guid.NewGuid();
+        var running = await SeedUserDraftAsync(
+            "u3",
+            createdAt: longAgo,
+            state: "Building",
+            token: await SeedInvokedEntryAsync(waiting, null)
+        );
+
+        var violations = (
+            await TraxInvariants.FindViolationsAsync(
+                ConnectionString,
+                [],
+                Timed,
+                maxDraftLifetime: TimeSpan.FromDays(1),
+                keptStates: [new KeptState(Machine, "Built")]
+            )
+        )
+            .Where(v => v.Invariant == TraxInvariants.DraftOlderThanMaxLifetime)
+            .Select(v => v.Id)
+            .ToList();
+
+        violations
+            .Should()
+            .BeEquivalentTo(
+                [editable.ToString(), unborn.ToString(), running.ToString()],
+                $"the check reports exactly the drafts the sweep deletes for their age. See {MachineApiAdr}"
+            );
+    }
+
+    // A user's draft owned by userKey in state, created at createdAt (now when null, none recorded with
+    // noCreatedAt), last written at updatedAt (now when null), waiting on the run token names; returns its row id.
+    private static async Task<long> SeedUserDraftAsync(
+        string userKey,
+        DateTimeOffset? createdAt = null,
+        string state = "Built",
+        bool noCreatedAt = false,
+        DateTimeOffset? updatedAt = null,
+        string? token = null
+    )
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO trax.snapshot_draft
+                (id, user_key, owner_kind, machine, version, state, concurrency_token, created_at, updated_at,
+                 invoke_token)
+            VALUES (gen_random_uuid(), @user, 'user', @machine, 1, @state, gen_random_uuid(), @created, @updated,
+                    @token)
+            RETURNING row_id
+            """;
+        command.Parameters.AddWithValue("user", userKey);
+        command.Parameters.AddWithValue("machine", Machine);
+        command.Parameters.AddWithValue("state", state);
+        command.Parameters.AddWithValue(
+            "created",
+            noCreatedAt ? DBNull.Value : (object)(createdAt ?? DateTimeOffset.UtcNow)
+        );
+        command.Parameters.AddWithValue("updated", updatedAt ?? DateTimeOffset.UtcNow);
+        command.Parameters.AddWithValue("token", (object?)token ?? DBNull.Value);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     [Test]
     public async Task AssertConsistent_ReportsEveryViolation_NotOnlyTheFirst()
     {

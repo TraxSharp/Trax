@@ -434,6 +434,143 @@ it, and a write that gives the row a token or moves it to another state clears i
 stranded on purpose is told apart from one that lost its token. It is server-only and added without
 a default, so the table is not rewritten.
 
+## State-machine revision (076, SQLite 038)
+
+`076_snapshot_draft_revision.sql` (SQLite `038`) adds `trax.snapshot_draft.revision`, a
+`bigint not null default 1`, and the nullable `ir_hash`. A row starts at revision 1 and a trigger
+named `snapshot_draft_revision` adds one on every `UPDATE`: a `BEFORE UPDATE` trigger on Postgres
+and an `AFTER UPDATE` one on SQLite, which cannot assign to the new row. The database does the
+bump so that every writer is numbered, a custom store, raw SQL and a host still on the previous
+version included. On Postgres a value a writer puts in the column is overwritten. On SQLite an
+update that leaves the column where it was or moves it back ends one past the stored revision, and
+one that moves it forward keeps its value, so the column never goes back; the trigger's own write is
+skipped by its `WHEN` clause, so it stops there even with `PRAGMA recursive_triggers` on. `ir_hash` is the IR hash
+(`IMachine.SchemaHash`) of the definition that wrote the row, null for a machine with no
+exportable IR. Both are server-only and never part of a snapshot.
+
+Existing rows read revision 1 and keep their `row_id`. On Postgres the constant default stays in
+the catalog, so the table is not rewritten. `row_id` comes from a sequence (Postgres) or
+`AUTOINCREMENT` (SQLite) and is never reused, so a draft deleted and created again under the same
+id is a new row with a new `row_id`, and its revisions start again at 1. Never empty the table with
+`TRUNCATE ... RESTART IDENTITY` (or reset the SQLite sequence): a reused `row_id` would look to a
+watching client like the incarnation it already holds, and a `TRUNCATE` fires no row trigger, so
+no watcher is told the rows are gone.
+
+A host on the previous version writes without the columns; its inserts take the default and its
+updates are bumped by the trigger, so a rolling deploy is safe.
+
+## State-machine start and request ring (077, SQLite 039)
+
+`077_snapshot_draft_start_and_request_ring.sql` (SQLite `039`) adds three nullable columns to
+`trax.snapshot_draft`: `start_request_id` and `start_fingerprint`, the request id and input hash of
+the `start` that created the row, and `recent_requests` (`jsonb`, `TEXT` on SQLite), the row's last
+sixteen client requests with the result each was answered with, at most 128 KiB of JSON text. A partial unique index,
+`ux_snapshot_draft_start_request`, on `(owner_kind, user_key, machine, start_request_id)` where
+`start_request_id` is set, makes a retried start find the instance it created. On Postgres it is built
+`CONCURRENTLY`, so drafts keep being saved and advanced while it builds. All three are
+server-only and never part of a snapshot.
+
+They are added without defaults, so the table is not rewritten, and nothing is backfilled: an
+existing row has no ring, and its last request is matched from the `last_request_*` columns as
+before. A host on the previous version neither reads nor writes them; its advances leave the ring as
+it is, so a rolling deploy is safe.
+
+## State-machine change notify (078)
+
+`078_snapshot_draft_change_notify.sql` (Postgres only) adds the trigger `snapshot_draft_changed_notify` on
+`trax.snapshot_draft`, which sends `pg_notify('trax_snapshot_changed', <row_id>)` after every row it inserts,
+updates or deletes: one notice per row, so a bulk delete sends one for each row it removes. The payload is the
+row's `row_id` and nothing else. It is a hint: the state-machine change listener on each host re-reads the row's
+revision, state and existence before it pushes anything, so a notice sent by hand moves nothing and no context
+travels through the notification queue. A notice is sent when the writing transaction commits and never when it
+rolls back, and identical notices in one transaction are folded into one, so two writes to one row in one
+transaction send one.
+
+A trigger rather than a call at each write site covers every writer: Trax's own paths, the outcome hook and
+reconciler, the draft sweep, a host's custom store, raw SQL, and a host still on the previous version during a
+rolling deploy. The function is replaced and the trigger created only when it is missing, so the script runs again
+over its own result. SQLite has no notification channel, so it has no migration: there the listener polls the
+`(row_id, revision)` pairs of the watched rows instead, and a Postgres host with `ChangeFeed = Poll` polls the same
+way.
+
+## State-machine timers (079, SQLite 040)
+
+`079_snapshot_draft_due_at.sql` (SQLite `040`) adds the nullable `due_at` (`timestamptz`, fixed-width UTC text on
+SQLite) to `trax.snapshot_draft`: when the timer of the state the instance is in fires, or null when that state has no
+timer. Every write that enters a timed state sets it from the database's clock in the same statement as the state; a
+write that leaves the state clears it. A partial index, `ix_snapshot_draft_due` on `(due_at, row_id)` where `due_at` is
+set, serves the sweep that fires due timers. On Postgres it is built `CONCURRENTLY`, so drafts keep being written while
+it builds. The column is server-only and never part of a snapshot.
+
+It is added without a default, so the table is not rewritten, and nothing is backfilled: an existing row in a timed
+state has no due time until it is entered again. A host on the previous version writes without the column, so a row it
+moves keeps whatever due time it had. During a rolling deploy that has two effects. A row it moves into a state with no
+timer keeps the old due time until a sweep finds it and clears it, without firing. A row it moves from one timed state
+into another keeps the first state's due time, so the second state's timer fires at the first one's time, at once if
+that time has passed, rather than its own duration after entry. A host on this version arms each timed state correctly
+on entry. To avoid the gap, finish the deploy before any machine whose states chain timers is used, or drain such
+instances first.
+
+## State-machine change notify switch (080)
+
+`080_snapshot_draft_change_notify_switch.sql` (Postgres only) recreates the trigger `snapshot_draft_changed_notify`
+with a condition, `WHEN (lower(current_setting('trax.snapshot_notify', true)) IS DISTINCT FROM 'off')`; the function
+`078` added is unchanged. `off` in any case turns the notices off. Write `on` or `off`: with the setting unset, or set
+to anything else, every write notifies as before, so a database nobody configures behaves as it did under `078`. The
+script replaces the trigger only while it has no condition, so it runs again over its own result.
+
+The switch exists because every transaction that sends a Postgres `NOTIFY` takes one lock shared by the whole cluster
+and holds it through its commit. With `078`'s trigger every write to `trax.snapshot_draft` is such a transaction, so
+concurrent instance writes commit one at a time, together with the work queue's (`069`) and invoked runs' (`073`)
+notices. A snapshot write in the same transaction as one of those notices still takes the lock for it. To take the
+snapshot notice off the writes, turn it off for the whole database:
+
+```sql
+ALTER DATABASE <name> SET trax.snapshot_notify = 'off';   -- new sessions only
+```
+
+That is the only supported switch. The trigger reads the setting in the session that writes, and a host that listens
+can check only the database's own value, so a role setting (`ALTER ROLE ... SET`), a connection string's
+`Options=-c trax.snapshot_notify=off` or a `SET LOCAL` turns the notices off for some writers only, and a host still
+on `Notify` never hears their writes. Do not use them while any host listens.
+
+Hosts then hear changes by polling:
+[`StateMachineOptions.ChangeFeed = StateMachineChangeFeed.Poll`](/docs/sdk-reference/statemachine-api/add-trax-state-machines#options)
+reads the watched rows' revisions once a second while something watches. Roll it out in that order: set `ChangeFeed
+= Poll` on every host first, then turn the notices off for the database. A host left on `Notify` refuses to start
+when the database's own setting turns the notices off (read from `pg_db_role_setting`, not from its session), when a
+role's setting or its own session's does, or when the trigger is not enabled for ordinary sessions (`tgenabled` other
+than `O` or `A`, as after `ALTER TABLE ... ENABLE REPLICA TRIGGER`). A `Poll` host whose database still notifies starts
+and logs a warning, and either kind warns when its own session reads the setting otherwise than the database, or when
+the value is neither `on` nor `off`. The check is made at startup, so turning the notices off while a `Notify` host
+runs leaves its watchers silent until it restarts. A writer whose session sets `session_replication_role = replica`
+fires no ordinary trigger and sends no notice either.
+
+## State-machine pending effect and server record (081, SQLite 041)
+
+`081_snapshot_draft_pending_effect_and_server_record.sql` (SQLite `041`) adds six nullable, server-only columns to
+`trax.snapshot_draft`, none of them part of a snapshot:
+
+- `effect_token` (`uuid`), `effect_key`, `effect_trigger`, `effect_request_id` and `effect_lease_until`
+  (`timestamptz`): the effect pending on the row, the key it runs under (minted when the row is marked), its event, the
+  client request that sent it and when the claimant's lease ends, on the database's clock. Sending an effect-bound event sets them by a conditional write; every other write to the row
+  requires `effect_token` to be null, so nothing moves the row while its effect runs. The receipt, the move to the
+  effect's target and clearing the columns are one write. Past the lease, the next send or the reconciler takes the
+  mark over and runs the effect again under the same key.
+- `server_record` (`boolean`): whether the server put the row in its state (an effect, an invoked train's outcome, a
+  gated event), which decides what `discard` refuses, what the draft sweep keeps and what `MaxDraftsPerUser` counts.
+
+A partial index, `ix_snapshot_draft_effect_pending` on `(effect_lease_until, row_id)` where `effect_token` is set,
+serves the reconciler's read of marks whose lease has passed; on Postgres it is built `CONCURRENTLY`.
+
+The columns are added without defaults and nothing is backfilled. A row with no `server_record` is judged by its state
+as before: kept when its state is a committed state, an effect's target, an invoked train's outcome target or a gated
+event's target. An effect claim the earlier version recorded in `trax.effect_claim` is still honoured: a completed one
+whose row is still in the effect's state is recorded by that row's next send, which then removes it, and one in
+flight within its lease keeps the row's events refused as `effect-in-progress`. A host on the previous version writes
+without the columns, so during a rolling deploy it neither honours a mark a new host set nor sets one: finish the
+deploy before an instance's effect is sent, or drain sends first.
+
 ## Failure search (066)
 
 `066_metadata_failure_search.sql` (Postgres only) adds two indexes on `trax.metadata` for the GraphQL
