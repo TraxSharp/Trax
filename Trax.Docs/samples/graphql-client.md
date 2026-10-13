@@ -23,16 +23,6 @@ HTTP round trip. Everything runs in memory: no database, no broker.
 | The three ways to write a request: raw string (A), embedded `.graphql` resource (E), typed POCO (D) | `Trax.Samples.GraphQLClient/Requests/` |
 | A client validating against the server's own schema configuration (`UseAssemblySchema`), so the two cannot drift | `Trax.Samples.GraphQLClient/Program.cs` |
 
-## Layout
-
-```
-samples/GraphQLClient/
-├── Trax.Samples.GraphQLClient.InventoryServer/   Trax server: discover { inventory { getProduct } }
-├── Trax.Samples.GraphQLClient.BillingServer/     Trax server: discover { billing { getInvoice } }
-├── Trax.Samples.GraphQLClient.Gateway/           starts both, calls each through its keyed client
-└── Trax.Samples.GraphQLClient/                   a HotChocolate server and a client in modes A, E, D
-```
-
 ## Run
 
 From the `Trax.Samples` root:
@@ -68,34 +58,53 @@ It exits with code 1 when either comparison is `False`.
 
 ## How it works
 
+### Layout
+
+```
+samples/GraphQLClient/
+├── Trax.Samples.GraphQLClient.InventoryServer/   Trax server: discover { inventory { getProduct } }
+├── Trax.Samples.GraphQLClient.BillingServer/     Trax server: discover { billing { getInvoice } }
+├── Trax.Samples.GraphQLClient.Gateway/           starts both, calls each through its keyed client
+└── Trax.Samples.GraphQLClient/                   a HotChocolate server and a client in modes A, E, D
+```
+
 ### The servers are ordinary Trax hosts
 
-```csharp
+```csharp from=Trax.Samples/samples/GraphQLClient/Trax.Samples.GraphQLClient.BillingServer/BillingServerHost.cs
 using Trax.Api.Extensions;
 using Trax.Api.GraphQL.Extensions;
 using Trax.Effect.Data.InMemory.Extensions;
 using Trax.Effect.Extensions;
 using Trax.Effect.Provider.Json.Extensions;
 using Trax.Mediator.Extensions;
+// ...
+public static WebApplication Build(string[] args)
+{
+    var builder = WebApplication.CreateBuilder(args);
+// ...
+    builder.Services.AddAuthorization();
 
-builder.Services.AddAuthorization();
-builder.Services.AddTrax(trax =>
-    trax.AddEffects(effects => effects.UseInMemory().AddJson())
-        .AddMediator(mediator =>
-            mediator
-                .ScanAssemblies(typeof(IGetInvoiceTrain).Assembly)
-                .AllowMissingAuthorizationService()
-        )
-);
-builder.Services.AddTraxGraphQL();
-builder.Services.AddHealthChecks().AddTraxHealthCheck();
+    builder.Services.AddTrax(trax =>
+        trax.AddEffects(effects => effects.UseInMemory().AddJson())
+            .AddMediator(mediator =>
+                mediator
+                    .ScanAssemblies(typeof(IGetInvoiceTrain).Assembly)
+                    .AllowMissingAuthorizationService()
+            )
+    );
+// ...
+    builder.Services.AddTraxGraphQL();
+    builder.Services.AddHealthChecks().AddTraxHealthCheck();
 
-var app = builder.Build();
-app.UseTraxGraphQL();
-app.MapHealthChecks("/trax/health");
+    var app = builder.Build();
+    app.UseTraxGraphQL();
+    app.MapHealthChecks("/trax/health");
+    return app;
+}
 ```
 
-The one train is `[TraxAllowAnonymous]` and `[TraxQuery(Namespace = "billing")]`, which serves it at
+`BillingServerHost.Build` is shared by the billing server's own `Program.cs`, the Gateway and the
+E2E suite; `InventoryServerHost` has the same shape. The one billing train is `[TraxAllowAnonymous]` and `[TraxQuery(Namespace = "billing")]`, which serves it at
 `discover { billing { getInvoice(input: ...) } }`. The client validates against the schema it fetches
 by introspection, and a Trax server answers introspection only in Development unless the host passes
 `AllowIntrospection` a predicate. These servers keep that default. The Gateway's launch profile runs it,
@@ -106,29 +115,46 @@ callers it trusts. See [GraphQL Client: Schema Providers](/docs/api-graphql-clie
 
 ### Two keyed clients in one container
 
-```csharp
+```csharp from=Trax.Samples/samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Program.cs
 using Trax.Api.GraphQL.Client;
-
+// ...
 var consumer = Host.CreateApplicationBuilder();
-consumer.Services.AddKeyedTraxGraphQLClient("serverB", new Uri("http://localhost:5310/trax/graphql"));
-consumer.Services.AddKeyedTraxGraphQLClient("serverC", new Uri("http://localhost:5311/trax/graphql"));
+consumer.Services.AddKeyedTraxGraphQLClient("serverB", new Uri($"{inventoryUrl}/trax/graphql"));
+consumer.Services.AddKeyedTraxGraphQLClient("serverC", new Uri($"{billingUrl}/trax/graphql"));
+using var consumerHost = consumer.Build();
+var inventoryClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClientExecutor>(
+    "serverB"
+);
+var billingClient = consumerHost.Services.GetRequiredKeyedService<IGraphQLClientExecutor>(
+    "serverC"
+);
 
-using var host = consumer.Build();
-var inventory = host.Services.GetRequiredKeyedService<IGraphQLClientExecutor>("serverB");
-var billing = host.Services.GetRequiredKeyedService<IGraphQLClientExecutor>("serverC");
-
-var product = await inventory.Run(new GetProductRequest { Input = new GetProductInput("SKU-1") });
+var product = await inventoryClient.Run(
+    new GetProductRequest { Input = new GetProductInput("SKU-1") }
+);
+// ...
+try
+{
+    await inventoryClient.Run(new GetInvoiceRequest { Input = new GetInvoiceInput("INV-1") });
+    Console.WriteLine("UNEXPECTED: the inventory client accepted a billing query");
+}
+catch (GraphQLValidationException)
+{
+    Console.WriteLine("serverB rejected a billing query (schema isolation holds)");
+}
 ```
 
-The key names the server; each executor validates against its own server's schema. Running
-`GetInvoiceRequest` through the inventory executor throws `GraphQLValidationException`, because the
-inventory schema has no `getInvoice`.
+`inventoryUrl` and `billingUrl` are `http://localhost:5310` and `http://localhost:5311`, where the
+Gateway starts the two servers in-process before it builds the consumer. The key names the server;
+each executor validates against its own server's schema. Running `GetInvoiceRequest` through the
+inventory executor throws `GraphQLValidationException`, because the inventory schema has no
+`getInvoice`.
 
 ### A typed request into a Trax namespace
 
-```csharp
+```csharp from=Trax.Samples/samples/GraphQLClient/Trax.Samples.GraphQLClient.Gateway/Requests/KeyedRequests.cs
 using Trax.Api.GraphQL.Client.Typed;
-
+// ...
 [GraphQLType("GetProductOutput")]
 public sealed record ProductView(string Sku, string Name, int QuantityOnHand);
 
