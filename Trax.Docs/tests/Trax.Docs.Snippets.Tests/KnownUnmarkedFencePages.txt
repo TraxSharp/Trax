@@ -155,17 +155,6 @@ sdk-reference/graphql-client/graphql-resource-request.md
 sdk-reference/graphql-client/i-graphql-client-request.md
 sdk-reference/graphql-client/response-strictness.md
 sdk-reference/graphql-client/validate-assemblies.md
-sdk-reference/mediator-api.md
-sdk-reference/mediator-api/add-service-train-bus.md
-sdk-reference/mediator-api/concurrency-limiting.md
-sdk-reference/mediator-api/i-concurrency-limiter.md
-sdk-reference/mediator-api/i-current-principal-provider.md
-sdk-reference/mediator-api/i-enqueue-context-accessor.md
-sdk-reference/mediator-api/i-trusted-execution-scope.md
-sdk-reference/mediator-api/mediator-configuration.md
-sdk-reference/mediator-api/train-bus.md
-sdk-reference/mediator-api/train-discovery.md
-sdk-reference/mediator-api/train-execution.md
 sdk-reference/persisted-operations/i-persisted-operation-store.md
 sdk-reference/persisted-operations/i-persisted-operation-validator.md
 sdk-reference/persisted-operations/i-persisted-operations-service.md

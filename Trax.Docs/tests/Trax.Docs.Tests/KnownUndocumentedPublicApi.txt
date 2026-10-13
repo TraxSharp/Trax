@@ -285,14 +285,6 @@ Trax.Effect.StateMachine.Testing M:MachineConformance.CheckIr
 Trax.Effect.StateMachine.Testing M:MachineConformance.WriteIr
 Trax.Effect.StateMachine.Testing T:DifferentialCorpus
 Trax.Effect.StateMachine.Testing T:MachineConformance
-Trax.Mediator M:AmbiguousTrainNameException.CandidateFullNames
-Trax.Mediator M:AmbiguousTrainNameException.RequestedName
-Trax.Mediator M:ITrainRegistry.InputTypeToTrain
-Trax.Mediator M:TrainNotFoundException.RequestedName
-Trax.Mediator M:TrainRegistration.IsRemote
-Trax.Mediator M:TrainRegistration.MaxConcurrentRun
-Trax.Mediator T:TrainDiscoveryService
-Trax.Mediator T:TrainExecutionService
 Trax.Mediator.Testing M:TrainGuardFixture.Every_train_has_a_companion_interface
 Trax.Scheduler M:AdminTrains.ShortNames
 Trax.Scheduler M:DagValidator.TopologicalSort
